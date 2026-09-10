@@ -494,11 +494,13 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
    * cards stay in the sysop's gallery (no ownedBy there) and for screens
    * the theme has not drawn.
    *
-   * Matched per screen, scope, level band AND format: a theme that drew the
-   * ANSI still needs the board's PETSCII card, or the missing-format chips
-   * would lie about what is left to draw.
+   * Matched per screen, scope, level band AND screen type: a theme that drew
+   * the ANSI still needs the board's .GR twin, or the missing-format chips
+   * would lie about what is left to draw. In a themed index the covered
+   * original reads `shadowed`, never `resolved` - same key decides.
    */
-  const drawnInTheme = (ownedBy: string): Set<string> => {    const claimed = new Set<string>();
+  const drawnInTheme = (ownedBy: string): Set<string> => {
+    const claimed = new Set<string>();
     for (const file of drawable) {
       if (file.theme !== ownedBy) continue;
       for (const reader of file.readBy ?? []) {
@@ -512,10 +514,13 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
   const groups = [...byContent.values()].filter(copies => {
     if (!opts.ownedBy || drawn.size === 0) return true;
     // The theme's own cards always stay; a board group goes when the theme
-    // serves the same screen, scope, level band and format.
+    // serves the same screen, scope, level band and screen type.
     if (copies.some(copy => copy.theme === opts.ownedBy)) return true;
-    const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
-    const reader = file.readBy?.find(r => r.via === 'resolved');
+    // In a themed index the board's copy reads `shadowed`, never `resolved`
+    // — the theme answered first. A shadowed card is the covered original,
+    // so it decides by the same key.
+    const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved' || r.via === 'shadowed')) ?? copies[0];
+    const reader = file.readBy?.find(r => r.via === 'resolved' || r.via === 'shadowed');
     if (!reader) return true;
     return !drawn.has(servedKey(reader));
   });

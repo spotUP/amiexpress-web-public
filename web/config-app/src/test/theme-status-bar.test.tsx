@@ -118,4 +118,25 @@ describe('an artist\'s theme, above the gallery', () => {
     render(bar({}, [theme(), theme({ slug: 'other', title: 'The other one' })]), { wrapper });
     expect(screen.getByLabelText('Theme')).toBeTruthy();
   });
+
+  // `default` is the board's own screens, not a registry theme: asking the
+  // server to validate it answers 404, twice (query plus retry) straight
+  // onto the artist's console. The bar asks nothing of it.
+  it('never asks validation of the board default', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const seen: string[] = [];
+    const outer = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(String(input));
+      return outer!(input, init);
+    });
+    try {
+      render(bar({ slug: 'default', title: 'Board default' }), { wrapper });
+
+      await waitFor(() => expect(screen.getByText(/Counting what you have redrawn/)).toBeTruthy());
+      expect(seen.some(url => url.includes('/validation'))).toBe(false);
+    } finally {
+      fetchMock.mockImplementation(outer!);
+    }
+  });
 });

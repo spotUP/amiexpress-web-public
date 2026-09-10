@@ -120,4 +120,29 @@ describe('what belongs in a gallery', () => {
     expect(paths(artist)).not.toContain('Node1/GUESTLOGON.txt');
     expect(paths(artist)).toContain('Conf1/menu250.txt.GR');
   });
+
+  // The live shape: once a theme answers, the board's copy reads
+  // `shadowed`, never `resolved` - and guestlogon was still shown twice
+  // with only the resolved reader counted.
+  it('hides the shadowed original behind the drawn theme version', () => {
+    const shadowed = {
+      ...index,
+      files: {
+        ...index.files,
+        'Node1/GUESTLOGON.txt': file({
+          relPath: 'Node1/GUESTLOGON.txt', sha256: 'board',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'shadowed', shadowedBy: 'Themes/neon/Node/guestlogon.txt' }],
+        }),
+        'Themes/neon/Node/guestlogon.txt': file({
+          relPath: 'Themes/neon/Node/guestlogon.txt', sha256: 'theirs', theme: 'neon',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'resolved' }],
+        }),
+      },
+    } as unknown as ScreenIndexShape;
+    const artist = buildGalleryItems(shadowed,
+      { theme: 'neon', showGenerated: false, showUnread: false, ownedBy: 'neon' });
+
+    expect(paths(artist)).toContain('Themes/neon/Node/guestlogon.txt');
+    expect(paths(artist)).not.toContain('Node1/GUESTLOGON.txt');
+  });
 });
