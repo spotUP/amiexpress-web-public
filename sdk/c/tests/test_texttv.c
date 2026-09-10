@@ -94,8 +94,34 @@ static void test_utf8(void)
     CHECK(utf8_to_latin1(0, out, sizeof out) == 0);
 }
 
-static void test_favs(void)
+static void test_pick_body(void)
 {
+    /* Recorded proxy shapes: the door's exact parse chain, driven. */
+    char out[512];
+    const char *both =
+        "[{\"num\":\"100\",\"title\":\"T\",\"content_plain\":[\"plain\"],"
+        "\"next_page\":\"101\",\"ansi\":\"\\u001b[0;33;44mDH\\u001b[0m\"}]";
+    const char *plain_only =
+        "[{\"num\":\"100\",\"title\":\"T\",\"content_plain\":[\"plain\"],"
+        "\"next_page\":\"101\"}]";
+    /* ANSI wins when present and non-empty (ESC arrives \u-escaped). */
+    CHECK(texttv_pick_body(both, out, sizeof out) == 0);
+    CHECK(out[0] == '\x1b');
+    CHECK(strstr(out, "DH") != 0);
+    /* Old proxy without ansi: plain carries the page. */
+    CHECK(texttv_pick_body(plain_only, out, sizeof out) == 0);
+    CHECK(strcmp(out, "plain") == 0);
+    /* Empty ansi falls back to plain, not to a blank screen. */
+    CHECK(texttv_pick_body(
+        "[{\"content_plain\":[\"plain\"],\"ansi\":\"\"}]",
+        out, sizeof out) == 0);
+    CHECK(strcmp(out, "plain") == 0);
+    /* Neither: off-air, out left "". */
+    CHECK(texttv_pick_body("[]", out, sizeof out) != 0);
+    CHECK(out[0] == '\0');
+}
+
+static void test_favs(void){
     texttv_config cfg;
     texttv_config_defaults(&cfg);
     CHECK(cfg.fav_count == 0);
@@ -119,6 +145,7 @@ int main(void)
     test_valid_page();
     test_page_path();
     test_first_plain();
+    test_pick_body();
     test_utf8();
     test_favs();
     if (failures == 0) printf("test_texttv: all green\n");

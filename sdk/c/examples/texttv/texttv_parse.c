@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "texttv_parse.h"
+#include "json_lite.h"
 
 #define TEXTTV_TIMEOUT_DEFAULT 15
 #define TEXTTV_START_DEFAULT 100
@@ -98,6 +99,18 @@ int texttv_first_plain(const char *json, char *out, unsigned long outcap)
     if (*p != '"') { out[0] = '\0'; return -1; }
     out[n] = '\0';
     return 0;
+}
+
+int texttv_pick_body(const char *json, char *out, unsigned long outcap)
+{
+    if (outcap > 0) out[0] = '\0';
+    if (json == 0 || out == 0 || outcap == 0) return -1;
+    /* ANSI rows first: the proxy converts content HTML to colored rows,
+       and an old proxy (or a hand-rolled one) answers plain only. */
+    if (json_extract_string(json, "ansi", out, outcap) == 0 && out[0] != '\0')
+        return 0;
+    out[0] = '\0';
+    return texttv_first_plain(json, out, outcap);
 }
 
 int utf8_to_latin1(const char *in, char *out, unsigned long cap)

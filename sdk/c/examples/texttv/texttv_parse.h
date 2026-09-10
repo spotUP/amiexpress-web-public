@@ -40,6 +40,14 @@ int texttv_page_path(int page, char *out, unsigned long cap);
 int texttv_first_plain(const char *json, char *out, unsigned long outcap);
 
 /*
+ * The door's body, in priority order: the proxy's "ansi" rows when
+ * present and non-empty (colors, bars, double-height), else the first
+ * content_plain string. 0 + out set on success; non-zero + out "" when
+ * neither exists (off-air page) or nothing fits.
+ */
+int texttv_pick_body(const char *json, char *out, unsigned long outcap);
+
+/*
  * UTF-8 to Latin-1, bounded, never guessing past a truncation.
  * U+0000-U+00FF map direct; en/em dash, curly quotes, ellipsis and NBSP
  * fold to ASCII; everything else outside Latin-1 - and every malformed,

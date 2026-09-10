@@ -73,11 +73,13 @@ build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 # here: it needs the NDK and only ever builds for 68K, which is the same reason
 # ae_transport_amiga.c never appears in a host test rule.
 # The Text-TV door's pure helpers (page validation, request paths,
-# content_plain extraction, UTF-8 to Latin-1, favorites). No BBS, no
-# sockets - the door's classic-Amiga edges live here, driven on the host.
-build/test_texttv: examples/texttv/texttv_parse.c tests/test_texttv.c examples/texttv/texttv_parse.h
+# content_plain extraction, body preference, UTF-8 to Latin-1, favorites).
+# No BBS, no sockets - the door's classic-Amiga edges live here, driven on
+# the host. Links json_lite: the body preference reads the proxy's "ansi"
+# field through the same extractor the door uses on the wire.
+build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c examples/texttv/texttv_parse.h include/json_lite.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -I examples/texttv examples/texttv/texttv_parse.c tests/test_texttv.c -o $@
+	$(CC) $(HOST_CFLAGS) -I examples/texttv -I include examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c -o $@
 
 build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/ae_dos.h
 	@mkdir -p build

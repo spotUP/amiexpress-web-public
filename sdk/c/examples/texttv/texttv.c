@@ -303,7 +303,7 @@ static int fetch_page(int page)
     if (rc != AE_HTTP_OK) return 0;
     if (resp.status != 200) return resp.status;
 
-    if (texttv_first_plain(body, plain, sizeof plain) != 0) return -1;
+    if (texttv_pick_body(body, plain, sizeof plain) != 0) return -1;
     utf8_to_latin1(plain, page_body, sizeof page_body);
     if (json_extract_string(body, "title", page_title, sizeof page_title) != 0)
         sprintf(page_title, "Text-TV %d", page);
