@@ -177,7 +177,12 @@ class WhipApp {
         }
     }
     async showProjectList() {
-        await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+        // Selecting a project opens its board - returning to the menu
+        // instead is the dead end reported 2026-09-10.
+        const selected = await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+        if (selected) {
+            await this.showKanbanBoard(selected);
+        }
     }
     async selectProjectForKanban() {
         const projects = await this.dataManager.loadProjects();

@@ -230,13 +230,18 @@ export class WhipApp {
   }
 
   private async showProjectList(): Promise<void> {
-    await showProjectList(
+    // Selecting a project opens its board - returning to the menu
+    // instead is the dead end reported 2026-09-10.
+    const selected = await showProjectList(
       this.screen,
       this.currentUser,
       this.dataManager,
       this.achievementManager,
       this.bbsApi
     );
+    if (selected) {
+      await this.showKanbanBoard(selected);
+    }
   }
 
   private async selectProjectForKanban(): Promise<void> {
