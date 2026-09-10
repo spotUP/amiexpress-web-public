@@ -16,8 +16,13 @@ import {
   rankZenModels,
   primeZenCatalogue,
   resetZenCatalogue,
+  primeGoCatalogue,
+  resetGoCatalogue,
   ZEN_RATE_LIMITED_LINE,
+  ZEN_FAILED_LINE,
+  ZEN_UNCONFIGURED_LINE,
   ZEN_BASE,
+  GO_BASE,
 } from '../../src/handlers/grumpy-sysop-bot.handler';
 import type { AIProviderConfig } from '../../src/handlers/grumpy-sysop-bot.handler';
 
@@ -41,12 +46,14 @@ beforeEach(() => {
   mocked.get.mockReset();
   mocked.post.mockReset();
   resetZenCatalogue();
+  resetGoCatalogue();
   delete process.env.ZEN_API_KEY;
+  delete process.env.GO_API_KEY;
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.GROQ_API_KEY;
   delete process.env.GEMINI_API_KEY;
 });
-afterEach(() => { resetZenCatalogue(); });
+afterEach(() => { resetZenCatalogue(); resetGoCatalogue(); });
 
 describe('zen discovery', () => {
   it('ranks free models muse-spark-first, drops paid ones', () => {
@@ -73,7 +80,7 @@ describe('zen failover', () => {
     mocked.post.mockRejectedValue(Object.assign(new Error('socket hang up'), { response: undefined }));
     const first = await getGrumpySysopResponse('hello', context as any, zenCfg());
     // Every leg keyless except zen, zen's three attempts all die -> persona fallback.
-    expect(first).toMatch(/ask me again in a minute/);
+    expect(first).toMatch(/ask me again in a minute/i);
     mocked.post.mockResolvedValue(chatOk('Second brain here.'));
     const second = await getGrumpySysopResponse('hello again', context as any, zenCfg());
     expect(second).toContain('Second brain here.');
@@ -139,8 +146,82 @@ describe('zen failover', () => {
     mocked.post.mockRejectedValue(Object.assign(new Error('Unauthorized'),
       { response: { status: 401, data: { error: { message: 'invalid key' } } } }));
     const reply = await getGrumpySysopResponse('hello', context as any, zenCfg());
-    expect(reply).toMatch(/ask me again in a minute/);
+    expect(reply).toMatch(/ask me again in a minute/i);
     const zenCalls = mocked.post.mock.calls.filter((c) => String(c[0]).includes('opencode.ai'));
     expect(zenCalls.length).toBe(1);
+  });
+});
+
+describe('rule-based and honest fallbacks', () => {
+  it('rule-based sends no round trip anywhere', async () => {
+    const reply = await getGrumpySysopResponse('hello', context as any,
+      { provider: 'rule-based', temperature: 0.9, systemPrompt: '' });
+    expect(reply).toMatch(/ask me again in a minute/i);
+    expect(mocked.get).not.toHaveBeenCalled();
+    expect(mocked.post).not.toHaveBeenCalled();
+  });
+  it('no keys anywhere ends in the unconfigured line', async () => {
+    const reply = await getGrumpySysopResponse('hello', context as any,
+      { provider: 'openrouter', temperature: 0.9, systemPrompt: '' });
+    expect(reply).toBe(ZEN_UNCONFIGURED_LINE);
+    expect(mocked.post).not.toHaveBeenCalled();
+  });
+  it('tried-and-died ends in the failed line, never blaming the outside', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    mocked.post.mockRejectedValue(Object.assign(new Error('boom'), { response: { status: 500, data: {} } }));
+    const reply = await getGrumpySysopResponse('hello', context as any, zenCfg());
+    expect(reply).toBe(ZEN_FAILED_LINE);
+    expect(reply).not.toMatch(/outside/);
+  });
+  it('an admin-pinned model outside the list is refused for the picked one', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    mocked.post.mockResolvedValue(chatOk('Picked brain here.'));
+    const reply = await getGrumpySysopResponse('hello', context as any,
+      zenCfg({ modelName: 'gpt-5.6-sol' }));
+    expect(reply).toContain('Picked brain here.');
+    expect((mocked.post.mock.calls[0][1] as any).model).toBe('mimo-v2.5-free');
+  });
+});
+
+describe('opencode go', () => {
+  const goCfg = (over: Partial<AIProviderConfig> = {}): AIProviderConfig => ({
+    provider: 'go', modelName: '', temperature: 0.9, systemPrompt: '',
+    goApiKey: 'go-test-key', ...over,
+  });
+  it('ranks subscription models muse-spark-first without a free filter', () => {
+    expect(rankZenModels(['glm-5.2', 'muse-spark-1.2-contributor', 'kimi-k3'], 'go'))
+      .toEqual(['muse-spark-1.2-contributor', 'kimi-k3', 'glm-5.2']);
+  });
+  it('discovers keyless and answers from the best go model', async () => {
+    mocked.get.mockResolvedValue({ data: { data: [{ id: 'glm-5.2' }, { id: 'kimi-k3' }] } } as any);
+    mocked.post.mockResolvedValue(chatOk('Hi from Go.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, goCfg());
+    expect(reply).toContain('Hi from Go.');
+    expect(mocked.get).toHaveBeenCalledWith(`${GO_BASE}/models`, expect.anything());
+    expect(mocked.post).toHaveBeenCalledWith(
+      `${GO_BASE}/chat/completions`,
+      expect.objectContaining({ model: 'kimi-k3' }),
+      expect.anything(),
+    );
+  });
+  it('a dead go best fails over silently inside one reply', async () => {
+    primeGoCatalogue(['kimi-k3', 'glm-5.2']);
+    mocked.post.mockRejectedValueOnce(err429());
+    mocked.post.mockResolvedValue(chatOk('Second Go brain here.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, goCfg());
+    expect(reply).toContain('Second Go brain here.');
+    const models = mocked.post.mock.calls.map((c) => (c[1] as any).model);
+    expect(models).toEqual(['kimi-k3', 'glm-5.2']);
+  });
+  it('go preferred still falls back to openrouter', async () => {
+    primeGoCatalogue(['kimi-k3']);
+    mocked.get.mockResolvedValue({ data: { data: [] } } as any);
+    mocked.post.mockImplementation((url: string) => {
+      if (String(url).includes('opencode.ai')) return Promise.reject(err429());
+      return Promise.resolve(chatOk('OpenRouter after Go.'));
+    });
+    const reply = await getGrumpySysopResponse('hello', context as any,
+      goCfg({ openRouterApiKey: 'sk-or-v1-test' }));
+    expect(reply).toContain('OpenRouter after Go.');
   });
 });

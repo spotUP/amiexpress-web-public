@@ -26,7 +26,7 @@ import Database from 'better-sqlite3';
 import { OperatorChatRepository } from '../../src/database/operator-chat.repository';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 import { userSessions } from '../../src/server/session-manager';
-import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
+import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse, ZEN_UNCONFIGURED_LINE } from '../../src/handlers/grumpy-sysop-bot.handler';
 import { THINKING_DOTS_AFTER_MS } from '../../src/handlers/operator-chat/thinking-dots';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 
@@ -162,7 +162,7 @@ describe('the engine tags, now that there is one engine', () => {
       messageHistory: [{ role: 'bot', content: '[RB] [RB] earlier line' }],
     }, { provider: 'openrouter', openRouterApiKey: '', budgetMs: 500 });
     expect(reply).not.toMatch(/^\[(AI|RB)\]/);
-    expect(reply).toContain('ask me again in a minute');
+    expect(reply).toBe(ZEN_UNCONFIGURED_LINE);
   });
 });
 

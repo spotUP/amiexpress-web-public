@@ -132,6 +132,7 @@ export class OperatorChatRepository {
         gemini_api_key TEXT DEFAULT '',
         openrouter_api_key TEXT DEFAULT '',
         zen_api_key TEXT DEFAULT '',
+        go_api_key TEXT DEFAULT '',
         pushover_user_key TEXT DEFAULT '',
         pushover_app_token TEXT DEFAULT '',
         gotify_url TEXT DEFAULT '',
@@ -180,6 +181,9 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN zen_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN go_api_key TEXT DEFAULT ''`);
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN pushover_user_key TEXT DEFAULT ''`);
@@ -577,7 +581,7 @@ export class OperatorChatRepository {
       notifyOnPage: row.notify_on_page !== 0,
       notifyDiscord: row.notify_discord !== 0,
       aiEnabled: row.ai_enabled === 1,
-      aiProvider: (row.ai_provider as 'groq' | 'gemini' | 'openrouter' | 'zen' | 'rule-based') || 'openrouter',
+      aiProvider: (row.ai_provider as 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'rule-based') || 'openrouter',
       aiModelName: row.ai_model_name || '',
       aiTemperature: row.ai_temperature ?? 0.9,
       aiSystemPrompt: row.ai_system_prompt || '',
@@ -585,6 +589,7 @@ export class OperatorChatRepository {
       geminiApiKey: row.gemini_api_key || '',
       openRouterApiKey: row.openrouter_api_key || '',
       zenApiKey: (row as any).zen_api_key || '',
+      goApiKey: (row as any).go_api_key || '',
       pushoverUserKey: row.pushover_user_key || '',
       pushoverAppToken: row.pushover_app_token || '',
       gotifyUrl: row.gotify_url || '',
@@ -638,6 +643,7 @@ ntfyTopic: row.ntfy_topic || '',
         gemini_api_key = ?,
         openrouter_api_key = ?,
         zen_api_key = ?,
+        go_api_key = ?,
         pushover_user_key = ?,
         pushover_app_token = ?,
         gotify_url = ?,
@@ -681,6 +687,7 @@ ntfyTopic: row.ntfy_topic || '',
       merged.geminiApiKey ?? '',
       merged.openRouterApiKey ?? '',
       (merged as any).zenApiKey ?? '',
+      (merged as any).goApiKey ?? '',
       merged.pushoverUserKey ?? '',
       merged.pushoverAppToken ?? '',
       merged.gotifyUrl ?? '',

@@ -29,7 +29,7 @@ interface OperatorChatConfig {
     customMessage?: string;
   };
   aiEnabled: boolean;
-  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'rule-based';
+  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'rule-based';
   aiModelName: string;
   aiSysopName: string;
   aiPersona: string;
@@ -42,6 +42,7 @@ interface OperatorChatConfig {
   geminiApiKey: string;
   openRouterApiKey: string;
   zenApiKey: string;
+  goApiKey: string;
   pushoverUserKey: string;
   pushoverAppToken: string;
   gotifyUrl: string;
@@ -948,6 +949,7 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
               <select {...register('aiProvider')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded">
                 <option value="openrouter">OpenRouter (auto-discovers free models)</option>
                 <option value="zen">OpenCode Zen (auto-discovers free models)</option>
+                <option value="go">OpenCode Go (subscription models)</option>
                 <option value="groq">Groq (fast, Llama 3.1 8B)</option>
                 <option value="gemini">Google Gemini (good quality, 1.5 Flash)</option>
                 <option value="rule-based">Rule-based only (no API key needed)</option>
@@ -1007,11 +1009,16 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
             {/* API Keys */}
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-medium text-content-primary">API Keys</h3>
-              <p className="text-xs text-content-secondary">Leave empty to use environment variables (<span className="font-mono">GROQ_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>, <span className="font-mono">OPENROUTER_API_KEY</span>, <span className="font-mono">ZEN_API_KEY</span>)</p>
+              <p className="text-xs text-content-secondary">Leave empty to use environment variables (<span className="font-mono">GROQ_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>, <span className="font-mono">OPENROUTER_API_KEY</span>, <span className="font-mono">ZEN_API_KEY</span>, <span className="font-mono">GO_API_KEY</span>)</p>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">OpenCode Zen API Key</label>
                 <input type="password" {...register('zenApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="..." autoComplete="off" />
                 <a href="https://opencode.ai/docs/zen" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">opencode.ai/docs/zen — sign in and copy API key (free models)</a>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">OpenCode Go API Key</label>
+                <input type="password" {...register('goApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="..." autoComplete="off" />
+                <a href="https://opencode.ai/docs/go" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">opencode.ai/docs/go — subscribe and copy API key</a>
               </div>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">OpenRouter API Key</label>
@@ -1090,7 +1097,7 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
             <div className="bg-surface-0 border border-border rounded p-3">
               <p className="text-sm font-medium text-content-primary mb-2">Fallback Chain:</p>
               <ol className="text-sm text-content-secondary space-y-1 list-decimal list-inside">
-                <li>Configured provider (then Zen → OpenRouter → Groq → Gemini; Zen first when it holds the preferred slot)</li>
+                <li>Configured provider (then Zen → Go → OpenRouter → Groq → Gemini; a preferred Zen or Go leads instead)</li>
                 <li>Rule-based patterns (built-in, works without any API key)</li>
               </ol>
             </div>

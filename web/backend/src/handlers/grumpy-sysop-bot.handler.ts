@@ -80,7 +80,7 @@ interface ChatContext {
  * AI configuration from OperatorChatConfig
  */
 export interface AIProviderConfig {
-  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'rule-based';
+  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'rule-based';
   /**
    * The three below belong to the AI providers, not to the bot.
    *
@@ -99,6 +99,7 @@ export interface AIProviderConfig {
   geminiApiKey?: string;
   openRouterApiKey?: string;
   zenApiKey?: string;
+  goApiKey?: string;
   /**
    * The whole AI cascade - every provider, every retry, the model discovery
    * - gets THIS long in total before the rule-based reply goes out. The
@@ -612,6 +613,9 @@ console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.mess
  * 429s, the other is tried before the persona fallback goes out.
  */
 export const ZEN_BASE = 'https://opencode.ai/zen/v1';
+export const GO_BASE = 'https://opencode.ai/zen/go/v1';
+
+export type ZenUpstream = 'zen' | 'go';
 
 /** Free Zen ids worth preferring: the muse-spark family has proven
  *  tool-calling chat on this board's own agents. */
@@ -628,17 +632,37 @@ const FALLBACK_ZEN_FREE_MODELS: string[] = [
   'nemotron-3.5-lightning-free',
 ];
 
+/** Go ids, probed live 2026-09-10. Go is subscription-wide (no free
+ *  suffix), so the fallback is the strong generalists, muse-spark first. */
+const FALLBACK_GO_MODELS: string[] = [
+  'muse-spark-1.3-contributor',
+  'muse-spark-1.2-contributor',
+  'kimi-k3',
+  'glm-5.2',
+  'deepseek-v4-pro',
+];
+
+/** Go ranking preference; Zen uses ZEN_PREFERRED_FREE. */
+const GO_PREFERRED = ['muse-spark-1.3-contributor', 'muse-spark-1.2-contributor', 'kimi-k3'];
+
 let cachedZenModels: string[] = [];
 let lastZenDiscovery = 0;
 /** Zen models whose tool calls the API refused: plain completions only. */
 const zenPlainOnly = new Set<string>();
 
-export function rankZenModels(ids: string[]): string[] {
+let cachedGoModels: string[] = [];
+let lastGoDiscovery = 0;
+/** Go models whose tool calls the API refused: plain completions only. */
+const goPlainOnly = new Set<string>();
+
+export function rankZenModels(ids: string[], upstream: ZenUpstream = 'zen'): string[] {
+  const preferred = upstream === 'go' ? GO_PREFERRED : ZEN_PREFERRED_FREE;
+  const pool = upstream === 'go' ? ids : ids.filter((id) => id.toLowerCase().includes('free'));
   const pref = (id: string) => {
-    const i = ZEN_PREFERRED_FREE.indexOf(id);
-    return i === -1 ? ZEN_PREFERRED_FREE.length : i;
+    const i = preferred.indexOf(id);
+    return i === -1 ? preferred.length : i;
   };
-  return [...new Set(ids.filter((id) => id.toLowerCase().includes('free')))]
+  return [...new Set(pool)]
     .sort((a, b) => pref(a) - pref(b) || (a < b ? -1 : 1));
 }
 
@@ -653,6 +677,17 @@ export function resetZenCatalogue(): void {
   lastZenDiscovery = 0;
   zenPlainOnly.clear();
 }
+/** Test seam: what a Go discovery would have returned. */
+export function primeGoCatalogue(ids: string[]): void {
+  cachedGoModels = rankZenModels(ids, 'go');
+  lastGoDiscovery = Date.now();
+}
+/** Test seam: forget cached Go state. */
+export function resetGoCatalogue(): void {
+  cachedGoModels = [];
+  lastGoDiscovery = 0;
+  goPlainOnly.clear();
+}
 
 /**
  * Fail over: the failed model goes to the back, the next-best is tried on
@@ -662,6 +697,10 @@ export function resetZenCatalogue(): void {
 function rotateZenModels(): void {
   const failed = cachedZenModels.shift();
   if (failed !== undefined) cachedZenModels.push(failed);
+}
+function rotateGoModels(): void {
+  const failed = cachedGoModels.shift();
+  if (failed !== undefined) cachedGoModels.push(failed);
 }
 
 async function discoverZenModels(timeoutMs: number): Promise<string[]> {
@@ -673,6 +712,19 @@ console.log(`[Grumpy Bot] Discovered ${ranked.length} free Zen models:`, ranked.
     return ranked;
   } catch (error) {
 console.error('[Grumpy Bot] Failed to discover Zen models:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+async function discoverGoModels(timeoutMs: number): Promise<string[]> {
+  try {
+    const response = await axios.get(`${GO_BASE}/models`, { timeout: timeoutMs });
+    const ids: string[] = (response.data?.data ?? []).map((m: any) => m.id).filter(Boolean);
+    const ranked = rankZenModels(ids, 'go');
+console.log(`[Grumpy Bot] Discovered ${ranked.length} Go models:`, ranked.slice(0, 5));
+    return ranked;
+  } catch (error) {
+console.error('[Grumpy Bot] Failed to discover Go models:', error instanceof Error ? error.message : error);
     return [];
   }
 }
@@ -696,12 +748,32 @@ console.log('[Grumpy Bot] No Zen models from API, trying hardcoded fallback list
   return ranked[0];
 }
 
+async function getGoModel(timeoutMs: number): Promise<string | null> {
+  const now = Date.now();
+  if (cachedGoModels.length > 0 && (now - lastGoDiscovery) < MODEL_CACHE_DURATION) {
+console.log('[Grumpy Bot] Using cached Go model:', cachedGoModels[0]);
+    return cachedGoModels[0];
+  }
+console.log('[Grumpy Bot] Discovering Go models...');
+  const ranked = await discoverGoModels(timeoutMs);
+  if (ranked.length === 0) {
+console.log('[Grumpy Bot] No Go models from API, trying hardcoded fallback list');
+    cachedGoModels = [...FALLBACK_GO_MODELS];
+    lastGoDiscovery = now;
+    return cachedGoModels[0] ?? null;
+  }
+  cachedGoModels = ranked;
+  lastGoDiscovery = now;
+  return ranked[0];
+}
+
 const isRateLimit = (error: any): boolean => error?.response?.status === 429;
 const isToolRejection = (error: any): boolean =>
   error?.response?.status === 400 && /tool|function/i.test(String(error?.response?.data?.error?.message ?? ''));
 
 /** Why the cascade died, for an honest fallback line (reset per message). */
-let lastCascadeNote: 'rate-limited' | null = null;
+type CascadeNote = 'rate-limited' | 'failed' | 'unconfigured' | null;
+let lastCascadeNote: CascadeNote = null;
 function noteCascadeRateLimited(): void { lastCascadeNote = 'rate-limited'; }
 
 /** Said when every provider answered 429: the models are jammed, not the
@@ -709,10 +781,37 @@ function noteCascadeRateLimited(): void { lastCascadeNote = 'rate-limited'; }
 export const ZEN_RATE_LIMITED_LINE =
   'The AI line is jammed - the free models are all busy. Ask me again in a minute and I will look it up.';
 
+/** Said when providers were tried and died (500s, 400s, time-outs): the
+ *  fault is upstairs, not the caller's, and not "the outside world". */
+export const ZEN_FAILED_LINE =
+  'My brain misfired on that one - nothing is broken on your end. Ask me again in a minute.';
+
+/** Said when no provider even has a key: the board, not the caller, and
+ *  retrying changes nothing until the sysop acts. */
+export const ZEN_UNCONFIGURED_LINE =
+  'No AI key is set up on this board yet, so I am on fallback lines - tell the sysop, then ask me again.';
+
 async function getZenResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
-  const apiKey = aiConfig.zenApiKey || process.env.ZEN_API_KEY;
+  return getUpstreamResponse('zen', userMessage, context, aiConfig);
+}
+
+async function getGoResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  return getUpstreamResponse('go', userMessage, context, aiConfig);
+}
+
+/**
+ * One OpenAI-compatible upstream (Zen or Go): silent best-first failover
+ * inside one reply, round-robin across messages. The two differ only in
+ * base URL, key, pool, and free-vs-subscription ranking.
+ */
+async function getUpstreamResponse(kind: ZenUpstream, userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const label = kind === 'go' ? 'Go' : 'Zen';
+  const base = kind === 'go' ? GO_BASE : ZEN_BASE;
+  const apiKey = kind === 'go'
+    ? aiConfig.goApiKey || process.env.GO_API_KEY
+    : aiConfig.zenApiKey || process.env.ZEN_API_KEY;
   if (!apiKey) {
-console.log('[Grumpy Bot] No ZEN_API_KEY configured, skipping Zen');
+console.log(`[Grumpy Bot] No ${kind === 'go' ? 'GO_API_KEY' : 'ZEN_API_KEY'} configured, skipping ${label}`);
     return null;
   }
   const callTimeout = remainingBudget(aiConfig, 10000);
@@ -731,38 +830,54 @@ console.log('[Grumpy Bot] No ZEN_API_KEY configured, skipping Zen');
     { role: 'user', content: userMessage }
   ];
   const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+  const getModel = kind === 'go' ? getGoModel : getZenModel;
+  const rotate = kind === 'go' ? rotateGoModels : rotateZenModels;
+  const plainOnly = kind === 'go' ? goPlainOnly : zenPlainOnly;
+  const cached = () => kind === 'go' ? cachedGoModels : cachedZenModels;
   const post = async (body: unknown, timeoutMs: number) =>
-    (await axios.post(`${ZEN_BASE}/chat/completions`, body, { headers, timeout: timeoutMs })).data;
+    (await axios.post(`${base}/chat/completions`, body, { headers, timeout: timeoutMs })).data;
 
   const plainCall = async (model: string): Promise<string | null> => {
     const response = await axios.post(
-      `${ZEN_BASE}/chat/completions`,
+      `${base}/chat/completions`,
       { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
       { headers, timeout: remainingBudget(aiConfig, 10000) },
     );
     const content = response.data.choices[0]?.message?.content;
-    if (content) console.log('[Grumpy Bot] SUCCESS - Using Zen response');
+    if (content) console.log(`[Grumpy Bot] SUCCESS - Using ${label} response`);
     return content ?? null;
   };
 
   // Silent failover inside one reply: best-first, up to three brains, the
   // caller hears nothing about the switching. A failure rotates the model
   // to the back, so the next attempt (and the next message) meets the next
-  // best. Zen 429s are per-model upstreams, not one shared pool, so the
-  // next model is a real second chance.
-  // An admin-pinned model gets one attempt: retrying the same brain is
-  // just the same refusal twice.
-  const maxAttempts = aiConfig.modelName ? 1 : 3;
+  // best. Upstream 429s are per-model, not one shared pool, so the next
+  // model is a real second chance.
+  // An admin-pinned model runs only if it is listed (discovery or fallback
+  // list); otherwise it is refused with a log line and the picker chooses.
+  // Same rule as OpenRouter's adminModelIfFree, minus the free-only price
+  // check Zen's bare rows cannot carry (Go has no free tier at all).
+  // A pinned model gets one attempt.
+  let pinned: string | null = null;
+  if (aiConfig.modelName) {
+    await getModel(Math.min(callTimeout, 5000));
+    if (cached().includes(aiConfig.modelName)) {
+      pinned = aiConfig.modelName;
+    } else {
+console.log(`[Grumpy Bot] Model "${aiConfig.modelName}" from the admin is not a listed ${label} model - refused; using the picker's choice.`);
+    }
+  }
+  const maxAttempts = pinned ? 1 : 3;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (remainingBudget(aiConfig, 1000) < 250) break;
-    const model = aiConfig.modelName || await getZenModel(Math.min(remainingBudget(aiConfig, 5000), 5000));
+    const model = pinned || await getModel(Math.min(remainingBudget(aiConfig, 5000), 5000));
     if (!model) {
-console.log('[Grumpy Bot] No Zen free models available');
+console.log(`[Grumpy Bot] No ${label} models available`);
       return null;
     }
   try {
-    if (context.tools && context.tools.list.length > 0 && !zenPlainOnly.has(model)) {
-console.log(`[Grumpy Bot] Trying Zen (${model}) with ${context.tools.list.length} tools...`);
+    if (context.tools && context.tools.list.length > 0 && !plainOnly.has(model)) {
+console.log(`[Grumpy Bot] Trying ${label} (${model}) with ${context.tools.list.length} tools...`);
       const result = await askWithTools({
         model, messages, tools: context.tools.list, ctx: context.tools.ctx,
         deadline: cfgDeadline(aiConfig), perRoundMs: PER_ROUND_MS,
@@ -771,7 +886,7 @@ console.log(`[Grumpy Bot] Trying Zen (${model}) with ${context.tools.list.length
       (context.afters ??= []).push(...result.afters);
       if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
       if (result.text) {
-console.log('[Grumpy Bot] SUCCESS - Using Zen response (tool loop)');
+console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
         return result.truncated ? withContinuation(result.text) : result.text;
       }
       const answered = result.calls.filter((c) => c.outcome === 'ok');
@@ -779,30 +894,30 @@ console.log('[Grumpy Bot] SUCCESS - Using Zen response (tool loop)');
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
         return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
       }
-      rotateZenModels();
+      rotate();
       continue;
     }
-console.log(`[Grumpy Bot] Trying Zen (${model})...`);
+console.log(`[Grumpy Bot] Trying ${label} (${model})...`);
     const plain = await plainCall(model);
     if (plain) return plain;
-    rotateZenModels();
+    rotate();
   } catch (error: any) {
-console.error('[Grumpy Bot] Zen failed:', error.message);
+console.error(`[Grumpy Bot] ${label} failed:`, error.message);
     if (error?.response) {
-console.error('[Grumpy Bot] Zen status:', error.response.status);
-console.error('[Grumpy Bot] Zen data:', JSON.stringify(error.response.data)?.slice(0, 500));
+console.error(`[Grumpy Bot] ${label} status:`, error.response.status);
+console.error(`[Grumpy Bot] ${label} data:`, JSON.stringify(error.response.data)?.slice(0, 500));
     }
     if (error?.response?.status === 401) {
       // The key itself is refused: every model would answer the same.
       // Loud, once, then the cascade moves on - never burn attempts.
-console.error('[Grumpy Bot] Zen key refused (401) - check ZEN_API_KEY');
+console.error(`[Grumpy Bot] ${label} key refused (401) - check ${kind === "go" ? "GO_API_KEY" : "ZEN_API_KEY"}`);
       return null;
     }
     if (isRateLimit(error)) {
       // Per-model upstream, not the whole pool: note it for an honest
       // fallback if everything dies, and try the next brain silently.
       noteCascadeRateLimited();
-      rotateZenModels();
+      rotate();
       continue;
     }
     if (context.tools && context.tools.list.length > 0 && error?.response?.status === 400) {
@@ -811,20 +926,20 @@ console.error('[Grumpy Bot] Zen key refused (401) - check ZEN_API_KEY');
       // tools shape without saying "tools" in the error. A plain body is
       // shaped differently, so the retry is meaningful, not a replay.
       if (isToolRejection(error)) {
-console.log(`[Grumpy Bot] Zen model ${model} refuses tools - plain completion instead`);
+console.log(`[Grumpy Bot] ${label} model ${model} refuses tools - plain completion instead`);
       } else {
-console.log(`[Grumpy Bot] Zen model ${model} 400 on tools - plain completion instead`);
+console.log(`[Grumpy Bot] ${label} model ${model} 400 on tools - plain completion instead`);
       }
-      zenPlainOnly.add(model);
+      plainOnly.add(model);
       try {
         const plain = await plainCall(model);
         if (plain) return plain;
       } catch (retryError: any) {
-console.error('[Grumpy Bot] Zen plain retry failed:', retryError.message);
+console.error(`[Grumpy Bot] ${label} plain retry failed:`, retryError.message);
         if (isRateLimit(retryError)) noteCascadeRateLimited();
       }
     }
-    rotateZenModels();
+    rotate();
     continue;
   }
   }
@@ -1034,26 +1149,40 @@ console.log('[Grumpy Bot] Trying next OpenRouter model...');
 async function getAIResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const preferred = aiConfig.provider || 'openrouter';
 
-  // Ordered cascade: preferred first, then the rest with Zen ahead of
-  // OpenRouter - either way a Zen failure falls back to OpenRouter and an
-  // OpenRouter 429 falls forward to Zen before Groq/Gemini are tried.
-  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen'> =
-    preferred === 'groq' ? ['groq', 'zen', 'gemini', 'openrouter'] :
-    preferred === 'gemini' ? ['gemini', 'zen', 'groq', 'openrouter'] :
-    preferred === 'zen' ? ['zen', 'openrouter', 'groq', 'gemini'] :
-    ['openrouter', 'zen', 'groq', 'gemini'];
+  // Rule-based means rule-based: the admin turned the AI off, so no round
+  // trip leaves the box. (Before 2026-09-10 the cascade below ran anyway.)
+  if (preferred === 'rule-based') return null;
+
+  // Ordered cascade: preferred first, then the rest with the keyed
+  // upstreams (Zen, Go) ahead of OpenRouter - either way a Zen/Go failure
+  // falls back to OpenRouter and an OpenRouter 429 falls forward to Zen
+  // before Groq/Gemini are tried.
+  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen' | 'go'> =
+    preferred === 'groq' ? ['groq', 'zen', 'go', 'gemini', 'openrouter'] :
+    preferred === 'gemini' ? ['gemini', 'zen', 'go', 'groq', 'openrouter'] :
+    preferred === 'zen' ? ['zen', 'go', 'openrouter', 'groq', 'gemini'] :
+    preferred === 'go' ? ['go', 'zen', 'openrouter', 'groq', 'gemini'] :
+    ['openrouter', 'zen', 'go', 'groq', 'gemini'];
 
   lastCascadeNote = null;
+  const hasKeys = Boolean(
+    aiConfig.zenApiKey || process.env.ZEN_API_KEY
+    || aiConfig.goApiKey || process.env.GO_API_KEY
+    || aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY
+    || aiConfig.groqApiKey || process.env.GROQ_API_KEY
+    || aiConfig.geminiApiKey || process.env.GEMINI_API_KEY,
+  );
   for (const provider of cascade) {
     let response: string | null = null;
     if (provider === 'groq') response = await getGroqResponse(userMessage, context, aiConfig);
     else if (provider === 'gemini') response = await getGeminiResponse(userMessage, context, aiConfig);
     else if (provider === 'zen') response = await getZenResponse(userMessage, context, aiConfig);
+    else if (provider === 'go') response = await getGoResponse(userMessage, context, aiConfig);
     else if (provider === 'openrouter') response = await getOpenRouterResponse(userMessage, context, aiConfig);
     if (response) return response;
   }
-
-console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
+  // Tried and died versus never tried: the fallback line says which.
+  if (!lastCascadeNote) lastCascadeNote = hasKeys ? 'failed' : 'unconfigured';
   return null;
 }
 
@@ -1121,11 +1250,14 @@ console.log('[Grumpy Bot] Using AI response');
   // Its personality was never its own either: the voice is the system prompt
   // the model is given, so nothing was lost by deleting it.
   //
-  // When every provider answered 429 the models are jammed, not the
-  // board's data and not the net: one honest line instead of a persona
-  // fallback that blames "the outside".
+  // The fallback names the failure kind: jammed models, dead models, or
+  // no keys at all. None of them blame "the outside" - the board's data
+  // and the net were never the patient. Only rule-based (the admin turned
+  // the AI off) keeps the persona's own line.
 console.log('[Grumpy Bot] No provider answered - saying so');
   if (lastCascadeNote === 'rate-limited') return ZEN_RATE_LIMITED_LINE;
+  if (lastCascadeNote === 'failed') return ZEN_FAILED_LINE;
+  if (lastCascadeNote === 'unconfigured') return ZEN_UNCONFIGURED_LINE;
   return stripMarkdown(stripEmojis(fallbackForPersona(cfg)));
 }
 
