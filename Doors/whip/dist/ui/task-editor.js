@@ -24,10 +24,10 @@ async function createTask(screen, project, user, dataManager, bbsApi) {
         description: '',
         createdAt: new Date().toISOString()
     };
-    await showTaskEditor(screen, newTask, user, dataManager, true, project, bbsApi);
+    return showTaskEditor(screen, newTask, user, dataManager, true, project, bbsApi);
 }
 async function editTask(screen, task, user, dataManager, achievementManager, project, bbsApi) {
-    await showTaskEditor(screen, task, user, dataManager, false, project, bbsApi);
+    return showTaskEditor(screen, task, user, dataManager, false, project, bbsApi);
 }
 async function showTaskEditor(screen, task, user, dataManager, isNew, project, bbsApi) {
     // Assignee picker source. Loaded here (not in the dialog body) because
@@ -376,10 +376,10 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 }
             }
             cleanup();
-            resolve();
+            resolve(task);
         });
         saveBtn.on('press', () => { save(); });
-        cancelBtn.on('press', () => { cleanup(); resolve(); });
+        cancelBtn.on('press', () => { cleanup(); resolve(null); });
         // Tab order for the dialog. WHIP runs with focusKeys:false (arrows must
         // never yank focus out of its lists), so the screen's default Tab
         // navigation is off and the dialog advances focus itself down this ring -
@@ -401,7 +401,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 return;
             if (key.name === 'escape') {
                 cleanup();
-                resolve();
+                resolve(null);
             }
             else if (key.name === 'enter' && key.ctrl) {
                 save();

@@ -212,8 +212,10 @@ export class WhipApp {
     }
 
     if (backlogProject) {
-      // Open task editor for new task in Backlog project
-      await createTask(
+      // Open task editor for new task in Backlog project. Silence on
+      // cancel: an ESC out of the dialog used to congratulate the caller
+      // on a task that was never created (sysop, 2026-09-10).
+      const created = await createTask(
         this.screen,
         backlogProject,
         this.currentUser,
@@ -221,6 +223,7 @@ export class WhipApp {
         this.bbsApi
       );
 
+      if (!created) return;
       // Show success message
       this.showMessage('Task created in Backlog! View in Kanban [K]');
       await this.sleep(2000);

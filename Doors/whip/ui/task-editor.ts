@@ -22,7 +22,7 @@ export async function createTask(
   user: UserStats,
   dataManager: DataManager,
   bbsApi?: any
-): Promise<void> {
+): Promise<Task | null> {
   const newTask: Task = {
     id: uuidv4(),
     projectId: project.id,
@@ -36,7 +36,7 @@ export async function createTask(
     createdAt: new Date().toISOString()
   };
 
-  await showTaskEditor(screen, newTask, user, dataManager, true, project, bbsApi);
+  return showTaskEditor(screen, newTask, user, dataManager, true, project, bbsApi);
 }
 
 export async function editTask(
@@ -47,8 +47,8 @@ export async function editTask(
   achievementManager: AchievementManager,
   project?: Project,
   bbsApi?: any
-): Promise<void> {
-  await showTaskEditor(screen, task, user, dataManager, false, project, bbsApi);
+): Promise<Task | null> {
+  return showTaskEditor(screen, task, user, dataManager, false, project, bbsApi);
 }
 
 async function showTaskEditor(
@@ -59,7 +59,7 @@ async function showTaskEditor(
   isNew: boolean,
   project?: Project,
   bbsApi?: any
-): Promise<void> {
+): Promise<Task | null> {
   // Assignee picker source. Loaded here (not in the dialog body) because
   // the dialog builds synchronously; a board the user never opened has no
   // WHIP users yet, so this is allowed to be empty.
@@ -419,11 +419,11 @@ async function showTaskEditor(
       }
 
       cleanup();
-      resolve();
+      resolve(task);
     });
 
     saveBtn.on('press', () => { save(); });
-    cancelBtn.on('press', () => { cleanup(); resolve(); });
+    cancelBtn.on('press', () => { cleanup(); resolve(null); });
 
     // Tab order for the dialog. WHIP runs with focusKeys:false (arrows must
     // never yank focus out of its lists), so the screen's default Tab
@@ -444,7 +444,7 @@ async function showTaskEditor(
 
     const keyHandler = (ch: any, key: any) => {
       if (closed) return;
-      if (key.name === 'escape') { cleanup(); resolve(); }
+      if (key.name === 'escape') { cleanup(); resolve(null); }
       else if (key.name === 'enter' && key.ctrl) { save(); }
       else if ((key.name === 'up' || key.name === 'down') && screen.getFocused() === projectList) {
         // Arrows move the list's own selection without firing 'select';

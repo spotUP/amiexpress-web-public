@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './discord-name.test', './task-dialog-tab.test', './task-dialog-buttons.test', './task-dialog-project.test', './project-list-select.test', './menu-navigate.test', './party-timeline-scroll.test', './responsive.test', './main-menu-bar.test', './kanban-focus.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test'];
+const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './discord-name.test', './task-cancel.test', './task-dialog-tab.test', './task-dialog-buttons.test', './task-dialog-project.test', './project-list-select.test', './menu-navigate.test', './party-timeline-scroll.test', './responsive.test', './main-menu-bar.test', './kanban-focus.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test'];
 
 const realLog = console.log;
 console.log = () => {};
