@@ -78,9 +78,11 @@ export function ScreenArt({ content, scale = 1, className, testId, maxRows }: Sc
    * 872 screens, never released once drawn. That is what froze the gallery.
    */
   return (
+    // The viewer hugs the art like the editor does: a dialog wider than
+    // the canvas pads the rest with black, which reads as the screen
+    // itself being too wide (sysop screenshot, 2026-09-10).
     <div
-      className={`overflow-auto bg-black p-2 ${className ?? ''}`}
-      style={scale === 1 ? undefined : { width: 'fit-content' }}
+      className={`overflow-auto bg-black p-2 w-fit max-w-full ${className ?? ''}`}
     >
       <AnsiCanvas canvas={shown} scale={scale} testId={testId} />
     </div>
