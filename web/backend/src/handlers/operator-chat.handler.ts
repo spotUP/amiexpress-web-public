@@ -143,7 +143,12 @@ import { getSystemTime } from '../utils/date-time.util';
 import { report } from '../achievements/reporter';
 
 // BBS root for config and log files
-const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+// The board's data root: BBS_DATA_DIR in the container (/app/data/bbs),
+// BBS_ROOT elsewhere, the repo tree in dev (which IS a board tree).
+// BBS_ROOT alone resolved to /app in the container, where Commands/ and
+// ConfConfig.info do not live - every disk read in chat (doors, conferences,
+// bulletins, RAG corpus) came back empty there (live 2026-09-10).
+const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
 import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';

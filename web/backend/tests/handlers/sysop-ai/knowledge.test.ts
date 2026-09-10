@@ -49,9 +49,15 @@ describe('wikipedia', () => {
     expect(a).toContain('Family of personal computers');
     expect(a).toContain('Also matches: AmigaOS.');
   });
-  it('a dead net yields a sentence', async () => {
-    setWikipediaFetcher(async () => { throw new Error('socket hang up'); });
-    expect(await askWikipedia('amiga')).toMatch(/No answer from the net/);
+  it('a miss is not cached: the throttled edge recovers by itself', async () => {
+    let serve: any[] = [];
+    setWikipediaFetcher(async (url) => {
+      if (url.includes('search/page')) return { pages: serve };
+      return { title: 'Amiga', extract: 'Amiga is a family of personal computers.' };
+    });
+    expect(await askWikipedia('Amiga')).toContain('nothing about');
+    serve = [{ key: 'Amiga', title: 'Amiga' }];
+    expect(await askWikipedia('Amiga')).toContain('personal computers');
   });
   it('a question-shaped query falls back to its subject', async () => {
     const seen: string[] = [];
@@ -147,11 +153,13 @@ describe('openalex and headlines', () => {
     const a = await openalexSearch('bbs culture');
     expect(a).toContain('1994: On BBS culture - J. Sysop (cited 12)');
   });
-  it('quakes with magnitude, place, time', async () => {
+  it('quakes with magnitude, depth, place, full time', async () => {
     setHeadlinesFetcher(async () => ({
-      features: [{ properties: { mag: 5.2, place: 'Off the coast', time: 1786400000000 } }],
+      features: [{ properties: { mag: 5.2, place: 'Off the coast', time: 1786400000000 }, geometry: { coordinates: [0, 0, 29.4] } }],
     }));
-    expect(await recentQuakes()).toContain('M5.2 Off the coast');
+    const a = await recentQuakes();
+    expect(a).toContain('M5.2, 29 km deep, Off the coast');
+    expect(a).toContain('do not add others');
   });
   it('hacker news with points and comments', async () => {
     setHeadlinesFetcher(async () => ({

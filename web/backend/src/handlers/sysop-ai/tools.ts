@@ -195,7 +195,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_doors',
-    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me".',
+    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind is exactly one of search, detail, random, stats - there is no party kind (demoparties are search_demozoo). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me".',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
@@ -473,7 +473,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'door_data',
-    description: 'Stored data from a door that shares with chatbots (highscores and the like). Shared doors and keys are fixed; anything else is refused. Use it for "who leads at X", "top scores in Y".',
+    description: 'Stored data from a door that shares with chatbots: arkanoid key highscores.json; grandmaster keys highscores.json, high-scores.json; ncurses_pong, phreak_wars, telnet_frontend, livechat key high-scores.json; whip keys projects.json, tasks.json. Anything else is refused. Use it for "who leads at X", "top scores in Y".',
     parameters: { type: 'object', properties: { door: { type: 'string' }, key: { type: 'string' } }, required: ['door', 'key'], additionalProperties: false },
     tier: 'caller',
     async run(ctx, args) {

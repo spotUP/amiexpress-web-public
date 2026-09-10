@@ -32,7 +32,10 @@ async function cachedLookup(key: string, build: () => Promise<string>): Promise<
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
   try {
     const value = (await build()).slice(0, 1800);
-    cache.set(key, { at: Date.now(), value });
+    // A miss is not cached: "Wikipedia has nothing" usually means a
+    // throttled edge, and a 24h-cached miss outlives the throttle by a day
+    // (live 2026-09-10: "Amiga" missed for hours while the article exists).
+    if (!value.startsWith('Wikipedia has nothing')) cache.set(key, { at: Date.now(), value });
     return value;
   } catch (err) {
     return `No answer from the net right now (${(err as Error).message}).`;

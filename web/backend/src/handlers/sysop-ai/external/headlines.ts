@@ -41,11 +41,18 @@ export async function recentQuakes(minMagnitude = 4.5): Promise<string> {
     const data = await fetcher(`${USGS}?format=geojson&limit=5&orderby=time&minmagnitude=${minMagnitude}`);
     const rows: any[] = data?.features ?? [];
     if (!rows.length) return 'No recent earthquakes over magnitude 4.5.';
+    // Everything the model may say about a quake must come from here:
+    // a one-liner starves it into inventing depth, towns and dates
+    // (live 2026-09-10: a whole JSON block of fiction). So the line
+    // carries magnitude, depth, place and full UTC time - and nothing
+    // beyond this list exists.
     return rows.map((f) => {
       const p = f.properties ?? {};
-      const when = p.time ? new Date(p.time).toISOString().slice(0, 16).replace('T', ' ') : 'undated';
-      return `M${p.mag ?? '?'} ${p.place ?? 'unknown'} (${when} UTC)`;
-    }).join('\n');
+      const depth = f.geometry?.coordinates?.[2];
+      const when = p.time ? new Date(p.time).toISOString().replace(/\.\d+Z$/, 'Z') : 'undated';
+      const deep = depth !== undefined && depth !== null ? `, ${Math.round(depth)} km deep` : '';
+      return `M${p.mag ?? '?'}${deep}, ${p.place ?? 'unknown place'}, ${when}`;
+    }).join('\n') + '\nThese are the only recent quakes known - do not add others.';
   });
 }
 
