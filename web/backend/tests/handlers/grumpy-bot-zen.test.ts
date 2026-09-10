@@ -18,6 +18,9 @@ import {
   resetZenCatalogue,
   primeGoCatalogue,
   resetGoCatalogue,
+  primeKeyedCatalogue,
+  resetKeyedCatalogues,
+  keyedModelFor,
   ZEN_RATE_LIMITED_LINE,
   ZEN_FAILED_LINE,
   ZEN_UNCONFIGURED_LINE,
@@ -236,8 +239,7 @@ describe('opencode go', () => {
   });
 });
 
-describe('cerebras', () => {
-  const cbCfg = (over: Partial<AIProviderConfig> = {}): AIProviderConfig => ({
+describe('cerebras', () => {  const cbCfg = (over: Partial<AIProviderConfig> = {}): AIProviderConfig => ({
     provider: 'cerebras', modelName: '', temperature: 0.9, systemPrompt: '',
     cerebrasApiKey: 'csk-test', ...over,
   });
@@ -253,7 +255,7 @@ describe('cerebras', () => {
     expect(reply).toContain('Fast answer.');
     expect(mocked.post).toHaveBeenCalledWith(
       'https://api.cerebras.ai/v1/chat/completions',
-      expect.objectContaining({ model: 'llama-3.1-8b' }),
+      expect.objectContaining({ model: 'llama3.1-8b' }),
       expect.anything(),
     );
   });
@@ -261,5 +263,53 @@ describe('cerebras', () => {
     mocked.post.mockRejectedValue(err429());
     const reply = await getGrumpySysopResponse('hello', context as any, cbCfg());
     expect(reply).toBe(ZEN_RATE_LIMITED_LINE);
+  });
+});
+
+describe('keyed provider catalogues', () => {
+  beforeEach(() => { resetKeyedCatalogues(); });
+  afterEach(() => { resetKeyedCatalogues(); });
+  const cfg = (over = {}) => ({
+    provider: 'groq', modelName: '', temperature: 0.9, systemPrompt: '',
+    groqApiKey: 'gsk-test', ...over,
+  });
+  it('ranks preferred-known ids first, then alphabetically', async () => {
+    expect(await keyedModelFor('groq', cfg() as any)).toBe('llama-3.3-70b-versatile');
+  });
+  it('discovers with the key and answers with the best id', async () => {
+    mocked.get.mockResolvedValue({ data: { data: [{ id: 'mixtral-8x7b-32768' }, { id: 'llama-3.3-70b-versatile' }] } } as any);
+    mocked.post.mockResolvedValue(chatOk('Groq here.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, cfg());
+    expect(reply).toContain('Groq here.');
+    expect(mocked.get).toHaveBeenCalledWith(
+      'https://api.groq.com/openai/v1/models', expect.anything());
+    expect(mocked.post).toHaveBeenCalledWith(
+      'https://api.groq.com/openai/v1/chat/completions',
+      expect.objectContaining({ model: 'llama-3.3-70b-versatile' }),
+      expect.anything(),
+    );
+  });
+  it('maps gemini model names and falls back when discovery fails', async () => {
+    primeKeyedCatalogue('gemini', []);
+    mocked.get.mockRejectedValue(new Error('down'));
+    expect(await keyedModelFor('gemini', { temperature: 0.9, systemPrompt: '', geminiApiKey: 'k' } as any))
+      .toBe('gemini-2.0-flash');
+    mocked.get.mockResolvedValue({ data: { models: [{ name: 'models/gemini-1.5-flash' }] } } as any);
+    resetKeyedCatalogues();
+    expect(await keyedModelFor('gemini', { temperature: 0.9, systemPrompt: '', geminiApiKey: 'k' } as any))
+      .toBe('gemini-1.5-flash');
+  });
+  it('an admin override wins over the catalogue', async () => {
+    primeKeyedCatalogue('cerebras', ['llama3.1-8b']);
+    mocked.post.mockResolvedValue(chatOk('Custom here.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, {
+      provider: 'cerebras', modelName: 'custom-model', temperature: 0.9, systemPrompt: '', cerebrasApiKey: 'csk-test',
+    });
+    expect(reply).toContain('Custom here.');
+    expect(mocked.post).toHaveBeenCalledWith(
+      'https://api.cerebras.ai/v1/chat/completions',
+      expect.objectContaining({ model: 'custom-model' }),
+      expect.anything(),
+    );
   });
 });

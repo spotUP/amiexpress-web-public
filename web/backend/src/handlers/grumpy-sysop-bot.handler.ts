@@ -503,6 +503,116 @@ CRITICAL: Be concise. Typing at 2400 baud is slow, so you don't waste bytes.`;
  */
 
 /**
+ * Keyed providers with model catalogues (Groq, Gemini, Cerebras).
+ *
+ * The 2026-09-10 outage was three stale default ids, not three bad keys:
+ * Groq retired llama-3.1-8b-instant, Gemini moved past 1.5-flash, Cerebras
+ * spells it llama3.1-8b. Hardcoded ids rot; catalogues do not. Each leg
+ * lists its models with its own key (all three endpoints answer keyed
+ * GETs), ranks preferred-known ids first, and falls back to a hardcoded
+ * best guess when discovery itself fails. Cached an hour, like the rest.
+ */
+type KeyedProviderName = 'groq' | 'gemini' | 'cerebras';
+
+interface KeyedProvider {
+  label: string;
+  modelsUrl: (apiKey: string) => string;
+  idsOf: (data: any) => string[];
+  preferred: string[];
+  fallback: string[];
+}
+
+const KEYED_PROVIDERS: Record<KeyedProviderName, KeyedProvider> = {
+  groq: {
+    label: 'Groq',
+    modelsUrl: () => 'https://api.groq.com/openai/v1/models',
+    idsOf: (data) => ((data?.data ?? []) as any[]).map((m) => m.id).filter(Boolean),
+    preferred: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    fallback: ['llama-3.3-70b-versatile'],
+  },
+  gemini: {
+    label: 'Gemini',
+    modelsUrl: (apiKey) => `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    idsOf: (data) => ((data?.models ?? []) as any[]).map((m) => String(m.name ?? '').replace(/^models\//, '')).filter(Boolean),
+    preferred: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'],
+    fallback: ['gemini-2.0-flash'],
+  },
+  cerebras: {
+    label: 'Cerebras',
+    modelsUrl: () => 'https://api.cerebras.ai/v1/models',
+    idsOf: (data) => ((data?.data ?? []) as any[]).map((m) => m.id).filter(Boolean),
+    preferred: ['llama3.1-8b', 'llama-3.1-8b', 'llama-3.3-70b'],
+    fallback: ['llama3.1-8b'],
+  },
+};
+
+const keyedModelCache: Record<KeyedProviderName, { models: string[]; at: number }> = {
+  groq: { models: [], at: 0 },
+  gemini: { models: [], at: 0 },
+  cerebras: { models: [], at: 0 },
+};
+
+function rankKeyedModels(ids: string[], preferred: string[]): string[] {
+  const pref = (id: string) => {
+    const i = preferred.indexOf(id);
+    return i === -1 ? preferred.length : i;
+  };
+  return [...new Set(ids)].sort((a, b) => pref(a) - pref(b) || (a < b ? -1 : 1));
+}
+
+/** Test seam: what a keyed discovery would have returned. */
+export function primeKeyedCatalogue(name: KeyedProviderName, ids: string[]): void {
+  const ranked = rankKeyedModels(ids, KEYED_PROVIDERS[name].preferred);
+  keyedModelCache[name] = { models: ranked, at: Date.now() };
+}
+/** Test seam: forget keyed catalogues. */
+export function resetKeyedCatalogues(): void {
+  (Object.keys(keyedModelCache) as KeyedProviderName[]).forEach((k) => { keyedModelCache[k] = { models: [], at: 0 }; });
+}
+
+async function discoverKeyedModels(
+  name: KeyedProviderName,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<string[]> {
+  const def = KEYED_PROVIDERS[name];
+  try {
+    const response = await axios.get(def.modelsUrl(apiKey), {
+      timeout: timeoutMs,
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const ranked = rankKeyedModels(def.idsOf(response.data), def.preferred);
+console.log(`[Grumpy Bot] Discovered ${ranked.length} ${def.label} models:`, ranked.slice(0, 4));
+    return ranked;
+  } catch (error) {
+console.error(`[Grumpy Bot] Failed to discover ${def.label} models:`, error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+function keyFor(name: KeyedProviderName, aiConfig: AIProviderConfig): string {
+  if (name === 'groq') return aiConfig.groqApiKey || process.env.GROQ_API_KEY || '';
+  if (name === 'gemini') return aiConfig.geminiApiKey || process.env.GEMINI_API_KEY || '';
+  return aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY || '';
+}
+
+/** Best model id for a keyed leg: admin override, catalogue, fallback. */
+export async function keyedModelFor(
+  name: KeyedProviderName,
+  aiConfig: AIProviderConfig,
+): Promise<string> {
+  if (aiConfig.modelName) return aiConfig.modelName;
+  const cached = keyedModelCache[name];
+  const now = Date.now();
+  if (cached.models.length > 0 && now - cached.at < MODEL_CACHE_DURATION) return cached.models[0];
+  const apiKey = keyFor(name, aiConfig);
+  if (!apiKey) return KEYED_PROVIDERS[name].fallback[0];
+  const ranked = await discoverKeyedModels(name, apiKey, 5000);
+  keyedModelCache[name] = { models: ranked.length ? ranked : [...KEYED_PROVIDERS[name].fallback], at: now };
+  return keyedModelCache[name].models[0];
+}
+
+/**
  * Tier 1b: Cerebras (fast, free, OpenAI-compatible).
  *
  * Same shape as the Groq leg (plain completions, no tool loop): the free
@@ -533,7 +643,7 @@ console.log('[Grumpy Bot] No CEREBRAS_API_KEY configured, skipping Cerebras');
       { role: 'user', content: userMessage }
     ];
 
-    const model = aiConfig.modelName || 'llama-3.1-8b';
+    const model = await keyedModelFor('cerebras', aiConfig);
 console.log(`[Grumpy Bot] Trying Cerebras (${model})...`);
 
     const response = await axios.post(
@@ -584,7 +694,7 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
       { role: 'user', content: userMessage }
     ];
 
-    const model = aiConfig.modelName || 'llama-3.1-8b-instant';
+    const model = await keyedModelFor('groq', aiConfig);
 console.log(`[Grumpy Bot] Trying Groq (${model})...`);
 
     const response = await axios.post(
@@ -631,7 +741,7 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
       context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
     }\nUser: ${userMessage}\nAssistant:`;
 
-    const model = aiConfig.modelName || 'gemini-1.5-flash';
+    const model = await keyedModelFor('gemini', aiConfig);
 console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
 
     const response = await axios.post(
