@@ -348,6 +348,27 @@ async function handleMessage(message: Message): Promise<void> {
   }
 }
 
+/**
+ * A task id as typed: exact or unique 8-char prefix. The door shows short
+ * ids and callers quote them (`8f358f41`), but the API wants the full
+ * UUID — exact match wins, a unique prefix resolves, anything else says
+ * so with candidates instead of "Unknown task".
+ */
+export async function resolveTaskId(api: WhipApiClient, raw: string): Promise<string> {
+  const tasks = await api.listAllTasks();
+  const exact = tasks.find((t) => t.id === raw);
+  if (exact) return exact.id;
+  const hits = tasks.filter((t) => t.id.toLowerCase().startsWith(raw.toLowerCase()));
+  if (hits.length === 1) return hits[0].id;
+  if (hits.length > 1) {
+    throw new WhipApiError(
+      `"${raw}" matches ${hits.length} tasks: ${hits.slice(0, 5).map((t) => `${t.title} (\`${t.id.slice(0, 8)}\`)`).join(', ')}. Be more specific.`,
+      400,
+    );
+  }
+  throw new WhipApiError(`Unknown task "${raw}".`, 404);
+}
+
 async function handleWhip(
   interaction: ChatInputCommandInteraction,
   api: WhipApiClient,
@@ -444,7 +465,9 @@ async function handleWhip(
         }, board);
         break;
       }
-      case 'task': {        const task = await api.getTask(interaction.options.getString('id', true).trim());
+      case 'task': {
+        const taskId = await resolveTaskId(api, interaction.options.getString('id', true).trim());
+        const task = await api.getTask(taskId);
         const embed = new EmbedBuilder().setTitle(task.title);
         embed.setDescription(
           `${formatTaskLine(task)}${task.description ? `\n\n${task.description}` : ''}\n\`${task.id}\``
@@ -457,7 +480,7 @@ async function handleWhip(
         break;
       }
       case 'task-edit': {
-        const id = interaction.options.getString('id', true).trim();
+        const id = await resolveTaskId(api, interaction.options.getString('id', true).trim());
         const patch: Record<string, unknown> = {};
         for (const key of ['title', 'description', 'category', 'priority', 'points'] as const) {
           const value = interaction.options.getString(key, false);
@@ -477,7 +500,7 @@ async function handleWhip(
         break;
       }
       case 'task-delete': {
-        const id = interaction.options.getString('id', true).trim();
+        const id = await resolveTaskId(api, interaction.options.getString('id', true).trim());
         try {
           const task = await api.getTask(id);
           await interaction.editReply({
@@ -493,7 +516,7 @@ async function handleWhip(
         const actor = await requireLinkedUser(interaction, api);
         if (!actor) return;
         try {
-          const result = await completeTask(api, interaction.options.getString('id', true).trim(), actor);
+          const result = await completeTask(api, await resolveTaskId(api, interaction.options.getString('id', true).trim()), actor);
           await interaction.editReply({ content: result });
         } catch (err) {
           await replyError(interaction, writeErrorMessage(err));
@@ -506,7 +529,7 @@ async function handleWhip(
         try {
           const result = await moveTaskTo(
             api,
-            interaction.options.getString('id', true).trim(),
+            await resolveTaskId(api, interaction.options.getString('id', true).trim()),
             interaction.options.getString('status', true),
             actor
           );
