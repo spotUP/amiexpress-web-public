@@ -261,6 +261,18 @@ export async function showMainMenu(
 
     // Keyboard handler for direct shortcuts
     const keyHandler = (ch: any, key: any) => {
+      // Tab steps between the list and the menu bar. WHIP runs with
+      // focusKeys:false so the screen default never fires - without this
+      // the SDK bar's Tab stop is unreachable by keyboard (2026-09-10).
+      if (key.name === 'tab') {
+        const stop = menu?.bar.getTabStop();
+        if (!stop) return;
+        if (screen.getFocused() === stop) list.focus();
+        else stop.focus();
+        screen.render();
+        return;
+      }
+
       const keyName = key.name.toUpperCase();
 
       // Check for direct menu shortcuts

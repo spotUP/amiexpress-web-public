@@ -80,8 +80,7 @@ export async function menuBarGroupsEveryAction(): Promise<void> {
   } finally { screen.destroy(); }
 }
 
-export async function narrowScreensSkipTheBar(): Promise<void> {
-  const screen = open(40);
+export async function narrowScreensSkipTheBar(): Promise<void> {  const screen = open(40);
   // Headless Screens clamp to 80 columns, so narrow is staged by
   // overriding the instance width - the door only ever reads it.
   Object.defineProperty(screen, 'width', { value: 40, configurable: true });
@@ -94,5 +93,31 @@ export async function narrowScreensSkipTheBar(): Promise<void> {
     // The menu itself still works: hotkey K opens the board.
     screen.program.emit('keypress', 'k', { name: 'k', full: 'k' });
     assert.strictEqual(await done, 'kanban', 'hotkeys carry narrow screens');
+  } finally { screen.destroy(); }
+}
+
+export async function tabStepsBetweenListAndBar(): Promise<void> {
+  // focusKeys:false kills the screen default Tab, which stranded the
+  // SDK bar's Tab stop with no way to reach it (2026-09-10).
+  const screen = open();
+  try {
+    const done = showMainMenu(screen, user, dataManager);
+    await settle();
+
+    const bar = menuBarOf(screen);
+    assert.ok(bar, 'the bar is up');
+    const stop = bar.getTabStop();
+    assert.ok(stop, 'the bar names a tab stop');
+
+    screen.program.emit('keypress', '\t', { name: 'tab', full: 'tab' });
+    await settle();
+    assert.strictEqual(screen.getFocused(), stop, 'Tab lands on the bar');
+
+    screen.program.emit('keypress', '\t', { name: 'tab', full: 'tab' });
+    await settle();
+    assert.notStrictEqual(screen.getFocused(), stop, 'Tab again leaves the bar');
+
+    screen.program.emit('keypress', 'q', { name: 'q', full: 'q' });
+    await done;
   } finally { screen.destroy(); }
 }
