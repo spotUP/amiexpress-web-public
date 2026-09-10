@@ -23,7 +23,7 @@ function fixtureBase(stem: string): string {
 }
 
 /** Minimal native packet frame (edit.tf / wxTED / Marco family grammar). */
-const NATIVE_TTI = 'DE,Native test page\nPN,10000\nSC,0000\nOL,0,  NATIVE PACKETS\nOL,23, Page 100\n';
+const NATIVE_TTI = 'DE,Native test page\nPN,10000\nSC,0000\nCT,8,C\nPS,8000\nOL,0,  NATIVE PACKETS\nOL,2, Hello from packets.\nOL,23, Page 100\n';
 
 describe('findSecurityScreen - teletext slot', () => {
   test('.ttx wins for a teletext session', () => {
@@ -62,21 +62,31 @@ describe('findSecurityScreen - teletext slot', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('a native .tti is skipped until rendered - never served raw', () => {
-    // Packet bytes as ANSI would be noise, not art. With no renderer yet
-    // the loader must fall through past the native file to .txt.
+  test('a native .tti wins the security slot once validated as packets', () => {
+    // Preference, not rendering: findSecurityScreen answers paths. The
+    // loader renders (or falls through) afterwards - packet bytes are
+    // never served raw, proven by the loadScreenFile cases below.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-native-'));
     fs.writeFileSync(path.join(dir, 'NAT.txt'), 'ansi fallback');
     fs.writeFileSync(path.join(dir, 'NAT.tti'), NATIVE_TTI);
     const found = findSecurityScreen(path.join(dir, 'NAT'), 0, null, false, false, false, true);
     expect(found).not.toBeNull();
-    expect(found!.toLowerCase().endsWith('.txt')).toBe(true);
+    expect(found!.toLowerCase().endsWith('.tti')).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('a non-packet .tti does not take the native slot', () => {
+    // An ANSI file wearing the extension must not shadow the .ttx twin.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-native-'));
+    fs.writeFileSync(path.join(dir, 'NAT.ttx'), 'ansi teletext');
+    fs.writeFileSync(path.join(dir, 'NAT.tti'), 'just some ANSI text\n');
+    const found = findSecurityScreen(path.join(dir, 'NAT'), 0, null, false, false, false, true);
+    expect(found).not.toBeNull();
+    expect(found!.toLowerCase().endsWith('.ttx')).toBe(true);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test('a stem with only .txt still resolves in a teletext session (fallback)', () => {
-    // screens-menu.txt has no .ttx sibling: the board serves it, in the
-    // TDAText face, rather than failing the screen.
     const found = findSecurityScreen(fixtureBase('screens-menu'), 0, null, false, false, false, true);
     expect(found).not.toBeNull();
     expect(found!.toLowerCase().endsWith('.txt')).toBe(true);
@@ -135,8 +145,20 @@ describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
     expect(screen!.isTeletext).toBeFalsy();
   });
 
-  test('a native .tti beside the art is not served raw', () => {
+  test('a native .tti renders to ANSI through the loader, never raw', () => {
     fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.tti'), NATIVE_TTI);
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
+    expect(screen).not.toBeNull();
+    expect(screen!.content).toContain('Hello from packets');
+    expect(screen!.content).not.toContain('OL,2');
+    expect(screen!.isTeletext).toBe(true);
+  });
+
+  test('an unrenderable .tti falls back instead of serving noise', () => {
+    // Validated at the security slot but unrenderable at load (truncated
+    // packets): the .ttx twin serves, not the packet bytes.
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.tti'), 'DE,broken\nOL,0,');
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
     expect(screen).not.toBeNull();

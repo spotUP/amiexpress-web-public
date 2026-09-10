@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { conferenceDir } from '../conferences/conference-paths';
+import { tryNativeTtiFile } from '../teletext/render-native';
 
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -302,6 +303,12 @@ function isRipFile(filePath: string): boolean {
 function isTeletextFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return ext === '.ttx';
+}
+
+/** Name check for native packet screens; content validation happens in tryNativeTtiFile. */
+function isNativeTtiName(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === '.tti';
 }
 
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
@@ -1292,13 +1299,16 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
   const addTeletextVariants = (name: string) => {
     const variants = new Set<string>();
     const stem = stripScreenExtension(name);
-    // Prefer ANSI teletext .ttx first (lowercase first; see addAnsiVariants)
+    // Native packet .tti first (rendered server-side below), then ANSI
+    // .ttx (lowercase first; see addAnsiVariants).
+    variants.add(`${stem}.tti`);
+    variants.add(`${stem}.TTI`);
     variants.add(`${stem}.ttx`);
     variants.add(`${stem}.TTX`);
     // Also allow explicit name as-is
     variants.add(name);
-    // Fall back to ANSI text if no .ttx exists - a T session without
-    // authored teletext art still renders the board, in the TDAText face.
+    // Fall back to ANSI text if no teletext art exists - a T session
+    // without authored art still renders the board, in the TDAText face.
     variants.add(`${stem}.txt`);
     variants.add(`${stem}.TXT`);
     variants.add(`${stem}.logoff`);
@@ -1371,8 +1381,19 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(securityVariant), isPetscii: false, isRip: true, filePath: securityVariant };
           }
-          const decodedSecurity = readScreenWithTransforms(securityVariant);
-          return { content: decodedSecurity.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(securityVariant) || undefined, filePath: securityVariant, sourceEncoding: sourceCharsetOf(decodedSecurity) };
+          // Native packet teletext renders server-side; unrenderable
+          // packets fall through to the variations walk below (which
+          // probes the .ttx twin) - never served raw.
+          if (isNativeTtiName(securityVariant)) {
+            const native = tryNativeTtiFile(securityVariant);
+            if (native) {
+              screenDebug(`[loadScreenFile] Native .tti rendered for ${screenName}`);
+              return { content: native.ansi, isPetscii: false, isRip: false, isTeletext: true, filePath: securityVariant };
+            }
+          } else {
+            const decodedSecurity = readScreenWithTransforms(securityVariant);
+            return { content: decodedSecurity.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(securityVariant) || undefined, filePath: securityVariant, sourceEncoding: sourceCharsetOf(decodedSecurity) };
+          }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1406,6 +1427,17 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(fileToUse), isPetscii: false, isRip: true, filePath: fileToUse };
           } else {
+            // Native packet teletext renders server-side; unrenderable
+            // packets are skipped (never served raw) and the walk
+            // continues to the .ttx twin.
+            if (isNativeTtiName(fileToUse)) {
+              const native = tryNativeTtiFile(fileToUse);
+              if (native) {
+                screenDebug(`[loadScreenFile] Native .tti rendered for ${screenName}`);
+                return { content: native.ansi, isPetscii: false, isRip: false, isTeletext: true, filePath: fileToUse };
+              }
+              continue;
+            }
             const decoded = readScreenWithTransforms(fileToUse);
             const content = decoded.text;
             try {
@@ -1466,8 +1498,19 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
             if (isRipFile(secPath)) {
               return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
             }
-            const decodedSecPath = readScreenWithTransforms(secPath);
-            return { content: decodedSecPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(secPath) || undefined, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
+            // Native packet teletext renders server-side; unrenderable
+            // packets fall through past this block to the assign-path walk
+            // below (which probes the .ttx twin) - never served raw.
+            if (isNativeTtiName(secPath)) {
+              const native = tryNativeTtiFile(secPath);
+              if (native) {
+                screenDebug(`[loadScreenFile] Native .tti rendered for ${screenName}`);
+                return { content: native.ansi, isPetscii: false, isRip: false, isTeletext: true, filePath: secPath };
+              }
+            } else {
+              const decodedSecPath = readScreenWithTransforms(secPath);
+              return { content: decodedSecPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(secPath) || undefined, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
+            }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1487,12 +1530,12 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       const pathStem = stripScreenExtension(candidatePath);
       // `.seq` first only for a caller who is served 40-column art; an
       // 80-column PETSCII caller takes the ANSI order, as an ANSI caller does.
-      // `.ttx` first only for a teletext session; everyone else takes the
-      // ANSI order, with .ttx unreachable except by explicit name.
+      // Native packet `.tti` first for a teletext session (rendered below),
+      // then ANSI `.ttx`; everyone else takes the ANSI order.
       const extOrder = servesPetsciiArt(session)
         ? ['.seq', '.SEQ', '.txt', '.TXT', '.ans', '.ANS']
         : session?.texttvMode === true
-          ? ['.ttx', '.TTX', '.txt', '.TXT', '.ans', '.ANS']
+          ? ['.tti', '.TTI', '.ttx', '.TTX', '.txt', '.TXT', '.ans', '.ANS']
           : ['.txt', '.TXT', '.ans', '.ANS'];
       const pathsToTry = [candidatePath, ...extOrder.map(ext => pathStem + ext)]
         .filter((p, idx, all) => all.indexOf(p) === idx);
@@ -1514,6 +1557,17 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(tryPath), isPetscii: false, isRip: true, filePath: tryPath };
           } else {
+            // Native packet teletext renders server-side; unrenderable
+            // packets are skipped (never served raw) and the walk
+            // continues to the .ttx twin.
+            if (isNativeTtiName(tryPath)) {
+              const native = tryNativeTtiFile(tryPath);
+              if (native) {
+                screenDebug(`[loadScreenFile] Native .tti rendered for ${screenName}`);
+                return { content: native.ansi, isPetscii: false, isRip: false, isTeletext: true, filePath: tryPath };
+              }
+              continue;
+            }
             const decodedTryPath = readScreenWithTransforms(tryPath);
             return { content: decodedTryPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(tryPath) || undefined, filePath: tryPath, sourceEncoding: sourceCharsetOf(decodedTryPath) };
           }
