@@ -44,11 +44,61 @@ export async function showMainMenu(
       : null;
 
     // ========================================================================
+    // MENU BAR - one-key map of everything below (mouse or hotkey).
+    // A single borderless row: the list already owns the arrows, so the
+    // bar never takes focus - it is clicked, not tabbed to. Hidden below
+    // 60 columns, where the footer hints carry the same keys.
+    // ========================================================================
+    const menuBarItems: Array<{ label: string; value: MenuSelection }> = [
+      { label: 'Task', value: 'quick-task' },
+      { label: 'Project', value: 'new-project' },
+      { label: 'Boards', value: 'view-projects' },
+      { label: 'Kanban', value: 'kanban' },
+      { label: 'Mine', value: 'my-tasks' },
+      { label: 'Parties', value: 'parties' },
+      { label: 'Stars', value: 'leaderboard' },
+      { label: 'Medals', value: 'achievements' },
+      { label: 'Quit', value: 'quit' },
+    ];
+    let menuBar: any = null;
+    const pickFromBar = (value: MenuSelection) => {
+      cleanup();
+      resolve(value);
+    };
+    if (screen.width >= 60) {
+      const commands: Record<string, { callback: () => void }> = {};
+      for (const item of menuBarItems) {
+        const value = item.value;
+        commands[` ${item.label} `] = { callback: () => pickFromBar(value) };
+      }
+      menuBar = blessed.listbar({
+        parent: screen,
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        mouse: true,
+        keys: false,
+        focusable: false,
+        style: {
+          fg: T.ink,
+          bg: T.ground,
+          selected: { bg: T.accent, fg: T.ground },
+          item: { fg: T.ink, bg: T.ground },
+        },
+        commands,
+      } as any);
+    }
+    // Narrow screens skip the bar (footer hints carry the same keys) and
+    // everything above slides up one row - no empty row 0.
+    const barH = menuBar ? 1 : 0;
+
+    // ========================================================================
     // HEADER - the chrome's masthead (NOT focusable)
     // ========================================================================
     const header = createBox({
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -73,10 +123,10 @@ export async function showMainMenu(
     // ========================================================================
     const mainContainer = createBox({
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 0,
       width: '100%',
-      height: '100%-6',  // Leave room for header (3) and footer (3)
+      height: `100%-${barH + 7}`,  // Menu bar (0-1) + header (3) + footer (3) + gap
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -99,13 +149,13 @@ export async function showMainMenu(
       { key: 'Q', label: 'Quit', value: 'quit' as MenuSelection }
     ];
 
-    // Menu box with border - explicit height (9 items + 2 border + 2 padding = 13)
+    // Menu box with border - 9 items + 2 border + 1 spare = 12
     const menuBox = createBox({
       parent: mainContainer,
       top: 1,
       left: 1,
       width: '50%',
-      height: 13,
+      height: 12,
       border: { type: 'line' },
       label: ' MAIN MENU ',
       style: {
@@ -156,13 +206,13 @@ export async function showMainMenu(
       statsContent += `{${T.dim}-fg}No upcoming parties{/${T.dim}-fg}`;
     }
 
-    // Stats box on right side - same height as menu box (13)
+    // Stats box on right side - same height as menu box (12)
     const statsBox = createBox({
       parent: mainContainer,
       top: 1,
       right: 1,
       width: '45%',
-      height: 13,
+      height: 12,
       border: { type: 'line' },
       label: ' STATS ',
       content: statsContent,
@@ -269,6 +319,7 @@ export async function showMainMenu(
       chrome.stop();
       screen.off('keypress', keyHandler);
       list.removeAllListeners('select');
+      if (menuBar) screen.remove(menuBar);
       screen.remove(header);
       screen.remove(mainContainer);
       if (gettingStarted) screen.remove(gettingStarted);

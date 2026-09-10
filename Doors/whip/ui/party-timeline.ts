@@ -105,16 +105,29 @@ export async function showPartyTimeline(
         },
         scrollable: true,
         alwaysScroll: true,
+        // Visible scrollbar (2026-09-10): the list scrolled invisibly
+        // while the selection moved below the fold. Amiga-ASCII glyphs
+        // only - the terminal renders no block characters.
+        scrollbar: {
+          ch: '|',
+          track: { ch: ':', style: { fg: T.dim, bg: T.ground } },
+          style: { fg: T.accent, bg: T.ground },
+        },
         mouse: true,
         keys: true,
         vi: true,
         focusable: true,
       });
 
+      // Content line where each party's block starts, so the selection
+      // can be kept on screen (same fix as the scrollbar above).
+      let rowOf: number[] = [];
+
       if (upcomingParties.length === 0) {
         listBox.setContent(`{center}{${T.dim}-fg}No upcoming parties found.{/${T.dim}-fg}{/center}`);
       } else {
-        let content = '';
+        const blocks: string[] = [];
+        let line = 0;
 
         for (let i = 0; i < upcomingParties.length; i++) {
           const party = upcomingParties[i];
@@ -149,10 +162,12 @@ export async function showPartyTimeline(
             ? party.location.substring(0, maxLocationLength - 3) + '...'
             : party.location;
 
-          content += `${prefix}\n`;
-          content += ` {${color}-fg}[${days < 7 ? '!' : '*'}]{/${color}-fg} {bold}${partyName}{/bold}  -  {bold}${days} days{/bold}\n`;
-          content += `     Location: ${location}\n`;
-          content += `     Date: ${party.date}\n`;
+          rowOf.push(line);
+          const rows: string[] = [];
+          rows.push(`${prefix}`);
+          rows.push(` {${color}-fg}[${days < 7 ? '!' : '*'}]{/${color}-fg} {bold}${partyName}{/bold}  -  {bold}${days} days{/bold}`);
+          rows.push(`     Location: ${location}`);
+          rows.push(`     Date: ${party.date}`);
 
           if (party.categories.length > 0) {
             const cats = party.categories.join(', ');
@@ -160,16 +175,33 @@ export async function showPartyTimeline(
             const truncatedCats = cats.length > maxCatsLength
               ? cats.substring(0, maxCatsLength - 3) + '...'
               : cats;
-            content += `     Categories: ${truncatedCats}\n`;
+            rows.push(`     Categories: ${truncatedCats}`);
           }
 
-          content += `     Progress: ${progress}% ${progressBar}\n`;
-          content += `     Active: ${partyTasks.length - completedTasks} | Completed: ${completedTasks}\n`;
-          content += `${suffix}\n`;
+          rows.push(`     Progress: ${progress}% ${progressBar}`);
+          rows.push(`     Active: ${partyTasks.length - completedTasks} | Completed: ${completedTasks}`);
+          rows.push(`${suffix}`);
+          blocks.push(rows.join('\n'));
+          line += rows.length;
         }
 
-        listBox.setContent(content);
+        listBox.setContent(blocks.join('\n'));
       }
+
+      // Keep the selection on screen: scroll so its first row sits two
+      // rows down from the top of the pane.
+      listBox.scrollTo(Math.max(0, (rowOf[selectedIndex] ?? 0) - 2));
+
+      // The mousewheel moves the selection like the arrow keys (the pane
+      // is rebuilt every render, so this binds anew each time).
+      listBox.on('wheelup', () => {
+        selectedIndex = Math.max(0, selectedIndex - 1);
+        render();
+      });
+      listBox.on('wheeldown', () => {
+        selectedIndex = Math.min(upcomingParties.length - 1, selectedIndex + 1);
+        render();
+      });
 
       listBox.focus();
 

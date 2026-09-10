@@ -17,6 +17,8 @@ import { showAchievements } from './ui/achievements';
 import { createTask } from './ui/task-editor';
 import { createProject } from './ui/project-editor';
 import { showMyTasks } from './ui/my-tasks';
+import { attachResponsiveMode } from './ui/responsive';
+import type { TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { T, applyTheme } from './door-theme';
 
 export class WhipApp {
@@ -29,6 +31,10 @@ export class WhipApp {
   private currentUser!: UserStats;
   private exited = false;
   private bbsApi: any; // BBS API for event emission
+  // Alt+Enter responsive switch (ui/responsive.ts). Created at startup
+  // like livechat's - the call site runs in run(), and the proof is a
+  // started door, never a grep.
+  private terminalMode: TerminalModeSwitch | null = null;
   // Last project created or boarded, per session. Creating a project used
   // to leave the session nowhere, so the next Kanban opened Backlog (or a
   // picker) and a task made in a hurry "vanished" - it was in Backlog.
@@ -70,6 +76,11 @@ export class WhipApp {
 
     // Enable input
     this.inputManager.enable();
+
+    // Responsive switch: fixed 80 columns until the caller asks (Alt+Enter).
+    this.terminalMode = attachResponsiveMode(this.session.bbs, this.screen, () => {
+      this.screen.render();
+    });
 
     // Load/create user stats
     await this.loadUserStats();
@@ -331,6 +342,9 @@ export class WhipApp {
     this.screen.render();
     await this.sleep(200);
 
+    // Put the board's 80 columns back before leaving.
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     this.inputManager.disable();
     this.screen.destroy();
     this.exited = true;

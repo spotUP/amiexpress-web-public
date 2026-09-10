@@ -36,11 +36,60 @@ async function showMainMenu(screen, user, dataManager) {
             ? Math.ceil((new Date(upcomingParty.date).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
             : null;
         // ========================================================================
+        // MENU BAR - one-key map of everything below (mouse or hotkey).
+        // A single borderless row: the list already owns the arrows, so the
+        // bar never takes focus - it is clicked, not tabbed to. Hidden below
+        // 60 columns, where the footer hints carry the same keys.
+        // ========================================================================
+        const menuBarItems = [
+            { label: 'Task', value: 'quick-task' },
+            { label: 'Project', value: 'new-project' },
+            { label: 'Boards', value: 'view-projects' },
+            { label: 'Kanban', value: 'kanban' },
+            { label: 'Mine', value: 'my-tasks' },
+            { label: 'Parties', value: 'parties' },
+            { label: 'Stars', value: 'leaderboard' },
+            { label: 'Medals', value: 'achievements' },
+            { label: 'Quit', value: 'quit' },
+        ];
+        let menuBar = null;
+        const pickFromBar = (value) => {
+            cleanup();
+            resolve(value);
+        };
+        if (screen.width >= 60) {
+            const commands = {};
+            for (const item of menuBarItems) {
+                const value = item.value;
+                commands[` ${item.label} `] = { callback: () => pickFromBar(value) };
+            }
+            menuBar = blessed_1.default.listbar({
+                parent: screen,
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: 1,
+                mouse: true,
+                keys: false,
+                focusable: false,
+                style: {
+                    fg: door_theme_1.T.ink,
+                    bg: door_theme_1.T.ground,
+                    selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
+                    item: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
+                },
+                commands,
+            });
+        }
+        // Narrow screens skip the bar (footer hints carry the same keys) and
+        // everything above slides up one row - no empty row 0.
+        const barH = menuBar ? 1 : 0;
+        // ========================================================================
         // HEADER - the chrome's masthead (NOT focusable)
         // ========================================================================
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -64,10 +113,10 @@ async function showMainMenu(screen, user, dataManager) {
         // ========================================================================
         const mainContainer = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 0,
             width: '100%',
-            height: '100%-6', // Leave room for header (3) and footer (3)
+            height: `100%-${barH + 7}`, // Menu bar (0-1) + header (3) + footer (3) + gap
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.ground,
@@ -88,13 +137,13 @@ async function showMainMenu(screen, user, dataManager) {
             { key: 'A', label: 'Achievements', value: 'achievements' },
             { key: 'Q', label: 'Quit', value: 'quit' }
         ];
-        // Menu box with border - explicit height (9 items + 2 border + 2 padding = 13)
+        // Menu box with border - 9 items + 2 border + 1 spare = 12
         const menuBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
             top: 1,
             left: 1,
             width: '50%',
-            height: 13,
+            height: 12,
             border: { type: 'line' },
             label: ' MAIN MENU ',
             style: {
@@ -141,13 +190,13 @@ async function showMainMenu(screen, user, dataManager) {
         else {
             statsContent += `{${door_theme_1.T.dim}-fg}No upcoming parties{/${door_theme_1.T.dim}-fg}`;
         }
-        // Stats box on right side - same height as menu box (13)
+        // Stats box on right side - same height as menu box (12)
         const statsBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
             top: 1,
             right: 1,
             width: '45%',
-            height: 13,
+            height: 12,
             border: { type: 'line' },
             label: ' STATS ',
             content: statsContent,
@@ -245,6 +294,8 @@ async function showMainMenu(screen, user, dataManager) {
             chrome.stop();
             screen.off('keypress', keyHandler);
             list.removeAllListeners('select');
+            if (menuBar)
+                screen.remove(menuBar);
             screen.remove(header);
             screen.remove(mainContainer);
             if (gettingStarted)

@@ -19,10 +19,15 @@ const achievements_2 = require("./ui/achievements");
 const task_editor_1 = require("./ui/task-editor");
 const project_editor_1 = require("./ui/project-editor");
 const my_tasks_1 = require("./ui/my-tasks");
+const responsive_1 = require("./ui/responsive");
 const door_theme_1 = require("./door-theme");
 class WhipApp {
     constructor(session) {
         this.exited = false;
+        // Alt+Enter responsive switch (ui/responsive.ts). Created at startup
+        // like livechat's - the call site runs in run(), and the proof is a
+        // started door, never a grep.
+        this.terminalMode = null;
         this.session = session;
         // The board's theme, before any widget reads a colour from it.
         (0, door_theme_1.applyTheme)(session.bbs);
@@ -52,6 +57,10 @@ class WhipApp {
         await this.sleep(200);
         // Enable input
         this.inputManager.enable();
+        // Responsive switch: fixed 80 columns until the caller asks (Alt+Enter).
+        this.terminalMode = (0, responsive_1.attachResponsiveMode)(this.session.bbs, this.screen, () => {
+            this.screen.render();
+        });
         // Load/create user stats
         await this.loadUserStats();
         // Refresh party calendar (with cache)
@@ -240,6 +249,9 @@ class WhipApp {
         this.screen.alloc();
         this.screen.render();
         await this.sleep(200);
+        // Put the board's 80 columns back before leaving.
+        this.terminalMode?.dispose();
+        this.terminalMode = null;
         this.inputManager.disable();
         this.screen.destroy();
         this.exited = true;
