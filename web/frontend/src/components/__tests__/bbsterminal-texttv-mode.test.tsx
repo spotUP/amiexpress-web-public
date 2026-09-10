@@ -116,15 +116,40 @@ const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
 
 describe('texttv-mode on', () => {
-  it('swaps the face to TDAText and the palette to teletext colours', async () => {
+  it('swaps the face to TDAText at double size and the palette to teletext colours', async () => {
     mount();
     await act(async () => {
       socket.fire('texttv-mode', { enabled: true });
     });
     const term = rec.terminals[0];
     expect(term.options.fontFamily).toBe(fontFamilyFor(TELETEXT_FONT));
+    // Classic 40x25 at 12x10 cells on an 80x24 model: integer 2x, so 40
+    // teletext columns fill the width exactly. The mount default is 16.
+    expect(term.options.fontSize).toBe(32);
     expect(term.options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
     expect(term.options.theme.background).toBe('#000000');
+  });
+
+  it('lets the doubled terminal scroll instead of clipping', async () => {
+    const { container } = mount();
+    const box = container.querySelector('div');
+    const before = box ? (box as HTMLElement).style.overflow : null;
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: true });
+    });
+    // Exact node varies; at least one wrapper now scrolls.
+    const scrolled = Array.from(container.querySelectorAll('div')).some(
+      (el) => (el as HTMLElement).style.overflow === 'auto',
+    );
+    expect(scrolled).toBe(true);
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: false });
+    });
+    const unscrolled = Array.from(container.querySelectorAll('div')).every(
+      (el) => (el as HTMLElement).style.overflow !== 'auto',
+    );
+    expect(unscrolled).toBe(true);
+    expect(before).not.toBe('auto');
   });
 
   it('does not pollute the pre-login font cache', async () => {
@@ -156,18 +181,20 @@ describe('texttv-mode on', () => {
 });
 
 describe('texttv-mode off', () => {
-  it('restores the cached face and the previous palette', async () => {
+  it('restores the cached face at calibrated size and the previous palette', async () => {
     window.localStorage.setItem(FONT_CACHE_KEY, 'Topaz_a500');
     mount();
     await act(async () => {
       socket.fire('texttv-mode', { enabled: true });
     });
     expect(rec.terminals[0].options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
+    expect(rec.terminals[0].options.fontSize).toBe(32);
     await act(async () => {
       socket.fire('texttv-mode', { enabled: false });
     });
     const term = rec.terminals[0];
     expect(term.options.fontFamily).toBe(fontFamilyFor('Topaz_a500'));
+    expect(term.options.fontSize).toBe(16);
     expect(term.options.theme.brightRed).toBe(DEFAULT_BRIGHT_RED);
   });
 

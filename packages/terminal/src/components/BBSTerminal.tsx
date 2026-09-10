@@ -441,6 +441,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // font-preference / set-font from clobbering the look mid-session.
   const texttvModeRef = useRef<boolean>(false);
   const texttvPrevThemeRef = useRef<any>(null);
+  const texttvPrevOverflowRef = useRef<string | null>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -2063,6 +2064,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           try { term.options.theme = texttvPrevThemeRef.current; } catch { /* terminal may be disposed */ }
           texttvPrevThemeRef.current = null;
         }
+        if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
+          try { terminalRef.current.style.overflow = texttvPrevOverflowRef.current; } catch { /* disposed */ }
+          texttvPrevOverflowRef.current = null;
+        }
       }
 
       // Log disconnect event for debugging
@@ -2383,23 +2388,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Teletext session mode (T answer at the graphics prompt). Stays on the
-    // xterm surface - unlike PETSCII there is no canvas, only a face and a
-    // palette. The face applies uncached (session-font.ts: TELETEXT_FONT is
-    // outside BBS_FONTS and cacheFont=false) so the next connect's
-    // pre-login window never opens in it.
+    // xterm surface - unlike PETSCII there is no canvas, only a face, a
+    // palette and a SIZE. Classic teletext is 40x25 at 12x10 cells; the
+    // terminal models 80x24, so the mode doubles the calibrated cell: 40
+    // teletext columns fill the width exactly, double-height rows take
+    // two, and the box scrolls (its CSS clips). The face applies uncached
+    // (session-font.ts: TELETEXT_FONT is outside BBS_FONTS and
+    // cacheFont=false) so the next connect's pre-login window never
+    // opens in it.
     socket.on('texttv-mode', (data: { enabled: boolean }) => {
       if (data?.enabled) {
-        console.log('[Terminal] Teletext mode on - TDAText face, teletext palette');
+        console.log('[Terminal] Teletext mode on - TDAText face at 2x, teletext palette');
         texttvModeRef.current = true;
         if (texttvPrevThemeRef.current === null) texttvPrevThemeRef.current = term.options.theme;
         term.options.theme = XTERM_CONFIG.teletextTheme;
-        void applyFont(term, TELETEXT_FONT, fontSizeRef.current, false);
+        if (terminalRef.current && texttvPrevOverflowRef.current === null) {
+          texttvPrevOverflowRef.current = terminalRef.current.style.overflow || '';
+          terminalRef.current.style.overflow = 'auto';
+        }
+        void applyFont(term, TELETEXT_FONT, fontSizeRef.current * 2, false);
       } else {
         console.log('[Terminal] Teletext mode off - restoring session face');
         texttvModeRef.current = false;
         if (texttvPrevThemeRef.current !== null) {
           term.options.theme = texttvPrevThemeRef.current;
           texttvPrevThemeRef.current = null;
+        }
+        if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
+          terminalRef.current.style.overflow = texttvPrevOverflowRef.current;
+          texttvPrevOverflowRef.current = null;
         }
         void applyFont(term, readCachedFont() ?? DEFAULT_BBS_FONT, fontSizeRef.current);
       }
