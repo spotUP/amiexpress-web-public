@@ -259,6 +259,17 @@ export class DownloadHandler {
   private static showFilespecPrompt(socket: Socket, session: BBSSession): void {
     const user = session.user!;
     const numFiles = session.tempData?.downloadNumFiles || 0;
+    // A line-input prompt and a pagination gate are mutually exclusive:
+    // express.e's lineInput() never has a pending pause, but a stale gate
+    // can sit armed here (preamble doPause, re-armed screen gate), and
+    // handleCommand gives the gate priority — the first Enter vanishes
+    // into handlePaginatedScreenInput (a bare newline) and only the
+    // second reaches the filename loop. Live log 2026-09-10: ENTRY
+    // download_filename_input paginatedScreen=true. Disarm on EVERY
+    // filespec prompt, not just loop entry: the gate re-armed mid-loop
+    // (Filespec 1-3 worked, Filespec 4 ate one Enter).
+    session.paginatedScreen = undefined;
+    session.menuPause = false;
     const filespecNum = numFiles + 1;
     const minsLeft = (session as any).timeRemaining || 60;
 
@@ -472,6 +483,10 @@ export class DownloadHandler {
     // express.e:20210 '\b\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? '
     socket.emit('ansi-output', '\r\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? ');
 
+    // Same mutual exclusion as the filespec loop: no pending pause may
+    // swallow the confirming keystroke.
+    session.paginatedScreen = undefined;
+    session.menuPause = false;
     session.subState = LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT;
     session.tempData = {
       ...session.tempData,
