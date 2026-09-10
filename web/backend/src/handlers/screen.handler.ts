@@ -275,7 +275,7 @@ function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): stri
  * `001.logoff.seq.seq`, `001.logoff.seq.txt`, ... - so the include silently
  * resolved to nothing (plan Task 7).
  */
-const SCREEN_EXTENSION_RE = /\.(seq|txt|rip|tti)$/i;
+const SCREEN_EXTENSION_RE = /\.(seq|txt|rip|tti|ttx)$/i;
 
 /** `001.logoff.seq` -> `001.logoff`; `MENU` -> `MENU` (unchanged). */
 function stripScreenExtension(name: string): string {
@@ -292,14 +292,16 @@ function isRipFile(filePath: string): boolean {
 }
 
 /**
- * Check if a file is a teletext screen (WEB_: T answer at the graphics
- * prompt). ANSI bytes like .txt - the web terminal's TDAText face does the
- * work - so the display path needs no branch for it; the loader prefers it
- * the way it prefers .seq/.rip, and displayScreen serves it as ANSI.
+ * Check if a file is an ANSI teletext screen (WEB_: T answer at the
+ * graphics prompt). ANSI bytes like .txt - the web terminal's TDAText
+ * face does the work - so the display path needs no branch for it; the
+ * loader prefers it the way it prefers .seq/.rip, and displayScreen
+ * serves it as ANSI. Native packet-level .tti is NOT this: it gets its
+ * own predicate and renderer when native support lands.
  */
 function isTeletextFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
-  return ext === '.tti';
+  return ext === '.ttx';
 }
 
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
@@ -1059,9 +1061,10 @@ export function loadScreenFile(
   isPetscii: boolean;
   isRip: boolean;
   /**
-   * WEB_: true when the winning file was a .tti teletext screen. Advisory
-   * only - displayScreen serves it down the ordinary ANSI path (the face
-   * does the work), but callers and tests can tell which variant won.
+   * WEB_: true when the winning file was a .ttx ANSI teletext screen.
+   * Advisory only - displayScreen serves it down the ordinary ANSI path
+   * (the face does the work), but callers and tests can tell which
+   * variant won.
    */
   isTeletext?: boolean;
   filePath: string;
@@ -1289,12 +1292,12 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
   const addTeletextVariants = (name: string) => {
     const variants = new Set<string>();
     const stem = stripScreenExtension(name);
-    // Prefer teletext .tti first (lowercase first; see addAnsiVariants)
-    variants.add(`${stem}.tti`);
-    variants.add(`${stem}.TTI`);
+    // Prefer ANSI teletext .ttx first (lowercase first; see addAnsiVariants)
+    variants.add(`${stem}.ttx`);
+    variants.add(`${stem}.TTX`);
     // Also allow explicit name as-is
     variants.add(name);
-    // Fall back to ANSI text if no .tti exists - a T session without
+    // Fall back to ANSI text if no .ttx exists - a T session without
     // authored teletext art still renders the board, in the TDAText face.
     variants.add(`${stem}.txt`);
     variants.add(`${stem}.TXT`);
@@ -1484,12 +1487,12 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       const pathStem = stripScreenExtension(candidatePath);
       // `.seq` first only for a caller who is served 40-column art; an
       // 80-column PETSCII caller takes the ANSI order, as an ANSI caller does.
-      // `.tti` first only for a teletext session; everyone else takes the
-      // ANSI order, with .tti unreachable except by explicit name.
+      // `.ttx` first only for a teletext session; everyone else takes the
+      // ANSI order, with .ttx unreachable except by explicit name.
       const extOrder = servesPetsciiArt(session)
         ? ['.seq', '.SEQ', '.txt', '.TXT', '.ans', '.ANS']
         : session?.texttvMode === true
-          ? ['.tti', '.TTI', '.txt', '.TXT', '.ans', '.ANS']
+          ? ['.ttx', '.TTX', '.txt', '.TXT', '.ans', '.ANS']
           : ['.txt', '.TXT', '.ans', '.ANS'];
       const pathsToTry = [candidatePath, ...extOrder.map(ext => pathStem + ext)]
         .filter((p, idx, all) => all.indexOf(p) === idx);

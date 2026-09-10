@@ -84,14 +84,14 @@ export interface GalleryItem {
    * text/ANSI file otherwise - so a screen with only one of them is a screen
    * two thirds of the board cannot show properly.
    */
-  formats?: { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean };
+  formats?: { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean; teletextNative: boolean };
   /**
    * WHAT THIS FILE IS, so the thumbnail is drawn by the renderer that can read
    * it. Every card used to go through the CP437 ANSI canvas, so a `.seq` - a
    * file of C64 screen codes - came out as noise, and a `.rip` as its own
    * drawing commands in text. Absent means text or ANSI, the common case.
    */
-  format?: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext';
+  format?: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext' | 'teletext-native';
 }
 
 /**
@@ -107,8 +107,11 @@ export interface GalleryItem {
  * `PetsciiCanvas`), which is the component the terminal draws a C64 caller
  * with, so the thumbnail and the caller see the same screen.
  *
- * Teletext (.tti) is ANSI bytes like .txt, so the ordinary ScreenArt canvas
- * reads it - the TDAText face is a terminal concern, not a content one.
+ * ANSI teletext (.ttx) is ANSI bytes like .txt, so the ordinary ScreenArt
+ * canvas reads it - the TDAText face is a terminal concern, not a content
+ * one. Native packet teletext (.tti) has no thumbnail yet: its picture
+ * needs the packet renderer landing separately, and a gallery is hundreds
+ * of cards; naming the format is honest, the RIP precedent.
  *
  * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
  * and a canvas per card, and a gallery is hundreds of cards; naming the format
@@ -117,6 +120,16 @@ export interface GalleryItem {
 function Thumbnail({ content, format }: { content: string; format?: GalleryItem['format'] }) {
   if (format === 'petscii') {
     return <PetsciiScreenPreview content={content} className="h-full w-full" />;
+  }
+  if (format === 'teletext-native') {
+    return (
+      <div
+        data-testid="teletext-native-thumbnail"
+        className="flex h-full w-full items-center justify-center text-xs text-content-muted"
+      >
+        Native teletext - renderer lands separately
+      </div>
+    );
   }
   if (format === 'rip') {
     return (
@@ -260,7 +273,8 @@ function GalleryCard(
               ['ANSI', item.formats.ansi],
               ['SEQ', item.formats.petscii],
               ['RIP', item.formats.rip],
-              ['TTI', item.formats.teletext],
+              ['TTX', item.formats.teletext],
+              ['TTI', item.formats.teletextNative],
             ] as const).map(([label, have]) => (
               <span
                 key={label}

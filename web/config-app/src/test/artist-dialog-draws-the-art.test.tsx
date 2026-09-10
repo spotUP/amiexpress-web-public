@@ -137,7 +137,7 @@ describe('opening a screen in the studio', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: '+ PETSCII' })).toBeTruthy());
     expect(screen.getByRole('button', { name: '+ RIP' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '+ Teletext' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '+ Teletext (native packets - author externally)' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '+ ANSI / text' })).toBeNull();
     expect(screen.getByText(/Nothing has been drawn here yet/)).toBeTruthy();
   });

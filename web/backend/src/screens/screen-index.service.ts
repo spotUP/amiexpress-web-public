@@ -32,7 +32,7 @@ import { readThemeRegistry, themeDirectory } from './theme-registry';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
 
-export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext';
+export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext' | 'teletext-native';
 
 /**
  * Who reads a file, and why.
@@ -372,9 +372,11 @@ function sniffFormat(name: string, buf: Buffer): ScreenFormat {
   const lower = name.toLowerCase();
   if (lower.endsWith('.rip') || buf.subarray(0, 2).toString('latin1') === '!|') return 'rip';
   if (lower.endsWith('.seq')) return 'petscii';
-  // WEB_: teletext screens are ANSI bytes (the TDAText face does the work),
-  // so they read as their own format for the gallery, not as generic text.
-  if (lower.endsWith('.tti')) return 'teletext';
+  // WEB_: .tti is native packet-level teletext (edit.tf / wxTED / Marco
+  // family) - listed, never parsed as text. .ttx is this board's ANSI
+  // teletext (the TDAText face does the work), drawn like ANSI.
+  if (lower.endsWith('.tti')) return 'teletext-native';
+  if (lower.endsWith('.ttx')) return 'teletext';
   if (buf.includes(0x1b)) return 'ansi';
   return 'text';
 }
@@ -541,9 +543,9 @@ function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
   const problems: ScreenProblem[] = [];
   if (buf.length === 0) problems.push('empty');
 
-  // Only for text-shaped screens: RIP and PETSCII carry their own byte
-  // conventions and `[` means nothing special in them.
-  if (format !== 'rip' && format !== 'petscii') {
+  // Only for text-shaped screens: RIP, PETSCII and native teletext
+  // carry their own byte conventions and `[` means nothing special in them.
+  if (format !== 'rip' && format !== 'petscii' && format !== 'teletext-native') {
     const text = buf.toString('latin1');
     const hasEscape = text.includes('\x1b');
     const hasBareCsi = /\[[0-9][0-9;]*m/.test(text);
@@ -859,9 +861,9 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
   const name = path.basename(absPath);
   const format = sniffFormat(name, buf);
 
-  // Only a text-shaped screen carries MCI; RIP and PETSCII bytes would produce
-  // noise that looks like references.
-  const mci = format === 'rip' || format === 'petscii'
+  // Only a text-shaped screen carries MCI; RIP, PETSCII and native
+  // teletext bytes would produce noise that looks like references.
+  const mci = format === 'rip' || format === 'petscii' || format === 'teletext-native'
     ? []
     : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
 

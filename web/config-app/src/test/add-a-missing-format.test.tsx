@@ -72,7 +72,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('which formats a screen lacks', () => {
   it('offers PETSCII, RIP and Teletext for a screen that only has ANSI', () => {
     expect(missingFormats('Node1/BBSTITLE.txt', ['Node1/BBSTITLE.txt']).map(m => `${m.label}:${m.path}`))
-      .toEqual(['PETSCII:Node1/BBSTITLE.seq', 'RIP:Node1/BBSTITLE.rip', 'Teletext:Node1/BBSTITLE.tti']);
+      .toEqual(['PETSCII:Node1/BBSTITLE.seq', 'RIP:Node1/BBSTITLE.rip', 'Teletext (native packets - author externally):Node1/BBSTITLE.tti']);
   });
 
   it('offers nothing a screen already has, whatever the case of the name', () => {

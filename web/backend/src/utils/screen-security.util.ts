@@ -97,7 +97,9 @@ export function findSecurityScreen(
    *
    * Priority:
    * 0. WEB_ extension (not in express.e): PETSCII mode: .SEQ
-   * 0b. WEB_ extension (not in express.e): teletext mode: .TTI
+   * 0b. WEB_ extension (not in express.e): teletext mode: .TTX (ANSI
+   *     teletext). Native packet-level .TTI outranks it once the
+   *     renderer lands - until then a .TTI on disk is not served raw.
    * 1. RIP mode: .RIP
    * 2. User screen type: .TXT.GR, .IBM, etc.
    * 3. Plain text: .TXT
@@ -126,13 +128,16 @@ console.log(`[SCREEN] Found RIP screen: ${resolved}`);
       }
     }
 
-    // WEB_ extension over express.e - teletext sessions prefer .TTI after
-    // .SEQ/.RIP and before the user screen type. A teletext session is
-    // never simultaneously PETSCII or RIP on this BBS (the T branch clears
-    // both), so this slot only fires when neither of theirs did.
+    // WEB_ extension over express.e - teletext sessions prefer .TTX (ANSI
+    // teletext) after .SEQ/.RIP and before the user screen type. Native
+    // packet-level .TTI will outrank it once rendered; until then it is
+    // deliberately not served (packet bytes as ANSI is noise, not art).
+    // A teletext session is never simultaneously PETSCII or RIP on this
+    // BBS (the T branch clears both), so this slot only fires when
+    // neither of theirs did.
     if (texttvMode) {
-      const ttiPath = `${basePath}.TTI`;
-      const resolved = resolveCaseInsensitivePath(ttiPath);
+      const ttxPath = `${basePath}.TTX`;
+      const resolved = resolveCaseInsensitivePath(ttxPath);
       if (resolved) {
 console.log(`[SCREEN] Found teletext screen: ${resolved}`);
         return resolved;

@@ -1,13 +1,15 @@
 /**
- * Teletext screen variant (.tti) - WEB_ extension, T answer at the graphics
+ * ANSI teletext screens (.ttx) - WEB_ extension, T answer at the graphics
  * prompt. Behavioural where the loader allows it (findSecurityScreen takes
  * an explicit base path), structural where it does not (the variant lists
  * live inline in loadScreenFile - see screen-loader-case.test.ts for why
  * a source pin is proportionate there).
  *
- * Priority: .SEQ (petscii) > .RIP (rip) > .TTI (teletext) > user type >
- * .TXT. A T session without authored .tti art falls back to .txt, which
- * still renders in the TDAText face.
+ * Priority: .SEQ (petscii) > .RIP (rip) > .TTX (teletext) > user type >
+ * .TXT. Native packet-level .TTI is deliberately NOT served until
+ * rendered (packet bytes as ANSI is noise): a stem with only .tti falls
+ * through to .txt. A T session without authored .ttx art falls back to
+ * .txt, which still renders in the TDAText face.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -20,11 +22,14 @@ function fixtureBase(stem: string): string {
   return path.join(FIXTURES, stem);
 }
 
+/** Minimal native packet frame (edit.tf / wxTED / Marco family grammar). */
+const NATIVE_TTI = 'DE,Native test page\nPN,10000\nSC,0000\nOL,0,  NATIVE PACKETS\nOL,23, Page 100\n';
+
 describe('findSecurityScreen - teletext slot', () => {
-  test('.tti wins for a teletext session', () => {
+  test('.ttx wins for a teletext session', () => {
     const found = findSecurityScreen(fixtureBase('teletext-menu'), 0, null, false, false, false, true);
     expect(found).not.toBeNull();
-    expect(found!.toLowerCase().endsWith('.tti')).toBe(true);
+    expect(found!.toLowerCase().endsWith('.ttx')).toBe(true);
   });
 
   test('.txt wins when no mode flag is set', () => {
@@ -36,9 +41,9 @@ describe('findSecurityScreen - teletext slot', () => {
   test('.SEQ still wins when both petscii and teletext flags are set', () => {
     // A T session is never simultaneously PETSCII (the T branch clears
     // petsciiMode), but the order must be total anyway.
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tti-pri-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-pri-'));
     fs.writeFileSync(path.join(dir, 'PRI.txt'), 'ansi fallback');
-    fs.writeFileSync(path.join(dir, 'PRI.tti'), 'teletext art');
+    fs.writeFileSync(path.join(dir, 'PRI.ttx'), 'teletext art');
     fs.writeFileSync(path.join(dir, 'PRI.SEQ'), 'petscii art');
     const found = findSecurityScreen(path.join(dir, 'PRI'), 0, null, false, false, true, true);
     expect(found).not.toBeNull();
@@ -47,9 +52,9 @@ describe('findSecurityScreen - teletext slot', () => {
   });
 
   test('.RIP still wins when both rip and teletext flags are set', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tti-pri-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-pri-'));
     fs.writeFileSync(path.join(dir, 'PRI.txt'), 'ansi fallback');
-    fs.writeFileSync(path.join(dir, 'PRI.tti'), 'teletext art');
+    fs.writeFileSync(path.join(dir, 'PRI.ttx'), 'teletext art');
     fs.writeFileSync(path.join(dir, 'PRI.RIP'), 'rip art');
     const found = findSecurityScreen(path.join(dir, 'PRI'), 0, null, true, false, false, true);
     expect(found).not.toBeNull();
@@ -57,8 +62,20 @@ describe('findSecurityScreen - teletext slot', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  test('a native .tti is skipped until rendered - never served raw', () => {
+    // Packet bytes as ANSI would be noise, not art. With no renderer yet
+    // the loader must fall through past the native file to .txt.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-native-'));
+    fs.writeFileSync(path.join(dir, 'NAT.txt'), 'ansi fallback');
+    fs.writeFileSync(path.join(dir, 'NAT.tti'), NATIVE_TTI);
+    const found = findSecurityScreen(path.join(dir, 'NAT'), 0, null, false, false, false, true);
+    expect(found).not.toBeNull();
+    expect(found!.toLowerCase().endsWith('.txt')).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test('a stem with only .txt still resolves in a teletext session (fallback)', () => {
-    // screens-menu.txt has no .tti sibling: the board serves it, in the
+    // screens-menu.txt has no .ttx sibling: the board serves it, in the
     // TDAText face, rather than failing the screen.
     const found = findSecurityScreen(fixtureBase('screens-menu'), 0, null, false, false, false, true);
     expect(found).not.toBeNull();
@@ -68,7 +85,7 @@ describe('findSecurityScreen - teletext slot', () => {
 
 describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
   // The top-level entry, driven: a tmp board with Node0 art proves the new
-  // code RAN (isTeletext flag + .tti bytes), not just that a helper
+  // code RAN (isTeletext flag + .ttx bytes), not just that a helper
   // answers. The config singleton bakes dataDir at construction, so the
   // board is pointed with config.set (restored after) - env alone arrives
   // too late. Tmp dir, nothing on the shared board.
@@ -76,9 +93,9 @@ describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
   let oldDataDir = '';
 
   beforeEach(() => {
-    board = fs.mkdtempSync(path.join(os.tmpdir(), 'tti-board-'));
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-board-'));
     fs.mkdirSync(path.join(board, 'Node0'), { recursive: true });
-    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.tti'), 'TELETEXT TITLE');
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.ttx'), 'TELETEXT TITLE');
     fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.txt'), 'ANSI TITLE');
     const { config } = require('../../src/config');
     oldDataDir = config.getConfig().dataDir;
@@ -91,7 +108,7 @@ describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
     fs.rmSync(board, { recursive: true, force: true });
   });
 
-  test('a teletext session is served the .tti with the flag set', () => {
+  test('a teletext session is served the .ttx with the flag set', () => {
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
     expect(screen).not.toBeNull();
@@ -109,13 +126,22 @@ describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
     expect(screen!.isTeletext).toBeFalsy();
   });
 
-  test('a teletext session falls back to .txt when no .tti exists', () => {
-    fs.rmSync(path.join(board, 'Node0', 'BBSTITLE.tti'));
+  test('a teletext session falls back to .txt when no .ttx exists', () => {
+    fs.rmSync(path.join(board, 'Node0', 'BBSTITLE.ttx'));
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
     expect(screen).not.toBeNull();
     expect(screen!.content).toContain('ANSI TITLE');
     expect(screen!.isTeletext).toBeFalsy();
+  });
+
+  test('a native .tti beside the art is not served raw', () => {
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.tti'), NATIVE_TTI);
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
+    expect(screen).not.toBeNull();
+    expect(screen!.content).toContain('TELETEXT TITLE');
+    expect(screen!.isTeletext).toBe(true);
   });
 });
 describe('loadScreenFile - teletext variant lists (structural pins)', () => {
@@ -124,19 +150,19 @@ describe('loadScreenFile - teletext variant lists (structural pins)', () => {
     'utf8',
   );
 
-  test('SCREEN_EXTENSION_RE swaps .tti, not appends', () => {
-    expect(src).toMatch(/SCREEN_EXTENSION_RE\s*=\s*\/\\\.\(seq\|txt\|rip\|tti\)/);
+  test('SCREEN_EXTENSION_RE swaps .ttx (and still .tti), not appends', () => {
+    expect(src).toMatch(/SCREEN_EXTENSION_RE\s*=\s*\/\\\.\(seq\|txt\|rip\|tti\|ttx\)/);
   });
 
-  test('addTeletextVariants queues .tti before .TTI before .txt', () => {
+  test('addTeletextVariants queues .ttx before .TTX before .txt', () => {
     const body = src.match(/addTeletextVariants[\s\S]*?return\s+Array\.from\(variants\)/)?.[0];
     expect(body).toBeDefined();
-    const tti = body!.search(/\$\{\w+\}\.tti`/);
-    const TTI = body!.search(/\$\{\w+\}\.TTI`/);
+    const ttx = body!.search(/\$\{\w+\}\.ttx`/);
+    const TTX = body!.search(/\$\{\w+\}\.TTX`/);
     const txt = body!.search(/\$\{\w+\}\.txt`/);
-    expect(tti).toBeGreaterThanOrEqual(0);
-    expect(TTI).toBeGreaterThan(tti);
-    expect(txt).toBeGreaterThan(TTI);
+    expect(ttx).toBeGreaterThanOrEqual(0);
+    expect(TTX).toBeGreaterThan(ttx);
+    expect(txt).toBeGreaterThan(TTX);
   });
 
   test('the selection arms route a teletext session to addTeletextVariants', () => {
@@ -146,13 +172,13 @@ describe('loadScreenFile - teletext variant lists (structural pins)', () => {
     expect(hits!.length).toBe(3);
   });
 
-  test('the assign-path extOrder tries .tti first for a teletext session', () => {
-    expect(src).toMatch(/session\?\.texttvMode === true[\s\S]*?'\.tti', '\.TTI'/);
+  test('the assign-path extOrder tries .ttx first for a teletext session', () => {
+    expect(src).toMatch(/session\?\.texttvMode === true[\s\S]*?'\.ttx', '\.TTX'/);
   });
 });
 
 describe('shipped teletext seeds resolve through the loader', () => {
-  // The board's own .tti art, COPIED into a scratch board and served by the
+  // The board's own .ttx art, COPIED into a scratch board and served by the
   // real loader pointed at it: the bytes are the shipped seeds, the board
   // is not. The jest live-data guard forbids reading the checkout as a
   // board, so the seeds travel. The property asserted is the VARIANT
@@ -162,8 +188,8 @@ describe('shipped teletext seeds resolve through the loader', () => {
   let oldDataDir = '';
 
   beforeEach(() => {
-    board = fs.mkdtempSync(path.join(os.tmpdir(), 'tti-seeds-'));
-    for (const rel of ['Node1/BBSTITLE.tti', 'Node1/BBSTITLE.txt', 'Conf1/Menu.tti', 'Conf1/Menu.txt']) {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-seeds-'));
+    for (const rel of ['Node1/BBSTITLE.ttx', 'Node1/BBSTITLE.txt', 'Conf1/Menu.ttx', 'Conf1/Menu.txt']) {
       const dst = path.join(board, rel);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
       fs.copyFileSync(path.join(REPO_ROOT, rel), dst);
@@ -179,11 +205,11 @@ describe('shipped teletext seeds resolve through the loader', () => {
     fs.rmSync(board, { recursive: true, force: true });
   });
 
-  test('Node1/BBSTITLE.tti wins for a teletext session', () => {
+  test('Node1/BBSTITLE.ttx wins for a teletext session', () => {
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('BBSTITLE', undefined, 1, { texttvMode: true });
     expect(screen).not.toBeNull();
-    expect(screen!.filePath.toLowerCase().endsWith('.tti')).toBe(true);
+    expect(screen!.filePath.toLowerCase().endsWith('.ttx')).toBe(true);
     expect(screen!.isTeletext).toBe(true);
   });
 
@@ -195,11 +221,11 @@ describe('shipped teletext seeds resolve through the loader', () => {
     expect(screen!.isTeletext).toBeFalsy();
   });
 
-  test('Conf1/Menu.tti wins for a teletext session', () => {
+  test('Conf1/Menu.ttx wins for a teletext session', () => {
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('MENU', 1, 1, { texttvMode: true });
     expect(screen).not.toBeNull();
-    expect(screen!.filePath.toLowerCase().endsWith('.tti')).toBe(true);
+    expect(screen!.filePath.toLowerCase().endsWith('.ttx')).toBe(true);
     expect(screen!.isTeletext).toBe(true);
   });
 });
