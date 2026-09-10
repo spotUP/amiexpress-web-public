@@ -19,6 +19,7 @@ const achievements_2 = require("./ui/achievements");
 const task_editor_1 = require("./ui/task-editor");
 const project_editor_1 = require("./ui/project-editor");
 const my_tasks_1 = require("./ui/my-tasks");
+const my_profile_1 = require("./ui/my-profile");
 const responsive_1 = require("./ui/responsive");
 const door_theme_1 = require("./door-theme");
 class WhipApp {
@@ -138,6 +139,9 @@ class WhipApp {
                 case 'achievements':
                     await this.showAchievements();
                     break;
+                case 'my-profile':
+                    await this.showMyProfile();
+                    break;
                 case 'quit':
                     await this.quit();
                     return;
@@ -211,6 +215,22 @@ class WhipApp {
     }
     async showMyTasks() {
         await (0, my_tasks_1.showMyTasks)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+    }
+    ;
+    async showMyProfile() {
+        const result = await (0, my_profile_1.showMyProfile)(this.screen, this.currentUser);
+        if (result === null)
+            return;
+        const name = (0, my_profile_1.normalizeDiscordName)(result);
+        const user = await this.dataManager.getUser(this.currentUser.userId);
+        if (!user)
+            return;
+        if (name)
+            user.discordName = name;
+        else
+            delete user.discordName;
+        await this.dataManager.updateUser(user);
+        this.currentUser = user;
     }
     async showPartyTimeline() {
         await (0, party_timeline_1.showPartyTimeline)(this.screen, this.currentUser, this.dataManager, this.partyCalendar);

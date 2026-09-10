@@ -62,6 +62,9 @@ async function showMainMenu(screen, user, dataManager) {
                     { label: '[L] Leaderboard', value: 'leaderboard' },
                     { label: '[A] Achievements', value: 'achievements' },
                 ] },
+            { label: 'Me', entries: [
+                    { label: '[D] Profile', value: 'my-profile' },
+                ] },
             { label: 'Quit', entries: [
                     { label: '[Q] Quit', value: 'quit' },
                 ] },
@@ -145,15 +148,16 @@ async function showMainMenu(screen, user, dataManager) {
             { key: 'P', label: 'Party Timeline', value: 'parties' },
             { key: 'L', label: 'Leaderboard', value: 'leaderboard' },
             { key: 'A', label: 'Achievements', value: 'achievements' },
+            { key: 'D', label: 'My Profile (Discord name)', value: 'my-profile' },
             { key: 'Q', label: 'Quit', value: 'quit' }
         ];
-        // Menu box with border - 9 items + 2 border + 1 spare = 12
+        // Menu box with border - 10 items + 2 border + 1 spare = 13
         const menuBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
             top: 1,
             left: 1,
             width: '50%',
-            height: 12,
+            height: 13,
             border: { type: 'line' },
             label: ' MAIN MENU ',
             style: {

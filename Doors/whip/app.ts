@@ -17,6 +17,7 @@ import { showAchievements } from './ui/achievements';
 import { createTask } from './ui/task-editor';
 import { createProject } from './ui/project-editor';
 import { showMyTasks } from './ui/my-tasks';
+import { showMyProfile, normalizeDiscordName } from './ui/my-profile';
 import { attachResponsiveMode } from './ui/responsive';
 import type { TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { T, applyTheme } from './door-theme';
@@ -178,6 +179,9 @@ export class WhipApp {
         case 'achievements':
           await this.showAchievements();
           break;
+        case 'my-profile':
+          await this.showMyProfile();
+          break;
         case 'quit':
           await this.quit();
           return;
@@ -291,6 +295,18 @@ export class WhipApp {
 
   private async showMyTasks(): Promise<void> {
     await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+  };
+
+  private async showMyProfile(): Promise<void> {
+    const result = await showMyProfile(this.screen, this.currentUser);
+    if (result === null) return;
+    const name = normalizeDiscordName(result);
+    const user = await this.dataManager.getUser(this.currentUser.userId);
+    if (!user) return;
+    if (name) user.discordName = name;
+    else delete user.discordName;
+    await this.dataManager.updateUser(user);
+    this.currentUser = user;
   }
 
   private async showPartyTimeline(): Promise<void> {
