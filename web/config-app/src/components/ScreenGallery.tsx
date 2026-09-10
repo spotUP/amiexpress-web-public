@@ -84,14 +84,14 @@ export interface GalleryItem {
    * text/ANSI file otherwise - so a screen with only one of them is a screen
    * two thirds of the board cannot show properly.
    */
-  formats?: { ansi: boolean; petscii: boolean; rip: boolean };
+  formats?: { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean };
   /**
    * WHAT THIS FILE IS, so the thumbnail is drawn by the renderer that can read
    * it. Every card used to go through the CP437 ANSI canvas, so a `.seq` - a
    * file of C64 screen codes - came out as noise, and a `.rip` as its own
    * drawing commands in text. Absent means text or ANSI, the common case.
    */
-  format?: 'ansi' | 'text' | 'petscii' | 'rip';
+  format?: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext';
 }
 
 /**
@@ -106,6 +106,9 @@ export interface GalleryItem {
  * PETSCII is drawn by the board's own surface (`PetsciiScreenPreview` ->
  * `PetsciiCanvas`), which is the component the terminal draws a C64 caller
  * with, so the thumbnail and the caller see the same screen.
+ *
+ * Teletext (.tti) is ANSI bytes like .txt, so the ordinary ScreenArt canvas
+ * reads it - the TDAText face is a terminal concern, not a content one.
  *
  * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
  * and a canvas per card, and a gallery is hundreds of cards; naming the format
@@ -257,6 +260,7 @@ function GalleryCard(
               ['ANSI', item.formats.ansi],
               ['SEQ', item.formats.petscii],
               ['RIP', item.formats.rip],
+              ['TTI', item.formats.teletext],
             ] as const).map(([label, have]) => (
               <span
                 key={label}

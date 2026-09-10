@@ -275,7 +275,7 @@ function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): stri
  * `001.logoff.seq.seq`, `001.logoff.seq.txt`, ... - so the include silently
  * resolved to nothing (plan Task 7).
  */
-const SCREEN_EXTENSION_RE = /\.(seq|txt|rip)$/i;
+const SCREEN_EXTENSION_RE = /\.(seq|txt|rip|tti)$/i;
 
 /** `001.logoff.seq` -> `001.logoff`; `MENU` -> `MENU` (unchanged). */
 function stripScreenExtension(name: string): string {
@@ -289,6 +289,17 @@ function stripScreenExtension(name: string): string {
 function isRipFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return ext === '.rip';
+}
+
+/**
+ * Check if a file is a teletext screen (WEB_: T answer at the graphics
+ * prompt). ANSI bytes like .txt - the web terminal's TDAText face does the
+ * work - so the display path needs no branch for it; the loader prefers it
+ * the way it prefers .seq/.rip, and displayScreen serves it as ANSI.
+ */
+function isTeletextFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === '.tti';
 }
 
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
@@ -1047,6 +1058,12 @@ export function loadScreenFile(
   content: string;
   isPetscii: boolean;
   isRip: boolean;
+  /**
+   * WEB_: true when the winning file was a .tti teletext screen. Advisory
+   * only - displayScreen serves it down the ordinary ANSI path (the face
+   * does the work), but callers and tests can tell which variant won.
+   */
+  isTeletext?: boolean;
   filePath: string;
   petsciiBuffer?: Buffer;
   /**
@@ -1269,7 +1286,26 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     return Array.from(variants);
   };
 
+  const addTeletextVariants = (name: string) => {
+    const variants = new Set<string>();
+    const stem = stripScreenExtension(name);
+    // Prefer teletext .tti first (lowercase first; see addAnsiVariants)
+    variants.add(`${stem}.tti`);
+    variants.add(`${stem}.TTI`);
+    // Also allow explicit name as-is
+    variants.add(name);
+    // Fall back to ANSI text if no .tti exists - a T session without
+    // authored teletext art still renders the board, in the TDAText face.
+    variants.add(`${stem}.txt`);
+    variants.add(`${stem}.TXT`);
+    variants.add(`${stem}.logoff`);
+    variants.add(`${stem}.logoff.txt`);
+    variants.add(`${stem}.LOGOFF.TXT`);
+    return Array.from(variants);
+  };
+
   const wantsPetsciiArt = servesPetsciiArt(session);
+  const wantsTeletext = session?.texttvMode === true;
 
   const filenameVariations = (() => {
     // Special-case BBSTITLE: try .TXT first to avoid noisy extensionless probes
@@ -1278,6 +1314,8 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         return [...addPetsciiVariants(screenName)];
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
+      } else if (wantsTeletext) {
+        return [...addTeletextVariants(screenName)];
       }
       return ['BBSTITLE.txt', 'BBSTITLE.TXT', 'BBSTITLE'];
     }
@@ -1286,6 +1324,8 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         return [...addPetsciiVariants(screenName)];
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
+      } else if (wantsTeletext) {
+        return [...addTeletextVariants(screenName)];
       }
       return ['AWAITSCREEN.txt', 'AWAITSCREEN.TXT'];
     }
@@ -1296,6 +1336,9 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     }
     if (session?.ripMode) {
       return addRipVariants(fileToFind);
+    }
+    if (wantsTeletext) {
+      return addTeletextVariants(fileToFind);
     }
     return addAnsiVariants(fileToFind);
   })();
@@ -1308,7 +1351,8 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session));
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
+        session?.texttvMode ?? false);
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
@@ -1325,7 +1369,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
             return { content: readScreenText(securityVariant), isPetscii: false, isRip: true, filePath: securityVariant };
           }
           const decodedSecurity = readScreenWithTransforms(securityVariant);
-          return { content: decodedSecurity.text, isPetscii: false, isRip: false, filePath: securityVariant, sourceEncoding: sourceCharsetOf(decodedSecurity) };
+          return { content: decodedSecurity.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(securityVariant) || undefined, filePath: securityVariant, sourceEncoding: sourceCharsetOf(decodedSecurity) };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1365,7 +1409,7 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
               const fs = require('fs');
               fs.appendFileSync('debug-screen-loads.log', `[${new Date().toISOString()}] Loaded ${screenName} from ${fileToUse} (content length: ${content.length})\n`);
             } catch (e) { /* ignore */ }
-            return { content, isPetscii: false, isRip: false, filePath: fileToUse, sourceEncoding: sourceCharsetOf(decoded) };
+            return { content, isPetscii: false, isRip: false, isTeletext: isTeletextFile(fileToUse) || undefined, filePath: fileToUse, sourceEncoding: sourceCharsetOf(decoded) };
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
@@ -1406,7 +1450,8 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session));
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
+        session?.texttvMode ?? false);
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
@@ -1419,7 +1464,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
               return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
             }
             const decodedSecPath = readScreenWithTransforms(secPath);
-            return { content: decodedSecPath.text, isPetscii: false, isRip: false, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
+            return { content: decodedSecPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(secPath) || undefined, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1439,9 +1484,13 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       const pathStem = stripScreenExtension(candidatePath);
       // `.seq` first only for a caller who is served 40-column art; an
       // 80-column PETSCII caller takes the ANSI order, as an ANSI caller does.
+      // `.tti` first only for a teletext session; everyone else takes the
+      // ANSI order, with .tti unreachable except by explicit name.
       const extOrder = servesPetsciiArt(session)
         ? ['.seq', '.SEQ', '.txt', '.TXT', '.ans', '.ANS']
-        : ['.txt', '.TXT', '.ans', '.ANS'];
+        : session?.texttvMode === true
+          ? ['.tti', '.TTI', '.txt', '.TXT', '.ans', '.ANS']
+          : ['.txt', '.TXT', '.ans', '.ANS'];
       const pathsToTry = [candidatePath, ...extOrder.map(ext => pathStem + ext)]
         .filter((p, idx, all) => all.indexOf(p) === idx);
 
@@ -1463,7 +1512,7 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             return { content: readScreenText(tryPath), isPetscii: false, isRip: true, filePath: tryPath };
           } else {
             const decodedTryPath = readScreenWithTransforms(tryPath);
-            return { content: decodedTryPath.text, isPetscii: false, isRip: false, filePath: tryPath, sourceEncoding: sourceCharsetOf(decodedTryPath) };
+            return { content: decodedTryPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(tryPath) || undefined, filePath: tryPath, sourceEncoding: sourceCharsetOf(decodedTryPath) };
           }
         }
       }

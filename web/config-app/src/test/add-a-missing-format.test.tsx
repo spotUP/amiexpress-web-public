@@ -70,17 +70,17 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('which formats a screen lacks', () => {
-  it('offers PETSCII and RIP for a screen that only has ANSI', () => {
+  it('offers PETSCII, RIP and Teletext for a screen that only has ANSI', () => {
     expect(missingFormats('Node1/BBSTITLE.txt', ['Node1/BBSTITLE.txt']).map(m => `${m.label}:${m.path}`))
-      .toEqual(['PETSCII:Node1/BBSTITLE.seq', 'RIP:Node1/BBSTITLE.rip']);
+      .toEqual(['PETSCII:Node1/BBSTITLE.seq', 'RIP:Node1/BBSTITLE.rip', 'Teletext:Node1/BBSTITLE.tti']);
   });
 
   it('offers nothing a screen already has, whatever the case of the name', () => {
-    expect(missingFormats('Node1/BBSTITLE.txt', ['Node1/BBSTITLE.txt', 'Node1/BBSTITLE.SEQ', 'Node1/bbstitle.rip'])).toEqual([]);
+    expect(missingFormats('Node1/BBSTITLE.txt', ['Node1/BBSTITLE.txt', 'Node1/BBSTITLE.SEQ', 'Node1/bbstitle.rip', 'Node1/BBSTITLE.TTI'])).toEqual([]);
   });
 
   it('counts a .gr as the ANSI slot', () => {
-    expect(missingFormats('Node1/MENU.GR', ['Node1/MENU.GR']).map(m => m.ext)).toEqual(['seq', 'rip']);
+    expect(missingFormats('Node1/MENU.GR', ['Node1/MENU.GR']).map(m => m.ext)).toEqual(['seq', 'rip', 'tti']);
   });
 });
 

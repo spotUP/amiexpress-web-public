@@ -32,7 +32,7 @@ import { readThemeRegistry, themeDirectory } from './theme-registry';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
 
-export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii';
+export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext';
 
 /**
  * Who reads a file, and why.
@@ -372,6 +372,9 @@ function sniffFormat(name: string, buf: Buffer): ScreenFormat {
   const lower = name.toLowerCase();
   if (lower.endsWith('.rip') || buf.subarray(0, 2).toString('latin1') === '!|') return 'rip';
   if (lower.endsWith('.seq')) return 'petscii';
+  // WEB_: teletext screens are ANSI bytes (the TDAText face does the work),
+  // so they read as their own format for the gallery, not as generic text.
+  if (lower.endsWith('.tti')) return 'teletext';
   if (buf.includes(0x1b)) return 'ansi';
   return 'text';
 }
@@ -867,7 +870,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
    * text-shaped screen: RIP and PETSCII carry their own conventions and
    * "strip the escapes" means nothing in them.
    */
-  const codesOnly = (format === 'ansi' || format === 'text') && buf.length > 0
+  const codesOnly = (format === 'ansi' || format === 'text' || format === 'teletext') && buf.length > 0
     ? isCodesOnly(buf.toString('latin1'))
     : false;
 

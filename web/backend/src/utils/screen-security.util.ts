@@ -75,6 +75,9 @@ function normalizeScreenTypeExtension(screenTypeExt: string): string {
  *   web C64 terminal / real-C64 PETSCII sessions prefer a .SEQ variant over
  *   everything else. See resolvePetsciiPath() in screen.handler.ts for the
  *   sibling non-security-lookup preference this mirrors.
+ * @param texttvMode - WEB_ extension over express.e (no Amiga equivalent):
+ *   teletext sessions (T answer at the graphics prompt) prefer a .TTI
+ *   variant after .SEQ/.RIP and before the user screen type.
  * @returns Full path to found screen file, or null if not found
  */
 export function findSecurityScreen(
@@ -83,7 +86,8 @@ export function findSecurityScreen(
   userScreenTypeExt: string | null = null,
   ripMode: boolean = false,
   defScreens: boolean = false,
-  petsciiMode: boolean = false
+  petsciiMode: boolean = false,
+  texttvMode: boolean = false
 ): string | null {
   const minLevel = 5;
 
@@ -93,6 +97,7 @@ export function findSecurityScreen(
    *
    * Priority:
    * 0. WEB_ extension (not in express.e): PETSCII mode: .SEQ
+   * 0b. WEB_ extension (not in express.e): teletext mode: .TTI
    * 1. RIP mode: .RIP
    * 2. User screen type: .TXT.GR, .IBM, etc.
    * 3. Plain text: .TXT
@@ -117,6 +122,19 @@ console.log(`[SCREEN] Found PETSCII screen: ${resolved}`);
       const resolved = resolveCaseInsensitivePath(ripPath);
       if (resolved) {
 console.log(`[SCREEN] Found RIP screen: ${resolved}`);
+        return resolved;
+      }
+    }
+
+    // WEB_ extension over express.e - teletext sessions prefer .TTI after
+    // .SEQ/.RIP and before the user screen type. A teletext session is
+    // never simultaneously PETSCII or RIP on this BBS (the T branch clears
+    // both), so this slot only fires when neither of theirs did.
+    if (texttvMode) {
+      const ttiPath = `${basePath}.TTI`;
+      const resolved = resolveCaseInsensitivePath(ttiPath);
+      if (resolved) {
+console.log(`[SCREEN] Found teletext screen: ${resolved}`);
         return resolved;
       }
     }

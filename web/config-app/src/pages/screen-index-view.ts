@@ -52,7 +52,7 @@ export interface SauceShape {
 export interface ScreenFileShape {
   relPath: string;
   bytes: number;
-  format: 'ansi' | 'text' | 'rip' | 'petscii';
+  format: 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext';
   sha256: string;
   mci: MciReferenceShape[];
   readBy?: ScreenReaderShape[];
@@ -381,26 +381,28 @@ export function gallerySortKey(reader: ScreenReaderShape | undefined, label: str
  * Which formats a screen HAS, by looking for its siblings on the board.
  *
  * Keyed on the stem, because that is what the loader does: for one screen it
- * tries `<stem>.rip`, `<stem>.seq` and the text file, and serves whichever the
- * caller's terminal wants. `.gr` and `.ibm` are ANSI under another name.
+ * tries `<stem>.rip`, `<stem>.seq`, `<stem>.tti` and the text file, and
+ * serves whichever the caller's terminal wants. `.gr` and `.ibm` are ANSI
+ * under another name.
  */
 export function formatsPresent(
   openPath: string,
   files: Record<string, { relPath: string }> | undefined,
-): { ansi: boolean; petscii: boolean; rip: boolean } {
+): { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean } {
   const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
   const base = openPath.slice(openPath.lastIndexOf('/') + 1);
-  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
+  const stem = base.replace(/\.(txt|seq|rip|tti|gr|ibm|ans)$/i, '').toLowerCase();
 
-  const have = { ansi: false, petscii: false, rip: false };
+  const have = { ansi: false, petscii: false, rip: false, teletext: false };
   for (const key of Object.keys(files ?? {})) {
     const lower = key.toLowerCase();
     if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
     const name = lower.slice(lower.lastIndexOf('/') + 1);
     const ext = name.slice(name.lastIndexOf('.') + 1);
-    if (name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (name.replace(/\.(txt|seq|rip|tti|gr|ibm|ans)$/i, '') !== stem) continue;
     if (ext === 'seq') have.petscii = true;
     else if (ext === 'rip') have.rip = true;
+    else if (ext === 'tti') have.teletext = true;
     else have.ansi = true;
   }
   return have;
@@ -530,12 +532,13 @@ export function missingFormats(openPath: string | null, siblings: string[]): Arr
   if (!openPath) return [];
   const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
   const base = openPath.slice(openPath.lastIndexOf('/') + 1);
-  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '');
+  const stem = base.replace(/\.(txt|seq|rip|tti|gr|ibm|ans)$/i, '');
   const have = new Set([openPath, ...siblings].map(p => p.toLowerCase().replace(/^.*\./, '')));
   const all = [
     { ext: 'txt', label: 'ANSI / text' },
     { ext: 'seq', label: 'PETSCII' },
     { ext: 'rip', label: 'RIP' },
+    { ext: 'tti', label: 'Teletext' },
   ];
   return all
     .filter(f => !have.has(f.ext) && !(f.ext === 'txt' && (have.has('gr') || have.has('ibm') || have.has('ans'))))
