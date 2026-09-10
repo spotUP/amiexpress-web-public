@@ -7,7 +7,7 @@
  * through the same function.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -140,5 +140,47 @@ describe('opening a screen in the studio', () => {
     expect(screen.getByRole('button', { name: '+ Teletext (native packets - author externally)' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '+ ANSI / text' })).toBeNull();
     expect(screen.getByText(/Nothing has been drawn here yet/)).toBeTruthy();
+  });
+
+  // "i still cant upload ansi here on a new screen": the empty slot drew
+  // ANSI on canvas but offered no way to BRING an ANSI drawing. The upload
+  // writes the slot's own path, like the + format buttons do.
+  it('an empty slot takes an uploaded ANSI drawing', async () => {
+    const boardIndex = { files: {} } as unknown as ScreenIndexShape;
+    const writes: Array<{ url: string; body: any }> = [];
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? 'GET') !== 'GET') {
+        writes.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
+      }
+      if (url.includes('/api/screens/file')) {
+        return envelope({ relPath: 'Themes/skope/Node/LOCKOUT0.TXT', content: null, format: 'ansi', bytes: 0, mci: [] });
+      }
+      if (url.includes('/api/mci')) return envelope({ codes: [] });
+      return envelope({});
+    });
+    render(
+      <ArtistScreenDialog
+        path="Themes/skope/Node/LOCKOUT0.TXT"
+        theme={theme}
+        index={boardIndex}
+        isNew
+        newDescription="Shown to a caller whose account is locked out."
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ ANSI drawing' })).toBeTruthy());
+    const picker = document.querySelector('input[aria-label="Upload ANSI drawing"]') as HTMLInputElement;
+    expect(picker).toBeTruthy();
+    const bytes = new Uint8Array([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x48, 0x49]);
+    fireEvent.change(picker, { target: { files: [new File([bytes], 'lockout.ans', { type: 'application/octet-stream' })] } });
+
+    await waitFor(() => expect(writes.length).toBeGreaterThan(0));
+    const put = writes.find(w => w.url.includes('/api/screens/file'));
+    expect(put).toBeTruthy();
+    expect(decodeURIComponent(put!.url)).toContain('Themes/skope/Node/LOCKOUT0.TXT');
   });
 });

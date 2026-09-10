@@ -67,6 +67,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const [undrawable, setUndrawable] = useState<string | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const addFormatInput = useRef<HTMLInputElement | null>(null);
+  const ansiUploadInput = useRef<HTMLInputElement | null>(null);
   /** Which format the artist is about to add, once they pick a file. */
   const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -377,6 +378,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
       {isNew && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-content-secondary">ANSI draws on the canvas below. Bring the rest:</span>
+          <button
+            type="button"
+            className="px-2 py-1 border border-dashed border-border text-content-secondary"
+            onClick={() => ansiUploadInput.current?.click()}
+          >
+            + ANSI drawing
+          </button>
           {missing.map(gap => (
             <button
               key={gap.ext}
@@ -387,6 +395,21 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               + {gap.label}
             </button>
           ))}
+          <input
+            ref={ansiUploadInput}
+            type="file"
+            aria-label="Upload ANSI drawing"
+            className="hidden"
+            onChange={async event => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen || !path) return;
+              // Fresh file: nothing to carry over. The write invalidates
+              // the index, the slot flips to drawn, and the dialog shows
+              // the uploaded art.
+              writeBytes.mutate({ target: path, bytes: await readAsBase64(chosen) });
+            }}
+          />
           <input
             ref={addFormatInput}
             type="file"
