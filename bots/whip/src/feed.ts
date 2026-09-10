@@ -69,7 +69,9 @@ export interface FeedDeps {
 
 async function defaultLogin(apiUrl: string, username: string, password: string): Promise<string> {
   // POST /api/chat/login -> envelope { success, data: { token, user } }
-  const res = await axios.post(`${apiUrl.replace(/\/$/, '')}/api/chat/login`, { username, password });
+  // Bounded: an untimed login against a half-booted board hangs forever
+  // and wedges the retry loop below in silence (seen live 2026-09-10).
+  const res = await axios.post(`${apiUrl.replace(/\/$/, '')}/api/chat/login`, { username, password }, { timeout: 10000 });
   const token = (res.data as { data?: { token?: string }; token?: string })?.data?.token ??
     (res.data as { token?: string })?.token;
   if (!token) throw new Error('chat login did not return a token');
@@ -84,7 +86,9 @@ function defaultConnect(
 ): { close: () => void } {
   // Same session shape as LiveChat: chat token in handshake auth so the
   // backend builds a chatOnly BBS session (web/backend/src/index.ts).
-  const socket: Socket = io(apiUrl, { auth: { token }, query: { chatOnly: 'true' } });
+  // reconnection:false - the resilient loop above owns recovery (fresh
+  // token per attempt); the client's own redial would double-socket.
+  const socket: Socket = io(apiUrl, { auth: { token }, query: { chatOnly: 'true' }, reconnection: false });
   socket.on('bbs:event', (payload: BbsEventPayload) => {
     try {
       onEvent(payload);
