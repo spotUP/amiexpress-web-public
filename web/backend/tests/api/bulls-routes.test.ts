@@ -71,3 +71,66 @@ describe('bulls config routes', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('bull entries and content', () => {
+  function appFor(dir: string) {
+    const app = express();
+    app.use(express.json());
+    app.use('/api/config/bulls', createBullsRouter(dir));
+    return app;
+  }
+  function board(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bulls-entries-'));
+    fs.mkdirSync(path.join(dir, 'Doors', 'emp_tools'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'Bulletins'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Doors', 'emp_tools', 'Bulls.CFG'), CFG, 'latin1');
+    fs.writeFileSync(path.join(dir, 'Bulletins', 'bull1.txt'), 'x', 'latin1');
+    fs.writeFileSync(path.join(dir, 'Bulletins', 'bull9.txt'), 'static', 'latin1');
+    return dir;
+  }
+  it('rewrites only the menu section', async () => {
+    const dir = board();
+    try {
+      const app = appFor(dir);
+      const res = await request(app).put('/api/config/bulls/entries')
+        .send({ entries: [{ title: 'Top Uploaders', file: 'bull1.txt' }, { title: 'Static Nine', file: 'bull9.txt' }] });
+      expect(res.status).toBe(200);
+      expect(res.body.data.entries.map((e: any) => e.file)).toEqual(['bull1.txt', 'bull9.txt']);
+      const raw: string = res.body.data.raw;
+      expect(raw).toContain('DUAL_LISTING');
+      expect(raw).toContain('[Title_END]');
+      expect(raw).toContain('Static Nine');
+      const missing = res.body.data.problems.map((p: any) => p.kind);
+      expect(missing).not.toContain('missing-file');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('400s structural errors, never paths', async () => {
+    const dir = board();
+    try {
+      const app = appFor(dir);
+      expect((await request(app).put('/api/config/bulls/entries').send({ entries: 'nope' })).status).toBe(400);
+      expect((await request(app).put('/api/config/bulls/entries').send({ entries: [{ title: '', file: 'bull1.txt' }] })).status).toBe(400);
+      expect((await request(app).put('/api/config/bulls/entries').send({ entries: [{ title: 'X', file: '../evil' }] })).status).toBe(400);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('lists, reads, writes static, refuses generated and traversal', async () => {
+    const dir = board();
+    try {
+      const app = appFor(dir);
+      const list = await request(app).get('/api/config/bulls/bulletins');
+      expect(list.status).toBe(200);
+      expect(list.body.data.bulletins.map((b: any) => `${b.name}:${b.generated ? 'gen' : 'rw'}`)).toEqual(['bull1.txt:gen', 'bull9.txt:rw']);
+      expect((await request(app).get('/api/config/bulls/bulletins/bull9.txt')).body.data.content).toBe('static');
+      expect((await request(app).get('/api/config/bulls/bulletins/nope.txt')).status).toBe(400);
+      expect((await request(app).put('/api/config/bulls/bulletins/bull9.txt').send({ content: 'edited' })).status).toBe(200);
+      expect((await request(app).put('/api/config/bulls/bulletins/bull1.txt').send({ content: 'hacked' })).status).toBe(403);
+      expect((await request(app).put('/api/config/bulls/bulletins/bull9.txt').send({})).status).toBe(400);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

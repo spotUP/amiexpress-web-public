@@ -1247,6 +1247,38 @@ class ApiClient {
     );
   }
 
+  async saveBullsEntries(entries: Array<{ title: string; file: string }>) {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls/entries`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ entries }),
+      }
+    );
+  }
+
+  async listBulletins() {
+    return this.request<{ bulletins: Array<{ name: string; size: number; mtimeMs: number; generated: boolean; generator?: string }> }>(
+      `${API_BASE}/config/bulls/bulletins`
+    );
+  }
+
+  async getBulletin(name: string) {
+    return this.request<{ name: string; content: string }>(
+      `${API_BASE}/config/bulls/bulletins/${encodeURIComponent(name)}`
+    );
+  }
+
+  async saveBulletin(name: string, content: string) {
+    return this.request<{ name: string; size: number; mtimeMs: number }>(
+      `${API_BASE}/config/bulls/bulletins/${encodeURIComponent(name)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+      }
+    );
+  }
+
   // Screen Revisions
   /**
    * The three revision calls answer with the API ENVELOPE, like every other
