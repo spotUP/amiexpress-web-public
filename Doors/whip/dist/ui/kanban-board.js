@@ -93,13 +93,18 @@ function wrapTitle(title, width) {
 function formatKanbanCard(task, width, assigneeHandle, carried = false) {
     const priorityInitial = task.priority[0].toUpperCase();
     const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
-    // A carried task shows its grip: the marker eats its own cells so the
-    // wrap width shrinks by exactly that much.
+    // A carried task shows its grip AND its held state: the marker eats
+    // its own cells so the wrap width shrinks by exactly that much, and
+    // every row inverts - a held card reads nothing like a merely
+    // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
     const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
     if (carried && titleRows.length > 0)
         titleRows[0] = `>> ${titleRows[0]}`;
     const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''}`;
-    return [...titleRows, meta].join('\n');
+    const rows = [...titleRows, meta];
+    if (!carried)
+        return rows.join('\n');
+    return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
 }
 async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi) {
     return new Promise(async (resolve) => {

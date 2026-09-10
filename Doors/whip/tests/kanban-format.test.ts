@@ -45,3 +45,17 @@ export async function cardWithoutAssigneeOmitsIt(): Promise<void> {
   const card = formatKanbanCard(task, 30);
   assert.ok(!card.includes('·'), 'no dangling separator without assignee');
 }
+
+export async function carriedCardInvertsEveryRow(): Promise<void> {
+  const plain = formatKanbanCard(task, 30, 'spot', false);
+  assert.ok(!plain.includes('{inverse}'), 'a resting card has no inversion');
+  assert.ok(!plain.includes('>>'), 'a resting card has no grip');
+
+  const held = formatKanbanCard(task, 30, 'spot', true);
+  const rows = held.split('\n');
+  assert.ok(rows.length >= 2, 'title plus meta row');
+  for (const row of rows) {
+    assert.ok(row.startsWith('{inverse}') && row.endsWith('{/inverse}'), `held row inverted: ${row}`);
+  }
+  assert.ok(rows[0].includes('>>'), 'the grip survives the inversion');
+}
