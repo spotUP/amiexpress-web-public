@@ -13,6 +13,38 @@ import type { ChatSession, PageRequest } from '../../types/operator-chat.types';
 import { emitterForUserId } from '../../server/session-emitter-registry';
 import { planNaturalTyping } from '../grumpy-sysop-bot.handler';
 
+/**
+ * Model markup to terminal bytes. The co-sysop writes <title>, <color c>
+ * (cyan) and <color g> (green) - <colour> spelling and repeated close-tag
+ * attributes forgiven - and the board renders real SGR (plain 0;XX, never
+ * bold, per the output rules). Anything else in angle brackets is left
+ * literally: eating a caller's "a < b" would be worse than showing it.
+ * Unclosed tags run to end of string (a cut reply still paints).
+ */
+const CHAT_MARKUP_COLORS: Record<string, string> = { c: '36', g: '32' };
+
+export function renderChatMarkup(text: string): string {
+  const paint = (inner: string, code: string): string => `\x1b[0;${code}m${inner}\x1b[0m`;
+  let out = text.replace(
+    /<(title|colou?r)(?:\s+([a-z]))?\s*>([\s\S]*?)(?:<\/colou?r(?:\s+[a-z])?\s*>|<\/title\s*>)/gi,
+    (_m, tag: string, attr: string | undefined, inner: string) => {
+      if (tag.toLowerCase() === 'title') return paint(inner, '36');
+      const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase()];
+      return code ? paint(inner, code) : inner;
+    },
+  );
+  // Unclosed trailing tag paints to the end rather than leaking brackets.
+  out = out.replace(
+    /<(title|colou?r)(?:\s+([a-z]))?\s*>([^<]*)$/i,
+    (_m, tag: string, attr: string | undefined, inner: string) => {
+      if (tag.toLowerCase() === 'title') return paint(inner, '36');
+      const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase()];
+      return code ? paint(inner, code) : inner;
+    },
+  );
+  return out;
+}
+
 /** Every live chat, by page id. Owned here; the handler reads and writes it. */
 export const activeChatSessions = new Map<string, ChatSession>();
 
@@ -59,7 +91,14 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 type ChatSender = 'user' | 'sysop';
 /** express.e's `space` and `x` (6098-6100), and who wrote last, per chat. */
-interface ChatLine { text: string; lastSender: ChatSender | null }
+interface ChatLine {
+  text: string;
+  lastSender: ChatSender | null;
+  /** ANSI escape parser: 0 none, 1 seen ESC, 2 inside CSI. Escape bytes are
+   *  emitted but never counted toward the 78 columns. A lone ESC (the ESC
+   *  key, not CSI) counts as typed before. */
+  esc?: number;
+}
 function chatLineOf(chatSession: ChatSession): ChatLine {
   const cs = chatSession as any;
   if (!cs.line) cs.line = { text: '', lastSender: null } as ChatLine;
@@ -79,6 +118,19 @@ export function chatCharBytes(chatSession: ChatSession, sender: ChatSender, ch: 
     line.lastSender = sender;
   }
   out += ch;
+  if (ch === '\x1b') {
+    line.esc = 1;
+    return out;
+  }
+  if (line.esc === 1) {
+    line.esc = ch === '[' ? 2 : 0;
+    if (line.esc === 0) line.text += `\x1b${ch}`;
+    return out;
+  }
+  if (line.esc === 2) {
+    if (/[A-Za-z]/.test(ch)) line.esc = 0;
+    return out;
+  }
   line.text += ch;
   if (line.text.length > 78) {
     // 6181-6223: back up to the last space; no space (or a trailing one)
@@ -294,6 +346,9 @@ export async function deliverToCaller(
   text: string,
   pace: { typingSpeed?: number; typoProbability?: number } | null
 ): Promise<void> {
+  // Model markup (<title>, <color>) becomes terminal SGR here, once, for
+  // every sender - the wrap counting below then sees visible columns only.
+  const painted = renderChatMarkup(text);
   const run = async (): Promise<void> => {
     const reach = emitterForUserId(page.userId, io);
     if (!reach) {
@@ -310,7 +365,7 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
     const emit = (bytes: string) => { if (bytes && live()) reach.emitter.emit('ansi-output', bytes); };
 
     // The message's own line breaks are returns; the shared line wraps itself.
-    const lines = text.replace(/\r/g, '').split('\n');
+    const lines = painted.replace(/\r/g, '').split('\n');
     const plans = lines.map((line) =>
       pace ? planNaturalTyping(line, pace) : [...line].map((ch) => ({ kind: 'char', ch }) as const)
     );
