@@ -102,4 +102,31 @@ describe('extractGameTitle', () => {
     expect(searched).not.toContain('who');
     expect(card).toContain('Turrican');
   });
+
+  it('names the makers from one detail call on the top hit', async () => {
+    // Detail shape per rawg.io/apidocs (no key to probe with at build
+    // time): developers/publishers arrays of {name}. Recapture live.
+    const search = { results: [{ id: 11277, name: 'Turrican', released: '1990', slug: 'turrican' }] };
+    const detail = { id: 11277, developers: [{ name: 'Factor 5' }], publishers: [{ name: 'Rainbow Arts' }] };
+    const seen: string[] = [];
+    setGamesFetcher(async (url) => {
+      seen.push(url);
+      if (url.includes('/api/games/11277?')) return detail;
+      return search;
+    });
+    const card = await gameCardFor('who made Turrican?', 'KEY');
+    expect(card).toContain('Made by Factor 5');
+    expect(card).toContain('Published by Rainbow Arts');
+    expect(seen.filter((u) => u.includes('/api/games/11277?'))).toHaveLength(1);
+  });
+
+  it('a dead detail call still answers the search rows', async () => {
+    const search = { results: [{ id: 1, name: 'X', slug: 'x' }] };
+    setGamesFetcher(async (url) => {
+      if (url.includes('/api/games/1?')) throw new Error('down');
+      return search;
+    });
+    const card = await gameCardFor('who made X?', 'KEY');
+    expect(card).toContain('X (');
+  });
 });

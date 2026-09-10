@@ -32,8 +32,14 @@ export async function lookupGame(title: string, rawgKey?: string): Promise<strin
       const data = await fetcher(`${RAWG}?key=${encodeURIComponent(rawgKey)}&search=${encodeURIComponent(q)}&page_size=3`);
       const rows: any[] = data?.results ?? [];
       if (rows.length) {
-        return rows.map((g) =>
-          `${g.name} (${g.released ?? 'undated'}; ${(g.platforms ?? []).map((p: any) => p?.platform?.name).filter(Boolean).slice(0, 6).join(', ') || 'platforms?'}; ${(g.genres ?? []).map((x: any) => x?.name).filter(Boolean).join('/') || 'genre?'}${g.metacritic ? `; metacritic ${g.metacritic}` : ''}) https://rawg.io/games/${g.slug}`
+        // Search rows name no makers, so "who made X" died with facts in
+        // hand (live 2026-09-10: Turrican answered, designer unknown). One
+        // detail call on the top hit; cached with the rest, silent on miss.
+        const makers = rows[0]?.id !== undefined
+          ? await makerLine(rows[0].id, rawgKey)
+          : '';
+        return rows.map((g, i) =>
+          `${g.name} (${g.released ?? 'undated'}; ${(g.platforms ?? []).map((p: any) => p?.platform?.name).filter(Boolean).slice(0, 6).join(', ') || 'platforms?'}; ${(g.genres ?? []).map((x: any) => x?.name).filter(Boolean).join('/') || 'genre?'}${g.metacritic ? `; metacritic ${g.metacritic}` : ''})${i === 0 && makers ? ` ${makers}` : ''} https://rawg.io/games/${g.slug}`
         ).join('\n');
       }
     }
@@ -41,6 +47,23 @@ export async function lookupGame(title: string, rawgKey?: string): Promise<strin
     if (page?.extract) return `${page.title}${page.description ? ` - ${page.description}` : ''}: ${String(page.extract).slice(0, 900)} ${page.content_urls?.desktop?.page ?? ''}`;
     return `Nothing known about a game called "${q}".`;
   });
+}
+
+/** "Made by X. Published by Y." from a RAWG detail call. Never throws. */
+async function makerLine(id: string | number, rawgKey: string): Promise<string> {
+  try {
+    const d: any = await fetcher(`${RAWG}/${encodeURIComponent(String(id))}?key=${encodeURIComponent(rawgKey)}`);
+    const names = (xs: unknown): string[] =>
+      (Array.isArray(xs) ? xs : []).map((x: any) => x?.name).filter((n) => typeof n === 'string' && n);
+    const bits: string[] = [];
+    const devs = names(d?.developers).slice(0, 3);
+    const pubs = names(d?.publishers).slice(0, 3);
+    if (devs.length) bits.push(`Made by ${devs.join(', ')}`);
+    if (pubs.length) bits.push(`Published by ${pubs.join(', ')}`);
+    return bits.join('. ') + (bits.length ? '.' : '');
+  } catch {
+    return '';
+  }
 }
 
 /**
