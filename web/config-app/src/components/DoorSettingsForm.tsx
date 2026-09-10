@@ -169,9 +169,11 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
               </h4>
             )}
           <div className="space-y-1">
+            {(setting.type !== 'choice' || (setting.choices ?? []).length > 3) && (
             <label htmlFor={id} className="form-label">
               {setting.label}
             </label>
+            )}
 
             {setting.type === 'boolean' ? (
               <input
@@ -182,6 +184,29 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
                 className="h-4 w-4 accent-accent"
               />
             ) : setting.type === 'choice' ? (
+              (setting.choices ?? []).length <= 3 ? (
+                // A Yes/No (or similarly small) set reads as radio buttons,
+                // not a dropdown hiding the only other option. Longer lists
+                // keep the select below.
+                <fieldset>
+                  <legend className="form-label">{setting.label}</legend>
+                  <div className="flex flex-wrap gap-4">
+                    {(setting.choices ?? []).map(choice => (
+                      <label key={choice.value} className="inline-flex items-center gap-2 text-sm text-content-primary">
+                        <input
+                          type="radio"
+                          name={id}
+                          value={choice.value}
+                          checked={String(value ?? '') === choice.value}
+                          onChange={() => set(setting.key, choice.value)}
+                          className="h-4 w-4 accent-accent"
+                        />
+                        {choice.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : (
               <select
                 id={id}
                 value={String(value ?? '')}
@@ -192,6 +217,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
                   <option key={choice.value} value={choice.value}>{choice.label}</option>
                 ))}
               </select>
+              )
             ) : (
               <input
                 id={id}

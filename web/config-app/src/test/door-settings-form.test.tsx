@@ -71,7 +71,10 @@ describe('the door settings form', () => {
     await waitFor(() => expect(screen.getByLabelText('Server')).toBeTruthy());
     expect(screen.getByLabelText('Port')).toBeTruthy();
     expect(screen.getByLabelText('Announce joins')).toBeTruthy();
-    expect(screen.getByLabelText('Style')).toBeTruthy();
+    // Two-option sets render as radios under a legend, not a dropdown.
+    expect(screen.getByText('Style')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'One' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Four' })).toBeTruthy();
     expect(screen.getByText('Where the door connects')).toBeTruthy();
   });
 
@@ -113,11 +116,49 @@ describe('the door settings form', () => {
     expect(values.server).toBe('wall.uprough.net');
   });
 
-  it('offers only the choices the door declared', async () => {
+  it('offers only the choices the door declares', async () => {
     renderForm();
 
-    const style = await screen.findByLabelText('Style') as HTMLSelectElement;
-    expect([...style.options].map(o => o.value)).toEqual(['1', '4']);
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'One' })).toBeTruthy());
+    expect(screen.getByRole('radio', { name: 'Four' })).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('a longer choice list keeps the dropdown', async () => {
+    getDoorSettings.mockImplementationOnce(async () => ({
+      success: true,
+      data: {
+        manifest: {
+          command: 'TESTDOOR',
+          settings: [
+            { key: 'tz', label: 'Timezone', type: 'choice', default: 'a',
+              choices: [
+                { value: 'a', label: 'A' }, { value: 'b', label: 'B' },
+                { value: 'c', label: 'C' }, { value: 'd', label: 'D' },
+              ] },
+          ],
+        },
+        values: { tz: 'a' },
+        secretsSet: [],
+      },
+    } as any));
+    renderForm();
+
+    const select = await screen.findByLabelText('Timezone') as HTMLSelectElement;
+    expect([...select.options].map(o => o.value)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('a radio pick saves the picked value', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    const one = await screen.findByRole('radio', { name: 'One' });
+    await user.click(one);
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
+    const [, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(values).toEqual({ style: '1' });
   });
 
   it('hides a secret and says it is set', async () => {
@@ -180,11 +221,14 @@ describe('the door settings form', () => {
     } as any));
     renderForm();
 
-    await waitFor(() => expect(screen.getByLabelText('Dual listing')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Dual listing')).toBeTruthy());
     // One heading per group, not one per setting.
     expect(screen.getAllByText('Listing')).toHaveLength(1);
     expect(screen.getAllByText('Conference access')).toHaveLength(1);
-    expect(screen.getByLabelText('Cursor keys')).toBeTruthy();
+    expect(screen.getByText('Cursor keys')).toBeTruthy();
+    // Both toggles render Yes/No radios - one pair each.
+    expect(screen.getAllByRole('radio', { name: 'Yes' })).toHaveLength(2);
+    expect(screen.getAllByRole('radio', { name: 'No' })).toHaveLength(2);
     expect(screen.getByLabelText('Conference 1 bulletin mask')).toBeTruthy();
     expect(screen.getByLabelText('Plain')).toBeTruthy();
     // Art notes where it lives instead of rendering a textarea for it.
@@ -213,7 +257,7 @@ describe('the door settings form', () => {
     } as any));
     renderForm();
 
-    await waitFor(() => expect(screen.getByLabelText('Dual listing')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Dual listing')).toBeTruthy());
     expect(screen.queryByLabelText('Conference 1 bulletin mask')).toBeNull();
   });
 });
