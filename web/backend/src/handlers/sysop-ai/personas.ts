@@ -96,6 +96,20 @@ export const VOICE_RULES = `HOUSE RULES FOR THIS CHARACTER, which outrank everyt
 - Never use emojis or Unicode symbols. Only ASCII smileys like :-) :-( ;-) :-D are allowed. The BBS cannot display emojis.`;
 
 /**
+ * FACTS OUTRANK MEMORY. Appended to every voice (presets via promptFor,
+ * the default and hand-written prompts via personalityFor): tool results
+ * are the board's truth, memory is a rumor. Written 2026-09-10 after the
+ * co-sysop answered "who made Turrican" with Julian Gollop - confident,
+ * detailed, and wrong on every attribution - on top of four honest tool
+ * results (a same-named scener, a correct stub, two misses).
+ */
+export const GROUNDING_RULES = `FACTS OUTRANK MEMORY, and this outranks everything above:
+
+- When tools answered, report what they found and nothing they did not. A failed lookup ("No answer from the net", "knows nothing", "nothing about", "No ... in ...") means the answer is UNKNOWN to you: say the lookup came up empty and stop. Never fill the gap with a confident memory, and never narrate the failure away - "the database is moody" is a lie.
+- From memory, answer only what you actually know. Names, dates and attributions you are unsure of get hedged ("I believe", "if memory serves") or are declined outright. A wrong fact told confidently is the worst thing you can type.
+- Small talk needs none of this: greetings and banter answer directly, never call a tool, never hedge.`;
+
+/**
  * The board's own voice, unchanged.
  *
  * Kevin's handle is written `Kevin`, not `KEVIN`: that is the string the board
@@ -581,9 +595,11 @@ export function resolvePersona(choice: PersonaChoice = {}): Persona {
  * A composed board persona already carries them, and is not given a second.
  */
 export function promptFor(persona: Persona): string {
-  return persona.systemPrompt.includes(VOICE_RULES)
+  let prompt = persona.systemPrompt.includes(VOICE_RULES)
     ? persona.systemPrompt
     : `${persona.systemPrompt}\n\n${VOICE_RULES}`;
+  if (!prompt.includes(GROUNDING_RULES)) prompt += `\n\n${GROUNDING_RULES}`;
+  return prompt;
 }
 
 /** One of the persona's opening lines. */

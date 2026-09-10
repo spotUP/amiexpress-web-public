@@ -53,6 +53,36 @@ describe('wikipedia', () => {
     setWikipediaFetcher(async () => { throw new Error('socket hang up'); });
     expect(await askWikipedia('amiga')).toMatch(/No answer from the net/);
   });
+  it('a question-shaped query falls back to its subject', async () => {
+    const seen: string[] = [];
+    setWikipediaFetcher(async (url) => {
+      seen.push(url);
+      if (url.includes('search/page')) {
+        const q = new URL(url).searchParams.get('q');
+        if (q === 'Turrican') {
+          return { pages: [{ key: 'Turrican_(video_game)', title: 'Turrican (video game)' }] };
+        }
+        return { pages: [] };
+      }
+      return { title: 'Turrican (video game)', description: '1990 run-and-gun game', extract: 'Turrican is a 1990 game designed by Manfred Trenz.' };
+    });
+    const a = await askWikipedia('Turrican video game developer');
+    expect(a).toContain('Manfred Trenz');
+    expect(seen.some((u) => u.includes('q=Turrican'))).toBe(true);
+  });
+  it('a summary that 404s falls through to the next hit', async () => {
+    setWikipediaFetcher(async (url) => {
+      if (url.includes('search/page')) {
+        return { pages: [{ key: 'Gone', title: 'Gone' }, { key: 'Amiga', title: 'Amiga' }] };
+      }
+      if (url.includes('/summary/Gone')) {
+        throw Object.assign(new Error('404'), { response: { status: 404 } });
+      }
+      return { title: 'Amiga', extract: 'Amiga is a family of personal computers.' };
+    });
+    const a = await askWikipedia('amiga');
+    expect(a).toContain('family of personal computers');
+  });
 });
 
 describe('wikidata', () => {

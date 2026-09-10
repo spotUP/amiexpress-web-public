@@ -153,7 +153,10 @@ describe('whip answers', () => {
 
 describe('general knowledge', () => {
   it('answers from the net through the seams', async () => {
-    setWikipediaFetcher(async () => ({ pages: [{ key: 'Amiga', title: 'Amiga' }] }));
+    setWikipediaFetcher(async (url) => {
+      if (url.includes('search/page')) return { pages: [{ key: 'Amiga', title: 'Amiga' }] };
+      return { title: 'Amiga', extract: 'Amiga is a family of personal computers.' };
+    });
     const ctx = ctxFor(30);
     const r = await runTool(ctx, 'ask_wikipedia', { query: 'amiga' });
     expect(r.result.content).toContain('Amiga');

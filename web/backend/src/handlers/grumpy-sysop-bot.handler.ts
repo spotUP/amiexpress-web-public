@@ -14,6 +14,7 @@
 
 import axios from 'axios';
 import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
+import { GROUNDING_RULES } from './sysop-ai/personas';
 import { askWithTools } from './sysop-ai/loop';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
@@ -421,14 +422,16 @@ const FALLBACK_FREE_MODELS: string[] = [
  * sysop" (sysop, 2026-09-08) - he speaks as the board's co-sysop, and the
  * powers he wields are the caller's, never his own.
  */
-function personalityFor(aiConfig: AIProviderConfig): string {
+/** Test seam: the full system prompt a reply is built on. */
+export function personalityFor(aiConfig: AIProviderConfig): string {
   // A persona's prompt already carries VOICE_RULES via promptFor(); a
   // hand-written aiSystemPrompt (design s.2) overrides the persona's prompt
   // but keeps the handle/fallback, so we never invent one here.
+  // GROUNDING_RULES rides along on every path: honesty is not voice.
   const base = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
   const name = (aiConfig.botName || 'Kevin').slice(0, 30);
   const sysop = aiConfig.sysopName || 'the sysop';
-  return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.`;
+  return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.\n\n${GROUNDING_RULES}`;
 }
 
 function fallbackForPersona(aiConfig?: AIProviderConfig): string {
