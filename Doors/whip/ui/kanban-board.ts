@@ -215,10 +215,10 @@ export async function showKanbanBoard(
         border: { type: 'line' },
         label: ` ${label} `,
         style: {
-          // Theme tokens, not literals: the old yellow/cyan ignored the
-          // caller's theme. Active is T.ink - full-brightness text, white
-          // on classic, the white focus border asked for 2026-09-10.
-          border: { fg: i === currentColumn ? T.ink : T.chrome },
+          // Base color only. The focused column whitens by itself (SDK
+          // resolveStateBorder) - the door stopped painting focus by
+          // hand 2026-09-10, which is what fought the SDK default.
+          border: { fg: T.chrome },
           bg: T.ground
         },
         focusable: false,
@@ -306,9 +306,8 @@ export async function showKanbanBoard(
     let isUpdating = false;
 
     const updateListsImmediate = () => {
-      for (let i = 0; i < COLUMNS.length; i++) {
-        columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
-      }
+      // focus() + render() is the whole job: the SDK whitens the
+      // focused box, so there is no per-column painting here anymore.
       columnLists[currentColumn].focus();
       screen.render();
     };
@@ -367,10 +366,6 @@ export async function showKanbanBoard(
         columnLists[i].setItems(items.length > 0 ? items : []);
       }
 
-      for (let i = 0; i < COLUMNS.length; i++) {
-        columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
-      }
-
       columnLists[currentColumn].focus();
       screen.render();
     };
@@ -424,6 +419,7 @@ export async function showKanbanBoard(
         })
       };
 
+      setDropTarget(true);
       screen.render();
     };
 
@@ -434,24 +430,27 @@ export async function showKanbanBoard(
       dragState.ghost.top = y - 1;
       dragState.ghost.left = x - 8;
 
-      // Highlight potential drop target
-      const targetCol = getColumnFromX(x);
+      screen.render();
+    };
+
+    // Drop-target green rides the SDK hover state, not hand-painted
+    // borders (which the focus default would override mid-drag anyway):
+    // while a drag is active the box under the mouse goes green.
+    const setDropTarget = (on: boolean) => {
       for (let i = 0; i < COLUMNS.length; i++) {
-        if (i === targetCol && targetCol !== dragState.fromColumn) {
-          columnBoxes[i].style.border.fg = 'green';
-        } else if (i === currentColumn) {
-          columnBoxes[i].style.border.fg = T.ink;
-        } else {
-          columnBoxes[i].style.border.fg = T.chrome;
+        const style = columnBoxes[i].options.style as any;
+        if (on) {
+          style.hover = { ...(style.hover ?? {}), border: { fg: T.ok } };
+        } else if (style.hover) {
+          delete style.hover;
         }
       }
-
-      screen.render();
     };
 
     // End drag operation
     const endDrag = async (x: number, y: number) => {
       if (!dragState.active || !dragState.task) return;
+      setDropTarget(false);
 
       // Capture task info before resetting state
       const taskToMove = dragState.task;
@@ -484,10 +483,7 @@ export async function showKanbanBoard(
         }
         await updateLists(true);
       } else {
-        // Dropped on same column or outside - just refresh to reset borders
-        for (let i = 0; i < COLUMNS.length; i++) {
-          columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
-        }
+        // Dropped on same column or outside - just refresh.
         screen.render();
       }
     };

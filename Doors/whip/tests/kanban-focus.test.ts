@@ -1,14 +1,16 @@
 /**
- * The active kanban column wears a white border; the rest do not.
+ * The active kanban column is the focused one - and the SDK whitens it.
  *
- * Columns used to hardcode yellow/cyan literals, which also ignored the
- * caller's theme - on anything but classic the "active" border washed
- * out (2026-09-10). Active is now T.ink (full-brightness text, white on
- * classic), inactive T.chrome. The green drag-target keeps its meaning.
+ * The door used to paint focus itself (yellow/cyan literals, then theme
+ * tokens), which fought the SDK's own focus border until neither was
+ * trustworthy (2026-09-10). Column boxes now carry only their base
+ * color; the white active border comes from SDK resolveStateBorder, and
+ * the drop-target green rides the hover state during drags.
  *
- * Driven: a real board, Left/Right through program.emit, border colors
- * read off the column boxes. Classic theme is the test default, so ink
- * is white and chrome is cyan here.
+ * Driven: a real board. The boxes' own colors stay put while Left/Right
+ * moves the focus the SDK reads - that split (door owns base, SDK owns
+ * state) is the contract pinned here. The SDK side (white, no bold,
+ * explicit-wins) is pinned in sdk/tests/unit/focus-border.test.ts.
  */
 
 import assert from 'assert';
@@ -37,33 +39,35 @@ const dataManager: any = {
   getUser: async () => null,
 };
 
-function borderOf(screen: any, label: string): string | undefined {
-  let found: string | undefined;
+function boxOf(screen: any, label: string): any {
+  let found: any;
   const walk = (el: any): void => {
-    if (String(el.options?.label ?? '').trim() === label) found = el.style?.border?.fg;
+    if (String(el.options?.label ?? '').trim() === label) found = el;
     (el.children || []).forEach(walk);
   };
   walk(screen);
   return found;
 }
 
-export async function activeColumnWearsWhite(): Promise<void> {
+export async function focusMarksTheActiveColumn(): Promise<void> {
   const screen = open();
   try {
     const board = showKanbanBoard(screen, PROJECT as any, USER as any, dataManager, {} as any);
     await settle();
 
-    // Against the live theme binding, not literals: other suites in this
-    // process re-theme, and the point is active==ink, rest==chrome under
-    // whichever theme is current (white/cyan on classic).
-    assert.strictEqual(borderOf(screen, 'TODO'), T.ink, 'first column active');
-    assert.strictEqual(borderOf(screen, 'IN PROGRESS'), T.chrome, 'rest dim');
+    // Base colors never move: the door paints no focus anymore.
+    for (const label of ['TODO', 'IN PROGRESS', 'TESTING', 'DONE']) {
+      assert.strictEqual(boxOf(screen, label)?.style?.border?.fg, T.chrome, `${label} rests at the base color`);
+    }
+    // ...while the SDK reads focus off the live tree.
+    assert.strictEqual(boxOf(screen, 'TODO').hasFocusedChild(), true, 'focus starts in TODO');
+    assert.strictEqual(boxOf(screen, 'IN PROGRESS').hasFocusedChild(), false, 'rest unfocused');
 
     press(screen, 'right', 'right');
     await settle();
 
-    assert.strictEqual(borderOf(screen, 'TODO'), T.chrome, 'old column dims');
-    assert.strictEqual(borderOf(screen, 'IN PROGRESS'), T.ink, 'new column brightens');
+    assert.strictEqual(boxOf(screen, 'TODO').hasFocusedChild(), false, 'focus left TODO');
+    assert.strictEqual(boxOf(screen, 'IN PROGRESS').hasFocusedChild(), true, 'focus follows Right');
 
     press(screen, 'q', 'q');
     await board;
