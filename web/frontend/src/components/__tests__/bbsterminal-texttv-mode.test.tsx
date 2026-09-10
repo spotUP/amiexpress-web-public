@@ -152,6 +152,23 @@ describe('texttv-mode on', () => {
     expect(before).not.toBe('auto');
   });
 
+  it('a later cell-size pass does not write the calibrated size back over the mode', async () => {
+    // The ghost of 2026-09-10: the mode applied TDAText at 2x, then the
+    // fit/cell-size effect wrote the calibrated size straight back and T
+    // looked 1x. Recalibration (or any parent re-render with a size) must
+    // leave a teletext session alone.
+    const view = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: true });
+    });
+    expect(rec.terminals[0].options.fontSize).toBe(32);
+    await act(async () => {
+      view.rerender(<BBSTerminal backendUrl="http://localhost:3001" fontSize={18} />);
+    });
+    expect(rec.terminals[0].options.fontFamily).toBe(fontFamilyFor(TELETEXT_FONT));
+    expect(rec.terminals[0].options.fontSize).toBe(32);
+  });
+
   it('does not pollute the pre-login font cache', async () => {
     mount();
     await act(async () => {

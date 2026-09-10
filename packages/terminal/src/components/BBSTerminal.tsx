@@ -180,6 +180,13 @@ export interface BBSTerminalRef {
   getSocket: () => Socket | null;
   getTerminal: () => Terminal | null;
   /**
+   * True while a teletext session owns the look (TDAText face at 2x).
+   * The page's fit and the cell-size effect must not write options
+   * past it - see texttv-mode below (ghost: the mode applied, then a
+   * refit wrote the calibrated size back and T looked 1x, 2026-09-10).
+   */
+  isTexttvMode: () => boolean;
+  /**
    * Press a key on behalf of an on-screen control. Runs the exact same
    * game-mode path as a physical keydown (held-key state + custom key repeat),
    * so DAS/ARR and held keys behave identically. No-op outside game mode.
@@ -829,6 +836,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
+    isTexttvMode: () => texttvModeRef.current,
     pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
     releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
     sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) => {
@@ -3026,8 +3034,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // `options.fontSize`: the page's own fit probes real sizes onto the live
   // terminal (TerminalPage's refit -> measure), which is the whole reason it
   // ends the search by applying the size the terminal will KEEP.
+  //
+  // Except in teletext mode: the session owns its doubled cell, and this
+  // effect firing after it (recalibration, zoom fraction, any parent
+  // re-render with a new size) wrote the calibrated size straight back -
+  // the mode applied, then un-applied itself (2026-09-10).
   useEffect(() => {
-    if (terminalInstance.current) {
+    if (terminalInstance.current && !texttvModeRef.current) {
       terminalInstance.current.options.fontSize = fontSize;
     }
   }, [fontSize]);

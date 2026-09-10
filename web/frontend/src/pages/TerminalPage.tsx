@@ -156,6 +156,12 @@ export function TerminalPage(): JSX.Element {
     const element = term?.element;
     if (!term || !element) return;
 
+    // A teletext session owns its doubled cell (BBSTerminalRef.isTexttvMode):
+    // the fit probes real sizes onto the live terminal, and probing writes
+    // the calibrated size back over the mode's 2x - the mode applied, then
+    // un-applied itself (2026-09-10). Leave it alone, like a wide door.
+    if (terminalRef.current?.isTexttvMode?.() === true) return;
+
     // A door that took the terminal out of the standard 80-column grid (wide
     // mode, or a server-driven resize) owns its own sizing — leave it alone.
     if (term.cols !== BBS_COLS) return;
