@@ -1149,7 +1149,7 @@ export function ScreenFilesPage() {
             <span className="font-mono"> .GR </span> routing. Editing one
             changes what that door draws, and nothing else.
           </p>
-          {(doorArt ?? []).map(door => (
+          {(Array.isArray(doorArt) ? doorArt : []).map(door => (
             <div key={door.command} className="border border-border rounded p-2 space-y-1">
               <p className="text-content-primary">
                 <span className="font-mono">{door.command}</span>

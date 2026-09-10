@@ -258,7 +258,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     });
   }, [path, index]);
 
-  const missing = useMemo(() => (isNew ? [] : missingFormats(path, siblings)), [path, siblings, isNew]);
+  const missing = useMemo(() => {
+    // A blank slot draws its ANSI on the canvas; the other formats arrive
+    // by upload. Before, an empty slot offered neither - "i cant upload
+    // screens to this one" - because the whole strip was gated on !isNew.
+    if (isNew) return missingFormats(path, []);
+    return missingFormats(path, siblings);
+  }, [path, siblings, isNew]);
 
   /** Bytes, never text, all the way through. */
   const readAsBase64 = (chosen: File): Promise<string> =>
@@ -344,6 +350,34 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
             </button>
           ))}
           {mine && missing.map(gap => (
+            <button
+              key={gap.ext}
+              type="button"
+              className="px-2 py-1 border border-dashed border-border text-content-secondary"
+              onClick={() => { setAddingFormat(gap); addFormatInput.current?.click(); }}
+            >
+              + {gap.label}
+            </button>
+          ))}
+          <input
+            ref={addFormatInput}
+            type="file"
+            aria-label="Add a format"
+            className="hidden"
+            onChange={async event => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen || !addingFormat) return;
+              writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
+              setAddingFormat(null);
+            }}
+          />
+        </div>
+      )}
+      {isNew && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-content-secondary">ANSI draws on the canvas below. Bring the rest:</span>
+          {missing.map(gap => (
             <button
               key={gap.ext}
               type="button"

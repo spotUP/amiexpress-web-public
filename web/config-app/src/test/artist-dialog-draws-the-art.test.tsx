@@ -116,4 +116,29 @@ describe('opening a screen in the studio', () => {
     await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
     expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
   });
+
+  // "i cant upload screens to this one, it's empty": a blank slot opened
+  // only the canvas - no way to bring a PETSCII, RIP or Teletext drawing.
+  // The blank canvas IS the ANSI upload; the other three arrive by file.
+  it('an empty slot offers every format except the one the canvas draws', async () => {
+    const boardIndex = { files: {} } as unknown as ScreenIndexShape;
+    render(
+      <ArtistScreenDialog
+        path="Themes/skope/Node/LOCKOUT0.TXT"
+        theme={theme}
+        index={boardIndex}
+        isNew
+        newDescription="Shown to a caller whose account is locked out."
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ PETSCII' })).toBeTruthy());
+    expect(screen.getByRole('button', { name: '+ RIP' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '+ Teletext' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '+ ANSI / text' })).toBeNull();
+    expect(screen.getByText(/Nothing has been drawn here yet/)).toBeTruthy();
+  });
 });

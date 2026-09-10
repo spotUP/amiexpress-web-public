@@ -429,6 +429,26 @@ export interface GalleryBuildOptions {
 }
 
 /**
+ * What a resolved reader is served, narrow enough to tell twins apart.
+ *
+ * Level bands (LOGON per band) and screen types (.GR twins) are genuinely
+ * different cards: hiding one would lie about what is left. The gallery
+ * itself only ever holds ansi/text - PETSCII, RIP and Teletext never reach
+ * it (their chips on the ANSI card say what is missing) - so the byte
+ * format is not part of the key.
+ */
+export function servedKey(
+  reader: Pick<ScreenReaderShape, 'screen' | 'scope' | 'serves' | 'securityLevel' | 'screenType'>,
+): string {
+  return [
+    reader.screen,
+    reader.scope,
+    reader.serves ?? (reader.securityLevel !== undefined ? `level ${reader.securityLevel}` : ''),
+    reader.screenType ?? '',
+  ].join('|');
+}
+
+/**
  * Every screen a caller looking through `opts.theme` is served, as cards.
  *
  * ONE rule, called by the sysop's gallery and the artist's: a card cannot be
@@ -467,7 +487,40 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     byContent.set(file.sha256, [...(byContent.get(file.sha256) ?? []), file]);
   }
 
-  return [...byContent.values()]
+  /**
+   * In a theme's own studio, a screen it has drawn shows once: its version.
+   * The board's original beside it reads as a duplicate ("why do i see two
+   * guestlogon.txt") - the artist already answered it by drawing. Board
+   * cards stay in the sysop's gallery (no ownedBy there) and for screens
+   * the theme has not drawn.
+   *
+   * Matched per screen, scope, level band AND format: a theme that drew the
+   * ANSI still needs the board's PETSCII card, or the missing-format chips
+   * would lie about what is left to draw.
+   */
+  const drawnInTheme = (ownedBy: string): Set<string> => {    const claimed = new Set<string>();
+    for (const file of drawable) {
+      if (file.theme !== ownedBy) continue;
+      for (const reader of file.readBy ?? []) {
+        if (reader.via !== 'resolved') continue;
+        claimed.add(servedKey(reader));
+      }
+    }
+    return claimed;
+  };
+  const drawn = opts.ownedBy ? drawnInTheme(opts.ownedBy) : new Set<string>();
+  const groups = [...byContent.values()].filter(copies => {
+    if (!opts.ownedBy || drawn.size === 0) return true;
+    // The theme's own cards always stay; a board group goes when the theme
+    // serves the same screen, scope, level band and format.
+    if (copies.some(copy => copy.theme === opts.ownedBy)) return true;
+    const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
+    const reader = file.readBy?.find(r => r.via === 'resolved');
+    if (!reader) return true;
+    return !drawn.has(servedKey(reader));
+  });
+
+  return groups
     .map(copies => {
       // The copy a screen actually resolves to leads; failing that, the first.
       const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];

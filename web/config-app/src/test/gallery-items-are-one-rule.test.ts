@@ -63,4 +63,61 @@ describe('what belongs in a gallery', () => {
     expect(paths(buildGalleryItems(withUnread, { theme: 'default', showGenerated: true, showUnread: false })))
       .toContain('Screens/written.txt');
   });
+
+  // "why do i see two guestlogon.txt": the theme drew it and the board's
+  // original sat beside it under the same name. In the artist's own studio
+  // a drawn screen shows once - theirs. The sysop's board view keeps both.
+  it('shows a drawn screen once in its own studio, twice on the board', () => {
+    const both = {
+      ...index,
+      files: {
+        ...index.files,
+        'Node1/GUESTLOGON.txt': file({
+          relPath: 'Node1/GUESTLOGON.txt', sha256: 'board',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'resolved' }],
+        }),
+        'Themes/neon/Node/guestlogon.txt': file({
+          relPath: 'Themes/neon/Node/guestlogon.txt', sha256: 'theirs', theme: 'neon',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'resolved' }],
+        }),
+      },
+    } as unknown as ScreenIndexShape;
+    const opts = { theme: 'neon', showGenerated: false, showUnread: false } as const;
+
+    expect(paths(buildGalleryItems(both, opts)))
+      .toEqual(expect.arrayContaining(['Node1/GUESTLOGON.txt', 'Themes/neon/Node/guestlogon.txt']));
+    const artistPaths = paths(buildGalleryItems(both, { ...opts, ownedBy: 'neon' }));
+    expect(artistPaths).toContain('Themes/neon/Node/guestlogon.txt');
+    expect(artistPaths).not.toContain('Node1/GUESTLOGON.txt');
+  });
+
+  it('still shows the twins the theme has not drawn', () => {
+    // Level bands and screen-type twins are genuinely different cards: the
+    // theme drawing node GUESTLOGON must not hide the level-250 MENU or the
+    // .GR twin, and the gallery never holds PETSCII/RIP/Teletext anyway.
+    const twins = {
+      ...index,
+      files: {
+        ...index.files,
+        'Node1/GUESTLOGON.txt': file({
+          relPath: 'Node1/GUESTLOGON.txt', sha256: 'board',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'resolved' }],
+        }),
+        'Conf1/menu250.txt.GR': file({
+          relPath: 'Conf1/menu250.txt.GR', sha256: 'gr', format: 'ansi',
+          readBy: [{ screen: 'MENU', scope: 'conf', id: 1, serves: '250 and above', screenType: '.GR' }],
+        }),
+        'Themes/neon/Node/guestlogon.txt': file({
+          relPath: 'Themes/neon/Node/guestlogon.txt', sha256: 'theirs', theme: 'neon',
+          readBy: [{ screen: 'GUESTLOGON', scope: 'node', id: 1, via: 'resolved' }],
+        }),
+      },
+    } as unknown as ScreenIndexShape;
+    const artist = buildGalleryItems(twins,
+      { theme: 'neon', showGenerated: false, showUnread: false, ownedBy: 'neon' });
+
+    expect(paths(artist)).toContain('Themes/neon/Node/guestlogon.txt');
+    expect(paths(artist)).not.toContain('Node1/GUESTLOGON.txt');
+    expect(paths(artist)).toContain('Conf1/menu250.txt.GR');
+  });
 });
