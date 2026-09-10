@@ -217,6 +217,11 @@ export async function runPostAuthLogin(
   // Set session user data
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.EXEC_QUICKNEW;
+  // Who this socket held BEFORE this login (ghostlogoff 2026-09-10): the
+  // already-on check below must know whether the user is re-authenticating
+  // on a socket that never let them go (reload -> restore -> submit),
+  // because this assignment overwrites the evidence. Snapshot first.
+  session.entryUserId = (session.user as any)?.id;
   session.user = { ...user, lastLoginBeforeUpdate: ctx.lastLoginBeforeUpdate };
   session.ansiMode = user.ansi;
   installAnsiFilter(emitter, session);
@@ -482,7 +487,16 @@ export async function runPostAuthLogin(
     }
   }
 
-  {
+  // Same socket re-authenticating as the user it already held on entry
+  // (reload -> restore -> login form -> submit): the session never left,
+  // so there is nothing to refuse - fall through and re-register over it.
+  // A socket that held nobody takes the check as before, so a genuine
+  // second tab is still refused per express.e:29715-29727 (ghostlogoff).
+  const reauthenticating =
+    (session.entryUserId as any) !== undefined &&
+    String(session.entryUserId) === String((user as any)?.id);
+
+  if (!reauthenticating) {
     const alreadyOn = userAlreadyOnNode(
       appConfig.get('dataDir'),
       user.username,

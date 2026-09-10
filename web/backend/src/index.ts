@@ -459,6 +459,7 @@ export interface BBSSession {
   blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
   sysopKicked?: boolean; // Session was forcibly disconnected by sysop via NM command - skip grace period
   cleanLogoff?: boolean; // Caller said goodbye with G - deliberate logoff, skip grace period (a 15s wait only serves drops, and a fast re-login reads its own ghost)
+  entryUserId?: unknown; // Who this socket held before the current login overwrote session.user (ghostlogoff: same-socket re-auth skips the already-on check)
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163

@@ -78,4 +78,15 @@ describe('fresh login reclaims its own grace-ghost first', () => {
     expect(alreadyOnAt).toBeGreaterThan(-1);
     expect(reclaimAt).toBeLessThan(alreadyOnAt);
   });
+
+  test('same-socket re-auth skips the already-on check', () => {
+    // Reload -> restore -> login form -> submit lands on a socket that
+    // already holds the same user: replacing, not refusing. A socket
+    // with no user still takes the check (genuine second tab refused).
+    expect(loginSrc).toMatch(/reauthenticating/);
+    const skipAt = loginSrc.indexOf('if (!reauthenticating)');
+    const alreadyOnAt = loginSrc.indexOf('userAlreadyOnNode(');
+    expect(skipAt).toBeGreaterThan(-1);
+    expect(skipAt).toBeLessThan(alreadyOnAt);
+  });
 });
