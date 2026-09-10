@@ -137,7 +137,7 @@ describe('the door settings form', () => {
   });
 
   // Sending the whole form writes the door's own defaults into settings.json
-  // as if the sysop had chosen them. The first board to use this had
+  // as if a sysop had chosen them. The first board to use this had
   // maxNodes: 8 pinned that way, so raising the door's default to 255 would
   // never have reached it.
   it('sends only what the sysop changed, not the defaults they left alone', async () => {
@@ -153,5 +153,41 @@ describe('the door settings form', () => {
     const [, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(Object.keys(values)).toEqual(['server']);
     expect(values.port).toBeUndefined();
+  });
+
+  // Empire doors declare dozens of fields (Bulls: toggles, 39 masks, join
+  // settings). One flat wall is unusable, so consecutive settings sharing a
+  // group render under one heading; ungrouped settings render bare.
+  it('groups consecutive settings under one heading each', async () => {
+    getDoorSettings.mockImplementationOnce(async () => ({
+      success: true,
+      data: {        manifest: {
+          command: 'B',
+          artSections: [{ label: 'Title logo' }],
+          settings: [
+            { key: 'dual_listing', label: 'Dual listing', type: 'choice', group: 'Listing',
+              choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }], default: 'YES' },
+            { key: 'cursor_keys', label: 'Cursor keys', type: 'choice', group: 'Listing',
+              choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }], default: 'YES' },
+            { key: 'conf_1_mask', label: 'Conference 1 bulletin mask', type: 'string', group: 'Conference access',
+              default: '--------------------' },
+            { key: 'plain', label: 'Plain', type: 'string', default: '' },
+          ],
+        },
+        values: { dual_listing: 'YES', cursor_keys: 'NO', conf_1_mask: 'XXXX----------------', plain: '' },
+        secretsSet: [],
+      },
+    } as any));
+    renderForm();
+
+    await waitFor(() => expect(screen.getByLabelText('Dual listing')).toBeTruthy());
+    // One heading per group, not one per setting.
+    expect(screen.getAllByText('Listing')).toHaveLength(1);
+    expect(screen.getAllByText('Conference access')).toHaveLength(1);
+    expect(screen.getByLabelText('Cursor keys')).toBeTruthy();
+    expect(screen.getByLabelText('Conference 1 bulletin mask')).toBeTruthy();
+    expect(screen.getByLabelText('Plain')).toBeTruthy();
+    // Art notes where it lives instead of rendering a textarea for it.
+    expect(screen.getByText(/drawn in/)).toBeTruthy();
   });
 });

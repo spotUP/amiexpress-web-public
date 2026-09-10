@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
-import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError } from '../doors/door-settings.service';
+import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, listDoorArtSections } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
@@ -616,6 +616,89 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       if (error instanceof UnknownDoorSettingError) {
         return res.status(400).json({ success: false, message: error.message });
       }
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/doors-art
+   *
+   * Every door's Studio-editable art sections (door, file, section, label,
+   * live line counts — no bodies). The ANSI Studio door-art tab lists these
+   * beside the door files it already shows. Doors without artSections are
+   * absent, never errors: most doors have none.
+   */
+  router.get('/doors-art', async (req: Request, res: Response) => {
+    try {
+      const { getDoors } = require('../handlers/door.handler');
+      const out: Array<Record<string, unknown>> = [];
+      for (const door of getDoors()) {
+        try {
+          const doorDir = doorDirectoryFor(config.get('dataDir'), door);
+          if (!doorDir) continue;
+          const sections = listDoorArtSections(doorDir);
+          if (sections.length === 0) continue;
+          out.push({
+            command: door.command,
+            name: door.name || door.command,
+            sections,
+          });
+        } catch {
+          continue; // no manifest or no art: not an error, just absent
+        }
+      }
+      sendResponse(res, out);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/doors/:command/art
+   *
+   * Art blocks the ANSI Studio edits: sections living inside a door's config
+   * file (Bulls' Title logo in Bulls.CFG), where no screen path can name
+   * them. 404 when the door declares no art sections.
+   */  router.get('/doors/:command/art', async (req: Request, res: Response) => {
+    try {
+      const command = String(req.params.command).toUpperCase();
+      const { getDoors } = require('../handlers/door.handler');
+      const door = getDoors().find((d: any) => String(d.command).toUpperCase() === command);
+      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
+
+      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
+      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+
+      sendResponse(res, readDoorArtSections(doorDir));
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/doors/:command/art
+   *
+   * Replaces one art section body ({ file, section, content: base64 }).
+   * Limits come from the manifest (the door's DOC numbers); settings rows,
+   * comments and delimiters survive.
+   */
+  router.put('/doors/:command/art', async (req: any, res: Response) => {
+    try {
+      const command = String(req.params.command).toUpperCase();
+      const { getDoors } = require('../handlers/door.handler');
+      const door = getDoors().find((d: any) => String(d.command).toUpperCase() === command);
+      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
+
+      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
+      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+
+      const { file, section, content } = req.body ?? {};
+      if (typeof file !== 'string' || typeof section !== 'string' || typeof content !== 'string') {
+        return handleError(res, new Error('Expected { file, section, content } with string values'));
+      }
+      const updated = writeDoorArtSection(doorDir, file, section, content);
+      sendResponse(res, updated, `${command} art saved`);
+    } catch (error) {
       handleError(res, error);
     }
   });

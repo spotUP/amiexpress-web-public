@@ -29,8 +29,8 @@ describe('ONENODE screen ships (express.e:29715-29727)', () => {
     expect(art.length).toBeGreaterThan(100);
   });
 
-  test('first line opens with ~ so MCI processing is on', () => {
-    expect(rows[0].startsWith('~')).toBe(true);
+  test('first line opens with a wipe code (and MCI on)', () => {
+    expect(rows[0]).toMatch(/^~W[MHVSCRBNTEX]/i);
   });
 
   test('every row fits 80 printable cells', () => {

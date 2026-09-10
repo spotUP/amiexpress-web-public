@@ -26,6 +26,8 @@ export interface DoorSetting {
   min?: number;
   max?: number;
   secret?: boolean;
+  /** Group heading the form renders this setting under. */
+  group?: string;
 }
 
 export interface DoorSettingsFormProps {
@@ -133,18 +135,38 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
+  const artSections = (view.manifest as { artSections?: Array<{ label: string }> }).artSections ?? [];
+  let lastGroup: string | null = null;
+
   return (
     // A div, not a form: this renders inside the Edit Door modal's form, and
     // nesting forms is invalid HTML - the browser discards the inner one, and
     // its submit button would then save the DOOR instead of its settings.
     <div className="space-y-4 p-1">
+      {artSections.length > 0 && (
+        <p className="text-xs text-content-secondary border border-border rounded p-2">
+          Title art ({artSections.map(a => a.label).join(', ')}) is drawn in
+          the ANSI Studio under Screen files → Door screens — a settings form
+          is the wrong tool for art.
+        </p>
+      )}
       {view.manifest.settings.map(setting => {
         const value = values[setting.key];
         const id = `door-setting-${setting.key}`;
         const secretIsSet = setting.secret && view.secretsSet?.includes(setting.key);
+        // Consecutive settings sharing a group render under one heading;
+        // ungrouped settings render bare, exactly as before.
+        const heading = setting.group && setting.group !== lastGroup ? setting.group : null;
+        lastGroup = setting.group ?? lastGroup;
 
         return (
-          <div key={setting.key} className="space-y-1">
+          <div key={setting.key}>
+            {heading && (
+              <h4 className="text-sm font-semibold text-content-primary border-b border-border pb-1 mb-2 mt-2">
+                {heading}
+              </h4>
+            )}
+          <div className="space-y-1">
             <label htmlFor={id} className="form-label">
               {setting.label}
             </label>
@@ -188,6 +210,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
             {setting.help && (
               <p className="text-xs text-content-secondary">{setting.help}</p>
             )}
+          </div>
           </div>
         );
       })}

@@ -105,6 +105,15 @@ const DECLARED_ALIASES = new Map<string, string>([
    * door directory that is not there, so the check skipped it entirely.
    */
   ['subscan.info', 'SUBS'],
+  /*
+   * J is Bulls' drawer-mate, not its alias: emp_tools holds TWO binaries
+   * (Bulls and Joincnf) reading the SAME two files (Bulls.CFG the menu,
+   * joincnf.cfg the join rules — Bulls.DOC names JoinCnf.CFG errors among
+   * Bulls' own). One drawer, one manifest, two registrations, and a sysop
+   * changing join settings under either name has changed them for both —
+   * the SUBSCAN shape above, not the GWWALL one below.
+   */
+  ['j.info', 'B'],
 ]);
 
 function doorIsTypeScript(doorDir: string): boolean {

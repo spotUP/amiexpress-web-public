@@ -798,6 +798,23 @@ class ApiClient {
     });
   }
 
+  // Door art sections - art living inside a door's config file (Bulls' Title
+  // logo in Bulls.CFG), edited in the ANSI Studio, never in a settings form.
+  async listDoorArt() {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors-art`);
+  }
+
+  async getDoorArt(command: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`);
+  }
+
+  async saveDoorArt(command: string, file: string, section: string, contentBase64: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`, {
+      method: 'PUT',
+      body: JSON.stringify({ file, section, content: contentBase64 }),
+    });
+  }
+
   /*
    * There were four more methods here - get/create/update/deleteSecurityAccess
    * - on /config/security/*, with no caller anywhere in this app. They read

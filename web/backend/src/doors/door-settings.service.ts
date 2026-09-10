@@ -66,7 +66,39 @@ export interface DoorSetting {
    * still wins if one is set.
    */
   fromSystemConfig?: string;
+  /**
+   * Group heading the admin form renders this setting under. Settings share
+   * a heading while consecutive settings name the same group; ungrouped
+   * settings render as they always have. Added for Empire doors, which
+   * declare dozens of fields no sysop wants as one flat wall.
+   */
+  group?: string;
+  /**
+   * Regex a string value must match (e.g. `^[X-]{20}$` for an Empire access
+   * mask). Validated on save; must itself compile.
+   */
+  pattern?: string;
+  /**
+   * Bind this setting to a different legacy file than the manifest's
+   * `cfgFile` (e.g. `joincnf.cfg` beside `Bulls.CFG`). Same bare-filename
+   * rule. Only meaningful on file-backed (`cfgFormat: 'empire'`) manifests.
+   */
+  cfgFile?: string;
+  /**
+   * Row binding for sectioned (`cfgFormat: 'empire'`) files. `section` names
+   * the `[Name_END]` section without the suffix (`bullnames`, `masks`);
+   * `row` is the zero-based data row; `field` picks the cell. Init-style
+   * `KEY value` settings use `cfgKey` with `{ section: 'init' }` (or omit
+   * `cfgRow` and take the manifest file's init section).
+   */
+  cfgRow?: {
+    section: string;
+    row?: number;
+    field: 'value' | 'title' | 'file' | 'mask';
+  };
 }
+
+export type DoorCfgFormat = 'key-value' | 'empire';
 
 export interface DoorSettingsManifest {
   command: string;
@@ -78,8 +110,37 @@ export interface DoorSettingsManifest {
    * Bare filename only - never a path.
    */
   cfgFile?: string;
+  /**
+   * `key-value` (default) renders `Key=value` lines from `cfgKey` settings.
+   * `empire` parses the sectioned Empire format in place instead — the file
+   * is the store (settings.json is neither read nor written), unmapped bytes
+   * survive every save, and each setting binds via `cfgKey`/`cfgRow` plus an
+   * optional per-setting `cfgFile`.
+   */
+  cfgFormat?: DoorCfgFormat;
+  /**
+   * Art blocks the ANSI Studio edits (Bulls' Title logo). Read/written as
+   * whole sections through the Empire driver — never through the settings
+   * form, which is the wrong tool for art.
+   */
+  artSections?: DoorArtSection[];
 }
 
+const BARE_FILE_RE = /^[A-Za-z0-9._-]+$/;
+
+const CfgRowSchema = z.object({
+  section: z.string().min(1).max(32),
+  row: z.number().int().min(0).max(9999).optional(),
+  field: z.enum(['value', 'title', 'file', 'mask']),
+});
+
+const ArtSectionSchema = z.object({
+  file: z.string().min(1).max(64).regex(BARE_FILE_RE),
+  section: z.string().min(1).max(32),
+  label: z.string().min(1).max(80),
+  maxLines: z.number().int().min(1).max(100),
+  maxLineLength: z.number().int().min(1).max(1000),
+});
 const SettingSchema = z.object({
   key: z.string().min(1).max(64),
   label: z.string().min(1).max(120),
@@ -92,17 +153,41 @@ const SettingSchema = z.object({
   secret: z.boolean().optional(),
   cfgKey: z.string().min(1).max(64).optional(),
   fromSystemConfig: z.string().min(1).max(64).optional(),
+  group: z.string().min(1).max(40).optional(),
+  pattern: z.string().min(1).max(200).optional(),
+  cfgFile: z.string().min(1).max(64).regex(BARE_FILE_RE).optional(),
+  cfgRow: CfgRowSchema.optional(),
 }).refine(
   s => s.type !== 'choice' || (s.choices?.length ?? 0) > 0,
   { message: 'a choice needs choices' }
+).refine(
+  s => s.pattern === undefined || s.type === 'string',
+  { message: 'pattern is for strings' }
+).refine(
+  s => {
+    if (s.pattern === undefined) return true;
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(s.pattern);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: 'pattern must be a valid regular expression' }
+).refine(
+  s => !s.cfgRow || s.cfgRow.field === 'value' || s.cfgRow.row !== undefined,
+  { message: 'a title, file or mask row needs its row number' }
 );
 
 const ManifestSchema = z.object({
   command: z.string().min(1).max(50),
-  settings: z.array(SettingSchema).max(100),
+  settings: z.array(SettingSchema).max(200),
   // Bare filename: no separators, no traversal. The cfg is written INSIDE the
   // door directory and nowhere else.
-  cfgFile: z.string().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
+  cfgFile: z.string().min(1).max(64).regex(BARE_FILE_RE).optional(),
+  cfgFormat: z.enum(['key-value', 'empire']).optional(),
+  artSections: z.array(ArtSectionSchema).max(10).optional(),
 });
 
 /** The door's declaration, or null when it has none - the normal case. */
@@ -181,6 +266,13 @@ export function readDoorSettingsView(doorDir: string): DoorSettingsView | null {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest) return null;
 
+  // File-backed (Empire) manifests read the legacy files themselves: the
+  // live file's customized titles are what the form must show, not the
+  // manifest defaults. settings.json is never consulted for these doors.
+  if (manifest.cfgFormat === 'empire') {
+    return readEmpireSettingsView(doorDir, manifest);
+  }
+
   const stored = readValuesFromDir(doorDir);
   const values: Record<string, string | number | boolean> = {};
   const secretsSet: string[] = [];
@@ -235,6 +327,12 @@ export function writeDoorSettings(
   const unknown = Object.keys(incoming).filter(k => !declared.has(k));
   if (unknown.length > 0) throw new UnknownDoorSettingError(unknown);
 
+  // File-backed (Empire) manifests serialize into the legacy files: the CFG
+  // is the store, so settings.json is never written (a mirror would drift).
+  if (manifest.cfgFormat === 'empire') {
+    return writeEmpireSettings(doorDir, manifest, declared, incoming);
+  }
+
   const stored = readValuesFromDir(doorDir);
   const out: Record<string, string | number | boolean> = { ...stored } as any;
 
@@ -268,7 +366,11 @@ export function writeDoorSettings(
       continue;
     }
 
-    out[key] = String(value);
+    const str = String(value);
+    if (setting.pattern && !new RegExp(setting.pattern).test(str)) {
+      throw new Error(`${setting.label} must match ${setting.pattern}`);
+    }
+    out[key] = str;
   }
 
   const target = path.join(doorDir, VALUES_FILE);
@@ -302,6 +404,11 @@ export function renderDoorCfg(
 ): string | null {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest?.cfgFile) return null;
+  // Empire files are their own store — the Key=value renderer would flatten
+  // sections, comments and art into garbage. Startup (renderAllDoorCfgs)
+  // reaches here for every manifest with a cfgFile, so this guard is what
+  // keeps a reboot from destroying Bulls.CFG.
+  if (manifest.cfgFormat === 'empire') return null;
 
   const values = readValuesFromDir(doorDir);
   const lines: string[] = [];
@@ -365,4 +472,396 @@ export function renderAllDoorCfgs(
     }
   }
   return rendered;
+}
+
+/* ------------------------------------------------------------------ *
+ * Empire sectioned files (cfgFormat: 'empire').
+ *
+ * The legacy file is the store: reads parse it, writes serialize into it,
+ * and settings.json is never touched (a mirror would drift the moment a
+ * sysop hand-edits beside the admin). Unmapped bytes survive every save —
+ * the driver guarantees it, and the round-trip test pins it.
+ * ------------------------------------------------------------------ */
+
+import {
+  parseEmpireFile,
+  serializeEmpireFile,
+  getKv,
+  setKv,
+  getBullRows,
+  setBullRow,
+  appendBullRow,
+  getMaskRows,
+  setMaskRow,
+  appendMaskRow,
+  getSectionBody,
+  setSectionBody,
+  type EmpireFile,
+} from './text-cfg/empire';
+
+/** Which legacy file a setting binds (per-setting override, else manifest). */
+function empireFileName(manifest: DoorSettingsManifest, setting: DoorSetting): string {
+  const file = setting.cfgFile ?? manifest.cfgFile;
+  if (!file) {
+    throw new Error(
+      `${manifest.command}: ${setting.key} binds no file — an empire setting needs cfgFile (per setting or manifest)`
+    );
+  }
+  return file;
+}
+
+function loadEmpireFiles(
+  doorDir: string,
+  manifest: DoorSettingsManifest
+): Map<string, { file: EmpireFile; dirty: boolean }> {
+  const names = new Set<string>();
+  for (const setting of manifest.settings) {
+    if (setting.cfgKey || setting.cfgRow) names.add(empireFileName(manifest, setting));
+  }
+  const loaded = new Map<string, { file: EmpireFile; dirty: boolean }>();
+  for (const name of names) {
+    const full = path.join(doorDir, name);
+    let raw: Buffer;
+    try {
+      raw = fs.readFileSync(full);
+    } catch {
+      // Mirror the door's own complaint: Bulls errors `Bulls.CFG Not Found`.
+      throw new Error(`${manifest.command}: ${name} not found beside the door — nothing to edit yet`);
+    }
+    loaded.set(name, { file: parseEmpireFile(raw), dirty: false });
+  }
+  return loaded;
+}
+
+type EmpireCell = string | number | boolean | undefined;
+
+function readEmpireCell(
+  entry: { file: EmpireFile },
+  manifest: DoorSettingsManifest,
+  setting: DoorSetting
+): EmpireCell {
+  const { file } = entry;
+  const row = setting.cfgRow;
+  if (row) {
+    if (row.field === 'title' || row.field === 'file') {
+      const rows = getBullRows(file);
+      const found = rows[row.row ?? -1];
+      if (!found) return undefined;
+      return row.field === 'title' ? found.title : found.file;
+    }
+    if (row.field === 'mask') {
+      const masks = getMaskRows(file);
+      const found = masks[row.row ?? -1];
+      return found;
+    }
+    // field 'value' with an explicit section: init-style KV there.
+    if (setting.cfgKey) {
+      return getKv(file, row.section, setting.cfgKey);
+    }
+    return undefined;
+  }
+  if (setting.cfgKey) {
+    return getKv(file, 'init', setting.cfgKey);
+  }
+  return undefined;
+}
+
+function coerceEmpireValue(
+  setting: DoorSetting,
+  value: string | number | boolean
+): string | number {
+  if (setting.type === 'number') {
+    const n = Number(value);
+    if (!Number.isFinite(n)) throw new Error(`${setting.label} must be a number`);
+    if (setting.min !== undefined && n < setting.min) throw new Error(`${setting.label} must be at least ${setting.min}`);
+    if (setting.max !== undefined && n > setting.max) throw new Error(`${setting.label} must be at most ${setting.max}`);
+    return n;
+  }
+  if (setting.type === 'boolean') {
+    // Empire files speak YES/NO.
+    const yes = value === true || value === 'true' || value === 1 || String(value).toUpperCase() === 'YES';
+    return yes ? 'YES' : 'NO';
+  }
+  if (setting.type === 'choice') {
+    const allowed = (setting.choices ?? []).map(c => c.value);
+    if (!allowed.includes(String(value))) {
+      throw new Error(`${setting.label} must be one of: ${allowed.join(', ')}`);
+    }
+    return String(value);
+  }
+  const str = String(value);
+  if (setting.pattern && !new RegExp(setting.pattern).test(str)) {
+    throw new Error(`${setting.label} must match ${setting.pattern}`);
+  }
+  return str;
+}
+
+/** Grow a bull/mask section until `index` exists, scaffolding `-`/blank rows. */
+function ensureEmpireRow(file: EmpireFile, kind: 'bull' | 'mask', index: number): void {
+  if (kind === 'bull') {
+    while (getBullRows(file).length <= index) {
+      const n = getBullRows(file).length + 1;
+      appendBullRow(file, { title: '-', file: `bull${n}.txt` });
+    }
+    return;
+  }
+  while (getMaskRows(file).length <= index) {
+    const n = getMaskRows(file).length;
+    appendMaskRow(file, '-'.repeat(20), `; Conference ${n + 1}`);
+  }
+}
+
+function applyEmpireCell(
+  entry: { file: EmpireFile; dirty: boolean },
+  manifest: DoorSettingsManifest,
+  setting: DoorSetting,
+  value: string | number
+): void {
+  const str = String(value);
+  const { file } = entry;
+  const row = setting.cfgRow;
+  const fileLabel = empireFileName(manifest, setting);
+  if (row) {
+    if (row.field === 'title' || row.field === 'file') {
+      if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
+      ensureEmpireRow(file, 'bull', row.row);
+      const ok = setBullRow(file, row.row, row.field === 'title' ? { title: str } : { file: str });
+      if (!ok) throw new Error(`${setting.label} points past the bulletin list in ${fileLabel}`);
+      entry.dirty = true;
+      return;
+    }
+    if (row.field === 'mask') {
+      if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
+      ensureEmpireRow(file, 'mask', row.row);
+      const ok = setMaskRow(file, row.row, str);
+      if (!ok) throw new Error(`${setting.label} points past the access list in ${fileLabel}`);
+      entry.dirty = true;
+      return;
+    }
+    if (setting.cfgKey) {
+      const ok = setKv(file, row.section, setting.cfgKey, str);
+      if (!ok) throw new Error(`${setting.label} names ${setting.cfgKey}, which ${fileLabel} does not have`);
+      entry.dirty = true;
+      return;
+    }
+    throw new Error(`${manifest.command}: ${setting.key} binds nothing writable`);
+  }
+  if (setting.cfgKey) {
+    const ok = setKv(file, 'init', setting.cfgKey, str);
+    if (!ok) throw new Error(`${setting.label} names ${setting.cfgKey}, which ${fileLabel} does not have`);
+    entry.dirty = true;
+    return;
+  }
+  throw new Error(`${manifest.command}: ${setting.key} binds nothing writable`);
+}
+
+function readEmpireSettingsView(doorDir: string, manifest: DoorSettingsManifest): DoorSettingsView {
+  const loaded = loadEmpireFiles(doorDir, manifest);
+  const fileFor = (setting: DoorSetting) => {
+    const entry = loaded.get(empireFileName(manifest, setting));
+    if (!entry) throw new Error(`${manifest.command}: ${setting.key} binds no loaded file`);
+    return entry;
+  };
+  const values: Record<string, string | number | boolean> = {};
+  const secretsSet: string[] = [];
+  for (const setting of manifest.settings) {
+    if (!setting.cfgKey && !setting.cfgRow) {
+      // Display-only or future binding: fall back to the declared default.
+      if (setting.default !== undefined) values[setting.key] = setting.default;
+      continue;
+    }
+    const raw = readEmpireCell(fileFor(setting), manifest, setting);
+    if (setting.secret) {
+      if (raw !== undefined && raw !== null && raw !== '') secretsSet.push(setting.key);
+      values[setting.key] = '';
+      continue;
+    }
+    if (raw !== undefined && raw !== null && raw !== '') {
+      if (setting.type === 'number') {
+        const n = Number(raw);
+        if (Number.isFinite(n)) values[setting.key] = n;
+        else if (setting.default !== undefined) values[setting.key] = setting.default;
+      } else {
+        values[setting.key] = raw as string | number | boolean;
+      }
+    } else if (setting.default !== undefined) {
+      values[setting.key] = setting.default;
+    }
+  }
+  return { manifest, values, secretsSet };
+}
+
+function writeEmpireSettings(
+  doorDir: string,
+  manifest: DoorSettingsManifest,
+  declared: Map<string, DoorSetting>,
+  incoming: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> {
+  const loaded = loadEmpireFiles(doorDir, manifest);
+  const fileFor = (setting: DoorSetting) => {
+    const entry = loaded.get(empireFileName(manifest, setting));
+    if (!entry) throw new Error(`${manifest.command}: ${setting.key} binds no loaded file`);
+    return entry;
+  };
+  for (const [key, value] of Object.entries(incoming)) {
+    const setting = declared.get(key)!;
+    if (!setting.cfgKey && !setting.cfgRow) {
+      throw new Error(`${setting.label} binds no file row — the manifest must say where it lives`);
+    }
+    if (setting.secret && (value === '' || value === null || value === undefined)) {
+      continue;
+    }
+    const coerced = coerceEmpireValue(setting, value);
+    applyEmpireCell(fileFor(setting), manifest, setting, coerced);
+  }
+  // Atomic per file, latin1 so art bytes survive, normal perms (no secrets here).
+  for (const [name, entry] of loaded) {
+    if (!entry.dirty) continue;
+    const target = path.join(doorDir, name);
+    const temp = `${target}.tmp`;
+    fs.writeFileSync(temp, Buffer.from(serializeEmpireFile(entry.file), 'latin1'));
+    fs.renameSync(temp, target);
+  }
+  // Read back what the files now say.
+  const view = readEmpireSettingsView(doorDir, manifest);
+  return view.values;
+}
+
+/* ------------------------------------------------------------------ *
+ * Door art sections (ANSI Studio).
+ *
+ * Some doors keep their art INSIDE a config file — Bulls' Title logo lives
+ * in Bulls.CFG between the body lines and `[Title_END]`. No screen path
+ * names it, so the Studio's file gallery can never list it; instead the
+ * manifest declares `artSections` and these two functions read/write the
+ * named section through the Empire driver. The artists get the Studio's
+ * real canvas, the door keeps its single file, and the settings form never
+ * shows a textarea pretending to be an art tool.
+ * ------------------------------------------------------------------ */
+
+export interface DoorArtSection {
+  /** Bare filename inside the door directory (e.g. `Bulls.CFG`). */
+  file: string;
+  /** Section name without the marker suffix (`title` for `[Title_END]`). */
+  section: string;
+  /** What the Studio card says. */
+  label: string;
+  /** DOC limits (Bulls title: 20 lines, 200 chars per line). */
+  maxLines: number;
+  maxLineLength: number;
+}
+
+export interface DoorArtContent {
+  file: string;
+  section: string;
+  label: string;
+  /** Raw section body, base64 of the latin1 bytes (art carries ESC/high bytes). */
+  content: string;
+  lines: number;
+  maxLines: number;
+  maxLineLength: number;
+}
+
+function readArtManifest(doorDir: string): DoorSettingsManifest & { artSections: DoorArtSection[] } {
+  const manifest = readManifestFromDir(doorDir);
+  if (!manifest) throw new Error('This door does not declare any settings');
+  if (!manifest.artSections || manifest.artSections.length === 0) {
+    throw new Error('This door declares no art sections for the Studio');
+  }
+  return { ...manifest, artSections: manifest.artSections };
+}
+
+function loadArtFile(doorDir: string, file: string): EmpireFile {
+  const full = path.join(doorDir, file);
+  let raw: Buffer;
+  try {
+    raw = fs.readFileSync(full);
+  } catch {
+    throw new Error(`${file} not found beside the door — nothing to draw yet`);
+  }
+  return parseEmpireFile(raw);
+}
+
+/** Every art section the manifest declares, with its current body. */
+export function readDoorArtSections(doorDir: string): DoorArtContent[] {
+  return listDoorArtSections(doorDir).map((entry) => {
+    const file = loadArtFile(doorDir, entry.file);
+    const body = getSectionBody(file, entry.section);
+    if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
+    return {
+      file: entry.file,
+      section: entry.section,
+      label: entry.label,
+      content: Buffer.from(body.join('\n'), 'latin1').toString('base64'),
+      lines: body.length,
+      maxLines: entry.maxLines,
+      maxLineLength: entry.maxLineLength,
+    };
+  });
+}
+
+export interface DoorArtListing {
+  file: string;
+  section: string;
+  label: string;
+  lines: number;
+  maxLines: number;
+  maxLineLength: number;
+}
+
+/** Declared art sections with live line counts, without the bodies. */
+export function listDoorArtSections(doorDir: string): DoorArtListing[] {
+  const manifest = readArtManifest(doorDir);
+  return manifest.artSections.map((entry) => {
+    const file = loadArtFile(doorDir, entry.file);
+    const body = getSectionBody(file, entry.section);
+    if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
+    return {
+      file: entry.file,
+      section: entry.section,
+      label: entry.label,
+      lines: body.length,
+      maxLines: entry.maxLines,
+      maxLineLength: entry.maxLineLength,
+    };
+  });
+}
+
+/**
+ * Replace an art section body. Lines keep the file's own ending style;
+ * validation follows the manifest limits (the door's DOC numbers).
+ */
+export function writeDoorArtSection(
+  doorDir: string,
+  fileName: string,
+  section: string,
+  contentBase64: string
+): DoorArtContent {
+  const manifest = readArtManifest(doorDir);
+  const entry = manifest.artSections.find(
+    (a) => a.file === fileName && a.section.toLowerCase() === section.toLowerCase()
+  );
+  if (!entry) throw new Error(`No art section ${section} in ${fileName} — the manifest must declare it`);
+  const text = Buffer.from(contentBase64, 'base64').toString('latin1');
+  const lines = text.split(/\r\n|\n/);
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > entry.maxLines) {
+    throw new Error(`${entry.label}: ${lines.length} lines, at most ${entry.maxLines}`);
+  }
+  for (const [i, line] of lines.entries()) {
+    if (line.length > entry.maxLineLength) {
+      throw new Error(`${entry.label} line ${i + 1}: ${line.length} chars, at most ${entry.maxLineLength}`);
+    }
+  }
+  const full = path.join(doorDir, entry.file);
+  const file = loadArtFile(doorDir, entry.file);
+  if (!setSectionBody(file, entry.section, lines)) {
+    throw new Error(`${entry.file} has no [${entry.section}] section`);
+  }
+  const temp = `${full}.tmp`;
+  fs.writeFileSync(temp, Buffer.from(serializeEmpireFile(file), 'latin1'));
+  fs.renameSync(temp, full);
+  return readDoorArtSections(doorDir).find(
+    (a) => a.file === entry.file && a.section.toLowerCase() === entry.section.toLowerCase()
+  )!;
 }
