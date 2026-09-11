@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { CELL_HEIGHT, CELL_WIDTH, canvasPixelSize, paintScreen, type Highlight } from './ansi-canvas-paint';
 
@@ -60,6 +60,21 @@ export function AnsiCanvas({
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
 
+  /**
+   * Repaint once webfonts settle. The first paint often runs before Topaz
+   * arrives, and a canvas keeps whatever the fallback drew - missing glyphs
+   * baked in until something repaints. Absent in jsdom, where there is
+   * nothing to wait for and the guard must stay a no-op.
+   */
+  const [fontEpoch, setFontEpoch] = useState(0);
+  useEffect(() => {
+    const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
+    if (!fonts?.ready) return;
+    let live = true;
+    fonts.ready.then(() => { if (live) setFontEpoch(epoch => epoch + 1); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+
   useEffect(() => {
     const element = elementRef.current;
     if (!element) return;
@@ -92,7 +107,7 @@ export function AnsiCanvas({
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     paintScreen(ctx, canvas, cursor, highlights);
-  }, [canvas, cols, rows, cursor, highlights, scale]);
+  }, [canvas, cols, rows, cursor, highlights, scale, fontEpoch]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;

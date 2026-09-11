@@ -195,7 +195,7 @@ function GalleryCard(
    * is what stops a viewport of cards firing thirty requests at once, and
    * react-query does not limit concurrency of its own.
    */
-  const { data: fetched } = useQuery({
+  const { data: fetched, isFetching } = useQuery({
     // The theme is part of the KEY because it is part of the ANSWER: the same
     // path read through two themes has different readers.
     queryKey: ['screen-file', item.path, theme ?? 'default'],
@@ -228,7 +228,14 @@ function GalleryCard(
       className="text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
-      <div className={`h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+      <div className={`relative h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+        {isFetching && !item.placeholder && (
+          <span
+            data-testid="card-updating"
+            title="Fetching the latest bytes"
+            className="absolute right-1 top-1 z-10 h-3 w-3 animate-spin rounded-full border border-accent border-t-transparent"
+          />
+        )}
         {item.placeholder
           // An invitation, not a thumbnail: there is no file yet, and the card
           // exists so an artist can see the gap and click into it.
