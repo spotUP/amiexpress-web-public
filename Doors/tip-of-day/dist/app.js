@@ -7,7 +7,7 @@ const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const catalog_1 = require("./catalog");
 const layout_1 = require("./layout");
-const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const theme_2 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const tips_1 = require("./tips");
 const SEEN_KEY = 'seen-tip-ids';
 const SEEN_CAP = 200;
@@ -135,43 +135,56 @@ async function createApp(session) {
     });
     void hint;
     screen.render();
-    // The marching rail: one top row of scrolling slashes, effects tier
-    // only. effectsAllowed() is false at 40 columns, where a moving effect
-    // leaves stray glyphs mid-row — there the door is all tip, no chrome.
-    // The interval dies with the door (done() clears it); a leaked timer
-    // would keep rendering into the board's menu.
-    let railTimer = null;
-    if ((0, blessed_1.effectsAllowed)(screenWidth)) {
-        const rail = (0, blessed_helpers_1.createBox)({
-            parent: screen,
-            top: 0,
-            left: 0,
-            width: screenWidth,
-            height: 1,
-            border: undefined,
-            focusable: false,
-            content: (0, layout_1.buildRail)(screenWidth, 0),
-            style: { fg: t.dim, bg: t.ground },
-        });
-        void rail;
-        let phase = 0;
-        railTimer = setInterval(() => {
-            phase += 1;
-            try {
-                rail.setContent((0, layout_1.buildRail)(screenWidth, phase));
-                screen.render();
-            }
-            catch { /* leaving anyway */ }
-        }, 140);
-    }
+    // The board's own chrome, not a hand-rolled rail: masthead with the
+    // theme's animated slash rail, footer hints, width-gated by the SDK
+    // itself (at 40 columns the masthead is a static title and no timer
+    // exists). Replaced a bespoke setInterval rail (2026-09-11: the SDK
+    // had attachDoorChrome all along - search first, build never).
+    const s = (0, theme_2.themeStyles)(theme);
+    const mastheadRow = (0, blessed_helpers_1.createBox)({
+        parent: screen,
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        border: undefined,
+        focusable: false,
+        content: '',
+        style: { fg: t.dim, bg: t.ground },
+    });
+    const footerRow = (0, blessed_helpers_1.createBox)({
+        parent: screen,
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        border: undefined,
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        style: (0, theme_2.footerStyle)(theme),
+        content: '',
+    });
+    const chrome = (0, theme_2.attachDoorChrome)(theme, {
+        width: screenWidth,
+        title: 'TIP OF THE DAY',
+        masthead: mastheadRow,
+        footer: footerRow,
+        hints: [{ key: 'Any key', does: 'continues' }],
+        footerPad: ' ',
+        styles: s,
+        render: () => screen.render(),
+    });
     await new Promise((resolve) => {
         let settled = false;
         const done = () => {
             if (settled)
                 return;
             settled = true;
-            if (railTimer)
-                clearInterval(railTimer);
+            try {
+                chrome.stop();
+            }
+            catch { /* leaving anyway */ }
             try {
                 input.disable();
             }

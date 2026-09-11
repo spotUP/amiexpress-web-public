@@ -18,8 +18,10 @@ import {
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
-import { buildTipFrame, buildRail } from './layout';
-import { effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { buildTipFrame } from './layout';
+import {
+  themeStyles, attachDoorChrome, footerStyle,
+} from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { pickTip, type BoardFacts, type HowTo, type TipWeights } from './tips';
 
 interface DoorSession {
@@ -161,41 +163,53 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   screen.render();
 
-  // The marching rail: one top row of scrolling slashes, effects tier
-  // only. effectsAllowed() is false at 40 columns, where a moving effect
-  // leaves stray glyphs mid-row — there the door is all tip, no chrome.
-  // The interval dies with the door (done() clears it); a leaked timer
-  // would keep rendering into the board's menu.
-  let railTimer: ReturnType<typeof setInterval> | null = null;
-  if (effectsAllowed(screenWidth)) {
-    const rail = createBox({
-      parent: screen,
-      top: 0,
-      left: 0,
-      width: screenWidth,
-      height: 1,
-      border: undefined,
-      focusable: false,
-      content: buildRail(screenWidth, 0),
-      style: { fg: t.dim, bg: t.ground },
-    } as never);
-    void rail;
-    let phase = 0;
-    railTimer = setInterval(() => {
-      phase += 1;
-      try {
-        (rail as any).setContent(buildRail(screenWidth, phase));
-        screen.render();
-      } catch { /* leaving anyway */ }
-    }, 140);
-  }
+  // The board's own chrome, not a hand-rolled rail: masthead with the
+  // theme's animated slash rail, footer hints, width-gated by the SDK
+  // itself (at 40 columns the masthead is a static title and no timer
+  // exists). Replaced a bespoke setInterval rail (2026-09-11: the SDK
+  // had attachDoorChrome all along - search first, build never).
+  const s = themeStyles(theme);
+  const mastheadRow = createBox({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: 1,
+    border: undefined,
+    focusable: false,
+    content: '',
+    style: { fg: t.dim, bg: t.ground },
+  });
+  const footerRow = createBox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 1,
+    border: undefined,
+    focusable: false,
+    clickable: false,
+    mouse: false,
+    style: footerStyle(theme),
+    content: '',
+  });
+  const chrome = attachDoorChrome(theme, {
+    width: screenWidth,
+    title: 'TIP OF THE DAY',
+    masthead: mastheadRow as any,
+    footer: footerRow as any,
+    hints: [{ key: 'Any key', does: 'continues' }],
+    footerPad: ' ',
+    styles: s,
+    render: () => screen.render(),
+  } as never);
 
   await new Promise<void>((resolve) => {
     let settled = false;
     const done = () => {
       if (settled) return;
       settled = true;
-      if (railTimer) clearInterval(railTimer);
+      try { chrome.stop(); } catch { /* leaving anyway */ }
       try { input.disable(); } catch { /* leaving anyway */ }
       try { screen.destroy(); } catch { /* leaving anyway */ }
       try { bbs.write('\x1b[0m\x1b[2J\x1b[H\x1b[?25h'); } catch { /* leaving anyway */ }

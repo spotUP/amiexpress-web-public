@@ -51,23 +51,6 @@ export function wrapWords(text: string, width: number, maxLines: number): string
 }
 
 /**
- * The marching slash rail, pure: one row of demoscene chrome.
- *
- * Diagonal stripes scrolling right: cells where (x + phase) falls in the
- * first half of a 4-cell period are '/', the rest are space. '/' and ' '
- * both paint on Amiga and C64 alike, and the row is exactly `width` —
- * never more, so it cannot fold on a 40-column canvas. The door only
- * ANIMATES it when effectsAllowed(width); at 40 the rail stays home.
- */
-export function buildRail(width: number, phase: number): string {
-  const w = Math.max(1, Math.floor(width));
-  const p = ((Math.floor(phase) % 4) + 4) % 4;
-  let row = '';
-  for (let x = 0; x < w; x++) row += (x + p) % 4 < 2 ? '/' : ' ';
-  return row;
-}
-
-/**
  * Rows for this tip on a screen this wide. Inner text width is frame
  * minus borders and padding; on 40 columns the frame IS the screen
  * (minus padding) and the hint shortens to fit the cursor row.

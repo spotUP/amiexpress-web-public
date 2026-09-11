@@ -59,34 +59,24 @@ export async function wideScreenGrowsThenCaps(): Promise<void> {
   }
 }
 
+
 export async function longWordNeverBreachesTheRow(): Promise<void> {
   const monster: Tip = { ...TIP, body: `See ${'x'.repeat(100)} now` };
   for (const width of [40, 80, 132]) {
-    const { rows } = ((): { rows: string[] } => {
-      const f = buildTipFrame(monster, width);
-      return { rows: [f.title, ...f.body, f.hint] };
-    })();
-    for (const row of rows) {
+    const f = buildTipFrame(monster, width);
+    for (const row of [f.title, ...f.body, f.hint]) {
       assert.ok(row.length <= width, `width ${width}: row too wide (${row.length})`);
     }
   }
 }
 
 export async function frameBoundaryAmigaSafe(): Promise<void> {
-  const dirty: Tip = { ...TIP, title: 'Try WHIP — now', body: 'curious … situation' };
+  // Escapes keep this file ASCII: the source under test must never
+  // contain these, and owed text from outside is sanitized at paint.
+  const dirty: Tip = { ...TIP, title: 'Try WHIP \u2014 now', body: 'curious \u2026 situation' };
   const f = buildTipFrame(dirty, 80);
+  assert.ok(f.title.includes('Try WHIP ? now'));
   for (const row of [f.title, ...f.body, f.hint]) {
     assert.ok(!/[^\x20-\x7e\xa0-\xff]/.test(row), `non-Amiga char in: ${row}`);
   }
-}
-
-export async function railMarchesAndFits(): Promise<void> {
-  const { buildRail } = await import('../layout');
-  const a = buildRail(40, 0);
-  const b = buildRail(40, 1);
-  assert.strictEqual(a.length, 40);
-  assert.ok(a.includes('/') && a.includes(' '), 'stripes, not solid');
-  assert.notStrictEqual(a, b, 'phase moves the stripes');
-  assert.strictEqual(buildRail(40, 4), a, 'period 4 wraps');
-  assert.ok(/^[/ ]*$/.test(buildRail(132, 2)), 'slashes and spaces only');
 }
