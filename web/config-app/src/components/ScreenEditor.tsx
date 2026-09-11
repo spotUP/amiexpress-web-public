@@ -80,6 +80,12 @@ export interface ScreenEditorProps {
   onSave?: (base64: string) => void;
   onCancel?: () => void;
   /**
+   * A save is in flight. The button disables and says so: without this the
+   * click answered with silence while the PUT plus refetch plus decode ran,
+   * and "super slow to update" was the only possible reading.
+   */
+  saving?: boolean;
+  /**
    * Show the art and its codes; change nothing.
    *
    * The board's own screen, opened by an artist who has not redrawn it into
@@ -92,7 +98,7 @@ export interface ScreenEditorProps {
 }
 
 export function ScreenEditor({
-  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false,
+  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false, saving = false,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
@@ -487,9 +493,10 @@ export function ScreenEditor({
               onClick={() => onChange?.(redo(surface))}>
               <Redo2 size={14} /> Redo
             </button>
-            <button type="button" className="inline-flex items-center gap-1 underline"
+            <button type="button" className="inline-flex items-center gap-1 underline disabled:opacity-50"
+              disabled={saving}
               onClick={() => onSave?.(canvasToScreen(surface.canvas))}>
-              <Save size={14} /> Save
+              <Save size={14} /> {saving ? 'Saving…' : 'Save'}
             </button>
           </>
         )}

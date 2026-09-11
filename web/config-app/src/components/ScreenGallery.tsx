@@ -18,8 +18,9 @@ import { apiClient } from '../api/client';
  * makes each ~500ms, saturating connection pools and blocking the UI thread.
  */
 
-/** Max concurrent screen file fetches. */
-const MAX_CONCURRENT = 4;
+/** Max concurrent screen file fetches: the browser's own per-origin pool
+ *  limit, so one gallery can never ask for more than the transport allows. */
+export const MAX_CONCURRENT = 6;
 
 let pending: Array<() => void> = [];
 let inFlight = 0;

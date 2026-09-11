@@ -473,6 +473,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               readOnly={!mine}
               onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
               onCancel={onClose}
+              saving={save.isPending || writeBytes.isPending}
             />
           ) : file?.format === 'petscii' ? (
             <PetsciiScreenPreview content={file.content} />
@@ -486,6 +487,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               onChange={setEditing}
               onSave={async base64 => { if (await confirmAuditWrite('This drawing')) save.mutate(base64); }}
               onCancel={onClose}
+              saving={save.isPending || writeBytes.isPending}
             />
           ) : (
             <ReadOnlyArt content={file?.content ?? ''} mci={file?.mci ?? []} filePath={path} onClose={onClose} />
