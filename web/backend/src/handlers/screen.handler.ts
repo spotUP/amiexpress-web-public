@@ -368,6 +368,11 @@ const SCREENS_REQUIRE_CLEAR = new Set([
   'LOGOFF',
   'JOIN',
   'JOINED',
+  // WEB_: ONENODE is a small centered box, not full-screen art - without a
+  // clear the BBSTITLE and login prompts it interrupts bleed through around
+  // it (sysop screenshot, T mode). express.e:29715-29727 shows it with no
+  // clear; the sysop directed the clear.
+  'ONENODE',
 ]);
 
 /**
