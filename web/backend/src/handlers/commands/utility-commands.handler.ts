@@ -300,10 +300,13 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
 
   while (searchTerm.length > 0) {
     // express.e:25089 internalCommandUpHat: board-root help/ + params.
-    // This was a CWD-relative 'help/<topic>' which resolves nowhere in
-    // production (/app/web/backend/help does not exist), so EVERY ^ topic
-    // answered silence. dataDir is the board root.
-    const helpBasePath = path.join(config.get('dataDir'), 'help', searchTerm);
+    // Two stacked production breaks lived here: the dir was CWD-relative
+    // ('help/<topic>', resolves nowhere - /app/web/backend/help does not
+    // exist), fixed to dataDir; and lowercase 'help' while the volume
+    // carries HELP/ (AmigaDOS is case-insensitive, ext4 is not - live log:
+    // "Not found: /app/data/bbs/help/TESTPAGE"). dataDir is the board
+    // root, HELP is the on-disk case.
+    const helpBasePath = path.join(config.get('dataDir'), 'HELP', searchTerm);
     foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
     if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);

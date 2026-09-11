@@ -57,7 +57,9 @@ describe('^ passes the teletext slot to findSecurityScreen', () => {
     handleHelpFilesCommand(socket, tSession() as any, 'P8FF');
     handleHelpFilesCommand(socket, aSession() as any, 'P8FF');
     // Progressive search retries with stripped suffixes; the full term is first.
-    const full = seen.filter((a) => String(a[0]).endsWith(path.join('help', 'P8FF')));
+    // Pinned uppercase: the volume carries HELP/, and ext4 is case-sensitive
+    // (AmigaDOS is not - live log once read "Not found: .../help/TESTPAGE").
+    const full = seen.filter((a) => String(a[0]).endsWith(path.join('HELP', 'P8FF')));
     expect(full.length).toBe(2);
     expect(full[0][6]).toBe(true);
     expect(full[1][6]).not.toBe(true);
