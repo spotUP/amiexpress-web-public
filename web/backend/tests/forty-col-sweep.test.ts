@@ -416,6 +416,17 @@ describe('40-column sweep: the adapted doors', () => {
     fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
   });
 
+  it('tip-of-the-day: frame rows for a long tip at 40', () => {
+    const { buildTipFrame } = require('../../../Doors/tip-of-day/layout');
+    const tip = {
+      id: 'door:WHIP', kind: 'door', title: LONG, body: `${LONG_WORDS} ${PROSE}`, command: 'WHIP',
+    };
+    const f = buildTipFrame(tip, 40);
+    fits([f.title, ...f.body, f.hint]);
+    // Nothing cut: the longest words survive wrapped, not truncated.
+    expect([f.title, ...f.body, f.hint].join(' ')).toContain('Supercalifragilistic');
+  });
+
   it('screen-theme-picker: theme rows, note, footer hints', () => {
     const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
     const { buildThemeItems, buildNote, buildFooterHints, choicesForWidth } =
