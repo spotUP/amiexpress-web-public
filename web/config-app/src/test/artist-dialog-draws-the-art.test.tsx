@@ -13,6 +13,9 @@ import type { ReactNode } from 'react';
 
 import { QUERY_DEFAULTS } from '../lib/query-client';
 
+// Shared confirm mock so auditing-save tests can answer yes or no.
+const confirmMock = vi.hoisted(() => vi.fn(async (_options?: unknown) => true));
+
 // Real ANSI: ESC[31m then HI, exactly what the board serves.
 const art = new TextEncoder().encode('\x1b[31mHI\r\n');
 const base64 = btoa(String.fromCharCode(...art));
@@ -33,7 +36,7 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
 }));
 
 vi.mock('../contexts/NotificationContext', () => ({
-  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
+  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: confirmMock }),
 }));
 
 import { ArtistScreenDialog } from '../pages/ArtistScreenDialog';
@@ -182,5 +185,51 @@ describe('opening a screen in the studio', () => {
     const put = writes.find(w => w.url.includes('/api/screens/file'));
     expect(put).toBeTruthy();
     expect(decodeURIComponent(put!.url)).toContain('Themes/skope/Node/LOCKOUT0.TXT');
+  });
+});
+
+describe("auditing somebody else's theme", () => {
+  const tango = { slug: 'tango', title: "tango's screens", status: 'draft' as const, dir: 'Themes/tango', owner: 'tango', screens: 1, mine: false };
+  const tangoIndex = { files: { 'Themes/tango/Board/BULL.TXT': { relPath: 'Themes/tango/Board/BULL.TXT', theme: 'tango' } } } as unknown as ScreenIndexShape;
+
+  const openAuditing = () => render(
+    <ArtistScreenDialog path="Themes/tango/Board/BULL.TXT" theme={tango} index={tangoIndex} onClose={vi.fn()} onOpenPath={vi.fn()} auditing />,
+    { wrapper },
+  );
+
+  const puts = () => (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+    .filter((call: unknown[]) => {
+      const [url, init] = call as [unknown, RequestInit | undefined];
+      return String(url).includes('/api/screens/file') && (init?.method ?? 'GET') !== 'GET';
+    });
+
+  it('says whose theme the save lands in', async () => {
+    openAuditing();
+
+    await waitFor(() => expect(screen.getByText(/Editing in tango's screens/)).toBeTruthy());
+  });
+
+  it('a save confirms with the theme name first', async () => {
+    openAuditing();
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+
+    fireEvent.click(await screen.findByText('Save'));
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    expect(confirmMock.mock.calls[0][0]).toMatchObject({ title: expect.stringContaining("tango's screens") });
+    await waitFor(() => expect(puts().length).toBeGreaterThan(0));
+  });
+
+  it('a cancelled confirm writes nothing', async () => {
+    confirmMock.mockImplementationOnce(async () => false);
+    openAuditing();
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    const before = puts().length;
+
+    await screen.findByText('Save').then(element => element.click());
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(puts().length).toBe(before);
   });
 });

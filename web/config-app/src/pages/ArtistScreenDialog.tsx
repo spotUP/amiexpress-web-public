@@ -57,9 +57,16 @@ export interface ArtistScreenDialogProps {
   onClose: () => void;
   /** Reopen on another path - how a redraw lands the artist on their copy. */
   onOpenPath: (path: string) => void;
+  /**
+   * True when the open theme belongs to somebody else (the sysop auditing
+   * an artist's studio). Saves then confirm with the theme's name, so a
+   * switch nobody noticed cannot silently land art in the wrong theme.
+   * Defaults to the theme's own `mine` flag.
+   */
+  auditing?: boolean;
 }
 
-export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription }: ArtistScreenDialogProps) {
+export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -301,9 +308,31 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
 
   const title = path ? path.split('/').pop() ?? path : '';
 
+  /**
+   * Whose files these writes land in. Auditing (somebody else's theme) does
+   * not refuse - the sandbox owns that - but every write confirms with the
+   * theme's name first: the sysop replaced tango's art while meaning to
+   * replace 607080's, through a theme switch nobody saw happen.
+   */
+  const auditingHere = auditing ?? theme.mine === false;
+  const confirmAuditWrite = async (what: string): Promise<boolean> => {
+    if (!auditingHere) return true;
+    return confirm({
+      title: `Save into ${theme.title}?`,
+      message: `${what} lands in ${theme.owner ? `${theme.owner}'s` : 'this'} theme (${theme.slug}), not yours. The board serves it to callers wearing that theme.`,
+      confirmText: `Save into ${theme.title}`,
+    });
+  };
+
   return (
     <Modal open={!!path} title={title} onClose={onClose} maxWidth="max-w-4xl">
       {isLoading && <SkeletonRows rows={4} />}
+
+      {auditingHere && (
+        <p className="text-sm text-accent border border-dashed border-accent rounded p-2">
+          Editing in {theme.title}{theme.owner ? ` (${theme.owner}'s theme)` : ''} — saves land there, not in yours.
+        </p>
+      )}
 
       {isNew && (
         <p className="text-sm text-content-secondary">
@@ -375,6 +404,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               const chosen = event.target.files?.[0];
               event.target.value = '';
               if (!chosen || !addingFormat) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
               writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
               setAddingFormat(null);
             }}
@@ -410,6 +440,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               const chosen = event.target.files?.[0];
               event.target.value = '';
               if (!chosen || !path) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
               // Fresh file: nothing to carry over. The write invalidates
               // the index, the slot flips to drawn, and the dialog shows
               // the uploaded art.
@@ -425,6 +456,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               const chosen = event.target.files?.[0];
               event.target.value = '';
               if (!chosen || !addingFormat) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
               writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
               setAddingFormat(null);
             }}
@@ -439,7 +471,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               content={file?.content ?? ''}
               filePath={path ?? undefined}
               readOnly={!mine}
-              onSave={mine ? bytes => save.mutate(bytes) : undefined}
+              onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
               onCancel={onClose}
             />
           ) : file?.format === 'petscii' ? (
@@ -452,7 +484,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               mci={file?.mci ?? []}
               filePath={path ?? undefined}
               onChange={setEditing}
-              onSave={base64 => save.mutate(base64)}
+              onSave={async base64 => { if (await confirmAuditWrite('This drawing')) save.mutate(base64); }}
               onCancel={onClose}
             />
           ) : (
@@ -598,7 +630,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
             <button
               type="button"
               className="btn-primary"
-              onClick={() => path && writeBytes.mutate({ target: path, bytes: pendingUpload.bytes, carry: carryCodes })}
+              onClick={async () => { if (path && await confirmAuditWrite(pendingUpload.name)) writeBytes.mutate({ target: path, bytes: pendingUpload.bytes, carry: carryCodes }); }}
             >
               Write it
             </button>
