@@ -2154,6 +2154,27 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
 }
 
 /**
+ * No door leaves the terminal wide.
+ *
+ * Doors that resize ask through BBSApi.setTerminalMode, which records the
+ * wish on the session - and well-behaved doors put fixed back themselves
+ * (the SDK switch does it in dispose). A door that crashes, is kicked, or
+ * never learned the call strands every later screen at the door's width:
+ * menus and uploads drawn for 80 columns onto 167 of them (live
+ * 2026-09-11). So the backend owns the invariant at every TypeScript exit
+ * instead of trusting each door. Silent unless a door actually went wide.
+ */
+export function restoreFixedTerminal(socket: any, session: BBSSession): void {
+  if (!(session as any)?.doorTerminalWide) return;
+  (session as any).doorTerminalWide = false;
+  try {
+    socket.emit('terminal-mode', 'fixed');
+  } catch {
+    // A dead socket needs no resize; the flag is already cleared.
+  }
+}
+
+/**
  * Execute TypeScript door with runDoor() export
  * Dynamically imports the door module and calls its runDoor() function
  */
@@ -2418,6 +2439,7 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
         socket.emit('door:status', { status: 'closed' });
         socket.emit('door-active', false);
         disableGameMode(socket, session);
+        restoreFixedTerminal(socket, session);
         console.log(`[executeTypeScriptDoor] Legacy door ${door.name} completed`);
       }
       return;
@@ -2512,6 +2534,7 @@ console.log(`[executeTypeScriptDoor] Door completed successfully`);
 
     // Disable game mode when door exits
     disableGameMode(socket, session);
+    restoreFixedTerminal(socket, session);
 
     // Clear door active flag and input handler - MUST match 68K door cleanup
     // CRITICAL: Set to false, don't just delete, to ensure consistent state
@@ -2605,6 +2628,7 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
 
   } catch (error) {
 console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+    restoreFixedTerminal(socket, session);
 
     if (wrappedSocket?._doorCleanup) {
       wrappedSocket._doorCleanup();
