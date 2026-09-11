@@ -1,10 +1,12 @@
 /**
  * The ^ help command resolves native .TTI in teletext mode.
  *
- * A sysop-drawn CEBRA page converted to HELP/P8FF-3F7F.TTI never showed:
- * handleHelpFilesCommand called findSecurityScreen without the teletext
- * slot, so the .TTI twin was invisible and ^P8FF answered silence. The
- * file, the loader and the variant order were all already in place.
+ * Two stacked bugs, both answered silence:
+ * 1. handleHelpFilesCommand never passed the teletext slot, so the .TTI
+ *    twin was invisible.
+ * 2. The help dir was CWD-relative ('help/<topic>'), which resolves
+ *    nowhere in production - EVERY ^ topic was broken, not just .TTI.
+ *    express.e:25089 builds board-root help/ + params; dataDir is that.
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -74,5 +76,47 @@ describe('a .TTI help file resolves for teletext', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('^ finds the board help dir, not the process CWD', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../../src/config');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const realFind = require('../../src/utils/screen-security.util').findSecurityScreen;
+  let oldDataDir = '';
+  let board = '';
+
+  afterEach(() => {
+    config.set('dataDir', oldDataDir);
+    if (board) fs.rmSync(board, { recursive: true, force: true });
+    board = '';
+  });
+
+  test('TTX TESTPAGE displays the .TTI on a scratch board', () => {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'help-board-'));
+    fs.mkdirSync(path.join(board, 'HELP'), { recursive: true });
+    fs.writeFileSync(
+      path.join(board, 'HELP', 'TESTPAGE.TTI'),
+      'DE,x\nPN,8FF00\nSC,0000\nCT,8,C\nPS,8000\nOL,0,hi\n',
+    );
+    oldDataDir = config.getConfig().dataDir;
+    config.set('dataDir', board);
+    const shown: string[] = [];
+    setUtilityCommandsDependencies({
+      handleGoodbyeCommand: (() => {}) as any,
+      messages: [],
+      confScreenDir: '',
+      findSecurityScreen: realFind,
+      displayScreen: ((_s: any, _ss: any, name: string) => {
+        shown.push(name);
+        return true;
+      }) as any,
+      searchFileDescriptions: (async () => []) as any,
+    });
+    const socket: any = { emit: jest.fn(), id: 'help-board' };
+    handleHelpFilesCommand(socket, tSession() as any, 'TESTPAGE');
+    expect(shown).toHaveLength(1);
+    expect(shown[0].toUpperCase().endsWith('.TTI')).toBe(true);
   });
 });

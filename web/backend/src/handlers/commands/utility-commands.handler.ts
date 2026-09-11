@@ -20,6 +20,7 @@ import path from 'path';
 import fs from 'fs';
 import { formatDateSlash } from '../../utils/date-format.util';
 import { servesPetsciiArt } from '../screen.handler';
+import { config } from '../../config';
 
 import type { BBSSession } from '../../index';
 
@@ -298,7 +299,11 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   let foundFile: string | null = null;
 
   while (searchTerm.length > 0) {
-    const helpBasePath = path.join('help', searchTerm);
+    // express.e:25089 internalCommandUpHat: board-root help/ + params.
+    // This was a CWD-relative 'help/<topic>' which resolves nowhere in
+    // production (/app/web/backend/help does not exist), so EVERY ^ topic
+    // answered silence. dataDir is the board root.
+    const helpBasePath = path.join(config.get('dataDir'), 'help', searchTerm);
     foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
     if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);
