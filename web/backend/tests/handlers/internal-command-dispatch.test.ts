@@ -309,6 +309,7 @@ const DISPATCH: Array<[string, () => jest.Mock]> = [
   ['H', () => systemCommands.handleHelpCommand as unknown as jest.Mock],
   ['?', () => displayFileCommands.handleQuestionMarkCommand as unknown as jest.Mock],
   ['^', () => utilityCommands.handleHelpFilesCommand as unknown as jest.Mock],
+  ['TTX', () => utilityCommands.handleHelpFilesCommand as unknown as jest.Mock],
 
   // Information
   ['VER', () => infoCommands.handleVersionCommand as unknown as jest.Mock],

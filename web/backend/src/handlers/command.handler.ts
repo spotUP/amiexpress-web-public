@@ -5055,6 +5055,13 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       handleHelpFilesCommand(socket, session, params);
       return;
 
+    // WEB_: TTX is the typable alias for ^ (help files). PETSCII has no ^
+    // glyph at all, and phone keyboards bury it - without an alias a C64
+    // caller can never ask for a help screen. Same handler, same params.
+    case 'TTX':
+      handleHelpFilesCommand(socket, session, params);
+      return;
+
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
     case 'AG': { // AmigaGuide reader - a door's own documentation, on the board
       const { handleAmigaGuideCommand } = require('./commands/amigaguide-commands.handler');
