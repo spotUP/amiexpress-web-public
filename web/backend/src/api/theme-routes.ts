@@ -437,7 +437,15 @@ themesRouter.post('/:slug/copy', (req: Request, res: Response) => {
 
   const destination = path.join(themeRoot, target);
   if (fs.existsSync(destination)) {
-    return refuse(res, 409, `${theme.title} already has ${target} - edit it in the screen editor`);
+    // Not an error to act on: the artist asked to edit it, and it is
+    // already there to edit. Answer 409 (nothing was copied) WITH the
+    // path, so the dialog opens the theme copy instead of dead-ending
+    // on "already exists".
+    return res.status(409).json({
+      success: false,
+      error: `${theme.title} already has ${target}`,
+      data: { to: path.join(theme.dir, target) },
+    });
   }
 
   // The screen, not one of its files: the security variants and the .seq/.rip

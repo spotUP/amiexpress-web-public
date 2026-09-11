@@ -149,9 +149,15 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     },
     onError: (error: ApiError) => {
       // 409 is "you already redrew this" - the artist wanted to edit it, so
-      // take them there rather than making them find it themselves.
+      // take them there rather than making them find it themselves. The
+      // server answers the existing theme path alongside the refusal.
       if (error.status === 409) {
+        const to = (error.data as { to?: string } | undefined)?.to;
         queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+        if (typeof to === 'string' && to) {
+          onOpenPath(to);
+          return;
+        }
         showSuccess(error.message);
         return;
       }

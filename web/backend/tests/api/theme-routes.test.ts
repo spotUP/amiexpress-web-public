@@ -259,6 +259,9 @@ describe('starting a theme screen from the board', () => {
 
     expect(res.status).toBe(409);
     expect(fs.readFileSync(path.join(root, 'Themes', 'neon', 'Board', 'BULL.TXT'), 'utf8')).toBe('the artist');
+    // ...but names where it lives, so the dialog opens the copy instead of
+    // dead-ending on "already exists".
+    expect(res.body.data?.to).toBe(path.join('Themes', 'neon', 'Board', 'BULL.TXT'));
   });
 
   it("is refused for somebody else's theme", async () => {
