@@ -79,3 +79,14 @@ export async function frameBoundaryAmigaSafe(): Promise<void> {
     assert.ok(!/[^\x20-\x7e\xa0-\xff]/.test(row), `non-Amiga char in: ${row}`);
   }
 }
+
+export async function railMarchesAndFits(): Promise<void> {
+  const { buildRail } = await import('../layout');
+  const a = buildRail(40, 0);
+  const b = buildRail(40, 1);
+  assert.strictEqual(a.length, 40);
+  assert.ok(a.includes('/') && a.includes(' '), 'stripes, not solid');
+  assert.notStrictEqual(a, b, 'phase moves the stripes');
+  assert.strictEqual(buildRail(40, 4), a, 'period 4 wraps');
+  assert.ok(/^[/ ]*$/.test(buildRail(132, 2)), 'slashes and spaces only');
+}

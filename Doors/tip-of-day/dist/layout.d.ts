@@ -14,6 +14,16 @@ export interface TipFrame {
 }
 export declare function wrapWords(text: string, width: number, maxLines: number): string[];
 /**
+ * The marching slash rail, pure: one row of demoscene chrome.
+ *
+ * Diagonal stripes scrolling right: cells where (x + phase) falls in the
+ * first half of a 4-cell period are '/', the rest are space. '/' and ' '
+ * both paint on Amiga and C64 alike, and the row is exactly `width` —
+ * never more, so it cannot fold on a 40-column canvas. The door only
+ * ANIMATES it when effectsAllowed(width); at 40 the rail stays home.
+ */
+export declare function buildRail(width: number, phase: number): string;
+/**
  * Rows for this tip on a screen this wide. Inner text width is frame
  * minus borders and padding; on 40 columns the frame IS the screen
  * (minus padding) and the hint shortens to fit the cursor row.

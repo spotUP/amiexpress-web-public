@@ -18,7 +18,8 @@ import {
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
-import { buildTipFrame } from './layout';
+import { buildTipFrame, buildRail } from './layout';
+import { effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { pickTip, type BoardFacts, type HowTo, type TipWeights } from './tips';
 
 interface DoorSession {
@@ -160,11 +161,41 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   screen.render();
 
+  // The marching rail: one top row of scrolling slashes, effects tier
+  // only. effectsAllowed() is false at 40 columns, where a moving effect
+  // leaves stray glyphs mid-row — there the door is all tip, no chrome.
+  // The interval dies with the door (done() clears it); a leaked timer
+  // would keep rendering into the board's menu.
+  let railTimer: ReturnType<typeof setInterval> | null = null;
+  if (effectsAllowed(screenWidth)) {
+    const rail = createBox({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: screenWidth,
+      height: 1,
+      border: undefined,
+      focusable: false,
+      content: buildRail(screenWidth, 0),
+      style: { fg: t.dim, bg: t.ground },
+    } as never);
+    void rail;
+    let phase = 0;
+    railTimer = setInterval(() => {
+      phase += 1;
+      try {
+        (rail as any).setContent(buildRail(screenWidth, phase));
+        screen.render();
+      } catch { /* leaving anyway */ }
+    }, 140);
+  }
+
   await new Promise<void>((resolve) => {
     let settled = false;
     const done = () => {
       if (settled) return;
       settled = true;
+      if (railTimer) clearInterval(railTimer);
       try { input.disable(); } catch { /* leaving anyway */ }
       try { screen.destroy(); } catch { /* leaving anyway */ }
       try { bbs.write('\x1b[0m\x1b[2J\x1b[H\x1b[?25h'); } catch { /* leaving anyway */ }

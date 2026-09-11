@@ -7,6 +7,7 @@ const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const catalog_1 = require("./catalog");
 const layout_1 = require("./layout");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const tips_1 = require("./tips");
 const SEEN_KEY = 'seen-tip-ids';
 const SEEN_CAP = 200;
@@ -134,12 +135,43 @@ async function createApp(session) {
     });
     void hint;
     screen.render();
+    // The marching rail: one top row of scrolling slashes, effects tier
+    // only. effectsAllowed() is false at 40 columns, where a moving effect
+    // leaves stray glyphs mid-row — there the door is all tip, no chrome.
+    // The interval dies with the door (done() clears it); a leaked timer
+    // would keep rendering into the board's menu.
+    let railTimer = null;
+    if ((0, blessed_1.effectsAllowed)(screenWidth)) {
+        const rail = (0, blessed_helpers_1.createBox)({
+            parent: screen,
+            top: 0,
+            left: 0,
+            width: screenWidth,
+            height: 1,
+            border: undefined,
+            focusable: false,
+            content: (0, layout_1.buildRail)(screenWidth, 0),
+            style: { fg: t.dim, bg: t.ground },
+        });
+        void rail;
+        let phase = 0;
+        railTimer = setInterval(() => {
+            phase += 1;
+            try {
+                rail.setContent((0, layout_1.buildRail)(screenWidth, phase));
+                screen.render();
+            }
+            catch { /* leaving anyway */ }
+        }, 140);
+    }
     await new Promise((resolve) => {
         let settled = false;
         const done = () => {
             if (settled)
                 return;
             settled = true;
+            if (railTimer)
+                clearInterval(railTimer);
             try {
                 input.disable();
             }
