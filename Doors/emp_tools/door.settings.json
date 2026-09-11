@@ -14,7 +14,7 @@
   "settings": [
     {
       "key": "dual_listing",
-      "label": "Dual listing",
+      "label": "Dual listing (bulletins)",
       "type": "choice",
       "group": "Listing",
       "choices": [
@@ -29,7 +29,7 @@
       ],
       "default": "YES",
       "cfgKey": "DUAL_LISTING",
-      "help": "Use 2 listings. Bulletin titles hold 31 chars with dual listing, 39 without."
+      "help": "Use 2 listings in Bulls.CFG. Bulletin titles hold 31 chars with dual listing, 39 without."
     },
     {
       "key": "cursor_keys",
@@ -647,13 +647,13 @@
     },
     {
       "key": "join_dual_listing",
-      "label": "Dual listing",
+      "label": "Dual listing (join)",
       "type": "choice",
       "group": "Join conferences",
       "default": "NO",
       "cfgFile": "joincnf.cfg",
       "cfgKey": "DUAL_LISTING",
-      "help": "Use 2 Listings [YES/NO]",
+      "help": "Use 2 listings in joincnf.cfg [YES/NO].",
       "choices": [
         {
           "value": "YES",

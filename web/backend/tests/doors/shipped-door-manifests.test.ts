@@ -156,3 +156,23 @@ function cfgBindingResolves(doorDir: string, manifest: any, setting: any): boole
   }
   return empire.getKv(parsed, 'init', setting.cfgKey) !== undefined;
 }
+
+/**
+ * Labels are what the sysop reads: two settings sharing one label render
+ * as the same radios twice with nothing telling them apart. Live
+ * 2026-09-11: the B form showed "Dual listing" twice - Bulls.CFG's
+ * DUAL_LISTING and joincnf.cfg's DUAL_LISTING under one name.
+ */
+describe('shipped manifest labels', () => {
+  it.each(doorsWithManifests)('%s labels every setting distinctly', doorName => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(DOORS_DIR, doorName, 'door.settings.json'), 'utf8')
+    );
+    const seen = new Map<string, string>();
+    for (const setting of manifest.settings) {
+      const label = String(setting.label ?? '').toLowerCase();
+      expect(seen.has(label)).toBe(false);
+      seen.set(label, setting.key);
+    }
+  });
+});
