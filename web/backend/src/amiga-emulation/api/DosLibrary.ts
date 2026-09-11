@@ -13,6 +13,7 @@ import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from "../utils/env-paths
 import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 import { narrowVariants } from "../../utils/narrow-art.util";
+import type { FileShadowProvider } from "./file-shadow";
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
 const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
@@ -184,6 +185,13 @@ export class DosLibrary {
    * be made to save over art.
    */
   private narrowArtProvider: (() => boolean) | null = null;
+
+  /**
+   * Session-scoped file shadows (narrow Empire configs). Stashed here and
+   * forwarded to the FileManager at creation - the setter runs before
+   * enableNewFileSystem, same order as the narrow-art provider above.
+   */
+  private shadowProvider: FileShadowProvider | null = null;
 
   // Environment variable management (V36+ SetVar/GetVar/DeleteVar)
   private envManager: EnvironmentManager | null = null;
@@ -387,6 +395,12 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     this.narrowArtProvider = provider;
   }
 
+  /** Install the session's shadow provider (null disables). */
+  setShadowProvider(provider: FileShadowProvider | null): void {
+    this.shadowProvider = provider;
+    if (this.fileManager) this.fileManager.setShadowProvider(provider);
+  }
+
   /**
    * The name a read-only `Open()` should really use.
    *
@@ -419,6 +433,7 @@ debugLog(
       this.pathManager,
       this.fileCache
     );
+    this.fileManager.setShadowProvider(this.shadowProvider);
     this.useNewFileSystem = true;
     this.currentDirectory = this.bbsDataPath;
 

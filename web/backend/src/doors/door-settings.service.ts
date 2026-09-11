@@ -57,6 +57,14 @@ export interface DoorSetting {
    */
   cfgKey?: string;
   /**
+   * The value a narrow session (40-column PETSCII or teletext) reads
+   * instead of the file's, via the 68K file shadow - the disk file and
+   * every wide node are untouched. Bulls' DUAL_LISTING reads NO there so
+   * bulletins lay out in one column that fits. Requires cfgKey: an
+   * override without a file binding names nothing to rewrite.
+   */
+  narrowValue?: string;
+  /**
    * Take this value from the board's own system config when the door has none
    * of its own, naming the system_config column to read.
    *
@@ -161,6 +169,7 @@ const SettingSchema = z.object({
   max: z.number().optional(),
   secret: z.boolean().optional(),
   cfgKey: z.string().min(1).max(64).optional(),
+  narrowValue: z.string().min(1).max(64).optional(),
   fromSystemConfig: z.string().min(1).max(64).optional(),
   group: z.string().min(1).max(40).optional(),
   hidden: z.boolean().optional(),
@@ -188,6 +197,9 @@ const SettingSchema = z.object({
 ).refine(
   s => !s.cfgRow || s.cfgRow.field === 'value' || s.cfgRow.row !== undefined,
   { message: 'a title, file or mask row needs its row number' }
+).refine(
+  s => s.narrowValue === undefined || s.cfgKey !== undefined,
+  { message: 'narrowValue needs a cfgKey to rewrite' }
 );
 
 const ManifestSchema = z.object({

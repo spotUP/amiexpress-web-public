@@ -29,7 +29,8 @@
       ],
       "default": "YES",
       "cfgKey": "DUAL_LISTING",
-      "help": "Use 2 listings in Bulls.CFG. Bulletin titles hold 31 chars with dual listing, 39 without."
+      "narrowValue": "NO",
+      "help": "Use 2 listings in Bulls.CFG. Bulletin titles hold 31 chars with dual listing, 39 without. Narrow (40-column) sessions always read NO via the file shadow."
     },
     {
       "key": "cursor_keys",
@@ -653,7 +654,8 @@
       "default": "NO",
       "cfgFile": "joincnf.cfg",
       "cfgKey": "DUAL_LISTING",
-      "help": "Use 2 listings in joincnf.cfg [YES/NO].",
+      "narrowValue": "NO",
+      "help": "Use 2 listings in joincnf.cfg [YES/NO]. Narrow (40-column) sessions always read NO via the file shadow.",
       "choices": [
         {
           "value": "YES",
