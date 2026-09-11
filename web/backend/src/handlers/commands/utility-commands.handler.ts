@@ -19,6 +19,7 @@ import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 import { formatDateSlash } from '../../utils/date-format.util';
+import { servesPetsciiArt } from '../screen.handler';
 
 import type { BBSSession } from '../../index';
 
@@ -26,7 +27,7 @@ import type { BBSSession } from '../../index';
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
 let _messages: any[] = [];
 let _confScreenDir: string;
-let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean, texttvMode?: boolean) => string | null;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
 let _searchFileDescriptions: (searchPattern: string, conferenceId: number) => Promise<any[]>;
 
@@ -298,7 +299,7 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
 
   while (searchTerm.length > 0) {
     const helpBasePath = path.join('help', searchTerm);
-    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode);
+    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
     if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);
   }
