@@ -201,8 +201,10 @@ export function resolveDoorMinColumns(door: MinColumnsDoorShape): number {
  *    A real 132-column xterm opens a MIN_COLUMNS=132 door; an 80-column one
  *    is refused, which is the honest answer rather than a garbled screen.
  */
-export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number } | null | undefined): number {
-  if (session?.petsciiMode === true) return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
+export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean; petsciiColumns?: number } | null | undefined): number {
+  if (session?.petsciiMode === true || session?.texttvMode === true) {
+    return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
+  }
   const reported = validColumns(session?.screenWidth);
   return reported === null ? DEFAULT_MIN_COLUMNS : Math.max(DEFAULT_MIN_COLUMNS, reported);
 }

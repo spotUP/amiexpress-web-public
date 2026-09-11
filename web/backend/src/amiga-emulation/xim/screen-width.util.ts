@@ -23,6 +23,8 @@ export const C64_ROWS = 25;
 
 export interface ScreenWidthSource {
   petsciiMode?: boolean;
+  /** WEB_: teletext sessions are 40x25 like a C64, but stay ANSI. */
+  texttvMode?: boolean;
   screenWidth?: number;
   /**
    * The caller's REAL terminal width, as last negotiated (NAWS / PTY). Unlike
@@ -54,7 +56,11 @@ export function doorScreenWidth(
   session: ScreenWidthSource | null | undefined,
   fallback: number = DEFAULT_DOOR_COLUMNS,
 ): number {
-  if (!session || session.petsciiMode !== true) return fallback;
+  if (!session) return fallback;
+  // Teletext is 40 columns by definition (classic 40x25 grid), like a C64
+  // but with no transduction - everything stays ANSI.
+  if (session.texttvMode === true) return C64_COLUMNS;
+  if (session.petsciiMode !== true) return fallback;
   // A PETSCII screen's width is the MODE's, not the browser's: 40 for a C64,
   // 80 for the web terminal's wide screen, and nothing else. The reported
   // width used to be consulted here, which is how a `P` answer could inherit
@@ -93,6 +99,8 @@ export function doorScreenHeight(
   fallback: number,
 ): number {
   if (session?.petsciiMode === true) return C64_ROWS;
+  // Teletext is 25 rows by definition, same grid as the C64.
+  if (session?.texttvMode === true) return C64_ROWS;
   const reported = session?.screenHeight;
   if (typeof reported === 'number' && Number.isInteger(reported) && reported >= 10 && reported <= 200) {
     return reported;

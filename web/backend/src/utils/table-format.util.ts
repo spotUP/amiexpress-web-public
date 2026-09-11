@@ -49,12 +49,12 @@ export const NARROW_PROMPT_WIDTH = NARROW_WIDTH - 1;
 /**
  * Does this caller get the narrow layouts?
  *
- * `sessionColumns()` can only answer below 80 when `petsciiMode === true`
- * (every other session is floored at 80), so this is the C64 switch and
- * nothing else: a phone reporting 40 columns over NAWS keeps the express.e
- * bytes.
+ * `sessionColumns()` answers below 80 for PETSCII sessions and for
+ * teletext sessions (both 40-column grids); every other session is
+ * floored at 80, so a phone reporting 40 columns over NAWS keeps the
+ * express.e bytes.
  */
-export function isNarrow(session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined): boolean {
+export function isNarrow(session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean } | null | undefined): boolean {
   return sessionColumns(session ?? {}) < 80;
 }
 

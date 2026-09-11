@@ -110,9 +110,10 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     expect(events).not.toContain('rip-mode');
   });
 
-  test('T enables teletext mode with ANSI at 80x24 and emits texttv-mode', () => {
-    // WEB_: no express.e counterpart. The web terminal swaps to TDAText +
-    // teletext palette on the event; .tti screens preferred (Phase B).
+  test('T enables teletext mode at 40x25 and emits texttv-mode', () => {
+    // WEB_: no express.e counterpart. The web terminal swaps to TDAText at
+    // 2x with a teletext palette on the event; geometry is the classic
+    // 40x25 grid, the same 40-column path PETSCII sessions use.
     const socket = makeSocket();
     const session = makeSession();
     applyGraphicsAnswer(socket, session, 'T');
@@ -120,8 +121,8 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     expect(session.ansiEnabled).toBe(true);
     expect(session.petsciiMode).toBe(false);
     expect(session.ripMode).toBe(false);
-    expect(session.screenWidth).toBe(80);
-    expect(session.screenHeight).toBe(24);
+    expect(session.screenWidth).toBe(40);
+    expect(session.screenHeight).toBe(25);
     expect(socket.emit).toHaveBeenCalledWith('texttv-mode', { enabled: true });
   });
 

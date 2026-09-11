@@ -190,17 +190,20 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
     });
   } else if (hasT && transportCapabilities(session).teletext) {
     // WEB_: teletext session mode (T answer at the graphics prompt). The web
-    // terminal swaps to the TDAText face with a teletext palette on the
-    // `texttv-mode` event below; .tti screens are preferred once Phase B
-    // lands, .txt renders in teletext style until then. Geometry stays the
-    // web terminal's 80x24 so pagination matches what xterm shows.
+    // terminal swaps to the TDAText face at 2x with a teletext palette on
+    // the `texttv-mode` event below (the ONLY wire signal - no
+    // terminal-resize, which the frontend reads as "mount the C64 canvas").
+    // Geometry is the classic 40x25: screens (.ttx authored 40 wide),
+    // doors (BB_SCRWIDTH answers 40) and the narrow layouts all key off
+    // screenWidth, the same 40-column path PETSCII sessions use - except
+    // nothing is transduced, everything stays ANSI.
     session.texttvMode = true;
     session.petsciiMode = false;
     session.ripMode = false;
     session.ansiEnabled = true;
-    session.screenWidth = 80;
-    session.screenHeight = 24;
-console.log('[TEXTTV] Teletext mode enabled - TDAText font, .tti screens preferred');
+    session.screenWidth = 40;
+    session.screenHeight = 25;
+console.log('[TEXTTV] Teletext mode enabled - 40x25, TDAText face, .ttx preferred');
     socket.emit('texttv-mode', { enabled: true });
   } else if (hasT) {
     // WEB_: answering T on a byte transport. Same shape as the R fallback
@@ -281,7 +284,7 @@ console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
     // Determine graphics mode string for logging
     let graphicsMode = 'None';
     if (session.petsciiMode) graphicsMode = 'PETSCII (40x25)';
-    else if (session.texttvMode) graphicsMode = 'TELETEXT (80x24)';
+    else if (session.texttvMode) graphicsMode = 'TELETEXT (40x25)';
     else if (session.ripMode) graphicsMode = 'RIP (640x350)';
     else if (session.ansiEnabled) graphicsMode = 'ANSI';
 console.log('[GRAPHICS] Mode set:', graphicsMode);

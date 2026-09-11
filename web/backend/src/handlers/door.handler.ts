@@ -1818,7 +1818,12 @@ console.log('Executing door:', door.name);
 
   if (
     sessionColumns(session) < resolveDoorMinColumns(door as any) &&
-    !doorOpensForC64(door as any, session)
+    !doorOpensForC64(door as any, session) &&
+    // WEB_: a teletext caller chose the 40-column grid the same way C64
+    // hardware would force it, but on a full ANSI terminal: report the
+    // honest 40 via BB_SCRWIDTH and let the door cope (or not) rather
+    // than refusing. The C64 adapter path stays PETSCII-only.
+    session.texttvMode !== true
   ) {
     if (widthFallThroughArmed) {
       session.widthGateFallThrough = 'REFUSED';

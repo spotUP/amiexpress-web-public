@@ -2197,8 +2197,9 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // preventing later wipe detection.
     const earlyWipeResult = parseWipeMCI(content);
     const wipeCodePresent = earlyWipeResult.wipeType !== null;
-    // Effects-off for a C64 caller (C64/40-col Task 8): the wipe does not
-    // run at all on a PETSCII session and the screen paints directly - the
+    // Effects-off for a C64 or teletext caller (C64/40-col Task 8 +
+    // teletext-40): the wipe does not run at all on a PETSCII or
+    // teletext session and the screen paints directly - the
     // frames are composed 80 columns wide and go straight at the socket,
     // past the reflow choke. The directive is still stripped below, so
     // `~WX` never prints. An ANSI session is unaffected at any width.

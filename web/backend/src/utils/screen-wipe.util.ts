@@ -1102,6 +1102,10 @@ export function parseWipeMCI(content: string): { wipeType: WipeType | null; cont
  * PETSCII bytes with no ANSI to model, and the renderer never asks for one
  * (handlers/petscii-screen.render.ts).
  */
-export function wipeEffectsEnabled(_session: { petsciiMode?: boolean } | null | undefined): boolean {
+export function wipeEffectsEnabled(session: { petsciiMode?: boolean; texttvMode?: boolean } | null | undefined): boolean {
+  // Teletext has no wipe animations (and a wipe frame would smear a
+  // double-height page on the TDAText face): strip like the PETSCII era
+  // did, showing the screen itself.
+  if (session?.texttvMode === true) return false;
   return true;
 }

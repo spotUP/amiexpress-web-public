@@ -39,10 +39,10 @@ export { printableLength, wrapLineToWidth };
 
 export function wrapForSession(
   text: string,
-  session: { screenWidth?: number; petsciiMode?: boolean } | undefined
+  session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean } | undefined
 ): string {
   if (!session) return text;
-  if (session.petsciiMode !== true) return text;      // non-C64: never wrapped here, at any width
+  if (session.petsciiMode !== true && session.texttvMode !== true) return text;      // ANSI: never wrapped here, at any width
   // doorScreenWidth() - the SAME authority BB_SCRWIDTH, the launch-time
   // lineWrap, BBSApi.getTerminalSize() and wrapDoorTextForSession already
   // use. A local `screenWidth || 80` read the stale 80 a PETSCII session
@@ -77,10 +77,10 @@ export function wrapForSession(
  */
 export function wrapDoorTextForSession(
   text: string,
-  session: { screenWidth?: number; petsciiMode?: boolean } | undefined
+  session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean } | undefined
 ): string {
   if (!session) return text;
-  if (session.petsciiMode !== true) return text;      // non-C64: never wrapped, at any width
+  if (session.petsciiMode !== true && session.texttvMode !== true) return text;      // ANSI: never wrapped, at any width
   const width = doorScreenWidth(session, 80);
   if (width >= 80) return text;                       // 80-col: byte-identical
   return wrapPassingArt(text, width);

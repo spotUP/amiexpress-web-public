@@ -123,11 +123,21 @@ describe('texttv-mode on', () => {
     });
     const term = rec.terminals[0];
     expect(term.options.fontFamily).toBe(fontFamilyFor(TELETEXT_FONT));
-    // Classic 40x25 at 12x10 cells on an 80x24 model: integer 2x, so 40
-    // teletext columns fill the width exactly. The mount default is 16.
+    // Classic 40x25 grid on the 80x24 model: integer 2x cells, so 40
+    // teletext columns fill the width exactly.
     expect(term.options.fontSize).toBe(32);
     expect(term.options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
     expect(term.options.theme.background).toBe('#000000');
+  });
+
+  it('resizes the grid to the classic 40x25', async () => {
+    mount();
+    expect(rec.terminals[0].cols).toBe(80);
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: true });
+    });
+    expect(rec.terminals[0].cols).toBe(40);
+    expect(rec.terminals[0].rows).toBe(25);
   });
 
   it('lets the doubled terminal scroll instead of clipping', async () => {
@@ -206,6 +216,7 @@ describe('texttv-mode off', () => {
     });
     expect(rec.terminals[0].options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
     expect(rec.terminals[0].options.fontSize).toBe(32);
+    expect(rec.terminals[0].cols).toBe(40);
     await act(async () => {
       socket.fire('texttv-mode', { enabled: false });
     });
@@ -213,6 +224,8 @@ describe('texttv-mode off', () => {
     expect(term.options.fontFamily).toBe(fontFamilyFor('Topaz_a500'));
     expect(term.options.fontSize).toBe(16);
     expect(term.options.theme.brightRed).toBe(DEFAULT_BRIGHT_RED);
+    expect(term.cols).toBe(80);
+    expect(term.rows).toBe(25);
   });
 
   it('a disconnect ends the mode so the next login owns the font again', async () => {

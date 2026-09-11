@@ -449,6 +449,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const texttvModeRef = useRef<boolean>(false);
   const texttvPrevThemeRef = useRef<any>(null);
   const texttvPrevOverflowRef = useRef<string | null>(null);
+  const texttvPrevColsRef = useRef<number | null>(null);
+  const texttvPrevRowsRef = useRef<number | null>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -2064,13 +2066,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[DISCONNECT] Client disconnected, reason:', reason);
       // A teletext session ends with its socket: drop the mode flag so a
       // later font-preference on this terminal is honoured, and give the
-      // terminal its previous palette back (the face follows via the
-      // server's font-preference on the next login).
+      // terminal its previous palette, geometry and face back (the face
+      // follows via the server's font-preference on the next login).
       if (texttvModeRef.current) {
         texttvModeRef.current = false;
         if (texttvPrevThemeRef.current !== null) {
           try { term.options.theme = texttvPrevThemeRef.current; } catch { /* terminal may be disposed */ }
           texttvPrevThemeRef.current = null;
+        }
+        if (texttvPrevColsRef.current !== null) {
+          try { term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24); } catch { /* disposed */ }
+          texttvPrevColsRef.current = null;
+          texttvPrevRowsRef.current = null;
         }
         if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
           try { terminalRef.current.style.overflow = texttvPrevOverflowRef.current; } catch { /* disposed */ }
@@ -2410,6 +2417,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         texttvModeRef.current = true;
         if (texttvPrevThemeRef.current === null) texttvPrevThemeRef.current = term.options.theme;
         term.options.theme = XTERM_CONFIG.teletextTheme;
+        if (texttvPrevColsRef.current === null) {
+          texttvPrevColsRef.current = term.cols;
+          texttvPrevRowsRef.current = term.rows;
+        }
+        // True 40x25 grid (same geometry PETSCII sessions use): the board
+        // draws 40 columns for this session, so the terminal shows 40.
+        // Direct resize, never the 'terminal-resize' socket event - that
+        // means "mount the C64 canvas" to this component.
+        term.resize(40, 25);
         if (terminalRef.current && texttvPrevOverflowRef.current === null) {
           texttvPrevOverflowRef.current = terminalRef.current.style.overflow || '';
           terminalRef.current.style.overflow = 'auto';
@@ -2421,6 +2437,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         if (texttvPrevThemeRef.current !== null) {
           term.options.theme = texttvPrevThemeRef.current;
           texttvPrevThemeRef.current = null;
+        }
+        if (texttvPrevColsRef.current !== null) {
+          term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
+          texttvPrevColsRef.current = null;
+          texttvPrevRowsRef.current = null;
         }
         if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
           terminalRef.current.style.overflow = texttvPrevOverflowRef.current;
