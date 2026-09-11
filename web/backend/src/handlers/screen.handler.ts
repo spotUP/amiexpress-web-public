@@ -2669,9 +2669,13 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
       session.slowmoCount = 0;
     };
 
-    // Bulletin/logon flow screens should render as a single frame like express.e.
-    // Skip auto-pagination for flow screens; rely on explicit ~SP/pauses instead.
-    const allowPagination = !isFlowScreen && slowmoSpeed === 0;
+    // express.e shows every screen through displayFile, which pauses per
+    // lineCount (flagPause/checkForPause, express.e:28025/5180): a
+    // multi-screen BULL pauses mid-content, not just once at the end.
+    // Skipping pagination for flow screens scrolled long BULL/CONF_BULL
+    // past with no pause at all. Short flow screens (MENU, BBSTITLE) never
+    // reach pageSize, so this changes nothing for them.
+    const allowPagination = slowmoSpeed === 0;
 
     // Skip slowmo if wipe animation is active - wipes handle their own timing
     if (slowmoSpeed !== 0 && !hasWipeAnimation) {
