@@ -103,6 +103,10 @@ async function createApp(session) {
         left: pad,
         width: frame.innerWidth,
         height: 1,
+        // No border key would default to a bordered Panel (panel.ts:53) and
+        // the borders would eat these single-row boxes whole (live
+        // 2026-09-11: frame painted, text invisible). Explicit undefined.
+        border: undefined,
         content: frame.title,
         style: { fg: t.accent, bg: t.ground },
     });
@@ -113,6 +117,7 @@ async function createApp(session) {
         left: pad,
         width: frame.innerWidth,
         height: frame.body.length,
+        border: undefined,
         content: frame.body.join('\n'),
         style: { fg: t.ink, bg: t.ground },
     });
@@ -123,6 +128,7 @@ async function createApp(session) {
         left: pad,
         width: frame.innerWidth,
         height: 1,
+        border: undefined,
         content: frame.hint,
         style: { fg: t.dim, bg: t.ground },
     });

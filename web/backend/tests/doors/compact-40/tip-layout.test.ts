@@ -64,3 +64,24 @@ describe('tip-of-the-day layout', () => {
     }
   });
 });
+
+describe('tip-of-the-day content boxes', () => {
+  test('title, body and hint boxes opt out of the default Panel border', () => {
+    // Grep-style: Panel defaults border:{type:line} when the key is
+    // absent (panel.ts:53), and the borders ate these single-row boxes
+    // whole — live 2026-09-11: frame painted, text invisible. The SDK
+    // screen cannot run under jest, so the source contract is pinned.
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../../../../Doors/tip-of-day/app.ts'),
+      'utf8',
+    );
+    for (const anchor of ['content: frame.title', 'content: frame.body.join', 'content: frame.hint']) {
+      const at = src.indexOf(anchor);
+      expect(at).toBeGreaterThan(-1);
+      const window = src.slice(Math.max(0, at - 400), at);
+      expect(window).toMatch(/border:\s*undefined/);
+    }
+  });
+});
