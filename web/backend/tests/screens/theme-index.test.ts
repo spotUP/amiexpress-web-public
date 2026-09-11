@@ -68,3 +68,13 @@ it('does not invent a directory for the default theme', () => {
 
   expect(listed().some(dir => dir.includes('Themes/default'))).toBe(false);
 });
+
+it("walks a theme's Files mirror deep, so nested art opens instead of a blank canvas", () => {
+  // Files/Screens/logoff/001.logoff.txt in a theme was invisible: one level
+  // never reaches it, so the studio offered its slot as undrawn and opened
+  // a blank canvas over art - and uploads into it never surfaced either.
+  theme('neon', ['Files/Screens/logoff']);
+  fs.writeFileSync(path.join(root, 'Themes', 'neon', 'Files', 'Screens', 'logoff', '001.logoff.txt'), '~f\nart\n');
+
+  expect(listed()).toContain('<root>/Themes/neon/Files/Screens/logoff');
+});

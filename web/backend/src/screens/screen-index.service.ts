@@ -332,6 +332,22 @@ export function listScreenDirectories(baseDir: string): string[] {
     }
   };
 
+  // A theme's Files/ mirror nests (Files/Screens/logoff/): one level never
+  // reaches it, so a theme file there was invisible to the index - the
+  // studio offered its slot as undrawn and opened a blank canvas over art,
+  // and uploads into it never surfaced. Walk it deep; it is sysop-curated
+  // art, not a dependency tree.
+  const addTreeDeep = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
+    dirs.add(dir);
+    for (const entry of fs.readdirSync(dir)) {
+      const full = path.join(dir, entry);
+      try {
+        if (fs.statSync(full).isDirectory()) addTreeDeep(full);
+      } catch { /* a vanished entry is not a directory */ }
+    }
+  };
+
   addTree(path.join(baseDir, 'Screens'));
   for (const id of nodeIds(baseDir)) {
     dirs.add(path.join(baseDir, `Node${id}`));
@@ -362,6 +378,7 @@ export function listScreenDirectories(baseDir: string): string[] {
     if (!root) continue; // `default` is the board's own screens, already listed
     addTree(root);
     addTree(path.join(root, 'Conf'));
+    addTreeDeep(path.join(root, 'Files'));
   }
 
   return [...dirs].filter(d => fs.existsSync(d));
