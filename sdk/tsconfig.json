@@ -19,6 +19,7 @@
   "include": [
     "index.ts",
     "settings.ts",
+    "catalog.ts",
     "petscii/**/*",
     "teletext/**/*",
     "common/**/*",

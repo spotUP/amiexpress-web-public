@@ -218,6 +218,12 @@
       "import": "./dist/settings.js",
       "require": "./dist/settings.js",
       "default": "./dist/settings.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "import": "./dist/catalog.js",
+      "require": "./dist/catalog.js",
+      "default": "./dist/catalog.js"
     }
   },
   "scripts": {
