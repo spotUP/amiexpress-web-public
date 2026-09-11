@@ -6,6 +6,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
+import { kickConfirmFor } from './node-kick-guard';
 import {
   Activity,
   Monitor,
@@ -50,6 +52,7 @@ interface NodeStatusResponse extends ApiResponse<NodeStatus[]> {
 
 export function NodeControlPage() {
   const queryClient = useQueryClient();
+  const { confirm } = useNotification();
 
   // Audit A-3: reservation control state.
   // - editingReserveNodeId: which node card has its inline input open
@@ -84,6 +87,24 @@ export function NodeControlPage() {
     } catch (error) {
       console.error(`Failed to send ${command} to node ${nodeId}:`, error);
     }
+  };
+
+  /**
+   * Kick with a confirm. Kicks used to fire on one click - the sysop
+   * dropped discord-bridge (the WHIP feed bridge) that way and the
+   * Discord feed went silent. Service accounts get the danger dialog.
+   */
+  const handleKick = async (node: NodeStatus) => {
+    const dialog = kickConfirmFor({ nodeId: node.nodeId, username: node.username });
+    const confirmed = await confirm({
+      title: dialog.title,
+      message: dialog.message,
+      confirmText: dialog.confirmText,
+      cancelText: 'Cancel',
+      type: dialog.type,
+    });
+    if (!confirmed) return;
+    await handleNodeCommand(node.nodeId, 'kick');
   };
 
   /**
@@ -288,7 +309,7 @@ export function NodeControlPage() {
                       counterpart in a browser node; the endpoints now answer
                       501 rather than pretending. */}
                   <button
-                    onClick={() => handleNodeCommand(node.nodeId, 'kick')}
+                    onClick={() => handleKick(node)}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm bg-status-warn hover:bg-status-warn/90 text-content-inverse rounded transition-colors"
                     title="Force disconnect user (SV_KICKUSER)"
                   >
