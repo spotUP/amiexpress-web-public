@@ -2342,7 +2342,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint } = require('./operator-chat.handler');
+    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint, chatAcceptsKeystroke } = require('./operator-chat.handler');
 
     // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
     // line and back to their own terminal as pressed (6172), in the caller's
@@ -2404,8 +2404,10 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
         }
       }
     }
-    // Printable characters - real-time transmission
-    else if (data.length === 1 && data >= ' ' && data <= '~') {
+    // Printable characters - real-time transmission. Latin-1, not just
+    // ASCII: Swedish åäö died silently here ("i can't type swedish åäö in
+    // the operator chat"). The predicate lives with the chat stream.
+    else if (chatAcceptsKeystroke(data)) {
       session.inputBuffer += data;
       callerTypedChar(socket.server, session, data);
       // Don't transmit commands (starting with /) to sysop

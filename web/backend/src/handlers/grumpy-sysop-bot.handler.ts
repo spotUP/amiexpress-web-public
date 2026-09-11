@@ -24,7 +24,7 @@ import { getSystemTime } from '../utils/date-time.util';
  * caller message continues from the truncated history, so "go on" works.
  */
 export function withContinuation(text: string): string {
-  return `${text.trimEnd()}\n…(more coming - say "go on")`;
+  return `${text.trimEnd()}\n...(more coming - say "go on")`;
 }
 
 /**
@@ -66,6 +66,52 @@ function stripEmojis(text: string): string {
     .replace(/[\uFE0F\uFE0E\u200D]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/**
+ * Amiga Latin-1 out, nothing else.
+ *
+ * Commodore adopted ECMA-94 (ISO-8859-1) in 1985, so åäöüßé and the rest of
+ * U+00A0-U+00FF are first-class board citizens. Everything above U+00FF is
+ * not: smart quotes, dashes, ellipsis and bullets print as garbage on every
+ * terminal the board serves, and stripEmojis above only covers emoji blocks
+ * (a co-sysop's curly quotes sailed straight through, 2026-09-11). Known
+ * punctuation maps to its ASCII twin; the remainder is dropped, never
+ * replaced with a placeholder that would read as content.
+ */
+const NON_LATIN1_MAP: Record<string, string> = {
+  '‘': "'", '’': "'", '‚': ',', '‛': "'",
+  '“': '"', '”': '"', '„': '"', '‟': '"',
+  '–': '-', '—': '-', '―': '-', '‐': '-', '‑': '-',
+  '…': '...', '•': '*', '·': '*', '‹': '<', '›': '>',
+  '†': '+', '‡': '++',
+  '€': 'EUR', '£': 'GBP', '¥': 'YEN',
+  '−': '-', '⁄': '/', '″': '"', '′': "'",
+  '←': '<-', '→': '->', '↑': '^', '↓': 'v', '↔': '<->',
+  '★': '*', '☆': '*', '✓': 'v', '✔': 'v', '✗': 'x', '✘': 'X',
+  '™': '(TM)',
+};
+
+export function toAmigaLatin1(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    if (cp === 0x0a || cp === 0x0d || cp === 0x09) {
+      out += ch;
+      continue;
+    }
+    if ((cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff)) {
+      out += ch;
+      continue;
+    }
+    const mapped = NON_LATIN1_MAP[ch];
+    if (mapped !== undefined) {
+      out += mapped;
+      continue;
+    }
+    // ASCII control, C1 control, or beyond Latin-1: dropped.
+  }
+  return out;
 }
 
 /**
@@ -1552,7 +1598,7 @@ console.log('[Grumpy Bot] Stripped a faked tool-call block from the reply');
     // Cutoff is judged on the raw reply: stripMarkdown would eat a trailing
     // '**' and hide exactly the evidence this looks for.
     const cut = looksCutOff(cleaned);
-    const reply = stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim())));
+    const reply = toAmigaLatin1(stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim()))));
     if (cut) {
 console.log('[Grumpy Bot] Reply looks cut off mid-thought - marking continuation');
       return withContinuation(reply);
@@ -1595,7 +1641,7 @@ console.log('[Grumpy Bot] No provider answered - saying so');
   if (lastCascadeNote === 'rate-limited' && !repeat(ZEN_RATE_LIMITED_LINE)) return ZEN_RATE_LIMITED_LINE;
   if (lastCascadeNote === 'failed' && !repeat(ZEN_FAILED_LINE)) return ZEN_FAILED_LINE;
   if (lastCascadeNote === 'unconfigured') return ZEN_UNCONFIGURED_LINE;
-  return stripMarkdown(stripEmojis(fallbackForPersona(cfg)));
+  return toAmigaLatin1(stripMarkdown(stripEmojis(fallbackForPersona(cfg))));
 }
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {

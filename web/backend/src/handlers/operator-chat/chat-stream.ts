@@ -234,6 +234,24 @@ export function cancelThinkingDots(chatSession: ChatSession | null | undefined, 
   if (cancel) cancel(keepDots);
 }
 /**
+ * What counts as a typed character in operator chat.
+ *
+ * Was inline in command.handler (`data >= ' ' && data <= '~'`): 7-bit ASCII
+ * only, so Swedish åäö died silently at the keystroke - the caller typed and
+ * nothing reached the buffer, the echo, or the model ("i can't type swedish
+ * åäö in the operator chat", 2026-09-11). The board's own charset since 1985
+ * is Amiga Latin-1: printable ASCII plus U+00A0-U+00FF ride, C0/C1 controls
+ * and DEL stay out, astral planes (emoji are two UTF-16 units, never one
+ * keystroke) stay out with them.
+ */
+export function chatAcceptsKeystroke(data: string): boolean {
+  if (data.length !== 1) return false;
+  const cp = data.codePointAt(0)!;
+  if (cp >= 0x20 && cp <= 0x7e) return true;
+  return cp >= 0xa0 && cp <= 0xff;
+}
+
+/**
  * THE CALLER'S SIDE of the stream, called from the chat branch of
  * command.handler for every key: the character goes onto the shared line and
  * back to the caller's own terminal, exactly as express echoes it (6172).
