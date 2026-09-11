@@ -16,7 +16,7 @@ import {
   themeById,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
-import { readDoorSettings } from '@amiexpress/bbs-door-sdk/core/settings';
+import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
 import { buildTipFrame } from './layout';
 import { pickTip, type BoardFacts, type HowTo, type TipWeights } from './tips';
