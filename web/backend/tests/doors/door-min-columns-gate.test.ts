@@ -237,13 +237,22 @@ describe('executeDoor MIN_COLUMNS gate', () => {
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
   });
 
-  // WEB_: a teletext caller chose the 40-column grid on a full ANSI
-  // terminal. The board reports the honest 40 (BB_SCRWIDTH answers it)
-  // and lets the door cope rather than refusing: no C64 adapter exists
-  // for teletext output, so a refusal would just lock T callers out.
-  it('teletext session opens an 80-col door: no notice, launch proceeds', async () => {
+  // A teletext caller chose the same 40-column grid as a C64, so he gates
+  // the same way (sysop): unadapted wide doors are refused, C64_ADAPT
+  // doors run through the frame adapter.
+  it('teletext session is refused an unmarked (default-80) door like a C64', async () => {
     const socket = makeSocket();
-    await executeDoor(socket as any, texttvSession(), testDoor());
+    const session = texttvSession();
+    await executeDoor(socket as any, session, testDoor());
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(session.menuPause).toBe(false);
+  });
+
+  it('teletext session opens a C64_ADAPT door: no notice, launch proceeds', async () => {
+    const socket = makeSocket();
+    await executeDoor(socket as any, texttvSession(), testDoor({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } } as any));
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
     expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
   });

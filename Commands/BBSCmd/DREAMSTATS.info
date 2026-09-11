@@ -6,3 +6,4 @@ DESCRIPTION=DreamStats door (untested — batch-registered from Archives/DayDrea
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40
