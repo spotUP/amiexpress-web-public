@@ -1257,6 +1257,17 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   if (messageSubStates.has(session.subState as string)) {
     const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
+    // Locked-out comment form (login-post accountLocked/pwd-change-denied):
+    // express.e runs C to completion before Thanks + logoff, but the
+    // immediate beginLogoff used to fire 1.5 s after the form opened,
+    // cutting it off mid-fill. Fire the deferred Thanks + logoff when the
+    // flow lands back on the menu instead of advancing into it.
+    if (session.logoffAfterComment && session.subState === LoggedOnSubState.DISPLAY_MENU) {
+      session.logoffAfterComment = false;
+      socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
+      beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
+      return;
+    }
     // express.e yesNo()/abort/save all return to the menu immediately — no extra keypress needed.
     // If the handler left us in a display-flow state (e.g. DISPLAY_MENU after abort Y or save),
     // advance now so the menu appears without requiring the user to press an extra key.

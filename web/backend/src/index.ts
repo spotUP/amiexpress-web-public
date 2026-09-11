@@ -609,6 +609,14 @@ export interface BBSSession {
   // 80-column notice. See utils/door-min-columns.util.ts.
   widthGateFallThrough?: WidthGateFallThrough;
 
+  // Locked-out comment form (login-post accountLocked / pwd-change-denied):
+  // express.e runs the C flow to completion inline before Thanks + logoff,
+  // but this port's C only emits the first prompt and returns - the rest
+  // arrives over later keystrokes. Set when the form starts; the
+  // message-entry funnel in command.handler.ts fires the deferred Thanks +
+  // beginLogoff when the flow lands back on DISPLAY_MENU.
+  logoffAfterComment?: boolean;
+
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
   screenCommandResolver?: (() => void) | null;

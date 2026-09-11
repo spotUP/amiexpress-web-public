@@ -545,6 +545,15 @@ export async function runPostAuthLogin(
     } catch (err) {
       console.error("[LOGIN] account-locked comment-door failed:", err);
     }
+    if ((session.subState as LoggedOnSubState) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+      // The comment form is interactive - its Subject/body arrive over
+      // later keystrokes. Logging off here would guillotine it mid-fill
+      // (live: caller lost the form at Subject:). Defer: the
+      // message-entry funnel fires Thanks + logoff when the flow lands
+      // back on DISPLAY_MENU, matching express.e's run-to-completion.
+      session.logoffAfterComment = true;
+      return { ok: false, terminated: "account-locked" };
+    }
     beginLogoff(emitter as any, session, {
       message: "\r\nThanks you will now be disconnected...\r\n\r\n",
       finalState: BBSState.AWAIT,
@@ -591,6 +600,12 @@ export async function runPostAuthLogin(
           await processCommand(emitter as any, session, "C", "");
         } catch (err) {
           console.error("[LOGIN] pwd-change-denied comment-door failed:", err);
+        }
+        if ((session.subState as LoggedOnSubState) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+          // Same deferral as the account-locked form above: let the caller
+          // finish the comment before Thanks + logoff.
+          session.logoffAfterComment = true;
+          return { ok: false, terminated: "pwd-change-denied" };
         }
         beginLogoff(emitter as any, session, {
           message: "\r\nThanks you will now be disconnected...\r\n\r\n",
