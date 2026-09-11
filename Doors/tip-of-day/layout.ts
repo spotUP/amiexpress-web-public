@@ -6,6 +6,7 @@
  * tier. Tested in tests/layout.test.ts and pinned at 80.
  */
 import { getCompactProfile, calculateDialogWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { amigaSafe } from './catalog';
 import type { Tip } from './tips';
 
 export interface TipFrame {
@@ -56,17 +57,19 @@ export function wrapWords(text: string, width: number, maxLines: number): string
  */
 export function buildTipFrame(tip: Tip, screenWidth: number): TipFrame {
   const w = Math.max(40, screenWidth || 80);
-  const compact = getCompactProfile(w);
+  // Paint boundary: facts and manifests arrive as free text, and only
+  // Amiga Latin-1 paints. Sanitize once here rather than in every picker.
+  tip = { ...tip, title: amigaSafe(tip.title), body: amigaSafe(tip.body) };  const compact = getCompactProfile(w);
   const bordered = compact.borders;
   // The SDK's own dialog curve: near-full-width on narrow screens, a
   // percentage on wide ones. Never a literal cap of ours.
   const frameWidth = bordered ? calculateDialogWidth(w) : w - compact.padding * 2;
   const inner = frameWidth - (bordered ? 2 + 2 * compact.padding : 0);
-  const title = `Tip of the day — ${tip.title}`.slice(0, inner);
+  const title = `Tip of the day - ${tip.title}`.slice(0, inner);
   const body = wrapWords(tip.body, inner, 3);
   const command = tip.command ? `Run ${tip.command} at the menu. ` : '';
-  const longHint = `${command}Any key continues…`;
-  const hint = longHint.length <= inner ? longHint : 'Any key…';
+  const longHint = `${command}Any key continues...`;
+  const hint = longHint.length <= inner ? longHint : 'Any key...';
   const frameHeight = (bordered ? 2 : 0) + 1 + 1 + body.length + 1 + 1;
   return { frameWidth, frameHeight, bordered, innerWidth: inner, title, body, hint };
 }

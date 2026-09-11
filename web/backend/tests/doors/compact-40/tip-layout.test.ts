@@ -17,7 +17,7 @@ export {};
 const TIP: Tip = {
   id: 'door:WHIP',
   kind: 'door',
-  title: 'Try WHIP — written here',
+  title: 'Try WHIP',
   body: 'Demo-scene project management with kanban boards, parties, and a leaderboard. Run WHIP at the menu.',
   command: 'WHIP',
 };
@@ -30,12 +30,12 @@ describe('tip-of-the-day layout', () => {
       frameHeight: 8,
       bordered: true,
       innerWidth: 60,
-      title: 'Tip of the day — Try WHIP — written here'.slice(0, 60),
+      title: 'Tip of the day - Try WHIP'.slice(0, 60),
       body: [
         'Demo-scene project management with kanban boards, parties,',
         'and a leaderboard. Run WHIP at the menu.',
       ],
-      hint: 'Run WHIP at the menu. Any key continues…',
+      hint: 'Run WHIP at the menu. Any key continues...',
     });
   });
 
@@ -69,7 +69,7 @@ describe('tip-of-the-day content boxes', () => {
   test('title, body and hint boxes opt out of the default Panel border', () => {
     // Grep-style: Panel defaults border:{type:line} when the key is
     // absent (panel.ts:53), and the borders ate these single-row boxes
-    // whole — live 2026-09-11: frame painted, text invisible. The SDK
+    // whole - live 2026-09-11: frame painted, text invisible. The SDK
     // screen cannot run under jest, so the source contract is pinned.
     const fs = require('fs');
     const path = require('path');

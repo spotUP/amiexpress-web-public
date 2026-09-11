@@ -12,7 +12,7 @@ const SEEN_KEY = 'seen-tip-ids';
 const SEEN_CAP = 200;
 /** The curated command lessons. Content lives here, not in settings:
  *  the manifest schema holds flat scalar keys (weights), not lesson
- *  lists — phase 4 can promote these if the sysop wants the pen. */
+ *  lists - phase 4 can promote these if the sysop wants the pen. */
 const BUILTIN_HOWTOS = [
     { id: 'howto-bulls', title: 'Bulletins', body: 'Press B at the menu: board news, file lists, party announcements.', command: 'B' },
     { id: 'howto-quick', title: 'Quick logon', body: 'Answer Q at the ANSI prompt to skip the LOGON screen next time.' },

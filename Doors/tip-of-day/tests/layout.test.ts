@@ -1,7 +1,7 @@
 /**
  * Tip frame layout across the three screens: pinned at 80, stacked and
  * borderless at 40, growing on wide terminals. Every row the frame
- * describes must fit the screen it was built for — a row past the edge
+ * describes must fit the screen it was built for - a row past the edge
  * hard-wraps mid-word on a C64.
  */
 import assert from 'node:assert';
@@ -11,7 +11,7 @@ import type { Tip } from '../tips';
 const TIP: Tip = {
   id: 'door:WHIP',
   kind: 'door',
-  title: 'Try WHIP — written here',
+  title: 'Try WHIP',
   body: 'Demo-scene project management with kanban boards, parties, and a leaderboard. Run WHIP at the menu.',
   command: 'WHIP',
 };
@@ -31,7 +31,7 @@ export async function eightyColumnFrameIsPinned(): Promise<void> {
     'Demo-scene project management with kanban boards, parties,',
     'and a leaderboard. Run WHIP at the menu.',
   ]);
-  assert.strictEqual(frame.hint, 'Run WHIP at the menu. Any key continues…');
+  assert.strictEqual(frame.hint, 'Run WHIP at the menu. Any key continues...');
 }
 
 export async function fortyColumnFrameIsBorderlessAndFits(): Promise<void> {
@@ -69,5 +69,13 @@ export async function longWordNeverBreachesTheRow(): Promise<void> {
     for (const row of rows) {
       assert.ok(row.length <= width, `width ${width}: row too wide (${row.length})`);
     }
+  }
+}
+
+export async function frameBoundaryAmigaSafe(): Promise<void> {
+  const dirty: Tip = { ...TIP, title: 'Try WHIP — now', body: 'curious … situation' };
+  const f = buildTipFrame(dirty, 80);
+  for (const row of [f.title, ...f.body, f.hint]) {
+    assert.ok(!/[^\x20-\x7e\xa0-\xff]/.test(row), `non-Amiga char in: ${row}`);
   }
 }

@@ -1,6 +1,6 @@
 /**
  * Tip pickers: unseen-first per kind, weighted across kinds, fallback on
- * empty. Pure choice over injected data — no screen, no storage.
+ * empty. Pure choice over injected data - no screen, no storage.
  */
 import assert from 'node:assert';
 import { pickTip, FALLBACK_TIP, type TipWeights } from '../tips';

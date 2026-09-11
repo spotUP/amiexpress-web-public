@@ -1,7 +1,7 @@
 /**
  * Tip-of-the-day catalog: what the board has, for the spotlight picker.
  *
- * No catalog file exists under Doors/ — the registry is Commands/BBSCmd,
+ * No catalog file exists under Doors/ - the registry is Commands/BBSCmd,
  * one .info per installed door (TYPE=TS, LOCATION=Doors/<name>). This
  * reads the registry, not the directory: a door with no .info is not
  * installed and is never tipped. Descriptions come from each door's
@@ -10,7 +10,7 @@
  *
  * Root resolution mirrors door-manager's resolveBbsRoot: BBS_DATA_DIR
  * wins when it holds a registry, else walk up from the door's own dir.
- * Everything degrades to empty lists, never a throw — a tip door that
+ * Everything degrades to empty lists, never a throw - a tip door that
  * crashes the login is worse than no tip door.
  */
 import * as fs from 'fs';
@@ -45,10 +45,10 @@ export function resolveBoardRoot(startDir: string): string | null {
 
 /**
  * TOOLTYPE value from .info bytes. .info files are Amiga icons: binary
- * with NUL-padded `KEY=value` strings, not text lines — so the match
- * cannot anchor on line starts (^…$ misses `…\x1bLOCATION=Doors/x\0…`)
+ * with NUL-padded `KEY=value` strings, not text lines - so the match
+ * cannot anchor on line starts (^...$ misses `...\x1bLOCATION=Doors/x\0...`)
  * and a value ends at the first NUL/ESC/newline, not end-of-line.
- * Live 2026-09-11: linkwall.info carries TYPE=TS but never matched —
+ * Live 2026-09-11: linkwall.info carries TYPE=TS but never matched -
  * first the text anchor missed it, then the boundary class missed the
  * 0x08 byte before it. The lead is any non-identifier byte so a key is
  * never half of another word (XTYPES= must not read as TYPE=).
@@ -61,10 +61,20 @@ function tooltype(content: string, key: string): string | null {
 function readManifest(doorsDir: string, name: string): { description: string; author: string } {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(doorsDir, name, 'package.json'), 'utf8'));
-    return { description: String(pkg.description ?? ''), author: String(pkg.author ?? '') };
+    return { description: amigaSafe(String(pkg.description ?? '')), author: String(pkg.author ?? '') };
   } catch {
     return { description: '', author: '' };
   }
+}
+
+/**
+ * The board speaks Amiga Latin-1 both directions now, so U+0020-U+00FF
+ * paints. Anything above (em dashes, ellipses, emoji a sysop pasted
+ * into a description) does not - one '?' each, never a crash, never a
+ * silent drop of the whole tip.
+ */
+export function amigaSafe(text: string): string {
+  return text.replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
 }
 
 /** Installed TypeScript doors, in-house originals first. */

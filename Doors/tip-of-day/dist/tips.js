@@ -12,10 +12,10 @@ function doorTips(catalog) {
     return catalog.map((d) => ({
         id: `door:${d.command}`,
         kind: 'door',
-        title: d.inHouse ? `Try ${d.command} — written here` : `Try ${d.command}`,
+        title: `Try ${d.command}`,
         body: d.inHouse
-            ? `${d.description || 'A door written for this board.'} Run ${d.command} at the menu.`
-            : `${d.description || 'A door on this board.'} (Ported — run ${d.command} at the menu.)`,
+            ? `${d.description || 'A door on this board.'} Run ${d.command} at the menu.`
+            : `${d.description || 'A door on this board.'} (Ported - run ${d.command} at the menu.)`,
         command: d.command,
     }));
 }
@@ -26,7 +26,7 @@ function factTips(facts) {
             id: 'fact:conferences',
             kind: 'fact',
             title: `${facts.conferences.length} conferences open`,
-            body: `From ${facts.conferences[0].name} on — join one with J and say hello.`,
+            body: `From ${facts.conferences[0].name} on - join one with J and say hello.`,
         });
     }
     if (facts.doorsInstalled > 0) {
@@ -34,7 +34,7 @@ function factTips(facts) {
             id: 'fact:doors',
             kind: 'fact',
             title: `${facts.doorsInstalled} doors installed`,
-            body: 'Games, tools, chat, art — the doors menu lists them all.',
+            body: 'Games, tools, chat, art - the doors menu lists them all.',
         });
     }
     if (facts.newestFile) {
@@ -50,7 +50,7 @@ function factTips(facts) {
             id: 'fact:tasks',
             kind: 'fact',
             title: `${facts.openTasks} open WHIP tasks`,
-            body: 'The demo scene runs on this board — WHIP shows what needs hands.',
+            body: 'The demo scene runs on this board - WHIP shows what needs hands.',
             command: 'WHIP',
         });
     }

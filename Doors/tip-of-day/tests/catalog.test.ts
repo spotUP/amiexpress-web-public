@@ -84,3 +84,10 @@ export async function keyNeverMatchesMidWord(): Promise<void> {
   fs.writeFileSync(path.join(root, 'Commands', 'BBSCmd', 'fake.info'), 'XTYPES=TS\0LOCATION=Doors/nowhere\0');
   assert.deepStrictEqual(loadDoorCatalog(root), []);
 }
+
+export async function amigaSafeKeepsLatin1DropsTheRest(): Promise<void> {
+  const { amigaSafe } = await import('../catalog');
+  assert.strictEqual(amigaSafe('Try WHIP -Pods'), 'Try WHIP -Pods');
+  assert.strictEqual(amigaSafe('Börsen'), 'Börsen');
+  assert.strictEqual(amigaSafe('dash — ellipsis … emoji 🎮'), 'dash ? ellipsis ? emoji ??');
+}
