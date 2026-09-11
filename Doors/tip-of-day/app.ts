@@ -18,6 +18,7 @@ import {
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/core/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
+import { buildTipFrame } from './layout';
 import { pickTip, type BoardFacts, type HowTo, type TipWeights } from './tips';
 
 interface DoorSession {
@@ -93,6 +94,10 @@ export async function createApp(session: DoorSession): Promise<void> {
   } catch { /* repeats beat a crash */ }
 
   const screen = createScreen(bbs, { title: 'Tip of the day' });
+  // Geometry from the live screen, never a constant: the frame in
+  // layout.ts grows on wide terminals and stacks borderless at 40.
+  const screenWidth = ((screen as any).width as number) || 80;
+  const frame = buildTipFrame(tip, screenWidth);
 
   const input = new DoorInputManager(session as any, screen, {
     enableGameMode: false,
@@ -101,67 +106,48 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
   input.enable();
 
-  const frame = createBox({
+  const pad = frame.bordered ? 2 : 1;
+  const box = createBox({
     parent: screen,
     top: 'center',
     left: 'center',
-    width: 62,
-    height: 9,
-    border: { type: 'line' },
+    width: frame.frameWidth,
+    height: frame.frameHeight,
+    border: frame.bordered ? { type: 'line' } : undefined,
     focusable: false,
     content: '',
     style: { fg: t.ink, bg: t.ground, border: { fg: t.chrome } },
   } as never);
 
   const title = createBox({
-    parent: frame,
-    top: 1,
-    left: 2,
-    width: 56,
+    parent: box,
+    top: frame.bordered ? 1 : 0,
+    left: pad,
+    width: frame.innerWidth,
     height: 1,
-    content: `Tip of the day — ${tip.title}`,
+    content: frame.title,
     style: { fg: t.accent, bg: t.ground },
   } as never);
   void title;
 
-  const wrap = (text: string, width: number): string[] => {
-    const words = text.split(/\s+/).filter(Boolean);
-    const lines: string[] = [];
-    let line = '';
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (next.length > width) {
-        if (line) lines.push(line);
-        line = word;
-      } else {
-        line = next;
-      }
-    }
-    if (line) lines.push(line);
-    return lines.slice(0, 3);
-  };
-
-  const bodyLines = wrap(tip.body, 56);
   const body = createBox({
-    parent: frame,
-    top: 3,
-    left: 2,
-    width: 56,
-    height: 3,
-    content: bodyLines.join('\n'),
+    parent: box,
+    top: (frame.bordered ? 1 : 0) + 2,
+    left: pad,
+    width: frame.innerWidth,
+    height: frame.body.length,
+    content: frame.body.join('\n'),
     style: { fg: t.ink, bg: t.ground },
   } as never);
   void body;
 
   const hint = createBox({
-    parent: frame,
-    top: 7,
-    left: 2,
-    width: 56,
+    parent: box,
+    top: (frame.bordered ? 1 : 0) + 2 + frame.body.length + 1,
+    left: pad,
+    width: frame.innerWidth,
     height: 1,
-    content: tip.command
-      ? `Run ${tip.command} at the menu. Any key continues…`
-      : 'Any key continues…',
+    content: frame.hint,
     style: { fg: t.dim, bg: t.ground },
   } as never);
   void hint;

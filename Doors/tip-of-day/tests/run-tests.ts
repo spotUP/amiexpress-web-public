@@ -12,6 +12,7 @@ const realLog = console.log;
 const TEST_MODULES = [
   './tips.test',
   './catalog.test',
+  './layout.test',
 ];
 
 (async () => {

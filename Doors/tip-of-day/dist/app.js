@@ -6,6 +6,7 @@ const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const settings_1 = require("@amiexpress/bbs-door-sdk/core/settings");
 const catalog_1 = require("./catalog");
+const layout_1 = require("./layout");
 const tips_1 = require("./tips");
 const SEEN_KEY = 'seen-tip-ids';
 const SEEN_CAP = 200;
@@ -74,72 +75,55 @@ async function createApp(session) {
     }
     catch { /* repeats beat a crash */ }
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: 'Tip of the day' });
+    // Geometry from the live screen, never a constant: the frame in
+    // layout.ts grows on wide terminals and stacks borderless at 40.
+    const screenWidth = screen.width || 80;
+    const frame = (0, layout_1.buildTipFrame)(tip, screenWidth);
     const input = new door_input_manager_1.DoorInputManager(session, screen, {
         enableGameMode: false,
         enableGrabKeys: false,
         enableMouse: false,
     });
     input.enable();
-    const frame = (0, blessed_helpers_1.createBox)({
+    const pad = frame.bordered ? 2 : 1;
+    const box = (0, blessed_helpers_1.createBox)({
         parent: screen,
         top: 'center',
         left: 'center',
-        width: 62,
-        height: 9,
-        border: { type: 'line' },
+        width: frame.frameWidth,
+        height: frame.frameHeight,
+        border: frame.bordered ? { type: 'line' } : undefined,
         focusable: false,
         content: '',
         style: { fg: t.ink, bg: t.ground, border: { fg: t.chrome } },
     });
     const title = (0, blessed_helpers_1.createBox)({
-        parent: frame,
-        top: 1,
-        left: 2,
-        width: 56,
+        parent: box,
+        top: frame.bordered ? 1 : 0,
+        left: pad,
+        width: frame.innerWidth,
         height: 1,
-        content: `Tip of the day — ${tip.title}`,
+        content: frame.title,
         style: { fg: t.accent, bg: t.ground },
     });
     void title;
-    const wrap = (text, width) => {
-        const words = text.split(/\s+/).filter(Boolean);
-        const lines = [];
-        let line = '';
-        for (const word of words) {
-            const next = line ? `${line} ${word}` : word;
-            if (next.length > width) {
-                if (line)
-                    lines.push(line);
-                line = word;
-            }
-            else {
-                line = next;
-            }
-        }
-        if (line)
-            lines.push(line);
-        return lines.slice(0, 3);
-    };
-    const bodyLines = wrap(tip.body, 56);
     const body = (0, blessed_helpers_1.createBox)({
-        parent: frame,
-        top: 3,
-        left: 2,
-        width: 56,
-        height: 3,
-        content: bodyLines.join('\n'),
+        parent: box,
+        top: (frame.bordered ? 1 : 0) + 2,
+        left: pad,
+        width: frame.innerWidth,
+        height: frame.body.length,
+        content: frame.body.join('\n'),
         style: { fg: t.ink, bg: t.ground },
     });
     void body;
     const hint = (0, blessed_helpers_1.createBox)({
-        parent: frame,
-        top: 7,
-        left: 2,
-        width: 56,
+        parent: box,
+        top: (frame.bordered ? 1 : 0) + 2 + frame.body.length + 1,
+        left: pad,
+        width: frame.innerWidth,
         height: 1,
-        content: tip.command
-            ? `Run ${tip.command} at the menu. Any key continues…`
-            : 'Any key continues…',
+        content: frame.hint,
         style: { fg: t.dim, bg: t.ground },
     });
     void hint;
