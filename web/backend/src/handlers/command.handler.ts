@@ -295,6 +295,24 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
+/**
+ * TIP runs last, right before the menu - not at EXECUTE_ON_LOGON time.
+ * The early hook fires before the LOGON screen and bulletins, so a tip
+ * there is buried; here it is the last thing before the prompt. Once
+ * per login (tempData, not storage: this is flow position, not rotation -
+ * the door owns seen-ids), skipped on quick ('Q') logins, and skipped
+ * silently when TIP is not installed (no retry loop, no error - the
+ * board without the door is a board without the tip).
+ */
+export function tipDoorBeforeMenu(
+  session: BBSSession,
+  doors: Array<{ command?: string }>,
+): boolean {
+  if ((session as any).quickFlag) return false;
+  if (session.tempData?.tipShown) return false;
+  return doors.some((d) => (d.command ?? '').toUpperCase() === 'TIP');
+}
+
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
@@ -970,8 +988,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
-        if (session.skipNextDisplayFlowMenu) {
-          displayFlowLog(
+        if (session.skipNextDisplayFlowMenu) {          displayFlowLog(
             'skipping duplicate MENU display after manual render',
             `dest=${session.manualMenuTargetState}`
           );
@@ -979,6 +996,25 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           session.subState = session.manualMenuTargetState || LoggedOnSubState.READ_COMMAND;
           session.manualMenuTargetState = undefined;
           return;
+        }
+        // TIP last: the tip door runs here, after bulletins, scans and
+        // rejoin, with the menu one keypress behind it. Marked shown
+        // BEFORE running so a door that errors cannot loop the login;
+        // a failed tip falls through to the menu, never strands it.
+        if (tipDoorBeforeMenu(session, getDoors())) {
+          if (!session.tempData) session.tempData = {};
+          session.tempData.tipShown = true;
+          const tip = getDoors().find((d) => (d.command ?? '').toUpperCase() === 'TIP');
+          if (tip) {
+            displayFlowLog('running TIP before MENU');
+            try {
+              await executeDoor(socket, session, tip);
+            } catch (error) {
+              console.error('[DISPLAY FLOW] TIP door failed, continuing to menu:', (error as Error)?.message);
+            }
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            continue;
+          }
         }
         const relConfNumber = session.relConfNum || 1;
         const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
