@@ -1674,9 +1674,16 @@ console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as 
  * @returns Content with proper ESC prefixes
  */
 export function addAnsiEscapes(content: string): string {
-  // Match ANSI sequences: ESC?[digits;digits+][A-Za-z] or ESC?[HJK] or ESC?2J
+  // Match ANSI sequences: ESC?[digits;]+letter or ESC?2J. The parameter run
+  // is REQUIRED: a bare `[` + letter is display text far more often than
+  // CSI (every menu key: [E], [FR], [TLIST]...). Rescuing those inserts an
+  // ESC the terminal then executes as a cursor move (CSI E = next line,
+  // CSI F = previous line, CSI J = erase below), scrambling the screen.
+  // Shipped 80-col art never needs the letter case: every bracket there is
+  // already ESC-prefixed (`\x1b[31m[\x1b[37mE...`). Bare 2J (clear screen)
+  // stays rescued: it leads with a digit, so prose essentially never hits it.
   // Avoid double-prefixing sequences that already contain ESC (express.e stores ESC bytes)
-  return content.replace(/(\x1b)?\[([0-9;]*[A-Za-z]|[HJK]|2J)/g, (_m, esc, body) => {
+  return content.replace(/(\x1b)?\[([0-9;]+[A-Za-z]|2J)/g, (_m, esc, body) => {
     // If ESC was already present, preserve a single ESC; otherwise add one
     return `\x1b[${body}`;
   });
