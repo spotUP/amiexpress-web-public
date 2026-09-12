@@ -623,6 +623,9 @@ console.error('[displayNewFiles] ERROR:', error);
 // ===== Upload/Download Interfaces =====
 
 export function displayUploadInterface(socket: any, session: BBSSession, params: string) {
+  // Clear the screen to provide a fresh interface for uploading
+  emitText(socket, AnsiUtil.clearScreen());
+
   // express.e:25646 internalCommandU -> uploadaFile()
   // Check NDIRS (file areas exist in this conference)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
