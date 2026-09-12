@@ -180,6 +180,24 @@ describe('the same account logging in twice', () => {
     expect(userAlreadyOnNode).toHaveBeenCalled();
   });
 
+  it('replaces instead of refusing when the socket never let them go', async () => {
+    // Reload -> restore -> login form -> submit: the restored session
+    // still holds the same user, so the already-on check would refuse
+    // the caller against themselves (ghostlogoff 2026-09-10).
+    userAlreadyOnNode.mockReturnValue(2);
+    const { runPostAuthLogin } = require('../../src/services/login-post.service');
+    const socket = emitter();
+    const s = session();
+    (s as any).user = { ...LIVE_USER };
+
+    const result = await runPostAuthLogin(socket, s, LIVE_USER, {
+      lastLoginBeforeUpdate: new Date(0),
+    });
+
+    expect(userAlreadyOnNode).not.toHaveBeenCalled();
+    expect(result).not.toEqual({ ok: false, terminated: 'already-on-another-node' });
+  });
+
   it('asks about the caller by name, excluding the node being joined', async () => {
     const { runPostAuthLogin } = require('../../src/services/login-post.service');
 
@@ -187,6 +205,6 @@ describe('the same account logging in twice', () => {
       lastLoginBeforeUpdate: new Date(0),
     });
 
-    expect(userAlreadyOnNode).toHaveBeenCalledWith(expect.any(String), 'spot', 4);
+    expect(userAlreadyOnNode).toHaveBeenCalledWith(expect.any(String), 'spot', 4, expect.any(Function));
   });
 });

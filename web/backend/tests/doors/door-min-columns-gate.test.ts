@@ -138,6 +138,16 @@ function eightyColSession(): any {
   };
 }
 
+function texttvSession(): any {
+  return {
+    state: 'loggedon', subState: LoggedOnSubState.PROCESS_COMMAND,
+    user: { id: 'u3', username: 'TTVUSER', secLevel: 10 },
+    nodeId: 1, terminalType: 'modern', petsciiMode: false, texttvMode: true,
+    screenWidth: 40, screenHeight: 25, tempData: {},
+    menuPause: true,
+  };
+}
+
 const allOutput = (socket: any) =>
   socket.emitted.filter((e: any) => e.event === 'ansi-output').map((e: any) => e.data).join('');
 
@@ -205,7 +215,7 @@ describe('executeDoor MIN_COLUMNS gate', () => {
   // web socket carries its real xterm width (socket-handlers.ts
   // 'terminal-size'), so a phone in portrait reports far fewer than 80
   // columns - and must still be able to open every door it could open
-  // yesterday. Only petsciiMode narrows a session.
+  // yesterday. Only 40-column sessions (petsciiMode, texttvMode) narrow.
   it('narrow NON-PETSCII terminal (phone in portrait): launch proceeds, no gate', async () => {
     const socket = makeSocket();
     const session = { ...eightyColSession(), screenWidth: 38, screenHeight: 20 };
@@ -225,6 +235,26 @@ describe('executeDoor MIN_COLUMNS gate', () => {
     const socket = makeSocket();
     await executeDoor(socket as any, c64Session(), testDoor({ doorInfo: { minColumns: 40 } } as any));
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+  });
+
+  // A teletext caller chose the same 40-column grid as a C64, so he gates
+  // the same way (sysop): unadapted wide doors are refused, C64_ADAPT
+  // doors run through the frame adapter.
+  it('teletext session is refused an unmarked (default-80) door like a C64', async () => {
+    const socket = makeSocket();
+    const session = texttvSession();
+    await executeDoor(socket as any, session, testDoor());
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(session.menuPause).toBe(false);
+  });
+
+  it('teletext session opens a C64_ADAPT door: no notice, launch proceeds', async () => {
+    const socket = makeSocket();
+    await executeDoor(socket as any, texttvSession(), testDoor({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } } as any));
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
   });
 });
 

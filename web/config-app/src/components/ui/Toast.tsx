@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastPrimitive.Provider duration={5000} swipeDirection="right">
       {children}
-      <ToastPrimitive.Viewport className="fixed right-4 top-4 z-50 flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none" />
+      <ToastPrimitive.Viewport className="fixed right-4 top-4 z-[100] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none" />
     </ToastPrimitive.Provider>
   );
 }

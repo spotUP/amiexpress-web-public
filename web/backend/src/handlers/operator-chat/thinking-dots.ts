@@ -14,14 +14,19 @@
  * `chatSession.line.text`, and a dot recorded as line text would corrupt the
  * reply's 78-column wrapping and sit in the transcript. These are raw bytes,
  * rubbed out with raw backspaces, and the line model never learns they
- * happened.
+ * happened. A reply keeps them and types after (stop(true)); everything
+ * else erases.
  *
- * WHICH IS ALSO WHY THEY CARRY NO COLOUR. A raw `\x1b[36m` would leave the
- * terminal in sysop cyan while `line.lastSender` still said `user`, so the
- * caller's next key would take the "same sender, no SGR needed" branch and
- * render cyan - verbatim the bug that `callerTypedChar` in `chat-stream.ts`
- * was fixed for ("sometimes i get the sysop cyan when i type", 2026-09-08).
- * A bare dot cannot desync what it never sets.
+ * COLOUR, SECOND ATTEMPT (2026-09-10): the sysop wants the dots cyan
+ * like his texts, and the above failure was the MISSING RESET, not the
+ * colour itself. Each dot carries its own reset, so the terminal is back
+ * at default before the next key exists. Plain 0;36 (never bold) per the
+ * BBS output rules. If keystrokes ever render cyan again, revert this
+ * paragraph, not the dots.
+ *
+ * COUNT (same date): thinkingDotsShown reports how many dots are
+ * standing, so the reply can start on a fresh line instead of wrapping
+ * mid-line after them (screenshot: first line broke early).
  *
  * And the window ENDS at the caller's first key, because the line is shared:
  * see `setThinkingDotsCanceller` in `chat-stream.ts` for why counting dots
@@ -45,6 +50,19 @@ function humanGap(): number {
   return 200 + Math.floor(Math.random() * 700);
 }
 
+/** Dots currently standing per chat, for the reply's first-line math. */
+const shownBySession = new WeakMap<object, number>();
+
+export function thinkingDotsShown(chatSession: ChatSession | null | undefined): number {
+  if (!chatSession) return 0;
+  return shownBySession.get(chatSession) ?? 0;
+}
+
+/** Consume the count after the reply accounts for it. */
+export function clearThinkingDotsShown(chatSession: ChatSession | null | undefined): void {
+  if (chatSession) shownBySession.delete(chatSession);
+}
+
 export function startThinkingDots(
   emit: (bytes: string) => void,
   chatSession: ChatSession,
@@ -56,16 +74,20 @@ export function startThinkingDots(
 
   let written = 0;
   let stopped = false;
+  if (chatSession) shownBySession.delete(chatSession);
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const stop = (): void => {
+  const stop = (keepDots = false): void => {
     if (stopped) return;
     stopped = true;
     if (timer) { clearTimeout(timer); timer = null; }
     clearThinkingDotsCanceller(chatSession, stop);
-    // Rub out exactly what was written. A chat that has ended gets nothing:
-    // its caller is somewhere else and those bytes would land there.
-    if (written > 0 && chatIsLive(chatSession, pageId)) emit('\b \b'.repeat(written));
+    // A reply keeps the dots and types after them (sysop, 2026-09-10):
+    // rubbing them out read as the bot taking its thinking back. Anything
+    // else - the caller's key, a quit, the chat ending - still erases, so a
+    // dead chat leaves no dots stranded on the line.
+    if (!keepDots && written > 0 && chatIsLive(chatSession, pageId)) emit('\b \b'.repeat(written));
+    if (!keepDots) shownBySession.delete(chatSession);
     written = 0;
   };
 
@@ -78,8 +100,9 @@ export function startThinkingDots(
       clearThinkingDotsCanceller(chatSession, stop);
       return;
     }
-    emit('.');
+    emit('\x1b[0;36m.\x1b[0m');
     written++;
+    shownBySession.set(chatSession, written);
     timer = setTimeout(tick, gapMs());
   };
 

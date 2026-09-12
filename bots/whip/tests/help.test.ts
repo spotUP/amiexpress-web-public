@@ -16,3 +16,10 @@ export async function helpMentionsEverySubcommand(): Promise<void> {
     assert.ok(text.includes(sub), `mentions /whip ${sub}`);
   }
 }
+
+export async function helpMentionsBoardReads(): Promise<void> {
+  const text = buildHelpText();
+  for (const sub of ['board', 'online', 'new', 'top', 'finduser']) {
+    assert.ok(text.includes(sub), `mentions /whip ${sub}`);
+  }
+}

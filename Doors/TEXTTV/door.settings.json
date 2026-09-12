@@ -1,0 +1,51 @@
+{
+  "command": "TEXTTV",
+  "cfgFile": "TEXTTV.cfg",
+  "settings": [
+    {
+      "key": "host",
+      "cfgKey": "Host",
+      "label": "Text-TV proxy host",
+      "type": "string",
+      "default": "127.0.0.1",
+      "help": "Board serving /api/texttv over plain HTTP. Loopback: the door runs beside the board (container or localhost), where the public hostname hairpins and stalls. Point at the LAN IP for a classic Amiga."
+    },
+    {
+      "key": "port",
+      "cfgKey": "Port",
+      "label": "Port",
+      "type": "number",
+      "default": 3001,
+      "min": 1,
+      "max": 65535,
+      "help": "3001 is the board's backend port, plain HTTP, on this host and live."
+    },
+    {
+      "key": "timeout",
+      "cfgKey": "Timeout",
+      "label": "Request timeout (seconds)",
+      "type": "number",
+      "default": 15,
+      "min": 1,
+      "max": 120
+    },
+    {
+      "key": "startPage",
+      "cfgKey": "StartPage",
+      "label": "Start page",
+      "type": "number",
+      "default": 100,
+      "min": 100,
+      "max": 999,
+      "help": "Page the door opens on. 100 is the news front."
+    },
+    {
+      "key": "favorites",
+      "cfgKey": "Favorites",
+      "label": "Favorite pages",
+      "type": "string",
+      "default": "100,300",
+      "help": "Comma-separated page numbers, kept in the index below the curated list."
+    }
+  ]
+}

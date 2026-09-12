@@ -6,6 +6,8 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Task } from '../types/project';
 import type { UserStats } from '../types/user';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { getPriorityColor } from '../core/gamification';
@@ -30,7 +32,8 @@ export async function showMyTasks(
   user: UserStats,
   dataManager: DataManager,
   achievementManager: AchievementManager,
-  bbsApi?: any
+  bbsApi?: any,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<void> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -52,10 +55,14 @@ export async function showMyTasks(
       return project?.name || 'Unknown';
     };
 
+    // Menu bar row (ui/menu.ts): header and list slide down one row
+    // when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     // Header
     const header = createBox({
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -74,10 +81,10 @@ export async function showMyTasks(
     // Task list
     const listBox = createBox({
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 0,
       width: '100%',
-      height: '100%-6',
+      height: `100%-${barH + 6}`,
       fixed: true,
       border: { type: 'line' },
       label: ' Tasks ',
@@ -163,6 +170,15 @@ export async function showMyTasks(
     list.focus();
     screen.render();
 
+    // Menu picks leave this screen for wherever the app loop sends them.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve();
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => list.focus());
+
     const refreshList = async () => {
       allTasks = await dataManager.loadTasks();
       projects = await dataManager.loadProjects();
@@ -182,6 +198,10 @@ export async function showMyTasks(
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(listBox);

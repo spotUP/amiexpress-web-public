@@ -128,4 +128,40 @@ describe('a board screen an artist has not redrawn', () => {
     expect(await screen.findByText('Save')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Redraw this/ })).toBeNull();
   });
+
+  // "already exists - edit it in the screen editor" dead-ended the artist
+  // on the board copy: the 409 now carries the theme path, and the dialog
+  // opens it instead of scolding.
+  it('redrawing what is already mine opens the copy instead of erroring', async () => {
+    const user = userEvent.setup();
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/copy') && method === 'POST') {
+        return {
+          ok: false, status: 409,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            success: false,
+            error: "skope's screens already has Board/BULL.TXT",
+            data: { to: 'Themes/skope/Board/BULL.TXT' },
+          }),
+          text: async () => 'conflict',
+        } as unknown as Response;
+      }
+      // Anything else (a refetch racing the click) answers like the suite stub.
+      if (url.includes('/api/screens/file')) {
+        return envelope({ content: null, format: 'ansi', bytes: 0, mci: [] });
+      }
+      return envelope(index());
+    });
+    render(<ArtistStudioPage />, { wrapper });
+    await openTheCard(user);
+
+    await user.click(await screen.findByRole('button', { name: /Redraw this/ }));
+
+    // Same destination as a fresh copy: editing the theme file.
+    expect(await screen.findByText('Save')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Redraw this/ })).toBeNull();
+  });
 });

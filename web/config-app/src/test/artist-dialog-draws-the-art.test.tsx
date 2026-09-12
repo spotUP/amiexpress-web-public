@@ -7,11 +7,14 @@
  * through the same function.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { QUERY_DEFAULTS } from '../lib/query-client';
+
+// Shared confirm mock so auditing-save tests can answer yes or no.
+const confirmMock = vi.hoisted(() => vi.fn(async (_options?: unknown) => true));
 
 // Real ANSI: ESC[31m then HI, exactly what the board serves.
 const art = new TextEncoder().encode('\x1b[31mHI\r\n');
@@ -33,7 +36,7 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
 }));
 
 vi.mock('../contexts/NotificationContext', () => ({
-  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
+  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: confirmMock }),
 }));
 
 import { ArtistScreenDialog } from '../pages/ArtistScreenDialog';
@@ -115,5 +118,118 @@ describe('opening a screen in the studio', () => {
 
     await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
     expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
+  });
+
+  // "i cant upload screens to this one, it's empty": a blank slot opened
+  // only the canvas - no way to bring a PETSCII, RIP or Teletext drawing.
+  // The blank canvas IS the ANSI upload; the other three arrive by file.
+  it('an empty slot offers every format except the one the canvas draws', async () => {
+    const boardIndex = { files: {} } as unknown as ScreenIndexShape;
+    render(
+      <ArtistScreenDialog
+        path="Themes/skope/Node/LOCKOUT0.TXT"
+        theme={theme}
+        index={boardIndex}
+        isNew
+        newDescription="Shown to a caller whose account is locked out."
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ PETSCII' })).toBeTruthy());
+    expect(screen.getByRole('button', { name: '+ RIP' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '+ Teletext (native packets - author externally)' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '+ ANSI / text' })).toBeNull();
+    expect(screen.getByText(/Nothing has been drawn here yet/)).toBeTruthy();
+  });
+
+  // "i still cant upload ansi here on a new screen": the empty slot drew
+  // ANSI on canvas but offered no way to BRING an ANSI drawing. The upload
+  // writes the slot's own path, like the + format buttons do.
+  it('an empty slot takes an uploaded ANSI drawing', async () => {
+    const boardIndex = { files: {} } as unknown as ScreenIndexShape;
+    const writes: Array<{ url: string; body: any }> = [];
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? 'GET') !== 'GET') {
+        writes.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
+      }
+      if (url.includes('/api/screens/file')) {
+        return envelope({ relPath: 'Themes/skope/Node/LOCKOUT0.TXT', content: null, format: 'ansi', bytes: 0, mci: [] });
+      }
+      if (url.includes('/api/mci')) return envelope({ codes: [] });
+      return envelope({});
+    });
+    render(
+      <ArtistScreenDialog
+        path="Themes/skope/Node/LOCKOUT0.TXT"
+        theme={theme}
+        index={boardIndex}
+        isNew
+        newDescription="Shown to a caller whose account is locked out."
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ ANSI drawing' })).toBeTruthy());
+    const picker = document.querySelector('input[aria-label="Upload ANSI drawing"]') as HTMLInputElement;
+    expect(picker).toBeTruthy();
+    const bytes = new Uint8Array([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x48, 0x49]);
+    fireEvent.change(picker, { target: { files: [new File([bytes], 'lockout.ans', { type: 'application/octet-stream' })] } });
+
+    await waitFor(() => expect(writes.length).toBeGreaterThan(0));
+    const put = writes.find(w => w.url.includes('/api/screens/file'));
+    expect(put).toBeTruthy();
+    expect(decodeURIComponent(put!.url)).toContain('Themes/skope/Node/LOCKOUT0.TXT');
+  });
+});
+
+describe("auditing somebody else's theme", () => {
+  const tango = { slug: 'tango', title: "tango's screens", status: 'draft' as const, dir: 'Themes/tango', owner: 'tango', screens: 1, mine: false };
+  const tangoIndex = { files: { 'Themes/tango/Board/BULL.TXT': { relPath: 'Themes/tango/Board/BULL.TXT', theme: 'tango' } } } as unknown as ScreenIndexShape;
+
+  const openAuditing = () => render(
+    <ArtistScreenDialog path="Themes/tango/Board/BULL.TXT" theme={tango} index={tangoIndex} onClose={vi.fn()} onOpenPath={vi.fn()} auditing />,
+    { wrapper },
+  );
+
+  const puts = () => (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+    .filter((call: unknown[]) => {
+      const [url, init] = call as [unknown, RequestInit | undefined];
+      return String(url).includes('/api/screens/file') && (init?.method ?? 'GET') !== 'GET';
+    });
+
+  it('says whose theme the save lands in', async () => {
+    openAuditing();
+
+    await waitFor(() => expect(screen.getByText(/Editing in tango's screens/)).toBeTruthy());
+  });
+
+  it('a save confirms with the theme name first', async () => {
+    openAuditing();
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+
+    fireEvent.click(await screen.findByText('Save'));
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    expect(confirmMock.mock.calls[0][0]).toMatchObject({ title: expect.stringContaining("tango's screens") });
+    await waitFor(() => expect(puts().length).toBeGreaterThan(0));
+  });
+
+  it('a cancelled confirm writes nothing', async () => {
+    confirmMock.mockImplementationOnce(async () => false);
+    openAuditing();
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    const before = puts().length;
+
+    await screen.findByText('Save').then(element => element.click());
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(puts().length).toBe(before);
   });
 });

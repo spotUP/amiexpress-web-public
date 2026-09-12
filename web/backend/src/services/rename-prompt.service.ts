@@ -91,6 +91,10 @@ export function startRenamePrompt(
     handleRenameInput(session, typeof data === 'string' ? data : data.toString('latin1'));
 
   session.subState = LoggedOnSubState.UPLOAD_RENAME_PROMPT;
+  // T17 (2026-09-08): a caller on the web terminal could not type a name
+  // here, and the prompt left no server-side trace — arm/disarm/complete
+  // lines make the next report answerable from the runtime log alone.
+  console.log(`[rename] prompt armed for "${oldName}" (user ${(session as any)?.user?.username ?? '?'}, node ${(session as any)?.nodeId ?? '?'})`);
   // express.e:19196-19198
   emitter.emit('ansi-output', `\r\n${oldName} is too long a name, please rename.\r\n\r\n`);
   emitter.emit('ansi-output', '             [------------]\r\n');
@@ -170,5 +174,6 @@ function processRenameInput(session: BBSSession, name: string): void {
   (session as any).renamePromptState = undefined;
   (session as any).uploadRenameInputHandler = undefined;
   state.emitter.emit('ansi-output', '\r\n');
+  console.log(`[rename] "${state.oldName}" -> "${name}"`);
   state.onComplete({ newFilename: name, newPath, aborted: false });
 }

@@ -45,11 +45,9 @@ function freshManager(dataDir: string) {
 function boardWithUsers(dataDir: string) {
   const manager = freshManager(dataDir);
   manager.initializeUserDatabase();
-  // Two users, because the caller under test must sit at a NON-ZERO slot:
-  // records are addressed as `slot * SIZE`, so the first append lands at slot
-  // 0, and express reserves 0 for a deleted account - deleting a user sets
-  // `slotNumber := 0` (express.e:21365) and login refuses it with "That
-  // account has been deleted." (express.e:29701).
+  // Two users. Slots are 1-indexed like express.e (slot 0 is a deleted
+  // account - deleting a user sets `slotNumber := 0`, express.e:21365, and
+  // login refuses it with "That account has been deleted.", express.e:29701).
   for (const username of ['sysop', 'spot']) {
     manager.appendUser(
       manager.userToStruct({ username, location: 'Uprough', securityLevel: 255 }),
@@ -61,7 +59,7 @@ function boardWithUsers(dataDir: string) {
 }
 
 /** The second record: a real, non-deleted account. */
-const SLOT = 1;
+const SLOT = 2;
 
 describe('a wrong password, counted where express counts it', () => {
   let dataDir: string;
@@ -149,5 +147,29 @@ describe('a wrong password, counted where express counts it', () => {
 
     expect(() => manager.recordPasswordFailure(99, 3)).not.toThrow();
     expect(manager.recordPasswordFailure(99, 3)).toBe(false);
+  });
+
+  it("writes the caller's own record, not the neighbour's", () => {
+    // The bug this guards: records were addressed `slot * SIZE` while every
+    // caller passes 1-indexed slots, so one caller's typos locked the next
+    // account down - and unlocking never helped, because the gate read a
+    // different record than the one the failures wrote. Two accounts with
+    // different counts tell them apart with no layout hardcoding.
+    const manager = boardWithUsers(dataDir);
+
+    manager.recordPasswordFailure(2, 5);
+    manager.recordPasswordFailure(1, 5);
+    manager.recordPasswordFailure(1, 5);
+
+    expect(manager.readUserFromDisk(2).misc.invalidAttempts).toBe(1);
+    expect(manager.readUserFromDisk(1).misc.invalidAttempts).toBe(2);
+  });
+
+  it('findUserSlotByName returns the 1-indexed slot', () => {
+    const manager = boardWithUsers(dataDir);
+
+    expect(manager.findUserSlotByName('spot')).toBe(2);
+    expect(manager.findUserSlotByName('SPOT')).toBe(2);
+    expect(manager.findUserSlotByName('nobody')).toBe(-1);
   });
 });

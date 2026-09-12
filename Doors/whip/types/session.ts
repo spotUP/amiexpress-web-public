@@ -16,4 +16,5 @@ export type MenuSelection =
   | 'parties'
   | 'leaderboard'
   | 'achievements'
+  | 'my-profile'
   | 'quit';

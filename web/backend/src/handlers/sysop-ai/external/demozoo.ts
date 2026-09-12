@@ -129,7 +129,7 @@ async function describeReleaser(pick: any, alsoMatched: any[], known?: any): Pro
   }
 
   const links: string[] = (detail?.external_links ?? []).map((l: any) => l.url).filter(Boolean);
-  if (links.length) out.push(`Links: ${some(links, 4)}`);
+  if (links.length) out.push(`Links: ${some(links, 2)}`);
 
   const count = typeof recent?.count === 'number' ? recent.count : null;
   // Demozoo will not sort for us - `ordering` is ignored - so the window comes
@@ -140,7 +140,7 @@ async function describeReleaser(pick: any, alsoMatched: any[], known?: any): Pro
     .sort((a: any, b: any) => String(b.release_date ?? '').localeCompare(String(a.release_date ?? '')));
   if (count !== null) out.push(`Releases credited since ${sinceYear}: ${count}`);
   if (rows.length) {
-    out.push(`Recent: ${rows.slice(0, 6).map((p) =>
+    out.push(`Recent: ${rows.slice(0, 8).map((p) =>
       `${p.title} (${(p.release_date ?? '').slice(0, 7) || '?'}, ${names(p.types).join('/') || 'release'})`).join('; ')}`);
   }
 

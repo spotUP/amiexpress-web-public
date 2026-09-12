@@ -52,7 +52,7 @@ export interface SauceShape {
 export interface ScreenFileShape {
   relPath: string;
   bytes: number;
-  format: 'ansi' | 'text' | 'rip' | 'petscii';
+  format: 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext' | 'teletext-native';
   sha256: string;
   mci: MciReferenceShape[];
   readBy?: ScreenReaderShape[];
@@ -381,26 +381,29 @@ export function gallerySortKey(reader: ScreenReaderShape | undefined, label: str
  * Which formats a screen HAS, by looking for its siblings on the board.
  *
  * Keyed on the stem, because that is what the loader does: for one screen it
- * tries `<stem>.rip`, `<stem>.seq` and the text file, and serves whichever the
- * caller's terminal wants. `.gr` and `.ibm` are ANSI under another name.
+ * tries `<stem>.rip`, `<stem>.seq`, `<stem>.ttx` and the text file, and
+ * serves whichever the caller's terminal wants (native `<stem>.tti` wins
+ * once rendered). `.gr` and `.ibm` are ANSI under another name.
  */
 export function formatsPresent(
   openPath: string,
   files: Record<string, { relPath: string }> | undefined,
-): { ansi: boolean; petscii: boolean; rip: boolean } {
+): { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean; teletextNative: boolean } {
   const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
   const base = openPath.slice(openPath.lastIndexOf('/') + 1);
-  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
+  const stem = base.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '').toLowerCase();
 
-  const have = { ansi: false, petscii: false, rip: false };
+  const have = { ansi: false, petscii: false, rip: false, teletext: false, teletextNative: false };
   for (const key of Object.keys(files ?? {})) {
     const lower = key.toLowerCase();
     if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
     const name = lower.slice(lower.lastIndexOf('/') + 1);
     const ext = name.slice(name.lastIndexOf('.') + 1);
-    if (name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (name.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '') !== stem) continue;
     if (ext === 'seq') have.petscii = true;
     else if (ext === 'rip') have.rip = true;
+    else if (ext === 'ttx') have.teletext = true;
+    else if (ext === 'tti') have.teletextNative = true;
     else have.ansi = true;
   }
   return have;
@@ -424,6 +427,26 @@ export interface GalleryBuildOptions {
    * studio is not looking at their own work and should not be told they are.
    */
   ownedLabel?: string;
+}
+
+/**
+ * What a resolved reader is served, narrow enough to tell twins apart.
+ *
+ * Level bands (LOGON per band) and screen types (.GR twins) are genuinely
+ * different cards: hiding one would lie about what is left. The gallery
+ * itself only ever holds ansi/text - PETSCII, RIP and Teletext never reach
+ * it (their chips on the ANSI card say what is missing) - so the byte
+ * format is not part of the key.
+ */
+export function servedKey(
+  reader: Pick<ScreenReaderShape, 'screen' | 'scope' | 'serves' | 'securityLevel' | 'screenType'>,
+): string {
+  return [
+    reader.screen,
+    reader.scope,
+    reader.serves ?? (reader.securityLevel !== undefined ? `level ${reader.securityLevel}` : ''),
+    reader.screenType ?? '',
+  ].join('|');
 }
 
 /**
@@ -465,7 +488,45 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     byContent.set(file.sha256, [...(byContent.get(file.sha256) ?? []), file]);
   }
 
-  return [...byContent.values()]
+  /**
+   * In a theme's own studio, a screen it has drawn shows once: its version.
+   * The board's original beside it reads as a duplicate ("why do i see two
+   * guestlogon.txt") - the artist already answered it by drawing. Board
+   * cards stay in the sysop's gallery (no ownedBy there) and for screens
+   * the theme has not drawn.
+   *
+   * Matched per screen, scope, level band AND screen type: a theme that drew
+   * the ANSI still needs the board's .GR twin, or the missing-format chips
+   * would lie about what is left to draw. In a themed index the covered
+   * original reads `shadowed`, never `resolved` - same key decides.
+   */
+  const drawnInTheme = (ownedBy: string): Set<string> => {
+    const claimed = new Set<string>();
+    for (const file of drawable) {
+      if (file.theme !== ownedBy) continue;
+      for (const reader of file.readBy ?? []) {
+        if (reader.via !== 'resolved') continue;
+        claimed.add(servedKey(reader));
+      }
+    }
+    return claimed;
+  };
+  const drawn = opts.ownedBy ? drawnInTheme(opts.ownedBy) : new Set<string>();
+  const groups = [...byContent.values()].filter(copies => {
+    if (!opts.ownedBy || drawn.size === 0) return true;
+    // The theme's own cards always stay; a board group goes when the theme
+    // serves the same screen, scope, level band and screen type.
+    if (copies.some(copy => copy.theme === opts.ownedBy)) return true;
+    // In a themed index the board's copy reads `shadowed`, never `resolved`
+    // — the theme answered first. A shadowed card is the covered original,
+    // so it decides by the same key.
+    const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved' || r.via === 'shadowed')) ?? copies[0];
+    const reader = file.readBy?.find(r => r.via === 'resolved' || r.via === 'shadowed');
+    if (!reader) return true;
+    return !drawn.has(servedKey(reader));
+  });
+
+  return groups
     .map(copies => {
       // The copy a screen actually resolves to leads; failing that, the first.
       const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
@@ -530,12 +591,13 @@ export function missingFormats(openPath: string | null, siblings: string[]): Arr
   if (!openPath) return [];
   const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
   const base = openPath.slice(openPath.lastIndexOf('/') + 1);
-  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '');
+  const stem = base.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '');
   const have = new Set([openPath, ...siblings].map(p => p.toLowerCase().replace(/^.*\./, '')));
   const all = [
     { ext: 'txt', label: 'ANSI / text' },
     { ext: 'seq', label: 'PETSCII' },
     { ext: 'rip', label: 'RIP' },
+    { ext: 'tti', label: 'Teletext (native packets - author externally)' },
   ];
   return all
     .filter(f => !have.has(f.ext) && !(f.ext === 'txt' && (have.has('gr') || have.has('ibm') || have.has('ans'))))

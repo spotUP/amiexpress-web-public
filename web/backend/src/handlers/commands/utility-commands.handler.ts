@@ -19,6 +19,8 @@ import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 import { formatDateSlash } from '../../utils/date-format.util';
+import { servesPetsciiArt } from '../screen.handler';
+import { config } from '../../config';
 
 import type { BBSSession } from '../../index';
 
@@ -26,7 +28,7 @@ import type { BBSSession } from '../../index';
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
 let _messages: any[] = [];
 let _confScreenDir: string;
-let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean, texttvMode?: boolean) => string | null;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
 let _searchFileDescriptions: (searchPattern: string, conferenceId: number) => Promise<any[]>;
 
@@ -297,8 +299,15 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   let foundFile: string | null = null;
 
   while (searchTerm.length > 0) {
-    const helpBasePath = path.join('help', searchTerm);
-    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode);
+    // express.e:25089 internalCommandUpHat: board-root help/ + params.
+    // Two stacked production breaks lived here: the dir was CWD-relative
+    // ('help/<topic>', resolves nowhere - /app/web/backend/help does not
+    // exist), fixed to dataDir; and lowercase 'help' while the volume
+    // carries HELP/ (AmigaDOS is case-insensitive, ext4 is not - live log:
+    // "Not found: /app/data/bbs/help/TESTPAGE"). dataDir is the board
+    // root, HELP is the on-disk case.
+    const helpBasePath = path.join(config.get('dataDir'), 'HELP', searchTerm);
+    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
     if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);
   }

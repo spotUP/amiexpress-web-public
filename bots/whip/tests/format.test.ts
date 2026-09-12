@@ -5,6 +5,7 @@
 import assert from 'assert';
 import {
   formatAchievements,
+  formatBoardText,
   formatLeaderboard,
   formatParties,
   formatProjects,
@@ -85,4 +86,19 @@ export async function partiesCountDown(): Promise<void> {
   );
   assert.ok(out.includes('(in 8d)'), 'countdown suffix');
   assert.strictEqual(formatParties([], NOW), 'No parties listed.');
+}
+
+export async function boardTextPassesThrough(): Promise<void> {
+  assert.strictEqual(formatBoardText({ text: 'AmiExpress BBS.', truncated: false }), 'AmiExpress BBS.');
+}
+
+export async function boardTextNotesTruncation(): Promise<void> {
+  const out = formatBoardText({ text: 'row1\nrow2', truncated: true });
+  assert.ok(out.endsWith('…more on the board'), 'says where the rest is');
+}
+
+export async function boardTextCapsAtDiscordLimit(): Promise<void> {
+  const out = formatBoardText({ text: 'x'.repeat(5000), truncated: false });
+  assert.ok(out.length <= 4096, 'fits an embed description');
+  assert.ok(out.endsWith('…'), 'marks the cut');
 }

@@ -40,10 +40,12 @@ import {
 } from 'discord.js';
 import { loadConfig, type BotConfig } from './config';
 import { WhipApiClient, WhipApiError } from './whip-api';
-import { startFeed } from './feed';
+import { BoardApiClient, BoardApiError, type BoardText } from './board-api';
+import { startFeedResilient } from './feed';
 import { createHealthState, startHealthServer, type HealthState } from './health';
 import {
   formatAchievements,
+  formatBoardText,
   formatLeaderboard,
   formatParties,
   formatProjects,
@@ -148,6 +150,14 @@ const whipCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('users').setDescription('List BBS users for assigning tasks')
+  )
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('board').setDescription('Board card'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('online').setDescription('Who is on the board right now'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('new').setDescription('Latest conference traffic'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('top').setDescription('Top callers'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
+    sub.setName('finduser').setDescription('Look up a BBS user by handle')
+      .addStringOption((opt) => opt.setName('name').setDescription('Handle').setRequired(true))
   );
 
 export async function registerCommands(botToken: string, guildId: string, clientId: string): Promise<void> {
@@ -172,27 +182,105 @@ async function replyError(interaction: Repliable, message: string): Promise<void
   }
 }
 
-/** Resolve an explicit `user` option, else the caller's link. Null = told the user already. */
-async function resolveUserId(
+export interface DiscordIdentity {
+  userId: string;
+  /** Present only when a link row binds this Discord id: the backend
+   *  checks discordId against the link, so unlinked resolutions must not
+   *  send one. */
+  discordId?: string;
+}
+
+/**
+ * Who a Discord user is on the board, best evidence first:
+ *
+ * 1. An explicit `user` option (buttons and modals pass one through).
+ * 2. The link row (LINKDISCORD): the explicit override, spoof-proof.
+ * 3. Exact BBS handle match, case-insensitive (spotUP = spotup).
+ * 4. The Discord name set in the WHIP door ("my Discord name").
+ * 5. Fuzzy substring either way (spot ~ spotUP).
+ *
+ * One hit wins; several fuzzy hits are ambiguous and the bot asks instead
+ * of guessing; none is unknown with a pointer to the door. Only the bridge
+ * registers anything - nobody runs LINKDISCORD unless they want the lock.
+ */
+export async function resolveDiscordIdentity(
+  api: WhipApiClient,
+  discordId: string,
+  discordUsername: string,
+  explicit?: string | null,
+): Promise<DiscordIdentity | { ambiguous: string[] } | null> {
+  const name = (explicit ?? '').trim();
+  if (name) {
+    const users = await api.listUsers();
+    const hit = users.find(
+      (u) => u.handle.toLowerCase() === name.toLowerCase() || u.userId === name,
+    );
+    return hit ? { userId: hit.userId } : null;
+  }
+  try {
+    const status = await api.linkStatus(discordId);
+    return { userId: status.userId, discordId };
+  } catch (err) {
+    if (!(err instanceof WhipApiError) || err.status !== 404) throw err;
+  }
+  const clean = discordUsername.trim();
+  if (clean) {
+    try {
+      const resolved = await api.resolve(clean);
+      return { userId: resolved.userId };
+    } catch (err) {
+      if (!(err instanceof WhipApiError) || err.status !== 404) throw err;
+    }
+  }
+  const users = await api.listUsers();
+  const lower = clean.toLowerCase();
+  const claimed = users.find(
+    (u) => (u.discordName ?? '').toLowerCase() === lower && lower !== '',
+  );
+  if (claimed) return { userId: claimed.userId };
+  if (lower) {
+    const fuzzy = users.filter((u) => {
+      const handle = u.handle.toLowerCase();
+      const dn = (u.discordName ?? '').toLowerCase();
+      if (handle.includes(lower) || lower.includes(handle)) return true;
+      if (!dn) return false;
+      return dn.includes(lower) || lower.includes(dn);
+    });
+    if (fuzzy.length === 1) return { userId: fuzzy[0].userId };
+    if (fuzzy.length > 1) return { ambiguous: fuzzy.map((u) => u.handle) };
+  }
+  return null;
+}
+
+/** Resolve an explicit `user` option, else the caller's Discord identity.
+ *  Null = told the user already (unknown, or ambiguous). Button and select
+ *  interactions carry no options bag — the presser IS the identity there —
+ *  so the option read is optional (live 2026-09-11: Move… crashed on
+ *  `options.getString of undefined`). */
+export async function resolveUserId(
   interaction: ChatInputCommandInteraction,
   api: WhipApiClient,
-  optionName = 'user'
-): Promise<string | null> {
-  const explicit = interaction.options.getString(optionName, false);
-  if (explicit) return explicit.trim();
-  try {
-    const status = await api.linkStatus(interaction.user.id);
-    return status.userId;
-  } catch (err) {
-    if (err instanceof WhipApiError && err.status === 404) {
-      await replyError(
-        interaction,
-        'Your Discord account is not linked. On the BBS run LINKDISCORD, then `/link code:...` here first.'
-      );
-      return null;
-    }
-    throw err;
+  optionName = 'user',
+): Promise<DiscordIdentity | null> {
+  const explicit = interaction.options?.getString?.(optionName, false) ?? null;
+  const found = await resolveDiscordIdentity(api, interaction.user.id, interaction.user.username, explicit);
+  if (found && 'ambiguous' in found) {
+    await replyError(
+      interaction,
+      `Your Discord name matches several board users (${found.ambiguous.join(', ')}). Set your exact Discord name in the WHIP door under Me, then try again.`,
+    );
+    return null;
   }
+  if (!found) {
+    await replyError(
+      interaction,
+      explicit?.trim()
+        ? `Unknown user "${explicit.trim()}".`
+        : 'I do not know you on the board yet. Set your Discord name in the WHIP door under Me (D), then try again.',
+    );
+    return null;
+  }
+  return found;
 }
 
 async function handleLink(interaction: ChatInputCommandInteraction, api: WhipApiClient): Promise<void> {
@@ -225,15 +313,17 @@ async function handleLink(interaction: ChatInputCommandInteraction, api: WhipApi
 /** Pure usage text, so the help screen is unit-tested, not eyeballed. */
 export function buildHelpText(): string {
   return [
-    '**Link first.** On the BBS run LINKDISCORD, then `/link code:XXXXXXXX` here (10 minutes, single use).',
+    '**You, found.** The bot matches your Discord name to your BBS handle (exact, then the Discord name you set in the WHIP door under Me, then fuzzy). No registration needed.',
     '',
     '**Read the board.** `/whip projects` — all projects with progress. `/whip tasks project:<id>` — one project. `/whip task id:<id>` — one task with buttons. `/whip my-tasks` — yours (or `user:<id>`). `/whip leaderboard` — points and levels. `/whip achievements` — yours (or `user:<id>`). `/whip parties` — upcoming parties. `/whip users` — BBS users for assigning.',
     '',
-    '**Change the board (linked users).** `/whip task-new` and `/whip project-new` open forms. On a task: Complete, Move, Delete buttons. Or in text: `/whip task-complete`, `/whip task-move`, `/whip task-edit`, `/whip task-delete`, `/whip project-delete`.',
+    '**Change the board.** `/whip task-new` and `/whip project-new` open forms. On a task: Complete, Move, Delete buttons. Or in text: `/whip task-complete`, `/whip task-move`, `/whip task-edit`, `/whip task-delete`, `/whip project-delete`.',
+    '',
+    '**Ask about the board.** `/whip board` — the board card. `/whip online` — who is on. `/whip new` — latest traffic. `/whip top` — top callers. `/whip finduser name:<handle>` — look a caller up.',
     '',
     '**Follow along.** The feed channel posts completions, new projects, and achievements as they happen in the door.',
     '',
-    '**Out.** `/link` again to move your link; ask the sysop to unlink you if stuck.',
+    '**Out.** `/link` with a LINKDISCORD code locks your Discord account to your BBS user (no one can borrow the name); ask the sysop to unlink you if stuck.',
   ].join('\n');
 }
 
@@ -261,7 +351,32 @@ async function handleMessage(message: Message): Promise<void> {
   }
 }
 
-async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApiClient): Promise<void> {
+/**
+ * A task id as typed: exact or unique 8-char prefix. The door shows short
+ * ids and callers quote them (`8f358f41`), but the API wants the full
+ * UUID — exact match wins, a unique prefix resolves, anything else says
+ * so with candidates instead of "Unknown task".
+ */
+export async function resolveTaskId(api: WhipApiClient, raw: string): Promise<string> {
+  const tasks = await api.listAllTasks();
+  const exact = tasks.find((t) => t.id === raw);
+  if (exact) return exact.id;
+  const hits = tasks.filter((t) => t.id.toLowerCase().startsWith(raw.toLowerCase()));
+  if (hits.length === 1) return hits[0].id;
+  if (hits.length > 1) {
+    throw new WhipApiError(
+      `"${raw}" matches ${hits.length} tasks: ${hits.slice(0, 5).map((t) => `${t.title} (\`${t.id.slice(0, 8)}\`)`).join(', ')}. Be more specific.`,
+      400,
+    );
+  }
+  throw new WhipApiError(`Unknown task "${raw}".`, 404);
+}
+
+async function handleWhip(
+  interaction: ChatInputCommandInteraction,
+  api: WhipApiClient,
+  board: BoardApiClient | null,
+): Promise<void> {
   const sub = interaction.options.getSubcommand();
   if (sub === 'help') {
     await interaction.reply({ content: buildHelpText(), ephemeral: true });
@@ -286,9 +401,9 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         break;
       }
       case 'my-tasks': {
-        const userId = await resolveUserId(interaction, api);
-        if (!userId) return;
-        const formatted = formatUserTasks(await api.listUserTasks(userId));
+        const identity = await resolveUserId(interaction, api);
+        if (!identity) return;
+        const formatted = formatUserTasks(await api.listUserTasks(identity.userId));
         const embed = new EmbedBuilder().setTitle(formatted.title);
         embed.setDescription(formatted.body);
         await interaction.editReply({ embeds: [embed] });
@@ -302,9 +417,9 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         break;
       }
       case 'achievements': {
-        const userId = await resolveUserId(interaction, api);
-        if (!userId) return;
-        const formatted = formatAchievements(await api.achievements(userId));
+        const identity = await resolveUserId(interaction, api);
+        if (!identity) return;
+        const formatted = formatAchievements(await api.achievements(identity.userId));
         const embed = new EmbedBuilder().setTitle(formatted.title);
         embed.addFields(formatted.unlocked, formatted.locked);
         await interaction.editReply({ embeds: [embed] });
@@ -328,8 +443,34 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         await interaction.editReply({ embeds: [embed] });
         break;
       }
+      case 'board': {
+        await boardEmbed(interaction, 'Board', (b) => b.boardInfo(), board);
+        break;
+      }
+      case 'online': {
+        await boardEmbed(interaction, 'Online now', (b) => b.whoOnline(), board);
+        break;
+      }
+      case 'new': {
+        await boardEmbed(interaction, 'Latest traffic', (b) => b.recentMessages(1, 5), board);
+        break;
+      }
+      case 'top': {
+        await boardEmbed(interaction, 'Top callers', (b) => b.topCallers(5), board);
+        break;
+      }
+      case 'finduser': {
+        const name = interaction.options.getString('name', true).trim();
+        await boardEmbed(interaction, `User ${name}`, async (b) => {
+          const exact = await b.userLookup(name);
+          if (!exact.text.startsWith('No user called')) return exact;
+          return b.userSearch(name, 5);
+        }, board);
+        break;
+      }
       case 'task': {
-        const task = await api.getTask(interaction.options.getString('id', true).trim());
+        const taskId = await resolveTaskId(api, interaction.options.getString('id', true).trim());
+        const task = await api.getTask(taskId);
         const embed = new EmbedBuilder().setTitle(task.title);
         embed.setDescription(
           `${formatTaskLine(task)}${task.description ? `\n\n${task.description}` : ''}\n\`${task.id}\``
@@ -342,17 +483,19 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         break;
       }
       case 'task-edit': {
-        const id = interaction.options.getString('id', true).trim();
+        const id = await resolveTaskId(api, interaction.options.getString('id', true).trim());
         const patch: Record<string, unknown> = {};
-        for (const key of ['title', 'description', 'category', 'priority', 'points', 'assign'] as const) {
+        for (const key of ['title', 'description', 'category', 'priority', 'points'] as const) {
           const value = interaction.options.getString(key, false);
-          if (value !== null) patch[key === 'assign' ? 'assignedTo' : key] = key === 'points' ? value : value.trim();
+          if (value !== null) patch[key] = key === 'points' ? value : value.trim();
         }
+        const assignRaw = interaction.options.getString('assign', false);
         const actor = await requireLinkedUser(interaction, api);
         if (!actor) return;
         try {
+          if (assignRaw !== null) patch.assignedTo = await resolveAssignee(api, assignRaw.trim(), actor.userId);
           if (patch.points !== undefined) patch.points = parsePoints(patch.points as string);
-          const task = await api.updateTask(id, patch, actor.userId, interaction.user.id);
+          const task = await api.updateTask(id, patch, actor.userId, actor.discordId);
           await interaction.editReply({ content: `Updated **${task.title}**.` });
         } catch (err) {
           await replyError(interaction, writeErrorMessage(err));
@@ -360,7 +503,7 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         break;
       }
       case 'task-delete': {
-        const id = interaction.options.getString('id', true).trim();
+        const id = await resolveTaskId(api, interaction.options.getString('id', true).trim());
         try {
           const task = await api.getTask(id);
           await interaction.editReply({
@@ -376,7 +519,7 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         const actor = await requireLinkedUser(interaction, api);
         if (!actor) return;
         try {
-          const result = await completeTask(api, interaction.options.getString('id', true).trim(), actor);
+          const result = await completeTask(api, await resolveTaskId(api, interaction.options.getString('id', true).trim()), actor);
           await interaction.editReply({ content: result });
         } catch (err) {
           await replyError(interaction, writeErrorMessage(err));
@@ -389,7 +532,7 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         try {
           const result = await moveTaskTo(
             api,
-            interaction.options.getString('id', true).trim(),
+            await resolveTaskId(api, interaction.options.getString('id', true).trim()),
             interaction.options.getString('status', true),
             actor
           );
@@ -422,29 +565,79 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         await replyError(interaction, `Unknown subcommand: ${sub}`);
     }
   } catch (err) {
+    if (err instanceof BoardApiError) {
+      const message = err.status === 403
+        ? 'The bot is not allowed to read that. Ask the sysop to widen its token.'
+        : `Board request failed: ${err.message}`;
+      await replyError(interaction, message);
+      return;
+    }
     const message = err instanceof WhipApiError ? `WHIP request failed: ${err.message}` : 'WHIP request failed.';
     await replyError(interaction, message);
   }
 }
 
-/** Linked actor or null (already told the user). Discord id always travels. */
+/**
+ * The board client or a told user. Board subcommands need BOARD_DATA_TOKEN;
+ * without it they say so instead of failing on an undefined client.
+ */
+function needBoard(interaction: Repliable, board: BoardApiClient | null): board is BoardApiClient {
+  if (board) return true;
+  void replyError(interaction, 'Board reads are not configured on this bot. Ask the sysop to set BOARD_DATA_TOKEN.');
+  return false;
+}
+
+async function boardEmbed(
+  interaction: ChatInputCommandInteraction,
+  title: string,
+  read: (board: BoardApiClient) => Promise<BoardText>,
+  board: BoardApiClient | null,
+): Promise<void> {
+  if (!needBoard(interaction, board)) return;
+  const embed = new EmbedBuilder().setTitle(title);
+  embed.setDescription(formatBoardText(await read(board)));
+  await interaction.editReply({ embeds: [embed] });
+}
+
+/** Resolved actor or null (already told the user). The Discord id travels
+ *  only when a link row binds it: the backend 403s a discordId no link owns,
+ *  so username-matched callers must not send one. */
 async function requireLinkedUser(
   interaction: ChatInputCommandInteraction,
   api: WhipApiClient
-): Promise<{ userId: string; discordId: string } | null> {
-  const userId = await resolveUserId(interaction, api);
-  if (!userId) return null;
-  return { userId, discordId: interaction.user.id };
+): Promise<{ userId: string; discordId?: string } | null> {
+  const identity = await resolveUserId(interaction, api);
+  if (!identity) return null;
+  return identity.discordId ? { userId: identity.userId, discordId: identity.discordId } : { userId: identity.userId };
 }
 
 function writeErrorMessage(err: unknown): string {
   return err instanceof WhipApiError ? err.message : 'WHIP request failed.';
 }
 
+/**
+ * Assignee as typed: a handle resolves to its user id, a raw id passes
+ * through, blank means the backend default (the creator). Unknown handles
+ * are rejected with the user list, not silently dropped.
+ */
+async function resolveAssignee(api: WhipApiClient, raw: string, fallbackUserId: string): Promise<string> {
+  if (!raw) return fallbackUserId;
+  try {
+    const users = await api.listUsers();
+    const hit = users.find((u) => u.handle.toLowerCase() === raw.toLowerCase() || u.userId === raw);
+    if (hit) return hit.userId;
+    const known = users.map((u) => u.handle).join(', ') || 'nobody yet';
+    throw new WhipApiError(`Unknown user "${raw}". Known: ${known}.`, 400);
+  } catch (err) {
+    if (err instanceof WhipApiError) throw err;
+    return fallbackUserId;
+  }
+}
+
 async function completeTask(
   api: WhipApiClient,
   taskId: string,
-  actor: { userId: string; discordId: string }
+  actor: { userId: string; discordId?: string }
 ): Promise<string> {
   const result = await api.moveTask(taskId, 'done', actor.userId, actor.discordId);
   const unlocks =
@@ -456,7 +649,7 @@ async function moveTaskTo(
   api: WhipApiClient,
   taskId: string,
   status: string,
-  actor: { userId: string; discordId: string }
+  actor: { userId: string; discordId?: string }
 ): Promise<string> {
   const result = await api.moveTask(taskId, status, actor.userId, actor.discordId);
   return `Moved **${result.task.title}** to ${result.task.status}.`;
@@ -520,12 +713,14 @@ async function handleModalSubmit(interaction: any, api: WhipApiClient, parsed: {
   try {
     if (parsed && parsed.action === 'newtask') {
       const fields = interaction.fields;
+      const assigneeRaw = fields.getTextInputValue('assignee').trim();
       const task = await api.createTask({
         projectId: parsed.taskId,
         title: fields.getTextInputValue('title').trim(),
         category: fields.getTextInputValue('category').trim() || undefined,
         points: parsePoints(fields.getTextInputValue('points')),
         description: fields.getTextInputValue('description'),
+        assignedTo: await resolveAssignee(api, assigneeRaw, actor.userId),
         actorUserId: actor.userId,
         discordId: actor.discordId,
       });
@@ -628,7 +823,7 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
   }
   health.feedEnabled = true;
   const { feedChannelId, bbsUser, bbsPassword } = config;
-  startFeed({
+  startFeedResilient({
     apiUrl,
     bbsUser,
     bbsPassword,
@@ -640,14 +835,20 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
       }
     },
     log: (message) => console.log(message),
-  })
-    .then(() => console.log('[whip-bot] Live WHIP feed started'))
-    .catch((err) => console.error('[whip-bot] Feed failed to start, bot stays up:', err?.message ?? err));
+  }, {
+    onState: (state) => {
+      const was = health.feedState;
+      health.feedState = state;
+      if (state === 'live' && was !== 'live') console.log('[whip-bot] Live WHIP feed started');
+      if (state === 'retrying') health.feedReconnects += 1;
+    },
+  });
 }
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const api = new WhipApiClient(config.apiUrl, config.serviceToken);
+  const board = config.boardToken ? new BoardApiClient(config.apiUrl, config.boardToken) : null;
   const client = new Client({
     // Guilds (commands) + GuildMessages/DirectMessages (mention and DM
     // detection). None of these is privileged: the bot never asks for
@@ -695,7 +896,7 @@ async function main(): Promise<void> {
         if (interaction.commandName === 'link') {
           await handleLink(interaction, api);
         } else if (interaction.commandName === 'whip') {
-          await handleWhip(interaction, api);
+          await handleWhip(interaction, api, board);
         }
         return;
       }

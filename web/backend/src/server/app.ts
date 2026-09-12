@@ -280,6 +280,32 @@ app.get('/api', (req, res) => {
   res.json({ message: 'AmiExpress Backend API' });
 });
 
+// WEB_ plain-HTTP Text-TV proxy (services/texttv-proxy.service.ts).
+// api.texttv.nu is HTTPS-only; 68K doors and classic Amigas cannot do
+// TLS, so the board fetches over TLS and serves the verbatim JSON array
+// here. Public and read-only like /health above: validated page range,
+// 502 when the mirror is silent (a door reports that, not a blank page).
+app.get('/api/texttv/:page', async (req, res) => {
+  const raw = String(req.params.page ?? '');
+  if (!/^\d{3}$/.test(raw)) {
+    res.status(400).json({ success: false, message: 'page is 100-999' });
+    return;
+  }
+  const page = Number(raw);
+  if (page < 100 || page > 999) {
+    res.status(400).json({ success: false, message: 'page is 100-999' });
+    return;
+  }
+  try {
+    const { fetchTextTvPage } = await import('../services/texttv-proxy.service');
+    const { status, body } = await fetchTextTvPage(page);
+    if (status !== 200) throw new Error(`upstream answered ${status}`);
+    res.type('application/json').send(body);
+  } catch (err) {
+    res.status(502).json({ success: false, message: 'Text-TV did not answer' });
+  }
+});
+
 // Door API routes
 app.use('/api', doorApiRouter);
 

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showMyTasks = showMyTasks;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const menu_1 = require("./menu");
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
 const door_theme_1 = require("../door-theme");
@@ -17,7 +18,7 @@ const COMPACT_HINTS = [
     { key: 'Up/Dn', does: 'Move' },
     { key: 'Q', does: 'Back' },
 ];
-async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi) {
+async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -33,10 +34,13 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             const project = projects.find(p => p.id === projectId);
             return project?.name || 'Unknown';
         };
+        // Menu bar row (ui/menu.ts): header and list slide down one row
+        // when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -54,10 +58,10 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
         // Task list
         const listBox = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 0,
             width: '100%',
-            height: '100%-6',
+            height: `100%-${barH + 6}`,
             fixed: true,
             border: { type: 'line' },
             label: ' Tasks ',
@@ -136,6 +140,14 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
         });
         list.focus();
         screen.render();
+        // Menu picks leave this screen for wherever the app loop sends them.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
         const refreshList = async () => {
             allTasks = await dataManager.loadTasks();
             projects = await dataManager.loadProjects();
@@ -151,6 +163,10 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(listBox);

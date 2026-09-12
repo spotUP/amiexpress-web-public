@@ -402,7 +402,7 @@ if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || ech
   # executed by a test rather than only by this workflow; see
   # tests/deploy/the-caller-guard-lets-the-sysop-through.test.ts.
   . ./deploy/caller-guard.sh
-  OTHERS=$(callers_to_protect "$HEALTH" "${DEPLOY_IGNORE_CALLERS:-spot sysop}")
+  OTHERS=$(callers_to_protect "$HEALTH" "${DEPLOY_IGNORE_CALLERS:-spot sysop discord-bridge}")
 
   if [ "$CALLERS" -gt 0 ] && [ "$OTHERS" -le 0 ] 2>/dev/null; then
     echo "== only the sysop is on the board; deploying =="

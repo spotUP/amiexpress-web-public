@@ -29,7 +29,7 @@ interface OperatorChatConfig {
     customMessage?: string;
   };
   aiEnabled: boolean;
-  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
+  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras' | 'rule-based';
   aiModelName: string;
   aiSysopName: string;
   aiPersona: string;
@@ -41,6 +41,9 @@ interface OperatorChatConfig {
   groqApiKey: string;
   geminiApiKey: string;
   openRouterApiKey: string;
+  zenApiKey: string;
+  goApiKey: string;
+  cerebrasApiKey: string;
   pushoverUserKey: string;
   pushoverAppToken: string;
   gotifyUrl: string;
@@ -946,6 +949,9 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
               <label className="block text-sm font-medium text-content-primary mb-1">AI Provider</label>
               <select {...register('aiProvider')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded">
                 <option value="openrouter">OpenRouter (auto-discovers free models)</option>
+                <option value="zen">OpenCode Zen (auto-discovers free models)</option>
+                <option value="go">OpenCode Go (subscription models)</option>
+                <option value="cerebras">Cerebras (fast, free tier)</option>
                 <option value="groq">Groq (fast, Llama 3.1 8B)</option>
                 <option value="gemini">Google Gemini (good quality, 1.5 Flash)</option>
                 <option value="rule-based">Rule-based only (no API key needed)</option>
@@ -981,7 +987,7 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
               <input type="checkbox" id="aiToolsEnabled" {...register('aiToolsEnabled')} className="w-4 h-4" />
               <label htmlFor="aiToolsEnabled" className="text-sm font-medium text-content-primary">Let the co-sysop look things up and act</label>
             </div>
-            <p className="text-xs text-content-secondary -mt-2">Who is online, doors, conferences, files, bulletins; joining a caller to a conference or starting a door for them; extra time up to the cap; and, for the sysop account, the admin API with every write held until you type yes in the chat. Needs a free OpenRouter model that supports tools - the picker prefers one.</p>
+            <p className="text-xs text-content-secondary -mt-2">Who is online, doors, conferences, files, bulletins; joining a caller to a conference or starting a door for them; extra time up to the cap; and, for the sysop account, the admin API with every write held until you type yes in the chat. Needs a free model that supports tools (OpenRouter or Zen) - the picker prefers one.</p>
 
             <div>
               <label className="block text-sm font-medium text-content-primary mb-1">Extra Time Cap (minutes per caller per day)</label>
@@ -1005,7 +1011,22 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
             {/* API Keys */}
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-medium text-content-primary">API Keys</h3>
-              <p className="text-xs text-content-secondary">Leave empty to use environment variables (<span className="font-mono">GROQ_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>, <span className="font-mono">OPENROUTER_API_KEY</span>)</p>
+              <p className="text-xs text-content-secondary">Leave empty to use environment variables (<span className="font-mono">GROQ_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>, <span className="font-mono">OPENROUTER_API_KEY</span>, <span className="font-mono">ZEN_API_KEY</span>, <span className="font-mono">GO_API_KEY</span>, <span className="font-mono">CEREBRAS_API_KEY</span>)</p>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">OpenCode Zen API Key</label>
+                <input type="password" {...register('zenApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="..." autoComplete="off" />
+                <a href="https://opencode.ai/docs/zen" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">opencode.ai/docs/zen — sign in and copy API key (free models)</a>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">OpenCode Go API Key</label>
+                <input type="password" {...register('goApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="..." autoComplete="off" />
+                <a href="https://opencode.ai/docs/go" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">opencode.ai/docs/go — subscribe and copy API key</a>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">Cerebras API Key</label>
+                <input type="password" {...register('cerebrasApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="csk-..." autoComplete="off" />
+                <a href="https://cloud.cerebras.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">cloud.cerebras.ai — free key, no card</a>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">OpenRouter API Key</label>
                 <input type="password" {...register('openRouterApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="sk-or-v1-..." autoComplete="off" />
@@ -1083,7 +1104,7 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
             <div className="bg-surface-0 border border-border rounded p-3">
               <p className="text-sm font-medium text-content-primary mb-2">Fallback Chain:</p>
               <ol className="text-sm text-content-secondary space-y-1 list-decimal list-inside">
-                <li>Configured provider (or cascade: Groq → Gemini → OpenRouter if set to cascade)</li>
+                <li>Configured provider (then Zen → Go → OpenRouter → Groq → Gemini → Cerebras; a preferred leg leads instead)</li>
                 <li>Rule-based patterns (built-in, works without any API key)</li>
               </ol>
             </div>

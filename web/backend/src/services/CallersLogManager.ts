@@ -27,9 +27,17 @@ import { config as appConfig } from '../config';
 export class CallersLogManager {
   private bbsRoot: string;
 
-  constructor() {
-    // BBS: points to project root
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+  constructor(root?: string) {
+    // BBS: the audit trail must live where the node files live - on the
+    // persistent data volume, not the image-local repo tree. The old
+    // fallback (repo root) meant every deploy wiped the logs while the
+    // console still showed their lines, which is exactly the "emitted
+    // but never reach the file" gap (2026-09-10). Same precedence as
+    // initialization.ts: explicit root, BBS_ROOT, BBS_DATA_DIR, repo.
+    this.bbsRoot = root
+      ?? process.env.BBS_ROOT
+      ?? process.env.BBS_DATA_DIR
+      ?? path.join(__dirname, '../../../..');
   }
 
   /**

@@ -2,6 +2,9 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats, Achievement } from '../types/user';
 import type { DataManager } from '../core/data-manager';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import { bindBoxScroll } from './scroll-keys';
+import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { attachWhipChrome, type FooterHint } from './chrome';
 
@@ -38,7 +41,8 @@ function padName(name: string, maxLength: number): string {
 export async function showAchievements(
   screen: Screen,
   currentUser: UserStats,
-  dataManager: DataManager
+  dataManager: DataManager,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<void> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -52,11 +56,15 @@ export async function showAchievements(
     const unlocked = allAchievements.filter(a => currentUser.achievements.includes(a.id));
     const locked = allAchievements.filter(a => !currentUser.achievements.includes(a.id));
 
+    // Menu bar row (ui/menu.ts): header and content slide down one
+    // row when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -77,14 +85,19 @@ export async function showAchievements(
     const content = createBox({
       fixed: true,
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 1,
       width: '98%',
-      height: '100%-6',
+      height: `100%-${barH + 6}`,
       border: { type: 'line' },
       label: ' Achievements ',
       scrollable: true,
       alwaysScroll: true,
+      scrollbar: {
+        ch: '|',
+        track: { ch: ':', style: { fg: T.dim, bg: T.ground } },
+        style: { fg: T.accent, bg: T.ground },
+      },
       mouse: true,
       keys: true,
       vi: true,
@@ -123,6 +136,10 @@ export async function showAchievements(
 
     content.setContent(contentText);
     content.focus();
+
+    // Arrow/wheel scrolling: no widget binds it, so the door drives the
+    // pane like the timeline drives its selection (ui/scroll-keys.ts).
+    const unbindScroll = bindBoxScroll(screen, content);
 
     // Footer - NOT focusable
     const instructions = createBox({
@@ -168,10 +185,24 @@ export async function showAchievements(
 
     screen.on('keypress', keyHandler);
 
+    // Menu picks leave this screen for wherever the app loop sends them.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve();
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => content.focus());
+
     const cleanup = () => {
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      unbindScroll();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(content);

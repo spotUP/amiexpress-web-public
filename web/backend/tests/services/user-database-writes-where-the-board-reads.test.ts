@@ -96,8 +96,23 @@ describe('where a user is written', () => {
     expect(fs.statSync(path.join(dataDir, 'user.misc')).size).toBe(USER_MISC_BYTES);
     expect(manager.getUserCount()).toBe(1);
 
-    const read = manager.readUserFromDisk(0);
+    const read = manager.readUserFromDisk(1);
     expect(read).not.toBeNull();
     expect(read!.user.name).toBe('spot');
+  });
+
+  it('addresses slot 1 at file offset 0 - slots are 1-indexed like express.e', () => {
+    const manager = freshManager({ BBS_DATA_DIR: dataDir });
+    manager.initializeUserDatabase();
+    manager.appendUser(
+      manager.userToStruct({ username: 'spot', location: 'Uprough', securityLevel: 255 }),
+      manager.userToKeys({ username: 'spot' }, 0),
+      manager.userToMisc({ username: 'spot' }),
+    );
+
+    // Raw bytes, not the manager's opinion: slot N lives at (N-1)*SIZE.
+    const misc = fs.readFileSync(path.join(dataDir, 'user.misc'));
+    expect(misc.length).toBe(USER_MISC_BYTES);
+    expect(manager.readUserFromDisk(0)).toBeNull();
   });
 });

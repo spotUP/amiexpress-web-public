@@ -571,6 +571,9 @@ export function DoorsPage() {
         isLoading={isLoading}
         error={error as Error | null}
         onRetry={() => refetch()}
+        // The whole row opens the dialog; the action buttons in the last
+        // column stop propagation, so Edit/info/Delete never double-fire.
+        onRowClick={(door) => handleEdit(door)}
         emptyMessage={
           search.trim()
             ? `No door matches "${search.trim()}".`

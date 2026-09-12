@@ -36,6 +36,7 @@ import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, ty
 import { buildBoardCard } from './sysop-ai/board-card';
 import { resolvePersona, personaByHandle, promptFor } from './sysop-ai/personas';
 import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
+import { gameCardFor } from './sysop-ai/external/games';
 import { toolsFor, type ToolContext } from './sysop-ai/tools';
 import { confirmPendingAdmin } from './sysop-ai/admin-tool';
 import { TOOL_AI_BUDGET_MS } from './grumpy-sysop-bot.handler';
@@ -93,8 +94,7 @@ console.error(`[Operator Chat] Page ${pageId}: a scheduled action failed:`, err)
 }
 
 /** The board's own help on this message, for this caller - or nothing. */
-function retrievedFor(message: string, chatSession: ChatSession): string | undefined {
-  try {
+function retrievedFor(message: string, chatSession: ChatSession): string | undefined {  try {
     const caller = userSessions.get(String(chatSession.userId));
     const chunks = retrieve(message, { bbsRoot, repoRoot: path.join(__dirname, '../../../..') }, caller?.user?.secLevel ?? 0, caller?.currentConf, 3);
     return retrievedAsPrompt(chunks);
@@ -102,6 +102,26 @@ function retrievedFor(message: string, chatSession: ChatSession): string | undef
 console.log(`[Operator Chat] retrieval skipped (${(err as Error).message})`);
     return undefined;
   }
+}
+
+/**
+ * Prompt context for one message: the board's own retrieval plus a forced
+ * RAWG card when the message looks like a game question (2026-09-10 - the
+ * models answer games from weights and never call lookup_game, so the
+ * stored key only works when it rides the prompt). Either half may be
+ * absent; absent halves contribute nothing.
+ */
+async function retrievedWithGames(
+  message: string,
+  chatSession: ChatSession,
+  repository: OperatorChatRepository
+): Promise<string | undefined> {
+  const card = await gameCardFor(
+    message,
+    repository.getConfig().rawgApiKey || process.env.RAWG_API_KEY || undefined
+  );
+  const parts = [retrievedFor(message, chatSession), card].filter((p): p is string => !!p);
+  return parts.length ? parts.join('\n\n') : undefined;
 }
 import {
   renderPicker,
@@ -123,13 +143,18 @@ import { getSystemTime } from '../utils/date-time.util';
 import { report } from '../achievements/reporter';
 
 // BBS root for config and log files
-const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+// The board's data root: BBS_DATA_DIR in the container (/app/data/bbs),
+// BBS_ROOT elsewhere, the repo tree in dev (which IS a board tree).
+// BBS_ROOT alone resolved to /app in the container, where Commands/ and
+// ConfConfig.info do not live - every disk read in chat (doors, conferences,
+// bulletins, RAG corpus) came back empty there (live 2026-09-10).
+const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
-import { startThinkingDots } from './operator-chat/thinking-dots';
+import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
+import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
-export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
+export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
 
 // Track active paging dot intervals by pageId (for reliable cleanup)
 const activePagingIntervals = new Map<string, NodeJS.Timeout>();
@@ -507,12 +532,12 @@ console.error('[Operator Chat] MAIL_ON_SYSOP_PAGE failed:', err)
     if (session.user?.id) {
       socket.join(`user:${session.user.id}`);
       // Also ensure the user session is mapped for direct lookup (critical for grumpy bot)
-      if (!userSessions.has(session.user.id)) {
-        userSessions.set(session.user.id, session);
+      if (!userSessions.has(String(session.user.id))) {
+        userSessions.set(String(session.user.id), session);
 console.log(`[Operator Chat] Added user ${session.user.id} to userSessions map`);
       }
       // Also map socket to user for lookup
-      socketToUser.set(socket.id, session.user.id);
+      socketToUser.set(socket.id, String(session.user.id));
       // Verify room membership
       const rooms = Array.from(socket.rooms || []);
 console.log(`[Operator Chat] User ${session.user.username} (socket ${socket.id}) joined rooms: ${rooms.join(', ')}`);
@@ -965,7 +990,12 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // which is why the greeting is typed through the stream and not emitted
     // whole. A human sysop's opening is the same board line, said the same way.
     const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
-    if (!shown) await deliverGreeting(io, chatSession, page, startName, aiConfigFrom(repository.getConfig()).botTypingSpeed);
+    // A bot persona greets in its own voice right after this (its persona
+    // greeting), so the board's generic greeting would double up: human
+    // sysops keep the express.e line, bots skip straight to the hint.
+    if (!shown && sysopId !== 'bot') {
+      await deliverGreeting(io, chatSession, page, startName, aiConfigFrom(repository.getConfig()).botTypingSpeed);
+    }
     // WHAT EXPRESS NEVER SAID. chat() tells the caller nothing: it ends on
     // CTRL-C if they hold ACS_BREAK_CHAT (express.e:6118) or when the SYSOP
     // presses F1, BBSHelp.txt has no chat section, and a board that wanted to
@@ -1131,19 +1161,24 @@ async function sendBotMessageWithTyping(
   });
 
   if (thinkTime > 0) await new Promise<void>((r) => setTimeout(r, thinkTime));
-  // THE DOTS COME OFF HERE, and not a moment earlier. Stopping them when the
+  // THE DOTS STAY ON HERE, and not a moment earlier. Stopping them when the
   // model returned left the caller watching a dead line for the whole of
   // `thinkTime` above - a second by default, more on a board that raised it -
   // which is the exact silence the dots exist to fill. Before deliverToCaller
-  // and never inside it: the erase counts backspaces against what the window
-  // wrote, and a character of the reply typed first would be eaten by them.
+  // and never inside it. The dots are kept and the reply types after them
+  // (sysop, 2026-09-10); erasing read as the bot taking its thinking back.
   // A chat with no window open has no canceller registered, so this is a
   // no-op for the intro, the queued reply and the admin verdict.
-  cancelThinkingDots(chatSession);
+  cancelThinkingDots(chatSession, true);
+  // ...but after them, on a fresh line: kept dots occupy the line's first
+  // cells and the reply would wrap early (2026-09-10). The count is
+  // consumed here so a dotless reply never inherits it.
+  const dotsStanding = thinkingDotsShown(chatSession);
+  clearThinkingDotsShown(chatSession);
   await deliverToCaller(io, chatSession, page, message, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,
-  });
+  }, { prefixReturn: dotsStanding > 0 });
 }
 
 
@@ -1192,6 +1227,9 @@ function aiConfigFrom(config: OperatorChatConfig, persona?: any): AIProviderConf
     groqApiKey: config.groqApiKey,
     geminiApiKey: config.geminiApiKey,
     openRouterApiKey: config.openRouterApiKey,
+    zenApiKey: (config as any).zenApiKey,
+    goApiKey: (config as any).goApiKey,
+    cerebrasApiKey: (config as any).cerebrasApiKey,
     botTypingSpeed: config.botTypingSpeed,
     botTypoProbability: config.botTypoProbability,
     botThinkTime: config.botThinkTime,
@@ -1211,12 +1249,12 @@ function aiConfigForHandle(handle: string, repository: OperatorChatRepository): 
 /**
  * Process bot message queue — respond to messages that arrived while bot was typing
  */
-function processBotQueue(
+async function processBotQueue(
   io: any,
   repository: OperatorChatRepository,
   pageId: string,
   chatSession: any
-): void {
+): Promise<void> {
   const session = activeChatSessions.get(pageId);
   if (!session) return;
 
@@ -1236,7 +1274,7 @@ function processBotQueue(
     timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
     messageHistory: chatSession.botMessageHistory || [],
     boardCard: chatSession.boardCard as string | undefined,
-    retrieved: retrievedFor(lastMsg, chatSession),
+    retrieved: await retrievedWithGames(lastMsg, chatSession, repository),
     tools: toolsForChat(io, repository, page, chatSession),
     afters: [] as Array<() => Promise<void>>,
   };
@@ -1336,6 +1374,21 @@ console.log('[Operator Chat] Bot busy, queuing message');
     (chatSession as any).botBusy = true;
     const page = repository.getPageRequest(pageId);
     if (page) {
+      // Content-free messages (".......", "idk") get the nudge without
+      // waking any model: no cascade, no tools, no 146-door dumps. The lines
+      // still enter history so the conversation reads straight.
+      const { isLowContentMessage, LOW_CONTENT_NUDGE } = require('./grumpy-sysop-bot.handler');
+      if (isLowContentMessage(message)) {
+        try {
+          (chatSession as any).botMessageHistory = [...((chatSession as any).botMessageHistory || []), { role: 'user', content: message }, { role: 'bot', content: LOW_CONTENT_NUDGE }];
+          const nudgeConfig = aiConfigForHandle(page.sysopHandle || (chatSession as any).personaHandle || '', repository);
+          await sendBotMessageWithTyping(io, repository, pageId, LOW_CONTENT_NUDGE, nodeId, page, nudgeConfig);
+        } finally {
+          (chatSession as any).botBusy = false;
+        }
+        io.to(`page:${pageId}`).emit('operator:message', { ...saved, timestamp: saved.timestamp.getTime() });
+        return;
+      }
       const context = {
         userHandle: page.userHandle,
         nodeId: page.nodeId,
@@ -1343,7 +1396,7 @@ console.log('[Operator Chat] Bot busy, queuing message');
         timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
         messageHistory: (chatSession as any).botMessageHistory || [],
         boardCard: (chatSession as any).boardCard as string | undefined,
-        retrieved: retrievedFor(message, chatSession),
+        retrieved: await retrievedWithGames(message, chatSession as any, repository),
         tools: toolsForChat(io, repository, page, chatSession),
         afters: [] as Array<() => Promise<void>>,
       };

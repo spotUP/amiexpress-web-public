@@ -135,12 +135,24 @@ export class UserDatabaseManager {
     if (!fs.existsSync(this.userMiscPath)) fs.writeFileSync(this.userMiscPath, Buffer.alloc(0));
   }
 
+  /**
+   * Read one user's three records by Amiga slot number.
+   *
+   * Slots are 1-indexed: slot 1 is the first record, and slot 0 is a deleted
+   * account (express.e:21365, refused at logon per express.e:29701). This
+   * matches `User.slotNumber`, `UserFileManager`, and `readAllUsers`'
+   * `user-N` ids. An earlier revision addressed `slotNumber * SIZE` (0-based),
+   * so every password failure landed on the NEIGHBOUR's misc record: one
+   * caller's typos locked the next account down, and unlocking never helped
+   * because the gate read a different record than the one the failures wrote.
+   */
   readUserFromDisk(slotNumber: number): { user: UserStruct; keys: UserKeysStruct; misc: UserMiscStruct } | null {
     if (!fs.existsSync(this.userDataPath)) return null;
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) return null;
     try {
-      const userOffset = slotNumber * this.USER_SIZE;
-      const keysOffset = slotNumber * this.USERKEYS_SIZE;
-      const miscOffset = slotNumber * this.USERMISC_SIZE;
+      const userOffset = (slotNumber - 1) * this.USER_SIZE;
+      const keysOffset = (slotNumber - 1) * this.USERKEYS_SIZE;
+      const miscOffset = (slotNumber - 1) * this.USERMISC_SIZE;
 
       const userBuffer = Buffer.alloc(this.USER_SIZE);
       const keysBuffer = Buffer.alloc(this.USERKEYS_SIZE);
@@ -287,7 +299,7 @@ export class UserDatabaseManager {
     const userCount = this.getUserCount();
     const result = [];
     for (let i = 0; i < userCount; i++) {
-      const data = this.readUserFromDisk(i);
+      const data = this.readUserFromDisk(i + 1);
       if (data && data.user.name.length > 0) result.push(data);
     }
     return result;
@@ -448,7 +460,7 @@ export class UserDatabaseManager {
     const fd = fs.openSync(this.userDataPath, "r");
     try {
       const buffer = Buffer.alloc(CONF_ACCESS_SIZE);
-      fs.readSync(fd, buffer, 0, CONF_ACCESS_SIZE, slotNumber * this.USER_SIZE + CONF_ACCESS_OFFSET);
+      fs.readSync(fd, buffer, 0, CONF_ACCESS_SIZE, (slotNumber - 1) * this.USER_SIZE + CONF_ACCESS_OFFSET);
       let result = "";
       // Read the 10 bytes from disk
       for (let i = 0; i < CONF_ACCESS_SIZE; i++) result += buffer[i] === 0x58 ? "X" : "_";
@@ -556,16 +568,16 @@ export class UserDatabaseManager {
 
   /**
    * Find user slot by username (case-insensitive)
-   * Returns 0-based slot index or -1 if not found
+   * Returns 1-indexed Amiga slot number, or -1 if not found.
    */
   findUserSlotByName(username: string): number {
     if (!fs.existsSync(this.userDataPath)) return -1;
     const userCount = this.getUserCount();
     const searchName = username.toLowerCase();
     for (let i = 0; i < userCount; i++) {
-      const userData = this.readUserFromDisk(i);
+      const userData = this.readUserFromDisk(i + 1);
       if (userData && userData.user.name.toLowerCase() === searchName) {
-        return i;
+        return i + 1;
       }
     }
     return -1;
@@ -670,12 +682,12 @@ console.warn(`[UserDatabaseManager] updateUserMiscAfterPasswordChange: no misc r
 console.log(`[UserDatabaseManager] Cleared forcePwdReset and updated pwdLastUpdated for slot ${slotNumber}`);
   }
 
-  /** One place that writes a misc record back to its slot. */
+  /** One place that writes a misc record back to its slot (1-indexed). */
   private writeUserMisc(slotNumber: number, misc: UserMiscStruct): void {
     const miscBuffer = this.serializeUserMisc(misc);
     const fd = fs.openSync(this.userMiscPath, 'r+');
     try {
-      fs.writeSync(fd, miscBuffer, 0, miscBuffer.length, slotNumber * this.USERMISC_SIZE);
+      fs.writeSync(fd, miscBuffer, 0, miscBuffer.length, (slotNumber - 1) * this.USERMISC_SIZE);
     } finally {
       fs.closeSync(fd);
     }

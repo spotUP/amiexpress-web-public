@@ -33,7 +33,7 @@ describe('runPreLoginConnect — connect-time unification', () => {
       expect(serviceSrc).toMatch(/runSysCommand[\s\S]*?["']FRONTEND["']/);
       // Graphics prompt + parked state.
       expect(serviceSrc).toMatch(/ANSI_PROMPT/);
-      expect(serviceSrc).toMatch(/ANSI, RIP, PETSCII OR NO GRAPHICS/);
+      expect(serviceSrc).toMatch(/ANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS/);
       // AREXX login trigger fires on every transport (was web-only).
       expect(serviceSrc).toMatch(/arexxEngine[\s\S]*?executeTrigger[\s\S]*?["']login["']/);
     });

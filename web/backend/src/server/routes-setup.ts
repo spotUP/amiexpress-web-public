@@ -28,7 +28,8 @@ import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
 import { createWhipRouter } from '../api/whip-routes';
-import { authenticateServiceToken } from '../middleware/service-auth.middleware';
+import { createBotDataRouter } from '../api/bot-data-routes';
+import { authenticateServiceToken, authenticateBotToken } from '../middleware/service-auth.middleware';
 import { createStatisticsRouter } from '../api/statistics-routes';
 import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
@@ -185,6 +186,14 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const whipRouter = createWhipRouter(db);
   app.use('/api/whip', authenticateServiceToken, whipRouter);
 
+  // ===== WEB_BOT_DATA chatbot reads - per-bot service tokens, GET only.
+  // bbsRoot is projectRoot here (see below); mounted before its
+  // declaration, so resolve the same way. Mounted bare of JWT: the bot
+  // token is the auth.
+  app.use('/api/bot/v1', authenticateBotToken, createBotDataRouter(db, {
+    bbsRoot: process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
+  }));
+
   // ===== Bot plugin admin API - sysop JWT like every other /api/config route
   const { createBotPluginRouter } = require('../api/bot-plugin-routes');
   app.use('/api/config/bots', authenticateToken(db), requireSysop(), createBotPluginRouter(db));
@@ -235,6 +244,14 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   app.delete('/api/sprite-manager/:door/sprite/:file', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
     spriteManagerHandler.deleteSprite(req as AuthRequest, res)
   );
+
+  // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
+  const { createBullsRouter } = require('../api/bulls-routes');
+  app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(
+    process.env.BBS_DATA_DIR ? path.resolve(process.env.BBS_DATA_DIR)
+      : process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT)
+      : path.resolve(__dirname, '../../../..'),
+  ));
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);

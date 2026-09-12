@@ -436,6 +436,10 @@ export interface BBSSession {
   /** Per-session ANSI->PETSCII transducer for real C64 callers (connection-emitter.ts). Lazily created; shared by every emitter built for the connection so cursor/charset/reverse state never forks. */
   petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
+  // WEB_: teletext mode (T answer at the graphics prompt). TDAText font +
+  // teletext palette in the web terminal; plain ANSI on byte transports.
+  // Pure boolean like ripMode - no render ctx, cleared per-session.
+  texttvMode?: boolean; // Whether teletext display mode is enabled
   terminalType?: "c64" | "modern" | "unknown"; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
   screenWidth?: number; // The board's column MODEL (40 for C64, 80 for modern) - what its screens and doors are drawn for
   wireWidth?: number; // The caller's REAL terminal width, from NAWS / the PTY size. Not reset by the graphics prompt; the wire fold reads THIS, not screenWidth.
@@ -454,6 +458,8 @@ export interface BBSSession {
   quietFlag: boolean; // Whether node is in quiet mode (invisible to WHO) - express.e:309
   blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
   sysopKicked?: boolean; // Session was forcibly disconnected by sysop via NM command - skip grace period
+  cleanLogoff?: boolean; // Caller said goodbye with G - deliberate logoff, skip grace period (a 15s wait only serves drops, and a fast re-login reads its own ghost)
+  entryUserId?: unknown; // Who this socket held before the current login overwrote session.user (ghostlogoff: same-socket re-auth skips the already-on check)
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
@@ -602,6 +608,14 @@ export interface BBSSession {
   // 'REFUSED' by executeDoor's MIN_COLUMNS gate instead of printing the
   // 80-column notice. See utils/door-min-columns.util.ts.
   widthGateFallThrough?: WidthGateFallThrough;
+
+  // Locked-out comment form (login-post accountLocked / pwd-change-denied):
+  // express.e runs the C flow to completion inline before Thanks + logoff,
+  // but this port's C only emits the first prompt and returns - the rest
+  // arrives over later keystrokes. Set when the form starts; the
+  // message-entry funnel in command.handler.ts fires the deferred Thanks +
+  // beginLogoff when the flow lands back on DISPLAY_MENU.
+  logoffAfterComment?: boolean;
 
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
@@ -1525,6 +1539,13 @@ console.log(`[OK] Achievements flusher started (${achievementsNow().enabled ? "r
     const { startAchievementsBulletin } = await import("./achievements/bulletin");
     startAchievementsBulletin();
 console.log("[OK] Achievements bulletin refresher started");
+
+    // The news bulletins (Bulletins/bull7.txt news, bull8.txt sport): SVT
+    // Text-TV headlines via texttv.nu, refreshed hourly. WHIP task
+    // 8f358f41. A dead fetch keeps yesterday's file, never a blank one.
+    const { startNewsBulletins } = await import("./services/news-bulletins");
+    startNewsBulletins();
+console.log("[OK] News bulletins refresher started");
 
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");

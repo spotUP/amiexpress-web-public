@@ -437,6 +437,11 @@ console.error("❌ ERROR in handleLiveChatCommand:", error);
       handleHelpFilesCommand(socket, session, params);
       return;
 
+    // WEB_: typable alias for ^ (PETSCII has no ^ glyph). See command.handler.ts.
+    case "TTX":
+      handleHelpFilesCommand(socket, session, params);
+      return;
+
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
     case "DOORS": // Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);

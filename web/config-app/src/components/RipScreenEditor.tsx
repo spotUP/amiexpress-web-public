@@ -106,6 +106,8 @@ export interface RipScreenEditorProps {
   /** The edited screen as base64 - the shape an uploaded file arrives in. */
   onSave?: (base64: string) => void;
   onCancel?: () => void;
+  /** A save is in flight: the button disables and says so (see ScreenEditor). */
+  saving?: boolean;
 }
 
 /** A rectangle being dragged out on the picture, in RIP coordinates. */
@@ -122,7 +124,7 @@ function describeHotspot(spot: RipHotspot): string {
 }
 
 export function RipScreenEditor({
-  content, filePath, readOnly = false, onSave, onCancel,
+  content, filePath, readOnly = false, onSave, onCancel, saving = false,
 }: RipScreenEditorProps) {
   const [doc, setDoc] = useState<RipDocument>(() => parseRipDocument(base64ToLatin1(content)));
   const [selected, setSelected] = useState<number | null>(null);
@@ -244,10 +246,11 @@ export function RipScreenEditor({
             </button>
             <button
               type="button"
-              className="btn-primary"
+              className="btn-primary disabled:opacity-50"
+              disabled={saving}
               onClick={() => onSave?.(latin1ToBase64(serializeRipDocument(doc)))}
             >
-              <Save size={14} className="mr-1 inline" /> Save
+              <Save size={14} className="mr-1 inline" /> {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
         )}

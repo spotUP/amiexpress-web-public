@@ -70,9 +70,13 @@ export function ThemeStatusBar({
   const [previewing, setPreviewing] = useState(false);
 
   // The envelope, the same key and shape the themes page caches under.
+  // Never asked of `default`: it is the board's own screens, not a registry
+  // theme, so the server answers 404 - and the query plus its retry put two
+  // of those onto the console for it.
   const { data, isLoading } = useQuery({
     queryKey: ['screen-theme-validation', theme.slug],
     queryFn: () => apiClient.getScreenThemeValidation(theme.slug),
+    enabled: theme.slug !== 'default',
   });
   const report = (data as { data?: ThemeValidation } | undefined)?.data;
 

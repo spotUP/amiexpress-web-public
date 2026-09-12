@@ -24,7 +24,30 @@ import { conferencesFromDisk, commandsOnDisk, callerLines } from './board-card';
 import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, type Tier } from './fences';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { searchProductions, searchGroups, searchParties } from './external/demozoo';
+import {
+  searchDoors, doorDetail, doorRandom, doorStats,
+  searchFiles, fileDetail, fileRandom, listingStats, listingFacts,
+} from './external/doorrepo';
 import { lookupGame } from './external/games';
+import { askScene, sceneRandom, sceneLatest, checkLink } from './external/dooranswer';
+import { askWikipedia } from './external/wikipedia';
+import { wikidataFacts } from './external/wikidata';
+import { weatherNow } from './external/weather';
+import { texttvPage } from './external/texttv';
+import { openalexSearch } from './external/openalex';
+import { recentQuakes, hnSearch } from './external/headlines';
+import { whipService } from '../../services/whip.service';
+import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { BOT_userLookup, BOT_userSearch, BOT_topCallers } from '../../services/bot-data/users';
+import { BOT_recentMessages, BOT_searchMessages } from '../../services/bot-data/messages';
+import { BOT_searchFiles, BOT_fileStats } from '../../services/bot-data/files';
+import {
+  BOT_whipProjects, BOT_whipTasks, BOT_whipMyTasks, BOT_whipLeaderboard, BOT_whipAchievements,
+} from '../../services/bot-data/whip';
+import { BOT_doorData, BOT_doorDataKeys } from '../../services/bot-data/doors';
+import { BOT_boardTotals, BOT_recentCallers } from '../../services/bot-data/activity';
+import { BOT_boardInfo } from '../../services/bot-data/board';
+import type { BOTActor, BOTDb } from '../../services/bot-data/types';
 
 /** The slice of the board's database the sysop-grade tools use; injectable. */
 export interface ToolDatabase {
@@ -32,6 +55,17 @@ export interface ToolDatabase {
   updateUser(id: string, updates: Record<string, unknown>): Promise<void>;
   createMessage(message: Record<string, unknown>): Promise<number>;
   getMessageBases(conferenceId: number): Promise<Array<{ id: number }>>;
+  /* WEB_BOT_DATA read surface. Present on the real Database at runtime
+   * (built via getDatabase(): any); minimal fakes omit them and the new
+   * tools refuse honestly instead of throwing. */
+  getUsers?(filter?: { secLevel?: number; limit?: number }): Promise<any[]>;
+  getConferences?(): Promise<any[]>;
+  getMessages?(conferenceId: number, messageBaseId: number, options?: { limit?: number; search?: string }): Promise<any[]>;
+  getFileAreas?(conferenceId: number): Promise<any[]>;
+  getFileEntries?(areaId: number, options?: { limit?: number; search?: string }): Promise<any[]>;
+  getFileStatisticsByConference?(conferenceId: number): Promise<any>;
+  getActiveSessions?(): Promise<any[]>;
+  query?(sql: string, params?: any[]): Promise<{ rows: any[] }>;
 }
 
 export interface ToolContext {
@@ -95,7 +129,12 @@ export const CALLER_TOOLS: SysopTool[] = [
     tier: 'caller',
     async run(ctx) {
       const { external } = commandsOnDisk(ctx.bbsRoot, ctx.session.user?.secLevel ?? 0);
-      return { content: external.length ? `${external.length} doors/programs: ${external.join(', ')}` : 'No doors are available to this caller.' };
+      if (!external.length) return { content: 'No doors are available to this caller.' };
+      // Capped like search_files: a 146-door board once dumped its whole
+      // menu into one reply ("146 doors/programs: ..."). Ten names plus a
+      // count is what a caller can use; the model asks narrower next.
+      const shown = external.slice(0, 10).join(', ');
+      return { content: `${external.length} doors/programs: ${shown}${external.length > 10 ? ` (+${external.length - 10} more)` : ''}` };
     },
   },
   {
@@ -160,9 +199,71 @@ export const CALLER_TOOLS: SysopTool[] = [
     },
   },
   {
-    name: 'lookup_game',
-    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',
-    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
+    name: 'search_doors',
+    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind is exactly one of search, detail, random, stats - there is no party kind (demoparties are search_demozoo). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me with a door".',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await searchDoors(q) : 'What should I look up?' };
+        }
+        case 'detail': {
+          const q = str(args.query, 40);
+          return { content: q ? await doorDetail(q) : 'Which archive? Like MST-CM20.LHA.' };
+        }
+        case 'random': return { content: await doorRandom() };
+        case 'stats': return { content: await doorStats() };
+        default: return { content: 'kind must be search, detail, random or stats.' };
+      }
+    },
+  },
+  {
+    name: 'search_listing',
+    description: 'The BBS file listing (Up Rough releases archive): files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me with a file", "how big is the listing". For the caller\'s own conference uploads, search_files is the one. For asciiarena art and artists, ask_scene is the one - never this.',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats', 'facts'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await searchFiles(q) : 'What should I look up?' };
+        }
+        case 'detail': {
+          const q = str(args.query, 20);
+          return { content: q ? await fileDetail(q) : 'Which file id?' };
+        }
+        case 'random': return { content: await fileRandom() };
+        case 'stats': return { content: await listingStats() };
+        case 'facts': return { content: await listingFacts() };
+        default: return { content: 'kind must be search, detail, random, stats or facts.' };
+      }
+    },
+  },
+  {
+    name: 'ask_scene',
+    description: 'The wider scene beyond our own archives: a demo/intro/musicdisk by title, a demoparty, an ASCII logo from AsciiArena ("show me an ASCII logo", "logos by X"), a film, "surprise me with anything", latest arrivals, "is this download link alive". kind=search needs query; kind=random and kind=latest need nothing; kind=check needs an https URL. Not for scene groups/handles (search_demozoo), retail games (lookup_game), or our doors/files (search_doors/search_files). Answers carry their source - quote it.',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'random', 'latest', 'check'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await askScene(q) : 'What should I look up?' };
+        }
+        case 'random': return { content: await sceneRandom() };
+        case 'latest': return { content: await sceneLatest() };
+        case 'check': {
+          const q = str(args.query, 500);
+          return { content: q ? await checkLink(q) : 'Which URL? An https one.' };
+        }
+        default: return { content: 'kind must be search, random, latest or check.' };
+      }
+    },
+  },
+  {
+    name: 'lookup_game',    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
     tier: 'caller',
     async run(ctx, args) {
       return { content: await lookupGame(str(args.title, 80), ctx.rawgKey) };
@@ -213,7 +314,271 @@ export const CALLER_TOOLS: SysopTool[] = [
       return { content: 'Will end the chat and show the menu. Say goodbye in your reply.', after: () => ctx.execute('?', '') };
     },
   },
+  {
+    name: 'user_lookup',
+    description: 'A caller\'s public account facts by handle: level, location, calls, uploads, downloads. Never private data; higher-level and erased accounts read as unknown.',
+    parameters: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getUserByUsername');
+      if (!db) return { content: 'The board cannot read accounts right now.' };
+      return { content: (await BOT_userLookup(db, actorOf(ctx), str(args.handle, 30))).text };
+    },
+  },
+  {
+    name: 'user_search',
+    description: 'Find handles containing a fragment, within the caller\'s own level.',
+    parameters: { type: 'object', properties: { fragment: { type: 'string' } }, required: ['fragment'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getUsers');
+      if (!db) return { content: 'The board cannot read accounts right now.' };
+      return { content: (await BOT_userSearch(db, actorOf(ctx), str(args.fragment, 30))).text };
+    },
+  },
+  {
+    name: 'top_callers',
+    description: 'The board\'s most frequent callers by call count.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run(ctx) {
+      const db = reads(ctx.db, 'getUsers');
+      if (!db) return { content: 'The board cannot read accounts right now.' };
+      return { content: (await BOT_topCallers(db, actorOf(ctx))).text };
+    },
+  },
+  {
+    name: 'recent_messages',
+    description: 'Recent public messages in a conference (the caller\'s current one when omitted). Never private mail.',
+    parameters: { type: 'object', properties: { conference: { type: 'integer', minimum: 1 } }, additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getMessages', 'getMessageBases');
+      if (!db) return { content: 'The board cannot read messages right now.' };
+      const conf = int(args.conference) ?? ctx.session.currentConf ?? 1;
+      return { content: (await BOT_recentMessages(db, actorOf(ctx), conf)).text };
+    },
+  },
+  {
+    name: 'search_messages',
+    description: 'Search public message subjects and bodies in a conference for a word.',
+    parameters: { type: 'object', properties: { query: { type: 'string' }, conference: { type: 'integer', minimum: 1 } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getMessages', 'getMessageBases');
+      if (!db) return { content: 'The board cannot read messages right now.' };
+      const conf = int(args.conference) ?? ctx.session.currentConf ?? 1;
+      return { content: (await BOT_searchMessages(db, actorOf(ctx), conf, args.query)).text };
+    },
+  },
+  {
+    name: 'search_board_files',
+    description: 'Search the board\'s own file entries in a conference (the caller\'s current one when omitted) by filename or description. For the Up Rough releases archive, search_listing is the one.',
+    parameters: { type: 'object', properties: { query: { type: 'string' }, conference: { type: 'integer', minimum: 1 } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getFileAreas', 'getFileEntries');
+      if (!db) return { content: 'The board cannot read files right now.' };
+      const conf = int(args.conference) ?? ctx.session.currentConf ?? 1;
+      return { content: (await BOT_searchFiles(db, actorOf(ctx), conf, args.query)).text };
+    },
+  },
+  {
+    name: 'board_files_stats',
+    description: 'How many files and bytes a conference holds.',
+    parameters: { type: 'object', properties: { conference: { type: 'integer', minimum: 1 } }, additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const db = reads(ctx.db, 'getFileStatisticsByConference');
+      if (!db) return { content: 'The board cannot read files right now.' };
+      const conf = int(args.conference) ?? ctx.session.currentConf ?? 1;
+      return { content: (await BOT_fileStats(db, actorOf(ctx), conf)).text };
+    },
+  },
+  {
+    name: 'whip_projects',
+    description: 'The WHIP task board\'s projects. Use it for "what projects exist", then whip_tasks for what is in one. Lines carry terminal colors - quote them exactly as returned.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run() {
+      return { content: (await BOT_whipProjects(whipService, { ansi: true })).text };
+    },
+  },
+  {
+    name: 'whip_tasks',
+    description: 'Tasks in a WHIP project, by project name or id, with state and assignee. Lines carry terminal colors - quote them exactly as returned.',
+    parameters: { type: 'object', properties: { project: { type: 'string' } }, required: ['project'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      return { content: (await BOT_whipTasks(whipService, args.project, undefined, { ansi: true })).text };
+    },
+  },
+  {
+    name: 'whip_my_tasks',
+    description: 'The caller\'s own open WHIP tasks. Lines carry terminal colors - quote them exactly as returned.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run(ctx) {
+      const id = ctx.session.user?.id;
+      if (id === undefined || id === null) return { content: 'No account behind this chat.' };
+      return { content: (await BOT_whipMyTasks(whipService, String(id), undefined, { ansi: true })).text };
+    },
+  },
+  {
+    name: 'whip_leaderboard',
+    description: 'The WHIP points leaderboard. Lines carry terminal colors - quote them exactly as returned.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run() {
+      return { content: (await BOT_whipLeaderboard(whipService, undefined, { ansi: true })).text };
+    },
+  },
+  {
+    name: 'whip_achievements',
+    description: 'WHIP achievements unlocked by a user (the caller when omitted), by handle or id.',
+    parameters: { type: 'object', properties: { user: { type: 'string' } }, additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const u = str(args.user, 60) || String(ctx.session.user?.id ?? '');
+      if (!u) return { content: 'Whose achievements?' };
+      return { content: (await BOT_whipAchievements(whipService, u)).text };
+    },
+  },
+  {
+    name: 'board_info',
+    description: 'This board in one line: name and sysop.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run(ctx) {
+      const board = { getBoardConfig, commandsOnDisk, conferencesFromDisk };
+      return { content: (await BOT_boardInfo(board, ctx.bbsRoot)).text };
+    },
+  },
+  {
+    name: 'board_totals',
+    description: 'Board totals: users, messages, files with bytes, calls today.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run(ctx) {
+      const db = reads(ctx.db, 'query');
+      if (!db) return { content: 'Board totals are unreachable right now.' };
+      return { content: (await BOT_boardTotals(db, actorOf(ctx))).text };
+    },
+  },
+  {
+    name: 'recent_callers',
+    description: 'Recent caller activity: who called, what they did.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run(ctx) {
+      const db = reads(ctx.db, 'query');
+      if (!db) return { content: 'Caller history is unreachable right now.' };
+      return { content: (await BOT_recentCallers(db)).text };
+    },
+  },
+  {
+    name: 'door_data',
+    description: 'Stored data from a door that shares with chatbots: arkanoid key highscores.json; grandmaster keys highscores.json, high-scores.json; ncurses_pong, phreak_wars, telnet_frontend, livechat key high-scores.json; whip keys projects.json, tasks.json. Anything else is refused. Use it for "who leads at X", "top scores in Y".',
+    parameters: { type: 'object', properties: { door: { type: 'string' }, key: { type: 'string' } }, required: ['door', 'key'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const keys = BOT_doorDataKeys();
+      const r = await BOT_doorData(ctx.bbsRoot, args.door, args.key);
+      if (!r.text.includes('not shared')) return { content: r.text };
+      return { content: `${r.text} Shared doors: ${Object.entries(keys).map(([d, ks]) => `${d} (${ks.join(', ')})`).join('; ')}.` };
+    },
+  },
+  {
+    name: 'ask_wikipedia',
+    description: 'General knowledge: what or who is X, how does Y work. Searches Wikipedia and summarizes the top hit. Not for demoscene (search_demozoo), commercial games (lookup_game), or papers (openalex_search).',
+    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const q = str(args.query, 80);
+      return { content: q ? await askWikipedia(q) : 'What should I look up?' };
+    },
+  },
+  {
+    name: 'wikidata_facts',
+    description: 'Structured facts about a person, place or thing: what it is, other names, and which Wikipedia article reads more. Use it for "when" and "who is" questions where dates and identity matter.',
+    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const q = str(args.query, 80);
+      return { content: q ? await wikidataFacts(q) : 'What should I look up?' };
+    },
+  },
+  {
+    name: 'weather_now',
+    description: 'Current weather anywhere in the world, by place name: temperature, conditions, today\'s span, wind.',
+    parameters: { type: 'object', properties: { place: { type: 'string' } }, required: ['place'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const p = str(args.place, 80);
+      return { content: p ? await weatherNow(p) : 'Which place?' };
+    },
+  },
+  {
+    name: 'texttv_page',
+    description: 'Swedish SVT Text-TV headlines via texttv.nu: page 100 for latest news, 101-103 domestic, 104-105 foreign, 300-302 sport, 330 results, 376-395 goals, 400-401 weather, 600 TV listings, or a range like 101-105. Use it for "what is the news", Swedish headlines, sports results.',
+    parameters: { type: 'object', properties: { page: { type: 'string' } }, required: ['page'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      return { content: await texttvPage(str(args.page, 11)) };
+    },
+  },
+  {
+    name: 'openalex_search',
+    description: 'Scholarly papers about X: year, title, authors, citations, DOI. Use it for "studies about", research, science questions. Not for general knowledge (ask_wikipedia).',
+    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const q = str(args.query, 80);
+      return { content: q ? await openalexSearch(q) : 'What should I look up?' };
+    },
+  },
+  {
+    name: 'recent_quakes',
+    description: 'Latest earthquakes worldwide over magnitude 4.5, from the USGS catalog.',
+    parameters: noArgs,
+    tier: 'caller',
+    async run() {
+      return { content: await recentQuakes() };
+    },
+  },
+  {
+    name: 'hn_search',
+    description: 'Tech news and discussion: search Hacker News stories by keyword, with points and comment counts. Use it for "what is the tech world saying about X".',
+    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const q = str(args.query, 80);
+      return { content: q ? await hnSearch(q) : 'What should I look up?' };
+    },
+  },
 ];
+
+/**
+ * The caller behind a chat, as the bot-data layer sees them. Chat tools
+ * enforce the tier fence, not per-conference access: the caller's session
+ * already gates which conferences they may be in. The HTTP transport
+ * enforces confAccess strictly (bot-data-routes.ts).
+ */
+function actorOf(ctx: ToolContext): BOTActor {
+  return {
+    secLevel: ctx.session.user?.secLevel ?? 0,
+    username: ctx.session.user?.username,
+    userId: ctx.session.user?.id === undefined ? undefined : String(ctx.session.user.id),
+  };
+}
+
+/** The database when it offers every method named, else undefined so the
+ *  tool refuses honestly instead of throwing on a minimal fake. */
+function reads(db: ToolContext['db'], ...methods: string[]): BOTDb | undefined {
+  if (!db) return undefined;
+  const anyDb = db as any;
+  return methods.every((m) => typeof anyDb[m] === 'function') ? (anyDb as BOTDb) : undefined;
+}
 
 /**
  * Sysop-grade, bounded, any caller (K3b): a real sysop grants a regular a

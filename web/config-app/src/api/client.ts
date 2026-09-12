@@ -798,6 +798,23 @@ class ApiClient {
     });
   }
 
+  // Door art sections - art living inside a door's config file (Bulls' Title
+  // logo in Bulls.CFG), edited in the ANSI Studio, never in a settings form.
+  async listDoorArt() {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors-art`);
+  }
+
+  async getDoorArt(command: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`);
+  }
+
+  async saveDoorArt(command: string, file: string, section: string, contentBase64: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`, {
+      method: 'PUT',
+      body: JSON.stringify({ file, section, content: contentBase64 }),
+    });
+  }
+
   /*
    * There were four more methods here - get/create/update/deleteSecurityAccess
    * - on /config/security/*, with no caller anywhere in this app. They read
@@ -1228,6 +1245,55 @@ class ApiClient {
     return this.request<{ deleted: boolean }>(`${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprite/${encodeURIComponent(file)}`, {
       method: 'DELETE',
     });
+  }
+
+  // Bulls Menu (Bulls.CFG for the 68K Bulls door)
+  async getBullsConfig() {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls`
+    );
+  }
+
+  async saveBullsConfig(raw: string) {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ raw }),
+      }
+    );
+  }
+
+  async saveBullsEntries(entries: Array<{ title: string; file: string }>) {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls/entries`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ entries }),
+      }
+    );
+  }
+
+  async listBulletins() {
+    return this.request<{ bulletins: Array<{ name: string; size: number; mtimeMs: number; generated: boolean; generator?: string }> }>(
+      `${API_BASE}/config/bulls/bulletins`
+    );
+  }
+
+  async getBulletin(name: string) {
+    return this.request<{ name: string; content: string }>(
+      `${API_BASE}/config/bulls/bulletins/${encodeURIComponent(name)}`
+    );
+  }
+
+  async saveBulletin(name: string, content: string) {
+    return this.request<{ name: string; size: number; mtimeMs: number }>(
+      `${API_BASE}/config/bulls/bulletins/${encodeURIComponent(name)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+      }
+    );
   }
 
   // Screen Revisions

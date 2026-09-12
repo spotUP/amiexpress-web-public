@@ -24,7 +24,7 @@
  * two would come to disagree about `.asc`.
  */
 export const SCREEN_EXTENSIONS = [
-  '.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc',
+  '.txt', '.gr', '.ibm', '.seq', '.rip', '.ttx', '.tti', '.ans', '.asc',
   /*
    * `.Header` and `.Tailer` are ART the board splices into a screen it writes
    * itself: `Screens/AchieveTop.Header` above the achievements leaderboard and

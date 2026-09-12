@@ -255,10 +255,40 @@ class WhipService {
     return dm.loadParties();
   }
 
-  async listUsers(): Promise<Array<{ userId: string; handle: string }>> {
+  async listUsers(): Promise<Array<{ userId: string; handle: string; discordName?: string }>> {
     const dm = sharedDm();
     const users = await dm.loadUsers();
-    return Object.values(users).map((u: any) => ({ userId: u.userId, handle: u.handle }));
+    return Object.values(users).map((u: any) => ({
+      userId: u.userId, handle: u.handle,
+      ...(typeof u.discordName === 'string' && u.discordName ? { discordName: u.discordName } : {}),
+    }));
+  }
+
+  /**
+   * The Discord handle a user claims in the WHIP door ("my Discord name").
+   * Empty clears it. The door writes through here too - one writer, the
+   * DataManager under its exclusive lock.
+   */
+  async setDiscordName(userId: string, discordName: string): Promise<{ userId: string; handle: string; discordName?: string }> {
+    const name = String(discordName ?? '').trim().slice(0, 32);
+    const dm = sharedDm();
+    const users = await dm.loadUsers();
+    const user = users[userId];
+    if (!user) throw new WhipWriteError(`Unknown user ${userId}`);
+    if (name) user.discordName = name;
+    else delete user.discordName;
+    await dm.updateUser(user);
+    return { userId: user.userId, handle: user.handle, ...(name ? { discordName: name } : {}) };
+  }
+
+  /**
+   * Ensure WHIP stats exist, mirroring the door's first-entry creation.
+   * Called on /link so a freshly linked account never hits "Unknown user"
+   * on reads; harmless when stats already exist.
+   */
+  async ensureUser(userId: string, username: string): Promise<void> {
+    const dm = sharedDm();
+    await ensureWhipUser(dm, { userId, username, gdprConsented: false });
   }
 
   // ---- Writes (bot Phase 2). Every mutation runs serialized through the

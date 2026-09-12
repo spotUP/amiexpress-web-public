@@ -13,7 +13,7 @@ process.env.SKIP_DB_INIT = '1';
 jest.mock('axios');
 
 import axios from 'axios';
-import { getGrumpySysopResponse, DEFAULT_AI_BUDGET_MS } from '../../src/handlers/grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, DEFAULT_AI_BUDGET_MS, ZEN_UNCONFIGURED_LINE, ZEN_FAILED_LINE } from '../../src/handlers/grumpy-sysop-bot.handler';
 import type { AIProviderConfig } from '../../src/handlers/grumpy-sysop-bot.handler';
 
 const mocked = axios as jest.Mocked<typeof axios>;
@@ -37,14 +37,16 @@ beforeEach(() => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** With the rule-based bot gone (2026-09-08), no provider means one honest line. */
-const NO_PROVIDER = /ask me again in a minute/;
+/** No provider reachable means one honest line naming the failure kind
+ * (2026-09-10: rate-limited / tried-and-died / nothing configured). */
+const NO_KEY = ZEN_UNCONFIGURED_LINE;
+const TRIED_AND_DIED = ZEN_FAILED_LINE;
 
 it('with no API key anywhere, no request leaves the box and the answer is immediate', async () => {
   const t0 = Date.now();
   const reply = await getGrumpySysopResponse('hello', context as any, { ...base });
 
-  expect(reply).toMatch(NO_PROVIDER);
+  expect(reply).toBe(NO_KEY);
   expect(mocked.get).not.toHaveBeenCalled();
   expect(mocked.post).not.toHaveBeenCalled();
   expect(Date.now() - t0).toBeLessThan(200);
@@ -58,7 +60,7 @@ it('a key that every model refuses is given two tries, not the whole model list'
 
   const reply = await getGrumpySysopResponse('hello', context as any, { ...base, openRouterApiKey: 'sk-or-v1-test' });
 
-  expect(reply).toMatch(NO_PROVIDER);
+  expect(reply).toBe(TRIED_AND_DIED);
   expect(mocked.post.mock.calls.length).toBeLessThanOrEqual(2);
 });
 
@@ -75,7 +77,7 @@ it('a provider that hangs is cut off at the cascade budget, and the caller is to
     ...base, openRouterApiKey: 'sk-or-v1-test', groqApiKey: 'gsk-test', budgetMs: 600,
   });
 
-  expect(reply).toMatch(NO_PROVIDER);
+  expect(reply).toBe(TRIED_AND_DIED);
   expect(Date.now() - t0).toBeLessThan(1500);
   expect(DEFAULT_AI_BUDGET_MS).toBe(8000);
 });

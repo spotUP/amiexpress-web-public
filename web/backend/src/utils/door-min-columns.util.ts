@@ -201,8 +201,10 @@ export function resolveDoorMinColumns(door: MinColumnsDoorShape): number {
  *    A real 132-column xterm opens a MIN_COLUMNS=132 door; an 80-column one
  *    is refused, which is the honest answer rather than a garbled screen.
  */
-export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number } | null | undefined): number {
-  if (session?.petsciiMode === true) return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
+export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean; petsciiColumns?: number } | null | undefined): number {
+  if (session?.petsciiMode === true || session?.texttvMode === true) {
+    return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
+  }
   const reported = validColumns(session?.screenWidth);
   return reported === null ? DEFAULT_MIN_COLUMNS : Math.max(DEFAULT_MIN_COLUMNS, reported);
 }
@@ -310,12 +312,18 @@ export function doorDropsLastAt40(door: MinColumnsDoorShape | null | undefined):
  */
 export function doorOpensForC64(
   door: MinColumnsDoorShape | null | undefined,
-  session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number } | null | undefined,
+  session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number; texttvMode?: boolean } | null | undefined,
 ): boolean {
   // The CALLER half is forty columns, not PETSCII - the same clause
   // c64AdapterDrives() asks, because the launch gate and the install site have
   // to answer as one. An 80-column PETSCII caller is not adapted at all: he
   // reads the door's own 80-column screen, like the ANSI caller beside him.
+  // A teletext caller chose the same 40-column grid on an ANSI terminal, so
+  // he answers as one with the C64: adapted doors run reduced, the rest gate.
+  if (session?.texttvMode === true) {
+    const claim = adaptClaimFor(door);
+    return claim !== null && sessionColumns(session) >= claim;
+  }
   if (session?.petsciiMode !== true) return false;
   if (sessionColumns(session) > C64_COLUMNS) return false;
   const claim = adaptClaimFor(door);

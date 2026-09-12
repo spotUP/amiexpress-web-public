@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.showMainMenu = showMainMenu;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -36,11 +37,22 @@ async function showMainMenu(screen, user, dataManager) {
             ? Math.ceil((new Date(upcomingParty.date).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
             : null;
         // ========================================================================
+        // MENU BAR - shared helper (ui/menu.ts). Built after the list so
+        // Escape can hand focus back to it; barH comes straight from the
+        // width so the header below lands right with or without the bar.
+        // ========================================================================
+        const barH = screen.width >= 60 ? 1 : 0;
+        let menu = null;
+        const pickFromBar = (value) => {
+            cleanup();
+            resolve(value);
+        };
+        // ========================================================================
         // HEADER - the chrome's masthead (NOT focusable)
         // ========================================================================
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -64,10 +76,10 @@ async function showMainMenu(screen, user, dataManager) {
         // ========================================================================
         const mainContainer = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 0,
             width: '100%',
-            height: '100%-6', // Leave room for header (3) and footer (3)
+            height: `100%-${barH + 7}`, // Menu bar (0-1) + header (3) + footer (3) + gap
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.ground,
@@ -86,9 +98,10 @@ async function showMainMenu(screen, user, dataManager) {
             { key: 'P', label: 'Party Timeline', value: 'parties' },
             { key: 'L', label: 'Leaderboard', value: 'leaderboard' },
             { key: 'A', label: 'Achievements', value: 'achievements' },
+            { key: 'D', label: 'My Profile (Discord name)', value: 'my-profile' },
             { key: 'Q', label: 'Quit', value: 'quit' }
         ];
-        // Menu box with border - explicit height (9 items + 2 border + 2 padding = 13)
+        // Menu box with border - 10 items + 2 border + 1 spare = 13
         const menuBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
             top: 1,
@@ -141,13 +154,13 @@ async function showMainMenu(screen, user, dataManager) {
         else {
             statsContent += `{${door_theme_1.T.dim}-fg}No upcoming parties{/${door_theme_1.T.dim}-fg}`;
         }
-        // Stats box on right side - same height as menu box (13)
+        // Stats box on right side - same height as menu box (12)
         const statsBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
             top: 1,
             right: 1,
             width: '45%',
-            height: 13,
+            height: 12,
             border: { type: 'line' },
             label: ' STATS ',
             content: statsContent,
@@ -221,8 +234,25 @@ async function showMainMenu(screen, user, dataManager) {
         });
         // Focus the list
         list.focus();
+        // The bar goes up once the list exists for Escape to return to.
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
+        screen.render();
         // Keyboard handler for direct shortcuts
         const keyHandler = (ch, key) => {
+            // Tab steps between the list and the menu bar. WHIP runs with
+            // focusKeys:false so the screen default never fires - without this
+            // the SDK bar's Tab stop is unreachable by keyboard (2026-09-10).
+            if (key.name === 'tab') {
+                const stop = menu?.bar.getTabStop();
+                if (!stop)
+                    return;
+                if (screen.getFocused() === stop)
+                    list.focus();
+                else
+                    stop.focus();
+                screen.render();
+                return;
+            }
             const keyName = key.name.toUpperCase();
             // Check for direct menu shortcuts
             const menuItem = menuItems.find(item => item.key === keyName);
@@ -245,6 +275,10 @@ async function showMainMenu(screen, user, dataManager) {
             chrome.stop();
             screen.off('keypress', keyHandler);
             list.removeAllListeners('select');
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.remove(header);
             screen.remove(mainContainer);
             if (gettingStarted)

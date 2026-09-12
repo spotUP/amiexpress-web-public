@@ -295,6 +295,24 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
+/**
+ * TIP runs last, right before the menu - not at EXECUTE_ON_LOGON time.
+ * The early hook fires before the LOGON screen and bulletins, so a tip
+ * there is buried; here it is the last thing before the prompt. Once
+ * per login (tempData, not storage: this is flow position, not rotation -
+ * the door owns seen-ids), skipped on quick ('Q') logins, and skipped
+ * silently when TIP is not installed (no retry loop, no error - the
+ * board without the door is a board without the tip).
+ */
+export function tipDoorBeforeMenu(
+  session: BBSSession,
+  doors: Array<{ command?: string }>,
+): boolean {
+  if ((session as any).quickFlag) return false;
+  if (session.tempData?.tipShown) return false;
+  return doors.some((d) => (d.command ?? '').toUpperCase() === 'TIP');
+}
+
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
@@ -970,8 +988,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
-        if (session.skipNextDisplayFlowMenu) {
-          displayFlowLog(
+        if (session.skipNextDisplayFlowMenu) {          displayFlowLog(
             'skipping duplicate MENU display after manual render',
             `dest=${session.manualMenuTargetState}`
           );
@@ -979,6 +996,25 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           session.subState = session.manualMenuTargetState || LoggedOnSubState.READ_COMMAND;
           session.manualMenuTargetState = undefined;
           return;
+        }
+        // TIP last: the tip door runs here, after bulletins, scans and
+        // rejoin, with the menu one keypress behind it. Marked shown
+        // BEFORE running so a door that errors cannot loop the login;
+        // a failed tip falls through to the menu, never strands it.
+        if (tipDoorBeforeMenu(session, getDoors())) {
+          if (!session.tempData) session.tempData = {};
+          session.tempData.tipShown = true;
+          const tip = getDoors().find((d) => (d.command ?? '').toUpperCase() === 'TIP');
+          if (tip) {
+            displayFlowLog('running TIP before MENU');
+            try {
+              await executeDoor(socket, session, tip);
+            } catch (error) {
+              console.error('[DISPLAY FLOW] TIP door failed, continuing to menu:', (error as Error)?.message);
+            }
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            continue;
+          }
         }
         const relConfNumber = session.relConfNum || 1;
         const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
@@ -1221,6 +1257,17 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   if (messageSubStates.has(session.subState as string)) {
     const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
+    // Locked-out comment form (login-post accountLocked/pwd-change-denied):
+    // express.e runs C to completion before Thanks + logoff, but the
+    // immediate beginLogoff used to fire 1.5 s after the form opened,
+    // cutting it off mid-fill. Fire the deferred Thanks + logoff when the
+    // flow lands back on the menu instead of advancing into it.
+    if (session.logoffAfterComment && session.subState === LoggedOnSubState.DISPLAY_MENU) {
+      session.logoffAfterComment = false;
+      socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
+      beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
+      return;
+    }
     // express.e yesNo()/abort/save all return to the menu immediately — no extra keypress needed.
     // If the handler left us in a display-flow state (e.g. DISPLAY_MENU after abort Y or save),
     // advance now so the menu appears without requiring the user to press an extra key.
@@ -1616,7 +1663,7 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
           emitText(socket, `PETSCII: SIMULATING ${columns === 80 ? 'C128 DISPLAY (80X25)' : 'C64 DISPLAY (40X25)'}\r\n`);
         }
 
-console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
+console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.texttvMode ? 'TELETEXT' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
 
         // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
         // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the
@@ -2117,6 +2164,20 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           // MULTICOM / webhook / forced-pwd-change / GDPR / LOGON screen
           // / bulletin flow consistent across all three transports.
           session.loginRetryCount = 0;
+          // express.e:1018 — the ELSE of the failure comparison: a correct
+          // password zeroes the persisted counter. Without this a caller who
+          // mistyped twice, then got it right, carried those failures until
+          // the next sysop edit touched his record.
+          try {
+            const okUser = await getDatabase().getUserByUsername(username);
+            if (okUser?.slotNumber && okUser.slotNumber > 0) {
+              const { userDatabaseManager } = require('../services/UserDatabaseManager');
+              userDatabaseManager.clearPasswordFailures(okUser.slotNumber);
+            }
+          } catch (err) {
+            // A failure to clear must never block the login flow itself.
+            console.warn('[AUTH] Could not clear password failures:', err);
+          }
           const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
           endPasswordMask(socket, session);
           const { runPostAuthLogin } = await import('../services/login-post.service');
@@ -2342,7 +2403,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint } = require('./operator-chat.handler');
+    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint, chatAcceptsKeystroke } = require('./operator-chat.handler');
 
     // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
     // line and back to their own terminal as pressed (6172), in the caller's
@@ -2404,8 +2465,10 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
         }
       }
     }
-    // Printable characters - real-time transmission
-    else if (data.length === 1 && data >= ' ' && data <= '~') {
+    // Printable characters - real-time transmission. Latin-1, not just
+    // ASCII: Swedish åäö died silently here ("i can't type swedish åäö in
+    // the operator chat"). The predicate lives with the chat stream.
+    else if (chatAcceptsKeystroke(data)) {
       session.inputBuffer += data;
       callerTypedChar(socket.server, session, data);
       // Don't transmit commands (starting with /) to sysop
@@ -5050,6 +5113,13 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111
+      handleHelpFilesCommand(socket, session, params);
+      return;
+
+    // WEB_: TTX is the typable alias for ^ (help files). PETSCII has no ^
+    // glyph at all, and phone keyboards bury it - without an alias a C64
+    // caller can never ask for a help screen. Same handler, same params.
+    case 'TTX':
       handleHelpFilesCommand(socket, session, params);
       return;
 

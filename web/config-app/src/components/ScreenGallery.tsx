@@ -18,8 +18,9 @@ import { apiClient } from '../api/client';
  * makes each ~500ms, saturating connection pools and blocking the UI thread.
  */
 
-/** Max concurrent screen file fetches. */
-const MAX_CONCURRENT = 4;
+/** Max concurrent screen file fetches: the browser's own per-origin pool
+ *  limit, so one gallery can never ask for more than the transport allows. */
+export const MAX_CONCURRENT = 6;
 
 let pending: Array<() => void> = [];
 let inFlight = 0;
@@ -84,14 +85,14 @@ export interface GalleryItem {
    * text/ANSI file otherwise - so a screen with only one of them is a screen
    * two thirds of the board cannot show properly.
    */
-  formats?: { ansi: boolean; petscii: boolean; rip: boolean };
+  formats?: { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean; teletextNative: boolean };
   /**
    * WHAT THIS FILE IS, so the thumbnail is drawn by the renderer that can read
    * it. Every card used to go through the CP437 ANSI canvas, so a `.seq` - a
    * file of C64 screen codes - came out as noise, and a `.rip` as its own
    * drawing commands in text. Absent means text or ANSI, the common case.
    */
-  format?: 'ansi' | 'text' | 'petscii' | 'rip';
+  format?: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext' | 'teletext-native';
 }
 
 /**
@@ -107,6 +108,12 @@ export interface GalleryItem {
  * `PetsciiCanvas`), which is the component the terminal draws a C64 caller
  * with, so the thumbnail and the caller see the same screen.
  *
+ * ANSI teletext (.ttx) is ANSI bytes like .txt, so the ordinary ScreenArt
+ * canvas reads it - the TDAText face is a terminal concern, not a content
+ * one. Native packet teletext (.tti) has no thumbnail yet: its picture
+ * needs the packet renderer landing separately, and a gallery is hundreds
+ * of cards; naming the format is honest, the RIP precedent.
+ *
  * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
  * and a canvas per card, and a gallery is hundreds of cards; naming the format
  * is honest, and the card still opens into the RIP editor which does draw it.
@@ -114,6 +121,16 @@ export interface GalleryItem {
 function Thumbnail({ content, format }: { content: string; format?: GalleryItem['format'] }) {
   if (format === 'petscii') {
     return <PetsciiScreenPreview content={content} className="h-full w-full" />;
+  }
+  if (format === 'teletext-native') {
+    return (
+      <div
+        data-testid="teletext-native-thumbnail"
+        className="flex h-full w-full items-center justify-center text-xs text-content-muted"
+      >
+        Native teletext - renderer lands separately
+      </div>
+    );
   }
   if (format === 'rip') {
     return (
@@ -179,7 +196,7 @@ function GalleryCard(
    * is what stops a viewport of cards firing thirty requests at once, and
    * react-query does not limit concurrency of its own.
    */
-  const { data: fetched } = useQuery({
+  const { data: fetched, isFetching } = useQuery({
     // The theme is part of the KEY because it is part of the ANSWER: the same
     // path read through two themes has different readers.
     queryKey: ['screen-file', item.path, theme ?? 'default'],
@@ -212,7 +229,14 @@ function GalleryCard(
       className="text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
-      <div className={`h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+      <div className={`relative h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+        {isFetching && !item.placeholder && (
+          <span
+            data-testid="card-updating"
+            title="Fetching the latest bytes"
+            className="absolute right-1 top-1 z-10 h-3 w-3 animate-spin rounded-full border border-accent border-t-transparent"
+          />
+        )}
         {item.placeholder
           // An invitation, not a thumbnail: there is no file yet, and the card
           // exists so an artist can see the gap and click into it.
@@ -257,6 +281,8 @@ function GalleryCard(
               ['ANSI', item.formats.ansi],
               ['SEQ', item.formats.petscii],
               ['RIP', item.formats.rip],
+              ['TTX', item.formats.teletext],
+              ['TTI', item.formats.teletextNative],
             ] as const).map(([label, have]) => (
               <span
                 key={label}

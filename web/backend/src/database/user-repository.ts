@@ -121,7 +121,10 @@ export class UserRepository extends BaseRepository<User> {
   async appendUserToDisk(id: string): Promise<void> {
     const user = await this.getUserById(id);
     if (!user) return;
-    const slotNumber = userDatabaseManager.getUserCount();
+    // 1-indexed Amiga slot: the record being appended lands at file index
+    // getUserCount(), which is slot getUserCount()+1. (Slot 0 is a deleted
+    // account per express.e:21365.)
+    const slotNumber = userDatabaseManager.getUserCount() + 1;
     try {
       const userStruct = userDatabaseManager.userToStruct(user);
       userStruct.slotNumber = slotNumber;

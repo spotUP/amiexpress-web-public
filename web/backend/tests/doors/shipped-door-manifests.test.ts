@@ -87,7 +87,15 @@ describe('shipped door manifests', () => {
       // The 68K route: the board writes <cfgFile>, the door parses it. Its
       // source has to name each cfgKey, or that key reaches nothing.
       const source = cSourceFor(manifest.command);
-      expect(source).not.toBeNull();
+      if (source === null) {
+        // Binary-only door (Bulls): no source in the tree to name the keys,
+        // so the proof is the file the binary parses — every bound setting
+        // must resolve in the shipped cfg, or the form edits into the void.
+        for (const setting of manifest.settings) {
+          expect(cfgBindingResolves(doorDir, manifest, setting)).toBe(true);
+        }
+        return;
+      }
       for (const setting of manifest.settings) {
         const cfgKey = setting.cfgKey ?? setting.key;
         expect(source).toContain(cfgKey);
@@ -119,3 +127,52 @@ function cSourceFor(command: string): string | null {
   if (sources.length === 0) return null;
   return sources.map(name => fs.readFileSync(path.join(dir, name), 'utf8')).join('\n');
 }
+
+/**
+ * A binary-only door's proof: every bound setting resolves in the shipped
+ * cfg file the binary parses. Same question the C-source check answers for
+ * compiled doors — does this key reach anything — asked of the file.
+ */
+function cfgBindingResolves(doorDir: string, manifest: any, setting: any): boolean {
+  const file = setting.cfgFile ?? manifest.cfgFile;
+  if (!file || (!setting.cfgKey && !setting.cfgRow)) return false;
+  const full = path.join(doorDir, file);
+  if (!fs.existsSync(full)) return false;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const empire = require('../../src/doors/text-cfg/empire');
+  const parsed = empire.parseEmpireFile(fs.readFileSync(full));
+  const row = setting.cfgRow;
+  if (row) {
+    if (row.field === 'title' || row.field === 'file') {
+      return empire.getBullRows(parsed).length > (row.row ?? -1);
+    }
+    if (row.field === 'mask') {
+      return empire.getMaskRows(parsed).length > (row.row ?? -1);
+    }
+    if (setting.cfgKey) {
+      return empire.getKv(parsed, row.section, setting.cfgKey) !== undefined;
+    }
+    return false;
+  }
+  return empire.getKv(parsed, 'init', setting.cfgKey) !== undefined;
+}
+
+/**
+ * Labels are what the sysop reads: two settings sharing one label render
+ * as the same radios twice with nothing telling them apart. Live
+ * 2026-09-11: the B form showed "Dual listing" twice - Bulls.CFG's
+ * DUAL_LISTING and joincnf.cfg's DUAL_LISTING under one name.
+ */
+describe('shipped manifest labels', () => {
+  it.each(doorsWithManifests)('%s labels every setting distinctly', doorName => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(DOORS_DIR, doorName, 'door.settings.json'), 'utf8')
+    );
+    const seen = new Map<string, string>();
+    for (const setting of manifest.settings) {
+      const label = String(setting.label ?? '').toLowerCase();
+      expect(seen.has(label)).toBe(false);
+      seen.set(label, setting.key);
+    }
+  });
+});

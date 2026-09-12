@@ -57,9 +57,16 @@ export interface ArtistScreenDialogProps {
   onClose: () => void;
   /** Reopen on another path - how a redraw lands the artist on their copy. */
   onOpenPath: (path: string) => void;
+  /**
+   * True when the open theme belongs to somebody else (the sysop auditing
+   * an artist's studio). Saves then confirm with the theme's name, so a
+   * switch nobody noticed cannot silently land art in the wrong theme.
+   * Defaults to the theme's own `mine` flag.
+   */
+  auditing?: boolean;
 }
 
-export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription }: ArtistScreenDialogProps) {
+export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -67,6 +74,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const [undrawable, setUndrawable] = useState<string | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const addFormatInput = useRef<HTMLInputElement | null>(null);
+  const ansiUploadInput = useRef<HTMLInputElement | null>(null);
   /** Which format the artist is about to add, once they pick a file. */
   const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -148,9 +156,15 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     },
     onError: (error: ApiError) => {
       // 409 is "you already redrew this" - the artist wanted to edit it, so
-      // take them there rather than making them find it themselves.
+      // take them there rather than making them find it themselves. The
+      // server answers the existing theme path alongside the refusal.
       if (error.status === 409) {
+        const to = (error.data as { to?: string } | undefined)?.to;
         queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+        if (typeof to === 'string' && to) {
+          onOpenPath(to);
+          return;
+        }
         showSuccess(error.message);
         return;
       }
@@ -258,7 +272,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     });
   }, [path, index]);
 
-  const missing = useMemo(() => (isNew ? [] : missingFormats(path, siblings)), [path, siblings, isNew]);
+  const missing = useMemo(() => {
+    // A blank slot draws its ANSI on the canvas; the other formats arrive
+    // by upload. Before, an empty slot offered neither - "i cant upload
+    // screens to this one" - because the whole strip was gated on !isNew.
+    if (isNew) return missingFormats(path, []);
+    return missingFormats(path, siblings);
+  }, [path, siblings, isNew]);
 
   /** Bytes, never text, all the way through. */
   const readAsBase64 = (chosen: File): Promise<string> =>
@@ -288,9 +308,31 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
 
   const title = path ? path.split('/').pop() ?? path : '';
 
+  /**
+   * Whose files these writes land in. Auditing (somebody else's theme) does
+   * not refuse - the sandbox owns that - but every write confirms with the
+   * theme's name first: the sysop replaced tango's art while meaning to
+   * replace 607080's, through a theme switch nobody saw happen.
+   */
+  const auditingHere = auditing ?? theme.mine === false;
+  const confirmAuditWrite = async (what: string): Promise<boolean> => {
+    if (!auditingHere) return true;
+    return confirm({
+      title: `Save into ${theme.title}?`,
+      message: `${what} lands in ${theme.owner ? `${theme.owner}'s` : 'this'} theme (${theme.slug}), not yours. The board serves it to callers wearing that theme.`,
+      confirmText: `Save into ${theme.title}`,
+    });
+  };
+
   return (
     <Modal open={!!path} title={title} onClose={onClose} maxWidth="max-w-4xl">
       {isLoading && <SkeletonRows rows={4} />}
+
+      {auditingHere && (
+        <p className="text-sm text-accent border border-dashed border-accent rounded p-2">
+          Editing in {theme.title}{theme.owner ? ` (${theme.owner}'s theme)` : ''} — saves land there, not in yours.
+        </p>
+      )}
 
       {isNew && (
         <p className="text-sm text-content-secondary">
@@ -362,6 +404,59 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               const chosen = event.target.files?.[0];
               event.target.value = '';
               if (!chosen || !addingFormat) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
+              writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
+              setAddingFormat(null);
+            }}
+          />
+        </div>
+      )}
+      {isNew && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-content-secondary">ANSI draws on the canvas below. Bring the rest:</span>
+          <button
+            type="button"
+            className="px-2 py-1 border border-dashed border-border text-content-secondary"
+            onClick={() => ansiUploadInput.current?.click()}
+          >
+            + ANSI drawing
+          </button>
+          {missing.map(gap => (
+            <button
+              key={gap.ext}
+              type="button"
+              className="px-2 py-1 border border-dashed border-border text-content-secondary"
+              onClick={() => { setAddingFormat(gap); addFormatInput.current?.click(); }}
+            >
+              + {gap.label}
+            </button>
+          ))}
+          <input
+            ref={ansiUploadInput}
+            type="file"
+            aria-label="Upload ANSI drawing"
+            className="hidden"
+            onChange={async event => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen || !path) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
+              // Fresh file: nothing to carry over. The write invalidates
+              // the index, the slot flips to drawn, and the dialog shows
+              // the uploaded art.
+              writeBytes.mutate({ target: path, bytes: await readAsBase64(chosen) });
+            }}
+          />
+          <input
+            ref={addFormatInput}
+            type="file"
+            aria-label="Add a format"
+            className="hidden"
+            onChange={async event => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen || !addingFormat) return;
+              if (!(await confirmAuditWrite(chosen.name))) return;
               writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
               setAddingFormat(null);
             }}
@@ -376,8 +471,9 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               content={file?.content ?? ''}
               filePath={path ?? undefined}
               readOnly={!mine}
-              onSave={mine ? bytes => save.mutate(bytes) : undefined}
+              onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
               onCancel={onClose}
+              saving={save.isPending || writeBytes.isPending}
             />
           ) : file?.format === 'petscii' ? (
             <PetsciiScreenPreview content={file.content} />
@@ -389,8 +485,9 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               mci={file?.mci ?? []}
               filePath={path ?? undefined}
               onChange={setEditing}
-              onSave={base64 => save.mutate(base64)}
+              onSave={async base64 => { if (await confirmAuditWrite('This drawing')) save.mutate(base64); }}
               onCancel={onClose}
+              saving={save.isPending || writeBytes.isPending}
             />
           ) : (
             <ReadOnlyArt content={file?.content ?? ''} mci={file?.mci ?? []} filePath={path} onClose={onClose} />
@@ -535,7 +632,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
             <button
               type="button"
               className="btn-primary"
-              onClick={() => path && writeBytes.mutate({ target: path, bytes: pendingUpload.bytes, carry: carryCodes })}
+              onClick={async () => { if (path && await confirmAuditWrite(pendingUpload.name)) writeBytes.mutate({ target: path, bytes: pendingUpload.bytes, carry: carryCodes }); }}
             >
               Write it
             </button>

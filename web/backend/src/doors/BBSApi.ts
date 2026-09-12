@@ -530,6 +530,11 @@ console.log('[BBSApi] Mouse events disabled');
    */
   setTerminalMode(mode: 'fixed' | 'wide'): void {
     console.log(`[BBSApi] setTerminalMode called with mode=${mode}, socket.id=${this.socket.id}`);
+    // Remembered on the session, so the board can put fixed back on door
+    // exit even when the door never calls disableWideMode (crash, kick,
+    // or a door that never learned the call) - stranded wide terminals at
+    // the menu are that omission, live 2026-09-11.
+    (this.session as any).doorTerminalWide = mode === 'wide';
     this.socket.emit('terminal-mode', mode);
     console.log(`[BBSApi] Emitted terminal-mode event with mode=${mode}`);
   }

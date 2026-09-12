@@ -28,6 +28,7 @@ import { DoorConfig, DoorConstants } from "./DoorTypes.js";
 import { Socket } from "socket.io";
 import { c64AdapterFor } from "../server/c64-door-adapter";
 import { C64_COLUMNS } from "./xim/screen-width.util";
+import { createEmpireNarrowShadow } from "./api/file-shadow";
 import * as path from "path";
 import * as fs from "fs";
 import * as amigafs from "../utils/amigafs";
@@ -538,6 +539,13 @@ debugLog("[LibraryManager] Creating DOS.library...");
       const adapter = c64AdapterFor(this.socket);
       return !!adapter && adapter.columns <= C64_COLUMNS;
     });
+    // Session-scoped CFG shadows: a narrow caller reads single-column
+    // Empire configs (Bulls DUAL_LISTING forced to NO) while the disk file
+    // - and every other node - is untouched. Same question, same place as
+    // the narrow-art redirect above; the manifest declares what rewrites.
+    this.dosLibrary.setShadowProvider(
+      createEmpireNarrowShadow({ session: this.config.bbsSession, doorDir })
+    );
     this.dosLibrary.setBasePaths(projectRoot);
     this.dosLibrary.setEnvironment(this.config.env);
     this.dosLibrary.setInheritedHandles(1, 2);

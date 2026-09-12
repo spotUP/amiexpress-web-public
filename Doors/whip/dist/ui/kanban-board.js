@@ -3,11 +3,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.wrapTitle = wrapTitle;
+exports.columnGeometry = columnGeometry;
+exports.formatKanbanCard = formatKanbanCard;
 exports.showKanbanBoard = showKanbanBoard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
 const chrome_1 = require("./chrome");
@@ -25,6 +29,17 @@ const COMPACT_HINTS = [
     { key: 'Ent', does: 'Edit' },
     { key: 'Q', does: 'Back' },
 ];
+const CARRY_HINTS = [
+    { key: 'Arrows', does: 'Carry' },
+    { key: 'Enter', does: 'Drop' },
+    { key: 'E', does: 'Edit' },
+    { key: 'ESC', does: 'Cancel' },
+];
+const COMPACT_CARRY_HINTS = [
+    { key: 'Arr', does: 'Carry' },
+    { key: 'Ent', does: 'Drop' },
+    { key: 'ESC', does: 'Cancel' },
+];
 const COLUMNS = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS = {
     'todo': 'TODO',
@@ -32,13 +47,105 @@ const COLUMN_LABELS = {
     'testing': 'TESTING',
     'done': 'DONE'
 };
-async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi) {
+/**
+ * Word-wrap a task title to the column width: breaks on spaces, and only
+ * splits inside a word with a trailing hyphen when the word itself is wider
+ * than the column. Pure, so the wrapping is unit-tested, not eyeballed.
+ */
+function wrapTitle(title, width) {
+    const lines = [];
+    const words = title.split(/\s+/).filter((w) => w.length > 0);
+    if (words.length === 0)
+        return [''];
+    let current = '';
+    const push = () => {
+        if (current.length > 0)
+            lines.push(current);
+        current = '';
+    };
+    for (const word of words) {
+        if (word.length > width) {
+            // A word wider than the column: hard-split with hyphens.
+            push();
+            let rest = word;
+            while (rest.length > width) {
+                lines.push(rest.slice(0, width - 1) + '-');
+                rest = rest.slice(width - 1);
+            }
+            current = rest;
+            continue;
+        }
+        const candidate = current.length === 0 ? word : `${current} ${word}`;
+        if (candidate.length > width) {
+            push();
+            current = word;
+        }
+        else {
+            current = candidate;
+        }
+    }
+    push();
+    return lines;
+}
+/**
+ * Column geometry for a screen width (2026-09-10): four equal columns
+ * across the full width, so a widened terminal spreads the board
+ * instead of leaving it narrow. Pure - the board recomputes it on
+ * resize; the probe is width in, widths out.
+ */
+function columnGeometry(screenWidth) {
+    const totalWidth = Math.max(40, screenWidth - 1);
+    const colWidth = Math.max(10, Math.floor(totalWidth / 4));
+    return { totalWidth, colWidth, leftOf: (i) => i * colWidth };
+}
+/**
+ * One task as a multi-line card: full wrapped title rows, then the meta
+ * row (priority, points, assignee). Replaces the old single-line
+ * truncated form ("BBS Re.. [L] 10"), which left six readable characters.
+ */
+function formatKanbanCard(task, width, assigneeHandle, carried = false, selected = false) {
+    const priorityInitial = task.priority[0].toUpperCase();
+    const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
+    // A carried task shows its grip AND its held state: the marker eats
+    // its own cells so the wrap width shrinks by exactly that much, and
+    // every row inverts - a held card reads nothing like a merely
+    // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
+    // A selected (not carried) card inverts the same way: the list widget
+    // highlights only the first visual row of a multi-row item, which left
+    // the rest of the title and the meta row dark (screenshot, 2026-09-10).
+    const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
+    if (carried && titleRows.length > 0)
+        titleRows[0] = `>> ${titleRows[0]}`;
+    const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''}`;
+    const rows = [...titleRows, meta];
+    if (!carried && !selected)
+        return rows.join('\n');
+    return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
+}
+async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
         screen.alloc();
         let currentColumn = 0;
         let tasks = await dataManager.getTasksForProject(project.id);
+        // Open modal dialogs under this counter; the keyHandler below ignores
+        // everything while it is non-zero (see the guard there).
+        let modalDepth = 0;
+        async function withModal(fn) {
+            modalDepth++;
+            try {
+                return await fn();
+            }
+            finally {
+                modalDepth--;
+            }
+        }
+        // Keyboard carry: Enter grabs the task under the cursor, arrows move
+        // the cursor (left/right carry the task along, unsaved), Enter drops
+        // (one persisted move with full side effects), ESC puts it back.
+        // E keeps the old Enter job (edit).
+        let carried = null;
         // Drag and drop state
         let dragState = {
             active: false,
@@ -57,10 +164,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 partyInfo = ` | Party: ${party.name} in ${days} days`;
             }
         }
+        // Menu bar row (ui/menu.ts): headers and columns slide down one
+        // row when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -76,10 +186,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             mouse: false,
             clickable: false,
         });
-        // Column containers - calculate width based on screen width
-        // Leave 1 char margin on right to ensure border is visible
-        const totalWidth = screen.width - 1;
-        const colWidth = Math.floor(totalWidth / 4);
+        // Column containers - full width, recomputed on resize so a
+        // widened terminal spreads the board (2026-09-10). paintLists
+        // re-wraps cards from the same numbers, so one relayout covers all.
+        let { colWidth } = columnGeometry(screen.width);
         const columnBoxes = [];
         const columnLists = [];
         const leftMargin = 0;
@@ -88,15 +198,18 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             const label = COLUMN_LABELS[status];
             const box = (0, blessed_helpers_1.createBox)({
                 parent: screen,
-                top: 3,
+                top: barH + 3,
                 left: leftMargin + (i * colWidth),
                 width: colWidth,
-                height: '100%-6',
+                height: `100%-${barH + 6}`,
                 fixed: true,
                 border: { type: 'line' },
                 label: ` ${label} `,
                 style: {
-                    border: { fg: i === currentColumn ? 'yellow' : 'cyan' },
+                    // Base color only. The focused column whitens by itself (SDK
+                    // resolveStateBorder) - the door stopped painting focus by
+                    // hand 2026-09-10, which is what fought the SDK default.
+                    border: { fg: door_theme_1.T.chrome },
                     bg: door_theme_1.T.ground
                 },
                 focusable: false,
@@ -143,8 +256,11 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             mouse: false,
             clickable: false,
         });
-        // The whole chrome from the door's ONE call.
-        const chrome = (0, chrome_1.attachWhipChrome)({
+        // The whole chrome from the door's ONE call. Reattached with carry
+        // hints while a task is held (see setCarryMode): the SDK owns the
+        // footer row, so the hints change by reattaching, not by painting
+        // over it.
+        let chrome = (0, chrome_1.attachWhipChrome)({
             screen,
             header,
             footer,
@@ -156,13 +272,25 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             // damage whichever one happened to be focused at attach time.
             glitch: () => columnLists[currentColumn],
         });
+        const setCarryMode = (on) => {
+            chrome.stop();
+            chrome = (0, chrome_1.attachWhipChrome)({
+                screen,
+                header,
+                footer,
+                title: `KANBAN: ${project.name}${partyInfo}`,
+                hints: on ? CARRY_HINTS : HINTS,
+                compactHints: on ? COMPACT_CARRY_HINTS : COMPACT_HINTS,
+                glitch: () => columnLists[currentColumn],
+            });
+            screen.render();
+        };
         // Debounce timer for navigation updates
         let updateTimeout = null;
         let isUpdating = false;
         const updateListsImmediate = () => {
-            for (let i = 0; i < COLUMNS.length; i++) {
-                columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
-            }
+            // focus() + render() is the whole job: the SDK whitens the
+            // focused box, so there is no per-column painting here anymore.
             columnLists[currentColumn].focus();
             screen.render();
         };
@@ -176,29 +304,8 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             if (immediate) {
                 isUpdating = true;
                 tasks = await dataManager.getTasksForProject(project.id);
-                for (let i = 0; i < COLUMNS.length; i++) {
-                    const status = COLUMNS[i];
-                    const columnTasks = tasks.filter(t => t.status === status);
-                    const maxTitleLen = Math.max(8, colWidth - 12);
-                    const items = columnTasks.map(task => {
-                        const priorityInitial = task.priority[0].toUpperCase();
-                        const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
-                        const title = task.title.length > maxTitleLen
-                            ? task.title.substring(0, maxTitleLen - 2) + '..'
-                            : task.title;
-                        return `${title} {${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points}`;
-                    });
-                    // Clear items first, then set new ones to ensure proper refresh
-                    columnLists[i].clearItems();
-                    columnLists[i].setItems(items.length > 0 ? items : []);
-                }
-                // The header is not repainted here any more: the chrome's masthead
-                // owns that row and redraws itself.
-                for (let i = 0; i < COLUMNS.length; i++) {
-                    columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
-                }
-                columnLists[currentColumn].focus();
-                screen.render();
+                handlesById = await loadHandles();
+                paintLists();
                 isUpdating = false;
             }
             else {
@@ -209,20 +316,71 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 updateListsImmediate();
             }
         };
+        /** Handle per id for card meta rows. Refreshed on every reload. */
+        let handlesById = {};
+        const loadHandles = async () => {
+            try {
+                const users = await dataManager.loadUsers();
+                const map = {};
+                for (const u of Object.values(users)) {
+                    if (u?.userId && u?.handle)
+                        map[u.userId] = u.handle;
+                }
+                return map;
+            }
+            catch {
+                return {};
+            }
+        };
+        /** Repaint columns from the in-memory task list (no reload). */
+        const paintLists = () => {
+            for (let i = 0; i < COLUMNS.length; i++) {
+                const status = COLUMNS[i];
+                const columnTasks = tasks.filter(t => t.status === status);
+                const cardWidth = Math.max(8, colWidth - 2);
+                const sel = columnLists[i].selected || 0;
+                const items = columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id, 
+                // Selected rows invert whole: the widget highlights only the
+                // first visual row of a multi-row card (2026-09-10).
+                idx === sel && i === currentColumn));
+                // Clear items first, then set new ones to ensure proper refresh
+                columnLists[i].clearItems();
+                columnLists[i].setItems(items.length > 0 ? items : []);
+            }
+            columnLists[currentColumn].focus();
+            screen.render();
+        };
         await updateLists(true);
         // Get column index from screen X position
         const getColumnFromX = (x) => {
+            const geo = columnGeometry(screen.width);
             for (let i = 0; i < COLUMNS.length; i++) {
-                const colLeft = leftMargin + (i * colWidth);
-                const colRight = colLeft + colWidth;
+                const colLeft = leftMargin + geo.leftOf(i);
+                const colRight = colLeft + geo.colWidth;
                 if (x >= colLeft && x < colRight) {
                     return i;
                 }
             }
             return -1;
         };
+        // A widened (or narrowed) terminal re-lays the columns instead of
+        // leaving them at their opening width with dead space beside them.
+        const relayout = () => {
+            const geo = columnGeometry(screen.width);
+            colWidth = geo.colWidth;
+            for (let i = 0; i < COLUMNS.length; i++) {
+                columnBoxes[i].left = leftMargin + geo.leftOf(i);
+                columnBoxes[i].width = geo.colWidth;
+            }
+            paintLists();
+        };
+        screen.on('resize', relayout);
         // Start drag operation
         const startDrag = (colIndex, itemIndex, x, y) => {
+            // Keyboard carry and mouse drag never mix: drop (Enter) or cancel
+            // (ESC) first.
+            if (carried)
+                return;
             const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
             if (itemIndex >= columnTasks.length)
                 return;
@@ -251,6 +409,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     tags: true,
                 })
             };
+            setDropTarget(true);
             screen.render();
         };
         // Update drag ghost position
@@ -259,25 +418,27 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 return;
             dragState.ghost.top = y - 1;
             dragState.ghost.left = x - 8;
-            // Highlight potential drop target
-            const targetCol = getColumnFromX(x);
+            screen.render();
+        };
+        // Drop-target green rides the SDK hover state, not hand-painted
+        // borders (which the focus default would override mid-drag anyway):
+        // while a drag is active the box under the mouse goes green.
+        const setDropTarget = (on) => {
             for (let i = 0; i < COLUMNS.length; i++) {
-                if (i === targetCol && targetCol !== dragState.fromColumn) {
-                    columnBoxes[i].style.border.fg = 'green';
+                const style = columnBoxes[i].options.style;
+                if (on) {
+                    style.hover = { ...(style.hover ?? {}), border: { fg: door_theme_1.T.ok } };
                 }
-                else if (i === currentColumn) {
-                    columnBoxes[i].style.border.fg = 'yellow';
-                }
-                else {
-                    columnBoxes[i].style.border.fg = 'cyan';
+                else if (style.hover) {
+                    delete style.hover;
                 }
             }
-            screen.render();
         };
         // End drag operation
         const endDrag = async (x, y) => {
             if (!dragState.active || !dragState.task)
                 return;
+            setDropTarget(false);
             // Capture task info before resetting state
             const taskToMove = dragState.task;
             const fromCol = dragState.fromColumn;
@@ -307,10 +468,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 await updateLists(true);
             }
             else {
-                // Dropped on same column or outside - just refresh to reset borders
-                for (let i = 0; i < COLUMNS.length; i++) {
-                    columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
-                }
+                // Dropped on same column or outside - just refresh.
                 screen.render();
             }
         };
@@ -360,14 +518,27 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         screen.on('mouse', mouseHandler);
         // Listen on each column for mouseup in case screen doesn't get it
         columnLists.forEach(list => list.on('mouse', elementMouseHandler));
+        // Menu picks leave this board for wherever the app loop sends them.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => columnLists[currentColumn].focus());
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             if (updateTimeout)
                 clearTimeout(updateTimeout);
             screen.off('keypress', keyHandler);
             screen.off('mouse', mouseHandler);
+            screen.off('resize', relayout);
             columnLists.forEach(list => list.off('mouse', elementMouseHandler));
             if (dragState.ghost)
                 screen.remove(dragState.ghost);
@@ -379,6 +550,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             // Ignore keys during drag
             if (dragState.active)
                 return;
+            // Ignore keys while a modal dialog is open. Modals (edit, create,
+            // move picker, delete confirm) register their own screen keys, but
+            // declined keys still bubble here: picking a move destination with
+            // Enter opened the edit dialog on top of the move, and Escape in a
+            // title field closed the board behind the dialog (2026-09-09).
+            if (modalDepth > 0)
+                return;
             if (key.name === 'left' || key.name === 'right') {
                 if (key.name === 'left') {
                     currentColumn = Math.max(0, currentColumn - 1);
@@ -386,29 +564,56 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 else {
                     currentColumn = Math.min(COLUMNS.length - 1, currentColumn + 1);
                 }
-                updateLists(false);
+                if (carried) {
+                    // Carry along, unsaved: the drop persists, ESC restores. Paint
+                    // only - a reload would discard the carried (unsaved) status.
+                    carried.task.status = COLUMNS[currentColumn];
+                    paintLists();
+                }
+                else {
+                    updateLists(false);
+                }
                 return;
             }
             (async () => {
                 const columnTasks = tasks.filter(t => t.status === COLUMNS[currentColumn]);
                 switch (key.name) {
                     case 'enter':
+                        if (carried) {
+                            const { task, fromStatus } = carried;
+                            carried = null;
+                            setCarryMode(false);
+                            if (task.status !== fromStatus) {
+                                await moveTask(screen, task, task.status, dataManager, achievementManager, user, project, bbsApi);
+                            }
+                            await updateLists(true);
+                        }
+                        else if (columnTasks.length > 0) {
+                            const selectedIndex = columnLists[currentColumn].selected || 0;
+                            const task = columnTasks[selectedIndex];
+                            carried = { task, fromStatus: task.status };
+                            setCarryMode(true);
+                            paintLists();
+                        }
+                        break;
+                    case 'e':
+                    case 'E':
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            await (0, task_editor_1.editTask)(screen, task, user, dataManager, achievementManager, project, bbsApi);
+                            await withModal(() => (0, task_editor_1.editTask)(screen, task, user, dataManager, achievementManager, project, bbsApi));
                             await updateLists(true);
                         }
                         break;
                     case 'n':
-                        await (0, task_editor_1.createTask)(screen, project, user, dataManager, bbsApi);
+                        await withModal(() => (0, task_editor_1.createTask)(screen, project, user, dataManager, bbsApi));
                         await updateLists(true);
                         break;
                     case 'm':
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const newStatus = await selectMoveDestination(screen);
+                            const newStatus = await withModal(() => selectMoveDestination(screen));
                             if (newStatus) {
                                 await moveTask(screen, task, newStatus, dataManager, achievementManager, user, project, bbsApi);
                                 await updateLists(true);
@@ -419,7 +624,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const confirmed = await (0, confirm_delete_1.confirmDelete)(screen, 'task', task.title);
+                            const confirmed = await withModal(() => (0, confirm_delete_1.confirmDelete)(screen, 'task', task.title));
                             if (confirmed) {
                                 await dataManager.deleteTask(task.id);
                                 if (bbsApi?.emitCustomEvent) {
@@ -436,6 +641,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         break;
                     case 'q':
                     case 'escape':
+                        if (carried) {
+                            carried.task.status = carried.fromStatus;
+                            carried = null;
+                            setCarryMode(false);
+                            paintLists();
+                            break;
+                        }
                         cleanup();
                         resolve();
                         break;

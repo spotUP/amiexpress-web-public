@@ -8,24 +8,10 @@ import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import {
   FIT_TO_WINDOW,
-  ZOOM_CORNERS,
-  clampFraction,
-  cornerAt,
-  cursorForCorner,
-  dragZoom,
-  isBezelPoint,
-  isZoomWheel,
-  nextPreset,
-  readStoredZoom,
-  wheelZoom,
-  pinchZoom,
-  pinchDistance,
-  writeStoredZoom,
-  type ZoomCorner,
-  type ZoomRect,
 } from '../utils/terminal-zoom';
 import {
   DEFAULT_BBS_FONT,
+  TELETEXT_FONT,
   applyFont,
   fontFamilyFor,
   lineHeightFor,
@@ -35,7 +21,7 @@ import { readCookieModemSpeed, writeCookieModemSpeed } from '../utils/session-co
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { classifyKey } from '../utils/key-overrides';
+import { classifyKey, trackKeyId, repeatAlive } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
@@ -94,23 +80,12 @@ interface BBSTerminalProps {
    * strip covers the bottom rows.
    */
   fillParent?: boolean;
+  // REMOVED (sysop, 2026-09-12): zoomEnabled (viewer zoom override) -
+  // the browser window alone decides the size now. Kept out of the props
+  // so no host can re-enable what no longer exists.
   /**
-   * Whether the viewer may override the fit with the zoom gestures
-   * (Cmd/Ctrl+wheel and pinch, a bezel-corner drag, a double-click on the
-   * bezel). Default true.
-   *
-   * The BBS page turns it OFF for a handheld session: refit() already fits
-   * the grid to the phone, there is no pointer to put on a corner, and a
-   * handheld that wrote the override would erase the fraction the same
-   * viewer chose at their desk.
-   */
-  zoomEnabled?: boolean;
-  /**
-   * Fires with the viewer's zoom fraction - their override as a fraction of
-   * the fit, 1 meaning "follow the window" - whenever it changes, and once on
-   * mount with whatever this browser remembered. The host page owns the fit
-   * and does the one multiply; this component never scales the size it is
-   * given.
+   * REMOVED (sysop, 2026-09-12): fired once on mount with FIT_TO_WINDOW
+   * for hosts that still listen; no gesture can change it any more.
    */
   onZoomChange?: (fraction: number) => void;
   /**
@@ -179,6 +154,13 @@ export interface BBSTerminalRef {
   getSocket: () => Socket | null;
   getTerminal: () => Terminal | null;
   /**
+   * True while a teletext session owns the look (TDAText face at 2x).
+   * The page's fit and the cell-size effect must not write options
+   * past it - see texttv-mode below (ghost: the mode applied, then a
+   * refit wrote the calibrated size back and T looked 1x, 2026-09-10).
+   */
+  isTexttvMode: () => boolean;
+  /**
    * Press a key on behalf of an on-screen control. Runs the exact same
    * game-mode path as a physical keydown (held-key state + custom key repeat),
    * so DAS/ARR and held keys behave identically. No-op outside game mode.
@@ -221,7 +203,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   forcedMode,
   keepFocused,
   fillParent,
-  zoomEnabled = true,
   onZoomChange,
   onTerminalModeChange,
   centerInHost = true,
@@ -245,29 +226,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
 
   /**
-   * The viewer's OVERRIDE, as a fraction of the fit (1 = follow the window).
-   *
-   * Not a size and not a multiplier on a constant: the page computes the FIT
-   * - the largest cell size at which the whole 80x25 grid plus its bezel
-   * fits the viewport - and multiplies it by this fraction, once. Keeping the
-   * override relative is what makes it survive a window resize. See
-   * utils/terminal-zoom.ts.
-   *
-   * Seeded from this browser's last session; an absent or unusable stored
-   * value means "follow the window".
+   * REMOVED (sysop, 2026-09-12): the viewer zoom override is gone - the
+   * fraction is always fit-to-window and the browser window alone decides
+   * the size. Kept as a constant (not removed) because the canvas surface
+   * sizes its box from it below.
    */
-  const [zoomFraction, setZoomFraction] = useState<number>(
-    () => (zoomEnabled ? readStoredZoom() ?? FIT_TO_WINDOW : FIT_TO_WINDOW),
-  );
-  const zoomFractionRef = useRef(zoomFraction);
-  zoomFractionRef.current = zoomFraction;
+  const zoomFraction = FIT_TO_WINDOW;
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;
   const onTerminalModeChangeRef = useRef(onTerminalModeChange);
   onTerminalModeChangeRef.current = onTerminalModeChange;
-  /** Which corner the pointer is on (or dragging), for the cursor and the marks. */
-  const [activeCorner, setActiveCorner] = useState<ZoomCorner | null>(null);
-  /** The bezelled box: what the zoom gestures are measured against. */
+  /** REMOVED (sysop, 2026-09-12): corner marks went with the corner drag. */
+  /** The bezelled box wrapping the terminal and its overlays. */
   const zoomBoxRef = useRef<HTMLDivElement>(null);
 
   // Tracks the current calibrated font size so set-font / font-preference events
@@ -324,7 +294,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
-  const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
+  const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers, by physical key
+  const keyLastSeen = useRef<Record<string, number>>({});  // Last keydown edge per physical key (repeat heartbeat)
+  const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
   // ref (on-screen game controls) drives the SAME code path as the window
@@ -432,6 +404,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const gamepadManagerRef = useRef<GamepadManager | null>(null);
   const musicPlayerRef = useRef<HTMLAudioElement | null>(null);  // Background music player (for doors like GRANDMASTER)
   const mouseTrackingDisabledRef = useRef<boolean>(false); // Ctrl+Shift+M toggle state
+  // Teletext session mode (T answer at the graphics prompt, `texttv-mode`
+  // event below). The face and palette belong to this session only: the
+  // previous theme is remembered for the restore, and the mode flag keeps
+  // font-preference / set-font from clobbering the look mid-session.
+  const texttvModeRef = useRef<boolean>(false);
+  const texttvPrevThemeRef = useRef<any>(null);
+  const texttvPrevOverflowRef = useRef<string | null>(null);
+  const texttvPrevColsRef = useRef<number | null>(null);
+  const texttvPrevRowsRef = useRef<number | null>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -441,7 +422,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       { family: 'Topaz_a1200', url: '/fonts/Topaz_a1200_v1.0.ttf' },
       { family: 'Topaz_a500', url: '/fonts/Topaz_a500_v1.0.ttf' },
       { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' },
-      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' }
+      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' },
+      { family: 'TDAText', url: '/fonts/TDAText.woff2' }
     ];
 
     const loadFonts = async () => {
@@ -818,6 +800,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
+    isTexttvMode: () => texttvModeRef.current,
     pressGameKey: (key: string, code: string) => gameKeyPressRef.current?.(key, code),
     releaseGameKey: (key: string, code: string) => gameKeyReleaseRef.current?.(key, code),
     sendMouse: (type: TerminalMouseEventType, cell: TerminalCell, modifiers?: TerminalMouseModifiers) => {
@@ -1285,6 +1268,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Reset game mode state at initialization to prevent stuck state from previous sessions
     gameMode.current = false;
     keyState.current = {};
+    keyNames.current = {};
+    keyLastSeen.current = {};
     // Clear any lingering key repeat timers
     Object.keys(keyRepeatTimers.current).forEach(key => {
       clearTimeout(keyRepeatTimers.current[key]);
@@ -1390,29 +1375,41 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (NO_REPEAT_KEYS.has(key)) {
         return;
       }
+      // Physical identity: 'L'-down + 'l'-up (Shift released first) is one
+      // key, and tracking by character strands the timer on the down-case.
+      const id = trackKeyId({ key, code });
 
       // Clear any existing timer for this key
-      if (keyRepeatTimers.current[key]) {
-        clearTimeout(keyRepeatTimers.current[key]);
+      if (keyRepeatTimers.current[id]) {
+        clearTimeout(keyRepeatTimers.current[id]);
       }
 
       const repeatKey = () => {
-        const canRepeat = keyState.current[key] && gameMode.current && socketRef.current?.connected;
+        // An orphaned timer (missed keyup, blur race, mode toggle) stops
+        // itself: a held key keeps producing OS auto-repeats, so silence
+        // means nobody is holding anything.
+        if (!repeatAlive(keyLastSeen.current[id] ?? 0, Date.now())) {
+          delete keyRepeatTimers.current[id];
+          return;
+        }
+        const canRepeat = keyState.current[id] && gameMode.current && socketRef.current?.connected;
         if (canRepeat) {
-          socketRef.current!.emit('key-down', { key, code, repeat: true });
-          keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+          socketRef.current!.emit('key-down', { key: keyNames.current[id] ?? key, code, repeat: true });
+          keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_RATE);
         }
       };
 
       // Start repeat after initial delay (allows single character typing)
-      keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
+      keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
     };
 
     const stopKeyRepeat = (key: string) => {
-      if (keyRepeatTimers.current[key]) {
-        clearTimeout(keyRepeatTimers.current[key]);
-        delete keyRepeatTimers.current[key];
+      const id = trackKeyId({ key, code: key });
+      if (keyRepeatTimers.current[id]) {
+        clearTimeout(keyRepeatTimers.current[id]);
+        delete keyRepeatTimers.current[id];
       }
+      delete keyLastSeen.current[id];
     };
 
     // Cursor, text selection and xterm pointer events, in one place so the
@@ -1434,9 +1431,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // this, so a touch press is indistinguishable from a physical one.
     const pressGameKey = (key: string, code: string, mods?: { alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
       if (!gameMode.current || !socketRef.current?.connected) return;
+      // Physical identity (see trackKeyId): 'L'-down and 'l'-up are one key.
+      const id = trackKeyId({ key, code });
       // Only send if key wasn't already pressed (prevents duplicate downs)
-      if (keyState.current[key]) return;
-      keyState.current[key] = true;
+      if (keyState.current[id]) return;
+      keyState.current[id] = true;
+      keyNames.current[id] = key;
+      keyLastSeen.current[id] = Date.now();
       // The MODIFIERS travel with the key. Without them a door in game mode
       // received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
       // "select" - so the size toggle could not work there however well the
@@ -1446,10 +1447,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     const releaseGameKey = (key: string, code: string) => {
+      // Physical identity, like the press: a Shift-released 'l'-up releases
+      // the 'L'-down. And unconditional: a release with no tracked press
+      // still stops the timer and tells the backend, so a desync heals
+      // instead of typing for ever.
+      const id = trackKeyId({ key, code });
+      stopKeyRepeat(id);
+      delete keyState.current[id];
+      delete keyNames.current[id];
       if (!socketRef.current?.connected) return;
-      if (!keyState.current[key]) return;
-      delete keyState.current[key];
-      stopKeyRepeat(key);
       socketRef.current.emit('key-up', { key, code });
     };
 
@@ -1475,8 +1481,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Game mode: send raw keydown events with custom key repeat
       if (gameMode.current && socketRef.current?.connected) {
-        // Ignore browser key repeat - we handle our own repeat logic
+        // Browser auto-repeat is the heartbeat, not input: it proves the
+        // key is still down (see repeatAlive), so stamp it and swallow it.
         if (ev.repeat) {
+          keyLastSeen.current[trackKeyId(ev)] = Date.now();
           ev.preventDefault();
           return;
         }
@@ -1501,13 +1509,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const clearAllKeyState = () => {
       // Game mode: send key-up for all held keys so backend knows they're released
       if (gameMode.current) {
-        for (const key of Object.keys(keyState.current)) {
-          if (keyState.current[key] && socketRef.current?.connected) {
-            socketRef.current.emit('key-up', { key, code: '' });
+        for (const id of Object.keys(keyState.current)) {
+          if (keyState.current[id] && socketRef.current?.connected) {
+            socketRef.current.emit('key-up', { key: keyNames.current[id] ?? id, code: '' });
           }
-          stopKeyRepeat(key);
+          stopKeyRepeat(id);
         }
         keyState.current = {};
+        keyNames.current = {};
       }
       // Normal mode: clear tracked keys to prevent stale repeat detection
       normalPressedKeys.clear();
@@ -2017,6 +2026,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('disconnect', (reason: string) => {
       console.log('[DISCONNECT] Client disconnected, reason:', reason);
+      // A teletext session ends with its socket: drop the mode flag so a
+      // later font-preference on this terminal is honoured, and give the
+      // terminal its previous palette, geometry and face back (the face
+      // follows via the server's font-preference on the next login).
+      if (texttvModeRef.current) {
+        texttvModeRef.current = false;
+        if (texttvPrevThemeRef.current !== null) {
+          try { term.options.theme = texttvPrevThemeRef.current; } catch { /* terminal may be disposed */ }
+          texttvPrevThemeRef.current = null;
+        }
+        if (texttvPrevColsRef.current !== null) {
+          try { term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24); } catch { /* disposed */ }
+          texttvPrevColsRef.current = null;
+          texttvPrevRowsRef.current = null;
+        }
+        if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
+          try { terminalRef.current.style.overflow = texttvPrevOverflowRef.current; } catch { /* disposed */ }
+          texttvPrevOverflowRef.current = null;
+        }
+      }
 
       // Log disconnect event for debugging
       console.log('[DISCONNECT] Disconnect details:', {
@@ -2333,6 +2362,55 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // screen is a C128's VDC unless the caller has said otherwise.
       setPetsciiPalette(shape.palette === 'vic' ? 'vic' : shape.cols === 80 ? 'vdc' : 'vic');
       ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
+    });
+
+    // Teletext session mode (T answer at the graphics prompt). Stays on the
+    // xterm surface - unlike PETSCII there is no canvas, only a face, a
+    // palette and a SIZE. Classic teletext is 40x25 at 12x10 cells; the
+    // terminal models 80x24, so the mode doubles the calibrated cell: 40
+    // teletext columns fill the width exactly, double-height rows take
+    // two, and the box scrolls (its CSS clips). The face applies uncached
+    // (session-font.ts: TELETEXT_FONT is outside BBS_FONTS and
+    // cacheFont=false) so the next connect's pre-login window never
+    // opens in it.
+    socket.on('texttv-mode', (data: { enabled: boolean }) => {
+      if (data?.enabled) {
+        console.log('[Terminal] Teletext mode on - TDAText face at 2x, teletext palette');
+        texttvModeRef.current = true;
+        if (texttvPrevThemeRef.current === null) texttvPrevThemeRef.current = term.options.theme;
+        term.options.theme = XTERM_CONFIG.teletextTheme;
+        if (texttvPrevColsRef.current === null) {
+          texttvPrevColsRef.current = term.cols;
+          texttvPrevRowsRef.current = term.rows;
+        }
+        // True 40x25 grid (same geometry PETSCII sessions use): the board
+        // draws 40 columns for this session, so the terminal shows 40.
+        // Direct resize, never the 'terminal-resize' socket event - that
+        // means "mount the C64 canvas" to this component.
+        term.resize(40, 25);
+        if (terminalRef.current && texttvPrevOverflowRef.current === null) {
+          texttvPrevOverflowRef.current = terminalRef.current.style.overflow || '';
+          terminalRef.current.style.overflow = 'auto';
+        }
+        void applyFont(term, TELETEXT_FONT, fontSizeRef.current * 2, false);
+      } else {
+        console.log('[Terminal] Teletext mode off - restoring session face');
+        texttvModeRef.current = false;
+        if (texttvPrevThemeRef.current !== null) {
+          term.options.theme = texttvPrevThemeRef.current;
+          texttvPrevThemeRef.current = null;
+        }
+        if (texttvPrevColsRef.current !== null) {
+          term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
+          texttvPrevColsRef.current = null;
+          texttvPrevRowsRef.current = null;
+        }
+        if (terminalRef.current && texttvPrevOverflowRef.current !== null) {
+          terminalRef.current.style.overflow = texttvPrevOverflowRef.current;
+          texttvPrevOverflowRef.current = null;
+        }
+        void applyFont(term, readCachedFont() ?? DEFAULT_BBS_FONT, fontSizeRef.current);
+      }
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)
@@ -2801,6 +2879,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
+      // A teletext session owns its face (TDAText + palette, `texttv-mode`
+      // above) - an explicit pick waits until the mode ends with it.
+      if (texttvModeRef.current) return;
       // One owner: utils/session-font.ts holds the stack, the line-height
       // map and the cache. xterm never shows a PETSCII session any more
       // (the canvas does), so the pick goes straight to xterm. The
@@ -2812,6 +2893,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
+      // A teletext session owns its face - the server preference applies
+      // once the mode ends (or never, if the caller stays in T all night).
+      if (texttvModeRef.current) return;
       // The server preference is the owner of the session font; this
       // arrives after login-success AND after session-restored (both emit
       // get-font-preference). It applies to xterm only - a 'P' session
@@ -2933,270 +3017,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // `options.fontSize`: the page's own fit probes real sizes onto the live
   // terminal (TerminalPage's refit -> measure), which is the whole reason it
   // ends the search by applying the size the terminal will KEEP.
+  //
+  // Except in teletext mode: the session owns its doubled cell, and this
+  // effect firing after it (recalibration, zoom fraction, any parent
+  // re-render with a new size) wrote the calibrated size straight back -
+  // the mode applied, then un-applied itself (2026-09-10).
   useEffect(() => {
-    if (terminalInstance.current) {
+    if (terminalInstance.current && !texttvModeRef.current) {
       terminalInstance.current.options.fontSize = fontSize;
     }
   }, [fontSize]);
 
-  // Tell the page which fraction of the fit the viewer is on, so it can size
-  // the terminal. Fires once on mount with whatever this browser remembered.
+  // Tell the page the fraction is fit-to-window (once, on mount - no
+  // gesture can change it any more).
   useEffect(() => {
-    onZoomChangeRef.current?.(zoomEnabled ? zoomFraction : FIT_TO_WINDOW);
-  }, [zoomFraction, zoomEnabled]);
-
-  /**
-   * The bezelled box's rectangle, cached.
-   *
-   * `onHoverMove` used to call getBoundingClientRect() on every pointermove
-   * over the whole box - a forced synchronous layout per pointer sample,
-   * which is the class of bug behind the DOORMAN freeze (see the mouse
-   * throttle further down). The box only moves when the window resizes or
-   * the cell size changes, so the rect is read then and on entry, and the
-   * hover test is pure arithmetic.
-   */
-  const boxRectRef = useRef<ZoomRect | null>(null);
-  const readBoxRect = useCallback((): ZoomRect | null => {
-    const box = zoomBoxRef.current;
-    if (!box) return null;
-    const rect = box.getBoundingClientRect();
-    const cached = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-    boxRectRef.current = cached;
-    return cached;
+    onZoomChangeRef.current?.(FIT_TO_WINDOW);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => {
-    boxRectRef.current = null; // the box just changed size; re-read on demand
-  }, [fontSize, surface, terminalMode]);
 
-  /**
-   * The three zoom inputs, all of them on the bezelled box and nowhere else.
-   *
-   * They set an OVERRIDE, expressed as a fraction of the fit - see
-   * utils/terminal-zoom.ts for why a fraction and not a size. The default,
-   * and the home step of the ladder, is FIT_TO_WINDOW: follow the browser
-   * window.
-   *
-   * 1. Cmd+wheel (macOS) / Ctrl+wheel, and a trackpad pinch - which every
-   *    browser delivers as a wheel event with `ctrlKey` synthesised true.
-   *    `preventDefault` happens HERE and only here, so the rest of the site
-   *    keeps ordinary browser page zoom. The listener is in the CAPTURE
-   *    phase and stops the event, because the door's own wheel forwarder
-   *    (`mouse-wheel`, attached to `.xterm-screen` inside this box) would
-   *    otherwise report every pinch to the running door as a scroll. Deltas
-   *    accumulate and are applied once per animation frame.
-   * 2. A drag from within CORNER_HIT_PX of any corner: the diagonal resize
-   *    cursor, a bracket mark that fades in at that corner, and the fraction
-   *    following the pointer's distance from the box centre, so the box
-   *    scales about its middle. Escape puts it back.
-   * 3. A double-click on the BEZEL - the padding ring, never the screen,
-   *    which belongs to the BBS - walks the preset ladder and home to fit.
-   *
-   * Off entirely when the host disables it (a handheld already fits itself,
-   * and letting it write the override would erase the desktop's), and in
-   * wide/fullscreen mode, where a door owns its own geometry.
-   */
-  useEffect(() => {
-    const box = zoomBoxRef.current;
-    if (!box || !zoomEnabled || terminalMode !== 'fixed') return;
+  // REMOVED (sysop, 2026-09-12): the three zoom inputs (wheel/pinch,
+  // corner drag, bezel double-click). The browser window alone decides
+  // the size now. The door's own wheel forwarder (`mouse-wheel` on
+  // `.xterm-screen`) is untouched - doors still get their scroll.
 
-    /**
-     * The one place a new fraction is accepted. Persisting happens HERE
-     * rather than in an effect on the value: only a change the viewer made
-     * is worth remembering, and a mount that changed nothing must not stamp
-     * the default over the value they chose on another day.
-     */
-    const commit = (next: number) => {
-      const clamped = clampFraction(next);
-      if (clamped === zoomFractionRef.current) return;
-      zoomFractionRef.current = clamped;
-      setZoomFraction(clamped);
-      writeStoredZoom(clamped);
-    };
-
-    // --- 1. wheel / pinch -------------------------------------------------
-    let wheelFrame: number | null = null;
-    let pendingDelta = 0;
-    const onWheel = (ev: WheelEvent) => {
-      if (!isZoomWheel(ev)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      pendingDelta += ev.deltaY;
-      if (wheelFrame !== null) return;
-      wheelFrame = requestAnimationFrame(() => {
-        wheelFrame = null;
-        const delta = pendingDelta;
-        pendingDelta = 0;
-        commit(wheelZoom(zoomFractionRef.current, delta));
-      });
-    };
-    box.addEventListener('wheel', onWheel, { capture: true, passive: false });
-
-    // --- 1b. two-finger pinch (phones) ------------------------------------
-    //
-    // The browser's own pinch is the wrong tool here: it zooms the whole PAGE,
-    // and the on-screen keyboard is `position: fixed` - anchored to the layout
-    // viewport - so a pinch slides the keys off the screen ("zooming on phones
-    // zooms the keyboard away"). The terminal's zoom is a font size and
-    // touches nothing else, so the pinch drives that instead and the keyboard
-    // cannot move. preventDefault is what stops the browser doing its own.
-    let pinchStartDistance = 0;
-    let pinchStartFraction = FIT_TO_WINDOW;
-    let pinchFrame: number | null = null;
-    let pinchLatest = 0;
-
-    const onTouchStart = (ev: TouchEvent) => {
-      if (ev.touches.length !== 2) return;
-      ev.preventDefault();
-      pinchStartDistance = pinchDistance(ev.touches[0], ev.touches[1]);
-      pinchStartFraction = zoomFractionRef.current;
-    };
-
-    const onTouchMove = (ev: TouchEvent) => {
-      if (ev.touches.length !== 2 || pinchStartDistance <= 0) return;
-      ev.preventDefault();
-      pinchLatest = pinchDistance(ev.touches[0], ev.touches[1]);
-      if (pinchFrame !== null) return;
-      pinchFrame = requestAnimationFrame(() => {
-        pinchFrame = null;
-        commit(pinchZoom(pinchStartFraction, pinchLatest / pinchStartDistance));
-      });
-    };
-
-    const onTouchEnd = (ev: TouchEvent) => {
-      if (ev.touches.length < 2) pinchStartDistance = 0;
-    };
-
-    box.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
-    box.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
-    box.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
-    box.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
-
-    // Safari zooms the page on its own gesture events, which no amount of
-    // touch handling prevents. They only exist on Apple's browsers.
-    const stopSafariGesture = (ev: Event) => ev.preventDefault();
-    document.addEventListener('gesturestart', stopSafariGesture, { passive: false });
-    document.addEventListener('gesturechange', stopSafariGesture, { passive: false });
-    document.addEventListener('gestureend', stopSafariGesture, { passive: false });
-
-    // --- 2. corner drag ---------------------------------------------------
-    let dragging = false;
-    let dragFrame: number | null = null;
-    let dragRect: ZoomRect = { left: 0, top: 0, right: 0, bottom: 0 };
-    let dragStart = { x: 0, y: 0 };
-    let dragStartFraction = FIT_TO_WINDOW;
-    let dragLatest = { x: 0, y: 0 };
-    function onDragMove(ev: PointerEvent): void {
-      dragLatest = { x: ev.clientX, y: ev.clientY };
-      if (dragFrame !== null) return;
-      dragFrame = requestAnimationFrame(() => {
-        dragFrame = null;
-        commit(dragZoom(dragStartFraction, dragRect, dragStart, dragLatest));
-      });
-    }
-    function onDragUp(): void {
-      endDrag(null);
-    }
-    function onDragKey(ev: KeyboardEvent): void {
-      if (ev.key !== 'Escape') return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      endDrag(dragStartFraction);
-    }
-    const endDrag = (restoreTo: number | null) => {
-      if (!dragging) return;
-      dragging = false;
-      if (dragFrame !== null) {
-        cancelAnimationFrame(dragFrame);
-        dragFrame = null;
-      }
-      window.removeEventListener('pointermove', onDragMove);
-      window.removeEventListener('pointerup', onDragUp);
-      window.removeEventListener('pointercancel', onDragUp);
-      window.removeEventListener('keydown', onDragKey, true);
-      setActiveCorner(null);
-      if (restoreTo !== null) commit(restoreTo);
-    };
-    const onPointerDown = (ev: PointerEvent) => {
-      const rect = readBoxRect();
-      if (!rect) return;
-      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, rect);
-      if (!corner) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      dragging = true;
-      // The rect is read ONCE: the box changes size under the pointer during
-      // the drag, and re-reading it every move would feed the gesture its own
-      // output and make the scaling run away.
-      dragRect = rect;
-      dragStart = { x: ev.clientX, y: ev.clientY };
-      dragLatest = dragStart;
-      dragStartFraction = zoomFractionRef.current;
-      setActiveCorner(corner);
-      window.addEventListener('pointermove', onDragMove);
-      window.addEventListener('pointerup', onDragUp);
-      window.addEventListener('pointercancel', onDragUp);
-      window.addEventListener('keydown', onDragKey, true);
-    };
-    box.addEventListener('pointerdown', onPointerDown, true);
-
-    // Hover: the corner marks and the diagonal cursor appear only when the
-    // pointer is actually on a corner - the box carries no visible chrome
-    // otherwise. The rect comes from the cache, never from a measurement per
-    // pointer sample.
-    const onHoverEnter = () => { readBoxRect(); };
-    const onHoverMove = (ev: PointerEvent) => {
-      if (dragging) return;
-      const rect = boxRectRef.current ?? readBoxRect();
-      if (!rect) return;
-      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, rect);
-      setActiveCorner((previous) => (previous === corner ? previous : corner));
-    };
-    const onHoverLeave = () => {
-      if (!dragging) setActiveCorner(null);
-    };
-    box.addEventListener('pointerenter', onHoverEnter);
-    box.addEventListener('pointermove', onHoverMove);
-    box.addEventListener('pointerleave', onHoverLeave);
-
-    // The box moves with the window; drop the cached rect rather than
-    // measuring on a schedule.
-    const onWindowResize = () => { boxRectRef.current = null; };
-    window.addEventListener('resize', onWindowResize);
-    window.addEventListener('scroll', onWindowResize, true);
-
-    // --- 3. double-click the bezel ---------------------------------------
-    const onDoubleClick = (ev: MouseEvent) => {
-      const rect = boxRectRef.current ?? readBoxRect();
-      if (!rect) return;
-      const bezelPx = Number.parseFloat(window.getComputedStyle(box).paddingLeft) || 0;
-      if (!isBezelPoint({ x: ev.clientX, y: ev.clientY }, rect, bezelPx)) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      commit(nextPreset(zoomFractionRef.current));
-    };
-    box.addEventListener('dblclick', onDoubleClick, true);
-
-    return () => {
-      if (wheelFrame !== null) cancelAnimationFrame(wheelFrame);
-      endDrag(null);
-      box.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
-      box.removeEventListener('touchstart', onTouchStart, { capture: true } as EventListenerOptions);
-      box.removeEventListener('touchmove', onTouchMove, { capture: true } as EventListenerOptions);
-      box.removeEventListener('touchend', onTouchEnd, { capture: true } as EventListenerOptions);
-      box.removeEventListener('touchcancel', onTouchEnd, { capture: true } as EventListenerOptions);
-      document.removeEventListener('gesturestart', stopSafariGesture);
-      document.removeEventListener('gesturechange', stopSafariGesture);
-      document.removeEventListener('gestureend', stopSafariGesture);
-      if (pinchFrame !== null) cancelAnimationFrame(pinchFrame);
-      box.removeEventListener('pointerdown', onPointerDown, true);
-      box.removeEventListener('pointerenter', onHoverEnter);
-      box.removeEventListener('pointermove', onHoverMove);
-      box.removeEventListener('pointerleave', onHoverLeave);
-      box.removeEventListener('dblclick', onDoubleClick, true);
-      window.removeEventListener('resize', onWindowResize);
-      window.removeEventListener('scroll', onWindowResize, true);
-    };
-  }, [terminalMode, zoomEnabled, readBoxRect]);
 
   // Focus the terminal when clicking anywhere in the window. This ensures
   // keyboard input always goes to the live surface - xterm's textarea for
@@ -3625,9 +3468,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                 boxSizing: 'border-box',
                 borderRadius: 'var(--bbs-terminal-radius, 12px)',
                 overflow: 'hidden',
-                // Only while the pointer is actually on a corner; the box
-                // carries no other visible chrome.
-                ...(activeCorner ? { cursor: cursorForCorner(activeCorner) } : {}),
+                // REMOVED (sysop, 2026-09-12): the corner-resize cursor went
+                // with the corner drag. The box carries no visible chrome.
               }
             : { height: '100%' }),
         }}
@@ -3742,36 +3584,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           />
         </div>
       )}
-      {terminalMode === 'fixed' && ZOOM_CORNERS.map((corner) => {
-        // A faint bracket, drawn from two borders, that fades in when the
-        // pointer reaches that corner and says "this corner resizes the
-        // screen". Nothing shows at rest. Colour and size are page tokens,
-        // with the package's own fallbacks so it stays self-contained.
-        const north = corner === 'nw' || corner === 'ne';
-        const west = corner === 'nw' || corner === 'sw';
-        const edge = '1px solid var(--bbs-terminal-zoom-mark, rgba(255, 255, 255, 0.45))';
-        return (
-          <div
-            key={corner}
-            aria-hidden="true"
-            data-zoom-corner={corner}
-            style={{
-              position: 'absolute',
-              width: 'var(--bbs-terminal-zoom-mark-size, 12px)',
-              height: 'var(--bbs-terminal-zoom-mark-size, 12px)',
-              [north ? 'top' : 'bottom']: '4px',
-              [west ? 'left' : 'right']: '4px',
-              [north ? 'borderTop' : 'borderBottom']: edge,
-              [west ? 'borderLeft' : 'borderRight']: edge,
-              borderRadius: '2px',
-              opacity: activeCorner === corner ? 1 : 0,
-              transition: 'opacity 120ms ease-out',
-              pointerEvents: 'none',
-              zIndex: 20,
-            }}
-          />
-        );
-      })}
+      {/* REMOVED (sysop, 2026-09-12): the corner-resize marks went with the
+          corner drag - brackets that do nothing are worse than none. */}
       </div>
       {/* Web Transparency Overlays - CSS-based overlays for web connections */}
       {Array.from(overlays.entries()).map(([id, overlay]) => {

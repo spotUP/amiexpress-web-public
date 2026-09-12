@@ -132,6 +132,8 @@ export interface AdapterSession {
   screenWidth?: number;
   /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
   petsciiColumns?: number;
+  /** Teletext session mode: the same 40-column grid on a full ANSI terminal. */
+  texttvMode?: boolean;
 }
 
 export interface C64AdapterOptions {
@@ -178,6 +180,11 @@ export function c64AdapterDrives(session: AdapterSession | null | undefined): bo
   // "80 column petscii dont need any special petscii rules it can use the
   // normal /X doors for everything and normal file lists etc" (sysop,
   // 2026-09-07). This is that sentence, in the one place that decides it.
+  //
+  // Teletext drives it too: a T caller chose the same 40-column grid, and
+  // the reduction is width logic (frames to 40 ANSI rows) - the PETSCII
+  // transducer sits further downstream and simply never runs for him.
+  if (session?.texttvMode === true) return true;
   return session?.petsciiMode === true && petsciiColumnsOf(session) === C64_COLUMNS;
 }
 

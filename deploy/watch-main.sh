@@ -51,7 +51,7 @@ deploy_decision() {
     return 0
   fi
 
-  OTHERS=$(callers_to_protect "$HEALTH" "${DEPLOY_IGNORE_CALLERS:-spot sysop}")
+  OTHERS=$(callers_to_protect "$HEALTH" "${DEPLOY_IGNORE_CALLERS:-spot sysop discord-bridge}")
   if [ "${OTHERS:-0}" -gt 0 ] 2>/dev/null; then
     echo "callers"
     return 0

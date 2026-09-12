@@ -231,6 +231,7 @@ export function ArtistStudioPage() {
         newDescription={openPath ? slotByPath.get(openPath)?.description : undefined}
         onClose={() => setOpenPath(null)}
         onOpenPath={setOpenPath}
+        auditing={auditing}
       />
     </div>
   );

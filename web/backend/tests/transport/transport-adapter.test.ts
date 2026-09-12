@@ -271,6 +271,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'terminal-mode',
   'terminal-resize',
   'terminal-type',
+  'texttv-mode',
   'theme-changed',
   'theme-preference',
   'transfer-raw:cancelled',
@@ -566,7 +567,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // notice a sysop gets when they accept a page while the caller is inside a
     // door. It reached main unruled; the arm-A count pin caught it, and the
     // fix was the ruling, not the number.
-    expect(ruled.length).toBe(245);
+    // 246 as of 2026-09-10: `texttv-mode` ruled (web-only) - the teletext
+    // session flag from the graphics prompt's T answer.
+    expect(ruled.length).toBe(246);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -606,6 +609,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // construction, since a byte caller has no on-screen controls to restore.
     // web-only 117 (2026-09-07): `petscii-mode`, the shape a PETSCII caller's
     // canvas is mounted at. A byte caller IS the screen and needs no shape.
+    // web-only 118 (2026-09-10): `texttv-mode`, the teletext session flag.
+    // A byte caller keeps the ANSI the board emits and needs no signal.
     expect(counts).toEqual({
       render: 5,
       translate: 11,
@@ -617,7 +622,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // that a page they accepted is held until the caller leaves the door.
       // Structured payload for the operator console; the byte-transport
       // answer is TP-10's ansi-output push, like every operator name here.
-      'web-only': 115,
+      // 116 (2026-09-10): `texttv-mode`, the teletext session flag from the
+      // graphics prompt's T answer - browser-only by construction.
+      'web-only': 116,
       'not-transport': 104,
     });
   });
@@ -673,7 +680,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // and this pin caught it the same way - the fix was to rule it in
     // transport-event-rulings.ts (web-only, like every other operator-chat
     // control name), not to move this number on its own.
-    expect(fromA.length).toBe(153);
+    //
+    // 154 as of 2026-09-10: `texttv-mode`
+    // (handlers/command-handler/pre-login.ts, the graphics prompt's T
+    // answer), ruled web-only in the same change.
+    expect(fromA.length).toBe(154);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.
@@ -888,8 +899,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
   });
 
   it('a byte transport reports no key events, no browser, no RIP', () => {
-    const byteTransport = { bytes: true, events: false, keyEvents: false, browser: false, rip: false };
-    const browser = { bytes: false, events: true, keyEvents: true, browser: true, rip: true };
+    const byteTransport = { bytes: true, events: false, keyEvents: false, browser: false, rip: false, teletext: false };
+    const browser = { bytes: false, events: true, keyEvents: true, browser: true, rip: true, teletext: true };
 
     expect(transportCapabilities({ connectionType: 'telnet' } as BBSSession)).toEqual(byteTransport);
     expect(transportCapabilities({ connectionType: 'ssh' } as unknown as BBSSession)).toEqual(byteTransport);

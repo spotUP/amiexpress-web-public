@@ -14,9 +14,42 @@
 
 import axios from 'axios';
 import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
+import { GROUNDING_RULES } from './sysop-ai/personas';
 import { askWithTools } from './sysop-ai/loop';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
+
+/**
+ * A reply the model did not finish is marked, never silently cut: the next
+ * caller message continues from the truncated history, so "go on" works.
+ */
+export function withContinuation(text: string): string {
+  return `${text.trimEnd()}\n...(more coming - say "go on")`;
+}
+
+/**
+ * A reply that ends mid-thought with finish_reason 'stop': small models do
+ * cut off, and nothing marks it today (live 2026-09-10: "about Turrican:
+ * **", end of message). An unclosed tag or a trailing colon, comma, quote
+ * or opener is never how a finished reply ends - mark it so the caller
+ * knows to ask on instead of reading a cliffhanger as an answer.
+ */
+export function looksCutOff(text: string): boolean {
+  const t = text.trimEnd();
+  // An opening tag with no closer: strip the balanced pairs, anything
+  // tag-like left is cut off mid-markup.
+  const unbalanced = t
+    .replace(/<title>[\s\S]*?<\/title\s*>/gi, '')
+    .replace(/<colou?r(\s+[a-z])?\s*>[\s\S]*?<\/colou?r(\s+[a-z])?\s*>/gi, '');
+  if (/<(title|colou?r)\b/i.test(unbalanced)) return true;
+  // A trailing '**' alone is a closed bold, not a cut - unless a colon
+  // opened it ("about Turrican: **", live 2026-09-10).
+  if (/:\s*\*\*$/.test(t)) return true;
+  // A trailing preposition or article ("aspect of", "one of the"): a
+  // finished reply never ends on one (transcript 2026-09-10).
+  if (/\b(of|in|on|to|about|for|with|and|or|the|a|an)\s*$/i.test(t)) return true;
+  return /[:,\[("']$/.test(t);
+}
 
 /**
  * BBS is ASCII only - no emojis. The terminal cannot render them and they
@@ -33,6 +66,69 @@ function stripEmojis(text: string): string {
     .replace(/[\uFE0F\uFE0E\u200D]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/**
+ * Amiga Latin-1 out, nothing else.
+ *
+ * Commodore adopted ECMA-94 (ISO-8859-1) in 1985, so åäöüßé and the rest of
+ * U+00A0-U+00FF are first-class board citizens. Everything above U+00FF is
+ * not: smart quotes, dashes, ellipsis and bullets print as garbage on every
+ * terminal the board serves, and stripEmojis above only covers emoji blocks
+ * (a co-sysop's curly quotes sailed straight through, 2026-09-11). Known
+ * punctuation maps to its ASCII twin; the remainder is dropped, never
+ * replaced with a placeholder that would read as content.
+ */
+const NON_LATIN1_MAP: Record<string, string> = {
+  '‘': "'", '’': "'", '‚': ',', '‛': "'",
+  '“': '"', '”': '"', '„': '"', '‟': '"',
+  '–': '-', '—': '-', '―': '-', '‐': '-', '‑': '-',
+  '…': '...', '•': '*', '·': '*', '‹': '<', '›': '>',
+  '†': '+', '‡': '++',
+  '€': 'EUR', '£': 'GBP', '¥': 'YEN',
+  '−': '-', '⁄': '/', '″': '"', '′': "'",
+  '←': '<-', '→': '->', '↑': '^', '↓': 'v', '↔': '<->',
+  '★': '*', '☆': '*', '✓': 'v', '✔': 'v', '✗': 'x', '✘': 'X',
+  '™': '(TM)',
+};
+
+export function toAmigaLatin1(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    if (cp === 0x0a || cp === 0x0d || cp === 0x09) {
+      out += ch;
+      continue;
+    }
+    if ((cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff)) {
+      out += ch;
+      continue;
+    }
+    const mapped = NON_LATIN1_MAP[ch];
+    if (mapped !== undefined) {
+      out += mapped;
+      continue;
+    }
+    // ASCII control, C1 control, or beyond Latin-1: dropped.
+  }
+  return out;
+}
+
+/**
+ * BBS is plain text - no markdown either. The model wraps titles in
+ * **bold** and *italics* that arrive on the terminal as literal asterisks
+ * ("*The Swedish Booze Elite*", photographed 2026-09-09). Paired markers
+ * come off; lone characters stay, scene handles use them deliberately.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(\S[^*]*\S|\S)\*\*/g, '$1')
+    .replace(/__(\S[^_]*\S|\S)__/g, '$1')
+    .replace(/\*(\S[^*]*\S|\S)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
 }
 
 interface ChatContext {
@@ -55,7 +151,7 @@ interface ChatContext {
  * AI configuration from OperatorChatConfig
  */
 export interface AIProviderConfig {
-  provider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
+  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras' | 'rule-based';
   /**
    * The three below belong to the AI providers, not to the bot.
    *
@@ -71,8 +167,11 @@ export interface AIProviderConfig {
   temperature?: number;
   systemPrompt?: string;
   groqApiKey?: string;
+  cerebrasApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;
+  zenApiKey?: string;
+  goApiKey?: string;
   /**
    * The whole AI cascade - every provider, every retry, the model discovery
    * - gets THIS long in total before the rule-based reply goes out. The
@@ -126,11 +225,13 @@ export const PER_ROUND_MS = 12000;
  * How long the co-sysop's reply may be.
  *
  * The caller waits for every generated token, and the voice rules say less
- * is more - a one-liner gets a one-liner. 150 tokens is ~110 words, room for
- * three sentences and no room for an essay; the prompt asks for short, this
- * makes long impossible. Same cap for the tool loop's reply for the same reason.
+ * is more - a one-liner gets a one-liner. 250 tokens is room for a real
+ * answer and no room for an essay; the prompt asks for short, this makes
+ * long unlikely, and withContinuation() marks the rare cut instead of
+ * leaving a sentence hanging mid-word. Same cap for the tool loop's reply
+ * for the same reason.
  */
-export const CHAT_REPLY_TOKENS = 150;
+export const CHAT_REPLY_TOKENS = 250;
 
 /**
  * WHICH FREE MODEL ANSWERS FASTEST - measured, not guessed.
@@ -369,14 +470,15 @@ const MODEL_CACHE_DURATION = 3600000; // 1 hour in milliseconds
 /**
  * Hardcoded fallback free models when the OpenRouter model discovery API
  * returns nothing (API format change, network issue, etc.).
- * Kept current as of 2026-09-04.
+ * Refreshed against the live /models endpoint 2026-09-10 (the previous
+ * list had zero overlap with what OpenRouter actually serves free).
  */
 const FALLBACK_FREE_MODELS: string[] = [
-  'google/gemma-2-9b-it:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'microsoft/phi-3.5-mini-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-  'cognitivecomputations/dolphin-2.9.1-llama-3.1-8b:free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'poolside/laguna-s-2.1:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'cohere/north-mini-code:free',
 ];
 
 // BBS Help Knowledge Base (from AmiExpress wiki)
@@ -391,14 +493,16 @@ const FALLBACK_FREE_MODELS: string[] = [
  * sysop" (sysop, 2026-09-08) - he speaks as the board's co-sysop, and the
  * powers he wields are the caller's, never his own.
  */
-function personalityFor(aiConfig: AIProviderConfig): string {
+/** Test seam: the full system prompt a reply is built on. */
+export function personalityFor(aiConfig: AIProviderConfig): string {
   // A persona's prompt already carries VOICE_RULES via promptFor(); a
   // hand-written aiSystemPrompt (design s.2) overrides the persona's prompt
   // but keeps the handle/fallback, so we never invent one here.
+  // GROUNDING_RULES rides along on every path: honesty is not voice.
   const base = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
   const name = (aiConfig.botName || 'Kevin').slice(0, 30);
   const sysop = aiConfig.sysopName || 'the sysop';
-  return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.`;
+  return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.\n\n${GROUNDING_RULES}`;
 }
 
 function fallbackForPersona(aiConfig?: AIProviderConfig): string {
@@ -432,7 +536,7 @@ function fallbackForPersona(aiConfig?: AIProviderConfig): string {
   return 'My connection to the outside world just dropped - ask me again in a minute.';
 }
 
-const GRUMPY_SYSOP_PERSONALITY = `You are a veteran BBS co-sysop from the 1990s helping run an Amiga-based bulletin board system. Your personality:
+export const GRUMPY_SYSOP_PERSONALITY = `You are a veteran BBS co-sysop from the 1990s helping run an Amiga-based bulletin board system. Your personality:
 
 - You've been running BBSs since 1989 and you've seen EVERYTHING
 - You're grumpy, sarcastic, and perpetually annoyed by "newbies" (but you call them "lamers")
@@ -451,6 +555,14 @@ IMPORTANT: You can answer BBS usage questions using your knowledge base. When us
 3. Reference the specific command or feature
 4. Keep it SHORT (1-2 sentences max). DO NOT RAMBLE.
 
+You can also talk about ANYTHING else from your own knowledge - films, games, history, the world
+outside BBSes. The board is your home, not your boundary: always grumpy, always in character.
+Flirting and personal questions get the same grumpy charm as anything else - never a scope
+lecture about Amiga-only topics.
+When the tools have nothing on it, say so plainly - never invent titles, links, or facts.
+Shape replies for the terminal: blank lines between paragraphs; titles cyan (\x1b[0;36m...\x1b[0m),
+key facts green (\x1b[0;32m...\x1b[0m. Never bold, never emojis.
+
 Example:
 User: "How do I read messages?"
 You: "*sighs* Did you even TRY reading the help? Press R. It's literally on the main menu."
@@ -460,10 +572,232 @@ CRITICAL: Be concise. Typing at 2400 baud is slow, so you don't waste bytes.`;
 // Massively expanded response database for natural, varied conversations
 
 /**
- * Multi-tier AI Response System
- * Tries providers in order: Groq → Gemini → OpenRouter
- * Falls back to rule-based if all fail
+ * Small free models sometimes roleplay tool use in TEXT - a <tool_call>
+ * block in the reply - instead of calling through the loop. Nothing
+ * executes it (tools only run in askWithTools), so the caller would read
+ * stage directions. Strip the block: remainder stands, emptiness fails
+ * the cascade on to the next leg. Live 2026-09-10, asciiarena ask.
  */
+const FAKE_TOOL_CALL = /<tool_call>[\s\S]*?(<\/tool_call>|$)/gi;
+export function stripFakeToolCalls(text: string): string {
+  return text.replace(FAKE_TOOL_CALL, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Keyed providers with model catalogues (Groq, Gemini, Cerebras).
+ *
+ * The 2026-09-10 outage was three stale default ids, not three bad keys:
+ * Groq retired llama-3.1-8b-instant, Gemini moved past 1.5-flash, Cerebras
+ * spells it llama3.1-8b. Hardcoded ids rot; catalogues do not. Each leg
+ * lists its models with its own key (all three endpoints answer keyed
+ * GETs), ranks preferred-known ids first, and falls back to a hardcoded
+ * best guess when discovery itself fails. Cached an hour, like the rest.
+ */
+type KeyedProviderName = 'groq' | 'gemini' | 'cerebras';
+
+interface KeyedProvider {
+  label: string;
+  modelsUrl: (apiKey: string) => string;
+  idsOf: (data: any) => string[];
+  preferred: string[];
+  fallback: string[];
+}
+
+const KEYED_PROVIDERS: Record<KeyedProviderName, KeyedProvider> = {
+  groq: {
+    label: 'Groq',
+    modelsUrl: () => 'https://api.groq.com/openai/v1/models',
+    idsOf: (data) => ((data?.data ?? []) as any[]).map((m) => m.id).filter(Boolean),
+    preferred: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    fallback: ['llama-3.3-70b-versatile'],
+  },
+  gemini: {
+    label: 'Gemini',
+    modelsUrl: (apiKey) => `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    idsOf: (data) => ((data?.models ?? []) as any[]).map((m) => String(m.name ?? '').replace(/^models\//, '')).filter(Boolean),
+    preferred: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'],
+    fallback: ['gemini-2.0-flash'],
+  },
+  cerebras: {
+    label: 'Cerebras',
+    modelsUrl: () => 'https://api.cerebras.ai/v1/models',
+    idsOf: (data) => ((data?.data ?? []) as any[]).map((m) => m.id).filter(Boolean),
+    preferred: ['llama3.1-8b', 'llama-3.1-8b', 'llama-3.3-70b'],
+    fallback: ['llama3.1-8b'],
+  },
+};
+
+const keyedModelCache: Record<KeyedProviderName, { models: string[]; at: number }> = {
+  groq: { models: [], at: 0 },
+  gemini: { models: [], at: 0 },
+  cerebras: { models: [], at: 0 },
+};
+
+function rankKeyedModels(ids: string[], preferred: string[]): string[] {
+  const pref = (id: string) => {
+    const i = preferred.indexOf(id);
+    return i === -1 ? preferred.length : i;
+  };
+  return [...new Set(ids)].sort((a, b) => pref(a) - pref(b) || (a < b ? -1 : 1));
+}
+
+/** Test seam: what a keyed discovery would have returned. */
+export function primeKeyedCatalogue(name: KeyedProviderName, ids: string[]): void {
+  const ranked = rankKeyedModels(ids, KEYED_PROVIDERS[name].preferred);
+  keyedModelCache[name] = { models: ranked, at: Date.now() };
+}
+/** Test seam: forget keyed catalogues. */
+export function resetKeyedCatalogues(): void {
+  (Object.keys(keyedModelCache) as KeyedProviderName[]).forEach((k) => { keyedModelCache[k] = { models: [], at: 0 }; });
+}
+
+async function discoverKeyedModels(
+  name: KeyedProviderName,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<string[]> {
+  const def = KEYED_PROVIDERS[name];
+  try {
+    const response = await axios.get(def.modelsUrl(apiKey), {
+      timeout: timeoutMs,
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const ranked = rankKeyedModels(def.idsOf(response.data), def.preferred);
+console.log(`[Grumpy Bot] Discovered ${ranked.length} ${def.label} models:`, ranked.slice(0, 4));
+    return ranked;
+  } catch (error) {
+console.error(`[Grumpy Bot] Failed to discover ${def.label} models:`, error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+function keyFor(name: KeyedProviderName, aiConfig: AIProviderConfig): string {
+  if (name === 'groq') return aiConfig.groqApiKey || process.env.GROQ_API_KEY || '';
+  if (name === 'gemini') return aiConfig.geminiApiKey || process.env.GEMINI_API_KEY || '';
+  return aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY || '';
+}
+
+/** Best model id for a keyed leg: admin override, catalogue, fallback. */
+export async function keyedModelFor(
+  name: KeyedProviderName,
+  aiConfig: AIProviderConfig,
+): Promise<string> {
+  if (aiConfig.modelName) return aiConfig.modelName;
+  const cached = keyedModelCache[name];
+  const now = Date.now();
+  if (cached.models.length > 0 && now - cached.at < MODEL_CACHE_DURATION) return cached.models[0];
+  const apiKey = keyFor(name, aiConfig);
+  if (!apiKey) return KEYED_PROVIDERS[name].fallback[0];
+  const ranked = await discoverKeyedModels(name, apiKey, 5000);
+  keyedModelCache[name] = { models: ranked.length ? ranked : [...KEYED_PROVIDERS[name].fallback], at: now };
+  return keyedModelCache[name].models[0];
+}
+
+/**
+ * One tool-loop attempt for the plain legs (Groq, Gemini, Cerebras).
+ *
+ * The 2026-09-10 chats proved the cost of legs without tools: Groq
+ * answered "try the news conferences" while a texttv_page call away sat
+ * the actual headlines. All three vendors speak OpenAI chat completions,
+ * so the same loop fits. Never throws: a failed loop notes 429s and
+ * yields to the leg's plain call.
+ */
+async function toolLoopText(
+  label: string,
+  post: (body: unknown, timeoutMs: number) => Promise<any>,
+  model: string,
+  messages: unknown[],
+  context: ChatContext,
+  aiConfig: AIProviderConfig,
+): Promise<string | null> {
+  if (!context.tools || context.tools.list.length === 0) return null;
+  try {
+console.log(`[Grumpy Bot] Trying ${label} (${model}) with ${context.tools.list.length} tools...`);
+    const result = await askWithTools({
+      model, messages: messages as any, tools: context.tools.list, ctx: context.tools.ctx,
+      deadline: cfgDeadline(aiConfig), perRoundMs: PER_ROUND_MS,
+      maxTokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature, post,
+    });
+    (context.afters ??= []).push(...result.afters);
+    if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+    if (result.text) {
+console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
+      return result.truncated ? withContinuation(result.text) : result.text;
+    }
+    const answered = result.calls.filter((c) => c.outcome === 'ok');
+    if (answered.length > 0 && result.toolResults.length > 0) {
+console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
+      return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+    }
+    return null;
+  } catch (error: any) {
+    if (isRateLimit(error)) noteCascadeRateLimited();
+console.log(`[Grumpy Bot] ${label} tool loop failed, plain instead (${error instanceof Error ? error.message : error})`);
+    return null;
+  }
+}
+
+/**
+ * Tier 1b: Cerebras (fast, free, OpenAI-compatible).
+ *
+ * Same shape as the Groq leg (plain completions, no tool loop): the free
+ * tier is for short chat replies, and a second fast leg doubles the
+ * keyless-adjacent surface when OpenRouter 429s. Added 2026-09-10 from the
+ * free-model survey; default model from their dashboard rotation.
+ */
+async function getCerebrasResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const apiKey = aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY;
+  if (!apiKey) {
+console.log('[Grumpy Bot] No CEREBRAS_API_KEY configured, skipping Cerebras');
+    return null;
+  }
+  const timeout = remainingBudget(aiConfig, 8000);
+  if (timeout < 250) return null;
+
+  try {
+    const systemPrompt = personalityFor(aiConfig);
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+      { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+      ...context.messageHistory.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+      { role: 'user', content: userMessage }
+    ];
+
+    const model = await keyedModelFor('cerebras', aiConfig);
+    const headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+    const post = async (body: unknown, timeoutMs: number) =>
+      (await axios.post('https://api.cerebras.ai/v1/chat/completions', body, { headers, timeout: timeoutMs })).data;
+    const tooled = await toolLoopText('Cerebras', post, model, messages, context, aiConfig);
+    if (tooled) return tooled;
+console.log(`[Grumpy Bot] Trying Cerebras (${model})...`);
+
+    const response = await axios.post(
+      'https://api.cerebras.ai/v1/chat/completions',
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
+      {
+        headers,
+        timeout,
+      }
+    );
+
+    const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
+    if (content) {
+console.log('[Grumpy Bot] SUCCESS - Using Cerebras response');
+      return cutOff ? withContinuation(content) : content;
+    }
+    return null;
+  } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
+console.error('[Grumpy Bot] Cerebras failed:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
 
 /**
  * Tier 1: Groq (Fast, Free, Llama 3.1)
@@ -491,7 +825,15 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
       { role: 'user', content: userMessage }
     ];
 
-    const model = aiConfig.modelName || 'llama-3.1-8b-instant';
+    const model = await keyedModelFor('groq', aiConfig);
+    const groqHeaders = {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    };
+    const tooled = await toolLoopText('Groq',
+      async (body, timeoutMs) => (await axios.post('https://api.groq.com/openai/v1/chat/completions', body, { headers: groqHeaders, timeout: timeoutMs })).data,
+      model, messages, context, aiConfig);
+    if (tooled) return tooled;
 console.log(`[Grumpy Bot] Trying Groq (${model})...`);
 
     const response = await axios.post(
@@ -503,21 +845,20 @@ console.log(`[Grumpy Bot] Trying Groq (${model})...`);
         temperature: aiConfig.temperature,
       },
       {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: groqHeaders,
         timeout: groqTimeout
       }
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Groq response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
 console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.message : error);
     return null;
   }
@@ -534,38 +875,425 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   if (geminiTimeout < 250) return null;
   try {
     const systemPrompt = personalityFor(aiConfig);
-    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
-      context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
-    }\nUser: ${userMessage}\nAssistant:`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+      { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+      ...context.messageHistory.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+      { role: 'user', content: userMessage }
+    ];
 
-    const model = aiConfig.modelName || 'gemini-1.5-flash';
+    const model = await keyedModelFor('gemini', aiConfig);
+    const geminiHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    const tooled = await toolLoopText('Gemini',
+      async (body, timeoutMs) => (await axios.post('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', body, { headers: geminiHeaders, timeout: timeoutMs })).data,
+      model, messages, context, aiConfig);
+    if (tooled) return tooled;
 console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
       {
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          maxOutputTokens: 150,
-          temperature: aiConfig.temperature,
-        }
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
+        headers: geminiHeaders,
         timeout: geminiTimeout
       }
     );
 
-    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Gemini response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
 console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.message : error);
     return null;
   }
+}
+
+/**
+ * OpenCode Zen (https://opencode.ai/zen) - OpenAI-compatible
+ * chat/completions with free models, auto-discovered like OpenRouter.
+ *
+ * Zen's /models answers keyless with bare {id} rows (no pricing or
+ * parameter flags), so "free" is an id suffix and tool support is assumed
+ * then verified: the tool loop is attempted, and a tools-shaped API error
+ * falls back to a plain completion for that model from then on. Added
+ * 2026-09-10 as a cascade leg beside OpenRouter (which stays): when one
+ * 429s, the other is tried before the persona fallback goes out.
+ */
+export const ZEN_BASE = 'https://opencode.ai/zen/v1';
+export const GO_BASE = 'https://opencode.ai/zen/go/v1';
+
+export type ZenUpstream = 'zen' | 'go';
+
+/** Free Zen ids worth preferring: the muse-spark family has proven
+ *  tool-calling chat on this board's own agents. */
+const ZEN_PREFERRED_FREE = ['muse-spark-1.3-contributor-free', 'muse-spark-1.2-contributor-free'];
+
+/** Free Zen ids, probed live 2026-09-10, for when discovery fails. */
+const FALLBACK_ZEN_FREE_MODELS: string[] = [
+  'muse-spark-1.3-contributor-free',
+  'muse-spark-1.2-contributor-free',
+  'deepseek-v4-flash-free',
+  'mimo-v2.5-free',
+  'ling-3.0-flash-fin-free',
+  'nemotron-3-ultra-free',
+  'nemotron-3.5-lightning-free',
+];
+
+/** Go ids, probed live 2026-09-10. Go is subscription-wide (no free
+ *  suffix), so the fallback is the strong generalists, muse-spark first. */
+const FALLBACK_GO_MODELS: string[] = [
+  'muse-spark-1.3-contributor',
+  'muse-spark-1.2-contributor',
+  'kimi-k3',
+  'glm-5.2',
+  'deepseek-v4-pro',
+];
+
+/** Go ranking preference; Zen uses ZEN_PREFERRED_FREE. */
+const GO_PREFERRED = ['muse-spark-1.3-contributor', 'muse-spark-1.2-contributor', 'kimi-k3'];
+
+let cachedZenModels: string[] = [];
+let lastZenDiscovery = 0;
+/** Zen models whose tool calls the API refused: plain completions only. */
+const zenPlainOnly = new Set<string>();
+
+let cachedGoModels: string[] = [];
+let lastGoDiscovery = 0;
+/** Go models whose tool calls the API refused: plain completions only. */
+const goPlainOnly = new Set<string>();
+
+export function rankZenModels(ids: string[], upstream: ZenUpstream = 'zen'): string[] {
+  const preferred = upstream === 'go' ? GO_PREFERRED : ZEN_PREFERRED_FREE;
+  const pool = upstream === 'go' ? ids : ids.filter((id) => id.toLowerCase().includes('free'));
+  const pref = (id: string) => {
+    const i = preferred.indexOf(id);
+    return i === -1 ? preferred.length : i;
+  };
+  return [...new Set(pool)]
+    .sort((a, b) => pref(a) - pref(b) || (a < b ? -1 : 1));
+}
+
+/** Test seam: what a Zen discovery would have returned. */
+export function primeZenCatalogue(ids: string[]): void {
+  cachedZenModels = rankZenModels(ids);
+  lastZenDiscovery = Date.now();
+}
+/** Test seam: forget cached Zen state. */
+export function resetZenCatalogue(): void {
+  cachedZenModels = [];
+  lastZenDiscovery = 0;
+  zenPlainOnly.clear();
+}
+/** Test seam: what a Go discovery would have returned. */
+export function primeGoCatalogue(ids: string[]): void {
+  cachedGoModels = rankZenModels(ids, 'go');
+  lastGoDiscovery = Date.now();
+}
+/** Test seam: forget cached Go state. */
+export function resetGoCatalogue(): void {
+  cachedGoModels = [];
+  lastGoDiscovery = 0;
+  goPlainOnly.clear();
+}
+
+/**
+ * Fail over: the failed model goes to the back, the next-best is tried on
+ * the next message. Round-robin, not drop - a 429 is transient, and dropping
+ * would shrink the pool to nothing until the next hourly discovery.
+ */
+function rotateZenModels(): void {
+  const failed = cachedZenModels.shift();
+  if (failed !== undefined) cachedZenModels.push(failed);
+}
+function rotateGoModels(): void {
+  const failed = cachedGoModels.shift();
+  if (failed !== undefined) cachedGoModels.push(failed);
+}
+
+/** Test seam + junk recovery: rotate every round-robin pool so the next
+ *  message meets the next-best brain everywhere. */
+export function rotateModelPools(): void {
+  rotateZenModels();
+  rotateGoModels();
+}
+
+async function discoverZenModels(timeoutMs: number): Promise<string[]> {
+  try {
+    const response = await axios.get(`${ZEN_BASE}/models`, { timeout: timeoutMs });
+    const ids: string[] = (response.data?.data ?? []).map((m: any) => m.id).filter(Boolean);
+    const ranked = rankZenModels(ids);
+console.log(`[Grumpy Bot] Discovered ${ranked.length} free Zen models:`, ranked.slice(0, 5));
+    return ranked;
+  } catch (error) {
+console.error('[Grumpy Bot] Failed to discover Zen models:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+async function discoverGoModels(timeoutMs: number): Promise<string[]> {
+  try {
+    const response = await axios.get(`${GO_BASE}/models`, { timeout: timeoutMs });
+    const ids: string[] = (response.data?.data ?? []).map((m: any) => m.id).filter(Boolean);
+    const ranked = rankZenModels(ids, 'go');
+console.log(`[Grumpy Bot] Discovered ${ranked.length} Go models:`, ranked.slice(0, 5));
+    return ranked;
+  } catch (error) {
+console.error('[Grumpy Bot] Failed to discover Go models:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+async function getZenModel(timeoutMs: number): Promise<string | null> {
+  const now = Date.now();
+  if (cachedZenModels.length > 0 && (now - lastZenDiscovery) < MODEL_CACHE_DURATION) {
+console.log('[Grumpy Bot] Using cached Zen model:', cachedZenModels[0]);
+    return cachedZenModels[0];
+  }
+console.log('[Grumpy Bot] Discovering Zen models...');
+  const ranked = await discoverZenModels(timeoutMs);
+  if (ranked.length === 0) {
+console.log('[Grumpy Bot] No Zen models from API, trying hardcoded fallback list');
+    cachedZenModels = [...FALLBACK_ZEN_FREE_MODELS];
+    lastZenDiscovery = now;
+    return cachedZenModels[0] ?? null;
+  }
+  cachedZenModels = ranked;
+  lastZenDiscovery = now;
+  return ranked[0];
+}
+
+async function getGoModel(timeoutMs: number): Promise<string | null> {
+  const now = Date.now();
+  if (cachedGoModels.length > 0 && (now - lastGoDiscovery) < MODEL_CACHE_DURATION) {
+console.log('[Grumpy Bot] Using cached Go model:', cachedGoModels[0]);
+    return cachedGoModels[0];
+  }
+console.log('[Grumpy Bot] Discovering Go models...');
+  const ranked = await discoverGoModels(timeoutMs);
+  if (ranked.length === 0) {
+console.log('[Grumpy Bot] No Go models from API, trying hardcoded fallback list');
+    cachedGoModels = [...FALLBACK_GO_MODELS];
+    lastGoDiscovery = now;
+    return cachedGoModels[0] ?? null;
+  }
+  cachedGoModels = ranked;
+  lastGoDiscovery = now;
+  return ranked[0];
+}
+
+const isRateLimit = (error: any): boolean => error?.response?.status === 429;
+const isToolRejection = (error: any): boolean =>
+  error?.response?.status === 400 && /tool|function/i.test(String(error?.response?.data?.error?.message ?? ''));
+
+/** Why the cascade died, for an honest fallback line (reset per message). */
+type CascadeNote = 'rate-limited' | 'failed' | 'unconfigured' | null;
+let lastCascadeNote: CascadeNote = null;
+function noteCascadeRateLimited(): void { lastCascadeNote = 'rate-limited'; }
+
+/** Said when every provider answered 429: the models are jammed, not the
+ *  board's data, not the net. Never blames "the outside". */
+export const ZEN_RATE_LIMITED_LINE =
+  'The AI line is jammed - the free models are all busy. Ask me again in a minute and I will look it up.';
+
+/** Said when providers were tried and died (500s, 400s, time-outs): the
+ *  fault is upstairs, not the caller's, and not "the outside world". */
+export const ZEN_FAILED_LINE =
+  'My brain misfired on that one - nothing is broken on your end. Ask me again in a minute.';
+
+/** Said when no provider even has a key: the board, not the caller, and
+ *  retrying changes nothing until the sysop acts. */
+export const ZEN_UNCONFIGURED_LINE =
+  'No AI key is set up on this board yet, so I am on fallback lines - tell the sysop, then ask me again.';
+
+/** Answered without waking any model: punctuation noise, "idk" and the like
+ *  cost a full cascade today ("......." burned 35 seconds of model budget
+ *  for nothing, live 2026-09-10). Short nudge, no tools, no lists. */
+export const LOW_CONTENT_NUDGE = "Still here - what's on your mind?";
+
+const LOW_CONTENT_PHRASES = new Set([
+  'i dont know', "i don't know", 'dont know', "don't know",
+  'idk', 'dunno', 'dunno lol', 'hmm', 'uh', 'erm', 'uhh',
+]);
+
+/** True when there is nothing to answer: punctuation-only noise or a bare
+ *  shrug. Longer small-talk ("i want to talk random stuff") still goes to
+ *  the model under the prompt's small-talk rules. */
+export function isLowContentMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t === '') return true;
+  if (/^[.\s…?!,\-~*]+$/.test(t)) return true;
+  return LOW_CONTENT_PHRASES.has(t);
+}
+
+async function getZenResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  return getUpstreamResponse('zen', userMessage, context, aiConfig);
+}
+
+async function getGoResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  return getUpstreamResponse('go', userMessage, context, aiConfig);
+}
+
+/**
+ * One OpenAI-compatible upstream (Zen or Go): silent best-first failover
+ * inside one reply, round-robin across messages. The two differ only in
+ * base URL, key, pool, and free-vs-subscription ranking.
+ */
+async function getUpstreamResponse(kind: ZenUpstream, userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const label = kind === 'go' ? 'Go' : 'Zen';
+  const base = kind === 'go' ? GO_BASE : ZEN_BASE;
+  const apiKey = kind === 'go'
+    ? aiConfig.goApiKey || process.env.GO_API_KEY
+    : aiConfig.zenApiKey || process.env.ZEN_API_KEY;
+  if (!apiKey) {
+console.log(`[Grumpy Bot] No ${kind === 'go' ? 'GO_API_KEY' : 'ZEN_API_KEY'} configured, skipping ${label}`);
+    return null;
+  }
+  const callTimeout = remainingBudget(aiConfig, 10000);
+  if (callTimeout < 250) return null;
+
+  const systemPrompt = personalityFor(aiConfig);
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+    ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+    { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+    ...context.messageHistory.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })),
+    { role: 'user', content: userMessage }
+  ];
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+  const getModel = kind === 'go' ? getGoModel : getZenModel;
+  const rotate = kind === 'go' ? rotateGoModels : rotateZenModels;
+  const plainOnly = kind === 'go' ? goPlainOnly : zenPlainOnly;
+  const cached = () => kind === 'go' ? cachedGoModels : cachedZenModels;
+  const post = async (body: unknown, timeoutMs: number) =>
+    (await axios.post(`${base}/chat/completions`, body, { headers, timeout: timeoutMs })).data;
+
+  const plainCall = async (model: string): Promise<string | null> => {
+    const response = await axios.post(
+      `${base}/chat/completions`,
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
+      { headers, timeout: remainingBudget(aiConfig, 10000) },
+    );
+    const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
+    if (content) console.log(`[Grumpy Bot] SUCCESS - Using ${label} response`);
+    if (!content) return null;
+    return cutOff ? withContinuation(content) : content;
+  };
+
+  // Silent failover inside one reply: best-first, up to three brains, the
+  // caller hears nothing about the switching. A failure rotates the model
+  // to the back, so the next attempt (and the next message) meets the next
+  // best. Upstream 429s are per-model, not one shared pool, so the next
+  // model is a real second chance.
+  // An admin-pinned model runs only if it is listed (discovery or fallback
+  // list); otherwise it is refused with a log line and the picker chooses.
+  // Same rule as OpenRouter's adminModelIfFree, minus the free-only price
+  // check Zen's bare rows cannot carry (Go has no free tier at all).
+  // A pinned model gets one attempt.
+  let pinned: string | null = null;
+  if (aiConfig.modelName) {
+    await getModel(Math.min(callTimeout, 5000));
+    if (cached().includes(aiConfig.modelName)) {
+      pinned = aiConfig.modelName;
+    } else {
+console.log(`[Grumpy Bot] Model "${aiConfig.modelName}" from the admin is not a listed ${label} model - refused; using the picker's choice.`);
+    }
+  }
+  const maxAttempts = pinned ? 1 : 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (remainingBudget(aiConfig, 1000) < 250) break;
+    const model = pinned || await getModel(Math.min(remainingBudget(aiConfig, 5000), 5000));
+    if (!model) {
+console.log(`[Grumpy Bot] No ${label} models available`);
+      return null;
+    }
+  try {
+    if (context.tools && context.tools.list.length > 0 && !plainOnly.has(model)) {
+console.log(`[Grumpy Bot] Trying ${label} (${model}) with ${context.tools.list.length} tools...`);
+      const result = await askWithTools({
+        model, messages, tools: context.tools.list, ctx: context.tools.ctx,
+        deadline: cfgDeadline(aiConfig), perRoundMs: PER_ROUND_MS,
+        maxTokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature, post,
+      });
+      (context.afters ??= []).push(...result.afters);
+      if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+      if (result.text) {
+console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
+        return result.truncated ? withContinuation(result.text) : result.text;
+      }
+      const answered = result.calls.filter((c) => c.outcome === 'ok');
+      if (answered.length > 0 && result.toolResults.length > 0) {
+console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
+        return `Straight from the board:\n${result.toolResults.join('\n')}`;
+      }
+      rotate();
+      continue;
+    }
+console.log(`[Grumpy Bot] Trying ${label} (${model})...`);
+    const plain = await plainCall(model);
+    if (plain) return plain;
+    rotate();
+  } catch (error: any) {
+console.error(`[Grumpy Bot] ${label} failed:`, error.message);
+    if (error?.response) {
+console.error(`[Grumpy Bot] ${label} status:`, error.response.status);
+console.error(`[Grumpy Bot] ${label} data:`, JSON.stringify(error.response.data)?.slice(0, 500));
+    }
+    if (error?.response?.status === 401) {
+      // The key itself is refused: every model would answer the same.
+      // Loud, once, then the cascade moves on - never burn attempts.
+console.error(`[Grumpy Bot] ${label} key refused (401) - check ${kind === "go" ? "GO_API_KEY" : "ZEN_API_KEY"}`);
+      return null;
+    }
+    if (isRateLimit(error)) {
+      // Per-model upstream, not the whole pool: note it for an honest
+      // fallback if everything dies, and try the next brain silently.
+      noteCascadeRateLimited();
+      rotate();
+      continue;
+    }
+    if (context.tools && context.tools.list.length > 0 && (
+      error?.response?.status === 400 || error?.response?.status === 500
+    )) {
+      // A 400 or 500 on a tool-loop attempt retries plain: live evidence
+      // (2026-09-10, deepseek 400, muse-spark 500s with 44 tools) is that
+      // some upstream models choke on the tools shape. A plain body is
+      // shaped differently, so the retry is meaningful, not a replay.
+      // Unlike a 400 refusal the 500 is not remembered: a busy model may
+      // take tools fine on the next message.
+      if (isToolRejection(error)) {
+console.log(`[Grumpy Bot] ${label} model ${model} refuses tools - plain completion instead`);
+      } else {
+console.log(`[Grumpy Bot] ${label} model ${model} ${error?.response?.status} on tools - plain completion instead`);
+      }
+      if (error?.response?.status === 400) plainOnly.add(model);
+      try {
+        const plain = await plainCall(model);
+        if (plain) return plain;
+      } catch (retryError: any) {
+console.error(`[Grumpy Bot] ${label} plain retry failed:`, retryError.message);
+        if (isRateLimit(retryError)) noteCascadeRateLimited();
+      }
+    }
+    rotate();
+    continue;
+  }
+  }
+  return null;
 }
 
 /**
@@ -695,7 +1423,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.
       if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
       if (result.text) {
 console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
-        return result.text;
+        return result.truncated ? withContinuation(result.text) : result.text;
       }
       // THE BOARD ALREADY ANSWERED. When the model asked a tool and then ran
       // out of time before writing its reply, the cascade used to fall
@@ -707,7 +1435,7 @@ console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
       const answered = result.calls.filter((c) => c.outcome === 'ok');
       if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-        return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+        return `Straight from the board:\n${result.toolResults.join('\n')}`;
       }
       return null;
     }
@@ -729,11 +1457,12 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     noteModelCost(freeModel, Date.now() - plainStartedAt, Boolean(content));
     cachedFreeModels = rankFreeModels([...knownFreeModels.values()]);
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error: any) {
@@ -742,6 +1471,10 @@ console.error('[Grumpy Bot] OpenRouter failed:', error.message);
 console.error('[Grumpy Bot] Status:', error.response.status);
 console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     }
+    // A 429 is the shared pool refusing, not the board's data and not the
+    // net: the cascade yields to Zen at once (model-hopping replays the
+    // same refusal), and the fallback line says jammed, never "outside".
+    if (error?.response?.status === 429) noteCascadeRateLimited();
 
     // If this model failed, try the next one - but not every model on the
     // list, and never past the deadline. The caller is waiting.
@@ -766,21 +1499,43 @@ console.log('[Grumpy Bot] Trying next OpenRouter model...');
 async function getAIResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const preferred = aiConfig.provider || 'openrouter';
 
-  // Ordered cascade: preferred first, then rest as fallback
-  const cascade: Array<'groq' | 'gemini' | 'openrouter'> =
-    preferred === 'groq' ? ['groq', 'gemini', 'openrouter'] :
-    preferred === 'gemini' ? ['gemini', 'groq', 'openrouter'] :
-    ['openrouter', 'groq', 'gemini'];
+  // Rule-based means rule-based: the admin turned the AI off, so no round
+  // trip leaves the box. (Before 2026-09-10 the cascade below ran anyway.)
+  if (preferred === 'rule-based') return null;
 
+  // Ordered cascade: preferred first, then the rest with the keyed
+  // upstreams (Zen, Go) ahead of OpenRouter - either way a Zen/Go failure
+  // falls back to OpenRouter and an OpenRouter 429 falls forward to Zen
+  // before Groq/Gemini are tried.
+  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras'> =
+    preferred === 'groq' ? ['groq', 'zen', 'go', 'gemini', 'cerebras', 'openrouter'] :
+    preferred === 'gemini' ? ['gemini', 'zen', 'go', 'groq', 'cerebras', 'openrouter'] :
+    preferred === 'zen' ? ['zen', 'go', 'openrouter', 'groq', 'gemini', 'cerebras'] :
+    preferred === 'go' ? ['go', 'zen', 'openrouter', 'groq', 'gemini', 'cerebras'] :
+    preferred === 'cerebras' ? ['cerebras', 'groq', 'zen', 'go', 'openrouter', 'gemini'] :
+    ['openrouter', 'zen', 'go', 'groq', 'gemini', 'cerebras'];
+
+  lastCascadeNote = null;
+  const hasKeys = Boolean(
+    aiConfig.zenApiKey || process.env.ZEN_API_KEY
+    || aiConfig.goApiKey || process.env.GO_API_KEY
+    || aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY
+    || aiConfig.groqApiKey || process.env.GROQ_API_KEY
+    || aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY
+    || aiConfig.geminiApiKey || process.env.GEMINI_API_KEY,
+  );
   for (const provider of cascade) {
     let response: string | null = null;
     if (provider === 'groq') response = await getGroqResponse(userMessage, context, aiConfig);
     else if (provider === 'gemini') response = await getGeminiResponse(userMessage, context, aiConfig);
+    else if (provider === 'zen') response = await getZenResponse(userMessage, context, aiConfig);
+    else if (provider === 'go') response = await getGoResponse(userMessage, context, aiConfig);
+    else if (provider === 'cerebras') response = await getCerebrasResponse(userMessage, context, aiConfig);
     else if (provider === 'openrouter') response = await getOpenRouterResponse(userMessage, context, aiConfig);
     if (response) return response;
   }
-
-console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
+  // Tried and died versus never tried: the fallback line says which.
+  if (!lastCascadeNote) lastCascadeNote = hasKeys ? 'failed' : 'unconfigured';
   return null;
 }
 
@@ -832,12 +1587,23 @@ export async function getGrumpySysopResponse(
   };
 
   const aiResponse = await getAIResponse(userMessage, untaggedHistory(context), cfg);
-  if (aiResponse) {
-console.log('[Grumpy Bot] Using AI response');
+  const cleaned = aiResponse ? stripFakeToolCalls(aiResponse) : null;
+  if (cleaned && cleaned !== aiResponse) {
+console.log('[Grumpy Bot] Stripped a faked tool-call block from the reply');
+  }
+  if (cleaned) {console.log('[Grumpy Bot] Using AI response');
     // The caller has their answer; the board spends the quiet moment learning
     // what the NEXT model on the list costs, so nobody pays for it in a chat.
     void probeAnUnmeasuredModel(cfg).catch(() => undefined);
-    return stripEmojis(stripEngineTag(aiResponse).trim());
+    // Cutoff is judged on the raw reply: stripMarkdown would eat a trailing
+    // '**' and hide exactly the evidence this looks for.
+    const cut = looksCutOff(cleaned);
+    const reply = toAmigaLatin1(stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim()))));
+    if (cut) {
+console.log('[Grumpy Bot] Reply looks cut off mid-thought - marking continuation');
+      return withContinuation(reply);
+    }
+    return reply;
   }
 
   // NO CANNED BOT BEHIND THIS. There used to be a rule-based responder - a
@@ -848,12 +1614,34 @@ console.log('[Grumpy Bot] Using AI response');
   // Its personality was never its own either: the voice is the system prompt
   // the model is given, so nothing was lost by deleting it.
   //
-  // When no provider answers, the co-sysop says so, once, in his own voice.
-  // A caller told the truth can ask again; a caller told a non-sequitur
-  // thinks the board is broken. The persona's own line (s.6) is what is
-  // remembered: a persona without its own would start talking like Kevin.
+  // The fallback names the failure kind: jammed models, dead models, or
+  // no keys at all. None of them blame "the outside" - the board's data
+  // and the net were never the patient. Only rule-based (the admin turned
+  // the AI off) keeps the persona's own line.
 console.log('[Grumpy Bot] No provider answered - saying so');
-  return stripEmojis(fallbackForPersona(cfg));
+  // A reply that was ONLY a faked tool call leaves nothing to say - but
+  // its model must not lead again next message, or every retry roleplays
+  // the same block. Rotate, and record the death: the cascade returned
+  // text, so its tried-and-died default never ran, and without this the
+  // persona fallback would answer for a failure.
+  if (aiResponse && !cleaned) {
+    rotateModelPools();
+    if (!lastCascadeNote) lastCascadeNote = 'failed';
+  }
+  // One failure, one line - but never the SAME line twice running. Two
+  // identical outages back to back used to read out the identical sentence
+  // verbatim ("My brain misfired", twice in a row, live 2026-09-10), which
+  // reads as a stuck bot rather than a down provider. A repeat falls back
+  // to the persona's own line instead - still honest (the generic one is
+  // connection trouble), just not identical. Unconfigured stays stable: no
+  // keys is a standing condition, not an event.
+  const lastBotLine = [...context.messageHistory].reverse()
+    .find(m => m.role === 'bot' || (m as { role: string }).role === 'assistant')?.content;
+  const repeat = (line: string) => lastBotLine === line;
+  if (lastCascadeNote === 'rate-limited' && !repeat(ZEN_RATE_LIMITED_LINE)) return ZEN_RATE_LIMITED_LINE;
+  if (lastCascadeNote === 'failed' && !repeat(ZEN_FAILED_LINE)) return ZEN_FAILED_LINE;
+  if (lastCascadeNote === 'unconfigured') return ZEN_UNCONFIGURED_LINE;
+  return toAmigaLatin1(stripMarkdown(stripEmojis(fallbackForPersona(cfg))));
 }
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {

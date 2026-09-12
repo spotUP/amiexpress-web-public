@@ -32,7 +32,7 @@ import { runPreLoginConnect } from '../../src/services/login-connect.service';
 jest.setTimeout(60000);
 
 /** The prompt's own last characters - what step 01 ends on. */
-const STEP_01_SENTINEL = 'A/R/P/P8/N';
+const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({
   io: {} as never,

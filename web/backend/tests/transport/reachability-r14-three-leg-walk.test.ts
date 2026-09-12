@@ -34,7 +34,7 @@ import { bootBoard, type BootedBoard } from '../support/booted-board';
 
 jest.setTimeout(300000);
 
-const STEP_01 = 'A/R/P/P8/N';
+const STEP_01 = 'A/R/P/P8/T/N';
 
 /** Telnet's own framing is difference 3; remove it so bytes can be compared. */
 function stripTelnetNegotiation(raw: Buffer): Buffer {

@@ -95,11 +95,11 @@ export function TerminalPage(): JSX.Element {
   const fitSizeRef = useRef(fitSize);
   fitSizeRef.current = fitSize;
   /**
-   * The viewer's override, as a fraction of the fit (1 = follow the window).
-   * BBSTerminal owns the gestures and reports the fraction here; the page
-   * does the one multiply, so there is a single producer of a cell size.
+   * REMOVED (sysop, 2026-09-12): the viewer zoom override - the fraction is
+   * always fit-to-window and the browser window alone decides the size.
+   * Kept as a constant because the fit pipeline below reads it.
    */
-  const [zoomFraction, setZoomFraction] = useState<number>(FIT_TO_WINDOW);
+  const zoomFraction = FIT_TO_WINDOW;
   const zoomFractionRef = useRef(zoomFraction);
   zoomFractionRef.current = zoomFraction;
   /**
@@ -116,8 +116,9 @@ export function TerminalPage(): JSX.Element {
    * "it has padding now" (sysop, 2026-09-03). Splitting that slack between
    * the two sides of the bezel makes the BOX exactly the size of the space it
    * was fitted into on the constraining axis: flush, with a slightly thicker
-   * black frame instead of a grey gap. Only while the viewer is following the
-   * window; a deliberately scaled-down screen is meant to have room around it.
+   * black frame instead of a grey gap. The viewer always follows the window
+   * now (sysop, 2026-09-12 - the zoom override is gone), so the flush case
+   * is the only case.
    */
   const [bezelPx, setBezelPx] = useState<number>(TERMINAL_BEZEL_PX);
   const [activeDoorId, setActiveDoorId] = useState<string | null>(null);
@@ -155,6 +156,12 @@ export function TerminalPage(): JSX.Element {
     const term = terminalRef.current?.getTerminal();
     const element = term?.element;
     if (!term || !element) return;
+
+    // A teletext session owns its doubled cell (BBSTerminalRef.isTexttvMode):
+    // the fit probes real sizes onto the live terminal, and probing writes
+    // the calibrated size back over the mode's 2x - the mode applied, then
+    // un-applied itself (2026-09-10). Leave it alone, like a wide door.
+    if (terminalRef.current?.isTexttvMode?.() === true) return;
 
     // A door that took the terminal out of the standard 80-column grid (wide
     // mode, or a server-driven resize) owns its own sizing — leave it alone.
@@ -518,13 +525,9 @@ export function TerminalPage(): JSX.Element {
       onSurfaceChange={setSurface}
       onTerminalModeChange={setTerminalMode}
       /*
-       * The zoom gestures are a DESKTOP override on top of the fit. A
-       * handheld is already fitted to its screen, has no pointer to put on a
-       * bezel corner, and - if it were allowed to write the override - would
-       * erase the fraction the same viewer chose at their desk.
+       * REMOVED (sysop, 2026-09-12): zoomEnabled + onZoomChange (viewer zoom
+       * override). The browser window alone decides the size now.
        */
-      zoomEnabled={!isHandheldMode}
-      onZoomChange={setZoomFraction}
       /*
        * Desktop centres the terminal box inside the terminal's own wrapper -
        * that is what puts a canvas session on the page ground instead of in

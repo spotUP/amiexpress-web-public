@@ -53,3 +53,34 @@ export async function saveAndCancelButtonsPaint(): Promise<void> {
     await done;
   } finally { screen.destroy(); }
 }
+
+const dataManagerWithUsers: any = {
+  loadParties: async () => [],
+  loadUsers: async () => ({
+    u1: { userId: 'u1', handle: 'spot' },
+    u2: { userId: 'u2', handle: 'ace' },
+  }),
+};
+
+export async function assigneePickerListsHandles(): Promise<void> {
+  const screen = open();
+  try {
+    const chunks: string[] = [];
+    const program = screen.program;
+    const origWrite = program.write.bind(program);
+    program.write = (s: string) => { chunks.push(String(s)); return origWrite(s); };
+
+    const done = createTask(screen, { id: 'p1', name: 'Demo' }, user, dataManagerWithUsers);
+    await settle();
+    screen.render();
+    await settle();
+
+    const painted = chunks.join('');
+    assert.ok(painted.includes('Assignee'), 'the Assignee picker paints');
+    assert.ok(painted.includes('spot'), 'known handles are offered');
+    assert.ok(painted.includes('Demo'), 'the dialog names its project');
+
+    press(screen, '\x1b', 'escape');
+    await done;
+  } finally { screen.destroy(); }
+}

@@ -7,6 +7,7 @@ exports.showProjectList = showProjectList;
 exports.createProject = createProject;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const menu_1 = require("./menu");
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
@@ -26,7 +27,7 @@ const COMPACT_HINTS = [
     { key: 'D', does: 'Del' },
     { key: 'Q', does: 'Back' },
 ];
-async function showProjectList(screen, user, dataManager, achievementManager, bbsApi) {
+async function showProjectList(screen, user, dataManager, achievementManager, bbsApi, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -34,11 +35,14 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
         // Note: Removed 200ms artificial delay for better responsiveness
         let projects = await dataManager.loadProjects();
         let selectedIndex = 0;
+        // Menu bar row (ui/menu.ts): header and list slide down one row
+        // when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -56,10 +60,10 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
         const listBox = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 1,
             width: '98%',
-            height: '100%-6',
+            height: `100%-${barH + 6}`,
             border: { type: 'line' },
             label: ' Projects ',
             style: {
@@ -120,6 +124,10 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(listBox);
@@ -177,6 +185,15 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
         };
         screen.on('keypress', keyHandler);
         list.focus();
+        // Menu picks navigate out (the app loop jumps); the pick flow
+        // resolves null alongside so the kanban picker simply cancels.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve(null);
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
         screen.render();
     });
 }

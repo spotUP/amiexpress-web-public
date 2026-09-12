@@ -1,10 +1,10 @@
 /**
  * Discord writes for WHIP (bot Phase 2): modals, buttons, selects.
  *
- * Every write resolves the caller's link first (unlinked = ephemeral hint,
- * never an anonymous write) and always sends both actorUserId and discordId
- * so the backend can verify the mapping. Custom IDs are pure and tested;
- * the Discord objects stay at the edges.
+ * Every write resolves the caller's board identity first (link, handle,
+ * door name, fuzzy - never anonymous) and sends actorUserId with discordId
+ * only when a link row binds them, so the backend can verify the mapping.
+ * Custom IDs are pure and tested; the Discord objects stay at the edges.
  */
 
 import {
@@ -19,7 +19,7 @@ import {
 
 export type WriteDeps = {
   userId: string;
-  discordId: string;
+  discordId?: string;
 };
 
 const PREFIX = 'w:';
@@ -100,10 +100,16 @@ export function buildNewTaskModal(projectId: string): ModalBuilder {
     .setLabel('Description')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false);
+  const assignee = new TextInputBuilder()
+    .setCustomId('assignee')
+    .setLabel('Assignee (handle, optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(title),
     new ActionRowBuilder<TextInputBuilder>().addComponents(category),
     new ActionRowBuilder<TextInputBuilder>().addComponents(points),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(assignee),
     new ActionRowBuilder<TextInputBuilder>().addComponents(description)
   );
   return modal;

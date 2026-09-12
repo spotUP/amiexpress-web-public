@@ -1,0 +1,11 @@
+DE,Native teletext test page
+PN,10000
+SC,0000
+CT,8,C
+PS,8000
+OL,0,  NATIVE 100
+OL,1,
+OL,2, Hello from packets.
+OL,3,
+OL,23, Page 100     Test Service
+FL,200,300,400,500,100,8FF

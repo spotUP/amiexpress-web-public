@@ -20,8 +20,10 @@
 
 import express, { Request, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { sessions, socketToNodeId, getSocketIdByNodeId } from '../server/session-manager';
-import { emitterForNodeId } from '../server/session-emitter-registry';
+import { sessions, socketToNodeId, getSocketIdByNodeId, clearPendingDisconnect } from '../server/session-manager';
+import { userSessions, socketToUser } from '../server/session-manager';
+import { nodeFileManager } from '../services/NodeFileManager';
+import { emitterForNodeId, unregisterConnectionEmitter } from '../server/session-emitter-registry';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   setNodeReservation,
@@ -51,7 +53,61 @@ interface NodeStatus {
 }
 
 /** Just the fields the diagnostic above reads. */
-type BBSSessionLike = { socketId?: string };
+type BBSSessionLike = { socketId?: string; user?: { id?: unknown }; sysopKicked?: boolean };
+
+/**
+ * Synchronously clear a kicked node's presence (ghosts, 2026-09-10).
+ *
+ * Both kick paths use it: the live-emitter path (before disconnect) and
+ * the ghost path (no emitter at all). Every delete is idempotent, so a
+ * disconnect teardown that does run repeats them harmlessly. Never
+ * deletes another live session's rows - only the victim's own, or nobody's.
+ *
+ * The `sessions` entry is the one that matters most: the login refusal
+ * trusts exactly `sessions.has(nodeId)` as liveness, so a kick that left
+ * it made the ghost permanent - every fresh login refused, and kicking
+ * again re-entered the ghost branch forever ("i never get reloggedin",
+ * 2026-09-11). It is deleted only while it still names the victim.
+ */
+function clearKickPresence(
+  nodeId: number,
+  victim: (BBSSessionLike & { connectionEmitter?: unknown }) | undefined,
+): void {
+  if (!victim) return;
+  victim.sysopKicked = true;
+  const userId = victim.user?.id === undefined || victim.user?.id === null
+    ? undefined
+    : String(victim.user.id);
+  const key = nodeId.toString();
+  if (sessions.get(key) === (victim as unknown)) sessions.delete(key);
+  unregisterConnectionEmitter(victim as never);
+  if (userId !== undefined) clearPendingDisconnect(userId);
+  try {
+    const { multicomManager } = require('../nodes/MulticomManager.js');
+    multicomManager.clearNode(nodeId);
+  } catch {
+    // A node outside Multicom, or a manager that never loaded: not presence.
+  }
+  if (victim.socketId) {
+    socketToNodeId.delete(victim.socketId);
+    socketToUser.delete(victim.socketId);
+  }
+  for (const [socketId, mappedNode] of socketToNodeId) {
+    if (mappedNode === nodeId) socketToNodeId.delete(socketId);
+  }
+  if (userId !== undefined) {
+    for (const [socketId, mappedUser] of socketToUser) {
+      if (mappedUser === userId) socketToUser.delete(socketId);
+    }
+    const current = userSessions.get(userId);
+    if (!current || current === (victim as unknown)) userSessions.delete(userId);
+  }
+  try {
+    nodeFileManager.deleteNodeFiles(nodeId);
+  } catch {
+    // Disk cleanup is best-effort; the maps above are the refusal path.
+  }
+}
 
 export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof express.Router> {
   const router = express.Router();
@@ -334,6 +390,19 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
           : session.socketId
             ? `socket ${session.socketId}, which the server does not have`
             : 'a session with no socket recorded';
+      if (session) {
+        // A ghost: session rows but no live transport to drop. Clear the
+        // presence synchronously (same clearKickPresence below) and report
+        // it - this is the kick the admin UI means when it kicks a caller
+        // whose disconnect event never fired.
+        clearKickPresence(nodeId, session);
+        console.warn(`[Node Control] Kicked ghost on node ${nodeId} (${detail})`);
+        return res.json({
+          success: true,
+          message: `Node ${nodeId} had no live connection (${detail}); its presence was cleared`,
+          timestamp: getSystemTime().toISOString(),
+        });
+      }
       console.warn(`[Node Control] Kick refused for node ${nodeId}: ${detail}`);
       return res.status(404).json({
         success: false,
@@ -346,6 +415,13 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
         ? `\r\nDisconnected by the sysop: ${reason}\r\n`
         : '\r\nDisconnected by the sysop.\r\n',
     });
+
+    // Synchronous part of the kick (ghosts, 2026-09-10): nothing here
+    // may depend on the disconnect event firing at all - a dead
+    // transport never fires it. See clearKickPresence above.
+    clearKickPresence(nodeId, sessions.get(nodeId.toString()) as
+      (BBSSessionLike & { connectionEmitter?: unknown }) | undefined);
+
     target.emitter.disconnect(true);
 
     console.log(`[Node Control] Kicked node ${nodeId} (socket: ${validation.socketId})`);

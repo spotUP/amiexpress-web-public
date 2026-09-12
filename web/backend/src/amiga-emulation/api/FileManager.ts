@@ -16,6 +16,7 @@ import * as amigafs from '../../utils/amigafs';
 import { FileHandle } from './FileHandle';
 import { PathManager } from './PathManager';
 import { AmigaFileCache } from './AmigaFileCache';
+import type { FileShadowProvider } from './file-shadow';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
 
@@ -54,6 +55,14 @@ export class FileManager {
   /** Callback to emit debug messages to sysop terminal */
   private debugCallback?: DoorDebugCallback;
 
+  /**
+   * Session-scoped file shadows (narrow Empire configs). Consulted on
+   * MODE_OLDFILE opens after the path resolves; a Buffer answer becomes a
+   * memory-backed read handle, null falls through to disk. Writes never
+   * shadow - same rule as the narrow-art redirect, for the same reason.
+   */
+  private shadowProvider: FileShadowProvider | null = null;
+
   /** Last error code (AmigaDOS ERROR_* constant) */
   private lastErrorCode: number = 0;
 
@@ -87,6 +96,11 @@ export class FileManager {
     if (this.debugCallback) {
       this.debugCallback(message, level);
     }
+  }
+
+  /** Install the session's shadow provider (null disables). */
+  setShadowProvider(provider: FileShadowProvider | null): void {
+    this.shadowProvider = provider;
   }
 
   /**
@@ -311,6 +325,39 @@ console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will 
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (not found)`);
       // Emit to sysop terminal for visibility
       this.emitDebug(`[68K] File not found: "${amiPath}"`, 'warn');
+    }
+
+    // Session shadow: a narrow caller reads a rewritten copy (single-column
+    // Empire configs) while the disk file - and every other node - is
+    // untouched. MODE_OLDFILE only: _NEWFILE/_READWRITE create or mutate,
+    // and shadowing those would destroy or misdirect the door's writes.
+    // Memory handles are read-only by construction, so the shadow opens
+    // 'r' explicitly rather than through the 'rw' mapping below.
+    if (mode === 1005 && fileExists && this.shadowProvider) {
+      let shadow: Buffer | null = null;
+      try {
+        shadow = this.shadowProvider(amiPath, sysPath, mode);
+      } catch {
+        shadow = null;
+      }
+      if (shadow) {
+        const fh = new FileHandle(amiPath, sysPath, {
+          needClose: true,
+          autoFlush: false,
+          isNil: false,
+          isConsole: false,
+          memoryBuffer: shadow,
+        });
+        if (fh.open('r')) {
+          const bptr = this.allocateBptr();
+          fh.bAddr = bptr;
+          this.handles.set(bptr, fh);
+          this.lastErrorCode = this.ERROR_NO_ERROR;
+          return bptr;
+        }
+        // A shadow that cannot open is a failed shadow, not a failed
+        // file: fall through to the disk path below.
+      }
     }
 
     // AmigaDOS MODE_OLDFILE (1005) requires the target to already exist.

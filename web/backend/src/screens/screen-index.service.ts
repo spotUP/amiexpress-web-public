@@ -32,7 +32,7 @@ import { readThemeRegistry, themeDirectory } from './theme-registry';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
 
-export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii';
+export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii' | 'teletext' | 'teletext-native';
 
 /**
  * Who reads a file, and why.
@@ -332,6 +332,22 @@ export function listScreenDirectories(baseDir: string): string[] {
     }
   };
 
+  // A theme's Files/ mirror nests (Files/Screens/logoff/): one level never
+  // reaches it, so a theme file there was invisible to the index - the
+  // studio offered its slot as undrawn and opened a blank canvas over art,
+  // and uploads into it never surfaced. Walk it deep; it is sysop-curated
+  // art, not a dependency tree.
+  const addTreeDeep = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
+    dirs.add(dir);
+    for (const entry of fs.readdirSync(dir)) {
+      const full = path.join(dir, entry);
+      try {
+        if (fs.statSync(full).isDirectory()) addTreeDeep(full);
+      } catch { /* a vanished entry is not a directory */ }
+    }
+  };
+
   addTree(path.join(baseDir, 'Screens'));
   for (const id of nodeIds(baseDir)) {
     dirs.add(path.join(baseDir, `Node${id}`));
@@ -362,6 +378,7 @@ export function listScreenDirectories(baseDir: string): string[] {
     if (!root) continue; // `default` is the board's own screens, already listed
     addTree(root);
     addTree(path.join(root, 'Conf'));
+    addTreeDeep(path.join(root, 'Files'));
   }
 
   return [...dirs].filter(d => fs.existsSync(d));
@@ -372,6 +389,11 @@ function sniffFormat(name: string, buf: Buffer): ScreenFormat {
   const lower = name.toLowerCase();
   if (lower.endsWith('.rip') || buf.subarray(0, 2).toString('latin1') === '!|') return 'rip';
   if (lower.endsWith('.seq')) return 'petscii';
+  // WEB_: .tti is native packet-level teletext (edit.tf / wxTED / Marco
+  // family) - listed, never parsed as text. .ttx is this board's ANSI
+  // teletext (the TDAText face does the work), drawn like ANSI.
+  if (lower.endsWith('.tti')) return 'teletext-native';
+  if (lower.endsWith('.ttx')) return 'teletext';
   if (buf.includes(0x1b)) return 'ansi';
   return 'text';
 }
@@ -538,9 +560,9 @@ function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
   const problems: ScreenProblem[] = [];
   if (buf.length === 0) problems.push('empty');
 
-  // Only for text-shaped screens: RIP and PETSCII carry their own byte
-  // conventions and `[` means nothing special in them.
-  if (format !== 'rip' && format !== 'petscii') {
+  // Only for text-shaped screens: RIP, PETSCII and native teletext
+  // carry their own byte conventions and `[` means nothing special in them.
+  if (format !== 'rip' && format !== 'petscii' && format !== 'teletext-native') {
     const text = buf.toString('latin1');
     const hasEscape = text.includes('\x1b');
     const hasBareCsi = /\[[0-9][0-9;]*m/.test(text);
@@ -856,9 +878,9 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
   const name = path.basename(absPath);
   const format = sniffFormat(name, buf);
 
-  // Only a text-shaped screen carries MCI; RIP and PETSCII bytes would produce
-  // noise that looks like references.
-  const mci = format === 'rip' || format === 'petscii'
+  // Only a text-shaped screen carries MCI; RIP, PETSCII and native
+  // teletext bytes would produce noise that looks like references.
+  const mci = format === 'rip' || format === 'petscii' || format === 'teletext-native'
     ? []
     : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
 
@@ -867,7 +889,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
    * text-shaped screen: RIP and PETSCII carry their own conventions and
    * "strip the escapes" means nothing in them.
    */
-  const codesOnly = (format === 'ansi' || format === 'text') && buf.length > 0
+  const codesOnly = (format === 'ansi' || format === 'text' || format === 'teletext') && buf.length > 0
     ? isCodesOnly(buf.toString('latin1'))
     : false;
 

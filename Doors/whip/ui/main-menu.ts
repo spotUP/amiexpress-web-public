@@ -1,6 +1,7 @@
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
 import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
@@ -44,11 +45,23 @@ export async function showMainMenu(
       : null;
 
     // ========================================================================
+    // MENU BAR - shared helper (ui/menu.ts). Built after the list so
+    // Escape can hand focus back to it; barH comes straight from the
+    // width so the header below lands right with or without the bar.
+    // ========================================================================
+    const barH = screen.width >= 60 ? 1 : 0;
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      cleanup();
+      resolve(value);
+    };
+
+    // ========================================================================
     // HEADER - the chrome's masthead (NOT focusable)
     // ========================================================================
     const header = createBox({
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -73,10 +86,10 @@ export async function showMainMenu(
     // ========================================================================
     const mainContainer = createBox({
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 0,
       width: '100%',
-      height: '100%-6',  // Leave room for header (3) and footer (3)
+      height: `100%-${barH + 7}`,  // Menu bar (0-1) + header (3) + footer (3) + gap
       style: {
         fg: T.ink,
         bg: T.ground,
@@ -96,10 +109,11 @@ export async function showMainMenu(
       { key: 'P', label: 'Party Timeline', value: 'parties' as MenuSelection },
       { key: 'L', label: 'Leaderboard', value: 'leaderboard' as MenuSelection },
       { key: 'A', label: 'Achievements', value: 'achievements' as MenuSelection },
+      { key: 'D', label: 'My Profile (Discord name)', value: 'my-profile' as MenuSelection },
       { key: 'Q', label: 'Quit', value: 'quit' as MenuSelection }
     ];
 
-    // Menu box with border - explicit height (9 items + 2 border + 2 padding = 13)
+    // Menu box with border - 10 items + 2 border + 1 spare = 13
     const menuBox = createBox({
       parent: mainContainer,
       top: 1,
@@ -156,13 +170,13 @@ export async function showMainMenu(
       statsContent += `{${T.dim}-fg}No upcoming parties{/${T.dim}-fg}`;
     }
 
-    // Stats box on right side - same height as menu box (13)
+    // Stats box on right side - same height as menu box (12)
     const statsBox = createBox({
       parent: mainContainer,
       top: 1,
       right: 1,
       width: '45%',
-      height: 13,
+      height: 12,
       border: { type: 'line' },
       label: ' STATS ',
       content: statsContent,
@@ -241,8 +255,24 @@ export async function showMainMenu(
     // Focus the list
     list.focus();
 
+    // The bar goes up once the list exists for Escape to return to.
+    menu = attachWhipMenu(screen, pickFromBar, () => list.focus());
+    screen.render();
+
     // Keyboard handler for direct shortcuts
     const keyHandler = (ch: any, key: any) => {
+      // Tab steps between the list and the menu bar. WHIP runs with
+      // focusKeys:false so the screen default never fires - without this
+      // the SDK bar's Tab stop is unreachable by keyboard (2026-09-10).
+      if (key.name === 'tab') {
+        const stop = menu?.bar.getTabStop();
+        if (!stop) return;
+        if (screen.getFocused() === stop) list.focus();
+        else stop.focus();
+        screen.render();
+        return;
+      }
+
       const keyName = key.name.toUpperCase();
 
       // Check for direct menu shortcuts
@@ -269,6 +299,10 @@ export async function showMainMenu(
       chrome.stop();
       screen.off('keypress', keyHandler);
       list.removeAllListeners('select');
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.remove(header);
       screen.remove(mainContainer);
       if (gettingStarted) screen.remove(gettingStarted);

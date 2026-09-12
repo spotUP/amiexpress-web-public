@@ -131,6 +131,9 @@ export class OperatorChatRepository {
         groq_api_key TEXT DEFAULT '',
         gemini_api_key TEXT DEFAULT '',
         openrouter_api_key TEXT DEFAULT '',
+        zen_api_key TEXT DEFAULT '',
+        go_api_key TEXT DEFAULT '',
+        cerebras_api_key TEXT DEFAULT '',
         pushover_user_key TEXT DEFAULT '',
         pushover_app_token TEXT DEFAULT '',
         gotify_url TEXT DEFAULT '',
@@ -176,6 +179,15 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN openrouter_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN zen_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN go_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN cerebras_api_key TEXT DEFAULT ''`);
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN pushover_user_key TEXT DEFAULT ''`);
@@ -573,13 +585,16 @@ export class OperatorChatRepository {
       notifyOnPage: row.notify_on_page !== 0,
       notifyDiscord: row.notify_discord !== 0,
       aiEnabled: row.ai_enabled === 1,
-      aiProvider: (row.ai_provider as 'groq' | 'gemini' | 'openrouter' | 'rule-based') || 'openrouter',
+      aiProvider: (row.ai_provider as 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras' | 'rule-based') || 'openrouter',
       aiModelName: row.ai_model_name || '',
       aiTemperature: row.ai_temperature ?? 0.9,
       aiSystemPrompt: row.ai_system_prompt || '',
       groqApiKey: row.groq_api_key || '',
       geminiApiKey: row.gemini_api_key || '',
       openRouterApiKey: row.openrouter_api_key || '',
+      zenApiKey: (row as any).zen_api_key || '',
+      goApiKey: (row as any).go_api_key || '',
+      cerebrasApiKey: (row as any).cerebras_api_key || '',
       pushoverUserKey: row.pushover_user_key || '',
       pushoverAppToken: row.pushover_app_token || '',
       gotifyUrl: row.gotify_url || '',
@@ -632,6 +647,9 @@ ntfyTopic: row.ntfy_topic || '',
         groq_api_key = ?,
         gemini_api_key = ?,
         openrouter_api_key = ?,
+        zen_api_key = ?,
+        go_api_key = ?,
+        cerebras_api_key = ?,
         pushover_user_key = ?,
         pushover_app_token = ?,
         gotify_url = ?,
@@ -674,6 +692,9 @@ ntfyTopic: row.ntfy_topic || '',
       merged.groqApiKey ?? '',
       merged.geminiApiKey ?? '',
       merged.openRouterApiKey ?? '',
+      (merged as any).zenApiKey ?? '',
+      (merged as any).goApiKey ?? '',
+      (merged as any).cerebrasApiKey ?? '',
       merged.pushoverUserKey ?? '',
       merged.pushoverAppToken ?? '',
       merged.gotifyUrl ?? '',

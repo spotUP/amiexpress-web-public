@@ -86,9 +86,13 @@ export interface PreLoginConnectResult {
  * who types it gets the C64's 40-column screen, which is the honest answer:
  * their terminal IS the screen, and no byte on the wire could make it 80
  * columns wide.
+ *
+ * T (2026-09-10, WEB_) is TELETEXT session mode: TDAText face + teletext
+ * palette in the web terminal, plain ANSI on byte transports (with a
+ * fallback notice, same shape as R). No express.e counterpart.
  */
 export const ANSI_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/P8/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLETINS]? ";
 
 /**
  * The connect banner - express.e:29507-29522 - for EVERY transport.
@@ -134,6 +138,13 @@ export async function emitConnectBanner(
 
   const say = (text: string) => emitter.emit("ansi-output", text);
 
+  // Fresh connect, stale glass: a caller redialing after a refusal or a
+  // reboot still sees whatever was last painted (the ONENODE art, a dropped
+  // door). express.e never clears here - a dial-up terminal came up blank -
+  // but ours persist, so the banner clears first. (A real C64 never reaches
+  // this service - telnet short-circuits to handleC64Detected - so ANSI
+  // clear needs no PETSCII twin here.)
+  say("\x1b[2J\x1b[H");
   say("\r\n/X Native Telnet:  Searching for free node...\r\n");
   say(`/X Native Telnet:  Successful connection to node ${nodeId}\r\n`);
   say("\r\nCONNECT 19200\r\n");

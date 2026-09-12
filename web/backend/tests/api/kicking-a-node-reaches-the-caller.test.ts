@@ -23,7 +23,7 @@ import express from 'express';
 import request from 'supertest';
 
 import { createNodeControlRouter } from '../../src/api/node-control-routes';
-import { sessions, setSession, socketToNodeId } from '../../src/server/session-manager';
+import { sessions, setSession, socketToNodeId, userSessions, socketToUser } from '../../src/server/session-manager';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 
 function app(io: unknown) {
@@ -43,6 +43,8 @@ const ioWith = (socketId: string, socket: unknown) => ({
 beforeEach(() => {
   sessions.clear();
   socketToNodeId.clear();
+  userSessions.clear();
+  socketToUser.clear();
 });
 
 test('a web caller is kicked even though the session was registered under an older socket', async () => {
@@ -107,18 +109,51 @@ test('a web caller whose socket id went stale is still reached', async () => {
   expect(session.socketId).toBe('the-one-he-is-really-on');
 });
 
-test('a refusal says which of the three lookups came up empty', async () => {
+test('a ghost is cleared, not refused: session rows but no live transport', async () => {
+  // The admin UI kicked ghosts into a 404 ("has no active connection")
+  // and every store kept them, so the next login was refused against
+  // its own stale record (2026-09-10). Kicking a node with rows but no
+  // emitter now clears the presence synchronously and says so.
   const session: any = {
     user: { id: 'u4', username: 'ghost' }, nodeId: 4, connectionType: 'web',
     socketId: 'long-gone',
   };
   sessions.set('4', session);
+  userSessions.set('u4', session);
+  socketToUser.set('long-gone', 'u4');
+  socketToNodeId.set('long-gone', 4);
 
   const res = await request(app(ioWith('somebody-else', { id: 'somebody-else' })))
     .post('/api/nodes/4/kick').send({});
 
-  expect(res.status).toBe(404);
-  expect(String(res.body.message)).toContain('long-gone');
+  expect(res.status).toBe(200);
+  expect(String(res.body.message)).toContain('no live connection');
+  expect(session.sysopKicked).toBe(true);
+  expect(userSessions.has('u4')).toBe(false);
+  expect(socketToUser.has('long-gone')).toBe(false);
+  expect(socketToNodeId.has('long-gone')).toBe(false);
+  // THE liveness entry the login refusal trusts: leaving it made the ghost
+  // permanent - every fresh login refused, "i never get reloggedin".
+  expect(sessions.has('4')).toBe(false);
+});
+
+test('a kicked caller reads offline everywhere, so the next login is admitted', async () => {
+  const session: any = {
+    user: { id: 'u5', username: 'backsoon' }, nodeId: 5, connectionType: 'web',
+    socketId: 'kicked-socket',
+  };
+  const emitted: string[] = [];
+  const socket = { emit: (event: string) => emitted.push(event), disconnect: () => emitted.push('disconnect') };
+  setSession('kicked-socket', session);
+  userSessions.set('u5', session);
+
+  const res = await request(app(ioWith('kicked-socket', socket)))
+    .post('/api/nodes/5/kick').send({});
+
+  expect(res.status).toBe(200);
+  expect(emitted).toContain('disconnect');
+  expect(sessions.has('5')).toBe(false);
+  expect(userSessions.has('u5')).toBe(false);
 });
 
 test('a node nobody is on is still a 404', async () => {

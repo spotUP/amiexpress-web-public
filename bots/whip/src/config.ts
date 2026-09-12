@@ -8,6 +8,9 @@ export interface BotConfig {
   guildId: string;
   apiUrl: string;
   serviceToken: string;
+  /** Per-bot BOT_DATA_TOKENS secret for /api/bot/v1 board reads. Absent =
+   *  board subcommands disable cleanly; WHIP commands keep working. */
+  boardToken?: string;
   bbsUser?: string;
   bbsPassword?: string;
   feedChannelId?: string;
@@ -33,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
     guildId: required(env, 'DISCORD_GUILD_ID'),
     apiUrl: env.WHIP_API_URL ?? 'http://localhost:3001',
     serviceToken: required(env, 'WHIP_SERVICE_TOKEN'),
+    boardToken: optional(env, 'BOARD_DATA_TOKEN'),
     bbsUser: optional(env, 'WHIP_BBS_USER'),
     bbsPassword: optional(env, 'WHIP_BBS_PASSWORD'),
     feedChannelId: optional(env, 'DISCORD_FEED_CHANNEL_ID'),

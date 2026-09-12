@@ -15,7 +15,7 @@
 # Prints: the number of callers who are NOT the sysop. 0 means deploy.
 callers_to_protect() {
   HEALTH=${1:-}
-  SYSOP_NAMES=${2:-spot sysop}
+  SYSOP_NAMES=${2:-spot sysop discord-bridge}
 
   CALLERS=$(printf '%s' "$HEALTH" | sed -n 's/.*"callers":\([0-9]*\).*/\1/p')
   CALLERS=${CALLERS:-0}

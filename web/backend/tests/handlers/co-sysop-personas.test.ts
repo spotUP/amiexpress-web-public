@@ -268,3 +268,18 @@ describe('describe it and let the board write it', () => {
     expect(draft!.temperament.length).toBe('terse');
   });
 });
+
+describe('grounding outranks memory', () => {
+  it('every preset prompt carries the grounding rules', async () => {
+    const { GROUNDING_RULES } = await import('../../src/handlers/sysop-ai/personas');
+    for (const persona of PRESET_PERSONAS) {
+      expect(promptFor(persona)).toContain('FACTS OUTRANK MEMORY');
+      expect(promptFor(persona)).toContain(GROUNDING_RULES);
+    }
+  });
+  it('the default and hand-written prompts carry them too', async () => {
+    const { personalityFor } = await import('../../src/handlers/grumpy-sysop-bot.handler');
+    expect(personalityFor({} as any)).toContain('FACTS OUTRANK MEMORY');
+    expect(personalityFor({ systemPrompt: 'Custom voice.' } as any)).toContain('FACTS OUTRANK MEMORY');
+  });
+});

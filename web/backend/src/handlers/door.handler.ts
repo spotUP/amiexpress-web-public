@@ -750,10 +750,13 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
     const username = session.user?.username;
     if (username) {
       // Prefer the DB-stored slot number (authoritative) over name search.
-      // findUserSlotByName returns the LAST match, which is wrong when user.data has
-      // duplicate entries (e.g. sysop appears at indices 1-7 from prior appends).
+      // findUserSlotByName returns the FIRST match, which can be wrong when
+      // user.data has duplicate entries (e.g. sysop appears at indices 1-7
+      // from prior appends).
       const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
-      let slotIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(username);
+      // 1-indexed Amiga slot throughout: the DB slotNumber, findUserSlotByName
+      // and the disk readers all speak slots now (slot 0 = deleted account).
+      let slotNumber = dbSlot > 0 ? dbSlot : userDatabaseManager.findUserSlotByName(username);
 
       // Prefer the SQLite-loaded confAccess string over the binary
       // user.data probe. Rationale (added 2026-05-20 after live JoinCnf
@@ -801,13 +804,13 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
           : 0,
       } : null;
 
-      if (slotIndex >= 0) {
-        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
-        userSlotNumber = slotIndex + 1;
+      if (slotNumber > 0) {
+        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotNumber);
+        userSlotNumber = slotNumber;
         confAccess =
           (sqlConfAccess && sqlConfAccess.length > 0)
             ? sqlConfAccess
-            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
+            : userDatabaseManager.readConfAccessFromDisk(slotNumber);
       } else {
         // No matching binary slot at all — use SQLite as the only source.
         confAccess = sqlConfAccess;
@@ -917,7 +920,7 @@ console.error('[launchAmigaDoor] Error routing door input:', err);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch (err) {
 console.error('[launchAmigaDoor] Unable to persist session for door input:', err);
@@ -948,7 +951,7 @@ console.error('[launchAmigaDoor] Unable to persist session for door input:', err
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch (_) {
       /* ignore */
@@ -1819,6 +1822,10 @@ console.log('Executing door:', door.name);
   if (
     sessionColumns(session) < resolveDoorMinColumns(door as any) &&
     !doorOpensForC64(door as any, session)
+    // No teletext exemption: a 40-column T caller gates exactly like a
+    // 40-column C64 (sysop). Unadapted wide doors are refused with the
+    // notice below; C64_ADAPT doors run through the frame adapter, which
+    // reduces ANSI to 40 the same way for both (no PETSCII transducer).
   ) {
     if (widthFallThroughArmed) {
       session.widthGateFallThrough = 'REFUSED';
@@ -2149,6 +2156,27 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
 }
 
 /**
+ * No door leaves the terminal wide.
+ *
+ * Doors that resize ask through BBSApi.setTerminalMode, which records the
+ * wish on the session - and well-behaved doors put fixed back themselves
+ * (the SDK switch does it in dispose). A door that crashes, is kicked, or
+ * never learned the call strands every later screen at the door's width:
+ * menus and uploads drawn for 80 columns onto 167 of them (live
+ * 2026-09-11). So the backend owns the invariant at every TypeScript exit
+ * instead of trusting each door. Silent unless a door actually went wide.
+ */
+export function restoreFixedTerminal(socket: any, session: BBSSession): void {
+  if (!(session as any)?.doorTerminalWide) return;
+  (session as any).doorTerminalWide = false;
+  try {
+    socket.emit('terminal-mode', 'fixed');
+  } catch {
+    // A dead socket needs no resize; the flag is already cleared.
+  }
+}
+
+/**
  * Execute TypeScript door with runDoor() export
  * Dynamically imports the door module and calls its runDoor() function
  */
@@ -2413,6 +2441,7 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
         socket.emit('door:status', { status: 'closed' });
         socket.emit('door-active', false);
         disableGameMode(socket, session);
+        restoreFixedTerminal(socket, session);
         console.log(`[executeTypeScriptDoor] Legacy door ${door.name} completed`);
       }
       return;
@@ -2507,6 +2536,7 @@ console.log(`[executeTypeScriptDoor] Door completed successfully`);
 
     // Disable game mode when door exits
     disableGameMode(socket, session);
+    restoreFixedTerminal(socket, session);
 
     // Clear door active flag and input handler - MUST match 68K door cleanup
     // CRITICAL: Set to false, don't just delete, to ensure consistent state
@@ -2600,6 +2630,7 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
 
   } catch (error) {
 console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+    restoreFixedTerminal(socket, session);
 
     if (wrappedSocket?._doorCleanup) {
       wrappedSocket._doorCleanup();
@@ -3023,7 +3054,9 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       // which returned the last duplicate entry instead of the correct slot).
       const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
       let userSlotNumber = dbSlot > 0 ? dbSlot : (Number.isFinite((session as any).userSlotNumber) ? (session as any).userSlotNumber : -1);
-      let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
+      // 1-indexed Amiga slot (slot 0 = deleted account); the disk readers
+      // speak slots now. userSlotNumber doubles as the "have one" flag below.
+      let slotNumber = userSlotNumber > 0 ? userSlotNumber : -1;
 
       // Same SQLite-first preference as launchAmigaDoor (see comment
       // there at ~line 624). The binary readConfAccessFromDisk pads
@@ -3050,32 +3083,32 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
           : 0,
       } : null;
 
-      if (slotIndex >= 0) {
+      if (slotNumber > 0) {
         if (!confAccess) {
           confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
             ? sqlConfAccess
-            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
+            : userDatabaseManager.readConfAccessFromDisk(slotNumber);
         }
         if (!diskUserStats) {
-          diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
+          diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotNumber);
         }
       }
 
-      if (slotIndex < 0 || !confAccess || !diskUserStats) {
+      if (slotNumber <= 0 || !confAccess || !diskUserStats) {
         // Further fallback: name search (less reliable — may return last duplicate).
         const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
-        const foundIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(session.user.username);
-        if (foundIndex >= 0) {
+        const foundSlot = dbSlot > 0 ? dbSlot : userDatabaseManager.findUserSlotByName(session.user.username);
+        if (foundSlot > 0) {
           if (!confAccess) {
             confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
               ? sqlConfAccess
-              : userDatabaseManager.readConfAccessFromDisk(foundIndex);
+              : userDatabaseManager.readConfAccessFromDisk(foundSlot);
           }
           if (!diskUserStats) {
-            diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(foundIndex);
+            diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(foundSlot);
           }
-          slotIndex = foundIndex;
-          userSlotNumber = foundIndex + 1;
+          slotNumber = foundSlot;
+          userSlotNumber = foundSlot;
         } else {
           if (!confAccess) confAccess = sqlConfAccess;
           if (!diskUserStats) diskUserStats = sqlUserStats;
@@ -3250,7 +3283,7 @@ console.error('[executeAmigaDoor] Error routing door input:', err);
 console.log(`[executeAmigaDoor] Before setSession: inDoorManager=${session.inDoorManager}, handler=${!!session.doorInputHandler}`);
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
       // Verify session was stored correctly
       const verifySession = getSession(socket.id);
@@ -3330,7 +3363,7 @@ console.log(`[executeAmigaDoor] Door execution completed`);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch {
       /* ignore */
@@ -3500,7 +3533,7 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch {
       /* ignore */

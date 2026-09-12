@@ -129,6 +129,36 @@ export const XTERM_CONFIG = {
     brightWhite: '#ffffff',
   },
 
+  /**
+   * Teletext session mode palette (T answer at the graphics prompt). The
+   * WST Level 1 set - 8 full-saturation colours on black - which is what
+   * the board's default theme already is, stated explicitly so the mode
+   * does not inherit whatever theme object the terminal was constructed
+   * with. Brights map to the base colours: teletext has no bright row,
+   * and rendering one would dim ANSI art shown in the fallback path.
+   */
+  teletextTheme: {
+    background: '#000000',
+    foreground: '#ffffff',
+    cursor: '#ffffff',
+    black: '#000000',
+    red: '#ff0000',
+    green: '#00ff00',
+    yellow: '#ffff00',
+    blue: '#0000ff',
+    magenta: '#ff00ff',
+    cyan: '#00ffff',
+    white: '#ffffff',
+    brightBlack: '#000000',
+    brightRed: '#ff0000',
+    brightGreen: '#00ff00',
+    brightYellow: '#ffff00',
+    brightBlue: '#0000ff',
+    brightMagenta: '#ff00ff',
+    brightCyan: '#00ffff',
+    brightWhite: '#ffffff',
+  },
+
   /** SDK color theme (dark editor style) */
   themeSdk: {
     background: '#1E1E1E',

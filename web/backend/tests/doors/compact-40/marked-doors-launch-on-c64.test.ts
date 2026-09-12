@@ -117,7 +117,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * three lines and exits, which is what a conference bulletin's ~XISUBSCAN
  * runs, so there is no 40-column layout to prove.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

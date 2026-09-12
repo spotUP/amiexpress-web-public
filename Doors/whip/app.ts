@@ -17,6 +17,9 @@ import { showAchievements } from './ui/achievements';
 import { createTask } from './ui/task-editor';
 import { createProject } from './ui/project-editor';
 import { showMyTasks } from './ui/my-tasks';
+import { showMyProfile, normalizeDiscordName } from './ui/my-profile';
+import { attachResponsiveMode } from './ui/responsive';
+import type { TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { T, applyTheme } from './door-theme';
 
 export class WhipApp {
@@ -29,6 +32,18 @@ export class WhipApp {
   private currentUser!: UserStats;
   private exited = false;
   private bbsApi: any; // BBS API for event emission
+  // Menu picks on subpages stash their destination here; the screen
+  // resolves itself right after, and the loop jumps instead of showing
+  // the menu (ui/menu.ts).
+  private pendingNav: MenuSelection | null = null;
+  // Alt+Enter responsive switch (ui/responsive.ts). Created at startup
+  // like livechat's - the call site runs in run(), and the proof is a
+  // started door, never a grep.
+  private terminalMode: TerminalModeSwitch | null = null;
+  // Last project created or boarded, per session. Creating a project used
+  // to leave the session nowhere, so the next Kanban opened Backlog (or a
+  // picker) and a task made in a hurry "vanished" - it was in Backlog.
+  private lastProjectId?: string;
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -66,6 +81,11 @@ export class WhipApp {
 
     // Enable input
     this.inputManager.enable();
+
+    // Responsive switch: fixed 80 columns until the caller asks (Alt+Enter).
+    this.terminalMode = attachResponsiveMode(this.session.bbs, this.screen, () => {
+      this.screen.render();
+    });
 
     // Load/create user stats
     await this.loadUserStats();
@@ -136,7 +156,10 @@ export class WhipApp {
 
   private async showMainMenu(): Promise<void> {
     while (!this.exited) {
-      const selection = await showMainMenu(this.screen, this.currentUser, this.dataManager);
+      // A menu pick on any subpage lands here instead of the menu: the
+      // screen resolved itself after stashing the destination.
+      const selection = this.pendingNav ?? await showMainMenu(this.screen, this.currentUser, this.dataManager);
+      this.pendingNav = null;
 
       switch (selection) {
         case 'quick-task':
@@ -163,6 +186,9 @@ export class WhipApp {
         case 'achievements':
           await this.showAchievements();
           break;
+        case 'my-profile':
+          await this.showMyProfile();
+          break;
         case 'quit':
           await this.quit();
           return;
@@ -186,8 +212,10 @@ export class WhipApp {
     }
 
     if (backlogProject) {
-      // Open task editor for new task in Backlog project
-      await createTask(
+      // Open task editor for new task in Backlog project. Silence on
+      // cancel: an ESC out of the dialog used to congratulate the caller
+      // on a task that was never created (sysop, 2026-09-10).
+      const created = await createTask(
         this.screen,
         backlogProject,
         this.currentUser,
@@ -195,24 +223,36 @@ export class WhipApp {
         this.bbsApi
       );
 
+      if (!created) return;
       // Show success message
-      this.showMessage('Task created! View in Kanban [K]');
+      this.showMessage('Task created in Backlog! View in Kanban [K]');
       await this.sleep(2000);
     }
   }
 
   private async showNewProject(): Promise<void> {
-    await createProject(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+    const project = await createProject(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+    if (project) {
+      this.lastProjectId = project.id;
+      this.showMessage(`Project "${project.name}" created! Open it in Kanban [K]`);
+      await this.sleep(2000);
+    }
   }
 
   private async showProjectList(): Promise<void> {
-    await showProjectList(
+    // Selecting a project opens its board - returning to the menu
+    // instead is the dead end reported 2026-09-10.
+    const selected = await showProjectList(
       this.screen,
       this.currentUser,
       this.dataManager,
       this.achievementManager,
-      this.bbsApi
+      this.bbsApi,
+      this.onNavigate
     );
+    if (selected) {
+      await this.showKanbanBoard(selected);
+    }
   }
 
   private async selectProjectForKanban(): Promise<void> {
@@ -231,6 +271,17 @@ export class WhipApp {
       return;
     }
 
+    // Reopen where the session already was - a project just created, or a
+    // board just left. Otherwise the picker, which defaults to Backlog.
+    if (this.lastProjectId) {
+      const last = projects.find(p => p.id === this.lastProjectId);
+      if (last) {
+        await this.showKanbanBoard(last);
+        return;
+      }
+      this.lastProjectId = undefined;
+    }
+
     // Otherwise, show project selection
     // For MVP, we'll show the project list and let user select
     const selectedProject = await showProjectList(
@@ -246,19 +297,37 @@ export class WhipApp {
     }
   }
 
+  private onNavigate = (sel: MenuSelection): void => {
+    this.pendingNav = sel;
+  };
+
   private async showKanbanBoard(project: Project): Promise<void> {
+    this.lastProjectId = project.id;
     await showKanbanBoard(
       this.screen,
       project,
       this.currentUser,
       this.dataManager,
       this.achievementManager,
-      this.bbsApi
+      this.bbsApi,
+      this.onNavigate
     );
   }
 
   private async showMyTasks(): Promise<void> {
-    await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+    await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi, this.onNavigate);
+  };
+
+  private async showMyProfile(): Promise<void> {
+    const result = await showMyProfile(this.screen, this.currentUser);
+    if (result === null) return;
+    const name = normalizeDiscordName(result);
+    const user = await this.dataManager.getUser(this.currentUser.userId);
+    if (!user) return;
+    if (name) user.discordName = name;
+    else delete user.discordName;
+    await this.dataManager.updateUser(user);
+    this.currentUser = user;
   }
 
   private async showPartyTimeline(): Promise<void> {
@@ -266,16 +335,17 @@ export class WhipApp {
       this.screen,
       this.currentUser,
       this.dataManager,
-      this.partyCalendar
+      this.partyCalendar,
+      this.onNavigate
     );
   }
 
   private async showLeaderboard(): Promise<void> {
-    await showLeaderboard(this.screen, this.currentUser, this.dataManager);
+    await showLeaderboard(this.screen, this.currentUser, this.dataManager, this.onNavigate);
   }
 
   private async showAchievements(): Promise<void> {
-    await showAchievements(this.screen, this.currentUser, this.dataManager);
+    await showAchievements(this.screen, this.currentUser, this.dataManager, this.onNavigate);
   }
 
   private showMessage(message: string): void {
@@ -310,6 +380,9 @@ export class WhipApp {
     this.screen.render();
     await this.sleep(200);
 
+    // Put the board's 80 columns back before leaving.
+    this.terminalMode?.dispose();
+    this.terminalMode = null;
     this.inputManager.disable();
     this.screen.destroy();
     this.exited = true;

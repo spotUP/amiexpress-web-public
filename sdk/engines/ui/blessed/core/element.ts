@@ -100,6 +100,28 @@ export class Element extends EventEmitter {
   disabled: boolean = false;
 
   /**
+   * Border override from element state, if any. Priority: disabled >
+   * hover > focus. An explicit style block for the winning state always
+   * beats the default; with no explicit block the border goes white so
+   * every door shows focus the same way without painting it by hand
+   * (2026-09-10 - the old cyan-bold default fought per-door colors and
+   * bold violates the BBS output rules, so neither default carries it).
+   */
+  resolveStateBorder(): { fg?: string; bold?: boolean; [k: string]: unknown } | undefined {
+    const style = (this.options.style as any) ?? {};
+    if (this.disabled) {
+      return style.disabled?.border ?? { fg: 'gray' };
+    }
+    if (this._overBorder) {
+      return style.hover?.border ?? { fg: 'white' };
+    }
+    if (this.hasFocusedChild()) {
+      return style.focus?.border ?? { fg: 'white' };
+    }
+    return undefined;
+  }
+
+  /**
    * Check if this element or any of its descendants has focus
    */
   hasFocusedChild(): boolean {
@@ -2364,33 +2386,9 @@ export class Element extends EventEmitter {
     }
 
     // Apply state-specific border styles
-    if (this.disabled) {
-      // Disabled state (highest priority)
-      const disabledStyle = (this.options.style as any)?.disabled;
-      if (disabledStyle?.border) {
-        borderStyle = { ...borderStyle, ...disabledStyle.border };
-      } else {
-        // Default: gray foreground for border when disabled
-        borderStyle = { ...borderStyle, fg: 'gray' };
-      }
-    } else if (this._overBorder) {
-      // Hover state for border (takes priority over focus when mouse is over)
-      const hoverStyle = (this.options.style as any)?.hover;
-      if (hoverStyle?.border) {
-        borderStyle = { ...borderStyle, ...hoverStyle.border };
-      } else {
-        // Default: white bold foreground for border when hovered
-        borderStyle = { ...borderStyle, fg: 'white', bold: true };
-      }
-    } else if (this.hasFocusedChild()) {
-      // Focused state (or a child is focused)
-      const focusStyle = (this.options.style as any)?.focus;
-      if (focusStyle?.border) {
-        borderStyle = { ...borderStyle, ...focusStyle.border };
-      } else {
-        // Default: cyan bold foreground for border when focused (high visibility)
-        borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
-      }
+    const stateBorder = this.resolveStateBorder();
+    if (stateBorder) {
+      borderStyle = { ...borderStyle, ...stateBorder };
     }
 
     // Create default attribute (used for edges without specific colors)

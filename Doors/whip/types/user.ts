@@ -11,6 +11,9 @@ export interface UserStats {
   achievements: string[];
   joinedAt: string;
   lastActiveAt: string;
+  /** Discord handle the owner claims ("my Discord name"); the Discord bot
+   *  matches on it. Absent until set. */
+  discordName?: string;
 }
 
 export type AchievementCategory = 'tasks' | 'projects' | 'parties' | 'social' | 'special';

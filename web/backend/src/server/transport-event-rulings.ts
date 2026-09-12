@@ -1715,6 +1715,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "connection (server/connection-emitter.ts:157). TP-12 makes SSH raise the " +
     "same one.",
   },
+  "texttv-mode": {
+    kind: "web-only",
+    note:
+    "The session teletext flag, emitted once when a caller answers the " +
+    "graphics prompt with T (handlers/command-handler/pre-login.ts). Browser " +
+    "consumer: packages/terminal/src/components/BBSTerminal.tsx, which swaps " +
+    "the xterm face to TDAText and the ground/palette to teletext colours. " +
+    "A byte transport keeps the ANSI the board emits, so it needs no signal.",
+  },
   "theme-changed": {
     kind: "web-only",
     note:

@@ -38,6 +38,7 @@ vi.mock('@amiexpress/terminal', async () => ({
       injectInput: harness.injectInput,
       getSocket: () => null,
       getTerminal: () => null,
+      isTexttvMode: () => false,
       startDownload: async () => undefined,
       startUpload: async () => undefined,
       pressGameKey: harness.pressGameKey,

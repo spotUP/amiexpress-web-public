@@ -109,6 +109,73 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     const events = socket.emit.mock.calls.map((c: any[]) => c[0]);
     expect(events).not.toContain('rip-mode');
   });
+
+  test('T enables teletext mode at 40x25 and emits texttv-mode', () => {
+    // WEB_: no express.e counterpart. The web terminal swaps to TDAText at
+    // 2x with a teletext palette on the event; geometry is the classic
+    // 40x25 grid, the same 40-column path PETSCII sessions use.
+    const socket = makeSocket();
+    const session = makeSession();
+    applyGraphicsAnswer(socket, session, 'T');
+    expect(session.texttvMode).toBe(true);
+    expect(session.ansiEnabled).toBe(true);
+    expect(session.petsciiMode).toBe(false);
+    expect(session.ripMode).toBe(false);
+    expect(session.screenWidth).toBe(40);
+    expect(session.screenHeight).toBe(25);
+    expect(socket.emit).toHaveBeenCalledWith('texttv-mode', { enabled: true });
+  });
+
+  test('P beats T when both are answered', () => {
+    const socket = makeSocket();
+    const session = makeSession();
+    applyGraphicsAnswer(socket, session, 'PT');
+    expect(session.petsciiMode).toBe(true);
+    expect(session.texttvMode).toBe(false);
+  });
+
+  test('T beats R when both are answered', () => {
+    const socket = makeSocket();
+    const session = makeSession();
+    applyGraphicsAnswer(socket, session, 'TR');
+    expect(session.texttvMode).toBe(true);
+    expect(session.ripMode).toBe(false);
+  });
+
+  test('T on a byte transport falls back to ANSI and says so - no mode event', () => {
+    // Same shape as the R fallback: no teletext renderer on a byte
+    // transport, so the ANSI the board emits is the honest answer.
+    for (const transport of ['telnet', 'ssh'] as const) {
+      const socket = makeSocket();
+      const session = makeSession(transport);
+      applyGraphicsAnswer(socket, session, 'T');
+      expect(session.texttvMode).toBe(false);
+      expect(session.ansiEnabled).toBe(true);
+      expect(session.petsciiMode).toBe(false);
+      expect(session.ripMode).toBe(false);
+      const events = socket.emit.mock.calls.map((c: any[]) => c[0]);
+      expect(events).not.toContain('texttv-mode');
+      const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
+      expect(said).toContain('TELETEXT NEEDS A WEB BROWSER - USING ANSI');
+    }
+  });
+
+  test('TQ sets teletext and the quick-logon flag together', () => {
+    const socket = makeSocket();
+    const session = makeSession();
+    applyGraphicsAnswer(socket, session, 'TQ');
+    expect(session.texttvMode).toBe(true);
+    expect(session.quickFlag).toBe(true);
+    expect(session.tempData.quickLogon).toBe(true);
+  });
+
+  test('other answers leave texttvMode off', () => {
+    for (const answer of ['', 'A', 'R', 'P', 'N']) {
+      const session = makeSession();
+      applyGraphicsAnswer(makeSocket(), session, answer);
+      expect(session.texttvMode).toBe(false);
+    }
+  });
 });
 
 describe('every live dispatcher uses the shared implementation (source pins)', () => {

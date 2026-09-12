@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, Search } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, Search, Unlock } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
@@ -24,6 +24,11 @@ interface BbsUser {
   ansi: boolean;
   lastLogin?: Date;
   firstLogin: Date;
+  // Lockout state off user.misc (express.e userMisc). Absent on rows the
+  // backend served before it exposed them — treat as unlocked.
+  accountLocked?: number;
+  invalidAttempts?: number;
+  forcePwdReset?: number;
 }
 
 // Stable empty array reference to prevent infinite re-renders
@@ -87,8 +92,10 @@ export function UsersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<UserFormData> }) =>
-      apiClient.updateUser(id, updates),
+    mutationFn: ({ id, updates }: {
+      id: string;
+      updates: Partial<UserFormData> & { accountLocked?: number; invalidAttempts?: number };
+    }) => apiClient.updateUser(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       showSuccess('User updated successfully');
@@ -202,6 +209,20 @@ export function UsersPage() {
     }
   };
 
+  // express.e eduser page 1, C/D: clear the lock and the count that caused
+  // it. Unlocking never touches anything else on the record.
+  const handleUnlock = async (user: BbsUser) => {
+    const confirmed = await confirm({
+      title: 'Unlock account',
+      message: `${user.username} is locked out${user.invalidAttempts ? ` after ${user.invalidAttempts} failed password ${user.invalidAttempts === 1 ? 'attempt' : 'attempts'}` : ''}. Unlocking clears the lock and the count; the password is unchanged.`,
+      confirmText: 'Unlock',
+      cancelText: 'Cancel',
+    });
+    if (confirmed) {
+      updateMutation.mutate({ id: user.id, updates: { accountLocked: 0, invalidAttempts: 0 } });
+    }
+  };
+
   const getSecurityLevelColor = (level: number) => {
     if (level >= 255) return 'text-status-danger';
     if (level >= 200) return 'text-status-warn';
@@ -284,6 +305,22 @@ export function UsersPage() {
       // it raw reads as a bug rather than as a setting.
       cell: (user) => (user.timeLimit < 0 ? 'Unlimited' : `${user.timeLimit} min`),
     },
+    {
+      id: 'lockout',
+      header: 'Lockout',
+      value: (user) => (user.accountLocked ? 1 : 0),
+      width: '9rem',
+      // Quiet when clean: most accounts never fail a password. A lock reads
+      // as a badge; a bare count reads as a count.
+      cell: (user) =>
+        user.accountLocked ? (
+          <span className="rounded-sm bg-status-danger/20 px-1 text-status-danger">Locked</span>
+        ) : (user.invalidAttempts ?? 0) > 0 ? (
+          <span className="text-content-secondary">{user.invalidAttempts} fails</span>
+        ) : (
+          <span className="text-content-muted">-</span>
+        ),
+    },
   ];
 
   return (
@@ -319,6 +356,17 @@ export function UsersPage() {
         emptyMessage={search ? 'No user matches that search.' : 'No users yet.'}
         rowActions={(user) => (
           <>
+            {(user.accountLocked || (user.invalidAttempts ?? 0) > 0) && (
+              <button
+                type="button"
+                onClick={() => handleUnlock(user)}
+                aria-label={`Unlock ${user.username}`}
+                title="Clear the lock and the failure count"
+                className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+              >
+                <Unlock size={14} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleEdit(user)}

@@ -19,6 +19,7 @@
 
 export interface KeyLike {
   key: string;
+  code?: string;
   altKey?: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
@@ -34,6 +35,32 @@ export interface TerminalKeyState {
   connected: boolean;
   /** Ctrl+Shift+M turned mouse reporting off, so copy/select-all are ours. */
   mouseTrackingDisabled: boolean;
+}
+
+/**
+ * Game-mode key identity: the PHYSICAL key, not the character.
+ *
+ * `ev.key` follows the Shift state: pressing L gives keydown 'L' and, if
+ * Shift is released first (fast typing), keyup 'l'. Tracking press and
+ * release by `ev.key` strands the timer and the held set on 'L', and the
+ * client repeats it for ever - the WHIP title that filled with L after
+ * "Li" (sysop, 2026-09-10). `ev.code` ('KeyL') is shift-invariant, so
+ * down and up always meet. Emitted bytes still carry `ev.key` - doors
+ * read characters, and that path is untouched.
+ */
+export function trackKeyId(ev: KeyLike): string {
+  return ev.code || ev.key;
+}
+
+/**
+ * Repeat heartbeat: a held key keeps producing keydown auto-repeats, so a
+ * repeat timer with no fresh edge for this long is orphaned (missed keyup,
+ * blur race, mode toggle) and must stop instead of typing for ever.
+ */
+export const GAME_KEY_SILENCE_MS = 2000;
+
+export function repeatAlive(lastSeenAt: number, now: number): boolean {
+  return now - lastSeenAt <= GAME_KEY_SILENCE_MS;
 }
 
 /**

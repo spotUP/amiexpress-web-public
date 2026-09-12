@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
-  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface,
+  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
+  copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
+  type ClipboardRegion,
 } from '../pages/screen-editor-state';
+import { writeSystemText, readSystemText } from './system-clipboard';
+import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
+import { editorShortcut } from './editor-shortcuts';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
@@ -31,15 +36,17 @@ function tokenText(canvas: { char?: string }[][], token: MciToken): string {
  */
 
 /** The tools that make sense on a screen. Named as the SDK names them. */
-const TOOLS: { tool: DrawingTool; label: string }[] = [
-  { tool: 'text', label: 'Type' },
-  { tool: 'draw', label: 'Draw' },
-  { tool: 'line', label: 'Line' },
-  { tool: 'box', label: 'Box' },
-  { tool: 'box-fill', label: 'Filled box' },
-  { tool: 'ellipse', label: 'Ellipse' },
-  { tool: 'fill', label: 'Fill' },
-  { tool: 'select', label: 'Select' },
+const TOOLS: { tool: DrawingTool; label: string; hotkey: string }[] = [
+  { tool: 'text', label: 'Type', hotkey: 'Alt+T' },
+  { tool: 'draw', label: 'Draw', hotkey: 'Alt+D' },
+  { tool: 'line', label: 'Line', hotkey: 'Alt+L' },
+  { tool: 'box', label: 'Box', hotkey: 'Alt+B' },
+  { tool: 'box-fill', label: 'Filled box', hotkey: 'Alt+Shift+B' },
+  { tool: 'ellipse', label: 'Ellipse', hotkey: 'Alt+E' },
+  { tool: 'ellipse-fill', label: 'Filled ellipse', hotkey: 'Alt+Shift+E' },
+  { tool: 'fill', label: 'Fill', hotkey: 'Alt+F' },
+  { tool: 'pick', label: 'Pick', hotkey: 'Alt+P' },
+  { tool: 'select', label: 'Select', hotkey: 'Alt+S' },
 ];
 
 /** The characters ANSI art is actually drawn with, in the order a picker wants. */
@@ -73,6 +80,12 @@ export interface ScreenEditorProps {
   onSave?: (base64: string) => void;
   onCancel?: () => void;
   /**
+   * A save is in flight. The button disables and says so: without this the
+   * click answered with silence while the PUT plus refetch plus decode ran,
+   * and "super slow to update" was the only possible reading.
+   */
+  saving?: boolean;
+  /**
    * Show the art and its codes; change nothing.
    *
    * The board's own screen, opened by an artist who has not redrawn it into
@@ -85,16 +98,25 @@ export interface ScreenEditorProps {
 }
 
 export function ScreenEditor({
-  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false,
+  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false, saving = false,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
+  /** What Alt+C/X lifted: stamped back down by Alt+V at the cursor. A ref,
+   *  not state - the canvas shows it only after a paste, which re-renders
+   *  through onChange anyway. Dies with the dialog, like a real clipboard
+   *  dies with the program. */
+  const clipboard = useRef<ClipboardRegion | null>(null);
   /** A code already on the canvas, opened for changing rather than adding. */
   const [editingToken, setEditingToken] = useState<MciToken | null>(null);
 
   // Re-found on every change rather than tracked: a code is edited character by
   // character, and half of one is not a code.
   const tokens = useMemo(() => findMciTokens(surface.canvas, mci), [surface.canvas, mci]);
+  // The select tool tracked its marquee internally and never showed it:
+  // dragging selected invisibly (sysop, 2026-09-10: "can't select anything
+  // with the mouse"). Live points first, committed bounds after mouse-up.
+  const selectionHighlights = selectionHighlightRuns(getSelection(surface.state));
 
   const rows = surface.canvas.length;
   const cols = rows > 0 ? surface.canvas[0].length : 0;
@@ -103,25 +125,96 @@ export function ScreenEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       // Nothing typed reaches a screen that is not the artist's to change.
       if (readOnly) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+
+      // Highlighted page text belongs to the browser: Cmd+C on selected
+      // help text copies the text, it does not lift canvas cells. (Alt+C
+      // has no browser meaning and always means the canvas.)
+      if ((event.ctrlKey || event.metaKey) && !event.altKey
+        && ['c', 'x', 'v'].includes(event.key.toLowerCase())) {
+        const pageSelection = window.getSelection();
+        if (pageSelection && !pageSelection.isCollapsed) return;
+      }
+
+      // Moebius shortcuts first: undo/redo, colours, tools, cursor. Typing
+      // and text-mode keys fall through to the branch below.
+      // Backspace in Type mode keeps its typer's meaning (erase behind,
+      // step back) rather than the shortcut table's cell-erase.
+      if (surface.tool === 'text' && event.key === 'Backspace'
+        && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        const x = Math.max(0, cursor.x - 1);
+        onChange?.(typeCharacter(surface, x, cursor.y, ' '));
+        setCursor({ x, y: cursor.y });
+        return;
+      }
+      const sc = editorShortcut(event);
+      if (sc.action !== 'none') {
+        event.preventDefault();
+        switch (sc.action) {
+          case 'undo': onChange?.(undo(surface)); return;
+          case 'redo': onChange?.(redo(surface)); return;
+          case 'tool': onChange?.({ ...surface, tool: sc.tool }); return;
+          case 'fg': onChange?.({ ...surface, fg: sc.index }); return;
+          case 'bg': onChange?.({ ...surface, bg: sc.index }); return;
+          case 'move':
+            setCursor(c => ({
+              x: Math.min(cols - 1, Math.max(0, c.x + sc.dx)),
+              y: Math.min(rows - 1, Math.max(0, c.y + sc.dy)),
+            }));
+            return;
+          case 'row':
+            setCursor(c => ({ ...c, x: sc.edge === 'start' ? 0 : cols - 1 }));
+            return;
+          case 'page':
+            setCursor(c => ({ ...c, y: Math.min(rows - 1, Math.max(0, c.y + sc.dy)) }));
+            return;
+          case 'delete':
+            onChange?.(typeCharacter(surface, cursor.x, cursor.y, ' '));
+            return;
+          case 'copy': {
+            // Both clipboards: the system one carries plain text out to the
+            // sysop's own editor, the internal one keeps colours for
+            // canvas-to-canvas pastes. Either may be absent; Alt+V prefers
+            // the system's and falls back to the internal.
+            clipboard.current = copySelectedRegion(surface);
+            const text = selectedRegionToText(surface);
+            if (text) void writeSystemText(text);
+            return;
+          }
+          case 'cut': {
+            const cut = cutSelectedRegion(surface);
+            clipboard.current = cut.region;
+            const text = selectedRegionToText(surface);
+            if (cut.region) onChange?.(cut.surface);
+            // Read the text BEFORE the blanking above: cut.surface already
+            // committed, but `surface` still holds the lifted cells.
+            if (cut.region && text) void writeSystemText(text);
+            return;
+          }
+          case 'paste':
+            // Async: the system read may ask permission. The surface in this
+            // closure is the one Alt+V was pressed on - a stroke drawn in the
+            // meantime still applies, last write wins like everywhere else.
+            void (async () => {
+              const text = await readSystemText();
+              if (text) onChange?.(pasteText(surface, cursor.x, cursor.y, text));
+              else if (clipboard.current) onChange?.(pasteRegion(surface, cursor.x, cursor.y, clipboard.current));
+            })();
+            return;
+        }
+      }
+
       // Typing belongs to the canvas only while the Type tool is chosen -
       // otherwise the sysop is searching, or filling in a field, and a screen
       // that ate those keystrokes would be unusable.
       if (surface.tool !== 'text') return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-
-      if (event.key === 'ArrowLeft') { setCursor(c => ({ ...c, x: Math.max(0, c.x - 1) })); }
-      else if (event.key === 'ArrowRight') { setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) })); }
-      else if (event.key === 'ArrowUp') { setCursor(c => ({ ...c, y: Math.max(0, c.y - 1) })); }
-      else if (event.key === 'ArrowDown') { setCursor(c => ({ ...c, y: Math.min(rows - 1, c.y + 1) })); }
-      else if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
-      else if (event.key === 'Backspace') {
-        const x = Math.max(0, cursor.x - 1);
-        onChange?.(typeCharacter(surface, x, cursor.y, ' '));
-        setCursor({ x, y: cursor.y });
-      } else if (event.key.length === 1) {
+      if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
+      else if (event.key.length === 1) {
         onChange?.(typeCharacter(surface, cursor.x, cursor.y, event.key));
         setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) }));
       } else {
@@ -135,6 +228,11 @@ export function ScreenEditor({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [surface, cursor, cols, rows, onChange, readOnly]);
 
+  // Selected tools, colours and brushes all read the same: a ring in the
+  // board's accent, not a slightly stronger border (sysop, 2026-09-10:
+  // "not clear enough which brushes and colors are selected").
+  const selectedRing = (on: boolean) =>
+    on ? 'border-border-strong ring-2 ring-accent' : 'border-border';
   const swatches = (which: 'fg' | 'bg') => (
     <div className="flex flex-wrap gap-1">
       {ANSI_PALETTE.map((color, index) => (
@@ -142,12 +240,9 @@ export function ScreenEditor({
           key={`${which}-${index}`}
           type="button"
           aria-label={`${ANSI_COLOR_NAMES[index]} ${which === 'fg' ? 'foreground' : 'background'}`}
+          title={which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`}
           aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
-          className={`w-5 h-5 border ${
-            (which === 'fg' ? surface.fg : surface.bg) === index
-              ? 'border-border-strong'
-              : 'border-border'
-          }`}
+          className={`w-5 h-5 border ${selectedRing((which === 'fg' ? surface.fg : surface.bg) === index)}`}
           style={{ backgroundColor: color }}
           onClick={() => onChange?.({ ...surface, [which]: index })}
         />
@@ -163,19 +258,24 @@ export function ScreenEditor({
     // was inherited by every label, button and heading in the editor, so the
     // tool looked like the thing it edits. The canvas draws its own font and
     // the character picker below shows real board glyphs; those keep it.
-    <section className="space-y-3 border border-border p-3">
+    <section className="w-fit max-w-full space-y-3 border border-border p-3">
+      {/* The editor is exactly as wide as the art: the section hugs the
+          canvas instead of stretching to the dialog, so 80 columns on the
+          board is 80 columns here. The viewport scrolls a wider screen
+          inside rather than widening the tools with it. */}
       {/* The tools, the palette and the brushes: what a read-only view has no
           use for. The art below is the same in both modes. */}
       {!readOnly && (
       <>
       <div className="flex flex-wrap items-center gap-2">
-        {TOOLS.map(({ tool, label }) => (
+        {TOOLS.map(({ tool, label, hotkey }) => (
           <button
             key={tool}
             type="button"
             aria-pressed={surface.tool === tool}
-            className={`px-2 py-1 text-sm border ${
-              surface.tool === tool ? 'border-border-strong text-content-primary' : 'border-border text-content-secondary'
+            title={hotkey}
+            className={`px-2 py-1 text-sm border ${selectedRing(surface.tool === tool)} ${
+              surface.tool === tool ? 'text-content-primary' : 'text-content-secondary'
             }`}
             onClick={() => onChange?.({ ...surface, tool })}
           >
@@ -183,6 +283,13 @@ export function ScreenEditor({
           </button>
         ))}
       </div>
+      <p className="text-xs text-content-secondary">
+        Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
+        Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
+        Alt+S then drag selects; Alt+C/X copies/cuts to the system clipboard as text (and colours internally),
+        Alt+V pastes it back at the cursor - click where you want it first. On a Mac, Cmd+C/X/V does the
+        same, and the Delete-labelled key erases the cell.
+      </p>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
         <label className="space-y-1">
@@ -202,9 +309,7 @@ export function ScreenEditor({
                 type="button"
                 aria-label={`Draw with ${char === ' ' ? 'a space' : char}`}
                 aria-pressed={surface.char === char}
-                className={`w-6 h-6 font-topaz border ${
-                  surface.char === char ? 'border-border-strong' : 'border-border'
-                }`}
+                className={`w-6 h-6 font-topaz border ${selectedRing(surface.char === char)}`}
                 onClick={() => onChange?.({ ...surface, char })}
               >
                 {char}
@@ -235,12 +340,16 @@ export function ScreenEditor({
         <AnsiCanvas
           canvas={surface.canvas}
           cursor={!readOnly && surface.tool === 'text' ? cursor : null}
-          highlights={tokens.map(token => ({
+          highlights={[...tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
-          }))}
+          })), ...selectionHighlights]}
           onCellPointer={readOnly ? undefined : (x, y, phase) => {
+            // The paste cursor follows the mouse in EVERY tool, not just
+            // Type: Alt+V stamps at the cursor, and a sysop who selected
+            // with the mouse never touched the text cursor - without this
+            // every paste landed at 0,0 (sysop, 2026-09-10).
+            if (phase === 'down') setCursor({ x, y });
             if (surface.tool === 'text') {
-              if (phase === 'down') setCursor({ x, y });
               return;
             }
             onChange?.(pointerToCanvas(surface, x, y, phase));
@@ -384,9 +493,10 @@ export function ScreenEditor({
               onClick={() => onChange?.(redo(surface))}>
               <Redo2 size={14} /> Redo
             </button>
-            <button type="button" className="inline-flex items-center gap-1 underline"
+            <button type="button" className="inline-flex items-center gap-1 underline disabled:opacity-50"
+              disabled={saving}
               onClick={() => onSave?.(canvasToScreen(surface.canvas))}>
-              <Save size={14} /> Save
+              <Save size={14} /> {saving ? 'Saving…' : 'Save'}
             </button>
           </>
         )}

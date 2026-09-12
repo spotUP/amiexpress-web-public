@@ -13,6 +13,39 @@ import type { ChatSession, PageRequest } from '../../types/operator-chat.types';
 import { emitterForUserId } from '../../server/session-emitter-registry';
 import { planNaturalTyping } from '../grumpy-sysop-bot.handler';
 
+/**
+ * Model markup to terminal bytes. Titles (<title>) paint cyan; color tags
+ * paint their color: <color>/<colour> with c/cyan or g/green (bare <color>
+ * defaults cyan, matching what the models mean by it). Unknown tags and
+ * stray brackets stay literal: eating a caller's "a < b" would be worse
+ * than showing it. Unclosed tags run to end of string (a cut reply still
+ * paints).
+ */
+const CHAT_MARKUP_COLORS: Record<string, string> = {
+  c: '36', cyan: '36', g: '32', green: '32',
+};
+
+export function renderChatMarkup(text: string): string {
+  const paint = (inner: string, code: string): string => `\x1b[0;${code}m${inner}\x1b[0m`;
+  const paintTag = (tag: string, attr: string | undefined, inner: string): string => {
+    const t = tag.toLowerCase();
+    if (t === 'title' || t === 'cyan') return paint(inner, '36');
+    if (t === 'green') return paint(inner, '32');
+    const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase() || 'c'];
+    return code ? paint(inner, code) : inner;
+  };
+  let out = text.replace(
+    /<(title|colou?r|cyan|green)(?:\s+([a-z]))?\s*>([\s\S]*?)(?:<\/(?:colou?r|cyan|green|title)(?:\s+[a-z])?\s*>)/gi,
+    (_m, tag: string, attr: string | undefined, inner: string) => paintTag(tag, attr, inner),
+  );
+  // Unclosed trailing tag paints to the end rather than leaking brackets.
+  out = out.replace(
+    /<(title|colou?r|cyan|green)(?:\s+([a-z]))?\s*>([^<]*)$/i,
+    (_m, tag: string, attr: string | undefined, inner: string) => paintTag(tag, attr, inner),
+  );
+  return out;
+}
+
 /** Every live chat, by page id. Owned here; the handler reads and writes it. */
 export const activeChatSessions = new Map<string, ChatSession>();
 
@@ -59,7 +92,14 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 type ChatSender = 'user' | 'sysop';
 /** express.e's `space` and `x` (6098-6100), and who wrote last, per chat. */
-interface ChatLine { text: string; lastSender: ChatSender | null }
+interface ChatLine {
+  text: string;
+  lastSender: ChatSender | null;
+  /** ANSI escape parser: 0 none, 1 seen ESC, 2 inside CSI. Escape bytes are
+   *  emitted but never counted toward the 78 columns. A lone ESC (the ESC
+   *  key, not CSI) counts as typed before. */
+  esc?: number;
+}
 function chatLineOf(chatSession: ChatSession): ChatLine {
   const cs = chatSession as any;
   if (!cs.line) cs.line = { text: '', lastSender: null } as ChatLine;
@@ -79,6 +119,19 @@ export function chatCharBytes(chatSession: ChatSession, sender: ChatSender, ch: 
     line.lastSender = sender;
   }
   out += ch;
+  if (ch === '\x1b') {
+    line.esc = 1;
+    return out;
+  }
+  if (line.esc === 1) {
+    line.esc = ch === '[' ? 2 : 0;
+    if (line.esc === 0) line.text += `\x1b${ch}`;
+    return out;
+  }
+  if (line.esc === 2) {
+    if (/[A-Za-z]/.test(ch)) line.esc = 0;
+    return out;
+  }
   line.text += ch;
   if (line.text.length > 78) {
     // 6181-6223: back up to the last space; no space (or a trailing one)
@@ -155,10 +208,10 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
  * when it stops; the caller's three paths below empty it. That also keeps the
  * dependency one-way - `thinking-dots` reads this module, never the reverse.
  */
-type ChatWithDots = ChatSession & { thinkingDotsStop?: (() => void) | null };
+type ChatWithDots = ChatSession & { thinkingDotsStop?: ((keepDots?: boolean) => void) | null };
 
 /** Called by `thinking-dots` alone, when a window opens. */
-export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
+export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: (keepDots?: boolean) => void): void {
   (chatSession as ChatWithDots).thinkingDotsStop = cancel;
 }
 
@@ -169,16 +222,35 @@ export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: () =>
  * otherwise empty the slot belonging to the window that replaced it, and the
  * caller's next key would find nothing to cancel and type into live dots.
  */
-export function clearThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
+export function clearThinkingDotsCanceller(chatSession: ChatSession, cancel: (keepDots?: boolean) => void): void {
   const cs = chatSession as ChatWithDots;
   if (cs.thinkingDotsStop === cancel) cs.thinkingDotsStop = null;
 }
 
-/** End any thinking window this chat is in, erasing its dots. */
-export function cancelThinkingDots(chatSession: ChatSession | null | undefined): void {
+/** End any thinking window on this chat. A reply keeps the dots and types
+ *  after them; everything else (keys, quit, end) erases. */
+export function cancelThinkingDots(chatSession: ChatSession | null | undefined, keepDots = false): void {
   const cancel = chatSession ? (chatSession as ChatWithDots).thinkingDotsStop : null;
-  if (cancel) cancel();
+  if (cancel) cancel(keepDots);
 }
+/**
+ * What counts as a typed character in operator chat.
+ *
+ * Was inline in command.handler (`data >= ' ' && data <= '~'`): 7-bit ASCII
+ * only, so Swedish åäö died silently at the keystroke - the caller typed and
+ * nothing reached the buffer, the echo, or the model ("i can't type swedish
+ * åäö in the operator chat", 2026-09-11). The board's own charset since 1985
+ * is Amiga Latin-1: printable ASCII plus U+00A0-U+00FF ride, C0/C1 controls
+ * and DEL stay out, astral planes (emoji are two UTF-16 units, never one
+ * keystroke) stay out with them.
+ */
+export function chatAcceptsKeystroke(data: string): boolean {
+  if (data.length !== 1) return false;
+  const cp = data.codePointAt(0)!;
+  if (cp >= 0x20 && cp <= 0x7e) return true;
+  return cp >= 0xa0 && cp <= 0xff;
+}
+
 /**
  * THE CALLER'S SIDE of the stream, called from the chat branch of
  * command.handler for every key: the character goes onto the shared line and
@@ -292,8 +364,12 @@ export async function deliverToCaller(
   chatSession: ChatSession,
   page: PageRequest,
   text: string,
-  pace: { typingSpeed?: number; typoProbability?: number } | null
+  pace: { typingSpeed?: number; typoProbability?: number } | null,
+  opts?: { prefixReturn?: boolean }
 ): Promise<void> {
+  // Model markup (<title>, <color>) becomes terminal SGR here, once, for
+  // every sender - the wrap counting below then sees visible columns only.
+  const painted = renderChatMarkup(text);
   const run = async (): Promise<void> => {
     const reach = emitterForUserId(page.userId, io);
     if (!reach) {
@@ -309,9 +385,13 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
     const live = () => chatIsLive(chatSession, page.id);
     const emit = (bytes: string) => { if (bytes && live()) reach.emitter.emit('ansi-output', bytes); };
 
+    // Kept thinking dots occupy the line's first cells, so a reply typed
+    // after them wraps early (2026-09-10). Start it on a fresh line; the
+    // dots stay standing above, as decided.
+    if (opts?.prefixReturn) emit(chatReturnBytes(chatSession));
+
     // The message's own line breaks are returns; the shared line wraps itself.
-    const lines = text.replace(/\r/g, '').split('\n');
-    const plans = lines.map((line) =>
+    const lines = painted.replace(/\r/g, '').split('\n');    const plans = lines.map((line) =>
       pace ? planNaturalTyping(line, pace) : [...line].map((ch) => ({ kind: 'char', ch }) as const)
     );
     const plannedMs = plans.flat().reduce((sum, e) => sum + (e.kind === 'pause' ? e.ms : 0), 0);

@@ -30,6 +30,7 @@ import {
   sessions,
   userSessions,
   socketToUser,
+  reclaimGraceGhost,
 } from "../server/session-manager";
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
@@ -216,6 +217,11 @@ export async function runPostAuthLogin(
   // Set session user data
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.EXEC_QUICKNEW;
+  // Who this socket held BEFORE this login (ghostlogoff 2026-09-10): the
+  // already-on check below must know whether the user is re-authenticating
+  // on a socket that never let them go (reload -> restore -> submit),
+  // because this assignment overwrites the evidence. Snapshot first.
+  session.entryUserId = (session.user as any)?.id;
   session.user = { ...user, lastLoginBeforeUpdate: ctx.lastLoginBeforeUpdate };
   session.ansiMode = user.ansi;
   installAnsiFilter(emitter, session);
@@ -336,8 +342,10 @@ export async function runPostAuthLogin(
       `[SESSION-MIGRATION] User ${user.id} logged in on socket ${emitter.id}`,
     );
     sessions.delete(emitter.id);
-    userSessions.set(user.id, session);
-    socketToUser.set(emitter.id, user.id);
+    // String keys: Map distinguishes 5 from "5", and every lookup
+    // and delete below uses the string form (ghost sessions, 2026-09-10).
+    userSessions.set(String(user.id), session);
+    socketToUser.set(emitter.id, String(user.id));
     try {
       (emitter as any).join?.("user:" + String(user.id));
     } catch {
@@ -461,11 +469,42 @@ export async function runPostAuthLogin(
    * Between the deleted-account gate (29701) and the lockout (29775), which is
    * express's order.
    */
+  /**
+   * GHOST RECLAIM (ghostlogoff 2026-09-10): a re-login landing while the
+   * previous socket's disconnect grace is still pending meets its own
+   * ghost - the maps still name the dead socket, the already-on check
+   * below refuses, and the pending timer would later wipe the fresh
+   * login's maps. Reclaim first (only what still names the dead socket;
+   * a live tab is never touched), so the check reads the board as it is.
+   */
   {
+    const userKey = String((user as any)?.id ?? '');
+    if (userKey !== '') {
+      const nspSockets = (emitter as any)?.nsp?.sockets as
+        | { has?: (id: string) => boolean }
+        | undefined;
+      reclaimGraceGhost(userKey, (id) => nspSockets?.has?.(id) === true);
+    }
+  }
+
+  // Same socket re-authenticating as the user it already held on entry
+  // (reload -> restore -> login form -> submit): the session never left,
+  // so there is nothing to refuse - fall through and re-register over it.
+  // A socket that held nobody takes the check as before, so a genuine
+  // second tab is still refused per express.e:29715-29727 (ghostlogoff).
+  const reauthenticating =
+    (session.entryUserId as any) !== undefined &&
+    String(session.entryUserId) === String((user as any)?.id);
+
+  if (!reauthenticating) {
     const alreadyOn = userAlreadyOnNode(
       appConfig.get('dataDir'),
       user.username,
       session.nodeId ?? 0,
+      // Liveness: a name match with no session object behind it is a
+      // stale node file from a missed teardown, not a second login
+      // (ghosts, 2026-09-10 - the infant refusal was its own file).
+      (nodeId) => sessions.has(String(nodeId)),
     );
     if (alreadyOn !== null) {
       try {
@@ -505,6 +544,15 @@ export async function runPostAuthLogin(
       await processCommand(emitter as any, session, "C", "");
     } catch (err) {
       console.error("[LOGIN] account-locked comment-door failed:", err);
+    }
+    if ((session.subState as LoggedOnSubState) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+      // The comment form is interactive - its Subject/body arrive over
+      // later keystrokes. Logging off here would guillotine it mid-fill
+      // (live: caller lost the form at Subject:). Defer: the
+      // message-entry funnel fires Thanks + logoff when the flow lands
+      // back on DISPLAY_MENU, matching express.e's run-to-completion.
+      session.logoffAfterComment = true;
+      return { ok: false, terminated: "account-locked" };
     }
     beginLogoff(emitter as any, session, {
       message: "\r\nThanks you will now be disconnected...\r\n\r\n",
@@ -552,6 +600,12 @@ export async function runPostAuthLogin(
           await processCommand(emitter as any, session, "C", "");
         } catch (err) {
           console.error("[LOGIN] pwd-change-denied comment-door failed:", err);
+        }
+        if ((session.subState as LoggedOnSubState) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+          // Same deferral as the account-locked form above: let the caller
+          // finish the comment before Thanks + logoff.
+          session.logoffAfterComment = true;
+          return { ok: false, terminated: "pwd-change-denied" };
         }
         beginLogoff(emitter as any, session, {
           message: "\r\nThanks you will now be disconnected...\r\n\r\n",

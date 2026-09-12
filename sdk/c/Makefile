@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -63,6 +63,7 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ae_request
 	./build/test_ae_msgbase
 	./build/test_ae_dos
+	./build/test_texttv
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -71,6 +72,15 @@ build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 # The file layer, on its stdio backend. ae_dos_amiga.c is deliberately NOT
 # here: it needs the NDK and only ever builds for 68K, which is the same reason
 # ae_transport_amiga.c never appears in a host test rule.
+# The Text-TV door's pure helpers (page validation, request paths,
+# content_plain extraction, body preference, UTF-8 to Latin-1, favorites).
+# No BBS, no sockets - the door's classic-Amiga edges live here, driven on
+# the host. Links json_lite: the body preference reads the proxy's "ansi"
+# field through the same extractor the door uses on the wire.
+build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c examples/texttv/texttv_parse.h include/json_lite.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I examples/texttv -I include examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c -o $@
+
 build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/ae_dos.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c -o $@
@@ -143,7 +153,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/bench_repaint build/amiga/bench_repaint11
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/texttv build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -211,6 +221,13 @@ build/amiga/subs: examples/subs/subs.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
+# The Text-TV client: fetches api.texttv.nu over plain HTTP through ae_http,
+# drawn with the same widgets at both widths. Two translation units - the
+# door and its pure helpers - linked beside the library, never as objects.
+build/amiga/texttv: examples/texttv/texttv.c examples/texttv/texttv_parse.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/texttv examples/texttv/texttv.c examples/texttv/texttv_parse.c build/amiga/libae.lib -lauto -o $@
+
 build/amiga/bench_repaint: examples/bench/bench_repaint.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
@@ -249,7 +266,7 @@ probe: build/amiga/theme-picker
 # Each entry is <example-dir>:<Doors-dir>. Explicit rather than clever: an
 # earlier version derived the destination by lowercasing and matching inside a
 # pipeline, and the nested shell case broke make outright.
-SETTINGS_DOORS = requests:REQUESTS subs:SUBS
+SETTINGS_DOORS = requests:REQUESTS subs:SUBS texttv:TEXTTV
 
 .PHONY: settings
 settings:
