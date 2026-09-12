@@ -750,10 +750,13 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
     const username = session.user?.username;
     if (username) {
       // Prefer the DB-stored slot number (authoritative) over name search.
-      // findUserSlotByName returns the LAST match, which is wrong when user.data has
-      // duplicate entries (e.g. sysop appears at indices 1-7 from prior appends).
+      // findUserSlotByName returns the FIRST match, which can be wrong when
+      // user.data has duplicate entries (e.g. sysop appears at indices 1-7
+      // from prior appends).
       const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
-      let slotIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(username);
+      // 1-indexed Amiga slot throughout: the DB slotNumber, findUserSlotByName
+      // and the disk readers all speak slots now (slot 0 = deleted account).
+      let slotNumber = dbSlot > 0 ? dbSlot : userDatabaseManager.findUserSlotByName(username);
 
       // Prefer the SQLite-loaded confAccess string over the binary
       // user.data probe. Rationale (added 2026-05-20 after live JoinCnf
@@ -801,13 +804,13 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
           : 0,
       } : null;
 
-      if (slotIndex >= 0) {
-        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
-        userSlotNumber = slotIndex + 1;
+      if (slotNumber > 0) {
+        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotNumber);
+        userSlotNumber = slotNumber;
         confAccess =
           (sqlConfAccess && sqlConfAccess.length > 0)
             ? sqlConfAccess
-            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
+            : userDatabaseManager.readConfAccessFromDisk(slotNumber);
       } else {
         // No matching binary slot at all — use SQLite as the only source.
         confAccess = sqlConfAccess;
@@ -3051,7 +3054,9 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
       // which returned the last duplicate entry instead of the correct slot).
       const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
       let userSlotNumber = dbSlot > 0 ? dbSlot : (Number.isFinite((session as any).userSlotNumber) ? (session as any).userSlotNumber : -1);
-      let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
+      // 1-indexed Amiga slot (slot 0 = deleted account); the disk readers
+      // speak slots now. userSlotNumber doubles as the "have one" flag below.
+      let slotNumber = userSlotNumber > 0 ? userSlotNumber : -1;
 
       // Same SQLite-first preference as launchAmigaDoor (see comment
       // there at ~line 624). The binary readConfAccessFromDisk pads
@@ -3078,32 +3083,32 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
           : 0,
       } : null;
 
-      if (slotIndex >= 0) {
+      if (slotNumber > 0) {
         if (!confAccess) {
           confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
             ? sqlConfAccess
-            : userDatabaseManager.readConfAccessFromDisk(slotIndex);
+            : userDatabaseManager.readConfAccessFromDisk(slotNumber);
         }
         if (!diskUserStats) {
-          diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotIndex);
+          diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotNumber);
         }
       }
 
-      if (slotIndex < 0 || !confAccess || !diskUserStats) {
+      if (slotNumber <= 0 || !confAccess || !diskUserStats) {
         // Further fallback: name search (less reliable — may return last duplicate).
         const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
-        const foundIndex = dbSlot > 0 ? dbSlot - 1 : userDatabaseManager.findUserSlotByName(session.user.username);
-        if (foundIndex >= 0) {
+        const foundSlot = dbSlot > 0 ? dbSlot : userDatabaseManager.findUserSlotByName(session.user.username);
+        if (foundSlot > 0) {
           if (!confAccess) {
             confAccess = (sqlConfAccess && sqlConfAccess.length > 0)
               ? sqlConfAccess
-              : userDatabaseManager.readConfAccessFromDisk(foundIndex);
+              : userDatabaseManager.readConfAccessFromDisk(foundSlot);
           }
           if (!diskUserStats) {
-            diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(foundIndex);
+            diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(foundSlot);
           }
-          slotIndex = foundIndex;
-          userSlotNumber = foundIndex + 1;
+          slotNumber = foundSlot;
+          userSlotNumber = foundSlot;
         } else {
           if (!confAccess) confAccess = sqlConfAccess;
           if (!diskUserStats) diskUserStats = sqlUserStats;

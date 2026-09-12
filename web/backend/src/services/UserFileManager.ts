@@ -969,6 +969,13 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       userFlags: keysStruct.userFlags,
       created: new Date(userStruct.accountDate * 1000),
       updated: fileModTime,
+      // Lockout state, straight off user.misc. The admin lists it and the
+      // unlock button writes it; the login gate reads the same record.
+      // Absent here until now, which is why no admin surface could show it.
+      forcePwdReset: miscStruct.forcePwdReset,
+      accountLocked: miscStruct.accountLocked,
+      invalidAttempts: miscStruct.invalidAttempts,
+      pwdLastUpdated: miscStruct.pwdLastUpdated,
     };
   }
 
@@ -1195,6 +1202,30 @@ console.error('[UserFileManager] Error reading user files:', error);
     }
   }
 
+  /**
+   * The lockout bytes currently on disk for a 1-indexed slot.
+   * A missing file or a short record reads as all-zero: a new account has
+   * no lock. Deserializes through the same layout the writer uses, so the
+   * field offsets cannot drift apart.
+   */
+  private readMiscLockFields(slotNumber: number): { forcePwdReset: number; accountLocked: number; invalidAttempts: number } {
+    const zero = { forcePwdReset: 0, accountLocked: 0, invalidAttempts: 0 };
+    try {
+      if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userMiscPath)) return zero;
+      const offset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
+      const buffer = Buffer.alloc(this.USERMISC_STRUCT_SIZE);
+      const fd = fs.openSync(this.userMiscPath, 'r');
+      try {
+        if (fs.fstatSync(fd).size < offset + this.USERMISC_STRUCT_SIZE) return zero;
+        fs.readSync(fd, buffer, 0, this.USERMISC_STRUCT_SIZE, offset);
+      } finally { fs.closeSync(fd); }
+      const misc = this.deserializeUserMiscStruct(buffer, 0);
+      return { forcePwdReset: misc.forcePwdReset, accountLocked: misc.accountLocked, invalidAttempts: misc.invalidAttempts };
+    } catch {
+      return zero;
+    }
+  }
+
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
       // Slot 1 is the first record. A slot of 0 computed offset -232, and
@@ -1211,6 +1242,20 @@ console.error('[UserFileManager] Error reading user files:', error);
       const userStruct = this.userToFileStruct(user, slotNumber);
       const keysStruct = this.userToKeysStruct(user, slotNumber);
       const miscStruct = this.userToMiscStruct(user);
+
+      // The lock lives in user.misc and only the password check, an explicit
+      // unlock, or a sysop edit may change it (express.e:1008-1018, :21625).
+      // A User synced from the database carries no lock fields, so writing
+      // its zeroes here unlocked every account on each login and on each
+      // admin edit. Preserve the on-disk values unless the caller names
+      // explicit numbers (BBS account editor B/C/D, admin unlock button).
+      const keep = this.readMiscLockFields(slotNumber);
+      if (user.forcePwdReset === undefined) miscStruct.forcePwdReset = keep.forcePwdReset;
+      else miscStruct.forcePwdReset = user.forcePwdReset ? 1 : 0;
+      if (user.accountLocked === undefined) miscStruct.accountLocked = keep.accountLocked;
+      else miscStruct.accountLocked = user.accountLocked ? 1 : 0;
+      if (user.invalidAttempts === undefined) miscStruct.invalidAttempts = keep.invalidAttempts;
+      else miscStruct.invalidAttempts = Math.max(0, Math.floor(user.invalidAttempts));
 
       // Serialize to buffers
       const userBuffer = this.serializeUserStruct(userStruct);

@@ -30,6 +30,11 @@ export interface UserEdits {
   expert?: boolean;
   ansi?: boolean;
   passwordHash?: string;
+  // Lockout state off user.misc (express.e eduser page 1, B/C/D). Named
+  // here so an admin unlock reaches the disk record; absent means keep.
+  accountLocked?: number | boolean;
+  invalidAttempts?: number;
+  forcePwdReset?: number | boolean;
 }
 
 export interface DiskEditOutcome {
@@ -94,6 +99,9 @@ console.warn(
   carry('timeLimit');
   carry('expert');
   carry('ansi');
+  carry('accountLocked');
+  carry('invalidAttempts');
+  carry('forcePwdReset');
   // The disk copy of a password cannot verify a login - the field holds 32 of
   // a bcrypt hash's 60 characters - but leaving it stale keeps a fragment of
   // the OLD password on disk, which is worse than keeping it in step.

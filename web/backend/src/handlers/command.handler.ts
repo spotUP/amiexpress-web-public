@@ -2164,6 +2164,20 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           // MULTICOM / webhook / forced-pwd-change / GDPR / LOGON screen
           // / bulletin flow consistent across all three transports.
           session.loginRetryCount = 0;
+          // express.e:1018 — the ELSE of the failure comparison: a correct
+          // password zeroes the persisted counter. Without this a caller who
+          // mistyped twice, then got it right, carried those failures until
+          // the next sysop edit touched his record.
+          try {
+            const okUser = await getDatabase().getUserByUsername(username);
+            if (okUser?.slotNumber && okUser.slotNumber > 0) {
+              const { userDatabaseManager } = require('../services/UserDatabaseManager');
+              userDatabaseManager.clearPasswordFailures(okUser.slotNumber);
+            }
+          } catch (err) {
+            // A failure to clear must never block the login flow itself.
+            console.warn('[AUTH] Could not clear password failures:', err);
+          }
           const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
           endPasswordMask(socket, session);
           const { runPostAuthLogin } = await import('../services/login-post.service');

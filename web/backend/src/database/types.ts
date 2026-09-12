@@ -95,6 +95,15 @@ export interface User {
   // WEB_: GDPR soft-delete + erasure markers (Phase 3).
   deletedAt?: string;
   erasedAt?: string;
+  // Lockout state off user.misc (express.e userMisc: accountLocked,
+  // invalidAttempts, forcePwdReset, pwdLastUpdated). Carried on User so the
+  // admin can list it and the unlock path can set it; the login gate and the
+  // password check read the same disk record. Optional: database rows never
+  // hold these, only disk-synced User objects do.
+  accountLocked?: number;
+  invalidAttempts?: number;
+  forcePwdReset?: number;
+  pwdLastUpdated?: number;
   created: Date;
   updated: Date;
 }

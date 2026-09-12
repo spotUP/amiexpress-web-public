@@ -2134,6 +2134,12 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         if (updates.timeLimit !== undefined) updatedUser.timeLimit = updates.timeLimit;
         if (updates.expert !== undefined) updatedUser.expert = updates.expert;
         if (updates.ansi !== undefined) updatedUser.ansi = updates.ansi;
+        // Lockout state (express.e eduser page 1, B/C/D). updateUserDataFile
+        // preserves the on-disk values when these are absent, so naming them
+        // here is what makes an admin unlock stick instead of being kept.
+        if (updates.accountLocked !== undefined) updatedUser.accountLocked = updates.accountLocked ? 1 : 0;
+        if (updates.invalidAttempts !== undefined) updatedUser.invalidAttempts = Math.max(0, Math.floor(updates.invalidAttempts));
+        if (updates.forcePwdReset !== undefined) updatedUser.forcePwdReset = updates.forcePwdReset ? 1 : 0;
 
         // Handle password update
         if (password) {
