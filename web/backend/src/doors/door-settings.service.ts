@@ -113,6 +113,14 @@ export interface DoorSetting {
     row?: number;
     field: 'value' | 'title' | 'file' | 'mask';
   };
+  /**
+   * Door commands this setting belongs to (`["B"]`, `["J"]`), compared
+   * upper-cased. One directory can serve two doors - emp_tools serves
+   * Bulls (B) and Joincnf (J) from a single door.settings.json - and
+   * without this both forms show all 49 settings. Absent means every
+   * command, which is every single-door manifest today.
+   */
+  commands?: string[];
 }
 
 export type DoorCfgFormat = 'key-value' | 'empire';
@@ -176,6 +184,7 @@ const SettingSchema = z.object({
   pattern: z.string().min(1).max(200).optional(),
   cfgFile: z.string().min(1).max(64).regex(BARE_FILE_RE).optional(),
   cfgRow: CfgRowSchema.optional(),
+  commands: z.array(z.string().min(1).max(20)).max(10).optional(),
 }).refine(
   s => s.type !== 'choice' || (s.choices?.length ?? 0) > 0,
   { message: 'a choice needs choices' }
@@ -291,9 +300,23 @@ export function doorDirectoryFor(bbsRoot: string, door: { path?: string; locatio
 }
 
 /** Null when the door declares nothing - the normal case, not an error. */
-export function readDoorSettingsView(doorDir: string): DoorSettingsView | null {
-  const manifest = readManifestFromDir(doorDir);
-  if (!manifest) return null;
+/** The manifest as one requesting door command sees it. */
+function scopeManifest(
+  manifest: DoorSettingsManifest,
+  command: string | undefined,
+): DoorSettingsManifest {
+  if (!command) return manifest;
+  const want = command.toUpperCase();
+  const settings = manifest.settings.filter(
+    s => !s.commands || s.commands.some(c => c.toUpperCase() === want),
+  );
+  return { ...manifest, settings };
+}
+
+export function readDoorSettingsView(doorDir: string, command?: string): DoorSettingsView | null {
+  const found = readManifestFromDir(doorDir);
+  if (!found) return null;
+  const manifest = scopeManifest(found, command);
 
   // File-backed (Empire) manifests read the legacy files themselves: the
   // live file's customized titles are what the form must show, not the
@@ -346,11 +369,13 @@ export function writeDoorSettings(
   doorDir: string,
   incoming: Record<string, string | number | boolean>,
   resolveSystemValue?: SystemValueResolver,
+  command?: string,
 ): Record<string, string | number | boolean> {
-  const manifest = readManifestFromDir(doorDir);
-  if (!manifest) {
+  const found = readManifestFromDir(doorDir);
+  if (!found) {
     throw new Error('This door does not declare any settings');
   }
+  const manifest = scopeManifest(found, command);
 
   const declared = new Map(manifest.settings.map(s => [s.key, s]));
   const unknown = Object.keys(incoming).filter(k => !declared.has(k));

@@ -14,6 +14,7 @@
   "settings": [
     {
       "key": "dual_listing",
+      "commands": ["B"],
       "label": "Dual listing (bulletins)",
       "type": "choice",
       "group": "Listing",
@@ -34,6 +35,7 @@
     },
     {
       "key": "cursor_keys",
+      "commands": ["B"],
       "label": "Cursor keys",
       "type": "choice",
       "group": "Listing",
@@ -53,6 +55,7 @@
     },
     {
       "key": "conf_1_mask",
+      "commands": ["B"],
       "label": "Conference 1 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -68,6 +71,7 @@
     },
     {
       "key": "conf_2_mask",
+      "commands": ["B"],
       "label": "Conference 2 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -83,6 +87,7 @@
     },
     {
       "key": "conf_3_mask",
+      "commands": ["B"],
       "label": "Conference 3 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -98,6 +103,7 @@
     },
     {
       "key": "conf_4_mask",
+      "commands": ["B"],
       "label": "Conference 4 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -113,6 +119,7 @@
     },
     {
       "key": "conf_5_mask",
+      "commands": ["B"],
       "label": "Conference 5 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -128,6 +135,7 @@
     },
     {
       "key": "conf_6_mask",
+      "commands": ["B"],
       "label": "Conference 6 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -143,6 +151,7 @@
     },
     {
       "key": "conf_7_mask",
+      "commands": ["B"],
       "label": "Conference 7 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -158,6 +167,7 @@
     },
     {
       "key": "conf_8_mask",
+      "commands": ["B"],
       "label": "Conference 8 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -173,6 +183,7 @@
     },
     {
       "key": "conf_10_mask",
+      "commands": ["B"],
       "label": "Conference 10 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -188,6 +199,7 @@
     },
     {
       "key": "conf_11_mask",
+      "commands": ["B"],
       "label": "Conference 11 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -203,6 +215,7 @@
     },
     {
       "key": "conf_12_mask",
+      "commands": ["B"],
       "label": "Conference 12 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -218,6 +231,7 @@
     },
     {
       "key": "conf_13_mask",
+      "commands": ["B"],
       "label": "Conference 13 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -233,6 +247,7 @@
     },
     {
       "key": "conf_14_mask",
+      "commands": ["B"],
       "label": "Conference 14 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -248,6 +263,7 @@
     },
     {
       "key": "conf_15_mask",
+      "commands": ["B"],
       "label": "Conference 15 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -263,6 +279,7 @@
     },
     {
       "key": "conf_16_mask",
+      "commands": ["B"],
       "label": "Conference 16 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -278,6 +295,7 @@
     },
     {
       "key": "conf_17_mask",
+      "commands": ["B"],
       "label": "Conference 17 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -293,6 +311,7 @@
     },
     {
       "key": "conf_18_mask",
+      "commands": ["B"],
       "label": "Conference 18 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -308,6 +327,7 @@
     },
     {
       "key": "conf_19_mask",
+      "commands": ["B"],
       "label": "Conference 19 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -323,6 +343,7 @@
     },
     {
       "key": "conf_20_mask",
+      "commands": ["B"],
       "label": "Conference 20 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -338,6 +359,7 @@
     },
     {
       "key": "conf_21_mask",
+      "commands": ["B"],
       "label": "Conference 21 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -353,6 +375,7 @@
     },
     {
       "key": "conf_22_mask",
+      "commands": ["B"],
       "label": "Conference 22 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -368,6 +391,7 @@
     },
     {
       "key": "conf_23_mask",
+      "commands": ["B"],
       "label": "Conference 23 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -383,6 +407,7 @@
     },
     {
       "key": "conf_24_mask",
+      "commands": ["B"],
       "label": "Conference 24 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -398,6 +423,7 @@
     },
     {
       "key": "conf_25_mask",
+      "commands": ["B"],
       "label": "Conference 25 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -413,6 +439,7 @@
     },
     {
       "key": "conf_26_mask",
+      "commands": ["B"],
       "label": "Conference 26 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -428,6 +455,7 @@
     },
     {
       "key": "conf_27_mask",
+      "commands": ["B"],
       "label": "Conference 27 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -443,6 +471,7 @@
     },
     {
       "key": "conf_28_mask",
+      "commands": ["B"],
       "label": "Conference 28 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -458,6 +487,7 @@
     },
     {
       "key": "conf_29_mask",
+      "commands": ["B"],
       "label": "Conference 29 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -473,6 +503,7 @@
     },
     {
       "key": "conf_30_mask",
+      "commands": ["B"],
       "label": "Conference 30 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -488,6 +519,7 @@
     },
     {
       "key": "conf_31_mask",
+      "commands": ["B"],
       "label": "Conference 31 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -503,6 +535,7 @@
     },
     {
       "key": "conf_32_mask",
+      "commands": ["B"],
       "label": "Conference 32 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -518,6 +551,7 @@
     },
     {
       "key": "conf_33_mask",
+      "commands": ["B"],
       "label": "Conference 33 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -533,6 +567,7 @@
     },
     {
       "key": "conf_34_mask",
+      "commands": ["B"],
       "label": "Conference 34 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -548,6 +583,7 @@
     },
     {
       "key": "conf_35_mask",
+      "commands": ["B"],
       "label": "Conference 35 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -563,6 +599,7 @@
     },
     {
       "key": "conf_36_mask",
+      "commands": ["B"],
       "label": "Conference 36 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -578,6 +615,7 @@
     },
     {
       "key": "conf_37_mask",
+      "commands": ["B"],
       "label": "Conference 37 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -593,6 +631,7 @@
     },
     {
       "key": "conf_38_mask",
+      "commands": ["B"],
       "label": "Conference 38 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -608,6 +647,7 @@
     },
     {
       "key": "conf_39_mask",
+      "commands": ["B"],
       "label": "Conference 39 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -623,6 +663,7 @@
     },
     {
       "key": "conf_40_mask",
+      "commands": ["B"],
       "label": "Conference 40 bulletin mask",
       "type": "string",
       "group": "Conference access",
@@ -638,6 +679,7 @@
     },
     {
       "key": "join_logfile",
+      "commands": ["J"],
       "label": "Log file",
       "type": "string",
       "group": "Join conferences",
@@ -648,6 +690,7 @@
     },
     {
       "key": "join_dual_listing",
+      "commands": ["J"],
       "label": "Dual listing (join)",
       "type": "choice",
       "group": "Join conferences",
@@ -669,6 +712,7 @@
     },
     {
       "key": "join_current_cnf",
+      "commands": ["J"],
       "label": "Show current conferences",
       "type": "choice",
       "group": "Join conferences",
@@ -689,6 +733,7 @@
     },
     {
       "key": "join_cnf_names",
+      "commands": ["J"],
       "label": "Conference names from icon",
       "type": "choice",
       "group": "Join conferences",
@@ -709,6 +754,7 @@
     },
     {
       "key": "join_nrconflines",
+      "commands": ["J"],
       "label": "Conference lines",
       "type": "number",
       "group": "Join conferences",
@@ -720,6 +766,7 @@
     },
     {
       "key": "join_password_level",
+      "commands": ["J"],
       "label": "Password protection below level",
       "type": "number",
       "group": "Join conferences",
@@ -730,6 +777,7 @@
     },
     {
       "key": "join_netmail_startcnf",
+      "commands": ["J"],
       "label": "First netmail conference",
       "type": "number",
       "group": "Join conferences",
@@ -740,6 +788,7 @@
     },
     {
       "key": "join_drop_dtr",
+      "commands": ["J"],
       "label": "Drop carrier after failures",
       "type": "number",
       "group": "Join conferences",

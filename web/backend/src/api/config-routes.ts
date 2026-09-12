@@ -566,7 +566,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       const doorDir = doorDirectoryFor(config.get('dataDir'), door);
       if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
 
-      const view = readDoorSettingsView(doorDir);
+      const view = readDoorSettingsView(doorDir, command);
       if (!view) return res.status(404).json({ success: false, message: `${command} declares no settings` });
 
       sendResponse(res, view);
@@ -610,8 +610,8 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
           return undefined;
         }
       };
-      writeDoorSettings(doorDir, incoming, resolveSystemValue);
-      sendResponse(res, readDoorSettingsView(doorDir), `${command} settings saved`);
+      writeDoorSettings(doorDir, incoming, resolveSystemValue, command);
+      sendResponse(res, readDoorSettingsView(doorDir, command), `${command} settings saved`);
     } catch (error) {
       if (error instanceof UnknownDoorSettingError) {
         return res.status(400).json({ success: false, message: error.message });
