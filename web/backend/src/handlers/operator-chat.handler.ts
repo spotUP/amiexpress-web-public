@@ -151,7 +151,7 @@ import { report } from '../achievements/reporter';
 const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
+import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
 import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
@@ -844,7 +844,17 @@ async function acceptPage(
   pageId: string,
   sysopId: string,
   sysopHandle: string,
-  sysopSessionId: string
+  sysopSessionId: string,
+  /**
+   * The bot is taking this page FOR REAL, right now.
+   *
+   * Not inferred from `sysopId === 'bot'`: the deferred replay at
+   * processPageTimeouts also calls this with whatever sysopId was queued,
+   * including the bot's, and a chat claimed on that path is not the same
+   * event. Only activateGrumpyBot, at the point it has decided to take the
+   * page, passes true.
+   */
+  claimForBot = false
 ): Promise<void> {
   const page = repository.getPageRequest(pageId);
   if (!page) {
@@ -902,6 +912,19 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
     messages: existingMessages,
     isTyping: { user: false, sysop: false }
   };
+
+  // THE BOT CLAIMS ITS CHAT BEFORE THE GREETING, not after it. The caller is
+  // linked and OPERATOR_CHAT_ACTIVE from here, and the greeting that follows
+  // types for seconds - so a caller who answered during it reached
+  // handleUserChatMessage, was recorded and shown to the admin, and then fell
+  // through BOTH isBotControlled branches: no reply, and no queue entry
+  // either, because queuing lives inside the branch. Their first question
+  // disappeared. activateGrumpyBot still sets the rest - the persona, the
+  // intro's own history - once it has them.
+  if (claimForBot) {
+    (chatSession as any).isBotControlled = true;
+    (chatSession as any).botBusy = true;
+  }
 
   activeChatSessions.set(pageId, chatSession);
   // Achievements (SP2): the caller got their chat. Non-throwing.
@@ -1010,7 +1033,12 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // ACS_BREAK_CHAT here: a caller who cannot leave a chat nobody else is
     // in would be trapped. The board is not the sysop, so its colour reset
     // goes through the line model, or the next line types with no colour.
-    if (sysopId === 'bot') reach.emitter.emit('ansi-output', `${chatResetColourBytes(chatSession)}(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
+    // GUARDED. The greeting above now types for seconds and the caller can
+    // leave during it: deliverGreeting returns early once the chat is over,
+    // and this line printed regardless - landing the hint on top of the menu
+    // prompt the caller had just been returned to, and mutating a session
+    // already deleted from activeChatSessions.
+    if (sysopId === 'bot' && chatIsLive(chatSession, pageId)) reach.emitter.emit('ansi-output', `${chatResetColourBytes(chatSession)}(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
   }
 
 console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
@@ -1709,7 +1737,7 @@ console.log(`[Operator Chat] Page ${pageId}: ${reason} - GrumpyBot takes it`);
 
     // WHO ANSWERS THIS PAGE: the caller's choice -> board default -> Kevin, rolled once and pinned by handle (s.2).
     const persona = personaForPage(page, repository);
-    await acceptPage(io, repository, pageId, 'bot', persona.handle, 'grumpy-bot-session');
+    await acceptPage(io, repository, pageId, 'bot', persona.handle, 'grumpy-bot-session', true);
 
     const chatSession = activeChatSessions.get(pageId);
     if (!chatSession) {

@@ -153,3 +153,56 @@ describe('the grumpy bot answers a caller', () => {
     expect(text).toMatch(BOT_REPLY);
   });
 });
+
+/**
+ * A caller who answers DURING the greeting must not be ignored.
+ *
+ * The bot's flags were set after `await acceptPage(...)`, but the caller is
+ * linked and OPERATOR_CHAT_ACTIVE from inside it - and the greeting that
+ * follows types for seconds. A line sent in that window reached
+ * handleUserChatMessage, was recorded and shown to the admin, and then fell
+ * through BOTH isBotControlled branches: no reply, and no queue entry either,
+ * because queuing lives inside the branch. The caller's first question
+ * disappeared.
+ *
+ * It shipped to the live board on 2026-09-08 and stayed there five days. It
+ * lived that long because nothing tested what happened to what the caller
+ * typed - only that they COULD type.
+ */
+describe('the caller talks over the greeting', () => {
+  it('answers the line instead of swallowing it', async () => {
+    const H = require('../../src/handlers/operator-chat.handler');
+    const w = makeWorld();
+    // THE GREETING MUST BE SLOW OR THERE IS NO WINDOW TO TEST. makeWorld types
+    // at 1ms a character, which closes the gap before a test can reach into
+    // it - and a first version of this test passed with the fix reverted for
+    // exactly that reason. At 60ms the greeting takes seconds, which is what
+    // a real caller sees and what the bug needed.
+    w.repo.updateConfig({ botTypingSpeed: 60 } as any);
+    H.initOperatorChatHandler(w.io, w.repo);
+
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    // The moment the bot owns the page - its greeting is still going out.
+    await until('the bot to take the page',
+      () => w.repo.getPageRequest(w.session.tempData.pageId)?.sysopId === 'bot');
+
+    const botLines = () =>
+      w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot');
+
+    // THE BASELINE IS AFTER THE INTRO EXISTS, not after the page is taken.
+    // Taken first, the intro alone satisfied "a new bot line appeared" and the
+    // test passed against the broken code - it never asked whether the CALLER
+    // had been answered. The intro is recorded before it finishes typing, so
+    // this still lands inside the greeting window.
+    await until('the intro to be recorded', () => botLines().length >= 1);
+    const before = botLines().length;
+
+    await H.handleUserChatMessage(w.io, w.repo, w.session, 'are you there?');
+
+    // The intro is one bot line; an ANSWER to the caller is a second. Before
+    // the fix this stayed at `before` for ever - the line was recorded
+    // against the chat and nothing ever replied to it.
+    await until('the caller to be answered', () => botLines().length > before);
+    expect(botLines().length).toBeGreaterThan(before);
+  }, 30000);
+});
