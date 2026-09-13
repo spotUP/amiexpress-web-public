@@ -914,9 +914,9 @@ int main(int argc, char **argv)
                             : "No message base here.");
                 say(5, "Press Q to leave.");
             } else if (state == FEED_EMPTY || row_count == 0) {
-                say(3, wide ? "Nothing here you can read yet. Press P and be first."
+                say(3, wide ? "Nothing here you can read yet. Press E and be first."
                             : "Nothing posted yet.");
-                say(5, wide ? "Press P to post, Q to leave." : "P post, Q leave.");
+                say(5, wide ? "Press E to enter a message, Q to leave." : "E enter, Q leave.");
             } else {
                 draw_header();
                 ui_list_draw(&list, &screen.buf);
@@ -940,6 +940,20 @@ int main(int argc, char **argv)
             draw_status();
             if (screen.profile.collapse_chrome) draw_footer(narrow_hints, 3, "Q=Leave");
             else draw_footer(hints, 4, "Q=Leave");
+
+            /*
+             * NO CURSOR ON THE LIST. Nothing here is typed into, and a block
+             * parked on a row the caller is only arrowing through reads as an
+             * input field that will not accept anything.
+             *
+             * It has to be turned off HERE rather than left off, because the
+             * widgets that borrow it put it back on the way out: ui_doc shows
+             * it again when the reader closes (ui_doc.c:366) and ui_input's
+             * restore hides it, so which state the list inherits depends on
+             * which widget ran last. The list says what it wants instead of
+             * hoping.
+             */
+            ansi_cursor(&screen.buf, 0);
 
             ui_screen_flush(&screen);
             full = 0;
