@@ -493,6 +493,7 @@ static void read_page(void)
         ui_doc_style_init(&style);
         style.top = 3;
         texttv_reader_box(screen.cols, screen.rows, &style.left, &style.width, &style.height);
+        style.frameless = texttv_reader_frameless(screen.cols);
         style.fg = UI_TOKEN(UI_T_INK);
         style.bg = UI_TOKEN(UI_T_GROUND);
         style.ink = UI_TOKEN(UI_T_ACCENT);

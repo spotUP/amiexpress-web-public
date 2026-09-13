@@ -22,6 +22,7 @@ void ui_doc_style_init(ui_doc_style *style)
     style->fg = ANSI_WHITE;
     style->bg = ANSI_BLACK;
     style->ink = ANSI_CYAN;
+    style->frameless = 0;
 }
 
 int ui_doc_wrap(const char *text, int width,
@@ -152,7 +153,8 @@ static void paint_line(void *context, const char *start, int len)
     } else {
         ansi_color(c->b, c->st->fg, c->st->bg, 0);
     }
-    ansi_text(c->b, c->st->top + 1 + c->drawn, c->st->left + 1, row, c->st->width);
+    ansi_text(c->b, c->st->top + 1 + c->drawn,
+              c->st->left + (c->st->frameless ? 0 : 1), row, c->st->width);
     ansi_color(c->b, c->st->fg, c->st->bg, 0);
 
     c->index++;
@@ -172,8 +174,14 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
     /* Only a row changed: the frame, the footer and every other row are
      * already on the caller's screen. */
     if (only_line < 0) {
-        ansi_panel(b, st->top, st->left, st->height + 2, st->width + 2,
-                   st->ink, st->bg, title);
+        if (st->frameless) {
+            /* The title owns the top row; the rows start directly under it. */
+            ansi_fill(b, st->top, st->left, st->width, st->ink, st->bg);
+            ansi_text(b, st->top, st->left, title, st->width);
+        } else {
+            ansi_panel(b, st->top, st->left, st->height + 2, st->width + 2,
+                       st->ink, st->bg, title);
+        }
     }
 
     ctx.b = b;
@@ -189,7 +197,8 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
     /* Blank whatever the last page does not fill, or the page before it
      * shows through - the reader would read stale text as content. */
     while (ctx.drawn < st->height) {
-        ansi_fill(b, st->top + 1 + ctx.drawn, st->left + 1, st->width, st->fg, st->bg);
+        ansi_fill(b, st->top + 1 + ctx.drawn, st->left + (st->frameless ? 0 : 1),
+                  st->width, st->fg, st->bg);
         ctx.drawn++;
     }
 
@@ -229,7 +238,8 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
     }
 
     ansi_color(b, st->ink, st->bg, 0);
-    ansi_text(b, st->top + st->height + 1, st->left + 2, footer, st->width);
+    ansi_text(b, st->top + st->height + 1,
+              st->left + (st->frameless ? 0 : 2), footer, st->width);
     ansi_cursor(b, 0);
 }
 

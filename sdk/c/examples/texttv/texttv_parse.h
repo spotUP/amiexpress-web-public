@@ -49,6 +49,9 @@ int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
  */
 void texttv_reader_box(int cols, int rows, int *left, int *width, int *height);
 
+/** 1 when the reader must drop its frame to fit a forty-column teletext row. */
+int texttv_reader_frameless(int cols);
+
 /*
  * What an index page points at: one entry per headline the caller can open.
  *

@@ -30,6 +30,17 @@ extern "C" {
 typedef struct {
     int top, left, height, width;
     int fg, bg, ink;
+    /**
+     * Draw WITHOUT the frame: no panel, no border columns, the title on the
+     * top row and the footer on the bottom one.
+     *
+     * A framed reader needs `width + 2` columns. A teletext row IS forty
+     * columns, so on a forty-column caller the frame cannot be afforded: the
+     * panel ran two columns off the screen, the title was cut mid-word and
+     * every row wrapped two characters early (sysop's C64 walk, 2026-09-13).
+     * Zero keeps the frame, which is every existing caller.
+     */
+    int frameless;
 } ui_doc_style;
 
 /** A frame in the middle of an 80x24 screen, white on black. */

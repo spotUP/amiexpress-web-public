@@ -307,6 +307,43 @@ static void a_cursor_picks_a_line_and_costs_two_rows(void)
            move_bytes, full_bytes);
 }
 
+static void a_frameless_reader_uses_every_column(void)
+{
+    /* A framed reader needs width + 2 columns. A teletext row IS forty, so on
+       a forty-column caller the frame ran off the screen: the title was cut
+       mid-word, every row wrapped two characters early, and the panel's
+       bottom-right corner appeared under the footer (sysop's C64 walk). */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *forty = "  Dags for val - vallokalerna har oppnat";  /* exactly 40 */
+
+    ui_doc_style_init(&st);
+    st.height = 6; st.width = 40; st.left = 0; st.top = 1; st.frameless = 1;
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, "100 Dags for val", forty) == 0);
+
+    /* The row is whole - it did not wrap - and the frame is not drawn. */
+    assert(strstr(storage, "vallokalerna har oppnat") != 0);
+    assert(strstr(storage, "+-") == 0);
+    assert(strstr(storage, "Q LEAVE") != 0);      /* the way out survives */
+    assert(strstr(storage, "100 Dags for val") != 0);  /* and the title */
+
+    /* Framed, the same row does NOT fit: 40 columns of text want 42. */
+    st.frameless = 0;
+    st.width = 38;
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, "100 Dags for val", forty) == 0);
+    assert(strstr(storage, "oppnat") != 0);       /* it wrapped, and still shows */
+    printf("  [OK] a frameless reader uses every column\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -321,6 +358,7 @@ int main(void)
     a_narrow_reader_keeps_the_way_out();
     a_lost_caller_is_not_a_page_turn();
     a_cursor_picks_a_line_and_costs_two_rows();
+    a_frameless_reader_uses_every_column();
     printf("ui_doc: all passed\n");
     return 0;
 }

@@ -151,6 +151,14 @@ void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
     if (height) *height = rows - 7;
 }
 
+int texttv_reader_frameless(int cols)
+{
+    /* A framed reader needs width + 2 columns and a teletext row is exactly
+       forty, so at forty the frame costs two characters of every row. The
+       page wins; the box goes. */
+    return cols <= TEXTTV_COMPACT_COLS;
+}
+
 /* "key":<digits> out of one JSON object slice. -1 when absent. */
 static int json_int_field(const char *obj, unsigned long len, const char *key)
 {
