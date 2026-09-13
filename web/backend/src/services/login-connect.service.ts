@@ -34,7 +34,7 @@
  */
 
 import type { BBSSession } from "../index";
-import { recordPromptColumn } from '../utils/line-input.util';
+import { recordPromptColumn, SAVE_CURSOR } from '../utils/line-input.util';
 import type { LoginEmitter } from "../types/login-emitter";
 import { LoggedOnSubState } from "../constants/bbs-states";
 import { triggerSamiLogRefresh } from "./SamiLogService";
@@ -256,6 +256,7 @@ export async function runPreLoginConnect(
 
   // 5. Graphics prompt + parked state — express.e:29527-29528.
   emitter.emit("ansi-output", recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
+  emitter.emit("ansi-output", SAVE_CURSOR);
   session.subState = LoggedOnSubState.ANSI_PROMPT;
   session.tempData = { inputBuffer: "" };
 

@@ -12,7 +12,7 @@ import { resetPetsciiModel } from '../../utils/petscii-session-model';
 import { transportCapabilities } from '../../server/transport-adapter';
 import {
   acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN,
-  recordPromptColumn, backspaceEcho,
+  recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 
 /**
@@ -101,6 +101,7 @@ console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
     socket.emit('ansi-output', recordPromptColumn(
       session, '\r\nANSI, RIP or No graphics (A/r/n)? ',
     ));
+    socket.emit('ansi-output', SAVE_CURSOR);
     return true;
   }
 
@@ -193,13 +194,6 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
       cols: session.petsciiColumns,
       rows: 25,
       palette: session.petsciiColumns === 80 ? 'vdc' : 'vic',
-      // THE CHARACTER SET, with the shape and the colours. A C64 sold in
-      // Sweden shipped a modified ROM with a-ring and the umlauts where the
-      // bracket/pound trio sits, and a Swedish caller cannot type their own
-      // name without it. A VARIANT, never the default: $5C is the pound sign
-      // this board's MCI uses for its column tab, and only a session that
-      // asked for Swedish may have an O-umlaut there instead.
-      charset: (session as any).petsciiSwedish === true ? 'swedish' : 'standard',
     });
   } else if (hasT && transportCapabilities(session).teletext) {
     // WEB_: teletext session mode (T answer at the graphics prompt). The web

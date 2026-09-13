@@ -330,11 +330,45 @@ export function wireColumns(
  *
  * Returns the text unchanged, so a call site can wrap its emit in place.
  */
+/** DECSC. Emit straight after a prompt, as its own write. */
+export const SAVE_CURSOR = '\x1b7';
+
 export function recordPromptColumn<T extends string>(
-  session: { wireWidth?: number; screenWidth?: number; promptColumn?: number } | null | undefined,
+  session: {
+    wireWidth?: number; screenWidth?: number; promptColumn?: number;
+    promptCursorSaved?: boolean;
+  } | null | undefined,
   text: T,
 ): T {
-  if (session) session.promptColumn = visibleColumns(text) % wireColumns(session);
+  if (session) {
+    session.promptColumn = visibleColumns(text) % wireColumns(session);
+    // This prompt saved a cursor, so a redraw may restore it. A prompt
+    // printed by a path that has not been converted sets nothing, and the
+    // erase below stays the plain one - restoring a cursor saved by some
+    // EARLIER prompt would clear from the wrong place entirely.
+    session.promptCursorSaved = true;
+  }
+  /**
+   * AND THE TERMINAL REMEMBERS IT FOR US.
+   *
+   * ESC 7 (DECSC) saves the cursor exactly where the input will begin. A
+   * redraw can then restore it with ESC 8 and needs no column, no width
+   * and no row arithmetic - which is the whole class of bug this feature
+   * kept producing: measured against 80 while the caller's window was not
+   * 80, it climbed a row that was never wrapped into and erased real text;
+   * measured against a width reported before a resize, it did not climb at
+   * all. The terminal always knows where its own cursor was.
+   *
+   * The board already uses this pair elsewhere (smiley-picker.util,
+   * internode-chat.handler), so the sequence is known to work on every
+   * terminal this board serves. The save lives only from printing the
+   * prompt to the next keystroke.
+   *
+   * It is emitted SEPARATELY, never appended to the prompt text: those
+   * bytes are pinned for express parity (tests/handlers/menu-prompt-width)
+   * and budgeted to the column on a 40-column screen, and two extra bytes
+   * inside them broke both.
+   */
   return text;
 }
 
@@ -350,30 +384,37 @@ export function recordPromptColumn<T extends string>(
 export function backspaceEcho(
   before: string,
   after: string,
-  session: { wireWidth?: number; screenWidth?: number; promptColumn?: number; petsciiMode?: boolean } | null | undefined,
+  session: {
+    wireWidth?: number; screenWidth?: number; promptColumn?: number;
+    petsciiMode?: boolean; promptCursorSaved?: boolean;
+  } | null | undefined,
 ): string {
   if (before === after) return '';
-  const plain = '\b \b';
   // A PETSCII caller's terminal is not an ANSI one; it keeps the simple
   // erase it has always had.
-  if (!session || session.petsciiMode === true) return plain;
-  /**
-   * A REDRAW NEEDS A WIDTH WE WERE TOLD, never one we assumed.
-   *
-   * Guessing 80 and being wrong is worse than not redrawing at all: the
-   * line is measured against the wrong column, the cursor is moved up a row
-   * that was never wrapped into, and `ESC[0J` then wipes whatever was
-   * really there. That is exactly what the sysop saw next - "it moves up
-   * now but it removes text it shouldnt". With no reported size, the plain
-   * erase is the honest answer: it cannot climb, but it cannot destroy.
-   */
-  if (typeof session.wireWidth !== 'number') return plain;
-  const startCol = session.promptColumn ?? 0;
-  const rewrap = rewrapEcho(
-    { text: before, curpos: before.length },
-    { text: after, curpos: after.length },
-    startCol,
-    wireColumns(session),
-  );
-  return rewrap || plain;
+  if (session?.petsciiMode === true) return '\b \b';
+  // Only when THIS prompt saved a cursor to restore.
+  if (session?.promptCursorSaved !== true) return '\b \b';
+  return redrawFromSavedStart({ text: after, curpos: after.length });
+}
+
+/**
+ * Redraw an edited line from where the prompt saved the cursor.
+ *
+ * ESC 8 puts the cursor back at the first column of the input - across any
+ * number of wrapped rows, because the terminal recorded the real position
+ * rather than a computed one. ESC[0J then clears everything after it,
+ * including the rows below that a shortened line vacates.
+ *
+ * A cursor left mid-line is handled by restoring a second time and
+ * reprinting only the characters before it: identical bytes, so nothing
+ * changes on screen, and the cursor lands exactly where the edit left it
+ * without a single cursor-movement escape.
+ */
+export function redrawFromSavedStart(after: LineState): string {
+  let out = '\x1b8\x1b[0J' + after.text;
+  if (after.curpos < after.text.length) {
+    out += '\x1b8' + after.text.slice(0, after.curpos);
+  }
+  return out;
 }

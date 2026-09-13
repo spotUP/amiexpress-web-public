@@ -89,13 +89,13 @@ describe('backspace climbs the wrap at the menu prompt', () => {
       .map((e: any) => String(e.data ?? '')).join('');
 
     expect(session.inputBuffer).toBe('a'.repeat(29));
-    // The redraw addresses the cursor absolutely. A bare BS here is the bug:
-    // it cannot cross the row boundary and the first row stays stranded.
-    expect(out).toMatch(/\x1b\[\d+G/);
-    expect(out).toContain('\x1b[0J');
+    // Restore the cursor the prompt saved, clear from there, reprint. A
+    // bare BS here is the bug: it cannot cross the row boundary and the
+    // first row stays stranded.
+    expect(out).toContain('\x1b8\x1b[0J' + 'a'.repeat(29));
   });
 
-  it('leaves a short line on the cheap path, byte for byte', async () => {
+  it('redraws a short line too - the width no longer decides anything', async () => {
     const socket = makeSocket();
     const session = makeSession();
     displayMenuPrompt(socket as any, session);
@@ -110,9 +110,11 @@ describe('backspace climbs the wrap at the menu prompt', () => {
       .map((e: any) => String(e.data ?? '')).join('');
 
     expect(session.inputBuffer).toBe('ab');
-    // Unchanged behaviour for the common case: no repaint for one keystroke.
-    expect(out).toContain('\b');
-    expect(out).not.toContain('\x1b[0J');
+    // Three earlier versions tried to keep the cheap BS-space-BS for lines
+    // that "fit", and each one decided that with a width that was wrong -
+    // stale, assumed, or reported before a resize. Restoring a cursor the
+    // terminal saved is right either way, and a command line is short.
+    expect(out).toContain('\x1b8\x1b[0Jab');
   });
 });
 
@@ -147,11 +149,13 @@ describe('the graphics prompt climbs the wrap too', () => {
     expect(out).toContain('\x1b[0J');
   });
 
-  it('keeps the plain erase on a terminal where it fits', () => {
+  it('redraws on a wide terminal too, because width no longer decides', () => {
     const session: any = { wireWidth: 80, screenWidth: 80 };
     recordPromptColumn(session, PROMPT);
-    // 34 + 8 = 42, well inside 80.
-    expect(backspaceEcho('AAAAAAAA', 'AAAAAAA', session)).toBe('\b \b');
+    // 34 + 8 = 42, well inside 80 - and it redraws anyway. Restoring a
+    // cursor the terminal itself saved is correct whether the line wrapped
+    // or not, and deciding by width is what produced three wrong versions.
+    expect(backspaceEcho('AAAAAAAA', 'AAAAAAA', session)).toBe('\x1b8\x1b[0JAAAAAAA');
   });
 
   it('leaves a PETSCII caller the erase it has always had', () => {
@@ -191,6 +195,7 @@ describe('the connect question climbs the wrap', () => {
       wireWidth: 80,
       tempData: { inputBuffer: '' },
       promptColumn: visibleColumns(ANSI_GRAPHICS_PROMPT) % 80,
+      promptCursorSaved: true,
     };
 
     for (const ch of 'AAAAA') await handleCommand(socket as any, session, ch);
@@ -203,10 +208,8 @@ describe('the connect question climbs the wrap', () => {
       .map((e: any) => String(e.data ?? '')).join('');
 
     expect(session.tempData.inputBuffer).toBe('AAAA');
-    // Up a row, to the input's column, clear, reprint, place the cursor.
-    expect(out).toContain('\x1b[0J');
-    expect(out).toMatch(/\x1b\[\d+A/);
-    expect(out).toMatch(/\x1b\[\d+G/);
+    // Restore the cursor the prompt saved, clear from there, reprint.
+    expect(out).toContain('\x1b8\x1b[0J');
   });
 
   it('still refuses the eleventh character (express.e:29530)', async () => {
@@ -240,24 +243,27 @@ describe('the connect question climbs the wrap', () => {
 describe('a redraw needs a width we were told', () => {
   const { backspaceEcho, rewrapEcho } = require('../../src/utils/line-input.util');
 
-  it('falls back to the plain erase when the terminal never reported a size', () => {
-    const session: any = { screenWidth: 80, promptColumn: 79 };  // no wireWidth
-    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session)).toBe('\b \b');
-  });
-
-  it('redraws once the size is known', () => {
+  it('falls back to the plain erase when the prompt saved no cursor', () => {
+    // No saved cursor: this prompt was printed by a path that has not been
+    // converted, so restoring would clear from wherever an EARLIER prompt
+    // had saved. The plain erase cannot climb, but it cannot destroy.
     const session: any = { screenWidth: 80, wireWidth: 80, promptColumn: 79 };
-    const out = backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session);
-    expect(out).toContain('\x1b[0J');
-    expect(out).toMatch(/\x1b\[\d+A/);
+    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session)).toBe('\b \b');
   });
 
-  it('does not climb when the caller is wide enough that nothing wrapped', () => {
-    // 79 + 10 = 89, inside a 100-column terminal: one row, nothing to climb.
-    const session: any = { screenWidth: 100, wireWidth: 100, promptColumn: 79 };
-    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session)).toBe('\b \b');
-    expect(rewrapEcho(
-      { text: 'AAAAAAAAAA', curpos: 10 }, { text: 'AAAAAAAAA', curpos: 9 }, 79, 100,
-    )).toBe('');
+  it('redraws once a cursor has been saved', () => {
+    const session: any = {
+      screenWidth: 80, wireWidth: 80, promptColumn: 79, promptCursorSaved: true,
+    };
+    const out = backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session);
+    expect(out).toBe('\x1b8\x1b[0JAAAAAAAAA');
+  });
+
+  it('no longer depends on the width at all', () => {
+    // The restore is the terminal's own; a width cannot make it wrong.
+    const wide: any = {
+      screenWidth: 100, wireWidth: 100, promptColumn: 79, promptCursorSaved: true,
+    };
+    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', wide)).toBe('\x1b8\x1b[0JAAAAAAAAA');
   });
 });

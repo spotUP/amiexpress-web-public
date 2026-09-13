@@ -8,7 +8,8 @@ import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import { getSystemTime } from '../../utils/date-time.util';
 import {
-  acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN, backspaceEcho, recordPromptColumn,
+  acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN, backspaceEcho,
+  recordPromptColumn, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 import {
   runSysCommand as execSysCommand,
@@ -330,6 +331,7 @@ console.error(
           "ansi-output",
           recordPromptColumn(session as any, CONNECT_GRAPHICS_PROMPT)
         );
+        socket.emit("ansi-output", SAVE_CURSOR);
       }
       return;
     }

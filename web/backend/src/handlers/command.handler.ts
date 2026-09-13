@@ -204,7 +204,7 @@ import type { LineInputOptions } from '../utils/line-input.util';
 import {
   MAX_COMMAND_LINE, MAX_MSG_LINE_NUMBER, MAX_MSG_LINE_TEXT,
   MAX_MSG_TO, MAX_MSG_SUBJECT, MAX_DOOR_PASSWORD,
-  rewrapEcho, wireColumns, acceptTypedChar, acceptBackspace,
+  redrawFromSavedStart, acceptTypedChar, acceptBackspace, SAVE_CURSOR,
   backspaceEcho, recordPromptColumn, ANSI_PROMPT_MAX_LEN,
 } from '../utils/line-input.util';
 
@@ -1584,14 +1584,14 @@ console.log(' Connection screen viewed, showing ANSI prompt');
 console.log('[handleCommand] Await screen command still running, deferring prompt');
         session.pendingScreenCommand.then(() => {
           if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-            emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
+            emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT)); emitText(socket, SAVE_CURSOR);
           }
         }).catch(error => {
 console.error('[handleCommand] Pending screen command rejected:', error);
-          emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
+          emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT)); emitText(socket, SAVE_CURSOR);
         });
       } else {
-        emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
+        emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT)); emitText(socket, SAVE_CURSOR);
       }
       return;
     }
@@ -2520,15 +2520,6 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
 
       session.inputBuffer = '';
       (session as any).chatCursor = 0;
-      // A line the caller finished is a line up-arrow can bring back. Kept
-      // per session, not per message, so it survives the send-on-blank-line
-      // convention; the walk starts from the live line again each time.
-      if (input) {
-        const scratch = session as any;
-        scratch.chatHistory = [...(scratch.chatHistory ?? []), input].slice(-50);
-        scratch.chatHistoryAt = scratch.chatHistory.length;
-        scratch.chatHistoryDraft = '';
-      }
 
       callerPressedReturn(socket.server, session);
 
@@ -4432,13 +4423,15 @@ console.log(' Empty command, redisplaying menu');
          * cheap BS-tail-space below runs exactly as before: a board does
          * not repaint a row for every keystroke.
          */
-        const rewrap = (session.petsciiMode === true
-          || typeof (session as any).wireWidth !== 'number') ? '' : rewrapEcho(
-          { text: buf, curpos: was },
-          { text: edited, curpos },
-          ((session as any).promptColumn as number) ?? 0,
-          wireColumns(session as any),
-        );
+        /**
+         * The menu line redraws from the cursor the prompt saved (ESC 7),
+         * not from arithmetic. Width and column are exactly what this
+         * feature kept getting wrong; the terminal knows both already.
+         */
+        const rewrap = ((session as any).petsciiMode === true
+          || (session as any).promptCursorSaved !== true)
+          ? ''
+          : redrawFromSavedStart({ text: edited, curpos });
         if (rewrap) {
           emitText(socket, rewrap);
         } else {
