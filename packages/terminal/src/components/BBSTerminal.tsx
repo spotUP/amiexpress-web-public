@@ -353,8 +353,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // There is NO client-side baud pacing on this path, deliberately - see
   // enqueuePetscii below.
   const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
-  /** The Swedish character set, from the server's petscii-mode event. */
-  const [petsciiSwedish, setPetsciiSwedish] = useState(false);
   const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
   // The same instance as petsciiMachineRef, held in state so the render
@@ -2374,11 +2372,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
     });
 
-    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string; charset?: string }) => {
-      // The Swedish variant travels with the shape and the palette, and is
-      // off unless the board says otherwise - an ordinary session keeps the
-      // pound sign at $5C.
-      setPetsciiSwedish(shape.charset === 'swedish');
+    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
       console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide
       // screen is a C128's VDC unless the caller has said otherwise.
@@ -2406,6 +2400,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           texttvPrevRowsRef.current = term.rows;
           texttvPrevFontSizeRef.current = term.options.fontSize ?? null;
         }
+        /*
+         * Clear before the grid changes, screen AND scrollback.
+         *
+         * The pre-login window was painted at EIGHTY columns, and xterm
+         * reflows what it holds when the column count changes: the board's
+         * frontend art came back as two ragged rows above the teletext
+         * title and a second copy of the first row below it (sysop,
+         * localhost, 2026-09-13). None of it belongs to a teletext screen -
+         * the board repaints for the new grid straight after this event -
+         * so the buffer starts empty. reset() also drops the pen the old
+         * screen left in force, which is why it is not just clear().
+         */
+        term.reset();
+
         // True 40x25 grid (same geometry PETSCII sessions use): the board
         // draws 40 columns for this session, so the terminal shows 40.
         // Direct resize, never the 'terminal-resize' socket event - that
@@ -2429,6 +2437,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           texttvPrevThemeRef.current = null;
         }
         if (texttvPrevColsRef.current !== null) {
+          // The same clear on the way out: forty-column rows reflowed into
+          // eighty are the same mess in the other direction.
+          term.reset();
           term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
           texttvPrevColsRef.current = null;
           texttvPrevRowsRef.current = null;
@@ -3554,12 +3565,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             cursorVisible={doorOwnsScreen ? false : undefined}
             focusable
             focusOnMount
-            swedish={petsciiSwedish}
             onData={(bytes) => {
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
               // function keys included), then the one input path.
-              const text = petsciiInputToAscii(bytes, petsciiSwedish);
+              const text = petsciiInputToAscii(bytes);
               if (text) processInputKeyRef.current(text);
             }}
           />

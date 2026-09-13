@@ -48,7 +48,13 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     input() {}
     focus() {}
     refresh() {}
-    resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
+    resets = 0;
+    resizes: Array<{ cols: number; rows: number; afterResets: number }> = [];
+    reset() { this.resets += 1; }
+    resize(cols: number, rows: number) {
+      this.cols = cols; this.rows = rows;
+      this.resizes.push({ cols, rows, afterResets: this.resets });
+    }
     clearSelection() {}
     selectAll() {}
     getSelection() { return ''; }
@@ -128,6 +134,31 @@ describe('texttv-mode on', () => {
     expect(term.options.fontSize).toBe(32);
     expect(term.options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
     expect(term.options.theme.background).toBe('#000000');
+  });
+
+  it('clears the eighty-column screen before taking the forty-column grid', async () => {
+    // xterm reflows what it holds when the column count changes, so the
+    // pre-login art came back as ragged rows above and below the teletext
+    // title. The buffer starts empty instead - and the clear happens BEFORE
+    // the resize, or there is nothing left to reflow wrongly.
+    mount();
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: true });
+    });
+    const term = rec.terminals[0];
+    expect(term.resets).toBeGreaterThan(0);
+    const toTeletext = term.resizes.find((r: any) => r.cols === 40);
+    expect(toTeletext.afterResets).toBeGreaterThan(0);
+
+    // And on the way out, before the eighty-column grid comes back.
+    const before = term.resets;
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: false });
+    });
+    expect(term.resets).toBeGreaterThan(before);
+    const back = term.resizes[term.resizes.length - 1];
+    expect(back.cols).toBe(80);
+    expect(back.afterResets).toBe(term.resets);
   });
 
   it('resizes the grid to the classic 40x25', async () => {
