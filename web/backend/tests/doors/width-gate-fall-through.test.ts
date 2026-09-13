@@ -222,6 +222,49 @@ describe('a 40-column caller who types FR gets the file list', () => {
     expect(out).toContain('Reverse scanning directory 1');
   });
 
+  it('gives a TELETEXT caller the board\'s own screen, not the adapted door', async () => {
+    /*
+     * The adapter makes a wide door legible at forty columns; it cannot make
+     * it teletext. A teletext caller who typed J got Joincnf's eighty-column
+     * banner squeezed to forty while this board's own conference page - drawn
+     * in mosaics - sat one tier below (sysop, 2026-09-14). The door here
+     * declares C64_ADAPT, so the width gate WOULD let it through.
+     */
+    await register(doorOver('FR', { C64_ADAPT: '40', MIN_COLUMNS: '80' }));
+    const socket = makeSocket();
+    await handleCommand(socket as any, teletextSession('FR'), '');
+
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(allOutput(socket)).toContain('Reverse scanning directory 1');
+  });
+
+  it('leaves a C64 caller\'s adapted door alone - it has no PETSCII art to prefer', async () => {
+    // Deliberately NOT symmetrical: this board has .seq art for almost
+    // nothing, and an adapted door beats no door. The clause takes petscii
+    // the day the art exists.
+    //
+    // The door has to be one the adapter really carries (XIM), or the width
+    // gate refuses it for its type and both callers end up in the internal
+    // tier for reasons that have nothing to do with the clause under test.
+    await register({ ...doorOver('FR', { C64_ADAPT: '40', MIN_COLUMNS: '80' }), type: 'XIM' });
+    const socket = makeSocket();
+    await handleCommand(socket as any, c64Session('FR'), '');
+
+    // createAllDropFiles is executeDoor's launch sentinel: it runs
+    // immediately before the door-type switch, so "called" means the C64
+    // caller really did reach the door.
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalled();
+  });
+
+  it('and the teletext caller skips that same door', async () => {
+    await register({ ...doorOver('FR', { C64_ADAPT: '40', MIN_COLUMNS: '80' }), type: 'XIM' });
+    const socket = makeSocket();
+    await handleCommand(socket as any, teletextSession('FR'), '');
+
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(allOutput(socket)).toContain('Reverse scanning directory 1');
+  });
+
   it('leaves the door serving 80-column callers exactly as before', async () => {
     const socket = makeSocket();
     await handleCommand(socket as any, ansiSession('FR'), '');

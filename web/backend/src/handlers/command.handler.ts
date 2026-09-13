@@ -28,6 +28,7 @@ import { displayConferenceBulletins, joinConference, FORCE_MAILSCAN_SKIP } from 
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { INTERNAL_COMMAND_NAMES } from './command-handler/internal-command-names';
+import { displayModeOf } from '../amiga-emulation/xim/display-mode.util';
 import { displayDoorMenu, executeDoor, doorAvailableTo } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
@@ -4837,6 +4838,31 @@ console.log('[CommandPriority] Executed as SysCommand');
 console.log('[CommandPriority] SysCommand denied by permissions');
         return 'NOT_ALLOWED';
       }
+    }
+
+    /*
+     * A TELETEXT CALLER TAKES THE BOARD'S OWN SCREEN OVER AN ADAPTED DOOR.
+     *
+     * The frame adapter makes a wide 68K door LEGIBLE at forty columns: it
+     * replays the door's frames onto a virtual grid and reduces each one.
+     * What it cannot do is make the door teletext. A teletext caller who
+     * types J got Joincnf's eighty-column ANSI banner squeezed to forty,
+     * while this board's own conference page - drawn in mosaics, headed like
+     * a teletext page - sat one tier below and was never reached (sysop,
+     * 2026-09-14: "the j door ... looks like it did before").
+     *
+     * So for a teletext session the internal tier wins any command it has an
+     * equivalent for. Only teletext: a C64 caller keeps every adapted door
+     * exactly as today, because this board has PETSCII art for almost
+     * nothing and an adapted door beats no door at all. When the .seq art
+     * exists, the same clause can take `petscii`.
+     *
+     * A command with NO internal equivalent still runs its door, adapted, as
+     * it always has - this is a preference between tiers, never a refusal.
+     */
+    if (hasInternalEquivalent && displayModeOf(session as any) === 'teletext') {
+console.log('[CommandPriority] Teletext caller - the board\'s own screen outranks an adapted door');
+      return await runInternalTier();
     }
 
     // Try BbsCommand second

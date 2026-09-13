@@ -11,6 +11,7 @@
  */
 
 import { conferenceSubdir } from '../../conferences/conference-paths';
+import { servesPetsciiArt } from '../screen.handler';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity, UserFlags } from '../../utils/acs.util';
@@ -55,7 +56,7 @@ import { reportBulletinRead } from '../../achievements/sites';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;
-let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean, texttvMode?: boolean) => string | null;
 let _confScreenDir: string;
 let _db: any;
 let _hasKeysFile: any;
@@ -608,8 +609,13 @@ console.log('[ENV] Bulletins');
   const dataDir = config.get('dataDir');
   const currentConf = session.currentConf || 1;
   const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
-  const bullHelpPath = path.join(confScreenDir, 'Bulletins', 'BullHelp.txt');
-  if (!amigafs.existsSync(bullHelpPath)) {
+  // Any variant counts as "this conference has bulletins": a board whose
+  // bulletin menu is authored as teletext has bulletins just as much as one
+  // whose menu is a .txt.
+  const bullHelpBase = path.join(confScreenDir, 'Bulletins', 'BullHelp');
+  const hasBullHelp = ['.txt', '.ttx', '.seq', '.TXT']
+    .some((ext) => amigafs.existsSync(bullHelpBase + ext));
+  if (!hasBullHelp) {
     // express.e:8544-8545 myError(ERR_NO_BULLS): '\b\nNo bulletins are available in this conference!\b\n\b\n'
     socket.emit('ansi-output', '\r\nNo bulletins are available in this conference!\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -646,7 +652,25 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
   const currentConf = session.currentConf || 1;
   const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
   const bullHelpBasePath = path.join(confScreenDir, 'Bulletins', 'BullHelp');
-  const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, null, session.ripMode);
+  /*
+   * WITH the caller's screen KIND, not just their level.
+   *
+   * This asked for a screen the way it has since express.e, and got the
+   * `.txt` every time: the loader chooses `.seq` for a C64 and `.ttx` for a
+   * teletext caller only when it is told which it is talking to. So a
+   * teletext caller reading bulletins got the 80-column ANSI menu even with
+   * a teletext one sitting beside it, and a C64 the same (2026-09-14). The
+   * help command two files over has passed these two arguments all along.
+   */
+  const helpScreen = _findSecurityScreen(
+    bullHelpBasePath,
+    session.user?.secLevel || 0,
+    null,
+    session.ripMode,
+    false,
+    servesPetsciiArt(session),
+    session.texttvMode === true,
+  );
 
   if (helpScreen) {
     _displayScreen(socket, session, helpScreen);
