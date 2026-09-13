@@ -17,6 +17,7 @@ import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
 import { GROUNDING_RULES } from './sysop-ai/personas';
 import { BOT_cut } from '../services/bot-data/caps';
 import { askWithTools, withoutControlTokens } from './sysop-ai/loop';
+import { answerWithoutAModel } from './sysop-ai/no-model-answers';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
 
@@ -1748,6 +1749,20 @@ console.log('[Grumpy Bot] Reply looks cut off mid-thought - marking continuation
   // and the net were never the patient. Only rule-based (the admin turned
   // the AI off) keeps the persona's own line.
 console.log('[Grumpy Bot] No provider answered - saying so');
+
+  // BEFORE SAYING SO, SEE WHETHER THE BOARD KNOWS. 'who is online?' does not
+  // need a language model, it needs the board, and the board is right here.
+  // A handful of questions whose answer is a fact are run against the tool
+  // that already knows it; anything else falls through to the honest failure
+  // line rather than being guessed at, which is what the deleted rule-based
+  // responder used to do.
+  {
+    const fromTheBoard = await answerWithoutAModel(userMessage, context.tools);
+    if (fromTheBoard) {
+console.log('[Grumpy Bot] No model, but the board answered the question itself');
+      return toAmigaLatin1(stripMarkdown(stripEmojis(fromTheBoard)));
+    }
+  }
   // A reply that was ONLY a faked tool call leaves nothing to say - but
   // its model must not lead again next message, or every retry roleplays
   // the same block. Rotate, and record the death: the cascade returned
