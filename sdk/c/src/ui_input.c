@@ -34,7 +34,19 @@ static void paint(ansi_buf *b, const ui_input_style *st,
 
     ansi_fill(b, st->row, st->left, st->cols, st->fg, st->bg);
     ansi_color(b, st->ink, st->bg, 1);
-    ansi_text(b, st->row, st->left + 1, line, st->cols - 1);
+    /*
+     * RAW, so the text is not padded out to the field width.
+     *
+     * ansi_fill on the line above has already blanked the row, so padding is
+     * bytes spent twice - and it costs more than bytes. The pad leaves the
+     * TERMINAL's cursor at the far end of the field, and the goto that puts it
+     * back sits at the end of a frame that no longer fits one XIM message
+     * (~198 bytes on 68K). The tail then arrives in a second message a fifth
+     * of a second later, so every keystroke threw the cursor to the right of
+     * the screen and dragged it back. Visible on localhost 2026-09-13, where
+     * the slower redraw made the excursion easy to watch.
+     */
+    ansi_text_raw(b, st->row, st->left + 1, line, st->cols - 1);
     ansi_goto(b, st->row, st->left + 1 + (int) strlen(line));
     ansi_cursor(b, 1);
 }
@@ -111,7 +123,7 @@ int ui_confirm(ansi_buf *b, const ui_key_source *src, int *pushback,
 
         ansi_fill(b, style->row, style->left, style->cols, style->fg, style->bg);
         ansi_color(b, style->ink, style->bg, 1);
-        ansi_text(b, style->row, style->left + 1, line, style->cols - 1);
+        ansi_text_raw(b, style->row, style->left + 1, line, style->cols - 1);
         ansi_cursor(b, 0);
 
         /* The prompt is in a buffer until something sends it. */

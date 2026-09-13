@@ -179,9 +179,31 @@ static void draw_masthead(const char *title)
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
                           UI_TOKEN(UI_T_BAR), rail_tick);
 }
+/**
+ * Set while the caller is TYPING, which is not idle time.
+ *
+ * The rail below repaints the masthead and flushes it. That is exactly right
+ * while a caller is reading a list and wrong while one is writing a message:
+ * the flush leaves the terminal cursor wherever the masthead text ended, so
+ * the caller's cursor jumps to the top of the screen between keystrokes, and
+ * the rail's own partial redraw makes the title appear to lose characters
+ * ("POST TO EVERYONE" flickering down to "EVE"). Reported on localhost,
+ * 2026-09-13, where the slower redraw made it visible.
+ *
+ * ui_input puts the cursor back every time it repaints its row, so nothing is
+ * broken underneath - it is a race between two things drawing, and the one
+ * that is only decoration should lose.
+ */
+static int caller_is_typing;
+
 static void door_idle(void *ctx)
 {
     (void)ctx;
+    if (caller_is_typing) {
+        /* Still yield, or the poll loop spins hot on a 68K with one thread. */
+        ae_delay_ticks(1);
+        return;
+    }
     rail_tick++;
     ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
@@ -602,27 +624,11 @@ static void mark_read_on_the_way_out(void)
 /* ------------------------------------------------------------------ posting */
 
 /**
- * Hand "EALL" back to the board and leave.
- *
- * The door never writes a message: RETURNCOMMAND asks the BBS to run its own
- * express.e entry once this door has exited, which is the only order that
- * works - two doors cannot share a node. Public by default falls out for free,
- * because EALL *is* the public verb.
- *
- * `subject` is printed first and NOT prefilled. EALL is dispatched with a
- * literal argument (command.handler.ts:4920-4921), so there is no parameter
- * slot to put a "Re:" through, and adding one would change the signature of
- * the board's own message entry - a core behaviour change for a convenience.
- * Deferred on purpose; the caller retypes it.
- *
- * Returns 1 when the door should exit, 0 when the caller said no, -1 when the
- * caller went away.
- */
-/**
  * Write a message, here, without leaving the door.
  *
  * This used to hand `EALL` back to the board and exit - which is what the
- * sysop objected to on 2026-09-08 ("the subs door exits when i press P").
+ * sysop objected to on 2026-09-08 ("the subs door exits when i press P" -
+ * that key is E now, see the main loop).
  * Now the caller types the subject and the body in the door's own chrome and
  * the door appends the message to the base itself.
  *
@@ -642,13 +648,16 @@ static int post_flow(const char *question, const char *subject)
     long now, written;
     int yes, rc, i, attempt;
 
+    caller_is_typing = 1;
+
     {
         ui_input_style st;
         confirm_style(&st);
         yes = ui_confirm(&screen.buf, &keys, &pushback, &st, question, 1);
     }
-    if (yes < 0) return -1;
+    if (yes < 0) { caller_is_typing = 0; return -1; }
     if (yes == 0) {
+        caller_is_typing = 0;
         strcpy(status_line, "[INFO] Nothing posted.");
         return 0;
     }
@@ -671,8 +680,9 @@ static int post_flow(const char *question, const char *subject)
     confirm_style(&is);
     is.row = 3;
     rc = ui_input(&screen.buf, &keys, &pushback, &is, "Subject:", subj, (int) sizeof subj);
-    if (rc < 0) return -1;
+    if (rc < 0) { caller_is_typing = 0; return -1; }
     if (subj[0] == '\0') {
+        caller_is_typing = 0;
         strcpy(status_line, "[INFO] No subject, nothing posted.");
         return 0;
     }
@@ -690,6 +700,7 @@ static int post_flow(const char *question, const char *subject)
 
     ui_editor_text_init(&body);
     rc = ui_editor(&screen.buf, &keys, &pushback, &es, &body);
+    caller_is_typing = 0;              /* the writing is over either way */
     if (rc < 0) return -1;
     if (rc == 0 || body.count == 0) {
         strcpy(status_line, "[INFO] Nothing posted.");
@@ -870,10 +881,10 @@ int main(int argc, char **argv)
 
         if (full) {
             static const char *const hints[4] = {
-                "Up/Down Move", "Enter Read", "P Post", "R Reply"
+                "Up/Down Move", "Enter Read", "E Enter msg", "R Reply"
             };
             static const char *const narrow_hints[3] = {
-                "Up/Dn Move", "Ret Read", "P Post"
+                "Up/Dn Move", "Ret Read", "E Enter"
             };
 
             ansi_clear(&screen.buf);
@@ -964,7 +975,16 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (key == 'p' || key == 'P') {
+        /* E, not P. AmiExpress enters a message with E - internalCommandE,
+           gated on ACS_ENTER_MESSAGE (express.e:24860, dispatched at :28344) -
+           and R is READ (internalCommandR, ACS_READ_MESSAGE, :25518). A door
+           that invented its own letter for the board's oldest verb is a door
+           whose callers keep pressing the wrong key. Corrected by the sysop,
+           2026-09-13: "p should not be used, amiexpress use E for entering
+           messages". R stays REPLY here because Enter already reads at this
+           level, and Reply is what express.e's own between-messages prompt
+           offers on R. */
+        if (key == 'e' || key == 'E') {
             int rc = post_flow(wide ? "Post to everyone in this conference?" : "Post to everyone?", 0);
             if (rc < 0) break;
             /* A post no longer ends the door. It used to hand EALL back and

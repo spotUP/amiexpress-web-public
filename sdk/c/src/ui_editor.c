@@ -111,19 +111,19 @@ static void number_prompt(char *out, int line_no)
 }
 
 /**
- * Redraw the header and as much of the tail of the message as fits.
+ * Draw the chrome, and answer the first row the text may use.
  *
- * Only the TAIL: a screen buffer has no scrollback, and a caller typing line
- * 60 wants to see 55-59, not 1-5.
+ * ONCE per visit to the editor, not once per keystroke. The old version of
+ * this repainted the header, the instructions and every text row on every
+ * line entered, which is ~20 rows of fill plus text - well over the ~198 bytes
+ * that make one XIM message on 68K (RULES.md). The frame then arrived in
+ * pieces and the screen did not agree with itself: on localhost 2026-09-13 the
+ * first line of a message vanished as the second was typed.
  */
-static void paint(ansi_buf *b, const ui_editor_style *st,
-                  const ui_editor_text *text, int entry_row)
+static int paint_chrome(ansi_buf *b, const ui_editor_style *st)
 {
     char head[128];
-    int body_top = st->top;
-    int visible, first, i, row;
-
-    ansi_color(b, st->fg, st->bg, 0);
+    int row = st->top;
 
     if (st->to || st->subject) {
         head[0] = '\0';
@@ -136,39 +136,55 @@ static void paint(ansi_buf *b, const ui_editor_style *st,
             strcat(head, "Subject: ");
             strncat(head, st->subject, 40);
         }
-        ansi_fill(b, body_top, st->left, st->cols, st->fg, st->bg);
+        ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
         ansi_color(b, st->ink, st->bg, 1);
-        ansi_text(b, body_top, st->left, head, st->cols);
-        body_top++;
+        ansi_text_raw(b, row, st->left, head, st->cols);
+        row++;
     }
 
-    /* express.e:10148 prints this once; here it is repainted with the frame,
-       because the frame is a buffer that gets overwritten and not a teletype
-       that scrolls. Same words, so a caller reads the same instruction. */
+    /* express.e:10148's words, so a caller reads the same instruction. */
     sprintf(head, "Enter your text. (Enter) alone to end. (%d chars/line)",
             width_of(st));
-    ansi_fill(b, body_top, st->left, st->cols, st->fg, st->bg);
+    ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
     ansi_color(b, st->fg, st->bg, 0);
-    ansi_text(b, body_top, st->left, head, st->cols);
-    body_top++;
+    ansi_text_raw(b, row, st->left, head, st->cols);
+    row++;
 
-    visible = entry_row - body_top;
+    return row;
+}
+
+/** One text row: the number, then the line. */
+static void paint_line(ansi_buf *b, const ui_editor_style *st,
+                       int row, int number, const char *text)
+{
+    char numbered[UI_EDITOR_WIDTH + 8];
+    char num[8];
+
+    number_prompt(num, number);
+    sprintf(numbered, "%s %s", num, text);
+    ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
+    ansi_color(b, st->fg, st->bg, 0);
+    ansi_text_raw(b, row, st->left, numbered, st->cols);
+}
+
+/**
+ * The whole text window. Only when it has SCROLLED, or after the menu has
+ * drawn over it - one line arriving redraws one line.
+ */
+static void paint_lines(ansi_buf *b, const ui_editor_style *st,
+                        const ui_editor_text *text, int body_top, int entry_row)
+{
+    int visible = entry_row - body_top;
+    int first, i, row;
+
     if (visible < 0) visible = 0;
     first = text->count > visible ? text->count - visible : 0;
 
     row = body_top;
-    for (i = first; i < text->count && row < entry_row; i++, row++) {
-        char numbered[UI_EDITOR_WIDTH + 8];
-        char num[8];
-        number_prompt(num, i + 1);
-        sprintf(numbered, "%s %s", num, text->line[i]);
+    for (i = first; i < text->count && row < entry_row; i++, row++)
+        paint_line(b, st, row, i + 1, text->line[i]);
+    for (; row < entry_row; row++)
         ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
-        ansi_color(b, st->fg, st->bg, 0);
-        ansi_text(b, row, st->left, numbered, st->cols);
-    }
-    for (; row < entry_row; row++) {
-        ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
-    }
 }
 
 /** The one-line style the prompts and the entry row share. */
@@ -196,16 +212,20 @@ static int enter_lines(ansi_buf *b, const ui_key_source *src, int *pushback,
 {
     int entry_row = st->top + st->rows - 3;
     int w = width_of(st);
+    int body_top = paint_chrome(b, st);
+
+    /* Whatever is already there - a C(ontinue), or a return from the menu. */
+    paint_lines(b, st, text, body_top, entry_row);
 
     for (;;) {
         ui_input_style is;
         char buf[UI_EDITOR_WIDTH + 1];
         char num[8];
-        int rc;
+        int visible = entry_row - body_top;
+        int rc, row;
 
-        if (text->count >= UI_EDITOR_MAX_LINES) return 1;   /* full: go to the menu */
+        if (text->count >= UI_EDITOR_MAX_LINES) return 1;   /* full: to the menu */
 
-        paint(b, st, text, entry_row);
         prompt_style(&is, st, entry_row);
         number_prompt(num, text->count + 1);
 
@@ -213,11 +233,24 @@ static int enter_lines(ansi_buf *b, const ui_key_source *src, int *pushback,
         rc = ui_input(b, src, pushback, &is, num, buf, w + 1);
         if (rc < 0) return -1;
 
-        /* express.e:10184 - a bare ENTER is what ends entry, and the empty
-           line is NOT kept. */
+        /* express.e:10184 - a bare ENTER ends entry, and the empty line is
+           NOT kept. */
         if (buf[0] == '\0') return 1;
 
         if (!push_line(text, buf, (int) strlen(buf))) return 1;
+
+        /*
+         * ONE ROW, not the window. The window is only redrawn when the text
+         * has outgrown it and has to scroll - repainting all of it per line
+         * is what broke the display, because the frame stopped fitting a
+         * single XIM message.
+         */
+        if (visible > 0 && text->count <= visible) {
+            row = body_top + text->count - 1;
+            paint_line(b, st, row, text->count, text->line[text->count - 1]);
+        } else {
+            paint_lines(b, st, text, body_top, entry_row);
+        }
     }
 }
 
@@ -260,7 +293,7 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
               const ui_editor_style *style, ui_editor_text *text)
 {
     ui_editor_style fallback;
-    int menu_row, helplist = 0;
+    int menu_row, body_top, helplist = 0, dirty = 0;
 
     if (!b || !src || !pushback || !text) return -1;
     if (!style) { ui_editor_style_init(&fallback); style = &fallback; }
@@ -269,12 +302,21 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
 
     if (enter_lines(b, src, pushback, style, text) < 0) return -1;
 
+    /* enter_lines left the chrome and the text on screen; the menu only
+       redraws when something has actually changed it. Repainting per keystroke
+       is what stopped the frame fitting one XIM message. */
+    body_top = paint_chrome(b, style);
+    paint_lines(b, style, text, body_top, menu_row);
+
     for (;;) {
         ui_input_style is;
         char buf[16];
         int rc, n;
 
-        paint(b, style, text, menu_row);
+        if (dirty) {
+            paint_lines(b, style, text, body_top, menu_row);
+            dirty = 0;
+        }
 
         if (helplist) {
             /* express.e:10381-10389, minus the two file-transfer options: this
@@ -291,6 +333,7 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
                 ansi_text(b, row, style->left, help[i], style->cols);
             }
             helplist = 0;
+            dirty = 1;    /* the help drew over the text */
         }
 
         prompt_style(&is, style, menu_row);
@@ -324,11 +367,12 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
                last line to retype it is how the board gives them that. */
             if (text->count > 0) text->count--;
             if (enter_lines(b, src, pushback, style, text) < 0) return -1;
+            body_top = paint_chrome(b, style);
+            dirty = 1;
             break;
 
         case 'L':                                  /* express.e:10495 */
-            /* paint() already lists the tail every pass; L exists so a caller
-               who asked for it sees it without typing anything else. */
+            dirty = 1;
             break;
 
         case 'D': {                                /* express.e:10402 */
@@ -345,6 +389,7 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
             for (i = n - 1; i < text->count - 1; i++)
                 memcpy(text->line[i], text->line[i + 1], UI_EDITOR_WIDTH + 1);
             text->count--;
+            dirty = 1;
             break;
         }
 
@@ -366,6 +411,7 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
                     return -1;
             }
             strcpy(text->line[n - 1], edit);
+            dirty = 1;
             break;
         }
 
