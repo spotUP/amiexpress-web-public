@@ -88,19 +88,63 @@ function toCRLF(s: string): string {
   return s.replace(/\r?\n/g, '\r\n') + '\r\n';
 }
 
-/** BullHelp.txt names the number, once: re-ticks must not duplicate it. */
-export function ensureBullHelpLine(bulletinsDir: string, num: number, title: string): void {
+/**
+ * BullHelp.txt names the number, once: re-ticks must not duplicate it.
+ *
+ * ONLY A MISSING FILE IS AN EMPTY ONE. This read used to swallow every error
+ * and carry on with `text = ''`, which then WROTE that empty string back with
+ * one line appended - so a file the board could not read for a moment (a
+ * locked file, a busy disk, too many open handles) came back with every other
+ * bulletin's line gone. The board lists its own bulletins from this file, and
+ * this runs on a timer: a transient read error was quiet, permanent content
+ * loss. Anything but ENOENT now leaves the file alone.
+ */
+export function ensureBullHelpLine(
+  bulletinsDir: string,
+  num: number,
+  title: string,
+  // The read, as a seam. The destructive case is a read that fails while the
+  // write would have succeeded - a locked file, a busy disk, too many open
+  // handles - and no chmod expresses that, because permissions stop both.
+  // `import * as fs` compiles to a COPIED namespace here, so a spy on the
+  // test's own fs never reaches this call either.
+  readText: (file: string) => string = (file) => fs.readFileSync(file, 'latin1'),
+): void {
   const help = path.join(bulletinsDir, 'BullHelp.txt');
   let text = '';
   try {
-    text = fs.readFileSync(help, 'latin1');
-  } catch {
+    text = readText(help);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
     text = '';
   }
   const re = new RegExp(`^#${num}\\b`, 'm');
   if (re.test(text)) return;
   if (text.length && !text.endsWith('\n')) text += '\n';
-  fs.writeFileSync(help, `${text}#${num}    ${title}\n`, 'latin1');
+  writeFileAtomic(help, `${text}#${num}    ${title}\n`);
+}
+
+/**
+ * WRITE ALL OF IT, OR NONE OF IT.
+ *
+ * These files are written straight onto the live board on a timer, and a
+ * process that dies mid-write leaves a bulletin truncated - a zero-byte
+ * bull7.txt is a known sighting on this board, and "0 bytes is a kill
+ * mid-write" is how it was explained. A caller then opens an empty bulletin
+ * until the next tick, and BullHelp.txt losing its listing is worse.
+ *
+ * The temp file sits in the same directory so the rename cannot cross a
+ * filesystem, and rename is atomic: readers see the old file or the new one.
+ */
+function writeFileAtomic(target: string, contents: string): void {
+  const tmp = `${target}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, contents, 'latin1');
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* the write is what failed; the target is untouched */ }
+    throw err;
+  }
 }
 
 export async function refreshNewsBulletins(
@@ -125,7 +169,7 @@ export async function refreshNewsBulletins(
       `${src.title}\r\nUpdated ${deps.now().toISOString()}\r\n\r\n${body}\r\n\r\nSource: SVT Text via texttv.nu (unofficial mirror)`,
     );
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, src.file), text, 'latin1');
+    writeFileAtomic(path.join(dir, src.file), text);
     if (Number.isFinite(num)) {
       try {
         ensureBullHelpLine(dir, num, src.title);
