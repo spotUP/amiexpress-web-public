@@ -1355,7 +1355,10 @@ async function processBotQueue(
     chatSession.botBusy = false;
     await runAfters(context, pageId);
     // Recurse — process any more queued messages
-    processBotQueue(io, repository, pageId, chatSession);
+    void processBotQueue(io, repository, pageId, chatSession).catch((err) => {
+      console.error('[Operator Chat] Bot queue failed while draining:', err);
+      (chatSession as any).botBusy = false;
+    });
   }).catch(err => {
 console.error('[Operator Chat] Bot queue response error:', err);
     chatSession.botBusy = false;
@@ -1493,7 +1496,10 @@ console.log('[Operator Chat] Bot busy, queuing message');
         await runAfters(context, pageId);
 
         // Process any queued messages
-        processBotQueue(io, repository, pageId, chatSession as any);
+        void processBotQueue(io, repository, pageId, chatSession as any).catch((err) => {
+          console.error('[Operator Chat] Bot queue failed while draining:', err);
+          (chatSession as any).botBusy = false;
+        });
       }).catch(err => {
         // A model that throws must not leave its dots standing on the line.
         stopDots();
@@ -1855,7 +1861,10 @@ console.log(`[Operator Chat] Page ${pageId}: no board card (${(err as Error).mes
         .catch((err) => console.error(`[Operator Chat] Page ${pageId}: the bot's opening line failed:`, err))
         .finally(() => {
           (chatSession as any).botBusy = false;
-          processBotQueue(io, repository, pageId, chatSession as any);
+          void processBotQueue(io, repository, pageId, chatSession as any).catch((err) => {
+            console.error('[Operator Chat] Bot queue failed while draining:', err);
+            (chatSession as any).botBusy = false;
+          });
         });
     }
     return repository.getPageRequest(pageId)?.sysopId === 'bot';
