@@ -37,6 +37,36 @@ describe('the double-height filter', () => {
     expect(filter.write('ordinary')).toBe('ordinary');
   });
 
+  it('ends the attribute when the cursor leaves the line', () => {
+    /*
+     * A 68K door paints with absolute cursor motion and no newlines at all.
+     * TEXTTV's headline set the attribute, every row painted under it with
+     * ESC[r;cH inherited it, and half the page came out as the bottom halves
+     * of letters - the masthead included, because it is redrawn afterwards
+     * (sysop, 2026-09-14).
+     */
+    const filter = createDoubleHeightFilter();
+
+    expect(filter.write(`${ESC}#3BIG`)).toBe(top('BIG'));
+    expect(filter.write(`${ESC}[5;1Hplain`)).toBe(`${ESC}[5;1Hplain`);
+    expect(filter.half()).toBe('normal');
+
+    // Every motion that changes the row ends it; the ones that stay on the
+    // row do not.
+    for (const move of ['\x1b[H', '\x1b[3;4f', '\x1b[2A', '\x1b[2B', '\x1b[E', '\x1b[F', '\x1b[7d']) {
+      const f = createDoubleHeightFilter();
+      f.write(`${ESC}#4half`);
+      f.write(move);
+      expect([move, f.half()]).toEqual([move, 'normal']);
+    }
+    for (const stay of ['\x1b[4C', '\x1b[4D', '\x1b[9G', '\x1b[0;33m', '\x1b[K']) {
+      const f = createDoubleHeightFilter();
+      f.write(`${ESC}#4half`);
+      f.write(stay);
+      expect([stay, f.half()]).toEqual([stay, 'bottom']);
+    }
+  });
+
   it('ends the attribute on ESC#5, the way DECSWL does', () => {
     const filter = createDoubleHeightFilter();
     filter.write(`${ESC}#3BIG`);

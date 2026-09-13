@@ -26,6 +26,16 @@
  * socket writes as it takes. Anything the font has no half for - the mosaics,
  * the block elements, anything above Latin-1 - is passed through untouched
  * rather than mangled into a box.
+ *
+ * "The line ends" means the CURSOR LEAVES IT, and that is not always a
+ * newline. A real terminal keeps the attribute on the line in its buffer; we
+ * have no buffer, only the stream, so the stream has to say. A 68K door
+ * paints with absolute cursor motion and no newlines at all: TEXTTV's
+ * headline set the attribute, the rows under it were painted with
+ * `ESC[r;cH` and inherited it, and half the page came out as the bottom
+ * halves of letters - including the masthead, redrawn afterwards (sysop,
+ * 2026-09-14). So anything that moves the cursor off the line ends the
+ * attribute, exactly as leaving the line would.
  */
 
 /**
@@ -111,6 +121,9 @@ export interface DoubleHeightFilter {
 
 const ESC = '\x1b';
 
+/** CSI final bytes that put the cursor on a different line. */
+const MOVES_OFF_LINE = /[HfABEFd]/;
+
 const SHIFT_OUT = '\x0e';
 const SHIFT_IN = '\x0f';
 
@@ -161,7 +174,15 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
       if (ch === ESC) {
         const rest = data.slice(i);
         const csi = /^\x1b\[[0-9;?]*[ -/]*[@-~]/.exec(rest);
-        if (csi) { out += csi[0]; i += csi[0].length - 1; continue; }
+        if (csi) {
+          // A cursor move leaves the line, and the attribute stays behind on
+          // it. H and f position; A B E F move by rows; d picks one. C, D and
+          // G stay on this line, and `m`, `J`, `K` are not motion at all.
+          if (MOVES_OFF_LINE.test(csi[0].slice(-1))) half = 'normal';
+          out += csi[0];
+          i += csi[0].length - 1;
+          continue;
+        }
         const short = /^\x1b[()#][0-9A-Za-z]/.exec(rest);
         if (short) { out += short[0]; i += short[0].length - 1; continue; }
         out += ch;
