@@ -111,6 +111,26 @@ export function buildNote(s: any, compact: CompactProfile): string {
     : `  ${s.dim('This is who answers the next time you page the sysop.')}`;
 }
 
+/**
+ * The line under the list AFTER a save, said in as many words as the screen
+ * has room for.
+ *
+ * Width-gated like buildNote above, and for the same reason - it was not
+ * (2026-09-13): `  <handle> saved. That is who answers your next page.` is
+ * two columns of indent plus the handle plus 44, so it folded on a
+ * 40-column row for EVERY handle in the roster, and a folded row eats the
+ * footer under it.
+ */
+export function buildSavedNote(s: any, compact: CompactProfile, handle: string): string {
+  const saved = `${handle} saved.`;
+  if (compact.collapseChrome) {
+    // Two for the indent, one left empty so the row never writes its last
+    // cell (a written fortieth cell latches pending-wrap on a C64).
+    return `  ${s.ok(saved.substring(0, 37))}`;
+  }
+  return `  ${s.ok(saved)} ${s.dim('That is who answers your next page.')}`;
+}
+
 /** Footer key hints; the 40-column set is the same three keys, abbreviated. */
 export function buildFooterHints(compact: CompactProfile): Array<{ key: string; does: string }> {
   return compact.collapseChrome
@@ -264,18 +284,10 @@ export async function createApp(session: DoorSession): Promise<void> {
       // Repaint the rows, not the screen: the mark moved and nothing else did.
       (list as any).setItems(buildPersonaItems(personas, active, s, compact, screenWidth));
       const picked = personas.find(p => p.slug === saved) ?? chosen;
-      noteRow.setContent(
-        `  ${s.ok(`${picked.handle} saved.`)} ${s.dim('That is who answers your next page.')}`,
-      );
+      noteRow.setContent(buildSavedNote(s, compact, picked.handle));
       screen.render();
     });
 
     screen.key(['q', 'Q', 'escape'], () => done());
   });
 }
-
-export async function runDoor(bbs: any, session?: DoorSession): Promise<void> {
-  await createApp({ ...(session || {}), bbs } as DoorSession);
-}
-
-export default runDoor;

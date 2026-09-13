@@ -6,7 +6,6 @@
   "bbsCommand": "TIP",
   "doorType": "TS",
   "runtime": "server",
-  "doorPattern": "runDoor",
   "accessLevel": 0,
   "author": "AmiExpress Team",
   "keywords": [

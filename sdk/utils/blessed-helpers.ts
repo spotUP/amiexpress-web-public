@@ -1694,14 +1694,33 @@ export function guardDoubleSubmit<Args extends unknown[]>(
 export function advanceFocus(screen: any, ring: any[]): void {
   if (ring.length === 0) return;
   const i = ring.indexOf(screen.getFocused?.());
-  ring[(i + 1) % ring.length].focus();
+  if (i < 0) {
+    ring[0].focus();
+  } else {
+    ring[(i + 1) % ring.length].focus();
+  }
   screen.render();
 }
 
+/**
+ * The same step backwards - including OFF the ring.
+ *
+ * Both functions document "restarts at the front", and advanceFocus did:
+ * indexOf returns -1 and (-1 + 1) % len is 0. The arithmetic did not
+ * survive the sign change here, so the backward step landed on
+ * ring[len - 2] - the second-to-LAST field - whenever focus was outside
+ * the ring (a message box, a dropdown, nothing focused at all). Shift+Tab
+ * out of a dialog's stray element jumped to a field nobody asked for
+ * (2026-09-13). The two are symmetric now: off the ring is the front.
+ */
 export function retreatFocus(screen: any, ring: any[]): void {
   if (ring.length === 0) return;
   const i = ring.indexOf(screen.getFocused?.());
-  ring[(i - 1 + ring.length) % ring.length].focus();
+  if (i < 0) {
+    ring[0].focus();
+  } else {
+    ring[(i - 1 + ring.length) % ring.length].focus();
+  }
   screen.render();
 }
 

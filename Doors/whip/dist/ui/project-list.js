@@ -37,7 +37,7 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
         let selectedIndex = 0;
         // Menu bar row (ui/menu.ts): header and list slide down one row
         // when it is up, and stay put below 60 columns.
-        const barH = screen.width >= 60 ? 1 : 0;
+        const barH = (0, menu_1.menuBarHeight)(screen.width);
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
@@ -193,7 +193,9 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
             cleanup();
             resolve(null);
         };
-        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list, {
+            reserved: ['N', 'E', 'D', 'Q'],
+        });
         screen.render();
     });
 }

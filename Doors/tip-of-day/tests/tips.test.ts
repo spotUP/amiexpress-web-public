@@ -9,9 +9,21 @@ import type { DoorEntry } from '../catalog';
 const WEIGHTS: TipWeights = { door: 5, fact: 3, howto: 2, event: 1 };
 const EMPTY_FACTS = { conferences: [], doorsInstalled: 0 };
 
+// Whole CatalogEntry records, not the four fields the pickers happen to
+// read: the fixtures used to omit doorType, location and tooltypes, which
+// is TS2739 under --strict and was hidden only because tsconfig.json
+// excludes tests and tsx strips types without checking them (2026-09-13).
 const CATALOG: DoorEntry[] = [
-  { name: 'whip', command: 'WHIP', description: 'Demo-scene projects', author: 'AmiExpress Team', inHouse: true },
-  { name: 'arkanoid', command: 'ARKANOID', description: 'Arkanoid clone', author: 'AmiExpress Team', inHouse: true },
+  {
+    name: 'whip', command: 'WHIP', description: 'Demo-scene projects',
+    author: 'AmiExpress Team', inHouse: true,
+    doorType: 'TS', location: 'Doors/whip', tooltypes: { TYPE: 'TS', LOCATION: 'Doors/whip' },
+  },
+  {
+    name: 'arkanoid', command: 'ARKANOID', description: 'Arkanoid clone',
+    author: 'AmiExpress Team', inHouse: true,
+    doorType: 'TS', location: 'Doors/arkanoid', tooltypes: { TYPE: 'TS', LOCATION: 'Doors/arkanoid' },
+  },
 ];
 
 export async function doorSpotlightNamesTheCommand(): Promise<void> {

@@ -1,122 +1,17 @@
 /**
- * Storage - Persistent Data Storage API
+ * Storage - one implementation, re-exported.
  *
- * Provides clean API for saving/loading door data
+ * This file used to be a SECOND, near-identical copy of `core/Storage.ts`
+ * (the only difference was how `keys()` spelled its local variables), and
+ * the copy that DOORS load is the other one: `tsconfig.json` includes
+ * `core/**` and not `src/**`, and `@amiexpress/bbs-door-sdk/core` resolves
+ * to `dist/core/index.js`. Only `server/index.ts` reaches in here, for
+ * `src/core/Door`.
+ *
+ * That split is how the redeploy-data-loss guard came to test a file
+ * nothing ships: `tests/unit/storage-basedir.test.ts` imported
+ * `defaultBaseDir` from HERE, so deleting it from the shipped copy left
+ * the suite green (2026-09-13). One implementation now, so the two cannot
+ * drift again; the test points at the shipped path.
  */
-
-import * as fs from 'fs';
-import * as path from 'path';
-import type { StorageAPI, StorageOptions } from './types';
-
-/**
- * Where door data roots when the caller does not say. Same rule as the
- * bot plugin env files: BBS_DATA_DIR=<volume>/bbs means the volume root,
- * everything else means the process cwd (dev checkouts, tests, doors run
- * outside the board).
- */
-export function defaultBaseDir(): string {
-  const bbsData = process.env.BBS_DATA_DIR;
-  if (bbsData && path.basename(bbsData) === 'bbs') {
-    return path.dirname(bbsData);
-  }
-  return process.cwd();
-}
-
-export class Storage implements StorageAPI {
-  private storageDir: string;
-
-  constructor(options: StorageOptions, baseDir?: string) {
-    const { doorName, userId, global } = options;
-
-    // Build storage path. The default is volume-aware: inside the production
-    // container door JSON lived at <cwd>/data (the image layer) and every
-    // redeploy wiped it - a sysop's WHIP tasks vanished with a deploy
-    // (2026-09-09). With BBS_DATA_DIR=<volume>/bbs the base becomes the
-    // volume root, so data/doors/<door> survives recreates. Anywhere else
-    // (dev checkout, tests) behaves exactly as before.
-    const base = baseDir ?? defaultBaseDir();
-    let storagePath = path.join(base, 'data', 'doors', doorName);
-
-    if (!global && userId) {
-      storagePath = path.join(storagePath, 'users', userId);
-    } else if (!global) {
-      throw new Error('Storage requires either userId or global flag');
-    }
-
-    this.storageDir = storagePath;
-
-    // Ensure directory exists
-    if (!fs.existsSync(this.storageDir)) {
-      fs.mkdirSync(this.storageDir, { recursive: true });
-    }
-  }
-
-  // ===== Core Methods =====
-
-  async save(key: string, data: any): Promise<void> {
-    const filePath = this.getFilePath(key);
-    const json = JSON.stringify(data, null, 2);
-    fs.writeFileSync(filePath, json, 'utf8');
-  }
-
-  async load<T = any>(key: string): Promise<T | null> {
-    const filePath = this.getFilePath(key);
-
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
-    try {
-      const json = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(json) as T;
-    } catch (error) {
-      console.error(`[Storage] Error loading ${key}:`, error);
-      return null;
-    }
-  }
-
-  async delete(key: string): Promise<void> {
-    const filePath = this.getFilePath(key);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  }
-
-  async exists(key: string): Promise<boolean> {
-    const filePath = this.getFilePath(key);
-    return fs.existsSync(filePath);
-  }
-
-  async keys(): Promise<string[]> {
-    if (!fs.existsSync(this.storageDir)) {
-      return [];
-    }
-
-    const allEntries = fs.readdirSync(this.storageDir);
-
-    const files = allEntries
-      .filter(f => f.endsWith('.json'))
-      .map(f => f.replace(/\.json$/, ''));
-
-    return files;
-  }
-
-  async clear(): Promise<void> {
-    const allKeys = await this.keys();
-    for (const key of allKeys) {
-      await this.delete(key);
-    }
-  }
-
-  // ===== Helper Methods =====
-
-  private getFilePath(key: string): string {
-    const filename = `${key}.json`;
-    return path.join(this.storageDir, filename);
-  }
-
-  getStorageDir(): string {
-    return this.storageDir;
-  }
-}
+export { Storage, defaultBaseDir } from '../../core/Storage';

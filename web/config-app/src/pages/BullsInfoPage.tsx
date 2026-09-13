@@ -103,7 +103,8 @@ export function BullsInfoPage() {
         <h2 className="text-xl font-semibold text-content-primary">Bulls Menu (Bulls.CFG)</h2>
         <p className="text-xs text-content-secondary mt-1">
           The menu of the 68K Bulls door: title to bulletin file, conference masks, title art.
-          Edit the text exactly (a real Amiga binary reads it), Save writes the bytes back with one .bak kept.
+          Edit a row here and Save writes Bulls.CFG back byte for byte, keeping one .bak - the
+          column layout is preserved because a real Amiga binary reads it.
           Missing files and double mappings are flagged, never silently fixed.
         </p>
       </div>

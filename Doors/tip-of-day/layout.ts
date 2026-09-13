@@ -18,9 +18,48 @@ export interface TipFrame {
   bordered: boolean;
   /** Text width inside the frame: every content row fits exactly this. */
   innerWidth: number;
+  /**
+   * Columns of padding inside the frame, and so the LEFT of every content
+   * row. Blessed child coordinates are already inner-relative (the parent's
+   * border is added for them, sdk element.ts:572-576), so this must NOT
+   * include the border - a door that added one pushed its rows off the
+   * frame (2026-09-13).
+   */
+  padding: number;
   title: string;
   body: string[];
   hint: string;
+}
+
+/**
+ * Where each content box sits INSIDE the frame, and how many rows it has
+ * to sit in.
+ *
+ * Blessed child coordinates are inner-relative: the SDK adds the parent's
+ * border offset itself (element.ts:572-576). The door added one on top of
+ * that, which pushed the hint row onto the frame's own bottom border at 80
+ * columns and one column past the right edge at 40 (2026-09-13). The
+ * geometry is one function now, so the rows the app draws are the rows
+ * this file's tests measure.
+ */
+export interface TipBoxRows {
+  title: number;
+  body: number;
+  hint: number;
+  /** Left of every content box, inner-relative. */
+  left: number;
+  /** Rows inside the frame: a box at or past this one is on the border. */
+  innerRows: number;
+}
+
+export function tipBoxRows(frame: TipFrame): TipBoxRows {
+  return {
+    title: 0,
+    body: 2,
+    hint: 2 + frame.body.length + 1,
+    left: frame.padding,
+    innerRows: frame.frameHeight - (frame.bordered ? 2 : 0),
+  };
 }
 
 export function wrapWords(text: string, width: number, maxLines: number): string[] {
@@ -71,5 +110,9 @@ export function buildTipFrame(tip: Tip, screenWidth: number): TipFrame {
   const longHint = `${command}Any key continues...`;
   const hint = longHint.length <= inner ? longHint : 'Any key...';
   const frameHeight = (bordered ? 2 : 0) + 1 + 1 + body.length + 1 + 1;
-  return { frameWidth, frameHeight, bordered, innerWidth: inner, title, body, hint };
+  return {
+    frameWidth, frameHeight, bordered, innerWidth: inner,
+    padding: bordered ? compact.padding : 0,
+    title, body, hint,
+  };
 }

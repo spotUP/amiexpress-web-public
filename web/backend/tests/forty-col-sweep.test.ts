@@ -440,6 +440,25 @@ describe('40-column sweep: the adapted doors', () => {
     fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
   });
 
+  it('cosysop-persona: persona rows, note, saved note, footer hints', () => {
+    const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
+    const { rosterFor, buildPersonaItems, buildNote, buildSavedNote, buildFooterHints } =
+      require('../../../Doors/cosysop-persona/app');
+    const compact = getCompactProfile(40);
+    const roster = rosterFor([
+      { slug: 'kevin', handle: LONG, name: LONG, blurb: LONG },
+      { slug: 'empty', handle: EMPTY, name: EMPTY, blurb: EMPTY },
+    ]);
+    fits(buildPersonaItems(roster, 'kevin', PLAIN_STYLES, compact, 40));
+    fits([buildNote(PLAIN_STYLES, compact)]);
+    // The note AFTER a save was the one with no width gate at all: two
+    // columns of indent plus the handle plus 44, on a 40-column row.
+    for (const persona of roster) {
+      fits([buildSavedNote(PLAIN_STYLES, compact, persona.handle)]);
+    }
+    fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
+  });
+
   it('bug-tracker: bug title and chrome strips', () => {
     const { CompactLayout } = require('../../../Doors/bug-tracker/layout');
     const layout = new CompactLayout(() => 40);

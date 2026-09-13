@@ -145,7 +145,23 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         // the cursor (left/right carry the task along, unsaved), Enter drops
         // (one persisted move with full side effects), ESC puts it back.
         // E keeps the old Enter job (edit).
+        //
+        // The held column is HERE, in the door's own UI state, and the Task is
+        // never touched until the drop (2026-09-13). It used to be carried by
+        // writing `task.status` - and `getTasksForProject` hands out references
+        // into DataManager's tasksCache, so that wrote the unsaved column into
+        // the door's shared record. Only ESC put it back: carrying a card into
+        // DONE and then pressing N, E, M, D or a menu pick left the cache
+        // saying "done" with no points, no completedAt, no achievement check
+        // and no feed event, and the next saveTasks() wrote it to disk.
         let carried = null;
+        /**
+         * The column a task DRAWS in: the carried one follows the cursor, every
+         * other one answers with its stored status. One source of truth for the
+         * four column filters below, so a carry can never be half-applied.
+         */
+        const statusOf = (task) => carried && carried.task.id === task.id ? COLUMNS[carried.toColumn] : task.status;
+        const tasksIn = (columnIndex) => tasks.filter((t) => statusOf(t) === COLUMNS[columnIndex]);
         // Drag and drop state
         let dragState = {
             active: false,
@@ -166,7 +182,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         }
         // Menu bar row (ui/menu.ts): headers and columns slide down one
         // row when it is up, and stay put below 60 columns.
-        const barH = screen.width >= 60 ? 1 : 0;
+        const barH = (0, menu_1.menuBarHeight)(screen.width);
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
@@ -335,17 +351,23 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         /** Repaint columns from the in-memory task list (no reload). */
         const paintLists = () => {
             for (let i = 0; i < COLUMNS.length; i++) {
-                const status = COLUMNS[i];
-                const columnTasks = tasks.filter(t => t.status === status);
+                const columnTasks = tasksIn(i);
                 const cardWidth = Math.max(8, colWidth - 2);
                 const sel = columnLists[i].selected || 0;
                 const items = columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id, 
                 // Selected rows invert whole: the widget highlights only the
                 // first visual row of a multi-row card (2026-09-10).
                 idx === sel && i === currentColumn));
-                // Clear items first, then set new ones to ensure proper refresh
+                // Clear items first, then set new ones to ensure proper refresh -
+                // and put the selection BACK, because clearItems() zeroes it
+                // (sdk list.ts:539) and setItems() only ever clamps downwards. Every
+                // repaint used to drop the cursor to row 0 while the inverse
+                // highlight above stayed drawn on the old row, so two cards looked
+                // selected and E/M/D acted on the wrong one (2026-09-13).
                 columnLists[i].clearItems();
                 columnLists[i].setItems(items.length > 0 ? items : []);
+                if (sel > 0)
+                    columnLists[i].select(sel);
             }
             columnLists[currentColumn].focus();
             screen.render();
@@ -381,7 +403,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             // (ESC) first.
             if (carried)
                 return;
-            const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
+            const columnTasks = tasksIn(colIndex);
             if (itemIndex >= columnTasks.length)
                 return;
             const task = columnTasks[itemIndex];
@@ -481,7 +503,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     // Skip if already dragging
                     if (dragState.active)
                         return;
-                    const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
+                    const columnTasks = tasksIn(colIndex);
                     if (columnTasks.length === 0)
                         return;
                     // Get the selected item index - blessed updates this on mousedown
@@ -525,7 +547,12 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             cleanup();
             resolve();
         };
-        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => columnLists[currentColumn].focus());
+        // N/M/D/E/Q are the board's own keys, so the bar neither binds nor
+        // advertises them here; Tab still reaches it, and T/V/K/P/L/A pick
+        // straight from the board.
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => columnLists[currentColumn], {
+            reserved: ['N', 'M', 'D', 'E', 'Q'],
+        });
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
@@ -565,9 +592,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     currentColumn = Math.min(COLUMNS.length - 1, currentColumn + 1);
                 }
                 if (carried) {
-                    // Carry along, unsaved: the drop persists, ESC restores. Paint
-                    // only - a reload would discard the carried (unsaved) status.
-                    carried.task.status = COLUMNS[currentColumn];
+                    // Carry along, unsaved: the drop persists, ESC drops the carry.
+                    // Paint only - a reload would discard the carried column, and
+                    // NOTHING here touches the task itself.
+                    carried.toColumn = currentColumn;
                     paintLists();
                 }
                 else {
@@ -576,22 +604,23 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 return;
             }
             (async () => {
-                const columnTasks = tasks.filter(t => t.status === COLUMNS[currentColumn]);
+                const columnTasks = tasksIn(currentColumn);
                 switch (key.name) {
                     case 'enter':
                         if (carried) {
-                            const { task, fromStatus } = carried;
+                            const { task, fromStatus, toColumn } = carried;
+                            const toStatus = COLUMNS[toColumn];
                             carried = null;
                             setCarryMode(false);
-                            if (task.status !== fromStatus) {
-                                await moveTask(screen, task, task.status, dataManager, achievementManager, user, project, bbsApi);
+                            if (toStatus !== fromStatus) {
+                                await moveTask(screen, task, toStatus, dataManager, achievementManager, user, project, bbsApi);
                             }
                             await updateLists(true);
                         }
                         else if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            carried = { task, fromStatus: task.status };
+                            carried = { task, fromStatus: task.status, toColumn: currentColumn };
                             setCarryMode(true);
                             paintLists();
                         }
@@ -642,7 +671,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     case 'q':
                     case 'escape':
                         if (carried) {
-                            carried.task.status = carried.fromStatus;
+                            // Nothing to put back: the carry only ever lived in `carried`.
                             carried = null;
                             setCarryMode(false);
                             paintLists();

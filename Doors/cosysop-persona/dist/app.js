@@ -4,9 +4,9 @@ exports.RANDOM_CHOICE = exports.BOARD_DEFAULT = void 0;
 exports.rosterFor = rosterFor;
 exports.buildPersonaItems = buildPersonaItems;
 exports.buildNote = buildNote;
+exports.buildSavedNote = buildSavedNote;
 exports.buildFooterHints = buildFooterHints;
 exports.createApp = createApp;
-exports.runDoor = runDoor;
 /**
  * COSYSOP - choose WHO answers when you page.
  *
@@ -83,6 +83,25 @@ function buildNote(s, compact) {
     return compact.collapseChrome
         ? `  ${s.dim('Applies the next time you page.')}`
         : `  ${s.dim('This is who answers the next time you page the sysop.')}`;
+}
+/**
+ * The line under the list AFTER a save, said in as many words as the screen
+ * has room for.
+ *
+ * Width-gated like buildNote above, and for the same reason - it was not
+ * (2026-09-13): `  <handle> saved. That is who answers your next page.` is
+ * two columns of indent plus the handle plus 44, so it folded on a
+ * 40-column row for EVERY handle in the roster, and a folded row eats the
+ * footer under it.
+ */
+function buildSavedNote(s, compact, handle) {
+    const saved = `${handle} saved.`;
+    if (compact.collapseChrome) {
+        // Two for the indent, one left empty so the row never writes its last
+        // cell (a written fortieth cell latches pending-wrap on a C64).
+        return `  ${s.ok(saved.substring(0, 37))}`;
+    }
+    return `  ${s.ok(saved)} ${s.dim('That is who answers your next page.')}`;
 }
 /** Footer key hints; the 40-column set is the same three keys, abbreviated. */
 function buildFooterHints(compact) {
@@ -233,14 +252,10 @@ async function createApp(session) {
             // Repaint the rows, not the screen: the mark moved and nothing else did.
             list.setItems(buildPersonaItems(personas, active, s, compact, screenWidth));
             const picked = personas.find(p => p.slug === saved) ?? chosen;
-            noteRow.setContent(`  ${s.ok(`${picked.handle} saved.`)} ${s.dim('That is who answers your next page.')}`);
+            noteRow.setContent(buildSavedNote(s, compact, picked.handle));
             screen.render();
         });
         screen.key(['q', 'Q', 'escape'], () => done());
     });
 }
-async function runDoor(bbs, session) {
-    await createApp({ ...(session || {}), bbs });
-}
-exports.default = runDoor;
 //# sourceMappingURL=app.js.map

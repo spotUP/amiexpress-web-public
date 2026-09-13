@@ -90,4 +90,24 @@ describe('focus ring', () => {
       expect(screen._focused).toBe(ring[0]);
     } finally { screen.destroy(); }
   });
+
+  it('shift-tab from outside the ring lands on the same field tab does', () => {
+    // Four fields, so a wrong answer is distinguishable: the old
+    // arithmetic returned ring[len - 2] - the second-to-LAST field - for
+    // an off-ring focus, while advanceFocus documented and delivered the
+    // front. Shift+Tab out of a message box jumped to field three.
+    const screen: any = makeScreen();
+    try {
+      const ring = [0, 1, 2, 3].map(() => new Box({ parent: screen, focusable: true } as any));
+      const outsider = new Box({ parent: screen, focusable: true } as any);
+
+      outsider.focus();
+      retreatFocus(screen, ring);
+      expect(screen._focused).toBe(ring[0]);
+
+      outsider.focus();
+      advanceFocus(screen, ring);
+      expect(screen._focused).toBe(ring[0]);
+    } finally { screen.destroy(); }
+  });
 });

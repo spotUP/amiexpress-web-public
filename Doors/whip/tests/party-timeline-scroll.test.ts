@@ -66,8 +66,9 @@ export async function selectionStaysOnScreen(): Promise<void> {
     const done = showPartyTimeline(screen, user, dataManager, partyCalendar);
     await settle();
 
-    // NOTE: every render replaces the pane, so the box is re-found
-    // after each navigation - a held reference goes stale.
+    // The pane is built once and repainted (2026-09-13), so a held
+    // reference would do - the lookup stays because it asks the SCREEN
+    // what is on it rather than trusting a variable.
     const showing = () => listBoxOf(screen);
     assert.ok(showing(), 'the parties pane exists');
     assert.ok(showing().options?.scrollbar, 'the pane shows a scrollbar');

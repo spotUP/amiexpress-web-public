@@ -1303,15 +1303,6 @@ class ApiClient {
     );
   }
 
-  async saveBullsConfig(raw: string) {
-    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
-      `${API_BASE}/config/bulls`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ raw }),
-      }
-    );
-  }
 
   async saveBullsEntries(entries: Array<{ title: string; file: string }>) {
     return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(

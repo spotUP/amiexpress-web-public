@@ -36,7 +36,7 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
         };
         // Menu bar row (ui/menu.ts): header and list slide down one row
         // when it is up, and stay put below 60 columns.
-        const barH = screen.width >= 60 ? 1 : 0;
+        const barH = (0, menu_1.menuBarHeight)(screen.width);
         // Header
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
@@ -147,7 +147,7 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             cleanup();
             resolve();
         };
-        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list, { reserved: ['Q'] });
         const refreshList = async () => {
             allTasks = await dataManager.loadTasks();
             projects = await dataManager.loadProjects();

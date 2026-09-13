@@ -6,8 +6,6 @@
  * storage may refuse (seen-set stays empty and tips repeat). The worst
  * case is the fallback tip, which is still a tip.
  */
-import * as fs from 'fs';
-import * as path from 'path';
 import {
   createScreen,
   createBox,
@@ -18,7 +16,7 @@ import {
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
-import { buildTipFrame } from './layout';
+import { buildTipFrame, tipBoxRows } from './layout';
 import {
   themeStyles, attachDoorChrome, footerStyle,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
@@ -109,7 +107,13 @@ export async function createApp(session: DoorSession): Promise<void> {
   });
   input.enable();
 
-  const pad = frame.bordered ? 2 : 1;
+  // Child coordinates are INNER-relative: the SDK adds the parent's border
+  // offset itself (element.ts:572-576). The door used to add one on top,
+  // which put the hint row on the frame's bottom border at 80 columns
+  // (probe 2026-09-13: hint yi=15, border at 15) and one column past the
+  // right edge at 40. The frame owns this number now.
+  const rows = tipBoxRows(frame);
+  const pad = rows.left;
   const box = createBox({
     parent: screen,
     top: 'center',
@@ -124,7 +128,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const title = createBox({
     parent: box,
-    top: frame.bordered ? 1 : 0,
+    top: rows.title,
     left: pad,
     width: frame.innerWidth,
     height: 1,
@@ -139,7 +143,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const body = createBox({
     parent: box,
-    top: (frame.bordered ? 1 : 0) + 2,
+    top: rows.body,
     left: pad,
     width: frame.innerWidth,
     height: frame.body.length,
@@ -151,7 +155,7 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   const hint = createBox({
     parent: box,
-    top: (frame.bordered ? 1 : 0) + 2 + frame.body.length + 1,
+    top: rows.hint,
     left: pad,
     width: frame.innerWidth,
     height: 1,

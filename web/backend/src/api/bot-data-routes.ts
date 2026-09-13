@@ -40,11 +40,42 @@ export function createBotDataRouter(
   const presence = opts.presence ?? { listOnlineNodes };
   const board = { getBoardConfig, commandsOnDisk, conferencesFromDisk };
 
+  /**
+   * What a bot token may see, in conferences.
+   *
+   * It read as the board's trusted guest with `confAccess` simply omitted -
+   * and `maySee` answers true when it is absent, so a messages-scoped token
+   * read public mail in EVERY conference, sysop-only ones included, and the
+   * Discord bot relayed it into a channel. The plan that specified this API
+   * pinned the opposite ("conf-gated message refused").
+   *
+   * The bot is not a caller and has no account, so it gets what an ordinary
+   * caller gets: the board's own new-user conference access, the same string
+   * a fresh account is created with. Fail closed - an unreadable config means
+   * conference 1 only, never everything.
+   */
+  const botConfAccess = (): number[] => {
+    try {
+      const cfg = (database as any)?.getConfigRepository?.()?.getSystemConfig?.();
+      const mask = String(cfg?.new_user_conf_access ?? '').trim();
+      if (!mask) return [1];
+      // The X/_ string: position n-1 is conference n. An area NAME (the path
+      // a board with more than nine conferences takes) cannot be resolved
+      // without a user record, so it also means conference 1 only.
+      if (!/^[X_]+$/i.test(mask)) return [1];
+      const ids = mask.split('').map((c, i) => (c.toUpperCase() === 'X' ? i + 1 : 0)).filter(Boolean);
+      return ids.length ? ids : [1];
+    } catch {
+      return [1];
+    }
+  };
+
   /** A service token reads as the board's trusted guest: full reads,
-   *  domain-scoped by the token, never gated by conference access. */
+   *  domain-scoped by the token, conference-gated like any caller. */
   const actor = (req: Request): BOTActor => ({
     secLevel: 255,
     username: `bot:${(req as any).botService?.id ?? 'unknown'}`,
+    confAccess: botConfAccess(),
   });
 
   const send = (res: Response, r: BOTResult) => {

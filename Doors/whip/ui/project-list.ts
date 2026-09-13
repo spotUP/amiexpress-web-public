@@ -8,7 +8,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Project, ProjectType, ProjectStatus } from '../types/project';
 import type { UserStats } from '../types/user';
-import { attachWhipMenu, type WhipMenuBar } from './menu';
+import { attachWhipMenu, menuBarHeight, type WhipMenuBar } from './menu';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
@@ -53,7 +53,7 @@ export async function showProjectList(
 
     // Menu bar row (ui/menu.ts): header and list slide down one row
     // when it is up, and stay put below 60 columns.
-    const barH = screen.width >= 60 ? 1 : 0;
+    const barH = menuBarHeight(screen.width);
 
     // Header - NOT focusable
     const header = createBox({
@@ -228,7 +228,9 @@ export async function showProjectList(
       cleanup();
       resolve(null);
     };
-    menu = attachWhipMenu(screen, pickFromBar, () => list.focus());
+    menu = attachWhipMenu(screen, pickFromBar, () => list, {
+      reserved: ['N', 'E', 'D', 'Q'],
+    });
     screen.render();
   });
 }

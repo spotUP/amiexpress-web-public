@@ -19,7 +19,10 @@ Modifications from upstream, and only these:
 - This NOTICE file.
 
 Not vendored: the browser editor, the CRT shader viewer, the terminal
-viewer script, demo content, T42 import/export, docs. Nothing here was
+viewer script, demo content, docs. T42 import/export IS vendored
+(`marco/tti/t42Import.ts`, `marco/tti/t42Export.ts`, exported from
+`marco/tti/index.ts`) - this file said otherwise, which understated what
+the attribution above has to cover. Nothing here was
 reworded or restructured: upstream's tests still describe these copies
 (the one upstream failure, a stale DEC-sequence expectation in
 render-ansi, is theirs - row duplication is what xterm needs anyway).

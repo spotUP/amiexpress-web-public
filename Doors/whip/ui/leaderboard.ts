@@ -3,7 +3,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { getLevelColor, formatPoints } from '../core/gamification';
-import { attachWhipMenu, type WhipMenuBar } from './menu';
+import { attachWhipMenu, menuBarHeight, type WhipMenuBar } from './menu';
 import { bindBoxScroll } from './scroll-keys';
 import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
@@ -77,7 +77,7 @@ export async function showLeaderboard(
 
     // Menu bar row (ui/menu.ts): header and table slide down one row
     // when it is up, and stay put below 60 columns.
-    const barH = screen.width >= 60 ? 1 : 0;
+    const barH = menuBarHeight(screen.width);
 
     // Header - NOT focusable
     const header = createBox({
@@ -215,7 +215,7 @@ export async function showLeaderboard(
       cleanup();
       resolve();
     };
-    menu = attachWhipMenu(screen, pickFromBar, () => table.focus());
+    menu = attachWhipMenu(screen, pickFromBar, () => table, { reserved: ['Q'] });
 
     const cleanup = () => {
       // First: a rail timer still writing after these widgets are gone would

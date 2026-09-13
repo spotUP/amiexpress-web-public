@@ -36,12 +36,22 @@ export declare function rosterFor(personas: PersonaChoice[]): PersonaChoice[];
 export declare function buildPersonaItems(personas: PersonaChoice[], active: string, s: any, compact: CompactProfile, width?: number): string[];
 /** The line under the list, said in as many words as the screen has room for. */
 export declare function buildNote(s: any, compact: CompactProfile): string;
+/**
+ * The line under the list AFTER a save, said in as many words as the screen
+ * has room for.
+ *
+ * Width-gated like buildNote above, and for the same reason - it was not
+ * (2026-09-13): `  <handle> saved. That is who answers your next page.` is
+ * two columns of indent plus the handle plus 44, so it folded on a
+ * 40-column row for EVERY handle in the roster, and a folded row eats the
+ * footer under it.
+ */
+export declare function buildSavedNote(s: any, compact: CompactProfile, handle: string): string;
 /** Footer key hints; the 40-column set is the same three keys, abbreviated. */
 export declare function buildFooterHints(compact: CompactProfile): Array<{
     key: string;
     does: string;
 }>;
 export declare function createApp(session: DoorSession): Promise<void>;
-export declare function runDoor(bbs: any, session?: DoorSession): Promise<void>;
-export default runDoor;
+export {};
 //# sourceMappingURL=app.d.ts.map

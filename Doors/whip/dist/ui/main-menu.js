@@ -38,10 +38,10 @@ async function showMainMenu(screen, user, dataManager) {
             : null;
         // ========================================================================
         // MENU BAR - shared helper (ui/menu.ts). Built after the list so
-        // Escape can hand focus back to it; barH comes straight from the
-        // width so the header below lands right with or without the bar.
+        // Escape can hand focus back to it; menuBarHeight() is the ONE copy
+        // of the tier, so the header below lands right with or without the bar.
         // ========================================================================
-        const barH = screen.width >= 60 ? 1 : 0;
+        const barH = (0, menu_1.menuBarHeight)(screen.width);
         let menu = null;
         const pickFromBar = (value) => {
             cleanup();
@@ -235,24 +235,15 @@ async function showMainMenu(screen, user, dataManager) {
         // Focus the list
         list.focus();
         // The bar goes up once the list exists for Escape to return to.
-        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list.focus());
+        // The list's own table below answers every bracketed letter (and keeps
+        // answering below 60 columns, where there is no bar at all), so the bar
+        // advertises them and binds none.
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => list, { hotkeys: 'host' });
         screen.render();
-        // Keyboard handler for direct shortcuts
+        // Keyboard handler for direct shortcuts. Tab is NOT here any more: the
+        // step between the list and the menu bar is attachWhipMenu's job, on
+        // every screen, and this copy was the only one that ever had it.
         const keyHandler = (ch, key) => {
-            // Tab steps between the list and the menu bar. WHIP runs with
-            // focusKeys:false so the screen default never fires - without this
-            // the SDK bar's Tab stop is unreachable by keyboard (2026-09-10).
-            if (key.name === 'tab') {
-                const stop = menu?.bar.getTabStop();
-                if (!stop)
-                    return;
-                if (screen.getFocused() === stop)
-                    list.focus();
-                else
-                    stop.focus();
-                screen.render();
-                return;
-            }
             const keyName = key.name.toUpperCase();
             // Check for direct menu shortcuts
             const menuItem = menuItems.find(item => item.key === keyName);

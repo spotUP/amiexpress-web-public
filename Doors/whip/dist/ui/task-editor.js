@@ -309,10 +309,18 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             }
         });
         let closed = false;
+        // The Project label follows the arrow keys a tick late (see the key
+        // handler). A dialog closed within that tick would have left the timer
+        // to fire on a removed modal, so it is cleared here.
+        let labelTimer = null;
         const cleanup = () => {
             if (closed)
                 return;
             closed = true;
+            if (labelTimer) {
+                clearTimeout(labelTimer);
+                labelTimer = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(modal);
             screen.render();
@@ -323,18 +331,15 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // task duplicated under one id (2026-09-09). Set synchronously so the
         // second entry bails before its first await.
         const save = (0, blessed_helpers_1.guardDoubleSubmit)(async () => {
-            task.title = titleInput.getValue();
-            task.category = CATEGORIES[categoryList.selected];
-            task.priority = PRIORITIES[priorityList.selected];
-            task.points = parseInt(pointsInput.getValue()) || 10;
-            task.description = descInput.getValue();
-            task.assignedTo = assigneeOptions[assigneeList.selected]?.userId ?? undefined;
-            const fromProjectId = task.projectId;
-            const chosenProject = projectOptions[projectList.selected];
-            if (chosenProject)
-                task.projectId = chosenProject.id;
-            const projectNameOf = (id) => projectOptions.find((o) => o.id === id)?.label ?? id ?? '';
-            if (!task.title.trim()) {
+            // VALIDATE FIRST, then write (2026-09-13). This used to assign title,
+            // category, priority, points, assignee and projectId onto the Task -
+            // which is DataManager's cached record, handed out by reference - and
+            // only then check the title, returning without putting any of it back.
+            // Clearing the title and pressing Ctrl+Enter therefore left a
+            // blank-titled, possibly re-homed task on the board and in the Discord
+            // API even after Escape, because nothing was ever reverted.
+            const title = titleInput.getValue();
+            if (!title.trim()) {
                 const msg = blessed_1.default.message({
                     parent: screen,
                     top: 'center',
@@ -352,6 +357,17 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 });
                 return;
             }
+            task.title = title;
+            task.category = CATEGORIES[categoryList.selected];
+            task.priority = PRIORITIES[priorityList.selected];
+            task.points = parseInt(pointsInput.getValue()) || 10;
+            task.description = descInput.getValue();
+            task.assignedTo = assigneeOptions[assigneeList.selected]?.userId ?? undefined;
+            const fromProjectId = task.projectId;
+            const chosenProject = projectOptions[projectList.selected];
+            if (chosenProject)
+                task.projectId = chosenProject.id;
+            const projectNameOf = (id) => projectOptions.find((o) => o.id === id)?.label ?? id ?? '';
             if (isNew) {
                 await dataManager.addTask(task);
                 if (bbsApi?.emitCustomEvent && project) {
@@ -409,7 +425,13 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             else if ((key.name === 'up' || key.name === 'down') && screen.getFocused() === projectList) {
                 // Arrows move the list's own selection without firing 'select';
                 // the label follows a tick later, after the widget had its turn.
-                setTimeout(refreshLabel, 0);
+                if (labelTimer)
+                    clearTimeout(labelTimer);
+                labelTimer = setTimeout(() => {
+                    labelTimer = null;
+                    if (!closed)
+                        refreshLabel();
+                }, 0);
             }
             else if (key.name === 'tab') {
                 if (key.shift)

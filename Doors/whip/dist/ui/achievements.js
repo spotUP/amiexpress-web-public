@@ -45,7 +45,7 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
         const locked = allAchievements.filter(a => !currentUser.achievements.includes(a.id));
         // Menu bar row (ui/menu.ts): header and content slide down one
         // row when it is up, and stay put below 60 columns.
-        const barH = screen.width >= 60 ? 1 : 0;
+        const barH = (0, menu_1.menuBarHeight)(screen.width);
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
@@ -165,7 +165,7 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
             cleanup();
             resolve();
         };
-        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => content.focus());
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => content, { reserved: ['Q'] });
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.

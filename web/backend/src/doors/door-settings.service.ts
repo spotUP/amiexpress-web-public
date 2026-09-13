@@ -151,7 +151,15 @@ export interface DoorSettingsManifest {
   artSections?: DoorArtSection[];
 }
 
-const BARE_FILE_RE = /^[A-Za-z0-9._-]+$/;
+/**
+ * A bare filename beside the door's own cfg - no directory, no traversal.
+ *
+ * The dot had to be allowed for `Bulls.CFG`, and allowing it as the FIRST
+ * character let `.` and `..` through: both match `[A-Za-z0-9._-]+`, and a
+ * path joined with `..` leaves the door's directory. The first character is
+ * never a dot now, so a name is a name.
+ */
+const BARE_FILE_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 const CfgRowSchema = z.object({
   section: z.string().min(1).max(32),

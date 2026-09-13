@@ -71,6 +71,18 @@ describe('a value carrying newlines', () => {
       .toThrow(/semicolon/i);
   });
 
+  it('will not take a manifest whose cfgFile is a directory step', () => {
+    // `.` and `..` both matched the bare-filename rule, and a path joined
+    // with `..` leaves the door's own directory.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dotted-cfg-'));
+    fs.writeFileSync(
+      path.join(dir, 'door.settings.json'),
+      JSON.stringify({ command: 'B', cfgFile: '..', settings: [] })
+    );
+
+    expect(() => writeDoorSettings(dir, {}, undefined, 'B')).toThrow();
+  });
+
   it('is the same rule for both writers', () => {
     expect(oneCfgLine('a\nb')).toBe('a b');
     expect(oneCfgLine('a\r\nb')).toBe('a b');

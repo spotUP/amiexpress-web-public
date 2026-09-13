@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.tipBoxRows = tipBoxRows;
 exports.wrapWords = wrapWords;
 exports.buildTipFrame = buildTipFrame;
 /**
@@ -11,6 +12,15 @@ exports.buildTipFrame = buildTipFrame;
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const catalog_1 = require("./catalog");
+function tipBoxRows(frame) {
+    return {
+        title: 0,
+        body: 2,
+        hint: 2 + frame.body.length + 1,
+        left: frame.padding,
+        innerRows: frame.frameHeight - (frame.bordered ? 2 : 0),
+    };
+}
 function wrapWords(text, width, maxLines) {
     const words = text.split(/\s+/).filter(Boolean);
     const lines = [];
@@ -61,6 +71,10 @@ function buildTipFrame(tip, screenWidth) {
     const longHint = `${command}Any key continues...`;
     const hint = longHint.length <= inner ? longHint : 'Any key...';
     const frameHeight = (bordered ? 2 : 0) + 1 + 1 + body.length + 1 + 1;
-    return { frameWidth, frameHeight, bordered, innerWidth: inner, title, body, hint };
+    return {
+        frameWidth, frameHeight, bordered, innerWidth: inner,
+        padding: bordered ? compact.padding : 0,
+        title, body, hint,
+    };
 }
 //# sourceMappingURL=layout.js.map
