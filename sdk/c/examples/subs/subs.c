@@ -100,6 +100,20 @@ static int feed_window = ROWS_DEFAULT;
 static long feed_total;                 /* what the conference holds */
 static long feed_unread;
 static long feed_unreadable;            /* records no layout could explain */
+/*
+ * The highest message the caller actually OPENED this visit, or 0.
+ *
+ * Accumulated rather than flushed per message on purpose. Marking read costs
+ * a write plus a read-back - two round trips, and ~198 bytes is one XIM
+ * message on 68K - so doing it per Enter would put that on every keystroke
+ * that matters. express.e batches for the same reason: readit moves the
+ * global per message (express.e:12370) and only saveMsgPointers at a join or
+ * logoff touches storage.
+ *
+ * OPENED, never merely listed: a caller who arrows down the list and quits
+ * has read nothing, and must not lose their new flags for looking.
+ */
+static long marked_upto;
 static char conf_name[32];
 
 /*
@@ -523,6 +537,11 @@ static int read_message(int index)
         strcpy(body, "That message has no body on the board.");
     }
 
+    /* Counted as read even when the body is missing: the caller opened it and
+       got everything the board still holds, and leaving it new for ever would
+       mean a base whose bodies were lost could never be cleared. */
+    if (rows[index].number > marked_upto) marked_upto = rows[index].number;
+
     if (wide) {
         /* The recipient is read from the message, not assumed to be EALL:
            this door lists private mail the caller is party to as well. */
@@ -546,6 +565,29 @@ static int read_message(int index)
     rc = ui_doc(&screen.buf, &keys, &pushback, &ds, doc_title, body);
     ui_screen_flush(&screen);
     return rc;
+}
+
+/**
+ * Tell the board how far the caller got, once, on the way out.
+ *
+ * BOTH pointers move. express.e's reader advances lastMsgReadConf
+ * (express.e:12370) and its scan advances lastNewReadConf; this door is both,
+ * and its own "N new for you" is counted from the SCAN pointer
+ * (ae_msg_open takes ae_last_scanned), so moving only the read pointer would
+ * leave the number the caller is trying to clear exactly where it was.
+ *
+ * A board that does not implement AEW_SETPOINTER answers 0 and nothing here
+ * changes - see Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md. That
+ * is not an error and nothing is said about it: on a classic AmiExpress this
+ * door has always left the pointer alone, and it still works.
+ */
+static void mark_read_on_the_way_out(void)
+{
+    if (marked_upto <= 0) return;           /* opened nothing */
+    if (!ae_carrier(&session)) return;      /* the line is gone anyway */
+
+    ae_set_last_read(&session, (int)marked_upto);
+    ae_set_last_scanned(&session, (int)marked_upto);
 }
 
 /* ------------------------------------------------------------------ posting */
@@ -842,6 +884,7 @@ int main(int argc, char **argv)
        leaves a capture with two teardown clears, which is enough to make a
        screen model read as empty. */
     ui_screen_close(&screen);
+    mark_read_on_the_way_out();
     ae_close(&session);
     ae_shutdown();
     return 0;
