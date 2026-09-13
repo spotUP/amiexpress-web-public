@@ -249,6 +249,12 @@ def add_double_height(font):
             glyph.program = ttProgram.Program()
             glyph.program.fromBytecode(b"")
 
+            # The ADVANCE comes from the source character - a half is the
+            # same width as the letter it is half of - but the side bearing
+            # must be this glyph's own. Copying the source's shifted every
+            # half by the difference between the two bounding boxes, which is
+            # why the stem of a double-height 'T' sat to the left of its
+            # crossbar (sysop, 2026-09-13).
             base = DH_TOP_BASE if top else DH_BOTTOM_BASE
             new_codepoint = base + (codepoint - DH_FIRST_SOURCE)
             new_name = f"dh{'top' if top else 'bot'}.uni{codepoint:04X}"
@@ -264,6 +270,9 @@ def add_double_height(font):
             table.cmap.update(added)
     for name in added.values():
         glyf[name].recalcBounds(glyf)
+        advance = hmtx[name][0]
+        left_bearing = glyf[name].xMin if glyf[name].numberOfContours else 0
+        hmtx.metrics[name] = (advance, left_bearing)
     return len(added)
 
 
@@ -295,6 +304,19 @@ def main():
     repair_aring(font)
     halves = add_double_height(font)
     rename(font)
+
+    # NO LINE GAP.
+    #
+    # TDAText asks for 90/1000 em of leading, and a terminal honours it: the
+    # cell becomes 1.09 em while a glyph is 1.0, so consecutive rows are
+    # pushed apart by nine percent of the cell. Ordinary text does not care.
+    # Double height does: the two halves of a headline are drawn on
+    # consecutive rows and have to MEET, and that gap cut every letter across
+    # the middle (sysop, 2026-09-13: "the green text-tv edition row has offset
+    # issues"). A teletext grid is 40x25 with no leading by definition, so the
+    # gap goes.
+    font['hhea'].lineGap = 0
+    font['OS/2'].sTypoLineGap = 0
 
     # Deterministic output: head.modified follows the clock otherwise, and a
     # font that differs byte-for-byte every run cannot be diffed against the

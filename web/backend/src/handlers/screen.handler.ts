@@ -25,6 +25,7 @@ import {
 import { db } from '../database';
 import { formatNumberedFilename } from '../services/SequentialFileManager';
 import { ANSI } from '../utils/terminal-utils';
+import { AnsiUtil } from '../utils/ansi.util';
 const HIDE_CURSOR = ANSI.HIDE_CURSOR;
 const SHOW_CURSOR = ANSI.SHOW_CURSOR;
 import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/amigafs';
@@ -2682,8 +2683,24 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
     // reach pageSize, so this changes nothing for them.
     const allowPagination = slowmoSpeed === 0;
 
+    /*
+     * AN EMPTY SCREEN IS NOT STREAMED.
+     *
+     * The slow-mo frame wraps the screen in HIDE_CURSOR + ESC[H ... so it
+     * paints from the top of the glass. For a screen with nothing in it that
+     * is all it does: it homes the cursor, and the next thing the board
+     * prints - the Username prompt, right after Logon - lands over whatever
+     * was on screen, which is the title that was just drawn (sysop,
+     * 2026-09-13: "the prompt is there as well it should be at the bottom").
+     *
+     * Logon.ttx and Logon.txt are both `~\n` on this board: deliberately
+     * empty, and deliberately still a screen, so the whitespace path below
+     * keeps emitting exactly what it always did. Only the cursor move goes.
+     */
+    const streamHasContent = AnsiUtil.stripAnsiForPlainText(parsed).trim().length > 0;
+
     // Skip slowmo if wipe animation is active - wipes handle their own timing
-    if (slowmoSpeed !== 0 && !hasWipeAnimation) {
+    if (slowmoSpeed !== 0 && !hasWipeAnimation && streamHasContent) {
       await emitSlowmoFrame(parsed);
 
       if (session.lastScreenHadPause) {

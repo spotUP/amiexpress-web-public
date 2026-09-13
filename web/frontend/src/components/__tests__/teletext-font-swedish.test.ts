@@ -107,6 +107,56 @@ describe('the teletext face draws Swedish', () => {
     }
   });
 
+  it('asks for no leading, so consecutive rows touch', () => {
+    // A cell taller than the em pushes the two halves of a headline apart and
+    // cuts every letter across the middle (sysop, 2026-09-13). A teletext
+    // grid has no leading by definition: ascent + descent = one em, gap zero.
+    const hhea = t.get('hhea')!;
+    const ascent = buf.readInt16BE(hhea.offset + 4);
+    const descent = buf.readInt16BE(hhea.offset + 6);
+    const lineGap = buf.readInt16BE(hhea.offset + 8);
+    const head = t.get('head')!;
+    const unitsPerEm = buf.readUInt16BE(head.offset + 18);
+
+    expect(lineGap).toBe(0);
+    expect(ascent - descent).toBe(unitsPerEm);
+  });
+
+  it('gives each half its own side bearing, so the halves line up', () => {
+    // A half is as WIDE as the character it is half of - same advance - but
+    // its left side bearing is its own. Copying the source's shifted every
+    // half sideways by the difference between the bounding boxes, and the
+    // stem of a double-height 'T' came out left of its crossbar (sysop,
+    // 2026-09-13).
+    const hhea = t.get('hhea')!;
+    const numberOfHMetrics = buf.readUInt16BE(hhea.offset + 34);
+    const hmtx = t.get('hmtx')!;
+    const metric = (gid: number) => {
+      if (gid < numberOfHMetrics) {
+        return {
+          advance: buf.readUInt16BE(hmtx.offset + gid * 4),
+          lsb: buf.readInt16BE(hmtx.offset + gid * 4 + 2),
+        };
+      }
+      const extra = gid - numberOfHMetrics;
+      return {
+        advance: buf.readUInt16BE(hmtx.offset + (numberOfHMetrics - 1) * 4),
+        lsb: buf.readInt16BE(hmtx.offset + numberOfHMetrics * 4 + extra * 2),
+      };
+    };
+    const xMinOf = (gid: number) => outline(buf, t, gid).readInt16BE(2);
+
+    for (const ch of 'TAgj\u00e5') {
+      const cp = ch.codePointAt(0)!;
+      const source = metric(gid(ch));
+      for (const base of [0xe200, 0xe300]) {
+        const half = glyphId(buf, cmap.offset, base + cp - 0x20);
+        expect(metric(half).advance).toBe(source.advance);
+        expect(metric(half).lsb).toBe(xMinOf(half));
+      }
+    }
+  });
+
   it('stacks into exactly twice the letter, with the halves meeting', () => {
     // The invariant that makes double height real: drawn on consecutive rows
     // (one cell, 20 pixels of 50 units, apart) the two halves cover twice the
