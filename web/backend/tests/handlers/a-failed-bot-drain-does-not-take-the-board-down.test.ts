@@ -56,9 +56,16 @@ function makeWorld() {
   return { repo, io, session, socket, seen };
 }
 
+/**
+ * The board's own failure, and nobody else's. `unhandledRejection` is a
+ * process-wide event and jest runs several suites in one worker, so a
+ * neighbour's stray rejection would otherwise be counted as this one's.
+ */
+const BOOM = new Error('database is closed');
+
 describe('a bot queue that fails to drain', () => {
   let unhandled: unknown[] = [];
-  const record = (err: unknown) => { unhandled.push(err); };
+  const record = (err: unknown) => { if (err === BOOM) unhandled.push(err); };
 
   beforeEach(() => { unhandled = []; process.on('unhandledRejection', record); });
   afterEach(() => {
@@ -89,8 +96,7 @@ describe('a bot queue that fails to drain', () => {
       () => ((H.getActiveChatSessions().get(pageId) as any)?.botQueue ?? []).length > 0);
 
     // The board loses its database between the reply and the drain.
-    const boom = new Error('database is closed');
-    (w.repo as any).getPageRequest = () => { throw boom; };
+    (w.repo as any).getPageRequest = () => { throw BOOM; };
 
     await until('the drain to fail and the caller to be freed',
       () => (H.getActiveChatSessions().get(pageId) as any)?.botBusy === false);
