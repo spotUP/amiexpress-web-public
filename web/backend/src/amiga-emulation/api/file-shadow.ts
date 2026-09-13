@@ -59,11 +59,19 @@ export interface EmpireNarrowShadowOptions {
   readFile?: (sysPath: string) => Buffer | null;
 }
 
-const MANIFEST_FILE = 'door.settings.json';
-
+/**
+ * The manifest, through the one reader that owns it.
+ *
+ * This file used to `JSON.parse` door.settings.json itself, which accepted
+ * manifests `door-settings.service` rejects and knew nothing of the fields it
+ * validates - a second opinion about what a declaration IS, in the path a
+ * caller's screen depends on. A door whose manifest is broken still runs
+ * unshadowed: a throw here is not a reason to refuse the caller his door.
+ */
 function defaultReadManifest(doorDir: string): any | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(doorDir, MANIFEST_FILE), 'utf8'));
+    const { readManifestFromDir } = require('../../doors/door-settings.service');
+    return readManifestFromDir(doorDir);
   } catch {
     return null;
   }
@@ -154,6 +162,7 @@ export function createEmpireNarrowShadow(opts: EmpireNarrowShadowOptions): FileS
         changed = true;
       }
       if (!changed) return null;
+      console.log(`[FileShadow] Applying Empire shadow to ${sysPath} for narrow session`);
       return Buffer.from(serializeEmpireFile(file), 'latin1');
     } catch {
       return null;

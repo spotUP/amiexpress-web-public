@@ -79,9 +79,22 @@ describe('users: public facts only', () => {
     expect(r.text).toContain('ann');
     expect(r.text).not.toContain('spot');
   });
-  it('ranks top callers', async () => {
+  it('ranks top callers the caller is allowed to know about', async () => {
+    // This case used to assert the leak: a level-30 caller was handed
+    // "1. spot - 100 calls" for an account the search test two lines up
+    // proves he may not even find. Lookup and search enforced the level rule
+    // and the ranking took an `_actor` it ignored.
     const r = await BOT_topCallers(db, actor(30));
+    expect(r.text).not.toContain('spot');
+    expect(r.text).toMatch(/^1\. ann - 3 calls/);
+  });
+  it('ranks the whole board for a caller who outranks it', async () => {
+    const r = await BOT_topCallers(db, actor(255));
     expect(r.text).toMatch(/^1\. spot - 100 calls/);
+    expect(r.text).toContain('ann');
+    // Erased rows stay out whoever asks.
+    expect(r.text).not.toContain('ghost');
+    expect(r.text).not.toContain('wiped');
   });
   it('refuses honestly without a database', async () => {
     expect((await BOT_userLookup(undefined, actor(30), 'ann')).text).toMatch(/cannot read accounts/);

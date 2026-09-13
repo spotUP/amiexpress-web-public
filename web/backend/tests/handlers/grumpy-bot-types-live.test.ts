@@ -22,6 +22,36 @@
 process.env.SKIP_DB_INIT = '1';
 jest.setTimeout(20000);
 
+/**
+ * The provider keys this MACHINE carries are not part of the test.
+ *
+ * The cascade reads six env vars as well as the passed config, so a box with
+ * OPENROUTER_API_KEY set calls the real API here, waits for it, and takes
+ * whatever it answers - 429s, on 2026-09-08. Worse for the case below, a key
+ * in the environment makes "nothing reachable" mean TRIED AND DIED rather
+ * than NO KEY CONFIGURED, so the assertion flips on whose laptop runs it.
+ * Cleared for the suite, which is also the state CI runs in.
+ */
+const PROVIDER_KEYS = [
+  'ZEN_API_KEY', 'GO_API_KEY', 'OPENROUTER_API_KEY',
+  'GROQ_API_KEY', 'CEREBRAS_API_KEY', 'GEMINI_API_KEY',
+];
+const savedProviderKeys: Record<string, string | undefined> = {};
+
+beforeAll(() => {
+  for (const key of PROVIDER_KEYS) {
+    savedProviderKeys[key] = process.env[key];
+    delete process.env[key];
+  }
+});
+
+afterAll(() => {
+  for (const key of PROVIDER_KEYS) {
+    if (savedProviderKeys[key] === undefined) delete process.env[key];
+    else process.env[key] = savedProviderKeys[key];
+  }
+});
+
 import Database from 'better-sqlite3';
 import { OperatorChatRepository } from '../../src/database/operator-chat.repository';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';

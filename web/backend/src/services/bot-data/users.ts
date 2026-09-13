@@ -67,14 +67,21 @@ export async function BOT_userSearch(
 
 export async function BOT_topCallers(
   db: BOTDb | undefined,
-  _actor: BOTActor,
+  actor: BOTActor,
   limit?: unknown,
 ): Promise<BOTResult> {
   if (!db) return { text: 'The board cannot read accounts right now.', truncated: false };
   const n = BOT_clampLimit(limit);
   const rows = await db.getUsers({ limit: 1000 });
+  // The same rule lookup and search enforce, and for the same reason this
+  // module's header gives: an account above the caller's level does not exist
+  // as far as he is concerned, and its EXISTENCE is the leak. This ranking
+  // took an `_actor` it ignored, so the leaderboard named the sysop, his call
+  // count and his handle to any caller who asked - the one place in the
+  // domain where the rule was written down and not applied.
+  const mine = actor.secLevel ?? 0;
   const ranked = rows
-    .filter((u) => !erased(u))
+    .filter((u) => !erased(u) && (u.secLevel ?? 0) <= mine)
     .sort((a, b) => (b.calls ?? 0) - (a.calls ?? 0))
     .slice(0, n);
   if (!ranked.length) return { text: 'No callers yet.', truncated: false };

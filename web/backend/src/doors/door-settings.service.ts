@@ -229,8 +229,15 @@ const ManifestSchema = z.object({
   artSections: z.array(ArtSectionSchema).max(10).optional(),
 });
 
-/** The door's declaration, or null when it has none - the normal case. */
-function readManifestFromDir(doorDir: string): DoorSettingsManifest | null {
+/**
+ * The door's declaration, or null when it has none - the normal case.
+ *
+ * Exported because it is the ONE reader of door.settings.json: the schema
+ * below is what decides whether a manifest is a manifest, and a second parser
+ * elsewhere accepts files this one rejects and misses fields this one knows.
+ * The 68K narrow-config shadow had its own `JSON.parse` until 2026-09-13.
+ */
+export function readManifestFromDir(doorDir: string): DoorSettingsManifest | null {
   const file = path.join(doorDir, MANIFEST_FILE);
   if (!fs.existsSync(file)) return null;
 

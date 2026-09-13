@@ -109,6 +109,17 @@ describe('board reads', () => {
     const ctx = ctxFor(30);
     expect((await runTool(ctx, 'user_lookup', { handle: 'Knut' })).result.content).toContain('Knut (level 30)');
     expect((await runTool(ctx, 'user_lookup', { handle: 'Spot' })).result.content).toBe('No user called Spot.');
+    // The same caller, one line later, used to be handed "1. Spot - 99 calls"
+    // by the ranking - the account the line above says does not exist for
+    // him, with its handle and its call count. top_callers took an actor it
+    // ignored.
+    const ranked = (await runTool(ctx, 'top_callers', {})).result.content;
+    expect(ranked).not.toContain('Spot');
+    expect(ranked).toMatch(/^1\. Knut - 5 calls/);
+  });
+
+  it('ranks the sysop for someone who outranks him', async () => {
+    const ctx = ctxFor(255);
     expect((await runTool(ctx, 'top_callers', {})).result.content).toMatch(/^1\. Spot - 99 calls/);
   });
   it('recent_messages and search_messages read public mail', async () => {
