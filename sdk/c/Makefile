@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -48,13 +48,14 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
+test: door-sources-compile build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
 	./build/test_ui_list
 	./build/test_ui_chrome
 	./build/test_ui_input
+	./build/test_ui_editor
 	./build/test_ui_theme
 	./build/test_ui_settings
 	./build/test_ui_doc
@@ -118,6 +119,10 @@ build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c inclu
 build/test_ui_input: src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_input.c include/ui_input.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_input.c -o $@
+
+build/test_ui_editor: src/ui_ansi.c src/ui_key.c src/ui_input.c src/ui_editor.c tests/test_ui_editor.c include/ui_editor.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_key.c src/ui_input.c src/ui_editor.c tests/test_ui_editor.c -o $@
 
 build/test_ui_doc: src/ui_ansi.c src/ui_key.c src/ui_doc.c tests/test_ui_doc.c include/ui_doc.h
 	@mkdir -p build
