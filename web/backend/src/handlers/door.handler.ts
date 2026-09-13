@@ -2367,10 +2367,19 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
       const { showPreloaderWhile } = require('@amiexpress/bbs-door-sdk/utils/door-preloader');
       // Pass socket directly - session.socket doesn't exist, socket is a separate parameter
       const doorDisplayName = door.name || door.command || 'Application';
+      // The caller's real geometry, not an assumed 80x25. doorScreenWidth is
+      // the board's ONE width source - the same one the door itself will be
+      // built against a moment later - so the preloader and the door agree
+      // about the screen they are drawing on.
+      const { doorScreenWidth } = require('../amiga-emulation/xim/screen-width.util');
       doorModule = await showPreloaderWhile(
         socket,
         doorDisplayName,
-        async () => await import(importPath)
+        async () => await import(importPath),
+        {
+          cols: doorScreenWidth(session, 80),
+          rows: (session as any).screenHeight || 25,
+        }
       );
     } else {
       // Import directly without preloader

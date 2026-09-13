@@ -18,14 +18,35 @@ const ANSI = {
   RESET: ESC + '[0m',
 };
 
-function createPreloaderFrame(doorName: string, tick: number): string {
+/**
+ * The box, sized to the caller's screen.
+ *
+ * This was a 60-column box centred inside a hardcoded 80, drawn from row 8.
+ * A PETSCII caller has 40 columns and 25 rows, a phone in portrait fewer
+ * still, and a wide xterm more - so the one thing a caller saw before a slow
+ * door opened was a frame off the edge of their screen. "all our typescript
+ * doors have a broken preloader" (sysop, 2026-09-13).
+ *
+ * Everything below is derived from `cols`; the only literal left is the
+ * caller of this function defaulting an unknown width to 80.
+ */
+function preloaderBox(cols: number, rows: number) {
+  // Leave a column either side at 40; a share of the screen above that.
+  const width = Math.max(20, Math.min(cols - 2, Math.max(34, Math.floor(cols * 0.6))));
+  const startCol = Math.max(1, Math.floor((cols - width) / 2) + 1);
+  // A third of the way down reads as centred without needing the height to
+  // be 25, and keeps the box on screen when a terminal is short.
+  const startRow = Math.max(1, Math.min(rows - 6, Math.floor(rows / 3)));
+  return { width, startCol, startRow };
+}
+
+function createPreloaderFrame(doorName: string, tick: number, cols: number, rows: number): string {
   const spinnerChars = ['|', '/', '-', '\\'];
   const spinner = spinnerChars[tick % 4];
-  const name = doorName.length > 40 ? doorName.substring(0, 37) + '...' : doorName;
-  
-  const width = 60;
-  const startCol = Math.floor((80 - width) / 2) + 1; // 1-indexed for ANSI
-  const startRow = 8;
+  const { width, startCol, startRow } = preloaderBox(cols, rows);
+  // The name has to fit INSIDE the box, not inside an assumed 40.
+  const room = Math.max(8, width - 12);
+  const name = doorName.length > room ? doorName.substring(0, room - 3) + '...' : doorName;
 
   // Use absolute positioning for every line to ensure perfect alignment
   // ESC[row;colH
@@ -53,14 +74,23 @@ function createPreloaderFrame(doorName: string, tick: number): string {
   return out;
 }
 
+export interface PreloaderGeometry {
+  /** The caller's real terminal width; 80 when nothing has reported one. */
+  cols?: number;
+  rows?: number;
+}
+
 export async function showPreloaderWhile<T>(
   socket: any,
   doorName: string,
-  loader: () => Promise<T>
+  loader: () => Promise<T>,
+  geometry: PreloaderGeometry = {}
 ): Promise<T> {
   if (!socket || typeof socket.emit !== 'function') {
     return await loader();
   }
+  const cols = Math.max(20, geometry.cols || 80);
+  const rows = Math.max(8, geometry.rows || 25);
 
   let loaderFinished = false;
   let result: T | undefined;
@@ -76,10 +106,29 @@ export async function showPreloaderWhile<T>(
 
   socket.emit('ansi-output', ANSI.HIDE_CURSOR);
 
+  /**
+   * DRAWN ONCE, then one cell per tick.
+   *
+   * This used to send CLEAR_SCREEN and repaint the whole box ten times a
+   * second - roughly 700 bytes a frame, 7 KB a second, at the exact moment
+   * the board is busy importing a door. The door rules are explicit: an
+   * animation tick touches ONE row, never the frame. The spinner is one
+   * character, so it costs the cursor move plus a colour plus that.
+   */
+  const { width, startCol, startRow } = preloaderBox(cols, rows);
+  const spinRow = startRow + 3;
+  const spinCol = startCol + Math.floor(width / 2);
+  socket.emit('ansi-output', createPreloaderFrame(doorName, tick, cols, rows));
+
   while (!loaderFinished) {
-    const frame = createPreloaderFrame(doorName, tick++);
-    socket.emit('ansi-output', frame);
     await new Promise((resolve) => setTimeout(resolve, animationDelay));
+    if (loaderFinished) break;
+    tick += 1;
+    const spinner = ['|', '/', '-', '\\'][tick % 4];
+    socket.emit(
+      'ansi-output',
+      ESC + `[${spinRow};${spinCol}H` + ANSI.YELLOW + spinner + ANSI.RESET,
+    );
   }
 
   socket.emit('ansi-output', ANSI.SHOW_CURSOR);
