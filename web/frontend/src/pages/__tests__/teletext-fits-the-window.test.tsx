@@ -112,6 +112,29 @@ function enterTeletext(): void {
 }
 
 describe('a teletext session is fitted to the window', () => {
+  it('sits on a whole pixel, because a fractional one seams the mosaics', () => {
+    /*
+     * xterm's canvas renderer draws a font's block glyph a device pixel
+     * short of its cell at a fractional font size. Measured on a 40-cell
+     * teletext rule, a fresh terminal per size, dpr 2: every half-pixel
+     * size from 18.5 to 45.5 has a gap at every cell boundary, every whole
+     * size from 24 up is solid. The board's fit had landed on 41.5 and the
+     * rule drew as a row of dashes (sysop, 2026-09-14).
+     */
+    for (const [width, height] of [[1280, 800], [1366, 768], [1512, 945], [1920, 1080]]) {
+      cleanup();
+      const { page } = mountAt(width, height);
+      enterTeletext();
+
+      const size = harness.term.options.fontSize as number;
+      expect(size).toBe(Math.floor(size));
+      // And it still fits: rounding DOWN cannot push the grid off the page.
+      const grid = gridFor(size);
+      expect(grid.width).toBeLessThanOrEqual(page.clientWidth + 0.001);
+      expect(grid.height).toBeLessThanOrEqual(page.clientHeight + 0.001);
+    }
+  });
+
   it('keeps the whole 40x25 grid inside the page', () => {
     const { page } = mountAt(1280, 800);
     enterTeletext();

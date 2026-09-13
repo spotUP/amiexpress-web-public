@@ -152,6 +152,25 @@ export function TerminalPage(): JSX.Element {
    * The whole search is synchronous — setting `options.fontSize` re-measures
    * the char size and restyles the screen element before it returns.
    */
+  /**
+   * The teletext size, rounded DOWN to a whole CSS pixel.
+   *
+   * A teletext page is block graphics, and xterm's canvas renderer draws
+   * mosaics a device pixel short of their cell at a fractional font size:
+   * measured on a 40-cell rule, one fresh terminal per size, dpr 2 - every
+   * half-pixel size from 18.5 to 45.5 seams at every cell boundary, every
+   * whole size from 24 up is solid. The board's fit had landed on 41.5 and
+   * the drawn rule read as a row of dashes (sysop, 2026-09-14).
+   *
+   * Down, never up: the fit is the largest size the window holds, so the
+   * next size up does not fit. Ordinary ANSI art is unaffected either way -
+   * xterm draws U+2580-259F itself, and those never seam.
+   */
+  const wholePixelTeletextSize = (fitted: number): number => {
+    const whole = Math.floor(fitted);
+    return whole >= TELETEXT_FIT_LIMITS.min ? whole : fitted;
+  };
+
   const refit = useCallback(() => {
     const term = terminalRef.current?.getTerminal();
     const element = term?.element;
@@ -233,7 +252,8 @@ export function TerminalPage(): JSX.Element {
        * behind (fitFontSize measures the winner last).
        */
       const seed = zoomedFontSize(fitSizeRef.current, zoomFractionRef.current) * 2;
-      const size = fitFontSize(seed, available, measure, TELETEXT_FIT_LIMITS);
+      const fitted = fitFontSize(seed, available, measure, TELETEXT_FIT_LIMITS);
+      const size = wholePixelTeletextSize(fitted);
       const box = measure(size);
       if (!(box.width > 0) || !(box.height > 0)) return;
       const teletextSlack = Math.min(available.width - box.width, available.height - box.height);
