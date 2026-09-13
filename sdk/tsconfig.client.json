@@ -9,6 +9,11 @@
     "sourceMap": false
   },
   "include": [
+    "teletext/**/*",
+    // Both of these already declare an "import" condition in package.json
+    // and neither was emitted - found by tests/unit/esm-conditions-resolve.
+    "components/achievement-toast.ts",
+    "engines/ui/ansi-editor/**/*",
     "client/**/*",
     "common/**/*",
     "core/**/*",
@@ -23,6 +28,12 @@
     // the "import" condition points at a dist-esm path that never exists
     // (the exact fault the arcade module shipped with).
     "engines/graphics/cell-art/**/*",
+    // Teletext is pure - a lexer, a state machine and a renderer, no I/O -
+    // and package.json points three "import" conditions at
+    // ./dist-esm/teletext/*. Without this they resolve to files that have
+    // never existed, so an ESM door or a bundler importing
+    // @amiexpress/bbs-door-sdk/teletext fails while require() works. Same
+    // fault as arcade, cell-art and theme above; this is the fourth time.
     // Themes are pure - tokens, style objects and the glitch arithmetic,
     // no I/O - and every TypeScript door imports them. Doors are loaded as
     // ESM, so the "import" condition resolves dist-esm; leaving this out is
