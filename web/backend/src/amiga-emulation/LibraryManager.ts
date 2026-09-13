@@ -344,9 +344,18 @@ console.warn("[LibraryManager] Failed to extract ROM libraries", err);
     }, 20);
     __lagTimer.unref?.();
     const mark = (what: string): void => {
+      // Sample the lag AT THE MARK, not only from the interval.
+      //
+      // A synchronous block stops the interval too, so it cannot observe its
+      // own block until the tick AFTER it ends - and a mark placed right after
+      // the block then printed "loop lag max 0ms" while the board had been
+      // frozen for eleven seconds. The time since the interval last ran IS the
+      // block that just finished.
+      const sinceTick = Date.now() - __lagLast - 20;
+      if (sinceTick > __lagMax) __lagMax = sinceTick;
       this.logger?.log(
         'INFO',
-        `[timing] exec: ${what} +${Date.now() - __t0}ms (loop lag max ${__lagMax}ms)`
+        `[timing] exec: ${what} +${Date.now() - __t0}ms (blocked ${Math.max(0, sinceTick)}ms, worst ${__lagMax}ms)`
       );
     };
 
@@ -561,7 +570,9 @@ debugLog(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
 debugLog("[LibraryManager] Creating icon.library...");
     const bbsRoot = projectRoot;
     this.ensureAnswerFiles(bbsRoot);
+    mark("answer files ensured");
     this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
+    mark("icon library");
     // Set door directory for PROGDIR: support in GetDiskObject
     this.iconLibrary.setDoorDirectory(doorDir);
     // Set door binary basename so GetDiskObject can fall back to
@@ -594,6 +605,7 @@ debugLog(
 debugLog("[LibraryManager] Creating DOS.library...");
 
     this.dosLibrary = new DosLibrary(this.emulator, projectRoot);
+    mark("dos library");
     // The caller's width, for the ONE place dos.library needs it: a door that
     // opens its own header file (`ctop`, `conftop`) instead of asking the BBS
     // to show it. The socket lives here, so the question is answered here.
@@ -712,6 +724,7 @@ debugLog("[LibraryManager] Creating AEDoor.library...");
 debugLog("[LibraryManager] Creating utility.library...");
 
     this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket);
+    mark("aedoor + utility libraries");
 
 debugLog("[LibraryManager] Creating math libraries...");
 
@@ -727,6 +740,7 @@ debugLog("[LibraryManager] Creating intuition.library...");
 
 debugLog("[LibraryManager] Creating network libraries (bsdsocket, amissl)...");
     this.bsdSocketLibrary = new BsdSocketLibrary(this.emulator);
+    mark("math + intuition libraries");
     this.amisslMasterLibrary = new AmiSSLMasterLibrary(this.emulator);
     this.amisslLibrary = new AmiSSLLibrary(this.emulator);
     // Connect amissl to bsdsocket for TLS upgrade
@@ -751,6 +765,7 @@ debugLog("[LibraryManager] Creating fame.library (FAME BBS FIM compatibility)...
 debugLog("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
+    mark("socket/ssl/dream/fame libraries");
 
     this.emulator.setLibraryTrapHandler((pc: number) => {
       return this.libraryTraps!.handleTrap(pc);

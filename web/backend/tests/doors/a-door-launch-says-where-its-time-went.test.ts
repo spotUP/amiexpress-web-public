@@ -69,10 +69,13 @@ describe('a door launch', () => {
     const timings = logger.lines.filter((l) => l.includes('[timing] exec:'));
     expect(timings.length).toBeGreaterThan(0);
 
-    // The first thing it does, and the shape every mark carries: a phase name,
-    // a cumulative offset, and the worst event-loop lag seen so far - the
-    // figure that says "this blocked the whole board" rather than "this was
-    // slow for this caller".
-    expect(timings[0]).toMatch(/\[timing\] exec: bbs root resolved \+\d+ms \(loop lag max \d+ms\)/);
+    // The shape every mark carries: a phase name, a cumulative offset, and how
+    // long the event loop was BLOCKED by the step just finished - the figure
+    // that says "this stopped the whole board" rather than "this was slow for
+    // this caller". `blocked` is sampled at the mark because a synchronous
+    // block stops the sampling timer too, and so cannot observe itself.
+    expect(timings[0]).toMatch(
+      /\[timing\] exec: bbs root resolved \+\d+ms \(blocked \d+ms, worst \d+ms\)/
+    );
   });
 });
