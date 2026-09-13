@@ -76,16 +76,19 @@
   font-display: block;
 }
 
-/* Teletext session mode (T answer at the graphics prompt). TDAText by
- * Dmitry Tretyakov, SIL Open Font License 1.1 (see
- * public/fonts/TDAText-OFL-LICENSE.txt) - the only teletext contender
- * with the Swedish glyphs SVT Text TV needs (åäöÅÄÖ probed present).
+/* Teletext session mode (T answer at the graphics prompt). TeletextUPR:
+ * TDAText by Dmitry Tretyakov, SIL Open Font License 1.1, with ONE glyph
+ * repaired - TDAText draws lowercase a-ring as a copy of a-dieresis, so a
+ * Swedish page read "Nagon" (sysop, 2026-09-13). Renamed because TDAText is
+ * a Reserved Font Name; the notice, the original licence and the generator
+ * that re-applies the fix are in public/fonts/TeletextUPR-OFL-LICENSE.txt
+ * and dev/scripts/fonts/fix-teletext-aring.py.
  * woff2 first, ttf fallback for older browsers.
  */
 @font-face {
-  font-family: 'TDAText';
-  src: url('/fonts/TDAText.woff2') format('woff2'),
-       url('/fonts/TDAText.ttf') format('truetype');
+  font-family: 'TeletextUPR';
+  src: url('/fonts/TeletextUPR.woff2') format('woff2'),
+       url('/fonts/TeletextUPR.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: block;

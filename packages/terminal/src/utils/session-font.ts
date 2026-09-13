@@ -43,7 +43,11 @@ export const DEFAULT_BBS_FONT = 'TopazPlus_a1200';
  * so applyFont's cache write below is a no-op for it even without the
  * flag. The flag exists so that stays true if anyone ever lists it.
  */
-export const TELETEXT_FONT = 'TDAText';
+/* TeletextUPR, not TDAText: the shipped face is TDAText with its lowercase
+   a-ring repaired (it was a copy of a-dieresis) and renamed, because TDAText
+   is a Reserved Font Name under the OFL. See
+   web/frontend/public/fonts/TeletextUPR-OFL-LICENSE.txt. */
+export const TELETEXT_FONT = 'TeletextUPR';
 
 /**
  * Every font the BBS ships and the picker can select. Used to validate the
