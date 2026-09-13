@@ -25,6 +25,7 @@ import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { handleMsgQuery } from './xim/msgfeed';
+import { handleSetPointer } from './xim/msgpointer';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
@@ -902,6 +903,10 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
       // an empty reply, and drew every theme in the classic palette. The
       // handler was fine; the route was missing.
       XIMCommand.AEW_MSGQUERY,
+      // AEW_SETPOINTER writes the caller's pointer through loadMsgPointers /
+      // saveMsgPointers, so it is asynchronous too and belongs here for the
+      // same reason - and this is the line the comment above warns about.
+      XIMCommand.AEW_SETPOINTER,
       // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
       // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
     ];
@@ -1017,6 +1022,24 @@ debugLog(
           debugLog(`[XIMProtocol] AEW_MSGQUERY "${msg.string}" -> ${answer.bytes} bytes`);
           this.messageParser.writeMessageString(msg.msgAddr, answer.text);
           this.sendReply(msg, answer.bytes);
+        }
+        break;
+
+      /**
+       * AEW_SETPOINTER (10300): advance the caller's read pointers from a
+       * door. The board owns these on a real AmiExpress and there is no
+       * command for a door to move them - see xim/msgpointer.ts for the
+       * express.e evidence and the degradation contract.
+       *
+       * A WRITE, so it arrives with data 0, which is also exactly what an
+       * AmiExpress that has never heard of the command replies. That is what
+       * lets SUBS detect support without a version check: 1 means stored.
+       */
+      case XIMCommand.AEW_SETPOINTER:
+        {
+          const stored = await handleSetPointer(String(msg.string || ''), this.bbsSession);
+          debugLog(`[XIMProtocol] AEW_SETPOINTER "${msg.string}" -> ${stored}`);
+          this.sendReply(msg, stored);
         }
         break;
 

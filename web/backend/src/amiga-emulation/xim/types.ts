@@ -330,6 +330,28 @@ export enum XIMCommand {
    */
   AEW_MSGQUERY = 10200,
 
+  /**
+   * THIS BOARD'S OWN: advance the caller's read pointers from a door.
+   *
+   * express.e has no such command, and that is deliberate there - `LAST_READ`
+   * and `LAST_SCANNED` (express.e:3963-3966) only ever answer, while
+   * `MSGBASE_LOC` right below them shows the settable idiom the author used
+   * when a field WAS meant to be written. The board owns the pointer.
+   *
+   * That breaks down once a DOOR is the reader: SUBS reads the message base
+   * off the disk so it runs on a real Amiga, and ships an `R.info` override so
+   * it can replace the `R` command outright. Nothing then advances the
+   * pointer, and every message reads as new for ever.
+   *
+   * Answered with 1 when stored, 0 otherwise. The request carries data 0 (a
+   * write), so a board that does not know the command replies with data
+   * unchanged - 0 - and the door degrades silently instead of breaking.
+   *
+   * Proposed upstream; see Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md
+   * and xim/msgpointer.ts for the wire format.
+   */
+  AEW_SETPOINTER = 10300,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }
