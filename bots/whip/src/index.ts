@@ -16,10 +16,16 @@ import { config as loadEnv } from 'dotenv';
 // .env next to package.json (src/ in dev, dist/ in prod), else the bare
 // process environment. First file that exists wins; missing files are not
 // an error. Seen live: a present-but-unread .env reads as "missing token".
+//
+// The volume file OVERRIDES the process environment. dotenv keeps what is
+// already set unless told otherwise, and compose sets WHIP_API_URL and
+// HEALTH_PORT in `environment:` - so the admin's own fields were read off
+// the disk and then discarded, and "Board URL" changed nothing. The whole
+// point of the admin-written file is that what the sysop types wins.
 const volumeEnv = process.env.BOT_ENV_FILE;
 const localEnv = path.join(__dirname, '..', '.env');
 if (volumeEnv && fs.existsSync(volumeEnv)) {
-  loadEnv({ path: volumeEnv });
+  loadEnv({ path: volumeEnv, override: true });
 } else if (fs.existsSync(localEnv)) {
   loadEnv({ path: localEnv });
 }
@@ -383,6 +389,18 @@ async function handleWhip(
     await interaction.reply({ content: buildHelpText(), ephemeral: true });
     return;
   }
+  // A modal IS the reply to the interaction, so it cannot follow a defer:
+  // showModal after deferReply throws InteractionAlreadyReplied, which the
+  // outer catch turned into "WHIP request failed." - both creation forms
+  // have been dead since they were written.
+  if (sub === 'task-new') {
+    await interaction.showModal(buildNewTaskModal(interaction.options.getString('project', true).trim()));
+    return;
+  }
+  if (sub === 'project-new') {
+    await interaction.showModal(buildNewProjectModal());
+    return;
+  }
   await interaction.deferReply();
   try {
     switch (sub) {
@@ -479,10 +497,7 @@ async function handleWhip(
         await interaction.editReply({ embeds: [embed], components: [buildTaskButtons(task.id)] });
         break;
       }
-      case 'task-new': {
-        await interaction.showModal(buildNewTaskModal(interaction.options.getString('project', true).trim()));
-        break;
-      }
+
       case 'task-edit': {
         const id = await resolveTaskId(api, interaction.options.getString('id', true).trim());
         const patch: Record<string, unknown> = {};
@@ -541,10 +556,6 @@ async function handleWhip(
         } catch (err) {
           await replyError(interaction, writeErrorMessage(err));
         }
-        break;
-      }
-      case 'project-new': {
-        await interaction.showModal(buildNewProjectModal());
         break;
       }
       case 'project-delete': {
@@ -856,7 +867,11 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
       health.lastFeedEventAt = new Date().toISOString();
       const channel = await client.channels.fetch(feedChannelId);
       if (channel?.isTextBased()) {
-        await (channel as TextChannel).send(line);
+        // The line carries BBS text - a task title a caller typed, which
+        // can be typed from Discord too. Sent as bare content it would ping
+        // the guild for "@everyone" and every role it names, so mentions
+        // are off: the feed reports, it does not summon.
+        await (channel as TextChannel).send({ content: line, allowedMentions: { parse: [] } });
       }
     },
     log: (message) => console.log(message),
