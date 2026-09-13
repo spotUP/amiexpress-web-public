@@ -1385,7 +1385,21 @@ class CardLobbyApp {
             this.lobbyWindow.left = 0;
             this.lobbyWindow.width = leftWidth;
             this.tableWindow.show();
-            this.tableWindow.left = leftWidth;
+            /**
+             * `leftWidth - 1`, NOT `leftWidth`. The table shares its left border
+             * with the lobby's right one, which is why computeLayout hands back a
+             * width of `screen - leftWidth + 1`. Placed one column further right,
+             * that +1 runs off the end of the screen and the caller loses the
+             * right-hand border of both right-column panels - the sysop's
+             * screenshot, 2026-09-14: "the rightmost two panels have their right
+             * border chopped off".
+             *
+             * UIManager.relayout() had it right; this is a second copy of the same
+             * arithmetic that disagreed with it, which is the shape that has cost
+             * this codebase all evening. The numbers come from computeLayout in
+             * both places, so the two now say the same thing.
+             */
+            this.tableWindow.left = leftWidth - 1;
             this.tableWindow.width = rightWidth;
             this.tableWindow.height = mainHeight;
             this.logWindow.show();

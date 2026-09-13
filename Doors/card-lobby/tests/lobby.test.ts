@@ -24,6 +24,29 @@ import { join } from 'path';
 
 process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-lobby-'));
 
+/** The door on a screen of a given size, driven through its real run(). */
+async function openDoorAt(width: number, height: number): Promise<any> {
+  const { CardLobbyApp } = await import('../index');
+  const bbs: any = {
+    write: () => {}, writeLine: () => {}, on: () => {},
+    getTerminalSize: () => ({ width, height }),
+    readFile: async () => null, writeFile: async () => {},
+    enableWideMode: () => {}, disableWideMode: () => {},
+    getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
+    connectionType: 'web', unicodeCapable: true,
+  };
+  const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
+  const session: any = {
+    bbs, socket, params: [],
+    bbsSession: { userId: 1, username: 'sysop', nodeId: 1, secLevel: 255, screenHeight: height, socket },
+    user: { id: 1, username: 'sysop', name: 'sysop', accessLevel: 255 },
+  };
+  const app: any = new CardLobbyApp(session);
+  const finished = app.run();
+  await new Promise((r) => setTimeout(r, 1500));
+  return { app, finished, session, settle: () => new Promise((r) => setTimeout(r, 200)) };
+}
+
 function table(id: number, gameId = 'uno'): any {
   return {
     id, gameId, gameName: gameId === 'uno' ? 'UNO' : "Texas Hold'em",
@@ -206,4 +229,45 @@ export async function theActionButtonsSpreadAcrossTheRow(): Promise<void> {
 
   await h.app.shutdown();
   await h.finished;
+}
+
+export async function nothingIsDrawnPastTheRightEdge(): Promise<void> {
+  // "the rightmost two panels have their right border chopped off, the
+  // cardlobby is wider than 80 chars" (sysop, 2026-09-14). The table window
+  // shares its left border with the lobby's right one, so computeLayout
+  // returns a width of `screen - leftWidth + 1`; index.ts placed it at
+  // `leftWidth` instead of `leftWidth - 1`, and that +1 ran off the screen.
+  // Two copies of one piece of arithmetic, disagreeing by a column.
+  for (const [w, h] of [[150, 40], [132, 40], [120, 30], [100, 30], [80, 25]] as const) {
+    const h2 = await openDoorAt(w, h);
+    try {
+      // The view switch applies its geometry asynchronously, so this waits
+      // for it: measured in the same tick, the window still carries the
+      // position it had in the lobby view and the assertion proves nothing.
+      // (I had this backwards first and the test passed against the bug.)
+      h2.app.focusTable();
+      // applyViewGeometry is what places the windows for the chosen view,
+      // and focusTable reaches it only once the door's own refresh has run.
+      // Calling it directly is what makes this a test of the geometry
+      // rather than a test of a timer: measured without it, the window
+      // still carries the position it had in the lobby view and the
+      // assertion passes against the bug (it did, twice).
+      h2.app.applyViewGeometry();
+      await h2.settle();
+
+      const screen = h2.app.screen;
+      const all = (node: any): any[] => [node, ...((node.children ?? []).flatMap(all))];
+      for (const el of all(screen)) {
+        if (el === screen || el.hidden) continue;
+        const right = Number(el.aleft) + Number(el.width) - 1;
+        assert.ok(
+          right <= Number(screen.width) - 1,
+          `${el.options?.label ?? el.constructor.name} ends at column ${right} on a ${w}-wide screen`,
+        );
+      }
+    } finally {
+      await h2.app.shutdown();
+      await h2.finished;
+    }
+  }
 }
