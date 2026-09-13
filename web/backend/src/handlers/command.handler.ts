@@ -2414,11 +2414,38 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     // character - so a pasted line failed every branch and was dropped without
     // a word (reported live 2026-09-13: "pasting to the bbs is very slow as
     // well"; it was not slow, it was doing nothing, and the caller retyped).
-    // Each key takes the branch it would have taken had it been typed, which
-    // is also how a return inside the paste sends its line.
+    //
+    // BY RUN, NOT BY KEY. Feeding each character back through this handler
+    // fixed the drop and bought a stall: every character paid for the whole
+    // preamble, an awaited room emit and its own socket frame, so the first
+    // character appeared at once and the rest arrived as a long pause ("the
+    // first character gets visible directly and then there is a long pause
+    // when i paste"). The line model is still built one character at a time -
+    // it has to be, it wraps at column 78 - but the wire sees one frame per
+    // run, and only a line break costs a pass through this handler.
     const pastedKeys = inputKeys(data);
     if (pastedKeys.length > 1) {
-      for (const key of pastedKeys) await handleCommand(socket, session, key, io);
+      const { callerTypedRun, chatAcceptsKeystroke: accepts } = require('./operator-chat.handler');
+      const { handleOperatorChatKeystroke: keystroke } = require('./operator-chat.handler');
+      let run = '';
+      const flushRun = async () => {
+        if (!run) return;
+        session.inputBuffer += run;
+        callerTypedRun(socket.server, session, run);
+        if (!session.inputBuffer.trim().startsWith('/')) {
+          await keystroke(socket.server, session, run);
+        }
+        run = '';
+      };
+      for (const key of pastedKeys) {
+        if (key === '\r' || key === '\n') {
+          await flushRun();
+          await handleCommand(socket, session, '\r', io);
+        } else if (accepts(key)) {
+          run += key;
+        }
+      }
+      await flushRun();
       return;
     }
 

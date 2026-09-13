@@ -266,6 +266,35 @@ export function callerTypedChar(io: any, session: BBSSession, ch: string): void 
   // ("sometimes i get the sysop cyan when i type", 2026-09-08).
   emitToCaller(io, session, cs ? chatCharBytes(cs, 'user', ch) : `\x1b[${CHAT_COLOR_USER}m${ch}`);
 }
+/**
+ * A RUN OF CHARACTERS THE CALLER PASTED - one frame, not one per character.
+ *
+ * The line model is per character and has to stay that way: chatCharBytes
+ * tracks the colour change, the escape state and the wrap at column 78. What
+ * does NOT have to be per character is the socket write. Feeding a paste back
+ * through the single-key path emitted one frame per character and awaited the
+ * whole command handler in between, so the first character appeared at once
+ * and the rest arrived as a long pause ("the first character gets visible
+ * directly and then there is a long pause when i paste", 2026-09-13).
+ *
+ * Same bytes, same model, one emit.
+ */
+export function callerTypedRun(io: any, session: BBSSession, text: string): void {
+  if (!text) return;
+  const cs = chatOfSession(session);
+  if (cs) cancelThinkingDots(cs);
+  // With a chat session the model decides the colour and emits it only when
+  // the sender changes, so the run gets one prefix. Without one there is no
+  // model to ask - and the colour still belongs to the run, not to every
+  // character in it.
+  let bytes = '';
+  if (cs) {
+    for (const ch of text) bytes += chatCharBytes(cs, 'user', ch);
+  } else {
+    bytes = `\x1b[${CHAT_COLOR_USER}m${text}`;
+  }
+  emitToCaller(io, session, bytes);
+}
 export function callerBackspaced(io: any, session: BBSSession): void {
   const cs = chatOfSession(session);
   if (cs) cancelThinkingDots(cs);

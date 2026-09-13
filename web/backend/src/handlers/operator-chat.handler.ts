@@ -151,10 +151,10 @@ import { report } from '../achievements/reporter';
 const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
+import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
 import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
-export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
+export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
 
 // Track active paging dot intervals by pageId (for reliable cleanup)
 const activePagingIntervals = new Map<string, NodeJS.Timeout>();
