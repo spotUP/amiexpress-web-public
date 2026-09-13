@@ -426,6 +426,37 @@ static void left_and_right_page_unless_the_caller_wants_them(void)
     printf("  [OK] left and right page, unless the caller wants the direction\n");
 }
 
+static void a_line_attribute_costs_the_row_no_columns(void)
+{
+    /* `UI_INK 'H' '3'` is DECDHL: the row the cursor is on is the top half
+       of a double-height line. It is three bytes and zero columns, exactly
+       like a theme token, so a headline sent twice under the two halves is
+       still forty characters wide. */
+    char text[128];
+    static char storage[8192];
+    ansi_buf b;
+    ui_doc_style st;
+    typist t; ui_key_source src; int pushback = -1;
+
+    sprintf(text, "%sUP ROUGH BBS\n", UI_LINE_TOP);
+    assert(ui_doc_wrap(text, 12, 0, 0) == 1);
+
+    sprintf(text, "%sUP ROUGH\n%sUP ROUGH\n", UI_LINE_TOP, UI_LINE_BOTTOM);
+    assert(ui_doc_wrap(text, 8, 0, 0) == 2);
+
+    /* And it reaches the caller as the escape a VT100 knows. */
+    ui_doc_style_init(&st);
+    st.height = 4; st.width = 20; st.top = 1; st.left = 1;
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    sprintf(text, "%sBIG\n%sBIG\n", UI_LINE_TOP, UI_LINE_BOTTOM);
+    (void) ui_doc(&b, &src, &pushback, &st, " M ", text);
+    assert(strstr(storage, "\x1b#3") != 0);
+    assert(strstr(storage, "\x1b#4") != 0);
+    printf("  [OK] a line attribute costs the row no columns\n");
+}
+
 static void a_pen_after_the_last_column_does_not_make_a_line(void)
 {
     /* A teletext row is exactly forty columns and ends with a pen reset.
@@ -515,6 +546,7 @@ int main(void)
     left_and_right_page_unless_the_caller_wants_them();
     h_is_the_way_home_for_a_caller_that_walks();
     a_pen_after_the_last_column_does_not_make_a_line();
+    a_line_attribute_costs_the_row_no_columns();
     printf("ui_doc: all passed\n");
     return 0;
 }

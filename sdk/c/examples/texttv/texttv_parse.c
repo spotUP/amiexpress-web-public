@@ -284,6 +284,12 @@ int texttv_title(const char *json, char *out, unsigned long cap)
 
 unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap)
 {
+    return texttv_ansi_to_ink_mode(in, out, cap, 0);
+}
+
+unsigned long texttv_ansi_to_ink_mode(const char *in, char *out, unsigned long cap,
+                                      int double_height)
+{
     unsigned long n = 0;
     const char *p = in;
     if (out == 0 || cap == 0) return 0;
@@ -291,6 +297,28 @@ unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap)
     if (in == 0) return 0;
 
     while (*p != '\0' && n + 1 < cap) {
+        /*
+         * DECDHL, the two halves of a teletext headline.
+         *
+         * The proxy marks SVT's double-height rows with `ESC # 3` and
+         * `ESC # 4`. Kept, they become the SDK's line markers - three bytes,
+         * no columns, written back to the wire as the same escapes. Dropped,
+         * the row is ordinary text, which is what a caller whose terminal
+         * cannot draw halves must get: a C64's transducer would render the
+         * escape as glyphs, and an ANSI terminal that DOES implement DECDHL
+         * would also halve the row's width, which nobody asked for.
+         */
+        if (p[0] == 0x1b && p[1] == '#' && p[2] != '\0') {
+            char half = p[2];
+            if (double_height && (half == '3' || half == '4' || half == '5')
+                && n + 3 < cap) {
+                out[n++] = TEXTTV_INK;
+                out[n++] = 'H';
+                out[n++] = half;
+            }
+            p += 3;
+            continue;
+        }
         if (p[0] == 0x1b && p[1] == '[') {
             const char *q = p + 2;
             int value = -1;

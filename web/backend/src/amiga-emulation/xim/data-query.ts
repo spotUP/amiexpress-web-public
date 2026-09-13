@@ -10,6 +10,7 @@ import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './types';
 import { XIMMessageParser } from './messages';
+import { displayModeOf } from './display-mode.util';
 import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
@@ -245,6 +246,23 @@ console.error('[XIMDataQuery] AEW_THEME: could not persist:', error);
 debugLog(`  [WRITE] AEW_THEME: asked "${asked}", stored "${resolved.id}"`);
         }
         break;
+
+      /**
+       * This board's own command: the KIND of screen, not its size.
+       *
+       * Read-only. The caller picked it at the graphics prompt and a door
+       * has no business overruling it - unlike AEW_THEME above, which is a
+       * preference a door may legitimately set on the caller's behalf.
+       */
+      case XIMCommand.AEW_DISPLAYMODE: {
+        const mode = displayModeOf(this.bbsSession);
+        this.messageParser.writeMessageString(msg.msgAddr, mode);
+        for (let i = mode.length + 1; i < 32; i++) {
+          this.emulator.writeMemory(stringAddr + i, 0);
+        }
+debugLog(`  [READ] AEW_DISPLAYMODE: "${mode}"`);
+        break;
+      }
 
       case XIMCommand.DT_PHONENUMBER:
         if (isRead) {

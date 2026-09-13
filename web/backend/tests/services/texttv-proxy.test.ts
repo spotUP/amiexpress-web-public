@@ -282,6 +282,41 @@ describe('htmlToAnsiRows - texttv.nu markup to ANSI', () => {
     expect(rows[0]).toContain('\x1b[0;33;44m');
   });
 
+  /**
+   * And the other half of the same story, now that a terminal on this board
+   * CAN draw double height: the row goes out twice under the escapes that
+   * say which half is which - `ESC # 3` and `ESC # 4`, which every VT100 has
+   * understood since before this BBS existed. Opt-in, because a terminal
+   * that implements them draws the row double WIDTH too, and an ANSI caller
+   * did not ask for that.
+   */
+  test('with double height asked for, the headline goes out as two halves', () => {
+    const html =
+      '<div class="root"><span style="display:inline-block;transform:scaleY(2);' +
+      'transform-origin:top;" class="line DH"><span class="bgBl">  </span>' +
+      '<span class="bgBl Y">Nederl\u00e4nderna</span></span>' +
+      '<span class="line"><span class="bgBl">  </span></span></div>';
+    const { rows } = htmlToAnsiPage(html, { doubleHeight: true });
+
+    expect(rows.length).toBe(3);
+    expect(rows[0].startsWith('\x1b#3')).toBe(true);
+    expect(rows[1].startsWith('\x1b#4')).toBe(true);
+    // Same text in both halves - the terminal draws different glyphs from it.
+    expect(rows[0].slice(3)).toBe(rows[1].slice(3));
+    expect(rows[0]).toContain('Nederl\u00e4nderna');
+    expect(rows[1]).toContain('Nederl\u00e4nderna');
+    // The row below the headline is still the row below it.
+    expect(rows[2]).not.toContain('Nederl\u00e4nderna');
+  });
+
+  test('an ordinary row is untouched whether double height is asked for or not', () => {
+    const html =
+      '<div class="root"><span class="line"><span class="bgBl W">Vanlig rad</span></span></div>';
+    expect(htmlToAnsiPage(html, { doubleHeight: true }).rows)
+      .toEqual(htmlToAnsiPage(html).rows);
+    expect(htmlToAnsiPage(html, { doubleHeight: true }).rows[0]).not.toContain('\x1b#');
+  });
+
   test('mosaic image cells keep their color band, not the art', () => {
     // bgImg cells are per-character GIFs no terminal can draw; their text
     // is a space. Documented gap: a glyph-hash to mosaic table.

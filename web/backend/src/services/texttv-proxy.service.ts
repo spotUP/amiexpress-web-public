@@ -250,6 +250,11 @@ export interface TextTvLink {
   label: string;
 }
 
+/** DECDHL: this row is the top half of a double-height line. */
+const DH_TOP = '\x1b#3';
+/** And its bottom half - the same text, the other half of the glyphs. */
+const DH_BOTTOM = '\x1b#4';
+
 export interface TextTvRows {
   rows: string[];
   links: TextTvLink[];
@@ -257,6 +262,20 @@ export interface TextTvRows {
 
 export function htmlToAnsiRows(html: string): string[] {
   return htmlToAnsiPage(html).rows;
+}
+
+export interface TextTvRenderOptions {
+  /**
+   * Carry SVT's double-height rows as DECDHL rather than dropping them.
+   *
+   * A teletext headline is one row of text drawn over TWO rows of screen,
+   * and that is what `ESC # 3` (top half) and `ESC # 4` (bottom half) have
+   * meant since the VT100. Off by default, because a terminal that does
+   * implement them draws the row double WIDTH as well and an ANSI caller
+   * did not ask for that; the TEXTTV door turns it on once it has asked the
+   * board what kind of screen the caller has (AEW_DISPLAYMODE).
+   */
+  doubleHeight?: boolean;
 }
 
 /**
@@ -271,7 +290,7 @@ export function htmlToAnsiRows(html: string): string[] {
  * One link per row: an index row names one article, and the row is what the
  * caller selects. A second anchor on the same row does not add an entry.
  */
-export function htmlToAnsiPage(html: string): TextTvRows {
+export function htmlToAnsiPage(html: string, options: TextTvRenderOptions = {}): TextTvRows {
   const rows: string[] = [];
   let cur = '';
   let fg = TELETEXT_DEFAULT_FG;
@@ -301,14 +320,22 @@ export function htmlToAnsiPage(html: string): TextTvRows {
           label: line.replace(/\x1b\[[0-9;]*m/g, '').trim(),
         });
       }
-      rows.push(line);
       // A double-height row occupies TWO rows of the teletext screen: this
       // one and the one under it, which carries the same glyphs' BOTTOM
       // HALF - not a second copy of the words. Pushing `line` again printed
       // the headline twice on a terminal that cannot do double height
-      // ("Dags för val" on two consecutive rows, sysop 2026-09-13). The row
-      // is kept so nothing below it shifts up, and left empty.
-      if (dh) rows.push('');
+      // ("Dags för val" on two consecutive rows, sysop 2026-09-13).
+      //
+      // A terminal that CAN is sent both halves, under the escapes that say
+      // which is which; one that cannot gets the row once and an empty row
+      // below it, so nothing under the headline shifts up either way.
+      if (dh && options.doubleHeight) {
+        rows.push(DH_TOP + line);
+        rows.push(DH_BOTTOM + line);
+      } else {
+        rows.push(line);
+        if (dh) rows.push('');
+      }
     }
     cur = '';
     rowLink = null;
@@ -463,7 +490,10 @@ export function slimTextTvBody(upstreamBody: string): string {
   }
   const slim = parsed.map((row: any) => {
     const html = Array.isArray(row?.content) ? row.content.join('') : '';
-    const page = htmlToAnsiPage(html);
+    // The door is the consumer that can use double height: it asks the board
+    // what kind of screen the caller has and drops the escapes when the
+    // answer is not teletext.
+    const page = htmlToAnsiPage(html, { doubleHeight: true });
     return {
       num: row?.num ?? null,
       title: row?.title ?? null,

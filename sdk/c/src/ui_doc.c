@@ -50,7 +50,7 @@ int ui_doc_wrap(const char *text, int width,
          * in the line, which is what a Text-TV page is made of. */
         while (p[len] && p[len] != '\n' && cols < width) {
             if (p[len] == UI_INK && p[len + 1]) {
-                len += (p[len + 1] == 'T' && p[len + 2]) ? 3 : 2;
+                len += ((p[len + 1] == 'T' || p[len + 1] == 'H') && p[len + 2]) ? 3 : 2;
                 continue;
             }
             if (p[len] == ' ') last_space = len;
@@ -71,7 +71,7 @@ int ui_doc_wrap(const char *text, int width,
          *
          * A zero-width marker cannot need a line of its own. */
         while (p[len] == UI_INK && p[len + 1])
-            len += (p[len + 1] == 'T' && p[len + 2]) ? 3 : 2;
+            len += ((p[len + 1] == 'T' || p[len + 1] == 'H') && p[len + 2]) ? 3 : 2;
 
         if (p[len] == '\n') {
             if (line) line(context, start, len);
@@ -168,7 +168,8 @@ static void paint_line(void *context, const char *start, int len)
         int cols = 0;
         while (bytes < copy && cols < c->st->width) {
             if (start[bytes] == UI_INK && bytes + 1 < copy) {
-                bytes += (start[bytes + 1] == 'T' && bytes + 2 < copy) ? 3 : 2;
+                bytes += ((start[bytes + 1] == 'T' || start[bytes + 1] == 'H')
+                          && bytes + 2 < copy) ? 3 : 2;
                 continue;
             }
             bytes++;

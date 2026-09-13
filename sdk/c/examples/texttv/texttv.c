@@ -176,6 +176,10 @@ static ui_key_source keys;
 static const ui_theme *theme;
 static int pushback = -1;
 static int wide;
+/* `teletext` when the caller answered T at the graphics prompt: the only
+   screen on this board that can draw a double-height headline. Asked once,
+   at startup - a caller cannot change it mid-door. */
+static int screen_is_teletext;
 static char status_line[96];
 static texttv_config config;
 
@@ -387,7 +391,8 @@ static int fetch_page(int page)
        row no columns. A plain body has no escapes and passes through. */
     {
         static char inked[sizeof page_body];
-        if (texttv_ansi_to_ink(page_body, inked, sizeof inked) > 0)
+        if (texttv_ansi_to_ink_mode(page_body, inked, sizeof inked,
+                                    screen_is_teletext) > 0)
             memcpy(page_body, inked, strlen(inked) + 1);
     }
     /* Latin-1, like the body. A raw UTF-8 title painted `fÃ¶r` in the
@@ -711,6 +716,18 @@ int main(int argc, char **argv)
 
     ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     wide = !ui_is_compact_width(screen.cols);
+
+    /* WHAT KIND of screen, not how wide it is.
+       A teletext caller and a C64 are both forty columns, and only one of
+       them can draw a double-height headline - the other would render the
+       escape as glyphs. A board that has never heard of the question answers
+       `ansi`, which is the right answer on a classic AmiExpress. */
+    {
+        char mode[16];
+        mode[0] = '\0';
+        ae_display_mode(&session, mode, (int)sizeof(mode));
+        screen_is_teletext = strcmp(mode, "teletext") == 0;
+    }
 
     /* Classic fallback: a board that answers the theme field with nothing
        is a real AmiExpress (or a harness), and classic is the answer. */

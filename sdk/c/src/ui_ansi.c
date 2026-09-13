@@ -313,6 +313,18 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
         /* A pen change, and it costs the row no columns (ui_ansi.h). */
         if (c == UI_INK && at[1] != '\0') {
             char what = at[1];
+            if (what == 'H' && at[2] != '\0') {
+                /* A LINE attribute, not a pen: `ESC # 3` says the row the
+                   cursor is on is the top half of a double-height line.
+                   Written through raw, because it is the terminal's own
+                   escape and costs the row no columns - a teletext headline
+                   is the same forty characters, drawn twice. */
+                put_char(b, 27);
+                put_char(b, '#');
+                put_char(b, at[2]);
+                at += 3;
+                continue;
+            }
             if (what == 'T' && at[2] != '\0') {
                 /* A token: the palette decides what colour that is. */
                 char d = at[2];
@@ -366,8 +378,8 @@ unsigned long ui_printable_len(const char *text)
     if (!text) return 0;
     while (*text) {
         if (*text == UI_INK && text[1]) {
-            /* Two bytes for a colour, three for a token. */
-            text += (text[1] == 'T' && text[2]) ? 3 : 2;
+            /* Two bytes for a colour, three for a token or a line attribute. */
+            text += ((text[1] == 'T' || text[1] == 'H') && text[2]) ? 3 : 2;
             continue;
         }
         n++;

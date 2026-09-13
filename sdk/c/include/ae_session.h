@@ -122,6 +122,22 @@ typedef enum {
      */
     AE_FIELD_MSGQUERY       = 10200, /* AEW_MSGQUERY */
     /*
+     * ALSO THIS BOARD'S OWN: what KIND of screen the caller has.
+     *
+     * The SIZE has been askable for ever (AE_FIELD_SCREEN_COLS), and for a
+     * long time that was the whole question, because every caller's screen
+     * was the same kind of screen in two widths. It is not any more: a
+     * PETSCII caller's bytes are transduced on the way out and a teletext
+     * caller's terminal draws DECDHL headlines in a teletext face. Forty
+     * columns is true of both, so a door that writes a teletext escape on
+     * the strength of the width writes it into a C64's byte stream too.
+     *
+     * Answers `ansi`, `petscii`, `teletext` or `rip`. Read-only. A classic
+     * board answers nothing, which ae_display_mode reports as `ansi` - the
+     * mode every caller on a classic board has.
+     */
+    AE_FIELD_DISPLAY_MODE   = 10400, /* AEW_DISPLAYMODE */
+    /*
      * ALSO THIS BOARD'S OWN: move the caller's read pointer.
      *
      * AE_FIELD_LAST_READ / _LAST_SCANNED above are READ-ONLY, and that is
@@ -325,6 +341,18 @@ int ae_set_last_scanned(ae_session *s, int msg_num);
  * board does not answer - a classic AmiExpress, which has no themes.
  */
 int ae_user_theme(ae_session *s, char *out, int n);
+
+/**
+ * The KIND of screen the caller has: `ansi`, `petscii`, `teletext`, `rip`.
+ *
+ * Ask before writing anything only one kind of terminal understands - a
+ * teletext door's double-height headlines, say. A board that does not know
+ * the question answers nothing and this reports `ansi`, so a door written
+ * against it still runs on a classic AmiExpress.
+ *
+ * Returns 0 and fills `out` on success, -1 when the board said nothing.
+ */
+int ae_display_mode(ae_session *s, char *out, int n);
 
 /**
  * The command name the caller typed to get here, or "" where the board does

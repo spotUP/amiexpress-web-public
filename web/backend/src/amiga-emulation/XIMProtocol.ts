@@ -1088,7 +1088,10 @@ debugLog(
       // caller's theme on every open, got "UNHANDLED COMMAND: 10100" and an
       // empty reply, and drew all seven themes in the classic palette with
       // nothing marked (sysop, 2026-09-06: "themec is not using our themes").
-      command === XIMCommand.AEW_THEME;
+      command === XIMCommand.AEW_THEME ||
+      // The same route, and the same warning as above: a handler nothing
+      // reaches is a handler that does not exist.
+      command === XIMCommand.AEW_DISPLAYMODE;
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
 debugLog(
         `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`

@@ -311,6 +311,23 @@ export enum XIMCommand {
   AEW_THEME = 10100,
 
   /**
+   * THIS BOARD'S OWN: what KIND of screen the caller has.
+   *
+   * Width and height a door can already ask for (BB_SCRWIDTH /
+   * BB_SCRHEIGHT), and for a long time that was enough, because every
+   * caller's screen was the same kind of screen in two sizes. It is not any
+   * more: a PETSCII caller's bytes are transduced, a teletext caller's
+   * terminal draws DECDHL headlines with a teletext face, and a door that
+   * wants to use either has no way to ask which it is talking to. Answering
+   * "forty columns" to both is how a teletext escape ends up in a C64's
+   * byte stream.
+   *
+   * Answers one of: `ansi`, `petscii`, `teletext`, `rip`. Read-only - the
+   * caller chose it at the graphics prompt and a door does not overrule it.
+   */
+  AEW_DISPLAYMODE = 10400,
+
+  /**
    * THIS BOARD'S OWN: read the current conference's PUBLIC message feed.
    *
    * A 68K door cannot parse HeaderFile itself: this board's files hold two

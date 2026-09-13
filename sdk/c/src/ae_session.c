@@ -231,6 +231,24 @@ int ae_user_theme(ae_session *s, char *out, int n)
     return got > 0 ? got : 0;
 }
 
+int ae_display_mode(ae_session *s, char *out, int n)
+{
+    int got = ask(s, AE_FIELD_DISPLAY_MODE, out, n);
+
+    if (got > 0) return 0;
+
+    /* A classic board has never heard of the question, and every caller on
+       one has an ANSI screen - so the honest answer is the one a door can
+       act on, not an empty string it has to special-case. */
+    if (out && n > 0) {
+        const char *ansi = "ansi";
+        int i = 0;
+        while (ansi[i] != '\0' && i + 1 < n) { out[i] = ansi[i]; i++; }
+        out[i] = '\0';
+    }
+    return -1;
+}
+
 int ae_menu_command(ae_session *s, char *out, int n)
 {
     int got = ask(s, AE_FIELD_MENU_COMMAND, out, n);

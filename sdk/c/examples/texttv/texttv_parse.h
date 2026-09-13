@@ -126,6 +126,20 @@ int texttv_title(const char *json, char *out, unsigned long cap);
 unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap);
 
 /*
+ * The same conversion, told whether the caller's terminal can draw a
+ * double-height row.
+ *
+ * The proxy marks SVT's double-height headlines with `ESC # 3` / `ESC # 4`.
+ * With `double_height` those become the SDK's line markers and the headline
+ * is drawn at twice the height; without, they are dropped and the row is
+ * ordinary text. A door asks the board which it has (AEW_DISPLAYMODE,
+ * ae_display_mode) rather than guessing from the width: forty columns is
+ * true of a C64 and of a teletext screen alike.
+ */
+unsigned long texttv_ansi_to_ink_mode(const char *in, char *out, unsigned long cap,
+                                      int double_height);
+
+/*
  * First string of the "content_plain" array into out. 0 on success;
  * non-zero (out left "") when the key, the bracket, the opening quote,
  * the terminator or room is missing - an off-air page answers `[]` and

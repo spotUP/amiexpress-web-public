@@ -260,6 +260,41 @@ static void test_reader_box(void)
     }
 }
 
+static void test_double_height_rows(void)
+{
+    /* The proxy marks SVT's double-height headlines with the escapes a
+       VT100 knows. A teletext caller keeps them as the SDK's line markers -
+       three bytes, no columns; anyone else must not see them at all, or a
+       C64 renders the escape as glyphs. */
+    const char *in = "\033#3\033[0;33mNyheter\033[0m";
+    char out[128];
+
+    CHECK(texttv_ansi_to_ink_mode(in, out, sizeof out, 1) > 0);
+    CHECK(out[0] == '\001' && out[1] == 'H' && out[2] == '3');
+    CHECK(strstr(out, "Nyheter") != 0);
+    CHECK(strchr(out, 0x1b) == 0);         /* no raw escapes survive */
+
+    CHECK(texttv_ansi_to_ink_mode(in, out, sizeof out, 0) > 0);
+    CHECK(strstr(out, "Nyheter") != 0);
+    CHECK(strstr(out, "\001H") == 0);       /* dropped, not kept */
+    CHECK(strchr(out, 0x1b) == 0);
+
+    /* The bottom half, and the back-to-normal form. */
+    CHECK(texttv_ansi_to_ink_mode("\033#4rad", out, sizeof out, 1) > 0);
+    CHECK(out[0] == '\001' && out[1] == 'H' && out[2] == '4');
+    CHECK(texttv_ansi_to_ink_mode("\033#5rad", out, sizeof out, 1) > 0);
+    CHECK(out[2] == '5');
+
+    /* The old entry point is unchanged: no double height, no markers. */
+    CHECK(texttv_ansi_to_ink(in, out, sizeof out) > 0);
+    CHECK(strstr(out, "\001H") == 0);
+
+    /* An escape this door does not know is dropped whole rather than
+       half-copied - `ESC # 8` is DECALN and has no place on a page. */
+    CHECK(texttv_ansi_to_ink_mode("\033#8rad", out, sizeof out, 1) > 0);
+    CHECK(strcmp(out, "rad") == 0);
+}
+
 static void test_reader_title(void)
 {
     /* The real page on 2026-09-13: "Rysarjamnt i SVT:s prognos over valet"
@@ -407,6 +442,7 @@ int main(void)
     test_ansi_to_ink();
     test_reader_box();
     test_reader_title();
+    test_double_height_rows();
     test_title_latin1();
     test_links();
     test_link_step();

@@ -107,6 +107,9 @@ describe('the C SDK', () => {
       ['AE_FIELD_CURR_TIME', 'DT_CURR_TIME'],
       ['AE_FIELD_THEME', 'AEW_THEME'],
       ['AE_FIELD_MSGQUERY', 'AEW_MSGQUERY'],
+      // The KIND of screen, not its size: a door that writes a teletext
+      // escape on the strength of "forty columns" writes it into a C64 too.
+      ['AE_FIELD_DISPLAY_MODE', 'AEW_DISPLAYMODE'],
       ['AE_FIELD_SETPOINTER', 'AEW_SETPOINTER'],
       // Where the conference and its messages live, and how far this caller
       // has read. These four are what let a door open a message base for

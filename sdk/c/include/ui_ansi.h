@@ -130,6 +130,15 @@ typedef struct {
  *   'B'/'b'  bold on / off
  *   'R'      back to the colour the caller set before the text
  *
+ * Two markers take a THIRD byte:
+ *   'T' <hex>   a theme token rather than a terminal colour (below)
+ *   'H' '3'/'4'/'5'  this ROW is the top half / bottom half of a
+ *               double-height line, or back to normal - DECDHL, which a
+ *               teletext headline is made of. Written to the wire as
+ *               `ESC # 3`, the escape a VT100 has always understood;
+ *               terminals that do not implement it ignore it, which is why
+ *               a door may write it without asking first.
+ *
  * Markers cost NO columns: ansi_text pads and clips by what reaches the
  * screen, so a row with four of them still fills its width exactly. Two
  * bytes each, no parser, no allocation - which is what a 68K door can
@@ -150,6 +159,17 @@ typedef struct {
 
 /** The marker for one ANSI colour, into a caller's two-byte buffer. */
 void ui_ink(char *out, int colour);
+
+/**
+ * The line-attribute markers, three bytes each and zero columns wide.
+ *
+ * A double-height row is sent TWICE - once under UI_LINE_TOP and once under
+ * UI_LINE_BOTTOM - exactly as it would be to a VT100. The caller's terminal
+ * draws the halves; nothing here knows how.
+ */
+#define UI_LINE_TOP    "\001H3"
+#define UI_LINE_BOTTOM "\001H4"
+#define UI_LINE_NORMAL "\001H5"
 
 /**
  * How many COLUMNS a string reaches the screen as: its length with the

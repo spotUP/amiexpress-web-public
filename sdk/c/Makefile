@@ -180,7 +180,22 @@ amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/
 
 lib: build/amiga/libae.lib
 
-build/amiga/%.o: src/%.c
+# EVERY header, for every object.
+#
+# vbcc emits no dependency files, so a 68K object was rebuilt only when its
+# .c changed - and a change to a HEADER left every object that includes it
+# holding the old value. On 2026-09-13 AE_FIELD_DISPLAY_MODE moved from
+# 10300 to 10400 in ae_session.h, `make amiga` reported nothing to do for
+# ae_session.o, and the door went on asking the board for 10300 - which is
+# AEW_SETPOINTER, so it got someone else's answer. Two rounds of debugging
+# went into a binary that was simply stale.
+#
+# The whole header set, rather than per-file dependencies: there are some
+# thirty of them, they are small, and a rule that is approximately right
+# every time beats an exact one that has to be maintained.
+AMIGA_HEADERS = $(wildcard include/*.h)
+
+build/amiga/%.o: src/%.c $(AMIGA_HEADERS)
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) -c $< -o $@
 
@@ -247,7 +262,7 @@ build/amiga/subs: examples/subs/subs.c build/amiga/libae.lib
 # The Text-TV client: fetches api.texttv.nu over plain HTTP through ae_http,
 # drawn with the same widgets at both widths. Two translation units - the
 # door and its pure helpers - linked beside the library, never as objects.
-build/amiga/texttv: examples/texttv/texttv.c examples/texttv/texttv_parse.c build/amiga/libae.lib
+build/amiga/texttv: examples/texttv/texttv.c examples/texttv/texttv_parse.c examples/texttv/texttv_parse.h $(AMIGA_HEADERS) build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) -Iexamples/texttv examples/texttv/texttv.c examples/texttv/texttv_parse.c build/amiga/libae.lib -lauto -o $@
 
