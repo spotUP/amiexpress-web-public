@@ -209,15 +209,18 @@ describe('destructured requires across the backend', () => {
     }
   });
 
-  it('the mail scan the message feed reaches is still exported', () => {
-    // The original. msgfeed.ts reaches it through a NAMESPACE require
-    // (`scan.scanConferenceForNewMail`), which the destructure walk above
-    // cannot see, so it is asserted directly.
-    const scan = require(path.join(SRC, 'handlers/message/message-scan.handler'));
-    const feed = fs.readFileSync(path.join(SRC, 'amiga-emulation/xim/msgfeed.ts'), 'utf8');
-
-    expect(typeof scan.scanConferenceForNewMail).toBe('function');
-    expect(feed).toMatch(/scan\.scanConferenceForNewMail\(/);
-    expect(scan.scanConferenceForNewMail.length).toBe(5);
+  it('no longer pins the message feed, because the feed is gone', () => {
+    /*
+     * This file was written for ONE seam: msgfeed.ts reaching
+     * `scanConferenceForNewMail` through a require, whose dropped `export`
+     * told the whole board it had no new mail for five days.
+     *
+     * R2.3 deleted msgfeed.ts. SUBS reads the message base off the disk now,
+     * so there is no second consumer and no seam left to break - which is the
+     * ACTUAL fix for that bug rather than the guard that stood in for it. The
+     * walk above still covers every other require in the backend, which is
+     * why this file stays.
+     */
+    expect(fs.existsSync(path.join(SRC, 'amiga-emulation/xim/msgfeed.ts'))).toBe(false);
   });
 });

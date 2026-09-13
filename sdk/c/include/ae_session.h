@@ -108,20 +108,6 @@ typedef enum {
      */
     AE_FIELD_THEME          = 10100, /* AEW_THEME */
     /*
-     * ALSO THIS BOARD'S OWN, and the one field here that is not a field.
-     *
-     * AEW_MSGQUERY carries a QUERY out and TEXT back in the same message, so
-     * it is reached through ae_field_exchange (aedoor.h), never through the
-     * session accessors above - there is no "the caller's message feed" the
-     * way there is "the caller's name". It is named here because this enum is
-     * where the board's numbers are pinned against xim/types.ts
-     * (sdk/test/c-sdk-agrees-with-typescript.test.ts), and a number that lives
-     * in two files and is checked in neither is how they drift.
-     *
-     * The door-facing wrapper is sdk/c/include/ae_msgbase.h.
-     */
-    AE_FIELD_MSGQUERY       = 10200, /* AEW_MSGQUERY */
-    /*
      * ALSO THIS BOARD'S OWN: what KIND of screen the caller has.
      *
      * The SIZE has been askable for ever (AE_FIELD_SCREEN_COLS), and for a

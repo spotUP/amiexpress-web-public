@@ -106,7 +106,6 @@ describe('the C SDK', () => {
       ['AE_FIELD_MENU_COMMAND', 'GET_CUSTOM_MSGBASE_MENUCMD'],
       ['AE_FIELD_CURR_TIME', 'DT_CURR_TIME'],
       ['AE_FIELD_THEME', 'AEW_THEME'],
-      ['AE_FIELD_MSGQUERY', 'AEW_MSGQUERY'],
       // The KIND of screen, not its size: a door that writes a teletext
       // escape on the strength of "forty columns" writes it into a C64 too.
       ['AE_FIELD_DISPLAY_MODE', 'AEW_DISPLAYMODE'],
@@ -115,7 +114,7 @@ describe('the C SDK', () => {
       // has read. These four are what let a door open a message base for
       // itself instead of asking the board to decode one, which is what makes
       // the door work on a real Amiga AmiExpress. All four are ordinary
-      // AmiExpress numbers, so unlike AEW_THEME/AEW_MSGQUERY they sit BELOW
+      // AmiExpress numbers, so unlike AEW_THEME they sit BELOW
       // express.e's MAX_CMD and are pinned here rather than in the test below.
       ['AE_FIELD_CONF_NAME', 'BB_CONFNAME'],
       ['AE_FIELD_CONF_LOCATION', 'BB_CONFLOCAL'],
@@ -136,8 +135,6 @@ describe('the C SDK', () => {
     const header = fs.readFileSync(path.join(cRoot, 'include', 'ae_session.h'), 'utf8');
     const theme = Number(header.match(/AE_FIELD_THEME\s*=\s*(\d+)/)![1]);
     expect(theme).toBeGreaterThan(1003);
-    const msgQuery = Number(header.match(/AE_FIELD_MSGQUERY\s*=\s*(\d+)/)![1]);
-    expect(msgQuery).toBeGreaterThan(1003);
     const setPointer = Number(header.match(/AE_FIELD_SETPOINTER\s*=\s*(\d+)/)![1]);
     expect(setPointer).toBeGreaterThan(1003);
   });

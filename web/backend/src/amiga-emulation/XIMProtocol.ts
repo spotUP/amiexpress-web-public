@@ -24,7 +24,6 @@ import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
-import { handleMsgQuery } from './xim/msgfeed';
 import { handleSetPointer } from './xim/msgpointer';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
@@ -893,16 +892,13 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
       XIMCommand.GETKEY,
       XIMCommand.DISPLAY_FILE,
       XIMCommand.CHECK_TO_DISPLAY,
-      // THIS BOARD'S OWN, above express.e's MAX_CMD (1003). AEW_MSGQUERY reads
-      // the message base, so it is asynchronous and belongs with the I/O
-      // family rather than the synchronous data-query one.
+      // THIS BOARD'S OWN, above express.e's MAX_CMD (1003).
       //
       // THIS LINE IS THE STEP THAT GETS FORGOTTEN. AEW_THEME was implemented
       // in xim/data-query.ts and left out of `isDataQueryCommand`, so the C
       // theme picker asked on every open, got "UNHANDLED COMMAND: 10100" and
       // an empty reply, and drew every theme in the classic palette. The
       // handler was fine; the route was missing.
-      XIMCommand.AEW_MSGQUERY,
       // AEW_SETPOINTER writes the caller's pointer through loadMsgPointers /
       // saveMsgPointers, so it is asynchronous too and belongs here for the
       // same reason - and this is the line the comment above warns about.
@@ -997,32 +993,6 @@ debugLog(
 
       case XIMCommand.GETKEY:
         this.ioHandler.handleGetKey(msg);
-        break;
-
-      /**
-       * AEW_MSGQUERY (10200): the current conference's PUBLIC message feed,
-       * decoded and ACS-filtered here so the door never parses HeaderFile and
-       * never sees a message the caller could not read at the `R` prompt.
-       * See xim/msgfeed.ts.
-       *
-       * READ ONLY, by construction. Data != 0 is a read and Data == 0 is a
-       * write, the same direction flag every DT_ field uses
-       * (xim/data-query.ts:92). There is no write path in this command, so a
-       * write is answered with 0 and the door's own request buffer is left
-       * exactly as it sent it.
-       */
-      case XIMCommand.AEW_MSGQUERY:
-        {
-          if (!msg.data) {
-            debugLog('[XIMProtocol] AEW_MSGQUERY: write refused - this command only reads');
-            this.sendReply(msg, 0);
-            break;
-          }
-          const answer = await handleMsgQuery(String(msg.string || ''), this.bbsSession);
-          debugLog(`[XIMProtocol] AEW_MSGQUERY "${msg.string}" -> ${answer.bytes} bytes`);
-          this.messageParser.writeMessageString(msg.msgAddr, answer.text);
-          this.sendReply(msg, answer.bytes);
-        }
         break;
 
       /**

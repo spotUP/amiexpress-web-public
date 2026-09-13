@@ -496,7 +496,6 @@ console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} 
       // reads "AEW_MSGQUERY" and not "CMD_10200".
       [XIMCommand.AEW_THEME]: 'AEW_THEME',
       [XIMCommand.AEW_DISPLAYMODE]: 'AEW_DISPLAYMODE',
-      [XIMCommand.AEW_MSGQUERY]: 'AEW_MSGQUERY',
       [XIMCommand.SV_NEWMSG]: 'SV_NEWMSG',
       [XIMCommand.SV_UNICONIFY]: 'SV_UNICONIFY',
       [XIMCommand.SV_SYSOPLOG]: 'SV_SYSOPLOG',
