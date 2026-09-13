@@ -91,6 +91,11 @@ export const MAX_DOOR_PASSWORD = 15;
 /** Enough of a session for line collection; keeps this usable from tests. */
 export interface LineInputSession {
   inputBuffer?: string;
+  /** Set by recordPromptColumn where the prompt is emitted. */
+  promptColumn?: number;
+  wireWidth?: number;
+  screenWidth?: number;
+  petsciiMode?: boolean;
 }
 
 export interface LineInputOptions {
@@ -148,9 +153,12 @@ export async function collectLine(
   }
 
   if (data === '\x7f' || data === '\b') {
-    const edit = acceptBackspace(session.inputBuffer);
+    const had = session.inputBuffer;
+    const edit = acceptBackspace(had);
     session.inputBuffer = edit.buffer;
-    if (edit.echo) emitText(socket, edit.echo);
+    // Wrap-aware: a prompt plus its answer can pass the right edge, and
+    // `\b` cannot climb back over the wrap (see backspaceEcho).
+    if (edit.echo) emitText(socket, backspaceEcho(had, edit.buffer, session as any));
     return false;
   }
 
@@ -300,4 +308,52 @@ export function wireColumns(
 ): number {
   const reported = session?.wireWidth ?? session?.screenWidth;
   return typeof reported === 'number' && reported >= 20 ? Math.floor(reported) : 80;
+}
+
+/**
+ * Remember what column a prompt leaves the cursor in.
+ *
+ * Anything that wants to redraw a wrapped line needs to know where the
+ * input STARTS, and that is the prompt's visible width - colour excluded.
+ * Recorded where the prompt is emitted, because nothing downstream can
+ * recover it. A prompt wider than the terminal has wrapped itself, so only
+ * the part on the last row counts.
+ *
+ * Returns the text unchanged, so a call site can wrap its emit in place.
+ */
+export function recordPromptColumn<T extends string>(
+  session: { wireWidth?: number; screenWidth?: number; promptColumn?: number } | null | undefined,
+  text: T,
+): T {
+  if (session) session.promptColumn = visibleColumns(text) % wireColumns(session);
+  return text;
+}
+
+/**
+ * Backspace for a prompt that only ever types at the END of its line.
+ *
+ * The menu command line has a cursor that moves and does its own redraw;
+ * every other prompt on the board appends and deletes at the end, so this
+ * is all they need: the cheap BS-space-BS while the line fits on one row,
+ * and a redraw once it has wrapped - because `\b` stops dead at column 0
+ * and would otherwise strand the first row (the sysop, 2026-09-13).
+ */
+export function backspaceEcho(
+  before: string,
+  after: string,
+  session: { wireWidth?: number; screenWidth?: number; promptColumn?: number; petsciiMode?: boolean } | null | undefined,
+): string {
+  if (before === after) return '';
+  const plain = '\b \b';
+  // A PETSCII caller's terminal is not an ANSI one; it keeps the simple
+  // erase it has always had.
+  if (!session || session.petsciiMode === true) return plain;
+  const startCol = session.promptColumn ?? 0;
+  const rewrap = rewrapEcho(
+    { text: before, curpos: before.length },
+    { text: after, curpos: after.length },
+    startCol,
+    wireColumns(session),
+  );
+  return rewrap || plain;
 }

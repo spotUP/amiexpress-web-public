@@ -10,7 +10,10 @@ import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
 import { resetPetsciiModel } from '../../utils/petscii-session-model';
 import { transportCapabilities } from '../../server/transport-adapter';
-import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from '../../utils/line-input.util';
+import {
+  acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN,
+  recordPromptColumn, backspaceEcho,
+} from '../../utils/line-input.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -95,7 +98,9 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
 console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: '' }; // Initialize input buffer
-    socket.emit('ansi-output', '\r\nANSI, RIP or No graphics (A/r/n)? ');
+    socket.emit('ansi-output', recordPromptColumn(
+      session, '\r\nANSI, RIP or No graphics (A/r/n)? ',
+    ));
     return true;
   }
 
@@ -314,9 +319,13 @@ console.log('[GRAPHICS] Mode set:', graphicsMode);
     return true;
   } else if (data === '\x7f' || data === '\b') {
     // Backspace (express.e:2306). Always ANSI during this prompt.
-    const edit = acceptBackspace(session.tempData?.inputBuffer || '');
+    const had = (session.tempData?.inputBuffer as string) || '';
+    const edit = acceptBackspace(had);
     session.tempData.inputBuffer = edit.buffer;
-    if (edit.echo) socket.emit('ansi-output', edit.echo);
+    // Wrap-aware: this prompt is 34 columns, so on a narrow terminal even a
+    // ten-character answer reaches the edge, and a bare `\b \b` would stop
+    // at column 0 with the first row stranded.
+    if (edit.echo) socket.emit('ansi-output', backspaceEcho(had, edit.buffer, session as any));
     return true;
   } else if (data.length === 1 && data >= ' ' && data <= '~') {
     // Printable, and only while the field has room - express.e:2335, with

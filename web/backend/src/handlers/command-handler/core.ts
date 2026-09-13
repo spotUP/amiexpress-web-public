@@ -7,7 +7,9 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import { getSystemTime } from '../../utils/date-time.util';
-import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from '../../utils/line-input.util';
+import {
+  acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN, backspaceEcho, recordPromptColumn,
+} from '../../utils/line-input.util';
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
@@ -309,7 +311,7 @@ console.log(
             if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
               socket.emit(
                 "ansi-output",
-                CONNECT_GRAPHICS_PROMPT
+                recordPromptColumn(session as any, CONNECT_GRAPHICS_PROMPT)
               );
             }
           })
@@ -320,13 +322,13 @@ console.error(
             );
             socket.emit(
               "ansi-output",
-              CONNECT_GRAPHICS_PROMPT
+              recordPromptColumn(session as any, CONNECT_GRAPHICS_PROMPT)
             );
           });
       } else {
         socket.emit(
           "ansi-output",
-          CONNECT_GRAPHICS_PROMPT
+          recordPromptColumn(session as any, CONNECT_GRAPHICS_PROMPT)
         );
       }
       return;
@@ -376,11 +378,12 @@ console.log(
       } else if (data === "\x7f" || data === "\b") {
         // Backspace (express.e:2306), through the shared rule.
         {
-          const edit = acceptBackspace(
-            ((session.tempData as any)?.inputBuffer as string) || ""
-          );
+          const had = ((session.tempData as any)?.inputBuffer as string) || "";
+          const edit = acceptBackspace(had);
           (session.tempData as any).inputBuffer = edit.buffer;
-          if (edit.echo) socket.emit("ansi-output", edit.echo);
+          if (edit.echo) {
+            socket.emit("ansi-output", backspaceEcho(had, edit.buffer, session as any));
+          }
         }
         return;
       } else if (data.length === 1 && data >= " " && data <= "~") {
