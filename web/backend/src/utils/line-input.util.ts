@@ -357,6 +357,17 @@ export function backspaceEcho(
   // A PETSCII caller's terminal is not an ANSI one; it keeps the simple
   // erase it has always had.
   if (!session || session.petsciiMode === true) return plain;
+  /**
+   * A REDRAW NEEDS A WIDTH WE WERE TOLD, never one we assumed.
+   *
+   * Guessing 80 and being wrong is worse than not redrawing at all: the
+   * line is measured against the wrong column, the cursor is moved up a row
+   * that was never wrapped into, and `ESC[0J` then wipes whatever was
+   * really there. That is exactly what the sysop saw next - "it moves up
+   * now but it removes text it shouldnt". With no reported size, the plain
+   * erase is the honest answer: it cannot climb, but it cannot destroy.
+   */
+  if (typeof session.wireWidth !== 'number') return plain;
   const startCol = session.promptColumn ?? 0;
   const rewrap = rewrapEcho(
     { text: before, curpos: before.length },

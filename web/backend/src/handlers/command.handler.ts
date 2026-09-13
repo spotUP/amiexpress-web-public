@@ -4423,7 +4423,8 @@ console.log(' Empty command, redisplaying menu');
          * cheap BS-tail-space below runs exactly as before: a board does
          * not repaint a row for every keystroke.
          */
-        const rewrap = (session as any).petsciiMode === true ? '' : rewrapEcho(
+        const rewrap = (session.petsciiMode === true
+          || typeof (session as any).wireWidth !== 'number') ? '' : rewrapEcho(
           { text: buf, curpos: was },
           { text: edited, curpos },
           ((session as any).promptColumn as number) ?? 0,

@@ -222,3 +222,42 @@ describe('the connect question climbs the wrap', () => {
     expect(session.tempData.inputBuffer).toBe('ABCDEFGHIJ');
   });
 });
+
+/**
+ * A redraw needs a width the terminal TOLD us.
+ *
+ * "it moves up now but it removes text it shouldnt" - because the width was
+ * assumed. The frontend reports its geometry when the terminal mounts,
+ * which is before the BBS session exists, and socket-handlers dropped the
+ * report on the floor when it found no session. So wireWidth stayed unset,
+ * every decision fell back to 80, and on a terminal that was not 80 the
+ * redraw climbed a row that had never been wrapped into and ESC[0J wiped
+ * what was really there.
+ *
+ * Guessing wrong is worse than not climbing: the plain erase cannot reach
+ * the row above, but it cannot destroy it either.
+ */
+describe('a redraw needs a width we were told', () => {
+  const { backspaceEcho, rewrapEcho } = require('../../src/utils/line-input.util');
+
+  it('falls back to the plain erase when the terminal never reported a size', () => {
+    const session: any = { screenWidth: 80, promptColumn: 79 };  // no wireWidth
+    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session)).toBe('\b \b');
+  });
+
+  it('redraws once the size is known', () => {
+    const session: any = { screenWidth: 80, wireWidth: 80, promptColumn: 79 };
+    const out = backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session);
+    expect(out).toContain('\x1b[0J');
+    expect(out).toMatch(/\x1b\[\d+A/);
+  });
+
+  it('does not climb when the caller is wide enough that nothing wrapped', () => {
+    // 79 + 10 = 89, inside a 100-column terminal: one row, nothing to climb.
+    const session: any = { screenWidth: 100, wireWidth: 100, promptColumn: 79 };
+    expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', session)).toBe('\b \b');
+    expect(rewrapEcho(
+      { text: 'AAAAAAAAAA', curpos: 10 }, { text: 'AAAAAAAAA', curpos: 9 }, 79, 100,
+    )).toBe('');
+  });
+});

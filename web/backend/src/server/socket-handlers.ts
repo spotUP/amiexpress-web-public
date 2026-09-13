@@ -230,7 +230,24 @@ console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.messag
   // Handle terminal resize from client (for responsive terminal sizing)
   socket.on('terminal-size', (size: { cols: number; rows: number }) => {
     const session = getSession(socket.id);
-    if (!session) return;
+    if (!session) {
+      /**
+       * THE SIZE ARRIVES BEFORE THE SESSION DOES, and dropping it cost the
+       * board the one thing it knows about the caller's terminal.
+       *
+       * The frontend reports its geometry as soon as the terminal mounts,
+       * which is ahead of the BBS session for a web caller - so this
+       * handler returned, `wireWidth` was never set, and everything
+       * downstream fell back to assuming 80 columns. That is what made the
+       * wrap-aware backspace erase a row it should not have: it measured a
+       * wrapped line against 80 while the caller's window was not 80.
+       *
+       * Kept on the socket and applied when the session appears
+       * (applyPendingGeometry, called from the session-creating paths).
+       */
+      (socket as any).pendingGeometry = { cols: size.cols, rows: size.rows };
+      return;
+    }
 
     const { cols, rows } = size;
 
@@ -1339,3 +1356,17 @@ function cleanupTransfer(session: any) {
 }
 
 export default registerSocketHandlers;
+
+/**
+ * Apply a terminal size that arrived before this socket had a session.
+ *
+ * Call right after setSession() for a web caller. A no-op when the client
+ * never reported one - and the callers of `wireColumns` must keep behaving
+ * as if the width is unknown in that case, rather than guessing 80.
+ */
+export function applyPendingGeometry(socket: any, session: any): void {
+  const pending = socket?.pendingGeometry;
+  if (!pending || !session) return;
+  applyClientReportedGeometry(session, pending.cols, pending.rows);
+  socket.pendingGeometry = undefined;
+}

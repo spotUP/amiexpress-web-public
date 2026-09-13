@@ -76,6 +76,7 @@ import {
   hasKeysFile,
 } from "./handlers/screen.handler";
 import { registerSocketHandlers } from "./server/socket-handlers";
+import { applyPendingGeometry } from './server/socket-handlers';
 import { decideAdminSocket } from "./server/admin-socket";
 import { launchChatOnlyLiveChat } from "./server/chat-only-launch";
 import { displaySystemBulletins } from "./server/database-helpers";
@@ -1434,6 +1435,10 @@ console.log(
     connectionBaud: DEFAULT_CONNECTION_BAUD
   });
   setSession(socket.id, session); // Use helper to store by nodeId
+  // The terminal reports its size when it mounts, which is before this
+  // session existed; without this the board never learns the caller's real
+  // width and every wire-width decision falls back to assuming 80.
+  applyPendingGeometry(socket, session);
 
   // THE INPUT TIMEOUT STARTS AT CONNECT, not at the first keystroke: express
   // times a caller out at the username prompt as readily as at the menu - the
