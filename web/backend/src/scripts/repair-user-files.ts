@@ -65,6 +65,24 @@ function recordAt(data: Buffer, i: number): { name: string; calls: number } {
   return { name: (st.name ?? '').trim(), calls: st.timesCalled ?? 0 };
 }
 
+/**
+ * A NAME, or rubbish that survived a trim.
+ *
+ * The live file ends with a record of control bytes - \x03\x83\x00... - and
+ * readString stops at the first NUL, so it came back as a two-character
+ * "name" that is not empty. Left alone it would have been treated as an
+ * account at slot 37053 and sized the rebuilt file to 37053 records, which is
+ * the very thing being repaired. A caller's name is printable.
+ */
+function isRealName(name: string): boolean {
+  if (!name) return false;
+  for (const ch of name) {
+    const c = ch.codePointAt(0)!;
+    if (c < 0x20 || c === 0x7f) return false;
+  }
+  return true;
+}
+
 export interface RepairPlan {
   keep: Array<{ name: string; fromSlot: number; toSlot: number; calls: number }>;
   drop: Array<{ name: string; slot: number }>;
@@ -76,7 +94,7 @@ export function planRepair(data: Buffer, misc: Buffer): RepairPlan {
   const byName = new Map<string, Record0[]>();
   for (let i = 0; (i + 1) * DATA_REC <= data.length; i++) {
     const { name, calls } = recordAt(data, i);
-    if (!name) continue;
+    if (!isRealName(name)) continue;
     const rec = { slot: i + 1, name, calls };
     const list = byName.get(name) ?? [];
     list.push(rec);
