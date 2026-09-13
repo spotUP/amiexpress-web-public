@@ -45,7 +45,10 @@ export function renderNativeTti(text: string): NativeRender | null {
       raw.push(Array.from(compileRow(row).bytes40));
     }
     const grid = processPage(raw);
-    const ansi = renderToAnsi(grid);
+    // The page says which national option sub-set it is written in, and the
+    // renderer needs telling: without it a Swedish page prints {|}[\] where
+    // äöåÄÖÅ belong.
+    const ansi = renderToAnsi(grid, { subset: subpage.languageSubset });
     if (!ansi || ansi.trim() === '') return null;
     return { ansi, title: '' };
   } catch {
