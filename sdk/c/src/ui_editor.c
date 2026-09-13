@@ -172,18 +172,14 @@ static void paint_line(ansi_buf *b, const ui_editor_style *st,
  * drawn over it - one line arriving redraws one line.
  */
 static void paint_lines(ansi_buf *b, const ui_editor_style *st,
-                        const ui_editor_text *text, int body_top, int entry_row)
+                        const ui_editor_text *text, int body_top, int first,
+                        int last_row)
 {
-    int visible = entry_row - body_top;
-    int first, i, row;
+    int i, row = body_top;
 
-    if (visible < 0) visible = 0;
-    first = text->count > visible ? text->count - visible : 0;
-
-    row = body_top;
-    for (i = first; i < text->count && row < entry_row; i++, row++)
+    for (i = first; i < text->count && row <= last_row; i++, row++)
         paint_line(b, st, row, i + 1, text->line[i]);
-    for (; row < entry_row; row++)
+    for (; row <= last_row; row++)
         ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
 }
 
@@ -208,23 +204,47 @@ static void prompt_style(ui_input_style *is, const ui_editor_style *st, int row)
  * (express.e:10452-10465).
  */
 static int enter_lines(ansi_buf *b, const ui_key_source *src, int *pushback,
-                       const ui_editor_style *st, ui_editor_text *text)
+                       const ui_editor_style *st, ui_editor_text *text,
+                       int *body_top_out, int *first_out)
 {
-    int entry_row = st->top + st->rows - 3;
-    int w = width_of(st);
     int body_top = paint_chrome(b, st);
+    /* The lowest row the prompt may stand on. Below it live the menu and the
+       status line the door draws. */
+    int last_row = st->top + st->rows - 3;
+    int visible = last_row - body_top;
+    int w = width_of(st);
+    int first = 0;
+    int entry_row;
 
-    /* Whatever is already there - a C(ontinue), or a return from the menu. */
-    paint_lines(b, st, text, body_top, entry_row);
+    if (visible < 1) visible = 1;
+    if (text->count > visible) first = text->count - visible;
+
+    paint_lines(b, st, text, body_top, first, last_row);
 
     for (;;) {
         ui_input_style is;
         char buf[UI_EDITOR_WIDTH + 1];
         char num[8];
-        int visible = entry_row - body_top;
-        int rc, row;
+        int rc;
 
-        if (text->count >= UI_EDITOR_MAX_LINES) return 1;   /* full: to the menu */
+        if (text->count >= UI_EDITOR_MAX_LINES) break;
+
+        /*
+         * THE PROMPT FOLLOWS THE TEXT. express.e's editor is a teletype: it
+         * prints `NN> ` straight after the line before it and the whole thing
+         * walks down the screen (express.e:10168-10176). Anchoring the prompt
+         * to the bottom of the frame instead put a fixed input line under an
+         * empty middle - "feels more like a chat than a message editor", the
+         * sysop, 2026-09-14. It also made short messages look wrong, which is
+         * most of them.
+         */
+        entry_row = body_top + (text->count - first);
+        if (entry_row > last_row) {
+            /* Out of room: drop the oldest visible line and redraw. */
+            first += entry_row - last_row;
+            entry_row = last_row;
+            paint_lines(b, st, text, body_top, first, last_row);
+        }
 
         prompt_style(&is, st, entry_row);
         number_prompt(num, text->count + 1);
@@ -235,23 +255,18 @@ static int enter_lines(ansi_buf *b, const ui_key_source *src, int *pushback,
 
         /* express.e:10184 - a bare ENTER ends entry, and the empty line is
            NOT kept. */
-        if (buf[0] == '\0') return 1;
+        if (buf[0] == '\0') break;
 
-        if (!push_line(text, buf, (int) strlen(buf))) return 1;
+        if (!push_line(text, buf, (int) strlen(buf))) break;
 
-        /*
-         * ONE ROW, not the window. The window is only redrawn when the text
-         * has outgrown it and has to scroll - repainting all of it per line
-         * is what broke the display, because the frame stopped fitting a
-         * single XIM message.
-         */
-        if (visible > 0 && text->count <= visible) {
-            row = body_top + text->count - 1;
-            paint_line(b, st, row, text->count, text->line[text->count - 1]);
-        } else {
-            paint_lines(b, st, text, body_top, entry_row);
-        }
+        /* The line just typed is already on that row, minus its number: draw
+           it once more so the prompt's `NN>` becomes the line's own. */
+        paint_line(b, st, entry_row, text->count, text->line[text->count - 1]);
     }
+
+    if (body_top_out) *body_top_out = body_top;
+    if (first_out) *first_out = first;
+    return 1;
 }
 
 /** Ask for a line number in 1..count. 0 means "they changed their mind". */
@@ -293,28 +308,34 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
               const ui_editor_style *style, ui_editor_text *text)
 {
     ui_editor_style fallback;
-    int menu_row, body_top, helplist = 0, dirty = 0;
+    int menu_row, body_top = 0, first = 0, last_row, helplist = 0, dirty = 0;
 
     if (!b || !src || !pushback || !text) return -1;
     if (!style) { ui_editor_style_init(&fallback); style = &fallback; }
 
-    menu_row = style->top + style->rows - 3;
+    last_row = style->top + style->rows - 3;
 
-    if (enter_lines(b, src, pushback, style, text) < 0) return -1;
+    if (enter_lines(b, src, pushback, style, text, &body_top, &first) < 0) return -1;
 
     /* enter_lines left the chrome and the text on screen; the menu only
        redraws when something has actually changed it. Repainting per keystroke
        is what stopped the frame fitting one XIM message. */
-    body_top = paint_chrome(b, style);
-    paint_lines(b, style, text, body_top, menu_row);
 
     for (;;) {
         ui_input_style is;
         char buf[16];
         int rc, n;
 
+        /* The menu stands directly under the text, for the same reason the
+           entry prompt does: a prompt marooned at the bottom of an empty
+           frame reads as a chat window, not as an editor. */
+        if (text->count > first + (last_row - body_top))
+            first = text->count - (last_row - body_top);
+        menu_row = body_top + (text->count - first);
+        if (menu_row > last_row) menu_row = last_row;
+
         if (dirty) {
-            paint_lines(b, style, text, body_top, menu_row);
+            paint_lines(b, style, text, body_top, first, last_row);
             dirty = 0;
         }
 
@@ -366,8 +387,8 @@ int ui_editor(ansi_buf *b, const ui_key_source *src, int *pushback,
                effect a caller wants is "let me keep typing", and dropping the
                last line to retype it is how the board gives them that. */
             if (text->count > 0) text->count--;
-            if (enter_lines(b, src, pushback, style, text) < 0) return -1;
-            body_top = paint_chrome(b, style);
+            if (enter_lines(b, src, pushback, style, text, &body_top, &first) < 0)
+                return -1;
             dirty = 1;
             break;
 
