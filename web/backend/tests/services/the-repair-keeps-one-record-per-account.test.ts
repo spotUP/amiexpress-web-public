@@ -87,6 +87,20 @@ describe('the repair plan', () => {
     expect(planRepair(data, misc).locksCleared).toEqual([14]);
   });
 
+  it('ignores a record of control bytes rather than calling it an account', () => {
+    // The live file ends with \x03\x83\x00... at slot 37053. readString stops
+    // at the first NUL, so it came back as a non-empty "name" - and would
+    // have sized the rebuilt file to 37053 records, repairing nothing.
+    const data = Buffer.alloc(3 * DATA_REC);
+    const real = dataWith([{ slot: 1, name: 'coffe', calls: 4 }]);
+    real.copy(data, 0, 0, DATA_REC);
+    Buffer.from([0x03, 0x83, 0x00, 0x00, 0x03, 0x84]).copy(data, 2 * DATA_REC);
+
+    const plan = planRepair(data, miscWith(3));
+    expect(plan.keep.map((k) => k.name)).toEqual(['coffe']);
+    expect(plan.slots).toBe(1);
+  });
+
   it('sizes the files to the highest slot kept, not to what was there', () => {
     const data = dataWith([
       { slot: 2, name: 'BL', calls: 1 },
