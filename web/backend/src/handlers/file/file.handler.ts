@@ -623,7 +623,13 @@ console.error('[displayNewFiles] ERROR:', error);
 // ===== Upload/Download Interfaces =====
 
 export function displayUploadInterface(socket: any, session: BBSSession, params: string) {
-  // Clear the screen to provide a fresh interface for uploading
+  // WEB_: express does NOT clear here. uploadaFile (express.e:18944-19012)
+  // goes straight to displayScreen(SCREEN_UPLOAD) and the "<protocol>
+  // UPLOADING...." banner, over whatever the caller was looking at. The clear
+  // is this board's own choice, asked for 2026-09-12 because the upload
+  // interface arrived on top of a half-read file listing; it is a deviation,
+  // and is marked as one so nobody restores "parity" by deleting it or ports
+  // it onward as something express does.
   emitText(socket, AnsiUtil.clearScreen());
 
   // express.e:25646 internalCommandU -> uploadaFile()
