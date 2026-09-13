@@ -36,7 +36,12 @@ const CONTROL_KEYS: { [byte: number]: string } = {
  * The Swedish trio, read back as the Latin-1 letters the board already speaks
  * everywhere else. A session that is not Swedish keeps [, pound and ].
  */
-const SWEDISH_IN: { [byte: number]: string } = { 0x5B: '\u00e4', 0x5C: '\u00f6', 0x5D: '\u00e5' };
+const SWEDISH_IN: { [byte: number]: string } = {
+  0x5B: '\u00e4', 0x5C: '\u00f6', 0x5D: '\u00e5',
+  // Shifted, which character ROM 325018-02 gives its own glyphs in the text
+  // bank - so case survives the wire instead of depending on the bank.
+  0x7B: '\u00c4', 0x7C: '\u00d6', 0x7D: '\u00c5',
+};
 
 export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): string {
   let out = '';

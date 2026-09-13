@@ -20,7 +20,9 @@ describe('a Swedish caller typing', () => {
     expect(keyEventToPetscii('å', false, true)).toEqual([0x5D]);
     expect(keyEventToPetscii('ä', false, true)).toEqual([0x5B]);
     expect(keyEventToPetscii('ö', false, true)).toEqual([0x5C]);
-    expect(keyEventToPetscii('Å', false, true)).toEqual([0x5D]);
+    // Shift gives the capital its own byte, as the ROM gives it its own glyph.
+    expect(keyEventToPetscii('Å', false, true)).toEqual([0x7D]);
+    expect(keyEventToPetscii('Ö', false, true)).toEqual([0x7C]);
   });
 
   it('and the board reads them back as the letters it already speaks', () => {
@@ -30,9 +32,9 @@ describe('a Swedish caller typing', () => {
     expect(petsciiInputToAscii([0x5C], true)).toBe('ö');
   });
 
-  it('round-trips a name through the wire', () => {
+  it('round-trips a name through the wire, capitals and all', () => {
     const bytes = pastedTextToPetscii('Måns Ärlig', true);
-    expect(petsciiInputToAscii(bytes, true).toLowerCase()).toBe('måns ärlig');
+    expect(petsciiInputToAscii(bytes, true)).toBe('Måns Ärlig');
   });
 
   it('does nothing at all when the session is not Swedish', () => {
@@ -49,13 +51,34 @@ describe('a Swedish caller typing', () => {
     expect(petsciiInputToAscii([0x5C], false)).toBe('\\');
   });
 
-  it('draws the letters over the three symbols they replace, in both banks', () => {
-    // The glyphs come from the shipped PetMe64, which carries real a-ring and
-    // umlaut letterforms - nothing here is an invented bitmap.
-    expect(SWEDISH_GLYPHS).toHaveLength(6);
+  it('carries both cases in the text bank, which is what the ROM says', () => {
+    // The first cut of this table was INFERRED and had it half right: the
+    // text bank holds the lowercase letters at $1B-$1D AND the uppercase at
+    // $5B-$5D. Character ROM 325018-02 settled it.
+    const text = SWEDISH_GLYPHS.filter((g) => g.bank === 1);
+    expect(text.map((g) => g.char)).toEqual(['ä', 'ö', 'å', 'Ä', 'Ö', 'Å']);
+    expect(text.filter((g) => g.char === 'Ä')[0]!.screenCode).toBe(0x5B);
+    // Bank 0 is the uppercase/graphics set: the letters sit at $1B-$1D there.
     expect(SWEDISH_GLYPHS.filter((g) => g.bank === 0).map((g) => g.char)).toEqual(['Ä', 'Ö', 'Å']);
-    expect(SWEDISH_GLYPHS.filter((g) => g.bank === 1).map((g) => g.char)).toEqual(['ä', 'ö', 'å']);
-    // Every letter draws where its own byte would have drawn its symbol.
-    for (const g of SWEDISH_GLYPHS) expect(g.screenCode).toBe(g.petscii & 0x3F);
+  });
+
+  it('draws the ROM, not a font\'s idea of an a-ring', () => {
+    // Eight rows of eight pixels, straight out of characters.325018-02.bin.
+    // A-ring, uppercase: the ring, then the A. Read it down the column.
+    const aRing = SWEDISH_GLYPHS.find((g) => g.char === 'Å' && g.bank === 0)!;
+    expect(aRing.rom).toEqual([0x18, 0x24, 0x3C, 0x66, 0x7E, 0x66, 0x66, 0x00]);
+    // Every glyph is eight bytes, and none is blank.
+    for (const g of SWEDISH_GLYPHS) {
+      expect(g.rom).toHaveLength(8);
+      expect(g.rom.some((b) => b !== 0)).toBe(true);
+    }
+  });
+
+  it('keeps each letter on the byte its own symbol had', () => {
+    for (const g of SWEDISH_GLYPHS) {
+      // PETSCII $40-$5F draws from screen $00-$1F; $60-$7F from $40-$5F.
+      const expected = g.petscii < 0x60 ? g.petscii - 0x40 : g.petscii - 0x20;
+      expect(g.screenCode).toBe(expected);
+    }
   });
 });

@@ -57,23 +57,26 @@ export async function buildGlyphAtlas(pxSize: number, swedish = false): Promise<
     }
   }
 
-  // THE SWEDISH VARIANT, drawn over the cells it replaces.
+  // THE SWEDISH VARIANT, drawn from the ROM that defines it.
   //
-  // PetMe64 already carries real A-ring and umlaut glyphs at their Unicode
-  // codepoints - checked in the shipped file - so these are the font's own
-  // letterforms, not three characters invented here. The cell is cleared
-  // first: the symbol underneath ([, pound, ]) must not show through the
-  // letter drawn on top of it.
+  // Not the font's idea of an a-ring: these are the eight bytes at the
+  // glyph's offset in character ROM 325018-02, the set a C64 sold in Sweden
+  // actually shipped. Eight rows of eight pixels, MSB leftmost, scaled to the
+  // cell - which is exactly what the VIC-II does with them.
+  //
+  // The cell is cleared first: the symbol underneath ([, pound, ]) must not
+  // show through the letter drawn over it.
   if (swedish) {
+    const px = pxSize / 8;
     for (const g of SWEDISH_GLYPHS) {
-      const x = glyphCellIndex(g.bank, g.screenCode) * pxSize;
-      ctx.clearRect(x, 0, pxSize, pxSize);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, 0, pxSize, pxSize);
-      ctx.clip();
-      ctx.fillText(g.char, x, 0);
-      ctx.restore();
+      const x0 = glyphCellIndex(g.bank, g.screenCode) * pxSize;
+      ctx.clearRect(x0, 0, pxSize, pxSize);
+      for (let row = 0; row < 8; row++) {
+        const bits = g.rom[row] ?? 0;
+        for (let col = 0; col < 8; col++) {
+          if (bits & (0x80 >> col)) ctx.fillRect(x0 + col * px, row * px, px, px);
+        }
+      }
     }
   }
 
