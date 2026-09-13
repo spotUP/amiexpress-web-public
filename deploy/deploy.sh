@@ -351,8 +351,54 @@ docker builder prune -f --keep-storage=10GB 2>&1 | tail -2 || true
 docker image prune -f 2>&1 | tail -2 || true
 df -h / | tail -1
 
+# PROFILES THAT ARE ALREADY RUNNING MUST BE DEPLOYED TOO.
+#
+# `whip-bot` sits behind `profiles: [bots]` because it is opt-in - a board
+# with no Discord bot should not have one started for it. But `docker compose
+# build` and `up` SKIP a profiled service unless its profile is named, so the
+# deploy rebuilt the board, recreated it, reported success, and left the bot
+# running whatever image it first started with.
+#
+# It ran that way for three days. The bot's feed-reconnect fix was committed,
+# tested, merged and deployed green while the running bot still carried the
+# bug - retrying on the 60s cap for ever instead of resetting its backoff on a
+# good connection. Green in git, absent in production, and nothing said so.
+#
+# The rule that fixes it without overriding the sysop's choice: a profile with
+# something ALREADY RUNNING is deployed; a profile with nothing running stays
+# down. Opt-in is still opt-in, and what is up is never stale.
+#
+# Derived, never hardcoded: the profile list comes from compose, and the
+# services a profile gates are the difference between the service list with it
+# and without it.
+active_profile_args() {
+  local args="" profile gated running
+  running="$(docker compose ps --services --status running 2>/dev/null | sort)"
+  [ -n "$running" ] || return 0
+  for profile in $(docker compose config --profiles 2>/dev/null); do
+    [ -n "$profile" ] || continue
+    gated="$(comm -13 \
+      <(docker compose config --services 2>/dev/null | sort) \
+      <(docker compose --profile "$profile" config --services 2>/dev/null | sort))"
+    [ -n "$gated" ] || continue
+    # Any gated service currently up makes the whole profile part of this deploy.
+    if [ -n "$(comm -12 <(echo "$gated" | sort) <(echo "$running"))" ]; then
+      args="$args --profile $profile"
+    fi
+  done
+  printf '%s' "$args"
+}
+
+PROFILE_ARGS="$(active_profile_args)"
+if [ -n "$PROFILE_ARGS" ]; then
+  echo "== profiles with running services, included in this deploy:$PROFILE_ARGS =="
+else
+  echo "== no profiled service is running; none will be started =="
+fi
+
 echo "== docker compose build (with GIT_SHA) =="
-GIT_SHA="$ACTUAL_SHA" docker compose build
+# shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
+GIT_SHA="$ACTUAL_SHA" docker compose $PROFILE_ARGS build
 
 # Warn everybody who is connected, then wait out the countdown.
 # SIGUSR1 is handled in web/backend/src/index.ts; the backend
@@ -471,7 +517,8 @@ done
 # keeps serving stale code (the source of every "deploy
 # succeeded but the site shows old behaviour" report).
 echo "== docker compose up --force-recreate =="
-GIT_SHA="$ACTUAL_SHA" docker compose up -d --force-recreate --no-build
+# shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
+GIT_SHA="$ACTUAL_SHA" docker compose $PROFILE_ARGS up -d --force-recreate --no-build
 
 # Sanity check: assert the container was actually recreated
 # by this build, not a leftover from an earlier run. Tighter
@@ -514,7 +561,11 @@ for i in $(seq 1 60); do
     if docker image inspect amiexpress-bbs:rollback >/dev/null 2>&1; then
       echo "== rolling back to the previous image ==" >&2
       docker tag amiexpress-bbs:rollback amiexpress-bbs:latest
-      GIT_SHA="rollback" docker compose up -d --force-recreate --no-build || true
+      # Same profiles as the deploy that is being undone: rolling the board
+      # back while leaving a profiled service on the failed build is exactly
+      # the split state this whole mechanism exists to prevent.
+      # shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
+      GIT_SHA="rollback" docker compose $PROFILE_ARGS up -d --force-recreate --no-build || true
       for j in $(seq 1 30); do
         if curl -fsS http://localhost:3001/health >/dev/null 2>&1; then
           echo "OK: board is back up on the previous image after ${j}*2s" >&2
