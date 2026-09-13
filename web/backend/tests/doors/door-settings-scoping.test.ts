@@ -80,4 +80,50 @@ describe('command-scoped settings', () => {
     expect(j.manifest.settings.every(s => s.key.startsWith('join_'))).toBe(true);
     expect(b.values.dual_listing).toBe('YES');
   });
+
+  /**
+   * Art scopes the same way, and for the same reason: emp_tools holds two
+   * logos in two files - Bulls.CFG's title and joincnf.cfg's conference
+   * banner - and a sysop editing the bulletins has no business being offered
+   * the other door's banner.
+   */
+  test('each door is offered its OWN logo and not the other one', () => {
+    const b = readDoorSettingsView(repoEmp, 'B')!;
+    const j = readDoorSettingsView(repoEmp, 'J')!;
+
+    expect(b.manifest.artSections).toHaveLength(1);
+    expect(b.manifest.artSections![0].file).toBe('Bulls.CFG');
+    expect(j.manifest.artSections).toHaveLength(1);
+    expect(j.manifest.artSections![0].file).toBe('joincnf.cfg');
+
+    // Asked as nobody in particular, the manifest still holds both.
+    const all = readDoorSettingsView(repoEmp)!;
+    expect(all.manifest.artSections).toHaveLength(2);
+  });
+
+  test('untagged art shows for every command, like an untagged setting', () => {
+    // `stageManifest` spreads its argument into the SETTING, so the manifest
+    // is written out here rather than through it.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-art-'));
+    fs.writeFileSync(
+      path.join(dir, 'door.settings.json'),
+      JSON.stringify({
+        command: 'B',
+        cfgFile: 'Bulls.CFG',
+        cfgFormat: 'empire',
+        artSections: [
+          { file: 'Bulls.CFG', section: 'title', label: 'Shared', maxLines: 20, maxLineLength: 200 },
+        ],
+        settings: [
+          { key: 'dual_listing', label: 'Dual listing', type: 'choice',
+            choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }],
+            default: 'YES', cfgKey: 'DUAL_LISTING' },
+        ],
+      }),
+    );
+    fs.copyFileSync(path.join(repoEmp, 'Bulls.CFG'), path.join(dir, 'Bulls.CFG'));
+
+    expect(readDoorSettingsView(dir, 'B')!.manifest.artSections).toHaveLength(1);
+    expect(readDoorSettingsView(dir, 'J')!.manifest.artSections).toHaveLength(1);
+  });
 });

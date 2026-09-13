@@ -27,10 +27,45 @@ const toLatin1 = (b64: string) => Buffer.from(b64, 'base64').toString('latin1');
 const toB64 = (s: string) => Buffer.from(s, 'latin1').toString('base64');
 
 describe('door art sections (Studio)', () => {
+  test('a shared directory offers each door only its own art', () => {
+    // emp_tools is two doors in one directory: Bulls (B) with its title logo
+    // in Bulls.CFG, Joincnf (J) with the conference banner in joincnf.cfg.
+    // The banner was on disk and editable by nobody until it was declared.
+    const dir = stage();
+    try {
+      const bulls = readDoorArtSections(dir, 'B');
+      const join = readDoorArtSections(dir, 'J');
+      expect(bulls.map(a => a.file)).toEqual(['Bulls.CFG']);
+      expect(join.map(a => a.file)).toEqual(['joincnf.cfg']);
+      expect(join[0].label).toBe('Conference list banner');
+      expect(toLatin1(join[0].content)).toContain('___/');
+      expect(join[0].lines).toBeGreaterThan(3);
+      // And no command at all still sees the whole manifest.
+      expect(readDoorArtSections(dir)).toHaveLength(2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a write in one door\'s name cannot reach the other door\'s art', () => {
+    const dir = stage();
+    try {
+      const before = fs.readFileSync(path.join(dir, 'joincnf.cfg'), 'latin1');
+      expect(() =>
+        writeDoorArtSection(dir, 'joincnf.cfg', 'title', toB64('HACKED'), 'B'),
+      ).toThrow(/art section/i);
+      expect(fs.readFileSync(path.join(dir, 'joincnf.cfg'), 'latin1')).toBe(before);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('reads the Title body the door will show', () => {
     const dir = stage();
     try {
-      const sections = readDoorArtSections(dir);
+      // Asked as Bulls: emp_tools also holds Joincnf's banner, and each door
+      // is offered its own (door-settings-scoping.test.ts).
+      const sections = readDoorArtSections(dir, 'B');
       expect(sections).toHaveLength(1);
       expect(sections[0].section).toBe('title');
       expect(sections[0].label).toBe('Title logo');

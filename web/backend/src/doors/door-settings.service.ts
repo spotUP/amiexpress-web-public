@@ -174,6 +174,15 @@ const ArtSectionSchema = z.object({
   label: z.string().min(1).max(80),
   maxLines: z.number().int().min(1).max(100),
   maxLineLength: z.number().int().min(1).max(1000),
+  /**
+   * Door commands this art belongs to, the same way a setting declares its
+   * own. One directory can serve two doors - emp_tools is Bulls (B) and
+   * Joincnf (J) out of one manifest - and each has its own logo in its own
+   * file. Without this the sysop editing the bulletins would be offered the
+   * conference banner as well, which is the duplication `commands` was added
+   * to the settings for.
+   */
+  commands: z.array(z.string().min(1).max(20)).max(10).optional(),
 });
 const SettingSchema = z.object({
   key: z.string().min(1).max(64),
@@ -323,10 +332,11 @@ function scopeManifest(
 ): DoorSettingsManifest {
   if (!command) return manifest;
   const want = command.toUpperCase();
-  const settings = manifest.settings.filter(
-    s => !s.commands || s.commands.some(c => c.toUpperCase() === want),
-  );
-  return { ...manifest, settings };
+  const belongs = (declared: string[] | undefined) =>
+    !declared || declared.some(c => c.toUpperCase() === want);
+  const settings = manifest.settings.filter(s => belongs(s.commands));
+  const artSections = manifest.artSections?.filter(a => belongs(a.commands));
+  return { ...manifest, settings, artSections };
 }
 
 export function readDoorSettingsView(doorDir: string, command?: string): DoorSettingsView | null {
@@ -1004,6 +1014,12 @@ export interface DoorArtSection {
   /** DOC limits (Bulls title: 20 lines, 200 chars per line). */
   maxLines: number;
   maxLineLength: number;
+  /**
+   * Door commands this art belongs to, upper-cased on comparison. Absent
+   * means every command, which is every single-door manifest. See the
+   * schema above for why a shared directory needs it.
+   */
+  commands?: string[];
 }
 
 export interface DoorArtContent {
@@ -1017,13 +1033,29 @@ export interface DoorArtContent {
   maxLineLength: number;
 }
 
-function readArtManifest(doorDir: string): DoorSettingsManifest & { artSections: DoorArtSection[] } {
+/**
+ * The art this DOOR declares.
+ *
+ * `command` matters where one directory serves two doors: emp_tools holds
+ * Bulls' title logo in Bulls.CFG and Joincnf's conference banner in
+ * joincnf.cfg, and the sysop editing one has no business being offered the
+ * other. Omitted, every section comes back - which is every single-door
+ * manifest, and what the Studio's own listing wants when it asks per door.
+ */
+function readArtManifest(
+  doorDir: string,
+  command?: string,
+): DoorSettingsManifest & { artSections: DoorArtSection[] } {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest) throw new Error('This door does not declare any settings');
-  if (!manifest.artSections || manifest.artSections.length === 0) {
+  const want = command ? command.toUpperCase() : null;
+  const sections = (manifest.artSections ?? []).filter(
+    a => !want || !a.commands || a.commands.some(c => c.toUpperCase() === want),
+  );
+  if (sections.length === 0) {
     throw new Error('This door declares no art sections for the Studio');
   }
-  return { ...manifest, artSections: manifest.artSections };
+  return { ...manifest, artSections: sections };
 }
 
 function loadArtFile(doorDir: string, file: string): EmpireFile {
@@ -1038,8 +1070,8 @@ function loadArtFile(doorDir: string, file: string): EmpireFile {
 }
 
 /** Every art section the manifest declares, with its current body. */
-export function readDoorArtSections(doorDir: string): DoorArtContent[] {
-  return listDoorArtSections(doorDir).map((entry) => {
+export function readDoorArtSections(doorDir: string, command?: string): DoorArtContent[] {
+  return listDoorArtSections(doorDir, command).map((entry) => {
     const file = loadArtFile(doorDir, entry.file);
     const body = getSectionBody(file, entry.section);
     if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
@@ -1065,8 +1097,8 @@ export interface DoorArtListing {
 }
 
 /** Declared art sections with live line counts, without the bodies. */
-export function listDoorArtSections(doorDir: string): DoorArtListing[] {
-  const manifest = readArtManifest(doorDir);
+export function listDoorArtSections(doorDir: string, command?: string): DoorArtListing[] {
+  const manifest = readArtManifest(doorDir, command);
   return manifest.artSections.map((entry) => {
     const file = loadArtFile(doorDir, entry.file);
     const body = getSectionBody(file, entry.section);
@@ -1090,9 +1122,12 @@ export function writeDoorArtSection(
   doorDir: string,
   fileName: string,
   section: string,
-  contentBase64: string
+  contentBase64: string,
+  command?: string
 ): DoorArtContent {
-  const manifest = readArtManifest(doorDir);
+  // Scoped like the read and like a settings PUT: a request in one door's
+  // name cannot rewrite the other door's logo just by naming its file.
+  const manifest = readArtManifest(doorDir, command);
   const entry = manifest.artSections.find(
     (a) => a.file === fileName && a.section.toLowerCase() === section.toLowerCase()
   );

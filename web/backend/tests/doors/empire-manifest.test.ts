@@ -45,9 +45,14 @@ describe('emp_tools door.settings.json', () => {
       expect(view.manifest.settings.some((s) => s.key.startsWith('bull_'))).toBe(false);
       // No Conference 9 in the file, none in the form.
       expect(view.manifest.settings.some((s) => s.key === 'conf_9_mask')).toBe(false);
-      // Art rides to the Studio, not the form.
-      expect(view.manifest.artSections).toHaveLength(1);
-      expect(view.manifest.artSections![0].section).toBe('title');
+      // Art rides to the Studio, not the form. Two of them now: emp_tools is
+      // two doors in one directory, and each has a logo in its own file -
+      // Bulls.CFG's title and joincnf.cfg's conference banner. Asked as one
+      // door, only that door's art comes back (empire-art.test.ts).
+      expect(view.manifest.artSections).toHaveLength(2);
+      expect(view.manifest.artSections!.map((a) => a.file).sort())
+        .toEqual(['Bulls.CFG', 'joincnf.cfg']);
+      expect(view.manifest.artSections!.every((a) => a.section === 'title')).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -648,7 +648,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         try {
           const doorDir = doorDirectoryFor(config.get('dataDir'), door);
           if (!doorDir) continue;
-          const sections = listDoorArtSections(doorDir);
+          const sections = listDoorArtSections(doorDir, door.command);
           if (sections.length === 0) continue;
           out.push({
             command: door.command,
@@ -681,7 +681,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       const doorDir = doorDirectoryFor(config.get('dataDir'), door);
       if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
 
-      sendResponse(res, readDoorArtSections(doorDir));
+      sendResponse(res, readDoorArtSections(doorDir, command));
     } catch (error) {
       handleError(res, error);
     }
@@ -708,7 +708,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       if (typeof file !== 'string' || typeof section !== 'string' || typeof content !== 'string') {
         return handleError(res, new Error('Expected { file, section, content } with string values'));
       }
-      const updated = writeDoorArtSection(doorDir, file, section, content);
+      const updated = writeDoorArtSection(doorDir, file, section, content, command);
       sendResponse(res, updated, `${command} art saved`);
     } catch (error) {
       handleError(res, error);
