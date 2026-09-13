@@ -69,12 +69,23 @@ def logo_rows(text: str, cells_wide: int = 38, rows: int = 3) -> list:
 
 def screen(page: int, title: str, body: str = '', mci: str = '',
            board: str = 'UP ROUGH', logo: str = '') -> str:
-    lines = ['~SMO1|']
+    # CLEAR FIRST. A teletext page is the whole screen by definition, and
+    # these are shown from paths the board's SCREENS_REQUIRE_CLEAR list never
+    # sees - so the bulletins page drew over whatever the caller was looking
+    # at (sysop, 2026-09-14). The escape rather than a wipe code: a wipe is an
+    # animation, and this is just a clean sheet.
+    lines = ['~SMO1|', f'{ESC}[2J{ESC}[H']
     # Page, board, clock - a teletext header row, and the clock is why ~TM
     # exists: express.e has the date and the logon time and nothing that says
     # what time it is now.
     header = f'  {page} {board}'
-    lines.append(colour(CYAN, header) + colour(WHITE, ' ' * max(1, 28 - len(header)) + '~DT| ~TM|'))
+    # `~DT| ~TM|` is nine characters of token and SEVENTEEN of output -
+    # `09-14-26 01:38:36` - so padding to the token's width overran the row
+    # and the clock wrapped onto a line of its own (sysop, 2026-09-14). Pad
+    # for what the board PRINTS, not for what the file holds.
+    CLOCK_COLUMNS = len('09-14-26 01:38:36')
+    pad = max(1, WIDTH - len(header) - CLOCK_COLUMNS)
+    lines.append(colour(CYAN, header) + colour(WHITE, ' ' * pad + '~DT| ~TM|'))
     lines.append(colour(CYAN, RULE))
     lines.append('')
 

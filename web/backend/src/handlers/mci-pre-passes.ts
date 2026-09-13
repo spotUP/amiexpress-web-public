@@ -276,6 +276,35 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     parsed = parsed.replace(/~CL\./g, generated(confList));
   }
 
+  if (parsed.includes('~BL.')) {
+    /*
+     * WEB_: the board's own bulletin list, the twin of ~CL. above.
+     *
+     * express.e has no code for it because a bulletin menu there is a file
+     * the sysop types by hand. This board has one authored per screen kind -
+     * a teletext page, a .txt - and typing the list into each is how a page
+     * ends up claiming three bulletins on a board with twelve (sysop,
+     * 2026-09-14). The names are the ones the Bulls door shows, from the
+     * config the sysop edits in the Studio, so the two screens cannot
+     * disagree about what a bulletin is called.
+     */
+    const { listBulletins } = require('../services/bulletin-list');
+    const { config } = require('../config');
+    const { conferenceSubdir } = require('../conferences/conference-paths');
+    const dataDir = config.get('dataDir');
+    const conferenceScreenDir = conferenceSubdir(dataDir, session.currentConf || 1, 'Screens');
+
+    let bulletins = '';
+    for (const bulletin of listBulletins(dataDir, conferenceScreenDir)) {
+      const number = String(bulletin.number).padStart(3);
+      // Forty columns leaves twenty-nine for a title once the number, the
+      // bracket and the two-space indent are paid for.
+      const title = narrow ? bulletin.title.substring(0, 29) : bulletin.title.substring(0, 60);
+      bulletins += row(`  \x1b[32m${number}\x1b[33m) \x1b[35m${title}\x1b[0m`);
+    }
+    parsed = parsed.replace(/~BL\./g, generated(bulletins));
+  }
+
   if (parsed.includes('~CD.')) {
     // express.e:5608-5620 - ~CD: 2-column numbered list, filtered by access.
     // Format: "   [34m[[0m<num right-padded 3>[34m] [0m<name padEnd 30>" then \r\n every 2 entries.
