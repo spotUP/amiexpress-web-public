@@ -10,6 +10,7 @@ import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-results';
 import { higherAccess } from '../utils/error-handling.util';
+import { inputKeys } from '../utils/input-chunks.util';
 import { EnvStat } from '../constants/env-codes';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -2406,6 +2407,19 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_WAITING state');
 
   if (session.subState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE) {
 console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
+
+    // A PASTE IS ONE EVENT CARRYING MANY KEYS. Everything below is written
+    // against a keyboard - chatAcceptsKeystroke refuses anything but a single
+    // character - so a pasted line failed every branch and was dropped without
+    // a word (reported live 2026-09-13: "pasting to the bbs is very slow as
+    // well"; it was not slow, it was doing nothing, and the caller retyped).
+    // Each key takes the branch it would have taken had it been typed, which
+    // is also how a return inside the paste sends its line.
+    const pastedKeys = inputKeys(data);
+    if (pastedKeys.length > 1) {
+      for (const key of pastedKeys) await handleCommand(socket, session, key, io);
+      return;
+    }
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {

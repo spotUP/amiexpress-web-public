@@ -347,8 +347,9 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
       } else if (data.keystroke === '\r' || data.keystroke === '\n' || data.keystroke === 'Enter') {
         // Enter - clear buffer (message will be sent via operator:send-message)
         (chatSession as any).sysopTypingBuffer = '';
-      } else if (data.keystroke.length === 1 && data.keystroke >= ' ' && data.keystroke <= '~') {
-        // Printable character - add to buffer
+      } else if (isTypedRun(data.keystroke)) {
+        // Printable character, or a pasted run of them: this tested
+        // `length === 1`, so a paste failed every branch and was dropped.
         (chatSession as any).sysopTypingBuffer += data.keystroke;
       }
 
@@ -2067,6 +2068,17 @@ console.log(`[Operator Chat] Revived bot chat ${pageId} from its DB row after a 
  * Handle real-time keystroke transmission to sysop panel
  * Called from command.handler.ts for char-by-char typing like livechat
  */
+/**
+ * Text somebody typed or pasted: one printable character, or a run of them.
+ *
+ * Both typing buffers tested `length === 1`, which a keyboard satisfies and a
+ * paste does not - so a pasted line updated neither buffer and the other side
+ * saw nothing being typed at all.
+ */
+function isTypedRun(s: string): boolean {
+  return s.length > 0 && /^[ -~]+$/.test(s);
+}
+
 export async function handleOperatorChatKeystroke(
   io: any,
   session: BBSSession,
@@ -2092,8 +2104,8 @@ export async function handleOperatorChatKeystroke(
   } else if (keystroke === '\r' || keystroke === '\n') {
     // Enter - clear buffer (message was sent separately)
     (chatSession as any).userTypingBuffer = '';
-  } else if (keystroke.length === 1 && keystroke >= ' ' && keystroke <= '~') {
-    // Printable character - add to buffer
+  } else if (isTypedRun(keystroke)) {
+    // Printable character, or a pasted run of them.
     (chatSession as any).userTypingBuffer += keystroke;
   }
 

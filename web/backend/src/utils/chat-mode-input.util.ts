@@ -19,6 +19,7 @@
  */
 import type { BBSSession } from '../index';
 import { exitChat, sendChatMessage } from '../handlers/chat/chat.handler';
+import { inputKeys } from './input-chunks.util';
 
 /**
  * Route a single raw keystroke while `session.inChat` is true.
@@ -30,6 +31,15 @@ import { exitChat, sendChatMessage } from '../handlers/chat/chat.handler';
  */
 export function handleChatModeInput(socket: any, session: BBSSession, data: string): boolean {
   if (!session.inChat) return false;
+  // A PASTE IS ONE EVENT CARRYING MANY KEYS. The routing below is written
+  // against a keyboard and tests `data.length === 1`, so a pasted line used to
+  // fail every branch and vanish. inputKeys leaves a real keystroke, an escape
+  // sequence and door/transfer traffic exactly as they were.
+  const keys = inputKeys(data);
+  if (keys.length > 1) {
+    for (const key of keys) handleChatModeInput(socket, session, key);
+    return true;
+  }
 
   // F1 exits chat mode (like the sysop's local F1 in classic AmiExpress).
   if (data === '\x1b[OP') {
