@@ -233,19 +233,31 @@ static void test_reader_box(void)
     /* Forty: a teletext row is exactly this wide, and the frame's margin
        used to take three of its characters before the reader even wrapped. */
     texttv_reader_box(40, 25, &left, &width, &height);
-    CHECK(left == 0);
+    /* Column ONE. ansi_goto is 1-based, and a left of 0 emits `ESC[r;0H`,
+       which the terminal clamps - every row then lost its first characters
+       and overran on the right (sysop's C64, 2026-09-13). */
+    CHECK(left == 1);
     CHECK(width == 40);
     CHECK(height == 18);
 
     /* Narrower than a teletext row: still the whole screen, never negative. */
     texttv_reader_box(32, 24, &left, &width, &height);
-    CHECK(left == 0);
+    CHECK(left == 1);
     CHECK(width == 32);
     CHECK(height == 17);
 
     /* Null outputs are allowed - a caller may want one number. */
     texttv_reader_box(80, 25, 0, &width, 0);
     CHECK(width == 77);
+
+    /* No width a caller can have puts the reader in column zero. */
+    {
+        int c;
+        for (c = 20; c <= 132; c++) {
+            texttv_reader_box(c, 25, &left, &width, &height);
+            CHECK(left >= 1);
+        }
+    }
 }
 
 static void test_title_latin1(void)

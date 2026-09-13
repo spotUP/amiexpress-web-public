@@ -146,7 +146,11 @@ static char ink_digit(int colour)
 void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
 {
     int compact = cols <= TEXTTV_COMPACT_COLS;
-    if (left) *left = compact ? 0 : 2;
+    /* Column ONE, not zero: ansi_goto writes `ESC[row;colH` and those are
+       1-based. A left of 0 emitted `ESC[r;0H`, which a terminal clamps to
+       column 1 - so every row lost its first character or two and the tail
+       ran off the right. On the sysop's C64 the footer read "AGE 1/3". */
+    if (left) *left = compact ? 1 : 2;
     if (width) *width = compact ? cols : cols - 3;
     if (height) *height = rows - 7;
 }

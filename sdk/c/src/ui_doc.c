@@ -143,7 +143,23 @@ static void paint_line(void *context, const char *start, int len)
     }
 
     if (copy > room) copy = room;
-    if (copy > c->st->width) copy = c->st->width;
+    /* Clamp by COLUMNS, not bytes. A pen marker is UI_INK plus one byte and
+       reaches the screen as nothing, so a coloured row is longer in bytes
+       than it is wide - clamping at `width` bytes cut the tail off every
+       coloured row ("SVT:s mätn" for "SVT:s mätning", sysop's C64 walk). */
+    {
+        int bytes = 0;
+        int cols = 0;
+        while (bytes < copy && cols < c->st->width) {
+            if (start[bytes] == UI_INK && bytes + 1 < copy) {
+                bytes += (start[bytes + 1] == 'T' && bytes + 2 < copy) ? 3 : 2;
+                continue;
+            }
+            bytes++;
+            cols++;
+        }
+        copy = bytes;
+    }
     memcpy(row, start, (size_t) copy);
     row[copy] = '\0';
 

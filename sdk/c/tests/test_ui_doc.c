@@ -344,6 +344,32 @@ static void a_frameless_reader_uses_every_column(void)
     printf("  [OK] a frameless reader uses every column\n");
 }
 
+static void a_coloured_row_keeps_its_tail(void)
+{
+    /* A pen marker is UI_INK plus one byte and costs no column. Clamping the
+       drawn row at `width` BYTES cut the end off every coloured row - the
+       sysop's C64 read "SVT:s mätn" where the page says "SVT:s mätning". */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    /* Twelve visible columns, with two markers worth four bytes. */
+    const char *row = "\001" "7SVT:s \001" "3mig";
+
+    ui_doc_style_init(&st);
+    st.height = 3; st.width = 12; st.left = 1; st.top = 1; st.frameless = 1;
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, "T", row) == 0);
+
+    /* The whole row reached the screen, markers and all. */
+    assert(strstr(storage, "SVT:s ") != 0);
+    assert(strstr(storage, "mig") != 0);
+    printf("  [OK] a coloured row keeps its tail\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -359,6 +385,7 @@ int main(void)
     a_lost_caller_is_not_a_page_turn();
     a_cursor_picks_a_line_and_costs_two_rows();
     a_frameless_reader_uses_every_column();
+    a_coloured_row_keeps_its_tail();
     printf("ui_doc: all passed\n");
     return 0;
 }
