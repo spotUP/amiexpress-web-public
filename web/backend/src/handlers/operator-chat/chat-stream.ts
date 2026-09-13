@@ -194,8 +194,9 @@ export function chatLineEditKey(
   if (key === '\x1b[F' || key === '\x1bOF') {
     return { buffer, cursor: buffer.length, bytes: '\x1b[C'.repeat(buffer.length - at) };
   }
-  // Up and down have no meaning on a single line, and must not fall through
-  // to be typed as text.
+  // Up and down are the caller's own history, which needs more than a buffer
+  // and a cursor - callerEditedLine answers them before this is reached. They
+  // are named here so they can never fall through and be typed as text.
   if (key === '\x1b[A' || key === '\x1b[B') return { buffer, cursor: at, bytes: '' };
 
   const isBackspace = key === '\x7f' || key === '\b';
@@ -374,6 +375,17 @@ export function callerTypedRun(io: any, session: BBSSession, text: string): void
   emitToCaller(io, session, bytes);
 }
 /**
+ * Put a different line where the current one is - said, like every edit here,
+ * in the model's own two primitives so its text still matches the screen.
+ */
+function chatReplaceLineBytes(chatSession: ChatSession, oldLine: string, newLine: string): string {
+  let bytes = '';
+  for (let i = 0; i < oldLine.length; i++) bytes += chatBackspaceBytes(chatSession);
+  for (const ch of newLine) bytes += chatCharBytes(chatSession, 'user', ch);
+  return bytes;
+}
+
+/**
  * The caller edited the line they are still typing: the chat branch's one way
  * in. Resolves the chat session itself and writes the bytes, like every other
  * caller-side function here, so the cursor arithmetic stays in one place.
@@ -390,6 +402,28 @@ export function callerEditedLine(
 ): { buffer: string; cursor: number } | null {
   const cs = chatOfSession(session);
   if (!cs) return null;
+
+  // UP AND DOWN WALK WHAT THE CALLER HAS ALREADY SENT. A chat prompt is one
+  // line, so there is nothing above it to move to - and a key that does
+  // nothing at all reads as broken ("up/down doesnt work"). Every terminal
+  // and shell means the same thing by it: give me the line I typed before.
+  if (key === '\x1b[A' || key === '\x1b[B') {
+    const scratch = session as ChatScratch;
+    const history = scratch.chatHistory ?? [];
+    if (!history.length) return { buffer, cursor };
+    // Where the caller is in the history; length means "back at my own line".
+    const at = scratch.chatHistoryAt ?? history.length;
+    // The line being left is kept, so coming back down returns to it.
+    if (at === history.length) scratch.chatHistoryDraft = buffer;
+    const next = key === '\x1b[A' ? Math.max(0, at - 1) : Math.min(history.length, at + 1);
+    if (next === at) return { buffer, cursor };
+    const line = next === history.length ? (scratch.chatHistoryDraft ?? '') : history[next]!;
+    scratch.chatHistoryAt = next;
+    cancelThinkingDots(cs);
+    emitToCaller(io, session, chatReplaceLineBytes(cs, buffer, line));
+    return { buffer: line, cursor: line.length };
+  }
+
   const edit = chatLineEditKey(cs, buffer, cursor, key);
   if (!edit) return null;
   // The caller's own key takes the dots off the line first, exactly as a
@@ -429,6 +463,12 @@ export function callerPressedReturn(io: any, session: BBSSession): void {
 export const SEND_HINT_AFTER_MS = 6000;
 
 type ChatScratch = BBSSession & {
+  /** What the caller has sent in this chat, oldest first, for up and down. */
+  chatHistory?: string[];
+  /** Where up and down have walked to; history.length is the live line. */
+  chatHistoryAt?: number;
+  /** The line the caller was typing before they started walking back. */
+  chatHistoryDraft?: string;
   chatPendingLines?: string[];
   chatSendHintShown?: boolean;
   chatSendHintTimer?: ReturnType<typeof setTimeout>;

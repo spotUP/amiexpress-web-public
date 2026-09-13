@@ -2520,6 +2520,15 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
 
       session.inputBuffer = '';
       (session as any).chatCursor = 0;
+      // A line the caller finished is a line up-arrow can bring back. Kept
+      // per session, not per message, so it survives the send-on-blank-line
+      // convention; the walk starts from the live line again each time.
+      if (input) {
+        const scratch = session as any;
+        scratch.chatHistory = [...(scratch.chatHistory ?? []), input].slice(-50);
+        scratch.chatHistoryAt = scratch.chatHistory.length;
+        scratch.chatHistoryDraft = '';
+      }
 
       callerPressedReturn(socket.server, session);
 

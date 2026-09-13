@@ -2109,21 +2109,47 @@ export async function handleOperatorChatKeystroke(
     (chatSession as any).userTypingBuffer += keystroke;
   }
 
-  // Send real-time typing update to sysop panel
-  io.to(`page:${pageId}`).emit('operator:user-typing', {
-    pageId,
-    buffer: (chatSession as any).userTypingBuffer,
-    keystroke,
-    timestamp: Date.now()
-  });
+  // THE PANEL DOES NOT NEED A FRAME PER KEYSTROKE. This sent TWO room emits
+  // for every character, and the caller awaited them: hold a key down and
+  // auto-repeat turns that into sixty socket writes a second, which the sysop
+  // reads as lag on their own typing ("if i hold a key s for example its very
+  // lagy", 2026-09-13). The caller's echo is already on the wire by now; this
+  // is only the sysop's preview, and a preview is worth ten frames a second.
+  scheduleTypingUpdate(io, pageId, chatSession);
+}
 
-  // Update typing indicator
-  chatSession.isTyping.user = (chatSession as any).userTypingBuffer.length > 0;
-  io.to(`page:${pageId}`).emit('operator:typing-status', {
-    pageId,
-    senderType: 'user',
-    isTyping: chatSession.isTyping.user
-  });
+/** How often the sysop's preview of the caller's line may be redrawn. */
+const TYPING_UPDATE_MS = 100;
+
+/**
+ * Coalesced, and always trailing: the LAST state is what the panel must end
+ * on, so a pending timer is left to fire rather than dropped. `isTyping` is
+ * emitted only when it actually changes - it is a boolean, and a boolean that
+ * has not moved is not news.
+ */
+function scheduleTypingUpdate(io: any, pageId: string, chatSession: any): void {
+  chatSession.typingUpdatePending = true;
+  if (chatSession.typingUpdateTimer) return;
+  const flush = () => {
+    chatSession.typingUpdateTimer = undefined;
+    if (!chatSession.typingUpdatePending) return;
+    chatSession.typingUpdatePending = false;
+    const buffer = chatSession.userTypingBuffer ?? '';
+    io.to(`page:${pageId}`).emit('operator:user-typing', {
+      pageId, buffer, keystroke: '', timestamp: Date.now(),
+    });
+    const typing = buffer.length > 0;
+    if (chatSession.isTyping.user !== typing) {
+      chatSession.isTyping.user = typing;
+      io.to(`page:${pageId}`).emit('operator:typing-status', {
+        pageId, senderType: 'user', isTyping: typing,
+      });
+    }
+    // One more window, so a burst that ends mid-window still lands.
+    chatSession.typingUpdateTimer = setTimeout(flush, TYPING_UPDATE_MS);
+    chatSession.typingUpdateTimer.unref?.();
+  };
+  flush();
 }
 
 /**
