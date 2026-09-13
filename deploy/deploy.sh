@@ -590,6 +590,60 @@ done
 # from an earlier deploy while every check here passed
 # (2026-08-26: the video aspect fix was in the image and not in
 # the running door). Compare them and say so.
+# WHAT IS RUNNING MUST BE WHAT WAS JUST BUILT.
+#
+# Everything above proves the BOARD is new - the container's age, and /health
+# answering with the deployed SHA. Nothing proved it of any OTHER service, and
+# on 2026-09-13 that gap ran for three days: the WHIP bot sat behind
+# `profiles: [bots]`, `docker compose build` and `up` skipped it, and the
+# deploy rebuilt the board, recreated it, verified health and reported success
+# while the bot kept running a three-day-old image. Its feed fix had been
+# committed, tested, merged and deployed green, and was not in the process.
+#
+# The test that would have caught it on day one: for every RUNNING service,
+# does the container's image ID still equal the ID its tag points at now? A
+# tag that has moved since the container started is the definition of stale -
+# something rebuilt that image and this container did not get it.
+#
+# Cheap, generic, and needs no JSON: `.Config.Image` is the tag the container
+# was created from, `.Image` is the ID it actually runs.
+echo "== running images match what was just built =="
+STALE_SERVICES=""
+# shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
+for svc in $(docker compose $PROFILE_ARGS ps --services --status running 2>/dev/null); do
+  [ -n "$svc" ] || continue
+  # shellcheck disable=SC2086
+  cid=$(docker compose $PROFILE_ARGS ps -q "$svc" 2>/dev/null | head -1)
+  [ -n "$cid" ] || continue
+
+  running_id=$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null)
+  tag=$(docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null)
+  [ -n "$running_id" ] && [ -n "$tag" ] || continue
+
+  tag_id=$(docker image inspect -f '{{.Id}}' "$tag" 2>/dev/null || true)
+  # A tag that no longer exists cannot be compared; say so rather than pass.
+  if [ -z "$tag_id" ]; then
+    echo "  $svc: WARNING cannot resolve image tag $tag"
+    continue
+  fi
+
+  if [ "$running_id" = "$tag_id" ]; then
+    echo "  $svc: OK (running the current $tag)"
+  else
+    echo "  $svc: STALE - running ${running_id#sha256:} but $tag is now ${tag_id#sha256:}" >&2
+    STALE_SERVICES="$STALE_SERVICES $svc"
+  fi
+done
+
+if [ -n "$STALE_SERVICES" ]; then
+  echo "ERROR: these services were not recreated from the image just built:$STALE_SERVICES" >&2
+  echo "       The deploy built a new image and left them on the old one - the fix is" >&2
+  echo "       in the repository and NOT in the running process. Recreate them with:" >&2
+  # shellcheck disable=SC2086
+  echo "       docker compose $PROFILE_ARGS up -d --force-recreate --no-build$STALE_SERVICES" >&2
+  exit 1
+fi
+
 echo "== door sync verification =="
 # Wait for the entrypoint to SAY it has finished, rather than
 # inferring it from /health. Health answers while the sync is
