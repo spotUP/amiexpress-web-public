@@ -82,13 +82,19 @@ console.log('[Tool loop] tool loop: out of time before the reply');
     // waited half a minute and got the fallback line. Abandoned at the cap,
     // its cost is recorded and a faster model answers inside the same budget.
     const data = await req.post(body, Math.min(left, req.perRoundMs ?? DEFAULT_PER_ROUND_MS));
-    const message = data?.choices?.[0]?.message;
+    // finish_reason belongs to the CHOICE, not to the message inside it. Read
+    // off the message it is always undefined, so `truncated` was permanently
+    // false and the continuation marker never fired: a reply cut off at
+    // max_tokens simply stopped mid-sentence and the caller was never told
+    // there was more to ask for.
+    const choice = data?.choices?.[0];
+    const message = choice?.message;
     if (!message) return { text: null, truncated: false, afters, calls, toolResults };
 
     const toolCalls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (toolCalls.length === 0 || round === MAX_ROUNDS) {
       const text = typeof message.content === 'string' && message.content.trim() ? message.content : null;
-      return { text, truncated: message.finish_reason === 'length', afters, calls, toolResults };
+      return { text, truncated: choice.finish_reason === 'length', afters, calls, toolResults };
     }
 
     // The assistant's turn, tool calls and all, then one tool message per call.
