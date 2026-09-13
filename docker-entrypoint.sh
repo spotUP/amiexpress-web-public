@@ -801,8 +801,40 @@ else
     # edits - Commands/BBSCmd/<CMD>.info - and a blanket overwrite reverted
     # every door edit on the next restart. It goes through sync_tracked
     # below, which lets the image lead until the sysop takes a file over.
+    # The door cfg files the admin writes are named by the doors themselves:
+    # every Doors/<door>/door.settings.json declares its `cfgFile`, and
+    # door-settings.service.ts writes exactly that file when the sysop saves
+    # the form. They are tracked in git and shipped in the image, so the
+    # blanket tar below put the image's copy back on every boot and every
+    # setting the sysop had saved was gone: DUAL_LISTING, 39 conference
+    # masks, 20 bulletin titles. Same fault Commands had, same cure - they
+    # join the tracked set, where the image leads until the sysop takes a
+    # file over. The manifests are the list, so a new door needs no edit here.
+    DOOR_CFG_LIST=$(mktemp)
+    DOOR_CFG_EXCLUDES=$(mktemp)
+    for manifest in "$DEFAULT_DATA_DIR"/Doors/*/door.settings.json; do
+        [ -f "$manifest" ] || continue
+        # EVERY cfgFile in the manifest, not the first: a setting may name
+        # its own, and emp_tools serves two doors from one manifest - Bulls
+        # from Bulls.CFG and Joincnf from joincnf.cfg.
+        door=$(basename "$(dirname "$manifest")")
+        grep -o '"cfgFile"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" \
+          | sed 's/.*"\([^"]*\)"$/\1/' | sort -u | while IFS= read -r cfg; do
+            [ -n "$cfg" ] || continue
+            echo "Doors/$door/$cfg" >> "$DOOR_CFG_LIST"
+            echo "./$door/$cfg" >> "$DOOR_CFG_EXCLUDES"
+        done
+    done
+
     for sync_dir in Doors Screens Libs C; do
         [ -d "$DEFAULT_DATA_DIR/$sync_dir" ] || continue
+
+        # Only the Doors pass has cfg files to hold back.
+        if [ "$sync_dir" = "Doors" ]; then
+            SYNC_EXCLUDE_FROM="$DOOR_CFG_EXCLUDES"
+        else
+            SYNC_EXCLUDE_FROM=/dev/null
+        fi
 
         # One tar stream, not a file-by-file loop.
         #
@@ -831,6 +863,7 @@ else
                 --exclude='*.db-wal' --exclude='*.db-shm' \
                 --exclude='*.sqlite' --exclude='*.sqlite3' \
                 --exclude='*/data/*' \
+                --exclude-from="$SYNC_EXCLUDE_FROM" \
                 --exclude='*.log' .) \
              | (cd "$BBS_DATA_DIR/$sync_dir" && tar xf -); then
             echo "[Entrypoint] ERROR: failed to sync $sync_dir from image" >&2
@@ -839,6 +872,14 @@ else
 
         echo "[Entrypoint]   Synced $sync_dir from image"
     done
+
+    # Now the cfg files the tar was told to leave alone, the tracked way.
+    echo "[Entrypoint] Syncing door settings files (tracked)..."
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        sync_tracked_case_aware "$rel"
+    done < "$DOOR_CFG_LIST"
+    rm -f "$DOOR_CFG_LIST" "$DOOR_CFG_EXCLUDES"
 
     # Commands/: every door's definition, and the one directory in this list
     # a sysop edits through the admin.
