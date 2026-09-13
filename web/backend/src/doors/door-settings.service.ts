@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'fs';
+import { boardListeners, boardListenerFor } from '../server/board-listeners';
 import * as path from 'path';
 import { z } from 'zod';
 // The narrow subpath, not the package root: the root pulls in the server
@@ -380,6 +381,105 @@ export class UnknownDoorSettingError extends Error {
  * arrives empty keeps the stored one, because the form never received it to
  * send back.
  */
+/**
+ * A door may not be pointed at the board's own listener.
+ *
+ * The board is one node process - the API, telnet, SSH, FTP and every 68K
+ * door's emulator. A door that opens a socket to one of those ports is
+ * talking to the process running it: the emulator parks in
+ * `deasync.loopWhile`, which accepts the connection but cannot drain
+ * microtasks from where it is called, so the request it is waiting for can
+ * never finish. The board stops answering ANYONE - not just this door.
+ *
+ * It is not hypothetical. On 2026-09-13 the Text-TV door shipped with
+ * Host=127.0.0.1 Port=3001 and every caller was locked off the live board
+ * until the container was recreated. No shipped door needs the board's own
+ * port now, so this refuses rather than warns.
+ *
+ * The ports are asked for, never restated - see server/board-listeners.ts.
+ */
+interface DeadlyListener {
+  /** The setting key holding the port. */
+  key: string;
+  port: number;
+  /** What the board serves on it, for a message a sysop can act on. */
+  serves: string;
+  /** The manifest's own default, to fall back to. */
+  fallback: string | number;
+}
+
+/**
+ * Is this door aimed at the board's own listener?
+ *
+ * ONE detector, asked by both the save (which refuses) and the boot render
+ * (which repairs). Two copies of this rule would be two chances to disagree
+ * about which ports are deadly.
+ *
+ * The host and port are found by what the manifest calls them, so a door that
+ * dials no socket has neither and is never considered.
+ */
+function boardsOwnListenerIn(
+  values: Record<string, string | number | boolean>,
+  declared: Map<string, DoorSetting>
+): DeadlyListener | undefined {
+  const keyFor = (re: RegExp): string | undefined =>
+    [...declared.keys()].find((k) => re.test(k) || re.test(String(declared.get(k)?.cfgKey ?? '')));
+
+  const hostKey = keyFor(/^host$/i);
+  const portKey = keyFor(/^port$/i);
+  if (!hostKey || !portKey) return undefined;
+
+  const host = String(values[hostKey] ?? '');
+  const port = Number(values[portKey]);
+  if (!Number.isFinite(port)) return undefined;
+
+  const listener = boardListenerFor(host, port, boardListeners());
+  if (!listener) return undefined;
+
+  return {
+    key: portKey,
+    port,
+    serves: listener.serves,
+    // A port default is a number or a numeric string; a boolean default on a
+    // port setting is a malformed manifest, and '' is the honest answer.
+    fallback: (() => {
+      const d = declared.get(portKey)?.default;
+      return typeof d === 'string' || typeof d === 'number' ? d : '';
+    })(),
+  };
+}
+
+/**
+ * A door may not be SAVED pointed at the board's own listener.
+ *
+ * The board is one node process - the API, telnet, SSH, FTP and every 68K
+ * door's emulator. A door that opens a socket to one of those ports is
+ * talking to the process running it: the emulator parks in
+ * `deasync.loopWhile`, which accepts the connection but cannot drain
+ * microtasks from where it is called, so the request it waits for can never
+ * finish. The board stops answering ANYONE - not just this door.
+ *
+ * It is not hypothetical. On 2026-09-13 the Text-TV door shipped with
+ * Host=127.0.0.1 Port=3001 and every caller was locked off the live board
+ * until the container was recreated. No shipped door needs the board's own
+ * port, so a save refuses; the boot render repairs instead, because failing
+ * startup over one door's setting is worse than the bug.
+ */
+function refuseBoardsOwnListener(
+  values: Record<string, string | number | boolean>,
+  declared: Map<string, DoorSetting>
+): void {
+  const deadly = boardsOwnListenerIn(values, declared);
+  if (!deadly) return;
+
+  throw new Error(
+    `Port ${deadly.port} is the board's own listener - it serves ${deadly.serves}. ` +
+    `A door that connects to it talks to the process running it, which parks ` +
+    `the board's event loop and locks every caller out until the container is ` +
+    `restarted. Point this door at its own service instead.`
+  );
+}
+
 export function writeDoorSettings(
   doorDir: string,
   incoming: Record<string, string | number | boolean>,
@@ -442,6 +542,9 @@ export function writeDoorSettings(
     out[key] = str;
   }
 
+  // Before a byte is written: refuse a door aimed at the board itself.
+  refuseBoardsOwnListener(out, declared);
+
   const target = path.join(doorDir, VALUES_FILE);
   const temp = `${target}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(out, null, 2) + '\n');
@@ -493,6 +596,7 @@ export function renderDoorCfg(
 
   const values = readValuesFromDir(doorDir);
   const lines: string[] = [];
+  const resolved: Record<string, string | number | boolean> = {};
   for (const setting of manifest.settings) {
     if (!setting.cfgKey) continue;
     // Precedence: what the sysop set for THIS door, then the board's own
@@ -510,8 +614,33 @@ export function renderDoorCfg(
       }
     }
     const raw = (ownIsEmpty ? (fromBoard ?? setting.default ?? '') : own) ?? '';
+    resolved[setting.key] = raw as string | number | boolean;
     // One line per key, no quoting: that is the format these doors parse.
     lines.push(`${setting.cfgKey}=${oneCfgLine(raw as string)}`);
+  }
+
+  // REPAIR, not refuse.
+  //
+  // The save path turns away a door aimed at the board's own listener, but a
+  // settings.json written before that guard existed still holds one - and
+  // this runs at every boot, for every door. Refusing here would fail the
+  // board's startup over one door's setting, which is worse than the bug. So
+  // a deadly value is replaced by the manifest's own default and said out
+  // loud, and the door comes up pointed somewhere survivable.
+  const deadly = boardsOwnListenerIn(resolved, new Map(manifest.settings.map((x) => [x.key, x])));
+  if (deadly) {
+    console.log(
+      `[DoorSettings] ${manifest.command}: ${deadly.key}=${deadly.port} is the board's own ` +
+      `listener (${deadly.serves}). A door that dials it parks the board's event loop and ` +
+      `locks every caller out. Using the door's default (${deadly.fallback}) instead - ` +
+      `set a real one in the admin.`
+    );
+    for (let i = 0; i < manifest.settings.length; i++) {
+      const setting = manifest.settings[i];
+      if (setting.key !== deadly.key || !setting.cfgKey) continue;
+      const at = lines.findIndex((l) => l.startsWith(`${setting.cfgKey}=`));
+      if (at >= 0) lines[at] = `${setting.cfgKey}=${oneCfgLine(deadly.fallback)}`;
+    }
   }
 
   const target = path.join(doorDir, manifest.cfgFile);
@@ -831,6 +960,15 @@ function writeEmpireSettings(
     const coerced = coerceEmpireValue(setting, value);
     applyEmpireCell(fileFor(setting), manifest, setting, coerced);
   }
+
+  // Same refusal as the JSON writer, before anything is written: no shipped
+  // Empire door dials a socket today, but the rule belongs to "a door's
+  // settings", not to one of the two formats that store them.
+  refuseBoardsOwnListener(
+    { ...readEmpireSettingsView(doorDir, manifest).values, ...incoming },
+    declared
+  );
+
   // Atomic per file, latin1 so art bytes survive, normal perms (no secrets here).
   for (const [name, entry] of loaded) {
     if (!entry.dirty) continue;
