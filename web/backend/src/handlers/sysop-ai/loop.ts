@@ -116,6 +116,49 @@ export function withoutControlTokens(text: string): string {
     .trim();
 }
 
+/**
+ * ONE LAST ROUND, WITH THE TOOLS TAKEN AWAY.
+ *
+ * A small model can call a tool and then write nothing - it has spent its
+ * whole turn on the call. The board used to give up there and print the raw
+ * tool output at the caller, so a question about Fairlight's C64 era came back
+ * as a Demozoo record and a "no production called Fairlight C64" line, with
+ * not one word about the C64 era in it (live, 2026-09-13: every provider above
+ * OpenRouter was rate-limited or 500ing and the cascade had landed on a 2.6b
+ * model).
+ *
+ * The answer was already on the table; nobody had put it into a sentence. So
+ * ask once more with no tools offered and the results in hand - a model that
+ * cannot summarise will still return nothing, and the raw fallback is waiting
+ * behind this.
+ */
+async function composeFromWhatTheToolsSaid(
+  req: ToolLoopRequest,
+  messages: Array<Record<string, unknown>>,
+): Promise<string | null> {
+  const left = req.deadline - Date.now();
+  // Needs enough of the budget left to be worth a round trip.
+  if (left < 1500) return null;
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: [...messages, {
+      role: 'user',
+      content: 'Answer my question now, in your own words, using what the tools just returned. Do not call another tool.',
+    }],
+    max_tokens: req.maxTokens ?? 400,
+    temperature: req.temperature,
+  };
+  try {
+    const data = await req.post(body, Math.min(left, req.perRoundMs ?? DEFAULT_PER_ROUND_MS));
+    const content = data?.choices?.[0]?.message?.content;
+    const text = typeof content === 'string' ? withoutControlTokens(content) : '';
+    return text || null;
+  } catch {
+    // The raw fallback is still better than nothing.
+    return null;
+  }
+}
+
 export async function askWithTools(req: ToolLoopRequest): Promise<ToolLoopResult> {
   const messages = [...req.messages];
   const afters: Array<() => Promise<void>> = [];
@@ -159,6 +202,11 @@ console.log('[Tool loop] tool loop: out of time before the reply');
     if (toolCalls.length === 0 || round === MAX_ROUNDS) {
       const cleaned = typeof message.content === 'string' ? withoutControlTokens(message.content) : '';
       const text = cleaned ? cleaned : null;
+      // Tools answered but the model said nothing: give it the words back.
+      if (!text && toolResults.length) {
+        const composed = await composeFromWhatTheToolsSaid(req, messages);
+        if (composed) return { text: composed, truncated: false, afters, calls, toolResults };
+      }
       return { text, truncated: choice.finish_reason === 'length', afters, calls, toolResults };
     }
 

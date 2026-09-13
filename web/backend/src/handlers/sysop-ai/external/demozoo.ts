@@ -168,7 +168,7 @@ export async function searchGroups(name: string): Promise<string> {
         const others = exact
           .map((r, i) => ({ r, n: size(details[i]) }))
           .filter((_, i) => i !== best)
-          .map(({ r, n }) => `${r.name} (${releaserUrl(r)}, ${n} members)`);
+          .map(({ r, n }) => `${r.name} (${releaserUrl(r)}, ${n} member${n === 1 ? '' : 's'})`);
         return `${await describeReleaser(exact[best], [], details[best])}\nDemozoo also has: ${some(others, 3)}`;
       }
     }

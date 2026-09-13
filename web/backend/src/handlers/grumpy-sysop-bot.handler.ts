@@ -733,7 +733,7 @@ console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
     const answered = result.calls.filter((c) => c.outcome === 'ok');
     if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-      return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+      return rawToolAnswer(result.toolResults, true);
     }
     return null;
   } catch (error: any) {
@@ -1244,7 +1244,7 @@ console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
       const answered = result.calls.filter((c) => c.outcome === 'ok');
       if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-        return `Straight from the board:\n${result.toolResults.join('\n')}`;
+        return rawToolAnswer(result.toolResults);
       }
       rotate();
       continue;
@@ -1441,7 +1441,7 @@ console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
       const answered = result.calls.filter((c) => c.outcome === 'ok');
       if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-        return `Straight from the board:\n${result.toolResults.join('\n')}`;
+        return rawToolAnswer(result.toolResults);
       }
       return null;
     }
@@ -1573,6 +1573,20 @@ function randomFrom<T>(array: T[]): T {
  * from the rows a board recorded while they were in use.
  */
 const ENGINE_TAG = /^(?:\s*\[(?:AI|RB)\]\s*)+/;
+/**
+ * What a caller gets when the tools answered and the model did not.
+ *
+ * It used to read "Straight from the board:", which is not true of most of it -
+ * search_demozoo, ask_scene and the door archive are all somewhere else, and a
+ * caller reading a Demozoo record was being told the board said it. It also
+ * read as prose when it is a raw dump, so a question that never got an answer
+ * looked like it had been answered.
+ */
+function rawToolAnswer(results: string[], slowly = false): string {
+  const why = slowly ? 'I am typing slowly today' : 'I could not put it in my own words';
+  return `Here it is as it came back, ${why}:\n${results.join('\n')}`;
+}
+
 export function stripEngineTag(text: string): string {
   return text.replace(ENGINE_TAG, '');
 }
