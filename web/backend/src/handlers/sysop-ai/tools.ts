@@ -20,8 +20,9 @@ import type { PageRequest, ChatSession } from '../../types/operator-chat.types';
 import { listOnlineNodes } from '../../doors/who-is-online';
 import { searchFilesAdvanced } from '../../server/database-helpers';
 import { conferenceDir } from '../../conferences/conference-paths';
+import { checkConfAccess } from '../message/message-scan.handler';
 import { conferencesFromDisk, commandsOnDisk, callerLines } from './board-card';
-import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, type Tier } from './fences';
+import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, POST_MESSAGES_PER_DAY, type Tier } from './fences';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { searchProductions, searchGroups, searchParties } from './external/demozoo';
 import {
@@ -616,6 +617,22 @@ export const BOUNDED_TOOLS: SysopTool[] = [
       const subject = str(args.subject, 60);
       const body = String(args.body ?? '').trim().slice(0, 2000);
       if (!subject || !body) return { content: 'A message needs a subject and a body.' };
+      // A model's arguments are inputs, never authority (fences.ts). The
+      // conference came from the model, so it is checked against the caller's
+      // OWN access with the board's own rule - otherwise a caller could have
+      // a notice signed by the sysop posted into a conference they cannot
+      // even read.
+      const user = ctx.session.user;
+      if (!user) return { content: 'The board cannot post right now.' };
+      if (!checkConfAccess(user, conf)) {
+        return { content: `The caller has no access to conference ${conf}; nothing was posted.` };
+      }
+      // And it is capped per day like every other write a caller can reach.
+      const cap = POST_MESSAGES_PER_DAY;
+      if (remainingToday(String(user.id), 'post_message', cap) <= 0) {
+        return { content: `The caller already posted today's ${cap} messages; nothing more today.` };
+      }
+      spendToday(String(user.id), 'post_message', cap, 1);
       const bases = await ctx.db.getMessageBases(conf);
       const base = bases[0]?.id ?? 1;
       const id = await ctx.db.createMessage({

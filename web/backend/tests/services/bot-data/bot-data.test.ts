@@ -53,7 +53,11 @@ describe('users: public facts only', () => {
   const users = [
     { username: 'spot', secLevel: 255, location: 'Stockholm', calls: 100, uploads: 5, downloads: 9 },
     { username: 'ann', secLevel: 30, location: '', calls: 3, uploads: 0, downloads: 1 },
-    { username: 'ghost', secLevel: 10, deleted_at: '2026-01-01' },
+    // The FIELD name the repository maps to, not the column. This fake used
+    // to carry `deleted_at`, a shape production never produces, so the test
+    // stayed green while every erased account was served to the bot.
+    { username: 'ghost', secLevel: 10, deletedAt: '2026-01-01' },
+    { username: 'wiped', secLevel: 10, erasedAt: '2026-02-01' },
   ];
   const db = dbFake({
     getUserByUsername: async (h: string) => users.find((u) => u.username === h) ?? null,
@@ -68,6 +72,7 @@ describe('users: public facts only', () => {
   it('hides higher-level users and erased rows as "no such user"', async () => {
     expect((await BOT_userLookup(db, actor(30), 'spot')).text).toBe('No user called spot.');
     expect((await BOT_userLookup(db, actor(255), 'ghost')).text).toBe('No user called ghost.');
+    expect((await BOT_userLookup(db, actor(255), 'wiped')).text).toBe('No user called wiped.');
   });
   it('searches by fragment within the caller\'s level', async () => {
     const r = await BOT_userSearch(db, actor(30), 'a');

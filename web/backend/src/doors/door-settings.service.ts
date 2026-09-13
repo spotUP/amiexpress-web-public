@@ -452,6 +452,18 @@ export function writeDoorSettings(
  */
 export type SystemValueResolver = (systemConfigKey: string) => string | undefined;
 
+/**
+ * One line, whatever the sysop typed.
+ *
+ * Every one of these formats is line-oriented: a newline inside a value does
+ * not escape, it ends the line and the rest becomes a new record. In an Empire
+ * file that means a title can forge `[Init_END]` and a whole section with it.
+ * Both writers ask this, so the rule cannot drift between them again.
+ */
+export function oneCfgLine(value: string | number): string {
+  return String(value).replace(/[\r\n]+/g, ' ');
+}
+
 export function renderDoorCfg(
   doorDir: string,
   resolveSystemValue?: SystemValueResolver,
@@ -484,7 +496,7 @@ export function renderDoorCfg(
     }
     const raw = (ownIsEmpty ? (fromBoard ?? setting.default ?? '') : own) ?? '';
     // One line per key, no quoting: that is the format these doors parse.
-    lines.push(`${setting.cfgKey}=${String(raw).replace(/[\r\n]/g, ' ')}`);
+    lines.push(`${setting.cfgKey}=${oneCfgLine(raw as string)}`);
   }
 
   const target = path.join(doorDir, manifest.cfgFile);
@@ -643,25 +655,46 @@ function coerceEmpireValue(
     }
     return String(value);
   }
-  const str = String(value);
+  const str = oneCfgLine(String(value));
   if (setting.pattern && !new RegExp(setting.pattern).test(str)) {
     throw new Error(`${setting.label} must match ${setting.pattern}`);
   }
   return str;
 }
 
-/** Grow a bull/mask section until `index` exists, scaffolding `-`/blank rows. */
-function ensureEmpireRow(file: EmpireFile, kind: 'bull' | 'mask', index: number): void {
+/**
+ * Grow a bull/mask section until `index` exists, scaffolding `-`/blank rows.
+ *
+ * The append answers false when there is no section to append to - a
+ * `Bulls.CFG` that has lost its `[BullNames_END]` marker, say. `getBullRows`
+ * answers `[]` for that same file, so a loop that ignores the answer never
+ * grows and never ends: one PUT pinned a core and hung every caller, socket
+ * and door until the board was restarted. A refused append ends the walk.
+ */
+function ensureEmpireRow(
+  file: EmpireFile,
+  kind: 'bull' | 'mask',
+  index: number,
+  fileLabel: string
+): void {
   if (kind === 'bull') {
     while (getBullRows(file).length <= index) {
       const n = getBullRows(file).length + 1;
-      appendBullRow(file, { title: '-', file: `bull${n}.txt` });
+      if (!appendBullRow(file, { title: '-', file: `bull${n}.txt` })) {
+        throw new Error(
+          `${fileLabel} has no bulletin list to grow - its [BullNames_END] marker is missing`
+        );
+      }
     }
     return;
   }
   while (getMaskRows(file).length <= index) {
     const n = getMaskRows(file).length;
-    appendMaskRow(file, '-'.repeat(20), `; Conference ${n + 1}`);
+    if (!appendMaskRow(file, '-'.repeat(20), `; Conference ${n + 1}`)) {
+      throw new Error(
+        `${fileLabel} has no conference access list to grow - its [CnfAccess_END] marker is missing`
+      );
+    }
   }
 }
 
@@ -678,7 +711,7 @@ function applyEmpireCell(
   if (row) {
     if (row.field === 'title' || row.field === 'file') {
       if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
-      ensureEmpireRow(file, 'bull', row.row);
+      ensureEmpireRow(file, 'bull', row.row, fileLabel);
       const ok = setBullRow(file, row.row, row.field === 'title' ? { title: str } : { file: str });
       if (!ok) throw new Error(`${setting.label} points past the bulletin list in ${fileLabel}`);
       entry.dirty = true;
@@ -686,7 +719,7 @@ function applyEmpireCell(
     }
     if (row.field === 'mask') {
       if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
-      ensureEmpireRow(file, 'mask', row.row);
+      ensureEmpireRow(file, 'mask', row.row, fileLabel);
       const ok = setMaskRow(file, row.row, str);
       if (!ok) throw new Error(`${setting.label} points past the access list in ${fileLabel}`);
       entry.dirty = true;

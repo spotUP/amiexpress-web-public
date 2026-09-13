@@ -25,6 +25,15 @@ export function tierOf(session: Pick<BBSSession, 'user'>): Tier {
   return 'caller';
 }
 
+/**
+ * How many messages one caller may have the co-sysop post in a day.
+ *
+ * `post_message` writes a PUBLIC message authored as the sysop, so it is the
+ * one caller-tier tool whose output carries the board's name. It shipped with
+ * no counter at all while `grant_time` beside it had one.
+ */
+export const POST_MESSAGES_PER_DAY = 5;
+
 const RANK: Record<Tier, number> = { caller: 0, cosysop: 1, sysop: 2 };
 
 /** May a caller of `have` use a tool that needs `need`? */

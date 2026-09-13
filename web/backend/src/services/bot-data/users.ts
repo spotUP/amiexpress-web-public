@@ -8,11 +8,17 @@
  * is itself the leak.
  */
 import { BOT_clampLimit, BOT_cut, BOT_more } from './caps';
-import type { BOTActor, BOTDb, BOTResult } from './types';
+import type { BOTActor, BOTDb, BOTResult, BOTUser } from './types';
 
-const erased = (u: any): boolean => Boolean(u?.deleted_at ?? u?.erased_at);
+/**
+ * The repository hands out mapped records, so these are the FIELD names
+ * (`deletedAt`), not the column names. Asking for `deleted_at` here answered
+ * false for every real row and served erased accounts to the bot for as long
+ * as `BOTDb` was typed `any`.
+ */
+const erased = (u: BOTUser): boolean => Boolean(u.deletedAt ?? u.erasedAt);
 
-function publicLine(u: any): string {
+function publicLine(u: BOTUser): string {
   const bits = [
     `${u.username} (level ${u.secLevel})`,
     u.location ? `from ${u.location}` : null,

@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
-import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, listDoorArtSections } from '../doors/door-settings.service';
+import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
@@ -592,10 +592,22 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       const doorDir = doorDirectoryFor(config.get('dataDir'), door);
       if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
 
-      const incoming = req.body?.values ?? req.body;
-      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      const body = req.body?.values ?? req.body;
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return handleError(res, new Error('Expected an object of setting values'));
       }
+      // The schema has been declared since this route was written and was
+      // never asked. It is what keeps an object, a nested array or a 4 MB
+      // string out of a door's cfg before writeDoorSettings ever opens a file.
+      const parsed = DoorSettingsPayloadSchema.safeParse(body);
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        return res.status(400).json({
+          success: false,
+          message: `${first?.path.join('.') || 'value'}: ${first?.message ?? 'is not a setting value'}`,
+        });
+      }
+      const incoming = parsed.data;
 
       // Same resolver the startup render uses: a setting may take its value
       // from the board's own system config (REQUESTS' board key does). Without

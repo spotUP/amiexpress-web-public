@@ -19,7 +19,7 @@ import path from 'path';
 import { OperatorChatRepository } from '../../../src/database/operator-chat.repository';
 import { registerConnectionEmitter } from '../../../src/server/session-emitter-registry';
 import { userSessions } from '../../../src/server/session-manager';
-import { tierOf, tierAllows, remainingToday, spendToday, resetFences } from '../../../src/handlers/sysop-ai/fences';
+import { tierOf, tierAllows, remainingToday, spendToday, resetFences, POST_MESSAGES_PER_DAY } from '../../../src/handlers/sysop-ai/fences';
 import { runTool, toolsFor, CALLER_TOOLS, BOUNDED_TOOLS, type ToolContext } from '../../../src/handlers/sysop-ai/tools';
 import { askWithTools } from '../../../src/handlers/sysop-ai/loop';
 import { rankFreeModels, adminModelIfFree, primeModelCatalogue, modelSupportsTools } from '../../../src/handlers/grumpy-sysop-bot.handler';
@@ -116,7 +116,7 @@ function fakeDb() {
 }
 
 function ctxFor(level: number, executed: string[], db = fakeDb()): ToolContext & { fake: ReturnType<typeof fakeDb> } {
-  const session: any = { user: { id: 'u-tool', username: 'Knut', secLevel: level, timeTotal: 3600, timeUsed: 600 }, nodeId: 4, currentConf: 1, tempData: {} };
+  const session: any = { user: { id: 'u-tool', username: 'Knut', secLevel: level, timeTotal: 3600, timeUsed: 600, confAccess: 'XX_' }, nodeId: 4, currentConf: 1, tempData: {} };
   return {
     io: { to: () => ({ emit() {} }) }, session,
     page: { id: 'p1', userId: 'u-tool', userHandle: 'Knut', nodeId: 4 } as any,
@@ -172,6 +172,28 @@ describe('the sysop-grade tools and their fences', () => {
     expect(ctx.fake.messages[0]).toMatchObject({ author: 'Spot', isPrivate: false, messageBaseId: 7, conferenceId: 1 });
     await runTool(ctx, 'note_on_account', { note: 'Welcome back, Knut.' });
     expect(ctx.fake.messages[1]).toMatchObject({ author: 'Spot', isPrivate: true, toUser: 'Knut' });
+  });
+  it('post_message will not post into a conference the caller cannot read', async () => {
+    // The conference comes from the MODEL's arguments, so it is checked
+    // against the caller's own confAccess ('XX_': 1 and 2 yes, 3 no). Without
+    // this a caller could have a sysop-signed notice put anywhere on the board.
+    const ctx = ctxFor(30, []);
+    const refused = await runTool(ctx, 'post_message', { conference: 3, subject: 'Hi', body: 'There.' });
+    expect(refused.result.content).toContain('no access to conference 3');
+    expect(ctx.fake.messages).toHaveLength(0);
+
+    const allowed = await runTool(ctx, 'post_message', { conference: 2, subject: 'Hi', body: 'There.' });
+    expect(allowed.result.content).toMatch(/Posted message #1 "Hi" in conference 2/);
+  });
+  it('post_message stops at the daily cap, like every other caller write', async () => {
+    const ctx = ctxFor(30, []);
+    for (let i = 0; i < POST_MESSAGES_PER_DAY; i++) {
+      const r = await runTool(ctx, 'post_message', { subject: `N${i}`, body: 'Body.' });
+      expect(r.result.content).toMatch(/^Posted message/);
+    }
+    const over = await runTool(ctx, 'post_message', { subject: 'One more', body: 'Body.' });
+    expect(over.result.content).toContain(`already posted today's ${POST_MESSAGES_PER_DAY}`);
+    expect(ctx.fake.messages).toHaveLength(POST_MESSAGES_PER_DAY);
   });
   it('set_level: refused below co-sysop; a co-sysop may not set above own level, the sysop, or an outranking user', async () => {
     expect((await runTool(ctxFor(30, []), 'set_level', { handle: 'knut', level: 50 })).outcome).toBe('refused');
