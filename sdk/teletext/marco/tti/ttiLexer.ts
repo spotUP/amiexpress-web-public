@@ -20,8 +20,18 @@ export interface TtiRecord {
  * preserved as records with command="" so they can be round-tripped.
  */
 export function lexTti(input: string): TtiRecord[] {
-  // Normalize line endings
-  const lines = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  // CRLF and LF end a record. A LONE 0x0D DOES NOT.
+  //
+  // 0x0D inside an OL payload is teletext's DOUBLE HEIGHT control, and the
+  // CEBRA converter (dev/scripts/cebra-to-tti.ts) writes those bytes through
+  // verbatim. Normalising every \r to \n split such a record in two and the
+  // row was lost - on exactly the pages that use double height, which is
+  // most headed ones.
+  //
+  // A raw 0x0A inside a payload (END BOX) is still ambiguous and still
+  // splits: it IS the record separator here. That one has to be fixed where
+  // the bytes are written, by emitting the 0x80-0x9F translated form.
+  const lines = input.split(/\r\n|\n/);
   const records: TtiRecord[] = [];
 
   for (let i = 0; i < lines.length; i++) {
