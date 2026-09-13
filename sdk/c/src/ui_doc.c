@@ -26,6 +26,31 @@ void ui_doc_style_init(ui_doc_style *style)
     style->page_keys = 0;
 }
 
+/**
+ * Bytes of the ANSI escape sequence starting at `p`, or 0 if there is none.
+ *
+ * A message body is not the door's text - it is whatever a caller wrote, and
+ * on this board that is very often RAW ANSI: the Conftop results, bulletins,
+ * art. Those carry real `ESC [ ... m` sequences, not the SDK's own UI_INK
+ * markers, so the walk below counted all five bytes of `\x1b[32m` as five
+ * columns and could break in the middle of one. The sysop saw a table wrap
+ * two characters short on every coloured row and a bare `[32m12.` printed as
+ * text where the ESC had been left on the line above (2026-09-14).
+ *
+ * CSI is `ESC [`, then any number of parameter/intermediate bytes, then one
+ * final byte in 0x40-0x7E. A lone `ESC` that starts nothing is one byte and
+ * one column, which is what it looks like on screen.
+ */
+static int ansi_escape_len(const char *p)
+{
+    int n;
+
+    if (p[0] != 0x1b || p[1] != '[') return 0;
+    n = 2;
+    while (p[n] && ((unsigned char)p[n] < 0x40 || (unsigned char)p[n] > 0x7e)) n++;
+    return p[n] ? n + 1 : n;       /* an unterminated run is all of it */
+}
+
 int ui_doc_wrap(const char *text, int width,
                 void (*line)(void *context, const char *start, int len),
                 void *context)
@@ -49,10 +74,14 @@ int ui_doc_wrap(const char *text, int width,
          * coloured document short by two characters for every colour change
          * in the line, which is what a Text-TV page is made of. */
         while (p[len] && p[len] != '\n' && cols < width) {
+            int esc;
             if (p[len] == UI_INK && p[len + 1]) {
                 len += ((p[len + 1] == 'T' || p[len + 1] == 'H') && p[len + 2]) ? 3 : 2;
                 continue;
             }
+            /* A real ANSI sequence costs no columns either, and must never be
+               broken across a line - half of it renders as text. */
+            if ((esc = ansi_escape_len(p + len)) > 0) { len += esc; continue; }
             if (p[len] == ' ') last_space = len;
             len++;
             cols++;
@@ -70,8 +99,15 @@ int ui_doc_wrap(const char *text, int width,
          * scrolled (1500 bytes a keypress, measured 2026-09-13).
          *
          * A zero-width marker cannot need a line of its own. */
-        while (p[len] == UI_INK && p[len + 1])
-            len += ((p[len + 1] == 'T' || p[len + 1] == 'H') && p[len + 2]) ? 3 : 2;
+        for (;;) {
+            int esc;
+            if (p[len] == UI_INK && p[len + 1]) {
+                len += ((p[len + 1] == 'T' || p[len + 1] == 'H') && p[len + 2]) ? 3 : 2;
+                continue;
+            }
+            if ((esc = ansi_escape_len(p + len)) > 0) { len += esc; continue; }
+            break;
+        }
 
         if (p[len] == '\n') {
             if (line) line(context, start, len);

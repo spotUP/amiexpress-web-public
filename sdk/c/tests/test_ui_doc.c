@@ -572,6 +572,62 @@ static void h_is_the_way_home_for_a_caller_that_walks(void)
     printf("  [OK] h is the way home, for a caller that walks documents\n");
 }
 
+/** Collect the wrapped lines so a test can look at them. */
+static char rawline[16][256];
+static int rawline_count;
+static void collect_raw(void *ctx, const char *start, int len)
+{
+    (void)ctx;
+    if (rawline_count >= 16) return;
+    if (len > 255) len = 255;
+    memcpy(rawline[rawline_count], start, (size_t)len);
+    rawline[rawline_count][len] = '\0';
+    rawline_count++;
+}
+
+static void raw_ansi_costs_no_columns_and_is_never_split(void)
+{
+    /*
+     * A MESSAGE IS NOT THE DOOR'S TEXT. It is whatever a caller wrote, and on
+     * this board that is very often raw ANSI - the Conftop results, bulletins,
+     * art. Those carry real `ESC [ ... m`, not the SDK's UI_INK markers.
+     *
+     * Counting those bytes as columns wrapped a coloured table two characters
+     * short on every row, and breaking inside one left the tail rendering as
+     * text: the sysop saw a bare "[32m12." printed on the live board where the
+     * ESC had been left on the line above (2026-09-14).
+     */
+    char text[512];
+    int n, i;
+
+    /* Eighty columns of content, coloured, on an eighty-column reader: it is
+       ONE line, and the colour costs nothing. */
+    rawline_count = 0;
+    sprintf(text, "\x1b[32m%s\x1b[0m\n", "12345678901234567890");
+    n = ui_doc_wrap(text, 20, collect_raw, 0);
+    assert(n == 1);
+    assert(strstr(rawline[0], "12345678901234567890") != 0);
+
+    /* No line may end part-way through an escape - that is what renders as
+       text. Every ESC in a line must be followed by its final byte. */
+    rawline_count = 0;
+    sprintf(text, "%s\x1b[32m%s\x1b[0m%s\n",
+            "aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc");
+    ui_doc_wrap(text, 12, collect_raw, 0);
+    for (i = 0; i < rawline_count; i++) {
+        const char *e = strchr(rawline[i], 0x1b);
+        while (e) {
+            /* ESC [ ... final byte, all inside this line. */
+            const char *f = e + 2;
+            assert(e[1] == '[');
+            while (*f && ((unsigned char)*f < 0x40 || (unsigned char)*f > 0x7e)) f++;
+            assert(*f != '\0');
+            e = strchr(f, 0x1b);
+        }
+    }
+    printf("  [OK] raw ANSI costs no columns and is never split across lines\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -593,6 +649,7 @@ int main(void)
     a_double_height_headline_highlights_both_halves();
     a_pen_after_the_last_column_does_not_make_a_line();
     a_line_attribute_costs_the_row_no_columns();
+    raw_ansi_costs_no_columns_and_is_never_split();
     printf("ui_doc: all passed\n");
     return 0;
 }
