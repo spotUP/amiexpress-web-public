@@ -697,6 +697,18 @@ export async function initializeData(io?: SocketIOServer) {
       console.error(`[Init] door cfg render failed: ${err?.message || err}`);
     }
 
+    // The Text-TV proxy runs in its own process, because the TEXTTV door
+    // fetches over HTTP and a door must never make a request to the process
+    // running it: the emulator parks the shared loop inside
+    // deasync.loopWhile and the answer can never be produced. Wedged the
+    // whole live board on 2026-09-13. See scripts/texttv-sidecar-server.ts.
+    try {
+      const { startTextTvSidecar } = require('../services/texttv-sidecar');
+      startTextTvSidecar(path.resolve(__dirname, '..', '..'));
+    } catch (err: any) {
+      console.warn(`[Init] Text-TV sidecar did not start: ${err?.message || err}`);
+    }
+
     // Pre-populate door cache for instant DOORS/DOORMAN command response
     await initializeDoorCache();
 

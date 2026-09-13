@@ -19,7 +19,10 @@ void texttv_config_defaults(texttv_config *cfg)
        on every page turn (measured 2026-09-10). A sysop serving another
        board points Host at it; a classic Amiga uses the LAN IP. */
     strcpy(cfg->host, "127.0.0.1");
-    cfg->port = 3001;
+    /* The sidecar, not the board. A door that fetches from the process
+       running it parks the shared event loop - see
+       web/backend/src/scripts/texttv-sidecar-server.ts. */
+    cfg->port = 3002;
     cfg->timeout_secs = TEXTTV_TIMEOUT_DEFAULT;
     cfg->start_page = TEXTTV_START_DEFAULT;
     cfg->fav_count = 0;

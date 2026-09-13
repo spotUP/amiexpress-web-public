@@ -15,10 +15,10 @@
       "cfgKey": "Port",
       "label": "Port",
       "type": "number",
-      "default": 3001,
+      "default": 3002,
       "min": 1,
       "max": 65535,
-      "help": "3001 is the board's backend port, plain HTTP, on this host and live."
+      "help": "3002 is the board's Text-TV sidecar, a SEPARATE process on loopback. Do not point this at the board's own port (3001): a door that fetches from the process running it parks the shared event loop and takes every caller on the board down with it - that happened live on 2026-09-13."
     },
     {
       "key": "timeout",
