@@ -8,13 +8,21 @@
  * door-settings API like any other setting - the masks stay declared (and
  * hidden) in the manifest, so the API accepts them and no second writer is
  * invented for one file.
+ *
+ * The grid is a DataTable and not a hand-rolled table: a row is one
+ * CONFERENCE, addressed by its setting key, so sorting cannot lose an edit -
+ * the tick a cell shows is read from `masks[key]`, never from the row's
+ * position. That is what keeps this out of the EDITABLE_GRIDS exception in
+ * src/test/design-system-usage.test.ts, and it is what buys the failed-request
+ * panel: an unreadable door-settings call used to render as an empty matrix.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from './ui/DataTable';
 
 interface MaskSetting {
   key: string;
@@ -41,10 +49,16 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
     | { manifest: { settings: Array<{ key: string; label: string }> }; values: Record<string, string> }
     | undefined;
 
-  const maskSettings: MaskSetting[] = (view?.manifest.settings ?? [])
-    .map(s => ({ key: s.key, label: s.label, conf: confOf(s.key) }))
-    .filter((s): s is MaskSetting => s.conf !== null)
-    .sort((a, b) => a.conf - b.conf);
+  // Memoised on the fetched view: DataTable builds its row model from this
+  // array, and a fresh array on every render rebuilds the model for nothing.
+  const maskSettings: MaskSetting[] = useMemo(
+    () =>
+      (view?.manifest.settings ?? [])
+        .map(s => ({ key: s.key, label: s.label, conf: confOf(s.key) }))
+        .filter((s): s is MaskSetting => s.conf !== null)
+        .sort((a, b) => a.conf - b.conf),
+    [view],
+  );
 
   useEffect(() => {
     if (view && touched.size === 0) {
@@ -55,9 +69,9 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
       }
       setMasks(next);
     }
-    // maskSettings is derived from view; depending on it loops the effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, touched.size]);
+    // maskSettings is memoised on `view`, so naming it here is the same
+    // trigger the effect always had - without the exhaustive-deps waiver.
+  }, [view, maskSettings, touched.size]);
 
   const flip = (key: string, index: number) => {
     const current = masks[key] ?? '';
@@ -83,7 +97,50 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
   if (settingsQuery.isLoading) {
     return <p className="text-sm text-content-secondary">Reading conference access...</p>;
   }
-  if (maskSettings.length === 0) return null;
+  // A door with no conference masks declared has no matrix to show. A FAILED
+  // read is not that, and falls through to the table's error panel.
+  if (!settingsQuery.error && maskSettings.length === 0) return null;
+
+  const columnCount = maskSettings.reduce(
+    (widest, s) => Math.max(widest, (masks[s.key] ?? '').length),
+    titles.length,
+  );
+
+  const columns: DataTableColumn<MaskSetting>[] = [
+    {
+      id: 'conference',
+      header: 'Conference',
+      value: row => row.conf,
+      align: 'right',
+      mono: true,
+      width: '8rem',
+    },
+    // One column per mask position, not per menu entry: a mask is 20
+    // characters whether or not 20 bulletins are listed, and the bits past the
+    // last entry were tickable before this grid became a DataTable.
+    ...Array.from({ length: columnCount }, (_, i): DataTableColumn<MaskSetting> => {
+      const name = titles[i] || `Bulletin ${i + 1}`;
+      return {
+        id: `bulletin-${i}`,
+        header: <span title={name}>{i + 1}</span>,
+        align: 'center',
+        width: '3rem',
+        cell: row => {
+          const ch = (masks[row.key] ?? '')[i];
+          if (ch === undefined) return null;
+          return (
+            <input
+              type="checkbox"
+              checked={ch === 'X'}
+              aria-label={`${name} in conference ${row.conf}`}
+              onChange={() => flip(row.key, i)}
+              className="h-4 w-4 accent-accent"
+            />
+          );
+        },
+      };
+    }),
+  ];
 
   const dirty = touched.size > 0;
   return (
@@ -94,38 +151,15 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
           Which bulletins each conference sees. A tick means shown — the 20-character masks in Bulls.CFG, without typing them.
         </p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="text-sm border-collapse">
-          <thead>
-            <tr>
-              <th className="py-1 pr-2 font-medium text-left text-content-secondary">Conf</th>
-              {titles.map((title, i) => (
-                <th key={i} className="px-1 font-medium text-content-secondary" title={title || `Bulletin ${i + 1}`}>
-                  <span className="block max-w-16 truncate text-xs">{i + 1}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {maskSettings.map(s => (
-              <tr key={s.key} className="border-b border-border/50">
-                <td className="py-1 pr-2 font-mono text-content-secondary whitespace-nowrap">{s.conf}</td>
-                {(masks[s.key] ?? '').split('').map((ch, i) => (
-                  <td key={i} className="px-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={ch === 'X'}
-                      aria-label={`${titles[i] || `Bulletin ${i + 1}`} in conference ${s.conf}`}
-                      onChange={() => flip(s.key, i)}
-                      className="h-4 w-4 accent-accent"
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={maskSettings}
+        getRowId={row => row.key}
+        initialSort={[{ id: 'conference', desc: false }]}
+        emptyMessage="No conference masks are declared for this door."
+        error={settingsQuery.error as Error | null}
+        onRetry={() => settingsQuery.refetch()}
+      />
       <button
         type="button"
         onClick={save}

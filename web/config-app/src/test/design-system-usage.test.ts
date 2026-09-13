@@ -56,6 +56,11 @@ const EDITABLE_GRIDS = [
   // save and cancel beside it (AdminRolesPage.tsx:103-118). That is the grid
   // this exception is for, and it arrived after the list was written.
   'pages/AdminRolesPage.tsx',
+  // Bulls.CFG's menu, edited IN THE ROW and addressed BY INDEX: the number
+  // column IS the line the door reads, Remove drops draft[i], and "Add row"
+  // appends a second blank {title,file} - so there is no stable row id to give
+  // DataTable and no sort order that is not a corruption of the file.
+  'pages/BullsInfoPage.tsx',
 ];
 
 function offenders(pattern: RegExp): string[] {
