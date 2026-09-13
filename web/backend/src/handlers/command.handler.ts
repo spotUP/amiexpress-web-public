@@ -199,6 +199,11 @@ import {
 } from './command-execution.handler';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import type { LineInputOptions } from '../utils/line-input.util';
+// express.e:2335 - a prompt refuses the key that would overflow its field.
+import {
+  MAX_COMMAND_LINE, MAX_MSG_LINE_NUMBER, MAX_MSG_LINE_TEXT,
+  MAX_MSG_TO, MAX_MSG_SUBJECT, MAX_DOOR_PASSWORD,
+} from '../utils/line-input.util';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
@@ -522,7 +527,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageDeleteLineInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
         session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
       }
       return;
@@ -539,7 +544,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageEditLineInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
         session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
       }
       return;
@@ -552,7 +557,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageEditLineContent(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
         session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
       }
       return;
@@ -563,7 +568,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageAttachFileInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
         session.inputBuffer = (session.inputBuffer || '') + data;
       }
       return;
@@ -577,7 +582,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageReplaceSearchInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
         session.inputBuffer = (session.inputBuffer || '') + data;
       }
       return;
@@ -588,7 +593,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageReplaceWithInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
         session.inputBuffer = (session.inputBuffer || '') + data;
       }
       return;
@@ -600,7 +605,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageInsertLineInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
         session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
       }
       return;
@@ -612,7 +617,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleMessageInsertTextInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
         session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
       }
       return;
@@ -623,7 +628,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleUploadFileInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
         session.inputBuffer = (session.inputBuffer || '') + data;
         emitText(socket, data);
       }
@@ -635,7 +640,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleQuoteRangeInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
         session.inputBuffer = (session.inputBuffer || '') + data;
         emitText(socket, data); // Echo printable characters
       }
@@ -661,7 +666,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
             session.inputBuffer = session.inputBuffer.slice(0, -1);
             emitText(socket, '\b \b');
           }
-        } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
           session.inputBuffer = (session.inputBuffer || '') + data;
           emitText(socket, data);
         }
@@ -698,7 +703,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleForwardMessageToInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_TO) {
         session.inputBuffer = (session.inputBuffer || '') + data;
         emitText(socket, data); // Echo printable characters
       }
@@ -710,7 +715,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         await handleForwardMessageSubjectInput(socket, session, input);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_SUBJECT) {
         session.inputBuffer = (session.inputBuffer || '') + data;
         emitText(socket, data); // Echo printable characters
       }
@@ -1417,7 +1422,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         emitText(socket, '\b \b');
       }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+    } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
       session.inputBuffer = (session.inputBuffer || '') + data;
       emitText(socket, data);
     }
@@ -3185,7 +3190,7 @@ console.log(' In file upload state - canceling upload');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         socket.emit('ansi-output', '\b \b');
       }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+    } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
       session.inputBuffer = (session.inputBuffer || '') + data;
       socket.emit('ansi-output', data);
     }
@@ -3213,7 +3218,7 @@ console.log(' In file upload state - canceling upload');
         // own handler also uses the buffered API).
         socket.emit('ansi-output', '\b \b');
       }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+    } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
       session.inputBuffer = (session.inputBuffer || '') + data;
       socket.emit('ansi-output', data);
     }
@@ -3275,7 +3280,7 @@ console.log(' In file upload state - canceling upload');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         emitText(socket, '\b \b');
       }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+    } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_DOOR_PASSWORD) {
       session.inputBuffer = (session.inputBuffer || '') + data;
       emitText(socket, '*'); // Mask password characters
     }
@@ -4345,7 +4350,7 @@ console.log(' Empty command, redisplaying menu');
         emitText(socket, '\b' + tail + ' ' + '\x1b[D'.repeat(tail.length + 1));
         (session as any)._readCommandCurpos = curpos;
       }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+    } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
       const buf = session.inputBuffer;
       if (curpos === buf.length) {
         // Append at end (fast path)

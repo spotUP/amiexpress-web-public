@@ -10,7 +10,7 @@ import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
 import { resetPetsciiModel } from '../../utils/petscii-session-model';
 import { transportCapabilities } from '../../server/transport-adapter';
-import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from './line-input';
+import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from '../../utils/line-input.util';
 
 /**
  * Get the appropriate output event name based on session terminal type

@@ -21,7 +21,7 @@ import {
   acceptTypedChar,
   acceptBackspace,
   ANSI_PROMPT_MAX_LEN,
-} from '../../src/handlers/command-handler/line-input';
+} from '../../src/utils/line-input.util';
 
 /** Type a whole string through the rule, as a caller's keystrokes. */
 function type(start: string, keys: string, maxLen: number): { buffer: string; wire: string } {
@@ -97,5 +97,58 @@ describe('a prompt never runs past the edge', () => {
       expect(edit.buffer).toBe('AB');
       expect(edit.echo).toBe('');
     }
+  });
+});
+
+/**
+ * The same rule, through the routine most prompts actually use.
+ *
+ * collectLine() is this port's lineInput: LINE_PROMPT_SUBSTATES registers a
+ * prompt and collectLine buffers its keystrokes. It had no length at all, so
+ * every prompt that goes through it could run past the edge.
+ */
+describe('collectLine stops at the field length', () => {
+  const { collectLine, MAX_COMMAND_LINE } = require('../../src/utils/line-input.util');
+
+  function socketSpy(): { socket: any } {
+    const socket: any = { emit: () => {}, on() { return this; } };
+    return { socket };
+  }
+
+  it('refuses past the length the prompt declares, and echoes nothing', async () => {
+    const { socket } = socketSpy();
+    const session: any = { inputBuffer: '' };
+    let line: string | null = null;
+
+    for (const ch of 'ABCDEFGHIJKL') {
+      await collectLine(socket, session, ch, (l: string) => { line = l; }, { maxLen: 8 });
+    }
+    // The BUFFER is what this level can prove: emitText routes through the
+    // output buffer, which needs a registered session to reach a socket, and
+    // faking that here would be testing the fake. What the caller SEES is
+    // pinned directly on acceptTypedChar/acceptBackspace above.
+    expect(session.inputBuffer).toBe('ABCDEFGH');
+
+    await collectLine(socket, session, '\r', (l: string) => { line = l; }, { maxLen: 8 });
+    // What the handler receives is what the caller could see and edit -
+    // nothing arrives that backspace could not have removed.
+    expect(line).toBe('ABCDEFGH');
+  });
+
+  it('bounds a prompt that declares no length, rather than letting it run', async () => {
+    const { socket } = socketSpy();
+    const session: any = { inputBuffer: '' };
+    for (let i = 0; i < MAX_COMMAND_LINE + 50; i++) {
+      await collectLine(socket, session, 'x', () => {});
+    }
+    expect(session.inputBuffer.length).toBe(MAX_COMMAND_LINE);
+  });
+
+  it('still backspaces what it accepted', async () => {
+    const { socket } = socketSpy();
+    const session: any = { inputBuffer: '' };
+    for (const ch of 'ABC') await collectLine(socket, session, ch, () => {}, { maxLen: 8 });
+    for (let i = 0; i < 3; i++) await collectLine(socket, session, '\b', () => {}, { maxLen: 8 });
+    expect(session.inputBuffer).toBe('');
   });
 });

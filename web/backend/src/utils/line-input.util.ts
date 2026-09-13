@@ -18,12 +18,90 @@
 import { emitText, flushOutput } from './output.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 
+/**
+ * THE LENGTH RULE, and the lengths themselves.
+ *
+ * express.e refuses the keystroke that would overflow a prompt's field:
+ *
+ *     ELSEIF (ch>31) AND (EstrLen(outputString)<maxLen)      express.e:2335
+ *
+ * Without it the echo runs past the right edge, the TERMINAL wraps the line,
+ * and the `\b \b` sent to rub a character out cannot climb back over that
+ * wrap - `\b` stops at column 0. Whatever landed on the first row can then
+ * never be deleted, and is still in the buffer at Enter. The sysop, on the
+ * live board 2026-09-13: "when i type in the ansi prompt, it wraps to the
+ * next line and i cant backspace to delete on the first line".
+ */
+export const ANSI_PROMPT_MAX_LEN = 10;
+
+export interface LineEdit {
+  /** The buffer after the keystroke. */
+  buffer: string;
+  /** What to send to the caller's terminal - '' when the key is refused. */
+  echo: string;
+}
+
+/**
+ * A printable character, accepted only if the field has room for it.
+ *
+ * express.e:2335. A refused key echoes NOTHING: the caller sees the field
+ * stop taking input, which is the same feedback a real Amiga gave. Sending
+ * a bell here would be our invention, not express's.
+ */
+export function acceptTypedChar(buffer: string, ch: string, maxLen: number): LineEdit {
+  const printable = ch.length === 1 && ch >= ' ' && ch <= '~';
+  if (!printable || buffer.length >= maxLen) return { buffer, echo: '' };
+  return { buffer: buffer + ch, echo: ch };
+}
+
+/**
+ * Backspace over the last character, if there is one.
+ *
+ * express.e:2306 - `IF curpos>0`. An empty buffer ignores the key, which is
+ * what stops a caller rubbing out the prompt itself.
+ */
+export function acceptBackspace(buffer: string): LineEdit {
+  if (buffer.length === 0) return { buffer, echo: '' };
+  // BS, space, BS: back over the character, paint a space on it, back again
+  // (express.e:2307-2319 builds the same three-part string).
+  return { buffer: buffer.slice(0, -1), echo: '\b \b' };
+}
+
+/**
+ * The lengths express gives its prompts, with the line that says so.
+ *
+ * Each is `lineInput()`'s maxLen at that prompt. Where express's own
+ * counterpart could not be identified - prompts this port added, like the
+ * webhook URL - MAX_COMMAND_LINE is used: it is express's most permissive
+ * length (28624), so it bounds the buffer without inventing a number.
+ */
+/** The menu command line. express.e:28624 - lineInput('','',255,...). */
+export const MAX_COMMAND_LINE = 255;
+/** A line NUMBER inside the message editor - "delete which line". */
+export const MAX_MSG_LINE_NUMBER = 5;
+/** A line of message text. express.e:10117 - editor.editorMaxWidth:=76. */
+export const MAX_MSG_LINE_TEXT = 76;
+/** Who a message is to. express.e:9817, and 10779 for a new message. */
+export const MAX_MSG_TO = 30;
+/** A message subject. express.e:9826, and 10847 for a new message. */
+export const MAX_MSG_SUBJECT = 30;
+/** A door's password prompt. express.e:4720 - lineInput('','',15,...). */
+export const MAX_DOOR_PASSWORD = 15;
+
 /** Enough of a session for line collection; keeps this usable from tests. */
 export interface LineInputSession {
   inputBuffer?: string;
 }
 
 export interface LineInputOptions {
+  /**
+   * The field's length, as express gives it to `lineInput()`.
+   *
+   * A key past it is refused and never echoed (express.e:2335). Omitted
+   * means MAX_COMMAND_LINE - express's own most permissive length - so a
+   * prompt registered without one is still bounded.
+   */
+  maxLen?: number;
   /**
    * Echo a line break when Enter is pressed.
    *
@@ -70,18 +148,22 @@ export async function collectLine(
   }
 
   if (data === '\x7f' || data === '\b') {
-    if (session.inputBuffer.length > 0) {
-      session.inputBuffer = session.inputBuffer.slice(0, -1);
-      emitText(socket, '\b \b');
-    }
+    const edit = acceptBackspace(session.inputBuffer);
+    session.inputBuffer = edit.buffer;
+    if (edit.echo) emitText(socket, edit.echo);
     return false;
   }
 
-  // Printable ASCII only: control bytes must not become part of a filename,
-  // and echoing them would move the cursor off the prompt line.
-  if (data.length === 1 && data >= ' ' && data <= '~') {
-    session.inputBuffer += data;
-    emitText(socket, data);
+  // Printable ASCII only - control bytes must not become part of a filename,
+  // and echoing them would move the cursor off the prompt line - and only
+  // while the field has room, so the line cannot reach the wrap that
+  // backspace is unable to climb back over.
+  {
+    const edit = acceptTypedChar(
+      session.inputBuffer, data, options.maxLen ?? MAX_COMMAND_LINE,
+    );
+    session.inputBuffer = edit.buffer;
+    if (edit.echo) emitText(socket, edit.echo);
   }
 
   return false;
@@ -121,12 +203,12 @@ export async function collectLine(
 export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new Map<string, LineInputOptions>([
   // express.e:26151 - lineInput('','',78,...) "Enter string to search for: ".
   // echoNewline is off: handleSearchInput emits express.e:26154's own \b\n.
-  [LoggedOnSubState.ZIPPY_SEARCH_INPUT, {}],
+  [LoggedOnSubState.ZIPPY_SEARCH_INPUT, { maxLen: 78 }],
   // express.e:26869 - lineInput('','',8,...) inside getDirSpan(). Answers are
   // spans ("1-3"), not single keys, and handleDirSpanInput emits its own
   // newline on both the cancel and the search path.
-  [LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT, {}],
+  [LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT, { maxLen: 8 }],
   // express.e:20414 - lineInput('','',40,...) "Enter filename of file to view?"
   // handleFilenameInput emits express.e:20418's newline when the line is empty.
-  [LoggedOnSubState.VIEW_FILE_INPUT, {}],
+  [LoggedOnSubState.VIEW_FILE_INPUT, { maxLen: 40 }],
 ]);

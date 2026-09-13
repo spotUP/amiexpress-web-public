@@ -7,7 +7,7 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import { getSystemTime } from '../../utils/date-time.util';
-import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from './line-input';
+import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from '../../utils/line-input.util';
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
