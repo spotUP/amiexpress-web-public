@@ -262,6 +262,30 @@ export class SpriteStudioDoor {
     // that opens something - the editor behind it would have no document.
     await this.openSpriteRequester();
 
+    // CANCELLING THAT FIRST REQUESTER LEAVES THE DOOR.
+    //
+    // Every other requester returns to an editor with a document in it.
+    // This one has nothing behind it, so Escape used to drop the caller on
+    // a black screen with no key that did anything: the list was destroyed,
+    // `this.editor` was still null so nothing took focus, and the await
+    // below never resolved because only `screen.destroy()` resolves it and
+    // nothing had destroyed the screen. The door sat there holding the
+    // node until the caller dropped carrier. Reported by the sysop,
+    // 2026-09-13: "i pressed esc in the sprite selector and got a black
+    // screen".
+    //
+    // Escape on the FIRST requester is the caller saying "not today", and
+    // the honest answer is to give the board back. The same return covers
+    // the board that has no sprites at all, which reached this line the
+    // same way after its "No sprites" message.
+    //
+    // It belongs here and not in pick(): a later requester that quit the
+    // whole door on Escape would lose the caller's unsaved work.
+    if (!this.doc) {
+      this.destroy();
+      return;
+    }
+
     await new Promise<void>((resolve) => {
       this.exitResolve = resolve;
       this.screen.once('destroy', resolve);
