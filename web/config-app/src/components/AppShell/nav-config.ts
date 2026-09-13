@@ -79,7 +79,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Live',
     items: [
-      { path: '', label: 'Overview', icon: LayoutDashboard, minLevel: 100, description: 'The state of the board at a glance' },
+      // Sysop-only, like the rest of Live. Its panels are fed by /api/config,
+      // which is requireSysop() - a level-100 screen editor who opened it got
+      // the furniture and 403s behind it. Screens is the only destination a
+      // level 100 has (routes-setup.ts gates /api/screens and /api/themes at
+      // requireLevel(100)), and the sidebar now says the same thing.
+      { path: '', label: 'Overview', icon: LayoutDashboard, minLevel: 255, description: 'The state of the board at a glance' },
       { path: 'activity', label: 'Activity', icon: Zap, minLevel: 255, description: 'Live feed of logons, doors and transfers' },
       { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings', keywords: ['Node Control'] },
       { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages', 'Quiet Hours', 'AI Bot', 'Quick Replies', 'Page Sysop'] },

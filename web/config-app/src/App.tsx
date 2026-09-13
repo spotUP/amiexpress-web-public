@@ -102,7 +102,11 @@ function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<OverviewPage />} />
+        {/* Guarded like every other Live destination: the index is the
+            Overview, and a caller below its level lands on Screens instead.
+            Unguarded, a level-100 screen editor who typed /admin got the
+            Overview's furniture with 403s behind every panel. */}
+        <Route index element={<SysopRoute><OverviewPage /></SysopRoute>} />
 
         {/* Live — sysop-only except Overview */}
         <Route path="activity" element={<SysopRoute><ActivityPage /></SysopRoute>} />
