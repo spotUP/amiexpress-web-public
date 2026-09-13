@@ -6,6 +6,7 @@ import { io, Socket } from 'socket.io-client';
 import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
+import { createDoubleHeightFilter, type DoubleHeightFilter } from '../utils/teletext-double-height';
 import {
   FIT_TO_WINDOW,
 } from '../utils/terminal-zoom';
@@ -429,6 +430,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const texttvPrevRowsRef = useRef<number | null>(null);
   /** The cell size the session had before teletext fitted its own. */
   const texttvPrevFontSizeRef = useRef<number | null>(null);
+  /** Turns the board's DECDHL escapes into the face's half-height glyphs. */
+  const doubleHeightRef = useRef<DoubleHeightFilter>(createDoubleHeightFilter());
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -2291,11 +2294,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         enqueuePetscii(petsciiTransducerRef.current!.transduce(output));
         return;
       }
+      /*
+       * DECDHL, which xterm.js does not have (teletext-double-height.ts).
+       * A teletext session's headline rows arrive as ESC#3 / ESC#4 - the
+       * escapes a VT100 would understand - and become the private-use
+       * codepoints the face carries the halves in. Every other session sees
+       * its bytes untouched: the filter returns the string it was given when
+       * no attribute is set and none arrives.
+       */
+      const painted = texttvModeRef.current
+        ? doubleHeightRef.current.write(output)
+        : output;
+
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
-        modemEmulatorRef.current.write(output, { prePaced });
+        modemEmulatorRef.current.write(painted, { prePaced });
       } else {
-        term.write(output);
+        term.write(painted);
       }
       term.refresh(0, term.rows - 1);
     });
@@ -2372,12 +2387,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
     });
 
-    // W row 22, applied without a reconnect: the atlas is rebuilt from the
-    // new character set and the screen repaints from the machine it has.
-    socket.on('petscii-charset', (m: { charset?: string }) => {
-      setPetsciiSwedish(m?.charset === 'swedish');
-    });
-
     socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
       console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide
@@ -2419,6 +2428,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
          * screen left in force, which is why it is not just clear().
          */
         term.reset();
+        doubleHeightRef.current.reset();
 
         // True 40x25 grid (same geometry PETSCII sessions use): the board
         // draws 40 columns for this session, so the terminal shows 40.
@@ -2446,6 +2456,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // The same clear on the way out: forty-column rows reflowed into
           // eighty are the same mess in the other direction.
           term.reset();
+          doubleHeightRef.current.reset();
           term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
           texttvPrevColsRef.current = null;
           texttvPrevRowsRef.current = null;

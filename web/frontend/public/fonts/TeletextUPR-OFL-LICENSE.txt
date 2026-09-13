@@ -1,21 +1,31 @@
 MODIFICATION NOTICE (AmiExpress-Web, 2026-09-13)
 
-This directory ships TeletextUPR, a modified version of TDAText. The change
-is one glyph: TDAText 0.1.3 draws lowercase a-ring (U+00E5) as a byte-for-byte
-copy of a-dieresis (U+00E4) - outline and embedded bitmap alike - so Swedish
-teletext pages read "Nagon" with two dots where the ring belongs. The glyph
-was composed from this font's own 'a' and the ring already present on 'uring'
-and 'Aring'. Nothing else was touched.
+This directory ships TeletextUPR, a modified version of TDAText. Two changes:
+
+1. TDAText 0.1.3 draws lowercase a-ring (U+00E5) as a byte-for-byte copy of
+   a-dieresis (U+00E4) - outline and embedded bitmap alike - so Swedish
+   teletext pages read "Nagon" with two dots where the ring belongs. The glyph
+   was composed from this font's own 'a' and the ring already present on
+   'uring' and 'Aring'.
+
+2. Private Use Area E200-E2DF and E300-E3DF carry the top half and the bottom
+   half of every Latin-1 printable, each stretched over a whole cell. They are
+   how teletext's double-height rows are drawn on a terminal whose emulator
+   has no DECDHL: the row is sent twice, once in each half. The halves are
+   traced from this font's own 20ppem bitmaps, so they are the same pixels,
+   each row drawn twice.
+
+Nothing else was touched.
 
 TDAText is a Reserved Font Name, so the modified font is renamed to
 TeletextUPR - SIL Open Font License v1.1, clause 3. The original copyright
 and license follow, unchanged.
 
-The generator lives in dev/scripts/fonts/fix-teletext-aring.py and the upstream
-it reads in dev/scripts/fonts/TDAText-upstream.ttf, so the fix can be re-applied
-to a future TDAText release rather than re-derived by hand:
+The generator lives in dev/scripts/fonts/build-teletext-font.py and the
+upstream it reads in dev/scripts/fonts/TDAText-upstream.ttf, so the build can
+be re-applied to a future TDAText release rather than re-derived by hand:
 
-  python3 dev/scripts/fonts/fix-teletext-aring.py \
+  python3 dev/scripts/fonts/build-teletext-font.py \
       dev/scripts/fonts/TDAText-upstream.ttf \
       web/frontend/public/fonts/TeletextUPR.ttf \
       web/frontend/public/fonts/TeletextUPR.woff2

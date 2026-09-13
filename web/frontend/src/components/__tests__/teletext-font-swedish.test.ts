@@ -92,6 +92,46 @@ describe('the teletext face draws Swedish', () => {
     expect(ring.equals(dieresis)).toBe(false);
   });
 
+  it('carries a top and a bottom half for every Latin-1 printable', () => {
+    // Double height is drawn by the font because xterm.js has no DECDHL; the
+    // halves live at 0xE200 + (cp - 0x20) and 0xE300 + (cp - 0x20), clear of
+    // the U+E000-E1FF block the PETSCII transducer already owns.
+    for (const ch of 'A z0 \u00e5\u00f6') {
+      const cp = ch.codePointAt(0)!;
+      const topId = glyphId(buf, cmap.offset, 0xe200 + cp - 0x20);
+      const bottomId = glyphId(buf, cmap.offset, 0xe300 + cp - 0x20);
+      expect(topId).toBeGreaterThan(0);
+      expect(bottomId).toBeGreaterThan(0);
+      expect(topId).not.toBe(bottomId);
+      expect(topId).not.toBe(gid(ch));
+    }
+  });
+
+  it('stacks into exactly twice the letter, with the halves meeting', () => {
+    // The invariant that makes double height real: drawn on consecutive rows
+    // (one cell, 20 pixels of 50 units, apart) the two halves cover twice the
+    // plain glyph's height and meet exactly - no gap, no overlap.
+    const CELL = 1000;
+    const box = (cp: number) => {
+      const glyph = outline(buf, t, glyphId(buf, cmap.offset, cp));
+      // Simple glyph header: contours, xMin, yMin, xMax, yMax - so yMin is
+      // at byte 4 and yMax at byte 8.
+      return { yMin: glyph.readInt16BE(4), yMax: glyph.readInt16BE(8) };
+    };
+
+    for (const ch of 'Agq\u00e5') {
+      const cp = ch.codePointAt(0)!;
+      const plain = box(cp);
+      const top = box(0xe200 + cp - 0x20);
+      const bottom = box(0xe300 + cp - 0x20);
+
+      // The bottom half is drawn one row lower, so shift it there.
+      const shifted = { yMin: bottom.yMin - CELL, yMax: bottom.yMax - CELL };
+      expect(top.yMin).toBe(shifted.yMax);                       // they meet
+      expect(top.yMax - shifted.yMin).toBe(2 * (plain.yMax - plain.yMin));
+    }
+  });
+
   it('gives a-ring the same mark uppercase A-ring has, one pixel row taller than a', () => {
     // The ring reaches the ascender (800 units); plain 'a' stops at the
     // x-height (500). yMax is bytes 8..10 of a simple glyph record.

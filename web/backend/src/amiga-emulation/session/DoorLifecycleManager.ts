@@ -13,6 +13,16 @@ import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
 import { DoorMessageHandler } from "./DoorMessageHandler.js";
+import { createInactivityFuse, type InactivityFuse } from "./inactivity-fuse.js";
+
+/**
+ * The ceiling no amount of door activity pushes back.
+ *
+ * An hour: long enough that no caller reaches it while reading, short enough
+ * that a door left animating behind a caller who walked away gives the node
+ * back the same evening.
+ */
+const DOOR_ABSOLUTE_TIMEOUT_SECONDS = 3600;
 import { TIMDoorMessageHandler } from "./TIMDoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
@@ -79,6 +89,8 @@ export class DoorLifecycleManager {
   private onExitCallback: (() => void) | null = null;
   private lifecycleConfig: LifecycleConfig;
   private executionTimer: NodeJS.Timeout | null = null;
+  /** Burns while the door says nothing; touched by every message and key. */
+  private inactivityFuse: InactivityFuse | null = null;
   private isPaused: boolean = false;
 
   // PERFORMANCE FIX: Track if doorMessageCallback is handling XIM messages
@@ -362,7 +374,11 @@ debugLog(
       executionState: this.executionState,
       getXimProtocol: () => this.ximProtocol,
       markUsingDoorMessageCallback: () => { this.usingDoorMessageCallback = true; },
-      incrementMessagesHandled: () => { this.messagesHandledThisBatch++; },
+      incrementMessagesHandled: () => {
+        this.messagesHandledThisBatch++;
+        // A door that is talking is a door that is alive (see the fuse).
+        this.inactivityFuse?.touch();
+      },
     });
 
     // CRITICAL: Send INIT/STAT to door's pr_MsgPort BEFORE first instruction executes
@@ -382,13 +398,26 @@ debugLog("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door exe
       );
     }
 
-    // Set up timeout
+    /*
+     * The timeout is an INACTIVITY fuse, not a wall clock.
+     *
+     * It used to be armed once, here, for the whole configured timeout, and
+     * it fired whatever the door was doing - so a door a caller was USING
+     * died on the same schedule as a door that had wedged. TEXTTV went down
+     * at +310s with the sysop mid-page, five minutes being precisely how
+     * long a teletext reader is meant to be sat in (2026-09-13). Every XIM
+     * message and every keystroke pushes it back now; only silence burns it.
+     */
     if (this.lifecycleConfig.timeout) {
-      this.executionTimer = setTimeout(() => {
-debugLog("[DoorLifecycleManager] Execution timeout");
-        this.socket.emit("door:error", { message: "Execution timeout" });
-        this.terminate();
-      }, this.lifecycleConfig.timeout * 1000);
+      this.inactivityFuse = createInactivityFuse({
+        seconds: this.lifecycleConfig.timeout,
+        maxSeconds: DOOR_ABSOLUTE_TIMEOUT_SECONDS,
+        onExpire: () => {
+debugLog(`[DoorLifecycleManager] No door activity for ${this.lifecycleConfig.timeout}s - terminating`);
+          this.socket.emit("door:error", { message: "Execution timeout" });
+          this.terminate();
+        },
+      });
     }
 
     // Start the main execution loop
@@ -1904,6 +1933,10 @@ debugLog("[DoorLifecycleManager] Terminating door lifecycle");
     if (this.executionTimer) {
       clearTimeout(this.executionTimer);
       this.executionTimer = null;
+    }
+    if (this.inactivityFuse) {
+      this.inactivityFuse.clear();
+      this.inactivityFuse = null;
     }
     if (this.postShutdownTimer) {
       clearTimeout(this.postShutdownTimer);
