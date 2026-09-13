@@ -155,6 +155,24 @@ async function untilTrue(what: string, ok: () => boolean, ms = 15000): Promise<v
 
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
 
+/**
+ * A thinking dot as it goes on the wire.
+ *
+ * These three tests waited for a chunk that was exactly '.', which is what
+ * the dots used to be. Since 1793a4fc8 a dot carries its own colour and the
+ * reset that tells the line model what it did to it - one chunk,
+ * '\x1b[0;36m.' + chatResetColourBytes - so a bare '.' never arrives and all
+ * three sat out their fifteen seconds waiting for one. thinking-dots.test.ts
+ * pins the same bytes from the other side.
+ *
+ * Being the COLOURED dot matters beyond not timing out: a character the bot
+ * types is emitted bare when the sender has not changed, so a reply with a
+ * full stop in it would satisfy a bare-'.' test without any dot ever being
+ * drawn. That is why the held replies below say "no full stops in this one".
+ */
+const THINKING_DOT = '\x1b[0;36m.';
+const isThinkingDot = (chunk: string) => chunk.startsWith(THINKING_DOT);
+
 describe('the typing plan', () => {
   it('with no typos types the text in order, one character per event', () => {
     const plan = planNaturalTyping('Read the docs.', { typingSpeed: 10, typoProbability: 0 }, () => 0.5);
@@ -460,11 +478,17 @@ describe('the chat is one stream', () => {
     // failure - it is not a sleep.
   }, 40000);
 
-  it('shows the caller it is thinking when the reply is slow, and rubs it out', async () => {
-    // The reply is held back past the dot threshold, so the caller sees dots;
-    // by the time the reply has been typed they are gone again. The held
-    // reply contains no full stop, so a chunk that is exactly '.' can only be
-    // a thinking dot.
+  it('shows the caller it is thinking when the reply is slow, and types the reply after the dots', async () => {
+    // The reply is held back past the dot threshold, so the caller sees dots,
+    // and the reply is typed AFTER them on the same line.
+    //
+    // This test used to assert the opposite - that the dots were rubbed out
+    // before the reply - and that is no longer the board's behaviour. The
+    // sysop asked for it on 2026-09-10: erasing them read as the bot taking
+    // its thinking back. stop(keepDots=true) is the reply's path
+    // (thinking-dots.ts:89-99), and thinking-dots.test.ts:85 pins the same
+    // rule from the unit side. Everything ELSE still erases - the caller's
+    // key, a quit, the chat ending - which the quit test below asserts.
     mockHold = { ms: THINKING_DOTS_AFTER_MS + 900, reply: 'no full stops in this one' };
     try {
       const w = makeWorld();
@@ -474,7 +498,7 @@ describe('the chat is one stream', () => {
 
       const before = w.seen.length;
       await H.handleUserChatMessage(w.io, w.repo, w.session, 'something slow');
-      await untilTrue('the dots to appear', () => w.seen.slice(before).some((c) => c === '.'));
+      await untilTrue('the dots to appear', () => w.seen.slice(before).some(isThinkingDot));
       // And bare: a raw \x1b[36m on a dot would leave line.lastSender saying
       // `user` while the terminal stood in the sysop's cyan, so the caller's
       // next key would come out cyan - verbatim the bug callerTypedChar was
@@ -483,9 +507,9 @@ describe('the chat is one stream', () => {
 
       await untilTrue('the reply to finish', () => handedBack(w.seen.slice(before)));
       const shownNow = shown(w.seen.slice(before));
-      // Every dot the board typed while thinking was rubbed out: what is left is
-      // the reply, and a run of leading dots would be the bug.
-      expect(shownNow.trimStart().startsWith('.')).toBe(false);
+      // The dots the board typed while thinking are still standing, and the
+      // reply follows them - that is the whole point of keeping them.
+      expect(shownNow.trimStart()).toMatch(/^\.+/);
       expect(shownNow.replace(/\s/g, '')).toContain('nofullstopsinthisone');
     } finally {
       mockHold = null;
@@ -506,7 +530,7 @@ describe('the chat is one stream', () => {
 
       const before = w.seen.length;
       await H.handleUserChatMessage(w.io, w.repo, w.session, 'something slow');
-      await untilTrue('the dots to appear', () => w.seen.slice(before).some((c) => c === '.'));
+      await untilTrue('the dots to appear', () => w.seen.slice(before).some(isThinkingDot));
 
       await H.handleUserQuitChat(w.io, w.repo, w.session, w.socket);
       const text = shown(w.seen.slice(before));
@@ -518,7 +542,7 @@ describe('the chat is one stream', () => {
       // no dot of its own either.
       const after = w.seen.length;
       await wait(2500);
-      expect(w.seen.slice(after).some((c) => c === '.')).toBe(false);
+      expect(w.seen.slice(after).some(isThinkingDot)).toBe(false);
     } finally {
       mockHold = null;
     }
@@ -548,15 +572,17 @@ describe('the chat is one stream', () => {
       await untilTrue('the model to return and its line to be recorded', () => botLines().length > said);
 
       const thinking = w.seen.length;
-      await untilTrue('a dot AFTER the model returned', () => w.seen.slice(thinking).some((c) => c === '.'));
+      await untilTrue('a dot AFTER the model returned', () => w.seen.slice(thinking).some(isThinkingDot));
       // And nothing of the reply had been typed when it arrived.
-      const firstDot = w.seen.slice(thinking).findIndex((c) => c === '.');
+      const firstDot = w.seen.slice(thinking).findIndex(isThinkingDot);
       expect(shown(w.seen.slice(thinking, thinking + firstDot))).not.toContain('no full stops');
 
-      // The whole run still ends clean: dots gone, reply typed from the margin.
+      // The whole run ends with the dots still standing and the reply typed
+      // after them - stop(keepDots=true), the sysop's 2026-09-10 call. This
+      // asserted "dots gone" until the day the board stopped erasing them.
       await untilTrue('the reply to finish', () => handedBack(w.seen.slice(thinking)));
       const shownNow = shown(w.seen.slice(thinking));
-      expect(shownNow.trimStart().startsWith('.')).toBe(false);
+      expect(shownNow.trimStart()).toMatch(/^\.+/);
       expect(shownNow.replace(/\s/g, '')).toContain('nofullstopsinthisone');
     } finally {
       mockHold = null;

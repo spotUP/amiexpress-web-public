@@ -59,7 +59,12 @@ function squeeze(output: string): string {
 export async function theShowcaseOpensAndPaintsItsChrome(): Promise<void> {
   const painted = squeeze(await paint());
 
-  assert.ok(painted.includes('Neo-BlessedShowcase'), 'the header bar reaches the screen');
+  // The masthead's text is the door's own, and the door shouts it:
+  // attachDoorChrome is handed `NEO-BLESSED SHOWCASE ${BUILD_VERSION}` at
+  // app.ts:294. `Neo-Blessed Showcase` is the TERMINAL title (app.ts:130),
+  // which squeeze() strips with the rest of the OSC sequence - so asserting
+  // the mixed-case spelling was asserting a string the door never paints.
+  assert.ok(painted.includes('NEO-BLESSEDSHOWCASE'), 'the header bar reaches the screen');
   assert.ok(painted.includes('Categories'), 'and the category panel');
   assert.ok(painted.includes('DemoArea'), 'and the demo pane');
 }
@@ -75,7 +80,7 @@ export async function twoThemesGiveTwoDifferentFrames(): Promise<void> {
   // double rules, so even the border CHARACTERS change: `.-Categories-.` under
   // classic, `+=Categories=+` under neon.
   for (const [name, painted] of [['classic', squeeze(classic)], ['uprough-neon', squeeze(other)]] as const) {
-    assert.ok(painted.includes('Neo-BlessedShowcase'), `the header survives ${name}`);
+    assert.ok(painted.includes('NEO-BLESSEDSHOWCASE'), `the header survives ${name}`);
     assert.ok(painted.includes('User:sysop'), `and the status bar under ${name}`);
     assert.ok(painted.includes('Categories') && painted.includes('DemoArea'),
       `and both panels under ${name}`);
