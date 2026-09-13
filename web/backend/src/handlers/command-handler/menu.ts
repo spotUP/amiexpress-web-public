@@ -19,6 +19,7 @@ import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
 import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
 import { buildMenuPrompt } from '../../utils/menu-prompt.util';
+import { visibleColumns, wireColumns } from '../../utils/line-input.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { drainAchievementNotices } from '../../achievements/notices';
@@ -257,9 +258,9 @@ console.log('  - timeRemaining:', session.timeRemaining);
     emitText(socket, '\x1b[0m');
     // parseMciCodes is async; resolve the parsed string and append ' ' (express.e:28412)
     parseMciCodes(confToolFlags.menuPrompt, session).then((result) => {
-      emitPrompt(socket, result.parsed + ' ');
+      emitPrompt(socket, recallPromptColumn(session, result.parsed + ' '));
     }).catch(() => {
-      emitPrompt(socket, confToolFlags.menuPrompt + ' ');
+      emitPrompt(socket, recallPromptColumn(session, confToolFlags.menuPrompt + ' '));
     });
     return;
   }
@@ -286,7 +287,7 @@ console.log('  - currentMsgBase found:', !!currentMsgBase);
       : `${session.currentConfName}`;
   emitPrompt(
     socket,
-    buildMenuPrompt(
+    recallPromptColumn(session, buildMenuPrompt(
       {
         bbsName,
         relConfNum: session.relConfNum,
@@ -294,7 +295,24 @@ console.log('  - currentMsgBase found:', !!currentMsgBase);
         timeLeft,
       },
       session
-    )
+    ))
   );
 
+}
+
+/**
+ * Remember what column the prompt leaves the cursor in, and hand the text
+ * straight back.
+ *
+ * The command line's backspace has to redraw a wrapped line, and a redraw
+ * needs to know where the input STARTS - which is the visible width of
+ * whatever prompt was printed, colour excluded. Recorded here, at the one
+ * funnel every menu prompt goes through, so it cannot be a guess at the
+ * far end. A prompt longer than the terminal has itself wrapped, so only
+ * the part on the last row counts.
+ */
+function recallPromptColumn(session: BBSSession, text: string): string {
+  const width = wireColumns(session);
+  (session as any).promptColumn = visibleColumns(text) % width;
+  return text;
 }

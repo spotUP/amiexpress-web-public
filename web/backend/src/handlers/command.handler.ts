@@ -204,6 +204,7 @@ import type { LineInputOptions } from '../utils/line-input.util';
 import {
   MAX_COMMAND_LINE, MAX_MSG_LINE_NUMBER, MAX_MSG_LINE_TEXT,
   MAX_MSG_TO, MAX_MSG_SUBJECT, MAX_DOOR_PASSWORD,
+  rewrapEcho, wireColumns,
 } from '../utils/line-input.util';
 
 // Import security/ACS system
@@ -4358,10 +4359,38 @@ console.log(' Empty command, redisplaying menu');
       if (curpos > 0) {
         const buf = session.inputBuffer;
         const tail = buf.slice(curpos);
-        session.inputBuffer = buf.slice(0, curpos - 1) + tail;
+        const edited = buf.slice(0, curpos - 1) + tail;
+        session.inputBuffer = edited;
+        const was = curpos;
         curpos--;
-        // Redraw: BS + tail + space (to erase last char position) + move cursor back
-        emitText(socket, '\b' + tail + ' ' + '\x1b[D'.repeat(tail.length + 1));
+        /**
+         * A WRAPPED line is redrawn, not stepped back through.
+         *
+         * This prompt takes 255 characters (express.e:28624) and an
+         * 80-column terminal wraps at 80, so the line routinely spans rows.
+         * `\b` and `ESC[D` both stop dead at column 0, which left every
+         * character on the first row impossible to delete - the sysop, on
+         * the live board: "it wraps to the next line and i cant backspace
+         * to delete on the first line". express has the same limit and no
+         * answer to it, so this is a WEB_ deviation, asked for directly
+         * ("yes make climb the wrap").
+         *
+         * rewrapEcho returns '' when the line fits on one row, and the
+         * cheap BS-tail-space below runs exactly as before: a board does
+         * not repaint a row for every keystroke.
+         */
+        const rewrap = (session as any).petsciiMode === true ? '' : rewrapEcho(
+          { text: buf, curpos: was },
+          { text: edited, curpos },
+          ((session as any).promptColumn as number) ?? 0,
+          wireColumns(session as any),
+        );
+        if (rewrap) {
+          emitText(socket, rewrap);
+        } else {
+          // Redraw: BS + tail + space (to erase last char position) + move cursor back
+          emitText(socket, '\b' + tail + ' ' + '\x1b[D'.repeat(tail.length + 1));
+        }
         (session as any)._readCommandCurpos = curpos;
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {

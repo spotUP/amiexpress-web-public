@@ -152,3 +152,66 @@ describe('collectLine stops at the field length', () => {
     expect(session.inputBuffer).toBe('');
   });
 });
+
+/**
+ * Backspace that climbs a wrap.
+ *
+ * WEB_ deviation, asked for by the sysop on 2026-09-13. express rubs a
+ * character out with BS-space-BS (express.e:2307-2319) and both `\b` and
+ * `ESC[D` stop at column 0, so on a wrapped line the first row could not be
+ * reached - in express either. The menu command line takes 255 characters
+ * (express.e:28624) and wraps at the terminal's width, so this is not a
+ * corner: it is the normal way a long command behaves.
+ */
+describe('backspace climbs the wrap', () => {
+  const { rewrapEcho, visibleColumns, wireColumns } = require('../../src/utils/line-input.util');
+
+  it('leaves a line that fits alone, so ordinary typing is unchanged', () => {
+    // 20 characters starting at column 10 on an 80-column terminal: one row.
+    const before = { text: 'abcdefghijklmnopqrst', curpos: 20 };
+    const after = { text: 'abcdefghijklmnopqrs', curpos: 19 };
+    expect(rewrapEcho(before, after, 10, 80)).toBe('');
+  });
+
+  it('redraws from the input start when the line spans rows', () => {
+    // Prompt ends at column 10; 75 characters therefore reach column 85 and
+    // the line occupies two rows on an 80-column terminal.
+    const text = 'x'.repeat(75);
+    const out = rewrapEcho(
+      { text, curpos: 75 }, { text: text.slice(0, 74), curpos: 74 }, 10, 80,
+    );
+    // Up to the prompt's row, across to the input's column, wipe what
+    // follows - including the row below, which a shortened line vacates.
+    expect(out.startsWith('\x1b[1A\x1b[11G\x1b[0J')).toBe(true);
+    expect(out).toContain('x'.repeat(74));
+    // And the cursor ends where the edit left it: column (10+74)%80+1 = 5,
+    // on the second row, which is where writing the text already put it.
+    expect(out.endsWith('\x1b[5G')).toBe(true);
+  });
+
+  it('reaches a character on the FIRST row - the thing that was impossible', () => {
+    const text = 'y'.repeat(100);           // two rows at width 80, start 0
+    const after = text.slice(0, 39) + text.slice(40);  // delete one on row 1
+    const out = rewrapEcho({ text, curpos: 40 }, { text: after, curpos: 39 }, 0, 80);
+    expect(out).not.toBe('');
+    // The cursor was on row 0 (column 40), so nothing to climb on the way
+    // up; the redraw still rewrites both rows and puts it back at column 40.
+    expect(out).toContain('\x1b[1G\x1b[0J');
+    expect(out.endsWith('\x1b[40G')).toBe(true);
+  });
+
+  it('counts the prompt in columns, not in bytes of colour', () => {
+    // The menu prompt is mostly SGR; counting its bytes would put the input
+    // start tens of columns right of the caller's actual cursor.
+    // 'BBS [0] Menu: ' - fourteen columns, whatever the colour costs.
+    expect(visibleColumns('\x1b[0m\x1b[35mBBS \x1b[0m[\x1b[36m0\x1b[0m] Menu: ')).toBe(14);
+  });
+
+  it('measures the wire, not the board model', () => {
+    // screenWidth is reset to 80 for an ANSI caller at the graphics prompt;
+    // wireWidth is what the terminal actually reported.
+    expect(wireColumns({ wireWidth: 200, screenWidth: 80 })).toBe(200);
+    expect(wireColumns({ screenWidth: 40 })).toBe(40);
+    expect(wireColumns(undefined)).toBe(80);
+  });
+});

@@ -212,3 +212,92 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   // handleFilenameInput emits express.e:20418's newline when the line is empty.
   [LoggedOnSubState.VIEW_FILE_INPUT, { maxLen: 40 }],
 ]);
+
+/**
+ * The visible width of already-rendered prompt text.
+ *
+ * Colour is not width. The menu prompt is mostly SGR - `[0m[35m...` - and
+ * counting those bytes would put the input start tens of columns to the
+ * right of where the caller's cursor actually is.
+ */
+export function visibleColumns(text: string): number {
+  return text
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/[\r\n]/g, '')
+    .length;
+}
+
+/** Where an edited line stands: the text, and the cursor inside it. */
+export interface LineState {
+  text: string;
+  curpos: number;
+}
+
+/**
+ * WEB_ DEVIATION, on the sysop's instruction 2026-09-13 ("yes make climb the
+ * wrap"). express does not do this and cannot: `lineInput` rubs a character
+ * out with BS-space-BS (express.e:2307-2319), which stops dead at column 0,
+ * so on a real Amiga a wrapped line's first row was simply unreachable. The
+ * menu command line takes 255 characters (express.e:28624) and an 80-column
+ * terminal wraps at 80, so express's own answer leaves the caller stuck.
+ *
+ * Instead of stepping the cursor, this REDRAWS the line from where it began:
+ * up to the prompt's row, across to the column the input starts at, clear to
+ * the end of the screen, write the text again, then put the cursor where the
+ * edit left it. Crossing a row boundary is then not a special case - the
+ * cursor is positioned absolutely rather than walked backwards - so the same
+ * path serves a delete in the middle of a wrapped line.
+ *
+ * Returns '' when the line does not wrap, and the caller keeps its cheap
+ * BS-space-BS: one wrapped line is no reason to make every keystroke on the
+ * board repaint a row (RULES.md, doors draw smart).
+ */
+export function rewrapEcho(
+  before: LineState,
+  after: LineState,
+  startCol: number,
+  width: number,
+): string {
+  if (!Number.isFinite(width) || width < 2) return '';
+  const wrapped = (startCol + before.text.length) >= width
+    || (startCol + after.text.length) >= width;
+  if (!wrapped) return '';
+
+  const rowOf = (n: number): number => Math.floor((startCol + n) / width);
+  const colOf = (n: number): number => ((startCol + n) % width) + 1;
+
+  let out = '';
+  // 1. Up from wherever the cursor was, to the row the input starts on.
+  const upFromCursor = rowOf(before.curpos);
+  if (upFromCursor > 0) out += `\x1b[${upFromCursor}A`;
+  // 2. Across to the column the input starts at, and wipe everything after
+  //    it - including the rows below, which is what a shorter line leaves.
+  out += `\x1b[${startCol + 1}G\x1b[0J`;
+  // 3. The line as it now reads.
+  out += after.text;
+  // 4. Back up to where the edit left the cursor. After writing the text the
+  //    cursor sits at its end; a cursor at the very end needs no move, and
+  //    the column move is absolute so it is safe on either row.
+  const rowsAtEnd = rowOf(after.text.length);
+  const rowsAtCursor = rowOf(after.curpos);
+  if (rowsAtEnd > rowsAtCursor) out += `\x1b[${rowsAtEnd - rowsAtCursor}A`;
+  out += `\x1b[${colOf(after.curpos)}G`;
+  return out;
+}
+
+/**
+ * The caller's REAL terminal width, for anything that must not wrap.
+ *
+ * `screenWidth` is the board's column MODEL - reset to 80 for an ANSI
+ * caller at the graphics prompt - while `wireWidth` is what NAWS or the PTY
+ * actually reported. foldForWire (utils/wrap-for-session.util.ts) makes the
+ * same distinction for the same reason: conflating them made the fold read
+ * 80 for a terminal that had said 200.
+ */
+export function wireColumns(
+  session: { wireWidth?: number; screenWidth?: number } | null | undefined,
+): number {
+  const reported = session?.wireWidth ?? session?.screenWidth;
+  return typeof reported === 'number' && reported >= 20 ? Math.floor(reported) : 80;
+}
