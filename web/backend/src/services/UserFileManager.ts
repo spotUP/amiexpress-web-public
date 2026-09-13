@@ -984,6 +984,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
    * Appends to files if they exist, creates if not
    */
   public writeUserFiles(user: User, slotNumber: number): void {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`writeUserFiles: invalid slot ${slotNumber}`);
+    }
     try {
       this.ensureUserFilesReady();
       // Convert to file structs
@@ -996,10 +999,23 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       const keysBuffer = this.serializeUserKeysStruct(keysStruct);
       const miscBuffer = this.serializeUserMiscStruct(miscStruct);
 
-      // Append to files (create if not exist)
-      fs.appendFileSync(this.userDataPath, userBuffer);
-      fs.appendFileSync(this.userKeysPath, keysBuffer);
-      fs.appendFileSync(this.userMiscPath, miscBuffer);
+      // AT THE SLOT, NEVER APPENDED. These three files are arrays indexed by
+      // slot: record N is slot N+1, and every other read here computes its
+      // offset that way. This APPENDED, so a slot number was accepted and
+      // then ignored - each write added a record at the end instead of
+      // replacing the one it named. Write a user twice and the file holds
+      // two of them, the second at a position that is somebody else's slot.
+      //
+      // That is the duplication this board has carried from the start: 46
+      // accounts in 100 populated records (live, 2026-09-13), and a lockout
+      // written at coffe's slot sitting on the account that occupies that
+      // offset now. updateFileAtOffset extends the file with zeroed records
+      // when the slot is past the end, which is what makes a sparse slot
+      // file legal.
+      const index = slotNumber - 1;
+      this.updateFileAtOffset(this.userDataPath, userBuffer, index * this.USER_STRUCT_SIZE);
+      this.updateFileAtOffset(this.userKeysPath, keysBuffer, index * this.USERKEYS_STRUCT_SIZE);
+      this.updateFileAtOffset(this.userMiscPath, miscBuffer, index * this.USERMISC_STRUCT_SIZE);
 
 console.log(`[UserFileManager] Wrote user files for ${user.username} (slot ${slotNumber})`);
     } catch (error) {
