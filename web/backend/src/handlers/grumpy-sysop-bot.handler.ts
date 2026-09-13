@@ -15,7 +15,7 @@
 import axios from 'axios';
 import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
 import { GROUNDING_RULES } from './sysop-ai/personas';
-import { askWithTools } from './sysop-ai/loop';
+import { askWithTools, withoutControlTokens } from './sysop-ai/loop';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
 
@@ -1611,7 +1611,12 @@ console.log('[Grumpy Bot] Stripped a faked tool-call block from the reply');
     // Cutoff is judged on the raw reply: stripMarkdown would eat a trailing
     // '**' and hide exactly the evidence this looks for.
     const cut = looksCutOff(cleaned);
-    const reply = toAmigaLatin1(stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim()))));
+    // withoutControlTokens LAST of the strippers that can expose them: a model
+    // that writes its tool call as text puts <|tool_call_start|>... in the
+    // reply, which is pure ASCII and so walks straight past toAmigaLatin1.
+    // The tool loop parses that dialect and runs the tool; this is the net for
+    // the dialects it does not know, so a caller never reads control tokens.
+    const reply = withoutControlTokens(toAmigaLatin1(stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim())))));
     if (cut) {
 console.log('[Grumpy Bot] Reply looks cut off mid-thought - marking continuation');
       return withContinuation(reply);
