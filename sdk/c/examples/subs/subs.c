@@ -585,10 +585,25 @@ static int read_message(int index)
     }
 
     ui_doc_style_init(&ds);
-    ds.top = 3;
-    ds.left = screen.profile.borders ? 3 : 1;
-    ds.width = screen.cols - (screen.profile.borders ? 6 : 2);
-    ds.height = screen.rows - 5;
+    /*
+     * NO FRAME, and the whole width.
+     *
+     * A message is not the door's content, it is the caller's - and on this
+     * board a great many of them are exactly 80 columns: bulletins, ANSI art,
+     * the Conftop results. A framed reader is `width + 2` columns
+     * (ui_doc.h:37), so the border was eating six of the eighty and cutting
+     * the right-hand edge off everything written to the full line. "many
+     * bulletings and mails are 80 chars wide" - the sysop, 2026-09-14.
+     *
+     * frameless already exists for the forty-column teletext reader, where a
+     * row IS the screen and the frame cannot be afforded either. Same reason,
+     * same flag.
+     */
+    ds.frameless = 1;
+    ds.top = 2;
+    ds.left = 1;
+    ds.width = screen.cols;
+    ds.height = screen.rows - 3;
     ds.fg = UI_TOKEN(UI_T_INK);
     ds.bg = UI_TOKEN(UI_T_GROUND);
     ds.ink = UI_TOKEN(UI_T_ACCENT);
