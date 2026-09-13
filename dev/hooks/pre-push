@@ -36,6 +36,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cd "$REPO_ROOT" || exit 0
 
 FAILED=""
+SKIPPED=""
 
 step() {
   local name="$1"; shift
@@ -52,18 +53,44 @@ step() {
 
 run_in() { (cd "$1" && shift && "$@"); }
 
-step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
-step "admin types"    run_in web/config-app npx tsc --noEmit
-step "admin design system" run_in web/config-app npx vitest run --reporter=basic \
-  src/test/design-system-usage.test.ts \
-  src/test/tailwind-tokens.test.ts \
-  src/test/modal-semantics.test.tsx
+# A check that CANNOT RUN is not a check that FAILED.
+#
+# The landing model here is a throwaway worktree cut from origin/main, and a
+# worktree has no node_modules - so tsc reports "Cannot find type definition
+# file for 'node'" and every step went red at once. Refusing a push because
+# the toolchain is absent teaches people to reach for --no-verify, which
+# costs more than the gate is worth. Skip loudly instead, and say which tree
+# was not checked so nobody reads silence as approval.
+have_deps() { [ -d "$1/node_modules" ]; }
+
+if have_deps web/backend; then
+  step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
+else
+  echo "[pre-push] backend types ... [SKIPPED] no node_modules in $REPO_ROOT/web/backend"
+  SKIPPED=yes
+fi
+
+if have_deps web/config-app; then
+  step "admin types"    run_in web/config-app npx tsc --noEmit
+  step "admin design system" run_in web/config-app npx vitest run --reporter=basic \
+    src/test/design-system-usage.test.ts \
+    src/test/tailwind-tokens.test.ts \
+    src/test/modal-semantics.test.tsx
+else
+  echo "[pre-push] admin checks ... [SKIPPED] no node_modules in $REPO_ROOT/web/config-app"
+  SKIPPED=yes
+fi
 
 if [ -n "$FAILED" ]; then
   echo
   echo "[pre-push] REFUSED:$FAILED"
   echo "[pre-push] Fix it, or push with --no-verify if you mean to."
   exit 1
+fi
+
+if [ -n "$SKIPPED" ]; then
+  echo "[pre-push] [OK] pushing - but some checks could not run here; run them where the deps are"
+  exit 0
 fi
 
 echo "[pre-push] [OK] pushing"
