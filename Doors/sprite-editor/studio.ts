@@ -176,12 +176,35 @@ export function zoomThatFits(
   return best;
 }
 
+/** The size a sprite starts at when nobody has said otherwise. */
+export const DEFAULT_NEW_SPRITE = { cellW: 5, cellH: 2 };
+
+/**
+ * A sprite with nothing drawn on it yet.
+ *
+ * Shared by File > New Sprite and by the empty editor the door opens when
+ * the caller cancels its first requester - two ways into the same blank
+ * page, and they must agree on what blank means.
+ */
+export function blankSprite(name: string, cellW: number, cellH: number): Sprite {
+  const blank = () => Array.from({ length: cellH }, () =>
+    Array.from({ length: cellW }, () => null)) as CellBuffer;
+  return {
+    name, cellW, cellH,
+    animations: { idle: { ticksPerFrame: 4, loop: true, frames: [blank()] } },
+  } as Sprite;
+}
+
 /** The title line: what is open, which animation, which frame. */
 export function studioTitle(doc: EditDoc | null, door: string, file: string): string {
   if (!doc) return 'Sprite Studio';
   const anim = doc.sprite.animations[doc.animation];
   const dirty = doc.dirty ? '*' : '';
-  return `${dirty}${door}/${file}  ${doc.animation}  ` +
+  // A document that has never been saved has no door and no file, and
+  // printing the empty strings gave a title reading "/" with nothing
+  // either side of it.
+  const where = file ? `${door}/${file}` : '(untitled)';
+  return `${dirty}${where}  ${doc.animation}  ` +
     `frame ${doc.frame + 1}/${anim.frames.length}  ` +
     `${anim.ticksPerFrame}tpf ${anim.loop ? 'loop' : 'hold'}`;
 }
@@ -262,28 +285,25 @@ export class SpriteStudioDoor {
     // that opens something - the editor behind it would have no document.
     await this.openSpriteRequester();
 
-    // CANCELLING THAT FIRST REQUESTER LEAVES THE DOOR.
+    // CANCELLING THAT FIRST REQUESTER OPENS AN EMPTY EDITOR.
     //
-    // Every other requester returns to an editor with a document in it.
-    // This one has nothing behind it, so Escape used to drop the caller on
-    // a black screen with no key that did anything: the list was destroyed,
-    // `this.editor` was still null so nothing took focus, and the await
-    // below never resolved because only `screen.destroy()` resolves it and
-    // nothing had destroyed the screen. The door sat there holding the
-    // node until the caller dropped carrier. Reported by the sysop,
-    // 2026-09-13: "i pressed esc in the sprite selector and got a black
-    // screen".
+    // It used to drop the caller on a black screen that held the node: the
+    // list was destroyed, `this.editor` was still null so nothing took
+    // focus, and the await below never resolved because only
+    // `screen.destroy()` resolves it and nothing had destroyed the screen
+    // ("i pressed esc in the sprite selector and got a black screen",
+    // sysop, 2026-09-13). The first fix handed the board back instead.
     //
-    // Escape on the FIRST requester is the caller saying "not today", and
-    // the honest answer is to give the board back. The same return covers
-    // the board that has no sprites at all, which reached this line the
-    // same way after its "No sprites" message.
+    // The sysop's call is to stay in the door: Escape means "not that one",
+    // not "not today", and a blank page with the menu bar live is a better
+    // answer than the BBS prompt - File > New Sprite and File > Open are
+    // both a keypress away, and the caller can draw immediately.
     //
-    // It belongs here and not in pick(): a later requester that quit the
-    // whole door on Escape would lose the caller's unsaved work.
+    // The board with no sprites at all lands here the same way, after its
+    // "No sprites" message, and wants the same thing even more: with
+    // nothing to open, a blank page is the ONLY way into this door.
     if (!this.doc) {
-      this.destroy();
-      return;
+      await this.openUntitled();
     }
 
     await new Promise<void>((resolve) => {
@@ -445,6 +465,27 @@ export class SpriteStudioDoor {
   }
 
   /** File > Open: a door, then one of its sprites. Then it is gone. */
+  /**
+   * A blank page, with nowhere to save it yet.
+   *
+   * The door opens on a requester, and cancelling it leaves the caller
+   * here rather than back at the BBS prompt. There is deliberately NO door
+   * and NO file: this document has never been saved, the title bar says
+   * "(untitled)" rather than an empty path, and `save()` asks where it
+   * should go the first time. Picking a door up front would be a question
+   * asked before the caller has drawn anything, which is what they just
+   * escaped out of.
+   */
+  private async openUntitled(): Promise<void> {
+    this.door = '';
+    this.file = '';
+    this.artText = null;
+    this.doc = openDoc(blankSprite('untitled', DEFAULT_NEW_SPRITE.cellW, DEFAULT_NEW_SPRITE.cellH));
+    this.resetZoomForDocument();
+    await this.openEditor();
+    this.flash('New sprite - File > Save As names it, File > Open loads another');
+  }
+
   private async openSpriteRequester(): Promise<void> {
     const doors = listDoorsWithSprites();
     if (doors.length === 0) {
@@ -1201,12 +1242,7 @@ export class SpriteStudioDoor {
       return;
     }
 
-    const blank = () => Array.from({ length: cellH }, () =>
-      Array.from({ length: cellW }, () => null)) as CellBuffer;
-    const sprite = {
-      name, cellW, cellH,
-      animations: { idle: { ticksPerFrame: 4, loop: true, frames: [blank()] } },
-    } as Sprite;
+    const sprite = blankSprite(name, cellW, cellH);
 
     this.door = doors[d];
     this.file = `${name}.sprite.json`;
@@ -1246,8 +1282,45 @@ export class SpriteStudioDoor {
   }
 
   /** Save under another name, in the same door. */
+  /**
+   * Where does this blank page live? Asked once, the first time it is saved.
+   *
+   * The door is asked for as well as the name, because an untitled document
+   * has neither - unlike Save As on an opened sprite, which already knows
+   * the door it came from and only needs a new name.
+   */
+  private async saveUntitledAsked(): Promise<void> {
+    if (!this.doc) return;
+    const doors = listDoorsWithSprites();
+    if (doors.length === 0) {
+      await this.message('Nowhere to save',
+        'No door on this board has a sprites/ directory to save into.');
+      return;
+    }
+    const d = await this.pick('Save - which door', doors);
+    if (d === null) return;
+
+    const name = await promptText(this.screen, 'Sprite name (lowercase, dashes)');
+    if (!name) return;
+    if (!/^[a-z0-9-]+$/.test(name)) {
+      await this.message('Refused', 'A sprite name is lowercase letters, digits and dashes.');
+      return;
+    }
+
+    this.door = doors[d];
+    this.file = `${name}.sprite.json`;
+    this.doc = { ...this.doc, sprite: { ...this.doc.sprite, name } };
+    await this.save();
+  }
+
   private async saveAsAsked(): Promise<void> {
     if (!this.doc) return;
+    // Save As on a document that was never saved has no door to save INTO,
+    // so it is the same question as a first save, not a rename.
+    if (!this.door) {
+      await this.saveUntitledAsked();
+      return;
+    }
     const name = await promptText(this.screen, 'Save as (sprite name)',
       this.file.replace(/\.sprite\.json$/, ''));
     if (!name) return;
@@ -1291,6 +1364,13 @@ export class SpriteStudioDoor {
   }
 
   private async save(): Promise<void> {
+    // An untitled document has no door and no file, and writeSprite('', '')
+    // would either throw or write somewhere nobody asked for. Saving it the
+    // first time IS "save as": ask where it goes, then save normally.
+    if (this.doc && !this.file) {
+      await this.saveUntitledAsked();
+      return;
+    }
     if (this.artText !== null && !this.doc) {
       try {
         const text = this.editor.getContent();
