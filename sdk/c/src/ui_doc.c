@@ -243,7 +243,22 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
             counter[n] = '\0';
         }
 
-        if (counter[0] && (int) (strlen(counter) + 26) <= st->width) {
+        /* WHEN THERE IS SOMETHING TO CHOOSE, SAY SO FIRST.
+         *
+         * The door put "RETURN READS" in the panel title, which a
+         * forty-column screen cuts off - the one width where the caller most
+         * needs telling. The keys outrank the counter (see above), and
+         * "what RETURN does" outranks "which page this is". */
+        if (sel_line >= 0) {
+            if (counter[0] && (int) (strlen(counter) + 28) <= st->width) {
+                strcpy(footer, counter);
+                strcat(footer, "  ENTER READS  Q LEAVE");
+            } else if ((int) strlen("ENTER READS  Q LEAVE") <= st->width) {
+                strcpy(footer, "ENTER READS  Q LEAVE");
+            } else {
+                strcpy(footer, "ENTER READS");
+            }
+        } else if (counter[0] && (int) (strlen(counter) + 26) <= st->width) {
             strcpy(footer, counter);
             strcat(footer, "  SPACE NEXT  Q LEAVE");
         } else if ((int) strlen("SPACE NEXT  Q LEAVE") <= st->width) {

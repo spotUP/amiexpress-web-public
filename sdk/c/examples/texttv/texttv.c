@@ -197,8 +197,13 @@ static void draw_masthead(const char *title)
 
 static void say(int row, const char *text)
 {
+    /* Start where the reader starts. At forty columns the reader owns column
+       one, so writing from column three left the two characters underneath
+       it untouched - the previous screen's title showed through as "10"
+       beside the new one (sysop's C64 walk). */
+    int left = texttv_reader_frameless(screen.cols) ? 1 : 3;
     ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), UI_TOKEN(UI_T_GROUND), 0);
-    ansi_text(&screen.buf, row, 3, text, screen.cols - 3);
+    ansi_text(&screen.buf, row, left, text, screen.cols - (left - 1));
 }
 
 static void draw_footer(const char *const *optional, int n, const char *suffix)
@@ -502,7 +507,7 @@ static void read_page(void)
         if (page_link_count >= 2 && wide)
             sprintf(title, "%d %.100s - ARROWS PICK, RETURN READS", page_num, page_title);
         else if (page_link_count >= 2)
-            sprintf(title, "%d %.60s - RETURN READS", page_num, page_title);
+            sprintf(title, "%d %.60s", page_num, page_title);   /* the footer says ENTER READS */
         else
             sprintf(title, "%d %s", page_num, page_title);
         ansi_clear(&screen.buf);
