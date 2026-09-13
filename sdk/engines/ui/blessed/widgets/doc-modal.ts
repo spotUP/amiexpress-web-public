@@ -75,6 +75,8 @@ export class DocModal extends Box {
   private _swipeStartTime: number = 0;
   private _trapCleanup?: () => void;
   private _savedFocus?: any;
+  /** Closing is idempotent: see _close(). */
+  private _closed: boolean = false;
 
   constructor(options: DocModalOptions = {}) {
     super({
@@ -186,9 +188,28 @@ export class DocModal extends Box {
   /**
    * Set up keyboard navigation and close handlers
    */
-  private _setupKeyHandlers(): void {
-    // Close handler
-    const closeModal = () => {
+  /**
+   * Close the modal. The ONE way it closes.
+   *
+   * `'close'` is an ANNOUNCEMENT, not a command. This widget used to listen
+   * to its own 'close' and call the close routine from it, while the close
+   * routine ended by emitting 'close' - so closing recursed until the stack
+   * died: `RangeError: Maximum call stack size exceeded`, thrown out of the
+   * emit, swallowed by EventEmitter, and printed where nobody looked. Every
+   * caller who read a bulletin in CARDLOBBY and pressed a close key hit it;
+   * the door's own suite was green throughout.
+   *
+   * The guard is the second half. Closing twice used to run the whole
+   * routine twice - releasing a focus trap that was already released and
+   * calling the consumer's `onClose` a second time - and a widget whose
+   * close is not idempotent makes every caller responsible for not asking
+   * twice.
+   */
+  private _close(): void {
+    if (this._closed) return;
+    this._closed = true;
+
+    {
       // Clean up input trapping
       if (this._trapCleanup) {
         this._trapCleanup();
@@ -212,7 +233,11 @@ export class DocModal extends Box {
         this._onClose();
       }
       this.emit('close');
-    };
+    }
+  }
+
+  private _setupKeyHandlers(): void {
+    const closeModal = () => this._close();
 
     // Mouse wheel scrolling - on both content area and modal itself
     const handleWheelUp = () => {
@@ -274,10 +299,11 @@ export class DocModal extends Box {
       closeModal();
     });
 
-    // Handle close event from [X] button
-    this.on('close', () => {
-      closeModal();
-    });
+    // NO self-listener on 'close'. The comment that used to be here said it
+    // handled "the [X] button" - this widget has no [X] button, and the only
+    // things that emit 'close' are _close() itself and the tap-to-dismiss
+    // path, both of which ARE the close. Listening to it meant closing
+    // called closing.
   }
 
   /**
@@ -313,11 +339,11 @@ export class DocModal extends Box {
       // Check if click was on modal border/background, not content
       const target = data?.el || data?.element;
       if (target === this) {
-        this.hide();
-        if (this._onClose) {
-          this._onClose();
-        }
-        this.emit('close');
+        // Through the one close routine, not a second copy of it. This
+        // hand-rolled hide/onClose/emit skipped the input-trap cleanup and
+        // the focus restore, so dismissing by tap left the trap installed
+        // and the caller's focus where the modal had put it.
+        this._close();
       }
     });
   }
@@ -344,6 +370,12 @@ export class DocModal extends Box {
 
     // Invalidate coordinate cache
     this._invalidateCache(this);
+
+    // Opening again arms the close again. Without this a modal that is
+    // reused - opened, closed, opened - would carry `_closed` from the
+    // first close and refuse to shut the second time, which is a worse
+    // bug than the recursion the flag exists to stop.
+    this._closed = false;
 
     // Store element to focus when closed
     if (focusOnClose) {
