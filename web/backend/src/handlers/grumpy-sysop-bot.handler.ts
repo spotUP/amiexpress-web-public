@@ -1499,6 +1499,14 @@ console.log('[Grumpy Bot] Trying next OpenRouter model...');
 async function getAIResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const preferred = aiConfig.provider || 'openrouter';
 
+  // THIS answer's cause, not the last one's. The note is module state, and
+  // the reset used to sit below the rule-based return - so an attempt that
+  // never reached the cascade reported whatever the previous attempt had
+  // left, and the caller was told "my brain misfired" by a board whose AI
+  // was simply switched off, or told the wrong reason on the message after a
+  // real outage.
+  lastCascadeNote = null;
+
   // Rule-based means rule-based: the admin turned the AI off, so no round
   // trip leaves the box. (Before 2026-09-10 the cascade below ran anyway.)
   if (preferred === 'rule-based') return null;
@@ -1515,7 +1523,6 @@ async function getAIResponse(userMessage: string, context: ChatContext, aiConfig
     preferred === 'cerebras' ? ['cerebras', 'groq', 'zen', 'go', 'openrouter', 'gemini'] :
     ['openrouter', 'zen', 'go', 'groq', 'gemini', 'cerebras'];
 
-  lastCascadeNote = null;
   const hasKeys = Boolean(
     aiConfig.zenApiKey || process.env.ZEN_API_KEY
     || aiConfig.goApiKey || process.env.GO_API_KEY
