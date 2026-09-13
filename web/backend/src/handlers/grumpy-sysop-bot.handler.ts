@@ -57,14 +57,20 @@ export function looksCutOff(text: string): boolean {
  * This strips any emoji the model slips in (VOICE_RULES forbids them, but
  * models do it anyway) while keeping the ASCII art the board is built on.
  */
-function stripEmojis(text: string): string {
+export function stripEmojis(text: string): string {
   // Common emoji blocks + variation selectors + ZWJ. Keep it broad: anything
   // outside the ASCII + CP437 + PETSCII range that looks like an emoji.
   // Range covers: Emoticons, Misc Symbols, Transport, Dingbats, Flags, etc.
   return text
     .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{25AA}-\u{25AB}\u{25FC}-\u{25FE}\u{2194}-\u{2199}\u{21A9}-\u{21AA}\u{231A}-\u{231B}\u{23E9}-\u{23FA}\u{24C2}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}\u{260E}\u{2611}\u{2614}-\u{2615}\u{2618}\u{261D}\u{2620}\u{2622}-\u{2623}\u{2626}\u{262A}\u{262E}-\u{262F}\u{2638}-\u{263A}\u{2640}\u{2642}\u{2648}-\u{2653}\u{2660}\u{2663}\u{2665}-\u{2666}\u{2668}\u{267B}\u{267E}-\u{267F}\u{2692}-\u{2697}\u{2699}\u{269B}-\u{269C}\u{26A0}-\u{26A1}\u{26AA}-\u{26AB}\u{26B0}-\u{26B1}\u{26BD}-\u{26BE}\u{26C4}-\u{26C8}\u{26CE}-\u{26CF}\u{26D1}\u{26D3}-\u{26D4}\u{26EA}\u{26F2}-\u{26F5}\u{26FA}\u{26FD}\u{2702}\u{2705}\u{2708}-\u{270D}\u{270F}\u{2712}\u{2714}\u{2716}\u{2728}\u{2733}-\u{2734}\u{2744}\u{2747}\u{274C}\u{274E}\u{2753}-\u{2755}\u{2757}\u{2763}-\u{2764}\u{2795}-\u{2797}\u{27A1}\u{27B0}\u{27BF}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{3030}\u{303D}\u{3297}\u{3299}]/gu, '')
     .replace(/[\uFE0F\uFE0E\u200D]/gu, '')
-    .replace(/\s{2,}/g, ' ')
+    // Close the gap a removed emoji leaves, and NOTHING else. This was
+    // /\s{2,}/ - and \s matches a newline, so every paragraph break in the
+    // reply collapsed into a single space and the co-sysop's answers arrived
+    // as one run-on block. Horizontal whitespace only, then any that is left
+    // stranded at the end of a line.
+    .replace(/[^\S\r\n]{2,}/g, ' ')
+    .replace(/[^\S\r\n]+(\r?\n)/g, '$1')
     .trim();
 }
 

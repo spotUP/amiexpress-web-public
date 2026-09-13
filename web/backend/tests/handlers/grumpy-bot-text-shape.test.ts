@@ -7,7 +7,7 @@
  * Back"), because nothing between the model and the terminal spoke plain
  * text (2026-09-09).
  */
-import { stripMarkdown, withContinuation } from '../../src/handlers/grumpy-sysop-bot.handler';
+import { stripEmojis, stripMarkdown, withContinuation } from '../../src/handlers/grumpy-sysop-bot.handler';
 
 describe('stripMarkdown', () => {
   it('removes paired markers, keeps the words', () => {
@@ -31,5 +31,24 @@ describe('withContinuation', () => {
     const out = withContinuation('...and the Edison 2026 theme. Back');
     expect(out).toContain('...and the Edison 2026 theme. Back');
     expect(out).toMatch(/go on/);
+  });
+});
+
+describe('stripEmojis', () => {
+  it('closes the gap a removed emoji leaves', () => {
+    expect(stripEmojis('nice  work')).toBe('nice work');
+    expect(stripEmojis('Up Rough \u{1F525} forever')).toBe('Up Rough forever');
+  });
+
+  it('keeps the paragraph breaks it used to eat', () => {
+    // /\s{2,}/ matched a blank line, so a reply written in paragraphs reached
+    // the caller as one run-on block - and this runs BEFORE stripMarkdown, so
+    // nothing downstream could put the breaks back.
+    expect(stripEmojis('First line.\n\nSecond line.')).toBe('First line.\n\nSecond line.');
+    expect(stripEmojis('Files:\n- one\n- two')).toBe('Files:\n- one\n- two');
+  });
+
+  it('does not leave whitespace stranded at the end of a line', () => {
+    expect(stripEmojis('done \u{1F525}\nnext')).toBe('done\nnext');
   });
 });
