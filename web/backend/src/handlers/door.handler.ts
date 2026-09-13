@@ -1130,13 +1130,29 @@ console.error(`[launchAmigaDoor] Error executing door:`, error);
 /**
  * Display door games menu (DOORS command) - doorman-style UI with arrow keys
  */
+/**
+ * Can this caller open this door right now?
+ *
+ * Every route that OFFERS a door asks here, because a route that filters on
+ * its own forgets one of the three answers. `enabled` is the admin's switch;
+ * note that the registry hardcodes it true today and the admin parks a
+ * disabled door's ACCESS instead, so the level test is the one doing the work
+ * - both are checked so the day registration honours `enabled`, nothing has to
+ * be found and changed again. A conference-scoped door is offered only in its
+ * own conference.
+ */
+export function doorAvailableTo(
+  door: { enabled?: boolean; accessLevel?: number; conferenceId?: number | null },
+  session: BBSSession,
+): boolean {
+  if (door.enabled === false) return false;
+  if (door.conferenceId && door.conferenceId !== session.currentConf) return false;
+  return (session.user?.secLevel || 0) >= (door.accessLevel ?? 0);
+}
+
 export async function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   // Get TypeScript doors for current user
-  const filteredDoors = doors.filter(door =>
-    door.enabled &&
-    (!door.conferenceId || door.conferenceId === session.currentConf) &&
-    (session.user?.secLevel || 0) >= door.accessLevel
-  );
+  const filteredDoors = doors.filter(door => doorAvailableTo(door, session));
 
   // Calculate size for TypeScript doors based on their path
   const availableDoors = filteredDoors.map(door => {

@@ -27,7 +27,7 @@ import { displayConferenceBulletins, joinConference, FORCE_MAILSCAN_SKIP } from 
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { INTERNAL_COMMAND_NAMES } from './command-handler/internal-command-names';
-import { displayDoorMenu, executeDoor } from './door.handler';
+import { displayDoorMenu, executeDoor, doorAvailableTo } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
   displayFileMaintenance,
@@ -306,11 +306,17 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
  */
 export function tipDoorBeforeMenu(
   session: BBSSession,
-  doors: Array<{ command?: string }>,
+  doors: Array<{ command?: string; enabled?: boolean; accessLevel?: number; conferenceId?: number | null }>,
 ): boolean {
   if ((session as any).quickFlag) return false;
   if (session.tempData?.tipShown) return false;
-  return doors.some((d) => (d.command ?? '').toUpperCase() === 'TIP');
+  // A door the caller could not open from the DOORS menu is not run AT them
+  // on the way to it. doorAvailableTo is the same answer that menu uses -
+  // switching TIP off in the admin parks its ACCESS, and before this the
+  // login hook read neither the level nor the switch.
+  return doors.some(
+    (d) => (d.command ?? '').toUpperCase() === 'TIP' && doorAvailableTo(d, session),
+  );
 }
 
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
@@ -1004,7 +1010,9 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         if (tipDoorBeforeMenu(session, getDoors())) {
           if (!session.tempData) session.tempData = {};
           session.tempData.tipShown = true;
-          const tip = getDoors().find((d) => (d.command ?? '').toUpperCase() === 'TIP');
+          const tip = getDoors().find(
+            (d) => (d.command ?? '').toUpperCase() === 'TIP' && doorAvailableTo(d, session),
+          );
           if (tip) {
             displayFlowLog('running TIP before MENU');
             try {
