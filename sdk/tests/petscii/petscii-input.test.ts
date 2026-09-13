@@ -21,7 +21,17 @@ describe('petsciiInputToAscii', () => {
     expect(petsciiInputToAscii([0x87, 0x8B, 0x88, 0x8C])).toBe('\x1b[15~\x1b[17~\x1b[18~\x1b[19~');
   });
   it('LF, CLR and unknown control bytes are dropped', () => {
-    expect(petsciiInputToAscii([0x0A, 0x93, 0x03, 0x05, 0x12])).toBe('');
+    /*
+     * 0x03 IS NO LONGER ONE OF THEM. c753ef871 mapped RUN/STOP (Ctrl+C on the
+     * web canvas) to ETX so a PETSCII caller can abort at all - before it, the
+     * board's stop key could not be pressed in PETSCII mode and a caller could
+     * not leave the operator chat. It is asserted on its own below; a byte the
+     * board now acts on does not belong in a list of bytes with no meaning.
+     */
+    expect(petsciiInputToAscii([0x0A, 0x93, 0x05, 0x12])).toBe('');
+  });
+  it('RUN/STOP is passed through as ETX, so a PETSCII caller can abort', () => {
+    expect(petsciiInputToAscii([0x03])).toBe('\x03');
   });
   it('a mixed sequence including @ [ \\ ] ^ _ round-trips as one command string (moved from key-bytes-to-command.test.ts)', () => {
     // "cat@[h]" typed on the canvas: unshifted letters use keymap.ts's
