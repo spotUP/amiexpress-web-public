@@ -72,10 +72,12 @@ describe('a door launch', () => {
     // The shape every mark carries: a phase name, a cumulative offset, and how
     // long the event loop was BLOCKED by the step just finished - the figure
     // that says "this stopped the whole board" rather than "this was slow for
-    // this caller". `blocked` is sampled at the mark because a synchronous
-    // block stops the sampling timer too, and so cannot observe itself.
+    // this caller". It is sampled at the mark because a synchronous block
+    // stops the sampling timer too and so cannot observe itself; when the loop
+    // never yields at all the interval never fires, which is why the figure is
+    // named for what it measures rather than for what it is usually read as.
     expect(timings[0]).toMatch(
-      /\[timing\] exec: bbs root resolved \+\d+ms \(blocked \d+ms, worst \d+ms\)/
+      /\[timing\] exec: bbs root resolved \+\d+ms \(loop unserviced \d+ms\)/
     );
   });
 });

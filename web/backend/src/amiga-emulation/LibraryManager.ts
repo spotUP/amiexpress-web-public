@@ -351,11 +351,17 @@ console.warn("[LibraryManager] Failed to extract ROM libraries", err);
       // the block then printed "loop lag max 0ms" while the board had been
       // frozen for eleven seconds. The time since the interval last ran IS the
       // block that just finished.
-      const sinceTick = Date.now() - __lagLast - 20;
+      const sinceTick = Math.max(0, Date.now() - __lagLast - 20);
       if (sinceTick > __lagMax) __lagMax = sinceTick;
+      // "unserviced" is the literal measurement: how long since the sampling
+      // interval last got to run. Called it "blocked" first and that was a
+      // third misleading meter - when the loop never yields at all the
+      // interval never fires, so the figure is the time since this phase
+      // BEGAN, not the cost of the step just finished. Both readings matter,
+      // and the name should not pick one.
       this.logger?.log(
         'INFO',
-        `[timing] exec: ${what} +${Date.now() - __t0}ms (blocked ${Math.max(0, sinceTick)}ms, worst ${__lagMax}ms)`
+        `[timing] exec: ${what} +${Date.now() - __t0}ms (loop unserviced ${sinceTick}ms)`
       );
     };
 
@@ -596,6 +602,7 @@ debugLog("[LibraryManager] Creating XIM Protocol handler...");
         this.config.bbsSession,
         this.iconLibrary  // Pass iconLibrary for command .info file loading
       );
+      mark("xim protocol");
     } else {
 debugLog(
         `[LibraryManager] Skipping XIM protocol for ${doorType} door`
@@ -712,6 +719,7 @@ debugLog("[LibraryManager] Creating AEDoor.library...");
       this.execLibrary,
       this.config.bbsSession || {}
     );
+    mark("aedoor library");
 
     // Let XIMProtocol observe AEDoorLibrary.isInWaitForReply() so that
     // shouldInjectNativeInput can push input into replyPort while a
