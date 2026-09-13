@@ -18,6 +18,10 @@
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+// The marker comes from the engine that prints it - a copy of the string
+// here would drift the day someone reworded the line, and the check would
+// go quietly green for ever.
+import { LISTENER_ERROR_MARKER } from '../../sdk/engines/ui/blessed/core/events';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
@@ -53,12 +57,40 @@ function runOne(door: string): Outcome {
     timeout: 5 * 60 * 1000,
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+
+  // A GREEN SUITE THAT THREW IS NOT A GREEN SUITE.
+  //
+  // The engine's emit() swallows a listener's error on purpose so one bad
+  // handler cannot take a door down (core/events.ts), and prints it to
+  // console.error. Printing is not failing: a suite goes on to exit 0 and
+  // the door ships broken. That is exactly how two real door bugs reached
+  // the board - the ANSI editor calling a `program.setMouse` this engine
+  // never had, which threw on every focus of the draw canvas, and the
+  // sprite editor drawing its requester with an undefined theme. Both
+  // printed. Nothing failed. Both shipped.
+  //
+  // Read here rather than in each door's own runner: there are 22 of those
+  // and they are separate processes, so the marker in their output is the
+  // one place that covers every door at once, including doors written
+  // later by someone who never reads this file.
+  const threw = output.includes(LISTENER_ERROR_MARKER);
+  const listenerLines = threw
+    ? output.split('\n').filter((line) => line.includes(LISTENER_ERROR_MARKER))
+    : [];
+
   return {
     door,
-    ok: result.status === 0,
+    ok: result.status === 0 && !threw,
     ms: Date.now() - started,
-    // Enough to name the cause without pasting a whole suite's output.
-    tail: output.trim().split('\n').slice(-12).join('\n'),
+    // A swallowed throw leaves an exit code of 0 and a cheerful "N passed"
+    // at the end of the output, so the tail would show nothing of it. Name
+    // it outright instead.
+    tail: threw
+      ? [
+          `a listener threw (the suite still exited ${result.status}):`,
+          ...listenerLines.slice(0, 3),
+        ].join('\n')
+      : output.trim().split('\n').slice(-12).join('\n'),
   };
 }
 

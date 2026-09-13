@@ -4,6 +4,58 @@
 
 export type EventHandler = (...args: any[]) => boolean | void;
 
+/**
+ * The marker a swallowed listener error carries, on every line it prints.
+ *
+ * Grepping for this string is how a TEST RUNNER finds out that a door threw
+ * while still exiting 0 - see dev/scripts/run-door-suites.ts. It is a stable
+ * token rather than prose because something machine-readable has to survive
+ * a wording change.
+ */
+export const LISTENER_ERROR_MARKER = '[LISTENER-ERROR]';
+
+/** What a listener threw, and where. */
+export interface ListenerErrorReport {
+  event: string;
+  emitter: string;
+  error: unknown;
+}
+
+const listenerErrorHandlers: Array<(report: ListenerErrorReport) => void> = [];
+let listenerErrorCounter = 0;
+
+/**
+ * Watch for listener errors that emit() swallows.
+ *
+ * The swallow protects the door - one bad listener must not take the rest of
+ * the chain down - but it also means NOTHING FAILS when a door is broken.
+ * Two real door bugs lived behind it: the ANSI editor calling a
+ * `program.setMouse` this engine never had, which threw on every focus of
+ * the draw canvas, and the sprite editor drawing its requester with an
+ * undefined theme. Both printed to console.error, both exited 0, and both
+ * shipped. A test that wants to be honest about this registers here and
+ * asserts nothing arrived.
+ *
+ * Returns the unsubscribe.
+ */
+export function onListenerError(handler: (report: ListenerErrorReport) => void): () => void {
+  listenerErrorHandlers.push(handler);
+  return () => {
+    const i = listenerErrorHandlers.indexOf(handler);
+    if (i !== -1) listenerErrorHandlers.splice(i, 1);
+  };
+}
+
+/** How many listener errors have been swallowed since the last reset. */
+export function listenerErrorCount(): number {
+  return listenerErrorCounter;
+}
+
+/** Forget the count, for a test that wants a clean slate per case. */
+export function resetListenerErrorCount(): void {
+  listenerErrorCounter = 0;
+}
+
 export class EventEmitter {
   private events: Map<string, EventHandler[]> = new Map();
 
@@ -70,9 +122,23 @@ export class EventEmitter {
         // unchanged - we only stop discarding the evidence.
         const stack = (err as { stack?: unknown } | null)?.stack;
         const detail = typeof stack === 'string' ? stack : String(err);
+        const emitter = this.describeEmitter();
         console.error(
-          `[EventEmitter] listener for '${event}' on ${this.describeEmitter()} threw: ${detail}`
+          `[EventEmitter]${LISTENER_ERROR_MARKER} listener for '${event}' on ${emitter} threw: ${detail}`
         );
+        // Logging is not failing. console.error keeps a door running and
+        // keeps the evidence, but nothing reads it: a suite still exits 0
+        // and a deploy still goes out. Anyone who wants this to COUNT -
+        // a test runner, the board's door host - listens here.
+        listenerErrorCounter++;
+        for (const report of listenerErrorHandlers.slice()) {
+          try {
+            report({ event, emitter, error: err });
+          } catch {
+            // A reporter that throws must not resurrect the problem it
+            // exists to report, nor stop the other reporters.
+          }
+        }
       }
     }
 
