@@ -218,12 +218,41 @@ static void test_ansi_to_ink(void)
     CHECK(texttv_ansi_to_ink(0, out, sizeof out) == 0);
 }
 
+static void test_reader_box(void)
+{
+    int left = -1, width = -1, height = -1;
+
+    /* Eighty columns: the page fits inside the door's frame. */
+    texttv_reader_box(80, 25, &left, &width, &height);
+    CHECK(left == 2);
+    CHECK(width == 77);
+    CHECK(height == 18);
+
+    /* Forty: a teletext row is exactly this wide, and the frame's margin
+       used to take three of its characters before the reader even wrapped. */
+    texttv_reader_box(40, 25, &left, &width, &height);
+    CHECK(left == 0);
+    CHECK(width == 40);
+    CHECK(height == 18);
+
+    /* Narrower than a teletext row: still the whole screen, never negative. */
+    texttv_reader_box(32, 24, &left, &width, &height);
+    CHECK(left == 0);
+    CHECK(width == 32);
+    CHECK(height == 17);
+
+    /* Null outputs are allowed - a caller may want one number. */
+    texttv_reader_box(80, 25, 0, &width, 0);
+    CHECK(width == 77);
+}
+
 int main(void)
 {
     test_valid_page();
     test_page_path();
     test_page_line();
     test_ansi_to_ink();
+    test_reader_box();
     test_first_plain();
     test_pick_body();
     test_utf8();

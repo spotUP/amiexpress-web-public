@@ -138,6 +138,16 @@ static char ink_digit(int colour)
     return colour < 10 ? (char)('0' + colour) : (char)('a' + (colour - 10));
 }
 
+#define TEXTTV_COMPACT_COLS 40
+
+void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
+{
+    int compact = cols <= TEXTTV_COMPACT_COLS;
+    if (left) *left = compact ? 0 : 2;
+    if (width) *width = compact ? cols : cols - 3;
+    if (height) *height = rows - 7;
+}
+
 unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap)
 {
     unsigned long n = 0;

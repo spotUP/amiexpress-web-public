@@ -40,6 +40,16 @@ int texttv_page_path(int page, char *out, unsigned long cap);
 int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
 
 /*
+ * The reader's box for a screen this wide.
+ *
+ * A teletext row IS forty columns. An eighty-column caller can afford the
+ * door's frame around it; a forty-column one cannot - the two columns of
+ * margin cut three characters off every row, and the reader then wrapped
+ * what was left. The compact tier gets the whole width.
+ */
+void texttv_reader_box(int cols, int rows, int *left, int *width, int *height);
+
+/*
  * SGR colour escapes into the SDK's pen markers, everything else copied.
  *
  * The proxy converts texttv.nu's HTML to rows carrying real `ESC[0;37;44m`
