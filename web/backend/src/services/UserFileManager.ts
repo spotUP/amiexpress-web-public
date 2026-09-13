@@ -1208,8 +1208,8 @@ console.error('[UserFileManager] Error reading user files:', error);
    * no lock. Deserializes through the same layout the writer uses, so the
    * field offsets cannot drift apart.
    */
-  private readMiscLockFields(slotNumber: number): { forcePwdReset: number; accountLocked: number; invalidAttempts: number } {
-    const zero = { forcePwdReset: 0, accountLocked: 0, invalidAttempts: 0 };
+  private readMiscLockFields(slotNumber: number): { forcePwdReset: number; accountLocked: number; invalidAttempts: number; pwdLastUpdated: number } {
+    const zero = { forcePwdReset: 0, accountLocked: 0, invalidAttempts: 0, pwdLastUpdated: 0 };
     try {
       if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userMiscPath)) return zero;
       const offset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
@@ -1220,7 +1220,7 @@ console.error('[UserFileManager] Error reading user files:', error);
         fs.readSync(fd, buffer, 0, this.USERMISC_STRUCT_SIZE, offset);
       } finally { fs.closeSync(fd); }
       const misc = this.deserializeUserMiscStruct(buffer, 0);
-      return { forcePwdReset: misc.forcePwdReset, accountLocked: misc.accountLocked, invalidAttempts: misc.invalidAttempts };
+      return { forcePwdReset: misc.forcePwdReset, accountLocked: misc.accountLocked, invalidAttempts: misc.invalidAttempts, pwdLastUpdated: misc.pwdLastUpdated };
     } catch {
       return zero;
     }
@@ -1256,6 +1256,19 @@ console.error('[UserFileManager] Error reading user files:', error);
       else miscStruct.accountLocked = user.accountLocked ? 1 : 0;
       if (user.invalidAttempts === undefined) miscStruct.invalidAttempts = keep.invalidAttempts;
       else miscStruct.invalidAttempts = Math.max(0, Math.floor(user.invalidAttempts));
+      // WHEN THE PASSWORD WAS LAST CHANGED - not when the record was last
+      // touched. userToMiscStruct fills this from `user.updated`, which the
+      // database bumps on every write, and a login writes: so each login
+      // rewrote it to now, the password was permanently seconds old, an
+      // expiry policy could never fire, and a 68K door reading user.misc was
+      // told the same untruth. Only a real password change moves it
+      // (updateUserMiscAfterPasswordChange, express.e:29828-29829). The same
+      // rule as the three bytes above; it was simply left out of the list.
+      if (user.pwdLastUpdated === undefined) {
+        if (keep.pwdLastUpdated > 0) miscStruct.pwdLastUpdated = keep.pwdLastUpdated;
+      } else {
+        miscStruct.pwdLastUpdated = Math.max(0, Math.floor(user.pwdLastUpdated));
+      }
 
       // Serialize to buffers
       const userBuffer = this.serializeUserStruct(userStruct);
