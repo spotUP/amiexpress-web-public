@@ -273,9 +273,20 @@ export interface BullRow {
   file: string;
 }
 
+/**
+ * Where bull rows and conference masks live when a manifest does not say.
+ *
+ * These were written into six accessors as literals, so a `cfgRow.section`
+ * naming anything else was read and then ignored - the shipped manifests
+ * happen to name these two, so it worked by coincidence. The declared section
+ * is honoured now and these are only the fallback.
+ */
+export const BULL_SECTION = 'bullnames_end';
+export const MASK_SECTION = 'cnfaccess_end';
+
 /** Indexed bull rows in file order (blank lines excluded by the parser). */
-export function getBullRows(file: EmpireFile): BullRow[] {
-  const sec = findSection(file, 'bullnames_end');
+export function getBullRows(file: EmpireFile, section: string = BULL_SECTION): BullRow[] {
+  const sec = findSection(file, section);
   if (!sec) return [];
   const rows: BullRow[] = [];
   for (const line of sec.body) {
@@ -287,9 +298,10 @@ export function getBullRows(file: EmpireFile): BullRow[] {
 export function setBullRow(
   file: EmpireFile,
   index: number,
-  row: Partial<BullRow>
+  row: Partial<BullRow>,
+  section: string = BULL_SECTION
 ): boolean {
-  const sec = findSection(file, 'bullnames_end');
+  const sec = findSection(file, section);
   if (!sec) return false;
   const bulls = sec.body.filter((l): l is EmpireBullLine => l.kind === 'bull');
   const line = bulls[index];
@@ -300,8 +312,8 @@ export function setBullRow(
 }
 
 /** Append a canonical bull row (for files shorter than the manifest). */
-export function appendBullRow(file: EmpireFile, row: BullRow): boolean {
-  const sec = findSection(file, 'bullnames_end');
+export function appendBullRow(file: EmpireFile, row: BullRow, section: string = BULL_SECTION): boolean {
+  const sec = findSection(file, section);
   if (!sec) return false;
   const width = sec.body.reduce(
     (w, l) => (l.kind === 'bull' ? Math.max(w, l.titleRaw.length) : w),
@@ -318,8 +330,8 @@ export function appendBullRow(file: EmpireFile, row: BullRow): boolean {
 }
 
 /** Indexed mask strings in file order. */
-export function getMaskRows(file: EmpireFile): string[] {
-  const sec = findSection(file, 'cnfaccess_end');
+export function getMaskRows(file: EmpireFile, section: string = MASK_SECTION): string[] {
+  const sec = findSection(file, section);
   if (!sec) return [];
   const rows: string[] = [];
   for (const line of sec.body) {
@@ -328,8 +340,8 @@ export function getMaskRows(file: EmpireFile): string[] {
   return rows;
 }
 
-export function setMaskRow(file: EmpireFile, index: number, mask: string): boolean {
-  const sec = findSection(file, 'cnfaccess_end');
+export function setMaskRow(file: EmpireFile, index: number, mask: string, section: string = MASK_SECTION): boolean {
+  const sec = findSection(file, section);
   if (!sec) return false;
   const masks = sec.body.filter((l): l is EmpireMaskLine => l.kind === 'mask');
   const line = masks[index];
@@ -338,8 +350,8 @@ export function setMaskRow(file: EmpireFile, index: number, mask: string): boole
   return true;
 }
 
-export function appendMaskRow(file: EmpireFile, mask: string, comment: string): boolean {
-  const sec = findSection(file, 'cnfaccess_end');
+export function appendMaskRow(file: EmpireFile, mask: string, comment: string, section: string = MASK_SECTION): boolean {
+  const sec = findSection(file, section);
   if (!sec) return false;
   sec.body.push({ kind: 'mask', maskRaw: mask, comment });
   return true;

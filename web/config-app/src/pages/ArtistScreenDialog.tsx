@@ -324,6 +324,32 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     });
   };
 
+  /**
+   * The hidden file input behind every "+ <format>" button.
+   *
+   * ONE of them, named once: the same thirteen lines stood in the `isNew`
+   * branch and the branch beside it, and a fix to the confirm, the reset or
+   * the mutation had to be made twice or the two would answer differently.
+   * Only one branch is ever rendered, so one `addFormatInput` ref still means
+   * one input on the page.
+   */
+  const addFormatPicker = (
+    <input
+      ref={addFormatInput}
+      type="file"
+      aria-label="Add a format"
+      className="hidden"
+      onChange={async event => {
+        const chosen = event.target.files?.[0];
+        event.target.value = '';
+        if (!chosen || !addingFormat) return;
+        if (!(await confirmAuditWrite(chosen.name))) return;
+        writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
+        setAddingFormat(null);
+      }}
+    />
+  );
+
   return (
     <Modal open={!!path} title={title} onClose={onClose} maxWidth="max-w-4xl">
       {isLoading && <SkeletonRows rows={4} />}
@@ -395,20 +421,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               + {gap.label}
             </button>
           ))}
-          <input
-            ref={addFormatInput}
-            type="file"
-            aria-label="Add a format"
-            className="hidden"
-            onChange={async event => {
-              const chosen = event.target.files?.[0];
-              event.target.value = '';
-              if (!chosen || !addingFormat) return;
-              if (!(await confirmAuditWrite(chosen.name))) return;
-              writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
-              setAddingFormat(null);
-            }}
-          />
+          {addFormatPicker}
         </div>
       )}
       {isNew && (
@@ -447,20 +460,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               writeBytes.mutate({ target: path, bytes: await readAsBase64(chosen) });
             }}
           />
-          <input
-            ref={addFormatInput}
-            type="file"
-            aria-label="Add a format"
-            className="hidden"
-            onChange={async event => {
-              const chosen = event.target.files?.[0];
-              event.target.value = '';
-              if (!chosen || !addingFormat) return;
-              if (!(await confirmAuditWrite(chosen.name))) return;
-              writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
-              setAddingFormat(null);
-            }}
-          />
+          {addFormatPicker}
         </div>
       )}
 

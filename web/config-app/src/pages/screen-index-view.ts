@@ -449,6 +449,37 @@ export function servedKey(
   ].join('|');
 }
 
+/** The FORMAT extensions a screen file can wear, longest chain first:
+ *  `menu250.txt.GR` is the same screen as `MENU250.TXT`, on another terminal. */
+const FORMAT_EXTENSION = /\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i;
+
+/** A screen file's own name, without them. */
+export function screenStem(relPath: string): string {
+  let stem = relPath.slice(relPath.lastIndexOf('/') + 1).toLowerCase();
+  for (let stripped = stem.replace(FORMAT_EXTENSION, ''); stripped !== stem; stripped = stem.replace(FORMAT_EXTENSION, '')) {
+    stem = stripped;
+  }
+  return stem;
+}
+
+/**
+ * What a theme has DRAWN, as the board's own copy would describe itself.
+ *
+ * `servedKey` says what a reader is served - and two different pieces of art
+ * can answer the same description, because a reader is a claim about a
+ * SCREEN and a card is a FILE. A theme drawing `Board/MENU.TXT` made the
+ * board's `Screens/BULL.TXT` vanish from the artist's studio, which is the
+ * one thing that page is for: seeing what is still the board's. The loader
+ * finds a theme's copy by NAME (screen-index.service.ts:1113, variants are
+ * matched per directory), so the art's own name belongs in the key.
+ */
+export function drawnKey(
+  file: Pick<ScreenFileShape, 'relPath'>,
+  reader: Pick<ScreenReaderShape, 'screen' | 'scope' | 'serves' | 'securityLevel' | 'screenType'>,
+): string {
+  return `${screenStem(file.relPath)}|${servedKey(reader)}`;
+}
+
 /**
  * Every screen a caller looking through `opts.theme` is served, as cards.
  *
@@ -495,9 +526,9 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
    * cards stay in the sysop's gallery (no ownedBy there) and for screens
    * the theme has not drawn.
    *
-   * Matched per screen, scope, level band AND screen type: a theme that drew
-   * the ANSI still needs the board's .GR twin, or the missing-format chips
-   * would lie about what is left to draw. In a themed index the covered
+   * Matched per screen NAME, scope, level band AND screen type: a theme that
+   * drew the ANSI still needs the board's .GR twin, or the missing-format
+   * chips would lie about what is left to draw. In a themed index the covered
    * original reads `shadowed`, never `resolved` - same key decides.
    */
   const drawnInTheme = (ownedBy: string): Set<string> => {
@@ -506,7 +537,7 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
       if (file.theme !== ownedBy) continue;
       for (const reader of file.readBy ?? []) {
         if (reader.via !== 'resolved') continue;
-        claimed.add(servedKey(reader));
+        claimed.add(drawnKey(file, reader));
       }
     }
     return claimed;
@@ -523,7 +554,7 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved' || r.via === 'shadowed')) ?? copies[0];
     const reader = file.readBy?.find(r => r.via === 'resolved' || r.via === 'shadowed');
     if (!reader) return true;
-    return !drawn.has(servedKey(reader));
+    return !drawn.has(drawnKey(file, reader));
   });
 
   return groups

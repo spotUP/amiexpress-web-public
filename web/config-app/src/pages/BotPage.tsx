@@ -12,6 +12,7 @@ import { Bot, Play, Square, RotateCcw } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
+import type { ApiResponse } from '../types';
 
 interface ConfigField {
   key: string;
@@ -21,6 +22,9 @@ interface ConfigField {
   value: string;
   set: boolean;
 }
+
+// Stable empty array reference to prevent infinite re-renders
+const EMPTY_FIELDS: ConfigField[] = [];
 
 function unwrapList(res: any): any[] {
   const data = res?.data ?? res;
@@ -62,11 +66,18 @@ export function BotPage({ pluginId }: { pluginId: string }) {
 
   const configQuery = useQuery({
     queryKey: ['bot-config', pluginId],
-    queryFn: () => apiClient.getBotConfig(pluginId),
+    queryFn: (): Promise<ApiResponse<ConfigField[]>> => apiClient.getBotConfig(pluginId),
     enabled: !!manifest,
     retry: false,
   });
-  const fields: ConfigField[] = (configQuery.data as any)?.data ?? [];
+  // A FRESH `[]` here is a new dependency on every render, and the effect
+  // below sets state from it - so React re-rendered, which made another
+  // array, for ever ("Maximum update depth exceeded"): while the query
+  // loaded, on an error, and permanently on a bot that is not installed
+  // (the query never runs) or whose fields are all unset secrets (the
+  // setter returns a new empty object every time). One shared reference,
+  // as on UsersPage and NodesPage.
+  const fields: ConfigField[] = configQuery.data?.data ?? EMPTY_FIELDS;
 
   // Pre-fill what the backend echoes (non-secrets); secrets stay blank and
   // untouched fields merge server-side, so saving never wipes them.
@@ -121,7 +132,7 @@ export function BotPage({ pluginId }: { pluginId: string }) {
 
   const state: string = status?.state ?? 'unknown';
   const stateColor =
-    state === 'running' ? 'text-green-600' : state === 'stopped' ? 'text-content-muted' : 'text-amber-600';
+    state === 'running' ? 'text-status-ok' : state === 'stopped' ? 'text-content-muted' : 'text-status-warn';
 
   return (
     <div className="space-y-6">
@@ -175,7 +186,7 @@ export function BotPage({ pluginId }: { pluginId: string }) {
           </button>
         </div>
         {actionMutation.isError ? (
-          <p className="mt-2 text-sm text-red-600">Action failed. See logs below.</p>
+          <p className="mt-2 text-sm text-status-danger">Action failed. See logs below.</p>
         ) : null}
       </section>
 

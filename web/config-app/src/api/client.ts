@@ -1200,6 +1200,55 @@ class ApiClient {
     });
   }
 
+  /*
+   * Co-sysop personas.
+   *
+   * Through the client like everything else: the page hand-rolled six
+   * `fetch` calls with their own `Authorization` header, so a 401 went
+   * nowhere near the session handling and a failure answered
+   * `TypeError: cannot read properties of undefined`.
+   */
+  async getPersonas() {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat/personas`);
+  }
+
+  async savePersona(draft: unknown) {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat/personas`, {
+      method: 'PUT',
+      body: JSON.stringify(draft),
+    });
+  }
+
+  async deletePersona(slug: string) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/config/operator-chat/personas/${encodeURIComponent(slug)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  /** The system prompt this draft would compose to - shown, never edited. */
+  async composePersona(draft: unknown) {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat/personas/compose`, {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    });
+  }
+
+  async describePersona(description: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat/personas/describe`, {
+      method: 'POST',
+      body: JSON.stringify({ description }),
+    });
+  }
+
+  /** One exchange with the draft, with no caller paged. */
+  async tryPersona(draft: unknown, message: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat/personas/try`, {
+      method: 'POST',
+      body: JSON.stringify({ draft, message }),
+    });
+  }
+
   // Admin Permissions
   async getAdminPermissions() {
     return this.request<{

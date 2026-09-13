@@ -121,6 +121,35 @@ describe('what belongs in a gallery', () => {
     expect(paths(artist)).toContain('Conf1/menu250.txt.GR');
   });
 
+  /*
+   * "sees which cards are theirs and which are still the board's" - the whole
+   * point of an artist's studio, and the dedup took it away.
+   *
+   * A reader describes the SCREEN a file answers for, not the file. Two
+   * different pieces of art can carry the same description, and keyed on the
+   * description alone the board's BULL.TXT was dropped because the theme had
+   * drawn a MENU.TXT - no board card left, no "Board's - not redrawn yet"
+   * badge, nothing saying what is still to draw.
+   */
+  it('keeps the board\'s own screen when the theme drew a different one', () => {
+    const apart = {
+      ...index,
+      files: {
+        'Screens/BULL.TXT': file({ relPath: 'Screens/BULL.TXT', sha256: 'a', readBy: reader }),
+        'Themes/neon/Board/MENU.TXT': file({
+          relPath: 'Themes/neon/Board/MENU.TXT', sha256: 'b', theme: 'neon', readBy: reader,
+        }),
+      },
+    } as unknown as ScreenIndexShape;
+
+    const artist = buildGalleryItems(apart,
+      { theme: 'neon', showGenerated: false, showUnread: false, ownedBy: 'neon' });
+
+    expect(paths(artist)).toEqual(['Screens/BULL.TXT', 'Themes/neon/Board/MENU.TXT']);
+    expect(artist.find(i => i.path === 'Screens/BULL.TXT')?.badge)
+      .toEqual({ label: "Board's - not redrawn yet", kind: 'theirs' });
+  });
+
   // The live shape: once a theme answers, the board's copy reads
   // `shadowed`, never `resolved` - and guestlogon was still shown twice
   // with only the resolved reader counted.

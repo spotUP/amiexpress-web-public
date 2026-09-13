@@ -563,6 +563,8 @@ import {
   getSectionBody,
   setSectionBody,
   type EmpireFile,
+  BULL_SECTION,
+  MASK_SECTION,
 } from './text-cfg/empire';
 
 /** Which legacy file a setting binds (per-setting override, else manifest). */
@@ -610,13 +612,17 @@ function readEmpireCell(
   const row = setting.cfgRow;
   if (row) {
     if (row.field === 'title' || row.field === 'file') {
-      const rows = getBullRows(file);
+      // BULL_SECTION, not `row.section`. For a row setting `cfgRow.section`
+      // is a LABEL for the admin form - emp_tools writes "masks" for all 39
+      // conference rows - and no such section exists in the file. Only the
+      // `field:'value'` KV branch below reads it as a real section name.
+      const rows = getBullRows(file, BULL_SECTION);
       const found = rows[row.row ?? -1];
       if (!found) return undefined;
       return row.field === 'title' ? found.title : found.file;
     }
     if (row.field === 'mask') {
-      const masks = getMaskRows(file);
+      const masks = getMaskRows(file, MASK_SECTION);
       const found = masks[row.row ?? -1];
       return found;
     }
@@ -656,6 +662,14 @@ function coerceEmpireValue(
     return String(value);
   }
   const str = oneCfgLine(String(value));
+  // A semicolon starts a comment in an Empire file, and in a bull row it is
+  // the delimiter between the title and its filename. Either way the format
+  // cannot carry one inside a value: saving "a; ATTACK" read back as "a", so
+  // the sysop's text was lost between the save and the next form load. Say so
+  // rather than truncate.
+  if (str.includes(';')) {
+    throw new Error(`${setting.label} cannot contain a semicolon - these files read it as a comment`);
+  }
   if (setting.pattern && !new RegExp(setting.pattern).test(str)) {
     throw new Error(`${setting.label} must match ${setting.pattern}`);
   }
@@ -675,12 +689,13 @@ function ensureEmpireRow(
   file: EmpireFile,
   kind: 'bull' | 'mask',
   index: number,
-  fileLabel: string
+  fileLabel: string,
+  section: string
 ): void {
   if (kind === 'bull') {
-    while (getBullRows(file).length <= index) {
-      const n = getBullRows(file).length + 1;
-      if (!appendBullRow(file, { title: '-', file: `bull${n}.txt` })) {
+    while (getBullRows(file, section).length <= index) {
+      const n = getBullRows(file, section).length + 1;
+      if (!appendBullRow(file, { title: '-', file: `bull${n}.txt` }, section)) {
         throw new Error(
           `${fileLabel} has no bulletin list to grow - its [BullNames_END] marker is missing`
         );
@@ -688,9 +703,9 @@ function ensureEmpireRow(
     }
     return;
   }
-  while (getMaskRows(file).length <= index) {
-    const n = getMaskRows(file).length;
-    if (!appendMaskRow(file, '-'.repeat(20), `; Conference ${n + 1}`)) {
+  while (getMaskRows(file, section).length <= index) {
+    const n = getMaskRows(file, section).length;
+    if (!appendMaskRow(file, '-'.repeat(20), `; Conference ${n + 1}`, section)) {
       throw new Error(
         `${fileLabel} has no conference access list to grow - its [CnfAccess_END] marker is missing`
       );
@@ -711,16 +726,16 @@ function applyEmpireCell(
   if (row) {
     if (row.field === 'title' || row.field === 'file') {
       if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
-      ensureEmpireRow(file, 'bull', row.row, fileLabel);
-      const ok = setBullRow(file, row.row, row.field === 'title' ? { title: str } : { file: str });
+      ensureEmpireRow(file, 'bull', row.row, fileLabel, BULL_SECTION);
+      const ok = setBullRow(file, row.row, row.field === 'title' ? { title: str } : { file: str }, BULL_SECTION);
       if (!ok) throw new Error(`${setting.label} points past the bulletin list in ${fileLabel}`);
       entry.dirty = true;
       return;
     }
     if (row.field === 'mask') {
       if (row.row === undefined) throw new Error(`${manifest.command}: ${setting.key} needs its row number`);
-      ensureEmpireRow(file, 'mask', row.row, fileLabel);
-      const ok = setMaskRow(file, row.row, str);
+      ensureEmpireRow(file, 'mask', row.row, fileLabel, MASK_SECTION);
+      const ok = setMaskRow(file, row.row, str, MASK_SECTION);
       if (!ok) throw new Error(`${setting.label} points past the access list in ${fileLabel}`);
       entry.dirty = true;
       return;

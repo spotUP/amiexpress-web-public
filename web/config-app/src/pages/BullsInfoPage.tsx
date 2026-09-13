@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
+import { Modal } from '../components/ui/Modal';
 import { BullsMasksMatrix } from '../components/BullsMasksMatrix';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { AnsiCanvas } from '../components/AnsiCanvas';
@@ -289,14 +290,6 @@ function BulletinModal({ name, onClose, onSaved }: { name: string; onClose: () =
   const [building, setBuilding] = useState(false);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  useEffect(() => {
     let live = true;
     setContent(null);    setEditable(false);
     setStatus(null);
@@ -368,11 +361,12 @@ function BulletinModal({ name, onClose, onSaved }: { name: string; onClose: () =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-3xl max-h-[85vh] overflow-auto bg-surface-1 border border-border rounded-lg p-4 space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // The shared Modal owns the backdrop, Escape and the accessible name; this
+    // kept its own header, so it takes the visually hidden title instead.
+    <Modal open onClose={onClose} title={name} showHeader={false} maxWidth="max-w-3xl">
+      {/* A header-less Modal draws no padding of its own, so the shell keeps
+          the inset the hand-rolled panel had. */}
+      <div className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-content-primary font-mono">{name}</h3>
           <button onClick={onClose} className="px-3 py-1 text-content-secondary hover:text-content-primary text-sm">
@@ -440,6 +434,6 @@ function BulletinModal({ name, onClose, onSaved }: { name: string; onClose: () =
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

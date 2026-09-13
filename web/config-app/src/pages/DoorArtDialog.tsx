@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
@@ -39,14 +40,6 @@ export function DoorArtDialog({
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lineCount, setLineCount] = useState(0);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   useEffect(() => {
     let live = true;
@@ -112,11 +105,16 @@ export function DoorArtDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-4xl max-h-[90vh] overflow-auto bg-surface-1 border border-border rounded-lg p-4 space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
+    /*
+       A dialog announces itself as one. This was a `fixed inset-0` div with
+       no `role="dialog"`, no focus trap and an Escape handler of its own, so
+       a keyboard user could tab out of the canvas into the page behind it and
+       never get back (src/test/modal-semantics.test.tsx). The shared Modal
+       owns the shell, Escape and the backdrop; the header below stays, so the
+       accessible name comes from the Modal's own hidden title.
+    */
+    <Modal open title={`${doorName} - ${label}`} maxWidth="max-w-4xl" showHeader={false} onClose={onClose}>
+      <div className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-content-primary">
             {doorName} — {label}
@@ -151,6 +149,6 @@ export function DoorArtDialog({
         )}
         {saving && <p className="text-sm text-content-secondary">Saving...</p>}
       </div>
-    </div>
+    </Modal>
   );
 }

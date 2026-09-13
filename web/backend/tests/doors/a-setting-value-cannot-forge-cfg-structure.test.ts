@@ -61,6 +61,16 @@ describe('a value carrying newlines', () => {
     expect(after).toContain('PWN [Init_END] DUAL_LISTING');
   });
 
+  it('says a semicolon cannot be stored, instead of losing it silently', () => {
+    // `;` starts a comment in these files, and in a bull row it separates the
+    // title from its filename. Saving "a; ATTACK" used to read back as "a" -
+    // the sysop's text was gone between the save and the next form load.
+    const dir = stageEmpire();
+
+    expect(() => writeDoorSettings(dir, { bull1_title: 'Raid; ATTACK' }, undefined, 'B'))
+      .toThrow(/semicolon/i);
+  });
+
   it('is the same rule for both writers', () => {
     expect(oneCfgLine('a\nb')).toBe('a b');
     expect(oneCfgLine('a\r\nb')).toBe('a b');

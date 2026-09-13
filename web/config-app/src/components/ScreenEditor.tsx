@@ -107,6 +107,9 @@ export function ScreenEditor({
    *  through onChange anyway. Dies with the dialog, like a real clipboard
    *  dies with the program. */
   const clipboard = useRef<ClipboardRegion | null>(null);
+  /** The text the last Alt+C/Alt+X put on the SYSTEM clipboard, so Alt+V can
+   *  tell our own copy from something copied outside the admin. */
+  const exported = useRef<string | null>(null);
   /** A code already on the canvas, opened for changing rather than adding. */
   const [editingToken, setEditingToken] = useState<MciToken | null>(null);
 
@@ -178,9 +181,10 @@ export function ScreenEditor({
             // Both clipboards: the system one carries plain text out to the
             // sysop's own editor, the internal one keeps colours for
             // canvas-to-canvas pastes. Either may be absent; Alt+V prefers
-            // the system's and falls back to the internal.
+            // the internal one and falls back to the system's.
             clipboard.current = copySelectedRegion(surface);
             const text = selectedRegionToText(surface);
+            exported.current = text;
             if (text) void writeSystemText(text);
             return;
           }
@@ -188,9 +192,10 @@ export function ScreenEditor({
             const cut = cutSelectedRegion(surface);
             clipboard.current = cut.region;
             const text = selectedRegionToText(surface);
-            if (cut.region) onChange?.(cut.surface);
             // Read the text BEFORE the blanking above: cut.surface already
             // committed, but `surface` still holds the lifted cells.
+            exported.current = cut.region ? text : exported.current;
+            if (cut.region) onChange?.(cut.surface);
             if (cut.region && text) void writeSystemText(text);
             return;
           }
@@ -200,8 +205,27 @@ export function ScreenEditor({
             // meantime still applies, last write wins like everywhere else.
             void (async () => {
               const text = await readSystemText();
-              if (text) onChange?.(pasteText(surface, cursor.x, cursor.y, text));
-              else if (clipboard.current) onChange?.(pasteRegion(surface, cursor.x, cursor.y, clipboard.current));
+              const region = clipboard.current;
+              /*
+               * COLOURS FIRST.
+               *
+               * Alt+C writes both clipboards, and preferring the system read
+               * meant Chrome handed back the plain text Alt+C had just
+               * written: every canvas-to-canvas paste went through pasteText
+               * and restamped the art in the CURRENT colours, silently losing
+               * every foreground and background it had lifted. pasteRegion
+               * was reachable only when the system read failed.
+               *
+               * So a region lifted HERE pastes as art. The system clipboard
+               * is the fallback, for text that came from outside the admin -
+               * which is exactly what a system clipboard holding something
+               * other than our own export means.
+               */
+              if (region && (text === null || text === exported.current)) {
+                onChange?.(pasteRegion(surface, cursor.x, cursor.y, region));
+              } else if (text) {
+                onChange?.(pasteText(surface, cursor.x, cursor.y, text));
+              }
             })();
             return;
         }

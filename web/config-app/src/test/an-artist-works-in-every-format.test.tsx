@@ -154,3 +154,39 @@ describe('an artist with a screen open', () => {
     ).toBe(true));
   });
 });
+
+/*
+ * The hidden file input behind "+ PETSCII" / "+ RIP" was written out twice,
+ * verbatim: once in the `isNew` branch and once in the branch beside it. It
+ * is named once now, and both branches render it - which is the half of an
+ * extraction that can go wrong silently. A screen with no picker has buttons
+ * that open nothing; two pickers sharing one ref, and the ref points at the
+ * wrong one.
+ */
+describe('the picker that adds a format', () => {
+  beforeEach(() => { vi.clearAllMocks(); writes.length = 0; });
+
+  it('is on the page exactly once, on a screen that exists', async () => {
+    open();
+    await screen.findByRole('button', { name: /\+ RIP/ });
+
+    expect(screen.getAllByLabelText('Add a format')).toHaveLength(1);
+  });
+
+  it('is on the page exactly once, on a screen nothing has drawn yet', async () => {
+    render(
+      <ArtistScreenDialog
+        path="Themes/skope/Node/GUESTLOGON.TXT"
+        theme={theme}
+        index={index}
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+        isNew
+      />,
+      { wrapper },
+    );
+    await screen.findByRole('button', { name: /\+ PETSCII/ });
+
+    expect(screen.getAllByLabelText('Add a format')).toHaveLength(1);
+  });
+});
