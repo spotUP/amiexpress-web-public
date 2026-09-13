@@ -164,7 +164,17 @@ static void paint_line(ansi_buf *b, const ui_editor_style *st,
     sprintf(numbered, "%s %s", num, text);
     ansi_fill(b, row, st->left, st->cols, st->fg, st->bg);
     ansi_color(b, st->fg, st->bg, 0);
-    ansi_text_raw(b, row, st->left, numbered, st->cols);
+    /*
+     * left + 1, to stand in the same column as the ENTRY prompt.
+     *
+     * ui_input fills from `left` and writes its text at `left + 1`
+     * (ui_input.c). A finished line drawn flush at `left` therefore sat one
+     * column to the LEFT of the `NN>` still being typed, so the message
+     * appeared to step sideways as each line was accepted - "it works but its
+     * offset to the right", the sysop, 2026-09-14, of the prompt against the
+     * lines above it.
+     */
+    ansi_text_raw(b, row, st->left + 1, numbered, st->cols - 1);
 }
 
 /**
