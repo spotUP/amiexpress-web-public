@@ -107,7 +107,7 @@ console.log('[ENV] Join');
   // If params contain ".", delegate to J command (join conference) - express.e:25203-25205
   // express.e just calls internalCommandJ(params) silently — no message
   if (parsedParams.length > 0 && parsedParams[0].includes('.')) {
-    const { handleJoinConferenceCommand } = require('../commands/navigation-commands.handler');
+    const { handleJoinConferenceCommand } = require('../commands/user-commands.handler');
     await handleJoinConferenceCommand(socket, session, params);
     return;
   }
