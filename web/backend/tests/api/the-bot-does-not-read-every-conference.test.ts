@@ -13,7 +13,11 @@
  */
 
 import express from 'express';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import request from 'supertest';
+import { saveBBSConfig, invalidateBoardConfig } from '../../src/services/bbs-config-file.service';
 import { createBotDataRouter } from '../../src/api/bot-data-routes';
 
 const TOKEN = 'bot-conf-test-secret';
@@ -26,7 +30,6 @@ function boardWith(mask: string | undefined) {
     3: [{ id: 3, subject: 'Demos', fromUser: 'knut', isPrivate: false, posted: 3 }],
   };
   return {
-    getConfigRepository: () => ({ getSystemConfig: () => ({ new_user_conf_access: mask }) }),
     getConferences: async () => [
       { id: 1, name: 'Main' },
       { id: 2, name: 'Sysop' },
@@ -38,6 +41,16 @@ function boardWith(mask: string | undefined) {
 }
 
 function appFor(mask: string | undefined) {
+  // The board's config comes off DISK (getBoardConfig), so the board this
+  // test stands up is a real bbsConfig.info in a temp directory.
+  const bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-conf-'));
+  // Written with the board's own writer, so this is the file the board reads.
+  saveBBSConfig(bbsRoot, {
+    bbs_name: 'Uptown',
+    sysop_name: 'Spot',
+    ...(mask === undefined ? {} : { new_user_conf_access: mask }),
+  } as never);
+  invalidateBoardConfig();
   const app = express();
   app.use(express.json());
   app.use(
@@ -46,7 +59,7 @@ function appFor(mask: string | undefined) {
       (req as any).botService = { id: 'whip', domains: ['messages'] };
       next();
     },
-    createBotDataRouter(boardWith(mask) as never, { bbsRoot: process.cwd() })
+    createBotDataRouter(boardWith(mask) as never, { bbsRoot })
   );
   return app;
 }
@@ -72,11 +85,18 @@ describe('a bot token reading the message bases', () => {
     expect(res.body.data.text).toContain('Demos');
   });
 
-  it('falls back to conference 1 alone when the board says nothing', async () => {
+  it('takes the board\'s own default when nothing is configured', async () => {
+    // An unset NEWUSER access reads as 'XXX' - conferences 1 to 3 - which is
+    // what a fresh account gets, so it is what the bot gets. The [1]-only
+    // fallback is for a config that cannot be read AT ALL, below.
     expect((await listIn(appFor(undefined), 1)).body.data.text).toContain('Open house');
-    expect((await listIn(appFor(undefined), 3)).body.data.text).not.toContain('Demos');
+    expect((await listIn(appFor(undefined), 3)).body.data.text).toContain('Demos');
   });
 
+  // There is no case here for "the config cannot be read": getBoardConfig
+  // answers with defaults rather than throwing, even for a root with no board
+  // in it, so that branch cannot be reached from outside. The catch in
+  // botConfAccess stays as a belt, but nothing here pretends to exercise it.
   it('falls back to conference 1 alone for an area-name access string', async () => {
     // More than nine conferences: confAccess is an AREA NAME, which cannot be
     // resolved without a user record.

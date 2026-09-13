@@ -56,7 +56,12 @@ export function createBotDataRouter(
    */
   const botConfAccess = (): number[] => {
     try {
-      const cfg = (database as any)?.getConfigRepository?.()?.getSystemConfig?.();
+      // getBoardConfig, not the system_config ROW: on this board the admin
+      // writes bbsConfig.info and the database copy drifts. Reading the row
+      // is the shape that broke mail, the password policy and %NODELIST, and
+      // `tests/services/config-read-source.test.ts` is what stops a seventh.
+      // Same call the new-user handler makes for the same field.
+      const cfg = board.getBoardConfig(opts.bbsRoot);
       const mask = String(cfg?.new_user_conf_access ?? '').trim();
       if (!mask) return [1];
       // The X/_ string: position n-1 is conference n. An area NAME (the path

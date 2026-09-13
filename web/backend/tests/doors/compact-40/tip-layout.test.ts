@@ -30,6 +30,10 @@ describe('tip-of-the-day layout', () => {
       frameHeight: 8,
       bordered: true,
       innerWidth: 60,
+      // The frame's own padding, and so the left edge of every child box.
+      // It used to be re-derived at each call site, where adding the border
+      // a second time pushed the hint row onto the bottom border at 80.
+      padding: 1,
       title: 'Tip of the day - Try WHIP'.slice(0, 60),
       body: [
         'Demo-scene project management with kanban boards, parties,',

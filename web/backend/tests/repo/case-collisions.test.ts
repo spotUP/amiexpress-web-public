@@ -301,20 +301,24 @@ describe('the guard runs where it can stop a bad commit', () => {
     // Hence a second copy of the rule, in shell, inside the deploy script.
     // This test is what stops that copy being quietly removed - same job
     // `services/deploy-orphans-list.test.ts` does for the ORPHANS list.
-    const workflow = fs.readFileSync(
-      path.join(REPO_ROOT, '.github/workflows/deploy-hetzner.yml'),
-      'utf8'
-    );
-    expect(workflow).toContain('== case-collision check ==');
-    expect(workflow).toContain('refusing to deploy - two tracked paths differ only in case');
+    //
+    // `deploy/deploy.sh`, not the workflow: GitHub Actions is unpaid on this
+    // repo (`gh run list` answers 404), so deploy-hetzner.yml has not run in
+    // days. The host pulls and deploys itself on a systemd timer, and the
+    // script it runs is the only place this guard can still stop anything.
+    // Reading the workflow made this assertion pass against a file that
+    // deploys nothing.
+    const deploy = fs.readFileSync(path.join(REPO_ROOT, 'deploy/deploy.sh'), 'utf8');
+    expect(deploy).toContain('== case-collision check ==');
+    expect(deploy).toContain('refusing to deploy - two tracked paths differ only in case');
 
     // Position is the whole point. It must run AFTER the SHA is pinned (so it
     // checks what is actually being deployed) and BEFORE the image is built
-    // and the container recreated (so a bad commit costs a red workflow and
+    // and the container recreated (so a bad commit costs a failed deploy and
     // no downtime).
-    const shaPinned = workflow.indexOf('HEAD ($ACTUAL_SHA) != origin/main');
-    const check = workflow.indexOf('== case-collision check ==');
-    const build = workflow.indexOf('docker compose build');
+    const shaPinned = deploy.indexOf('HEAD ($ACTUAL_SHA) != origin/main');
+    const check = deploy.indexOf('== case-collision check ==');
+    const build = deploy.indexOf('docker compose build');
     expect(shaPinned).toBeGreaterThan(-1);
     expect(build).toBeGreaterThan(-1);
     expect(check).toBeGreaterThan(shaPinned);
