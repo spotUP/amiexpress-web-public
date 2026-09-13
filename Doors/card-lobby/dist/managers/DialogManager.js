@@ -180,9 +180,15 @@ class DialogManager {
                 available.push({ entry, content });
         }
         if (available.length === 0) {
+            // Say what actually makes one appear. The old wording promised a
+            // bulletin "once a week of play has gone by", which was never the
+            // rule and is certainly not it now: the lobby writes its leaderboard
+            // as soon as somebody has played, and then at most once a week after
+            // that. A caller who has been told to wait a week does not know that
+            // dealing one hand is what fills this window.
             this.showTextWindow('Bulletins', 'No bulletins have been posted yet.\n\n'
-                + 'The lobby writes its weekly leaderboard bulletin once a week of play\n'
-                + 'has gone by, and it will appear here when it does.');
+                + 'The lobby posts its leaderboard once somebody has played a hand,\n'
+                + 'and refreshes it at most once a week after that.');
             return;
         }
         const entries = available.map(({ entry }) => `#${entry.number} ${entry.title}`);

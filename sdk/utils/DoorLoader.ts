@@ -30,13 +30,23 @@
 
 import { Loading } from '../engines/ui/blessed/widgets/loading';
 import { ProgressBar } from '../engines/ui/blessed/widgets/progressbar';
+import { Box } from '../engines/ui/blessed/widgets/box';
 import type { Screen } from '../engines/ui/blessed/core/screen';
 import { activeTheme } from '../engines/ui/theme/live.js';
+import {
+  calculateDialogWidth, isCompactWidth,
+} from '../engines/ui/blessed/core/responsive-constants';
 
 export interface DoorLoaderOptions {
-  /** Show semi-transparent overlay behind loader (default: true) */
+  /**
+   * @deprecated Ignored. The loader paints an opaque backdrop instead, which
+   * works on every transport; the old overlay was a browser-side CSS dim
+   * that painted no cells, so a telnet caller saw the half-built door
+   * straight through it.
+   */
   overlay?: boolean;
   /** Overlay opacity 0-1 (default: 0.5) */
+  /** @deprecated Ignored - see `overlay`. */
   overlayOpacity?: number;
   /** Progress bar color (default: 'cyan') */
   barColor?: string;
@@ -52,22 +62,61 @@ export class DoorLoader {
   private screen: Screen;
   private loader: Loading;
   private bar: ProgressBar;
+  private backdrop: Box;
   private isVisible: boolean = false;
 
   constructor(screen: Screen, options: DoorLoaderOptions = {}) {
     this.screen = screen;
+    // `|| 80` is the one literal the door rules allow: an unknown width.
+    const screenWidth = (screen as unknown as { width?: number }).width || 80;
+    const compact = isCompactWidth(screenWidth);
+
+    /**
+     * AN OPAQUE BACKDROP, because the door behind this is HALF BUILT.
+     *
+     * Loading's own `overlay` is a CSS dim: it sends an OSC sequence the
+     * browser intercepts and shades, and paints no cells at all. So the
+     * door's panels - created but not yet filled - showed straight through
+     * it as loose coloured bars, and a telnet or SSH caller got no dimming
+     * whatsoever. The sysop's screenshot of exactly that, 2026-09-13: "the
+     * preloader looks super broken".
+     *
+     * A box of spaces in the theme's ground colour covers the screen on
+     * every transport, and being created before the dialog it sits under
+     * it. This is also why the dialog below asks for overlay: false.
+     */
+    this.backdrop = new Box({
+      parent: screen as never,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      hidden: true,
+      focusable: false,
+      ch: ' ',
+      style: { bg: activeTheme().tokens.ground, fg: activeTheme().tokens.ink },
+    } as never);
 
     // Use the Loading widget which handles overlay, centering and spinner animation
     this.loader = new Loading({
       parent: screen,
-      overlay: options.overlay !== false,
-      overlayOpacity: options.overlayOpacity ?? 0.5,
+      overlay: false,
+      // No overlayOpacity either: Loading enables the CSS overlay when
+      // EITHER key is present, so passing an opacity turned the browser dim
+      // straight back on beside the backdrop.
       spinner: options.spinnerFrames,
       interval: options.spinnerInterval,
-      border: { type: 'line' },
-      label: ' Loading ',
-      width: 60,
-      height: 7, // room for the message, the spinner and the bar
+      // GEOMETRY FROM THE SCREEN, never a constant. 60 columns is wider
+      // than a PETSCII caller's whole screen, so the one loader the board
+      // has looked broken anywhere but a plain 80-column terminal.
+      // calculateDialogWidth is the SDK's own ladder: nearly full width at
+      // 40, padded on mobile, a share of the screen above that.
+      border: compact ? false : { type: 'line' },
+      label: compact ? undefined : ' Loading ',
+      width: calculateDialogWidth(screenWidth),
+      // Three rows of content (message, spinner, bar) plus the frame. With
+      // no frame at 40 the two border rows are not there to pay for.
+      height: compact ? 5 : 7,
       style: {
         bg: 'black',
         fg: 'white',
@@ -112,7 +161,11 @@ export class DoorLoader {
     }
     
     this.bar.hide(); // Indeterminate mode shows the spinner alone
+    // Cover first, then draw on top of the cover.
+    this.backdrop.show();
+    (this.backdrop as unknown as { setBack?: () => void }).setBack?.();
     this.loader.load();
+    (this.loader as unknown as { setFront?: () => void }).setFront?.();
     this.isVisible = true;
   }
 
@@ -144,6 +197,7 @@ export class DoorLoader {
    */
   hide(): void {
     this.loader.stop();
+    this.backdrop.hide();
     this.isVisible = false;
   }
 
