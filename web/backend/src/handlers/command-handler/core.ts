@@ -49,7 +49,7 @@ let SCREEN_MENU: string = "MENU";
  * Kept identical to login-connect.service.ts's ANSI_GRAPHICS_PROMPT.
  */
 const CONNECT_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLS]? ";
 
 /**
  * Command Handler - Main Entry Point

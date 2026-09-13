@@ -594,6 +594,34 @@ const formatBytes = formatBytesCompact;
  * Interactive bulletin reading system.
  * Bulletins are stored in Bulletins/Bull1, Bull2, etc.
  */
+/**
+ * Where this board keeps its bulletins for the conference the caller is in.
+ *
+ * express.e:24616-24648 reads them out of `confScreenDir/Bulletins/`, and
+ * that is still the first answer. This board does not use it: its bulletins
+ * live in one `Bulletins/` directory at the board root (bull1..12 and
+ * BullHelp beside them), which is where the Bulls door reads them from too -
+ * `Conf1/Bulletins` is a 0-byte Amiga leftover from 2020.
+ *
+ * It never showed, because the Bulls door won the B command and read the
+ * root itself. The moment a caller reached the board's OWN bulletin tier -
+ * a teletext caller, 2026-09-14 - the conference-scoped path answered "no
+ * bulletins are available in this conference" for a board with twelve of
+ * them. So: the conference's own directory when it has one, the board's
+ * otherwise.
+ */
+function bulletinDir(session: BBSSession): string {
+  const dataDir = config.get('dataDir');
+  const currentConf = session.currentConf || 1;
+  const confDir = path.join(conferenceSubdir(dataDir, currentConf, 'Screens'), 'Bulletins');
+  try {
+    if (amigafs.existsSync(confDir) && amigafs.statSync(confDir).isDirectory()) return confDir;
+  } catch {
+    /* not a directory, or not readable: the board's own is the answer */
+  }
+  return path.join(dataDir, 'Bulletins');
+}
+
 export function handleReadBulletinCommand(socket: any, session: BBSSession, params: string = ''): void {
   if (!checkSecurity(session.user, ACSPermission.READ_BULLETINS)) {
     ErrorHandler.permissionDenied(socket, 'read bulletins', {
@@ -606,13 +634,10 @@ console.log('[ENV] Bulletins');
 
   // express.e:24616-24621 - Check confScreenDir + 'Bulletins/BullHelp.txt'
   // confScreenDir = Conf{N}/Screens/ — per-conference screen directory
-  const dataDir = config.get('dataDir');
-  const currentConf = session.currentConf || 1;
-  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
   // Any variant counts as "this conference has bulletins": a board whose
   // bulletin menu is authored as teletext has bulletins just as much as one
   // whose menu is a .txt.
-  const bullHelpBase = path.join(confScreenDir, 'Bulletins', 'BullHelp');
+  const bullHelpBase = path.join(bulletinDir(session), 'BullHelp');
   const hasBullHelp = ['.txt', '.ttx', '.seq', '.TXT']
     .some((ext) => amigafs.existsSync(bullHelpBase + ext));
   if (!hasBullHelp) {
@@ -648,10 +673,7 @@ console.log('[ENV] Bulletins');
 function _showBulletinHelp(socket: any, session: BBSSession): void {
   // express.e:24630-24632 - StrCopy(str,confScreenDir); StrAdd(str,'Bulletins/BullHelp')
   // confScreenDir = Conf{N}/Screens/
-  const dataDir = config.get('dataDir');
-  const currentConf = session.currentConf || 1;
-  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
-  const bullHelpBasePath = path.join(confScreenDir, 'Bulletins', 'BullHelp');
+  const bullHelpBasePath = path.join(bulletinDir(session), 'BullHelp');
   /*
    * WITH the caller's screen KIND, not just their level.
    *
@@ -689,10 +711,8 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
   // express.e:24648 - StringF(str,'\sBulletins/Bull\d',confScreenDir,stat)
   // confScreenDir = Conf{N}/Screens/
-  const dataDir = config.get('dataDir');
-  const currentConf = session.currentConf || 1;
-  const confScreenDir = conferenceSubdir(dataDir, currentConf, 'Screens');
-  const bulletinBasePath = path.join(confScreenDir, 'Bulletins', `Bull${bulletinNum}`);
+  const bulletins = bulletinDir(session);
+  const bulletinBasePath = path.join(bulletins, `Bull${bulletinNum}`);
   const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
   socket.emit('ansi-output', '\r\n');
@@ -700,7 +720,7 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
   if (bulletinScreen) {
     _displayScreen(socket, session, bulletinScreen);
     // Achievements (SP2): every bulletin read is bull.read.all, once. Non-throwing.
-    reportBulletinRead(session as any, bulletinNum, path.join(confScreenDir, 'Bulletins'));
+    reportBulletinRead(session as any, bulletinNum, bulletins);
 
     if (!nonStopDisplay) {
       socket.emit('ansi-output', '\r\n');

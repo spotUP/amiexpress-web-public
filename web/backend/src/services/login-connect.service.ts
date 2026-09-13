@@ -93,7 +93,7 @@ export interface PreLoginConnectResult {
  * fallback notice, same shape as R). No express.e counterpart.
  */
 export const ANSI_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLS]? ";
 
 /**
  * The connect banner - express.e:29507-29522 - for EVERY transport.
