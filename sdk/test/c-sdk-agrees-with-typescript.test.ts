@@ -106,6 +106,7 @@ describe('the C SDK', () => {
       ['AE_FIELD_MENU_COMMAND', 'GET_CUSTOM_MSGBASE_MENUCMD'],
       ['AE_FIELD_THEME', 'AEW_THEME'],
       ['AE_FIELD_MSGQUERY', 'AEW_MSGQUERY'],
+      ['AE_FIELD_SETPOINTER', 'AEW_SETPOINTER'],
       // Where the conference and its messages live, and how far this caller
       // has read. These four are what let a door open a message base for
       // itself instead of asking the board to decode one, which is what makes
@@ -133,6 +134,8 @@ describe('the C SDK', () => {
     expect(theme).toBeGreaterThan(1003);
     const msgQuery = Number(header.match(/AE_FIELD_MSGQUERY\s*=\s*(\d+)/)![1]);
     expect(msgQuery).toBeGreaterThan(1003);
+    const setPointer = Number(header.match(/AE_FIELD_SETPOINTER\s*=\s*(\d+)/)![1]);
+    expect(setPointer).toBeGreaterThan(1003);
   });
 
   it('agrees about which widths are compact, across the boundary', () => {

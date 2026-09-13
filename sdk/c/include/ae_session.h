@@ -108,7 +108,28 @@ typedef enum {
      *
      * The door-facing wrapper is sdk/c/include/ae_msgbase.h.
      */
-    AE_FIELD_MSGQUERY       = 10200  /* AEW_MSGQUERY */
+    AE_FIELD_MSGQUERY       = 10200, /* AEW_MSGQUERY */
+    /*
+     * ALSO THIS BOARD'S OWN: move the caller's read pointer.
+     *
+     * AE_FIELD_LAST_READ / _LAST_SCANNED above are READ-ONLY, and that is
+     * true of a real AmiExpress too, not just of a board that has not got
+     * round to it - express.e:3963-3966 only ever answers, while MSGBASE_LOC
+     * three lines below shows the settable idiom the author used where a
+     * field WAS meant to be written. The board owns the pointer and writes it
+     * when the BOARD does the reading.
+     *
+     * A door that reads the message base itself therefore cannot mark
+     * anything read, and SUBS is exactly that door. This is the additive
+     * command that closes it. Written as "READ <n>" or "SCAN <n>".
+     *
+     * A board that does not have it ignores the write, the read-back does not
+     * move, and ae_set_last_read answers 0 - so the door keeps working with
+     * nothing marked, which is what it does on a classic board today.
+     *
+     * Proposed upstream: Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md
+     */
+    AE_FIELD_SETPOINTER     = 10300  /* AEW_SETPOINTER */
 } ae_field;
 
 /**
@@ -258,6 +279,26 @@ int ae_last_read(ae_session *s);
  * that decides what counts as new; ae_last_read is where he stopped reading.
  */
 int ae_last_scanned(ae_session *s);
+
+/**
+ * Tell the board the caller has read up to `msg_num`.
+ *
+ * For a door that reads the message base itself: without this nothing ever
+ * advances the pointer, so every message stays new for ever and the caller
+ * can never clear "N new for you".
+ *
+ * Returns 1 when the pointer is now at or past `msg_num`, 0 otherwise -
+ * including on a board that does not implement the command, which is not an
+ * error and must not stop the door. Requires a writer (ae_set_writer).
+ *
+ * Pointers move FORWARD ONLY, as express.e's own readit does
+ * (`IF(msgNum>lastMsgReadConf)`, express.e:12370). Asking for a lower number
+ * answers 1 without moving anything: the state asked for is already true.
+ */
+int ae_set_last_read(ae_session *s, int msg_num);
+
+/** As ae_set_last_read, for the new-scan pointer (express.e lastNewReadConf). */
+int ae_set_last_scanned(ae_session *s, int msg_num);
 
 /**
  * The caller's theme id ("classic", "uprough-neon", ...), or "" where the

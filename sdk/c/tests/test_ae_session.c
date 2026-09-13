@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>   /* atoi */
 #include <string.h>
 
 /** A board that answers from a table, and can be told to drop the line. */
@@ -38,6 +39,17 @@ typedef struct {
     char theme[32];
     int writes;
     int can_write;
+    /*
+     * Does this board implement AE_FIELD_SETPOINTER?
+     *
+     * 0 models a real AmiExpress: the write is TAKEN (an unknown command is
+     * not an error there) and nothing moves. That is the case the degradation
+     * contract exists for, and the only way to prove a door survives it.
+     */
+    int knows_setpointer;
+    /** Mutable pointer storage, so a board that knows the command can move. */
+    char read_buf[16];
+    char scan_buf[16];
 } fake_board;
 
 static int fake_transport(void *context, ae_field field, char *out, int cap)
@@ -78,6 +90,22 @@ static int fake_write(void *context, ae_field field, const char *value)
     fake_board *b = (fake_board *)context;
 
     if (!b->can_write) return -1;
+
+    if (field == AE_FIELD_SETPOINTER) {
+        int asked;
+        b->writes += 1;
+        /* A board that never heard of it still ACCEPTS the write - that is
+           what makes this worth testing rather than assuming. */
+        if (!b->knows_setpointer) return 0;
+        if (sscanf(value + 5, "%d", &asked) != 1) return 0;
+        if (strncmp(value, "READ ", 5) == 0) {
+            if (asked > atoi(b->read_buf)) sprintf(b->read_buf, "%d", asked);
+        } else if (strncmp(value, "SCAN ", 5) == 0) {
+            if (asked > atoi(b->scan_buf)) sprintf(b->scan_buf, "%d", asked);
+        }
+        return 0;
+    }
+
     if (field != AE_FIELD_THEME) return -1;
 
     b->writes += 1;
@@ -355,6 +383,113 @@ static void a_classic_board_leaves_the_paths_empty(void)
     printf("  [OK] a board that will not say leaves the path empty\n");
 }
 
+/** A board that implements the command, with the caller's pointers mutable. */
+static fake_board a_board_that_marks_read(void)
+{
+    fake_board b = a_board();
+    b.knows_setpointer = 1;
+    strcpy(b.read_buf, "141");
+    strcpy(b.scan_buf, "138");
+    b.last_read = b.read_buf;
+    b.last_scanned = b.scan_buf;
+    return b;
+}
+
+static void a_door_can_mark_the_mail_read(void)
+{
+    /* The whole reason AE_FIELD_SETPOINTER exists: SUBS reads the message
+     * base itself, so without this nothing ever advances the pointer and
+     * every message stays new for ever. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board_that_marks_read();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_set_last_read(&s, 200) == 1);
+    assert(ae_last_read(&s) == 200);
+    assert(ae_last_scanned(&s) == 138);      /* the other one is untouched */
+
+    assert(ae_set_last_scanned(&s, 190) == 1);
+    assert(ae_last_scanned(&s) == 190);
+    printf("  [OK] a door can move each pointer, and only that one\n");
+}
+
+static void a_pointer_never_goes_backwards(void)
+{
+    /* express.e:12370 is IF(msgNum>lastMsgReadConf) THEN ..., never a plain
+     * assignment. A door walking the list backwards must not un-read
+     * everything after it. Asking for less is not an error - the state asked
+     * for is already true - so it answers 1 and moves nothing. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board_that_marks_read();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_set_last_read(&s, 5) == 1);
+    assert(ae_last_read(&s) == 141);
+    printf("  [OK] a pointer never goes backwards\n");
+}
+
+static void a_board_that_cannot_mark_read_does_not_break_the_door(void)
+{
+    /*
+     * THE DEGRADATION CONTRACT, and the reason the read-back exists.
+     *
+     * A real AmiExpress has no such command. It does not fail the write - an
+     * unknown command is simply not acted on - so ae_write_fn reports success
+     * and the pointer has not moved. Only asking afterwards tells the two
+     * apart. The door must get a plain 0 and carry on.
+     */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board_that_marks_read();
+
+    b.knows_setpointer = 0;                  /* a classic AmiExpress */
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_set_last_read(&s, 200) == 0);
+    assert(ae_last_read(&s) == 141);         /* exactly where it was */
+    assert(ae_carrier(&s) == 1);             /* and the door is still up */
+    printf("  [OK] a board without the command leaves the door running\n");
+}
+
+static void marking_read_needs_a_writer(void)
+{
+    /* A read-only transport is a valid one (ae_session.h:141), and every
+     * door built on one must still run. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board_that_marks_read();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    /* deliberately no ae_set_writer */
+
+    assert(ae_set_last_read(&s, 200) == 0);
+    assert(b.writes == 0);
+    printf("  [OK] no writer is answered, not crashed\n");
+}
+
+static void marking_read_refuses_nonsense_without_asking_the_board(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board_that_marks_read();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_set_last_read(&s, -1) == 0);
+    assert(ae_set_last_read(0, 5) == 0);     /* no session at all */
+    assert(b.writes == 0);
+    printf("  [OK] a negative pointer never reaches the board\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -371,6 +506,11 @@ int main(void)
     it_reads_the_callers_pointers();
     a_pointer_of_zero_is_not_a_board_that_cannot_answer();
     a_classic_board_leaves_the_paths_empty();
+    a_door_can_mark_the_mail_read();
+    a_pointer_never_goes_backwards();
+    a_board_that_cannot_mark_read_does_not_break_the_door();
+    marking_read_needs_a_writer();
+    marking_read_refuses_nonsense_without_asking_the_board();
     printf("ae_session: all passed\n");
     return 0;
 }

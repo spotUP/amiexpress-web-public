@@ -9,6 +9,7 @@
 
 #include "ae_session.h"
 
+#include <stdio.h>      /* sprintf - C89 has no snprintf */
 #include <stdlib.h>
 #include <string.h>
 
@@ -162,6 +163,54 @@ int ae_last_read(ae_session *s)
 int ae_last_scanned(ae_session *s)
 {
     return ask_int(s, AE_FIELD_LAST_SCANNED, -1);
+}
+
+/**
+ * Shared by both pointer setters: send "<VERB> <n>", then ask what the
+ * pointer actually is.
+ *
+ * The read-back is not belt-and-braces, it is the whole detection mechanism.
+ * ae_write_fn reports only whether the carrier survived, never what the board
+ * decided, and a board that has never heard of AE_FIELD_SETPOINTER takes the
+ * write without complaint and changes nothing. Asking afterwards is the only
+ * way to tell "stored" from "politely ignored" - the same reason
+ * ae_set_user_theme reads the theme back instead of trusting its own write.
+ */
+static int set_pointer(ae_session *s, const char *verb, int msg_num,
+                       int (*read_back)(ae_session *))
+{
+    char request[32];
+    int now;
+
+    if (!s || !s->transport || msg_num < 0) return 0;
+    if (!s->carrier) return 0;
+    if (!s->write) return 0;            /* a read-only transport */
+
+    /* sprintf, not snprintf - C89 has none, which is why ae_http.c and
+       ae_transport_amiga.c do the same. Safe by construction here and not by
+       hope: `verb` is one of two string literals four characters long, and an
+       int cannot print more than 11 characters, so 32 bytes cannot overflow. */
+    sprintf(request, "%s %d", verb, msg_num);
+
+    if (s->write(s->context, AE_FIELD_SETPOINTER, request) < 0) {
+        s->carrier = 0;
+        return 0;
+    }
+
+    now = read_back(s);
+    /* -1 is "the board would not say", which is not a stored pointer. */
+    if (now < 0) return 0;
+    return now >= msg_num ? 1 : 0;
+}
+
+int ae_set_last_read(ae_session *s, int msg_num)
+{
+    return set_pointer(s, "READ", msg_num, ae_last_read);
+}
+
+int ae_set_last_scanned(ae_session *s, int msg_num)
+{
+    return set_pointer(s, "SCAN", msg_num, ae_last_scanned);
 }
 
 int ae_user_theme(ae_session *s, char *out, int n)
