@@ -21,6 +21,7 @@ import fs from 'fs';
 import { formatDateSlash } from '../../utils/date-format.util';
 import { servesPetsciiArt } from '../screen.handler';
 import { config } from '../../config';
+import * as amigafs from '../../utils/amigafs';
 
 import type { BBSSession } from '../../index';
 
@@ -298,15 +299,11 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   let searchTerm = params.trim();
   let foundFile: string | null = null;
 
+  const helpDir = resolveHelpDir(config.get('dataDir'));
+
   while (searchTerm.length > 0) {
     // express.e:25089 internalCommandUpHat: board-root help/ + params.
-    // Two stacked production breaks lived here: the dir was CWD-relative
-    // ('help/<topic>', resolves nowhere - /app/web/backend/help does not
-    // exist), fixed to dataDir; and lowercase 'help' while the volume
-    // carries HELP/ (AmigaDOS is case-insensitive, ext4 is not - live log:
-    // "Not found: /app/data/bbs/help/TESTPAGE"). dataDir is the board
-    // root, HELP is the on-disk case.
-    const helpBasePath = path.join(config.get('dataDir'), 'HELP', searchTerm);
+    const helpBasePath = path.join(helpDir, searchTerm);
     foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
     if (foundFile) break;
     searchTerm = searchTerm.slice(0, -1);
@@ -323,6 +320,22 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * The board's help directory, in whatever case it is written on disk.
+ *
+ * express.e says BBS:help/ and AmigaDOS does not care about case; ext4 does,
+ * and this line has now broken twice in production for exactly that reason -
+ * first CWD-relative 'help/', then hardcoded 'HELP' against a volume that
+ * spells it otherwise. An AmiExpress distribution ships `Help/`. So the case
+ * is read off the disk (RULES rule 11: amigafs), not asserted here. A board
+ * with no help directory at all falls back to the literal, so the caller
+ * still gets express.e's silence rather than an error.
+ */
+export function resolveHelpDir(dataDir: string): string {
+  const literal = path.join(dataDir, 'HELP');
+  return amigafs.resolvePath(literal) ?? literal;
 }
 
 // === UTILITY FUNCTIONS ===
