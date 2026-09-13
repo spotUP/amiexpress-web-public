@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -56,6 +56,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ui_chrome
 	./build/test_ui_input
 	./build/test_ui_editor
+	./build/test_frame_budget
 	./build/test_ui_theme
 	./build/test_ui_settings
 	./build/test_ui_doc
@@ -123,6 +124,10 @@ build/test_ui_input: src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_inp
 build/write-message: tools/write-message.c src/ae_msgbase.c src/ae_dos.c src/ae_dos_native.c include/ae_msgbase.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) tools/write-message.c src/ae_msgbase.c src/ae_dos.c src/ae_dos_native.c -o $@
+
+build/test_frame_budget: src/ui_ansi.c src/ui_key.c src/ui_input.c src/ui_editor.c tests/test_frame_budget.c
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_key.c src/ui_input.c src/ui_editor.c tests/test_frame_budget.c -o $@
 
 build/test_ui_editor: src/ui_ansi.c src/ui_key.c src/ui_input.c src/ui_editor.c tests/test_ui_editor.c include/ui_editor.h
 	@mkdir -p build
