@@ -249,7 +249,13 @@ export function htmlToAnsiRows(html: string): string[] {
     if (cur !== '') {
       const line = cur + '\x1b[0m';
       rows.push(line);
-      if (dh) rows.push(line);
+      // A double-height row occupies TWO rows of the teletext screen: this
+      // one and the one under it, which carries the same glyphs' BOTTOM
+      // HALF - not a second copy of the words. Pushing `line` again printed
+      // the headline twice on a terminal that cannot do double height
+      // ("Dags för val" on two consecutive rows, sysop 2026-09-13). The row
+      // is kept so nothing below it shifts up, and left empty.
+      if (dh) rows.push('');
     }
     cur = '';
     fg = TELETEXT_DEFAULT_FG;
@@ -261,6 +267,14 @@ export function htmlToAnsiRows(html: string): string[] {
   };
 
   const paint = (text: string): void => {
+    // The markup is pretty-printed: there is a literal newline between
+    // `</span>` and the next `<span class="line">`, and it arrives here as a
+    // text token. Painted into the row it ended up INSIDE the row, so
+    // htmlToAnsiText's join produced a blank line between every row - 27 rows
+    // became 53 lines and the page read double-spaced. A teletext row's
+    // content is inside the spans; a line break between them is layout, not
+    // content.
+    text = text.replace(/[\r\n]+/g, '');
     if (text === '') return;
     if (fg !== emittedFg || bg !== emittedBg) {
       cur += `\x1b[0;${fg};${bg}m`;

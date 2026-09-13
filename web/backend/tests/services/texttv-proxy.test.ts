@@ -254,7 +254,17 @@ describe('htmlToAnsiRows - texttv.nu markup to ANSI', () => {
     ]);
   });
 
-  test('a double-height headline is emitted twice', () => {
+  /**
+   * This asserted that the row was emitted TWICE, and it was wrong about what
+   * the second row IS. On a teletext screen a double-height line occupies two
+   * rows: the glyphs' top half and their bottom half - not the words again.
+   * A terminal that cannot do double height printed the headline on two
+   * consecutive rows, which is what the sysop reported on 2026-09-13, and
+   * SVT's own content_plain carries it once.
+   *
+   * The row is still emitted, so nothing below it shifts up. It is empty.
+   */
+  test('a double-height headline takes two rows and says it once', () => {
     const html =
       '<div class="root"><span style="display:inline-block;transform:scaleY(2);' +
       'transform-origin:top;" class="line DH"><span class="bgBl">  </span>' +
@@ -263,7 +273,8 @@ describe('htmlToAnsiRows - texttv.nu markup to ANSI', () => {
     const rows = htmlToAnsiRows(html);
     expect(rows.length).toBe(3);
     expect(rows[0]).toContain('Nederl\u00e4nderna');
-    expect(rows[0]).toBe(rows[1]);
+    expect(rows[1]).toBe('');
+    expect(rows[2]).not.toContain('Nederl\u00e4nderna');
     expect(rows[0]).toContain('\x1b[0;33;44m');
   });
 
@@ -297,5 +308,39 @@ describe('htmlToAnsiRows - texttv.nu markup to ANSI', () => {
     expect(htmlToAnsiRows('')).toEqual([]);
     expect(htmlToAnsiRows('<div class="root"></div>')).toEqual([]);
     expect(htmlToAnsiText('')).toBe('');
+  });
+});
+
+/**
+ * The shape SVT actually sends, taken off the wire on 2026-09-13. Two things
+ * the caller saw on his screen came from here: the headline printed twice,
+ * and a blank line between every row.
+ */
+describe('htmlToAnsiRows against the real markup', () => {
+  // Pretty-printed markup: a literal newline sits between `</span>` and the
+  // next `<span class="line">`. A double-height headline carries class DH.
+  const REAL = [
+    '<span class="line"><span class="bgBl">   100 SVT Text</span></span>',
+    '<span style="transform:scaleY(2);" class="line DH"><span class="bgBl Y">Dags for val</span></span>',
+    '<span class="line"><span class="bgBl">  Preliminart valresultat</span></span>',
+  ].join('\n');
+
+  it('prints a double-height headline ONCE, keeping its second row empty', () => {
+    const rows = htmlToAnsiRows(REAL);
+    const text = rows.map((r) => r.replace(/\x1b\[[0-9;]*m/g, '').trim());
+    expect(text.filter((t) => t === 'Dags for val')).toHaveLength(1);
+    // The row below a double-height line is its bottom half on a real
+    // teletext screen. It is kept so nothing shifts up, and left empty.
+    const at = text.indexOf('Dags for val');
+    expect(text[at + 1]).toBe('');
+    expect(text[at + 2]).toBe('Preliminart valresultat');
+  });
+
+  it('does not carry the markup newlines into the rows, which double-spaced the page', () => {
+    const rows = htmlToAnsiRows(REAL);
+    for (const row of rows) expect(row).not.toMatch(/[\r\n]/);
+    // 27 rows became 53 lines before this: every row ended with its own
+    // newline and the join added another.
+    expect(htmlToAnsiText(REAL).split('\n')).toHaveLength(rows.length);
   });
 });
