@@ -84,8 +84,21 @@ export function loadModelCosts(): Map<string, StoredCost> {
  * would silently discard.
  */
 export function saveModelCosts(costs: Map<string, StoredCost>): void {
-  const file = costFilePath();
   try {
+    // INSIDE the try, like loadModelCosts already has it.
+    //
+    // costFilePath() does a lazy `require('../../config')`, and this runs
+    // from an unref'd 2-second timer. Under jest that timer can fire after
+    // the module registry has been torn down, `config` comes back undefined,
+    // and `config.get(...)` throws from a TIMER CALLBACK - which no test is
+    // awaiting, so it takes the whole worker down and reports as "Test suite
+    // failed to run" against whatever unrelated suite happened to be running.
+    // That is what made backend runs fail 7 suites one time and 0 the next,
+    // on files that had nothing to do with the bot.
+    //
+    // The catch below already says a board that cannot write its cache still
+    // answers callers. It just did not cover the line that actually threw.
+    const file = costFilePath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(costs), null, 2));
