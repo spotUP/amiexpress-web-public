@@ -71,4 +71,8 @@ export const INTERNAL_COMMAND_NAMES: readonly string[] = [
   '?',
   'DOORS',
   'COLOURS',
+  // Both reached the switch without reaching this list, so neither could be
+  // tab-completed and prompt-completion.test.ts had been red on them.
+  'LINKDISCORD',
+  'TTX',
 ];
