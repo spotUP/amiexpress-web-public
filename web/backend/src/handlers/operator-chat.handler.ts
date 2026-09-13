@@ -148,11 +148,12 @@ import { report } from '../achievements/reporter';
 // BBS_ROOT alone resolved to /app in the container, where Commands/ and
 // ConfConfig.info do not live - every disk read in chat (doors, conferences,
 // bulletins, RAG corpus) came back empty there (live 2026-09-10).
-const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+const bbsRoot = boardRoot();
 
 // Active chat sessions (in-memory)
 import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
 import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
+import { boardRoot } from '../utils/board-root.util';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
 

@@ -17,6 +17,7 @@ import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
+import { boardRoot } from '../utils/board-root.util';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
@@ -191,7 +192,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // declaration, so resolve the same way. Mounted bare of JWT: the bot
   // token is the auth.
   app.use('/api/bot/v1', authenticateBotToken, createBotDataRouter(db, {
-    bbsRoot: process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
+    // boardRoot(), not a fourth copy of this: BBS_DATA_DIR is what the
+    // container sets, and checking only BBS_ROOT resolved to /app - a tree
+    // with its own Conf1, so the bot answered about the repo, not the board.
+    bbsRoot: boardRoot(),
   }));
 
   // ===== Bot plugin admin API - sysop JWT like every other /api/config route
@@ -248,9 +252,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
   const { createBullsRouter } = require('../api/bulls-routes');
   app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(
-    process.env.BBS_DATA_DIR ? path.resolve(process.env.BBS_DATA_DIR)
-      : process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT)
-      : path.resolve(__dirname, '../../../..'),
+    boardRoot(),
   ));
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
