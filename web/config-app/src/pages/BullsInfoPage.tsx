@@ -109,7 +109,7 @@ export function BullsInfoPage() {
 
       {status && <p className="text-sm text-content-primary">{status}</p>}
       {globalProblems.length > 0 && (
-        <ul className="text-sm text-status-error space-y-1">
+        <ul className="text-sm text-status-danger space-y-1">
           {globalProblems.map((p, i) => <li key={i}>{KIND_LABEL[p.kind] ?? '[?]'} {p.message}</li>)}
         </ul>
       )}
@@ -148,13 +148,13 @@ export function BullsInfoPage() {
                   <td className="py-1 pr-2 whitespace-nowrap">
                     {!ps.length
                       ? <span className="text-status-ok">[OK]</span>
-                      : <span className="text-status-error" title={ps.map((p) => p.message).join('; ')}>{ps.map((p) => KIND_LABEL[p.kind] ?? '[?]').join(' ')}</span>}
+                      : <span className="text-status-danger" title={ps.map((p) => p.message).join('; ')}>{ps.map((p) => KIND_LABEL[p.kind] ?? '[?]').join(' ')}</span>}
                   </td>
                   <td className="py-1 whitespace-nowrap">
                     <button onClick={() => setModalFile(row.file.trim())} disabled={!row.file.trim()} className="px-2 py-1 text-accent hover:underline text-sm disabled:opacity-50">
                       Open
                     </button>
-                    <button onClick={() => setDraft(draft.filter((_, j) => j !== i))} className="px-2 py-1 text-status-error hover:underline text-sm">
+                    <button onClick={() => setDraft(draft.filter((_, j) => j !== i))} className="px-2 py-1 text-status-danger hover:underline text-sm">
                       Remove
                     </button>
                   </td>
@@ -270,7 +270,7 @@ function BulletinBrowser({ onOpen }: { onOpen: (name: string) => void }) {
           ) : b.text !== null ? (
             <pre className="font-mono text-xs text-content-secondary whitespace-pre-wrap">{b.text.split('\n').slice(0, PREVIEW_ROWS).join('\n')}</pre>
           ) : (
-            <p className="text-sm text-status-error">Unreadable.</p>
+            <p className="text-sm text-status-danger">Unreadable.</p>
           )}
         </div>
       ))}
