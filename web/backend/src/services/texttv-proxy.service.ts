@@ -17,6 +17,21 @@ export const TEXTTV_APP = 'amiexpress-web-bbs';
 export const TEXTTV_TIMEOUT_MS = 15000;
 export const TEXTTV_CACHE_MS = 5 * 60 * 1000;
 
+/**
+ * A teletext page is a few kilobytes of JSON. The mirror is not ours, so the
+ * size of what it sends is not ours to assume: `res.text()` buffers whatever
+ * arrives, and a wrong route or a hostile answer would be held whole in the
+ * board's heap. Read with a budget and give up past it.
+ */
+export const TEXTTV_MAX_BODY_BYTES = 512 * 1024;
+
+/**
+ * Pages 100-999 are 900 possible entries and the cache never dropped one, so
+ * a reader walking the index held every page it touched for the life of the
+ * process. Keep the most recently fetched and evict the oldest.
+ */
+export const TEXTTV_CACHE_MAX_PAGES = 64;
+
 export type TextTvFetcher = (url: string, init?: any) => Promise<{
   status: number;
   text(): Promise<string>;
@@ -32,6 +47,53 @@ interface CacheEntry {
 }
 
 const cache = new Map<number, CacheEntry>();
+
+function rememberPage(page: number, entry: CacheEntry): void {
+  cache.set(page, entry);
+  while (cache.size > TEXTTV_CACHE_MAX_PAGES) {
+    let oldestPage = -1;
+    let oldestAt = Infinity;
+    for (const [p, e] of cache) {
+      if (e.at < oldestAt) { oldestAt = e.at; oldestPage = p; }
+    }
+    if (oldestPage < 0) break;
+    cache.delete(oldestPage);
+  }
+}
+
+/**
+ * The body, refused past TEXTTV_MAX_BODY_BYTES.
+ *
+ * A fetcher that exposes a stream (the real one) is read in chunks and
+ * aborted the moment the budget is gone, so nothing oversized is ever held
+ * whole. A fetcher that only answers text() - every test seam - is checked
+ * after the fact, which still refuses the page but cannot un-buffer it.
+ */
+async function readCapped(res: { text(): Promise<string>; body?: any }, abort: () => void): Promise<string> {
+  const reader = res.body && typeof res.body.getReader === 'function' ? res.body.getReader() : null;
+  if (!reader) {
+    const text = await res.text();
+    if (Buffer.byteLength(text) > TEXTTV_MAX_BODY_BYTES) {
+      throw new Error(`texttv: upstream body over ${TEXTTV_MAX_BODY_BYTES} bytes`);
+    }
+    return text;
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.length;
+    if (total > TEXTTV_MAX_BODY_BYTES) {
+      abort();
+      try { await reader.cancel(); } catch { /* the socket is going anyway */ }
+      throw new Error(`texttv: upstream body over ${TEXTTV_MAX_BODY_BYTES} bytes`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf-8');
+}
 
 /** Test seam: drop the cache between cases. */
 export function clearTextTvCache(): void {
@@ -77,12 +139,12 @@ async function fetchFresh(
         Accept: 'application/json',
       },
     });
-    const body = await res.text();
+    const body = await readCapped(res as any, () => ctl.abort());
     if (res.status !== 200) {
       throw new Error(`texttv: upstream answered ${res.status}`);
     }
     const slim = slimTextTvBody(body);
-    cache.set(page, { at: Date.now(), status: res.status, body: slim });
+    rememberPage(page, { at: Date.now(), status: res.status, body: slim });
     const took = Date.now() - started;
     if (took > 5000) onSlow(took);
     return { status: res.status, body: slim, cached: false };

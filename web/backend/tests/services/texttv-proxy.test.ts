@@ -13,6 +13,8 @@ import {
   htmlToAnsiText,
   TEXTTV_API,
   TEXTTV_CACHE_MS,
+  TEXTTV_MAX_BODY_BYTES,
+  TEXTTV_CACHE_MAX_PAGES,
 } from '../../src/services/texttv-proxy.service';
 
 function stubFetcher(status: number, body: string, calls: { n: number }) {
@@ -22,8 +24,77 @@ function stubFetcher(status: number, body: string, calls: { n: number }) {
   };
 }
 
+/** A fetcher whose body arrives in chunks, the way the real one does. */
+function streamingFetcher(status: number, chunks: string[], seen: { aborted: boolean }) {
+  return async (_url: string, init?: any) => {
+    init?.signal?.addEventListener?.('abort', () => { seen.aborted = true; });
+    let i = 0;
+    return {
+      status,
+      text: async () => chunks.join(''),
+      body: {
+        getReader: () => ({
+          read: async () =>
+            i < chunks.length
+              ? { done: false, value: Buffer.from(chunks[i++]) }
+              : { done: true, value: undefined },
+          cancel: async () => {},
+        }),
+      },
+    };
+  };
+}
+
 describe('texttv-proxy.service', () => {
   beforeEach(() => clearTextTvCache());
+
+  // The mirror is not ours. Its answer used to be buffered whole by
+  // res.text() with no ceiling, and every page ever fetched was kept for
+  // the life of the process.
+  describe('the upstream is not trusted for size', () => {
+    test('a body past the cap is refused, not buffered and served', async () => {
+      const calls = { n: 0 };
+      const huge = 'x'.repeat(TEXTTV_MAX_BODY_BYTES + 1);
+      await expect(fetchTextTvPage(100, stubFetcher(200, huge, calls))).rejects.toThrow(
+        /over \d+ bytes/,
+      );
+    });
+
+    test('a streamed body past the cap aborts the request mid-flight', async () => {
+      const seen = { aborted: false };
+      const chunk = 'x'.repeat(64 * 1024);
+      const chunks = new Array(Math.ceil(TEXTTV_MAX_BODY_BYTES / chunk.length) + 2).fill(chunk);
+      await expect(
+        fetchTextTvPage(101, streamingFetcher(200, chunks, seen) as any),
+      ).rejects.toThrow(/over \d+ bytes/);
+      expect(seen.aborted).toBe(true);
+    });
+
+    test('a body at the cap still serves', async () => {
+      const calls = { n: 0 };
+      const body = '[{"num":"102","title":"T","content_plain":["hello"]}]';
+      const page = await fetchTextTvPage(102, stubFetcher(200, body, calls));
+      expect(page.status).toBe(200);
+      expect(page.body).toContain('hello');
+    });
+  });
+
+  test('the cache keeps a bounded number of pages', async () => {
+    const calls = { n: 0 };
+    const body = (n: number) => `[{"num":"${n}","title":"T","content_plain":["p${n}"]}]`;
+    for (let i = 0; i < TEXTTV_CACHE_MAX_PAGES + 5; i++) {
+      const page = 100 + i;
+      await fetchTextTvPage(page, stubFetcher(200, body(page), calls));
+    }
+    const fetchesSoFar = calls.n;
+    // The oldest pages were evicted, so asking again fetches again; the
+    // newest are still cached and do not.
+    await fetchTextTvPage(100, stubFetcher(200, body(100), calls));
+    expect(calls.n).toBe(fetchesSoFar + 1);
+    const newest = 100 + TEXTTV_CACHE_MAX_PAGES + 4;
+    await fetchTextTvPage(newest, stubFetcher(200, body(newest), calls));
+    expect(calls.n).toBe(fetchesSoFar + 1);
+  });
 
   test('page range is 100-999', () => {
     expect(isTextTvPage(100)).toBe(true);
