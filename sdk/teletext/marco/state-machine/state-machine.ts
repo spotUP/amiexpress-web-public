@@ -87,11 +87,17 @@ export function applySetAfterControlCode(state: RowState, code: number): void {
     state.fgColor = (code - ALPHA_BLACK) as Color;
     state.charsetMode = CharsetMode.TEXT;
     state.conceal = false;
+    // ETSI EN 300 706 s.12.3: a change of alpha/mosaic mode clears the held
+    // mosaic. Without this a held cell kept painting the character from
+    // before the mode change - the page showed a mosaic where the spec says
+    // a space.
+    state.heldMosaic = null;
   } else if (isMosaicColor(code)) {
     // Mosaic color: set foreground, switch to graphics mode
     state.fgColor = (code - MOSAIC_BLACK) as Color;
     state.charsetMode = CharsetMode.GRAPHICS;
     state.conceal = false;
+    state.heldMosaic = null;
   } else {
     switch (code) {
       case FLASH:
@@ -218,6 +224,13 @@ export function processRow(rowData: Uint8Array | number[]): Cell[] {
         state.holdGraphics = false;
       } else {
         // Standard set-after: emit with OLD state, then apply.
+        //
+        // Except for the held mosaic. ETSI EN 300 706 s.12.3 makes a change
+        // of alpha/mosaic mode release the hold, and that release is SET-AT:
+        // the attribute's own position shows a space, not the mosaic from
+        // before the change. Emitting first with the old state painted the
+        // stale cell there.
+        if (isAlphaColor(byte) || isMosaicColor(byte)) state.heldMosaic = null;
         const display = controlCodeDisplayChar(state);
         cells[col] = emitCell(state, display.char, display.mode, display.mosType);
         applySetAfterControlCode(state, byte);
