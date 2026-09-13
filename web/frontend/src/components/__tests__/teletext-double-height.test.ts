@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   createDoubleHeightFilter,
   halfCodepoint,
+  mosaicCodepoint,
   DH_TOP_BASE,
   DH_BOTTOM_BASE,
 } from '../../../../../packages/terminal/src/utils/teletext-double-height';
@@ -74,11 +75,62 @@ describe('the double-height filter', () => {
     expect(halfCodepoint('A', 'normal')).toBeNull();
   });
 
+  it('draws teletext block mosaics from the G1 set', () => {
+    // SO selects G1, the way a VT terminal has always selected an alternate
+    // set; the bytes are then 2x3 blocks, which Unicode has as sextants and
+    // the face draws. 0x20 is blank, 0x7f all six cells.
+    const filter = createDoubleHeightFilter();
+    const SO = '\x0e';
+    const SI = '\x0f';
+
+    expect(filter.write(`${SO}\x7f${SI}`)).toBe('\u2588');   // full block
+    expect(filter.write('plain')).toBe('plain');              // and back out again
+  });
+
+  it('maps every mosaic byte to the cell pattern teletext means by it', () => {
+    // The cells are numbered 1 2 / 3 4 / 5 6, and the bit that would be cell
+    // 6 is the one that selects the set - which is why 0x40 stands in for it.
+    expect(mosaicCodepoint(0x20)).toBe(0x20);        // no cells: a space
+    expect(mosaicCodepoint(0x7f)).toBe(0x2588);      // all six: full block
+    expect(mosaicCodepoint(0x35)).toBe(0x258c);      // cells 1,3,5: left half
+    expect(mosaicCodepoint(0x6a)).toBe(0x2590);      // cells 2,4,6: right half
+    expect(mosaicCodepoint(0x21)).toBe(0x1fb00);     // cell 1 alone
+    expect(mosaicCodepoint(0x23)).toBe(0x1fb02);     // cells 1 and 2
+
+    // Every one of the sixty-four patterns lands on a glyph, and the sixty
+    // sextants are all distinct.
+    const seen = new Set<number>();
+    for (const byte of [...Array(32).keys()].map((i) => 0x20 + i)
+      .concat([...Array(32).keys()].map((i) => 0x60 + i))) {
+      const cp = mosaicCodepoint(byte);
+      expect(cp).not.toBeNull();
+      seen.add(cp as number);
+    }
+    expect(seen.size).toBe(64);
+
+    // G1 is not all graphics: 0x40-0x5F stay letters even inside it, which
+    // is how a teletext page labels its own diagrams.
+    expect(mosaicCodepoint(0x41)).toBeNull();        // 'A' is still 'A'
+    expect(mosaicCodepoint(0x0a)).toBeNull();        // a newline is not a cell
+    expect(mosaicCodepoint(0xe5)).toBeNull();        // nor is a-ring
+  });
+
+  it('keeps the mosaic set across rows, because art is many rows of it', () => {
+    const filter = createDoubleHeightFilter();
+    filter.write('\x0e\x7f');
+    expect(filter.mosaic()).toBe(true);
+    expect(filter.write('\r\n\x7f')).toBe('\r\n\u2588');
+    expect(filter.write('\x0f')).toBe('');
+    expect(filter.mosaic()).toBe(false);
+  });
+
   it('reset drops a half-set line, for a mode change or a clear', () => {
     const filter = createDoubleHeightFilter();
     filter.write(`${ESC}#3HALF`);
+    filter.write('\x0e');
     filter.reset();
     expect(filter.half()).toBe('normal');
+    expect(filter.mosaic()).toBe(false);
     expect(filter.write('after')).toBe('after');
   });
 

@@ -43,6 +43,46 @@ export const DH_LAST_SOURCE = 0xff;
 
 export type LineHalf = 'normal' | 'top' | 'bottom';
 
+/**
+ * THE OTHER HALF OF A TELETEXT PAGE: block mosaics.
+ *
+ * Teletext draws its graphics from a second character set, G1, where each
+ * code is a 2x3 grid of blocks - the logos, the rules, the weather symbols.
+ * A terminal selects it with SO (shift out, 0x0E) and leaves it with SI
+ * (shift in, 0x0F), which is how VT terminals have switched character sets
+ * since the 1970s, so a `.ttx` screen can carry mosaic art as ordinary
+ * bytes and stay a Latin-1 file.
+ *
+ * Unicode has the same 64 cells as the "block sextants" of Symbols for
+ * Legacy Computing, and TeletextUPR draws all of them. The cells are
+ * numbered
+ *
+ *      1 2        bit 0x01 is cell 1, 0x02 cell 2, 0x04 cell 3,
+ *      3 4        0x08 cell 4, 0x10 cell 5 - and 0x40 cell 6,
+ *      5 6        because 0x20 is the bit that selects the set.
+ *
+ * and the four patterns Unicode already had (blank, left half, right half,
+ * full block) are not in the sextant range, which is why this is a function
+ * rather than an offset.
+ */
+export function mosaicCodepoint(byte: number): number | null {
+  const isMosaic = (byte >= 0x20 && byte <= 0x3f) || (byte >= 0x60 && byte <= 0x7f);
+  if (!isMosaic) return null;
+
+  const pattern = (byte & 0x1f) | ((byte & 0x40) >> 1);
+  if (pattern === 0b000000) return 0x20;       // space
+  if (pattern === 0b010101) return 0x258c;     // left half block
+  if (pattern === 0b101010) return 0x2590;     // right half block
+  if (pattern === 0b111111) return 0x2588;     // full block
+
+  // The sextants run in pattern order with those four taken out.
+  let skipped = 0;
+  for (const taken of [0b000000, 0b010101, 0b101010, 0b111111]) {
+    if (taken < pattern) skipped += 1;
+  }
+  return 0x1fb00 + pattern - skipped;
+}
+
 /** The private-use codepoint drawing one half of `ch`, or null if there is none. */
 export function halfCodepoint(ch: string, half: LineHalf): number | null {
   if (half === 'normal') return null;
@@ -65,18 +105,28 @@ export interface DoubleHeightFilter {
   reset(): void;
   /** What the current line is set to - for tests. */
   half(): LineHalf;
+  /** Whether the mosaic set is selected right now - for tests. */
+  mosaic(): boolean;
 }
 
 const ESC = '\x1b';
 
+const SHIFT_OUT = '\x0e';
+const SHIFT_IN = '\x0f';
+
 export function createDoubleHeightFilter(): DoubleHeightFilter {
   let half: LineHalf = 'normal';
+  let mosaic = false;
 
   const write = (data: string): string => {
-    // Nothing to do for the overwhelmingly common case: no escape in flight
-    // and none in the chunk. Teletext sessions are ordinary sessions most of
-    // the time and this runs on every byte the board sends.
-    if (half === 'normal' && data.indexOf(`${ESC}#`) < 0) return data;
+    // Nothing to do for the overwhelmingly common case: no attribute in
+    // flight and none in the chunk. Teletext sessions are ordinary sessions
+    // most of the time and this runs on every byte the board sends.
+    if (half === 'normal' && !mosaic
+        && data.indexOf(`${ESC}#`) < 0
+        && data.indexOf(SHIFT_OUT) < 0) {
+      return data;
+    }
 
     let out = '';
     for (let i = 0; i < data.length; i += 1) {
@@ -91,6 +141,12 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
         out += ch;
         continue;
       }
+
+      // The mosaic set, selected the way a VT terminal has always selected
+      // an alternate set. Unlike the line attribute it survives a newline:
+      // a block of art is many rows of it.
+      if (ch === SHIFT_OUT) { mosaic = true; continue; }
+      if (ch === SHIFT_IN) { mosaic = false; continue; }
 
       // A line attribute dies with its line, the way DEC's does.
       if (ch === '\n') {
@@ -112,6 +168,14 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
         continue;
       }
 
+      if (mosaic) {
+        // Mosaic art is graphics, not letters: it has no half-height form,
+        // and a double-height row of it is not a thing teletext can express.
+        const cell = mosaicCodepoint(ch.charCodeAt(0));
+        out += cell === null ? ch : String.fromCodePoint(cell);
+        continue;
+      }
+
       if (half === 'normal' || ch < ' ') { out += ch; continue; }
 
       const cp = halfCodepoint(ch, half);
@@ -122,7 +186,8 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
 
   return {
     write,
-    reset() { half = 'normal'; },
+    reset() { half = 'normal'; mosaic = false; },
     half() { return half; },
+    mosaic() { return mosaic; },
   };
 }
