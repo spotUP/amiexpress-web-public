@@ -8,6 +8,7 @@
  */
 
 #include "ui_doc.h"
+#include "ui_ansi.h"
 
 #include <string.h>
 
@@ -34,13 +35,25 @@ int ui_doc_wrap(const char *text, int width,
 
     while (*p) {
         const char *start = p;
-        int len = 0;
+        int len = 0;     /* bytes taken */
+        int cols = 0;    /* columns they occupy - not the same number */
         int last_space = -1;
 
-        /* Walk up to `width` characters, remembering where a break may go. */
-        while (p[len] && p[len] != '\n' && len < width) {
+        /* Walk up to `width` COLUMNS, remembering where a break may go.
+         *
+         * A pen marker (UI_INK plus one byte, or three for the token form)
+         * costs the row no columns - ansi_text pads and clips by what
+         * reaches the screen. Counting its bytes as columns wrapped a
+         * coloured document short by two characters for every colour change
+         * in the line, which is what a Text-TV page is made of. */
+        while (p[len] && p[len] != '\n' && cols < width) {
+            if (p[len] == UI_INK && p[len + 1]) {
+                len += (p[len + 1] == 'T' && p[len + 2]) ? 3 : 2;
+                continue;
+            }
             if (p[len] == ' ') last_space = len;
             len++;
+            cols++;
         }
 
         if (p[len] == '\n') {
@@ -65,9 +78,10 @@ int ui_doc_wrap(const char *text, int width,
             count++;
             p += last_space + 1;        /* the space goes with the break */
         } else {
-            if (line) line(context, start, width);
+            /* Mid-word: the break is where the walk stopped, in BYTES. */
+            if (line) line(context, start, len);
             count++;
-            p += width;
+            p += len;
         }
     }
 

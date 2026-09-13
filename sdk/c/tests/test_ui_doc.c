@@ -200,10 +200,48 @@ static void a_lost_caller_is_not_a_page_turn(void)
     printf("  [OK] a lost caller is not a page turn\n");
 }
 
+static int visible_len(const char *row)
+{
+    int n = 0;
+    const char *p = row;
+    while (*p) {
+        if (*p == UI_INK && p[1]) { p += (p[1] == 'T' && p[2]) ? 3 : 2; continue; }
+        n++; p++;
+    }
+    return n;
+}
+
+static void a_pen_marker_costs_the_row_no_columns(void)
+{
+    /* A marker is UI_INK plus one byte and reaches the screen as nothing
+       (ui_ansi.h). Counting its bytes as columns wrapped a coloured document
+       two characters short for every colour change in the line - which is
+       what a Text-TV page is made of, now that the door translates the
+       proxy's SGR into markers. */
+    int n = wrap("\001" "7aaa bbb \001" "2ccc ddd", 8);
+    int i;
+
+    for (i = 0; i < n; i++) assert(visible_len(lines[i]) <= 8);
+    assert(strcmp(lines[0], "\001" "7aaa bbb") == 0);
+    assert(n == 2);
+
+    /* The token form is three bytes and also free. */
+    n = wrap("\001T3hello world", 11);
+    assert(n == 1);
+    assert(visible_len(lines[0]) == 11);
+
+    /* Mid-word breaking still lands on a whole column, not inside a
+       marker: the break is taken in bytes where the walk stopped. */
+    n = wrap("\001" "4abcdefghij", 4);
+    assert(visible_len(lines[0]) == 4);
+    printf("  [OK] a pen marker costs the row no columns\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
     a_word_is_never_cut_in_half();
+    a_pen_marker_costs_the_row_no_columns();
     a_word_wider_than_the_box_still_breaks();
     a_newline_ends_its_line_wherever_it_falls();
     every_line_fits_the_box();
