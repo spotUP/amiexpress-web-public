@@ -10,6 +10,7 @@
  * The entrypoint's own Themes block walks what the IMAGE has, so what this
  * pins is that the image has it: the registry, the tree, and the two in step.
  */
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -17,9 +18,30 @@ const REPO = path.resolve(__dirname, '../../../..');
 const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf8');
 const entrypoint = fs.readFileSync(path.join(REPO, 'docker-entrypoint.sh'), 'utf8');
 
-/** Every theme the registry declares, by the directory it names. */
+/**
+ * Every theme the registry declares - as the IMAGE will carry it.
+ *
+ * READ FROM GIT, NOT FROM THE WORKING TREE. `Themes.info` is board state as
+ * well as repo content: an artist creating a theme through the admin writes a
+ * registry entry and a directory on the VOLUME, and on the sysop's own
+ * checkout - which is also a running board - those appear in the working
+ * copy. `ansiguy` is one: 58 files live on the board, nothing in git, and the
+ * committed registry names only `tango`.
+ *
+ * Reading the working copy made this suite assert that the REPO ships a theme
+ * the repo was never meant to ship, and it failed on the sysop's machine
+ * while passing everywhere else. The question here is what the image carries,
+ * and the image carries what is committed - so ask git.
+ *
+ * Same trap `tests/repo/tracked-fixtures.test.ts` exists for: a committed
+ * test must not depend on a file the repo does not track.
+ */
 function registeredThemeDirs(): string[] {
-  const info = fs.readFileSync(path.join(REPO, 'Themes.info'), 'latin1');
+  const info = execFileSync('git', ['show', 'HEAD:Themes.info'], {
+    cwd: REPO,
+    encoding: 'latin1',
+    maxBuffer: 8 * 1024 * 1024,
+  });
   return [...info.matchAll(/^DIR\.\d+=(.+)$/gm)].map((m) => m[1].trim()).filter((d) => d !== '');
 }
 
