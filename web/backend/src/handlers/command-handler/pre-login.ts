@@ -10,6 +10,7 @@ import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
 import { resetPetsciiModel } from '../../utils/petscii-session-model';
 import { transportCapabilities } from '../../server/transport-adapter';
+import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from './line-input';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -312,16 +313,25 @@ console.log('[GRAPHICS] Mode set:', graphicsMode);
     await transitionToBBSTitle(socket, session);
     return true;
   } else if (data === '\x7f' || data === '\b') {
-    // Backspace - remove last character from buffer
-    if (session.tempData?.inputBuffer && session.tempData.inputBuffer.length > 0) {
-      session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
-      socket.emit('ansi-output', '\b \b'); // Echo backspace (always ANSI during prompt)
-    }
+    // Backspace (express.e:2306). Always ANSI during this prompt.
+    const edit = acceptBackspace(session.tempData?.inputBuffer || '');
+    session.tempData.inputBuffer = edit.buffer;
+    if (edit.echo) socket.emit('ansi-output', edit.echo);
     return true;
   } else if (data.length === 1 && data >= ' ' && data <= '~') {
-    // Printable character - add to buffer and echo it (always ANSI during prompt)
-    session.tempData.inputBuffer = (session.tempData?.inputBuffer || '') + data;
-    socket.emit('ansi-output', data); // Echo the character
+    // Printable, and only while the field has room - express.e:2335, with
+    // the length express gives THIS prompt (29530: maxLen 10).
+    //
+    // Without the limit the answer ran past the right edge, the terminal
+    // wrapped it, and `\b \b` could not climb back over the wrap: the first
+    // line could not be deleted and was still in the buffer at Enter. The
+    // sysop, 2026-09-13: "it wraps to the next line and i cant backspace to
+    // delete on the first line".
+    const edit = acceptTypedChar(
+      (session.tempData?.inputBuffer as string) || '', data, ANSI_PROMPT_MAX_LEN,
+    );
+    session.tempData.inputBuffer = edit.buffer;
+    if (edit.echo) socket.emit('ansi-output', edit.echo);
     return true;
   }
 

@@ -7,6 +7,7 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import { getSystemTime } from '../../utils/date-time.util';
+import { acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN } from './line-input';
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
@@ -373,22 +374,30 @@ console.log(
         socket.emit("prompt-login"); // Tell frontend to show login form
         return;
       } else if (data === "\x7f" || data === "\b") {
-        // Backspace - remove last character from buffer
-        if (
-          session.tempData?.inputBuffer &&
-          (session.tempData as any).inputBuffer.length > 0
-        ) {
-          (session.tempData as any).inputBuffer = (
-            session.tempData as any
-          ).inputBuffer.slice(0, -1);
-          socket.emit("ansi-output", "\b \b"); // Echo backspace
+        // Backspace (express.e:2306), through the shared rule.
+        {
+          const edit = acceptBackspace(
+            ((session.tempData as any)?.inputBuffer as string) || ""
+          );
+          (session.tempData as any).inputBuffer = edit.buffer;
+          if (edit.echo) socket.emit("ansi-output", edit.echo);
         }
         return;
       } else if (data.length === 1 && data >= " " && data <= "~") {
-        // Printable character - add to buffer and echo it
-        (session.tempData as any).inputBuffer =
-          (session.tempData?.inputBuffer || "") + data;
-        socket.emit("ansi-output", data); // Echo the character
+        // Printable, and only while the field has room (express.e:2335,
+        // maxLen 10 for this prompt at 29530). This is the SECOND copy of
+        // the graphics prompt's input loop - pre-login.ts has the other -
+        // so it had the same wrap-and-cannot-backspace bug and needs the
+        // same rule until the two are merged.
+        {
+          const edit = acceptTypedChar(
+            ((session.tempData as any)?.inputBuffer as string) || "",
+            data,
+            ANSI_PROMPT_MAX_LEN
+          );
+          (session.tempData as any).inputBuffer = edit.buffer;
+          if (edit.echo) socket.emit("ansi-output", edit.echo);
+        }
         return;
       }
       // Ignore other control characters
