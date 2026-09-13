@@ -534,6 +534,21 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
     emitText(socket, '\r\n');
   }
 
+  // WEB_: the PETSCII CHARACTER SET. A C64 sold in Sweden shipped ROM
+  // 325018-02, which puts a-ring and the umlauts where the bracket/pound trio
+  // sits - without it a Swedish caller cannot type their own name. Standard
+  // unless asked for, because $5C is the pound sign this board's MCI uses for
+  // its column tab.
+  {
+    const swedish = session.user?.petsciiCharset === 'swedish';
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 22');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('PETSCII CHARACTER SET.. ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(swedish ? 'SWEDISH' : 'STANDARD', 'yellow'));
+    emitText(socket, '\r\n');
+  }
+
   // WEB_: DOORS THAT REGISTER THEMSELVES AS SETTINGS. A door that exists to
   // change what the board does for this caller belongs in the list he already
   // opens to change such things, rather than behind a command name he has to
@@ -554,7 +569,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 }
 
 /** The first W option number a registered settings door can take. */
-export const FIRST_SETTINGS_DOOR_OPTION = 22;
+export const FIRST_SETTINGS_DOOR_OPTION = 23;
 
 /** The settings doors this caller may open, from the board's own door list. */
 export function settingsDoorEntries(session: BBSSession): SettingsDoorEntry[] {
@@ -661,7 +676,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   const option = parseInt(trimmed, 10);
 
   // 18 = last express.e/web-extension option, 19/20 = GDPR, 21 = the PETSCII
-  // palette, and from FIRST_SETTINGS_DOOR_OPTION up are the doors that
+  // palette, 22 = the PETSCII character set, and from
+  // FIRST_SETTINGS_DOOR_OPTION up are the doors that
   // registered themselves as settings.
   const settingsDoors = settingsDoorEntries(session);
   const lastOption = FIRST_SETTINGS_DOOR_OPTION + settingsDoors.length - 1;
@@ -894,6 +910,29 @@ console.error('[W] could not save the PETSCII palette:', error);
       }
       // The canvas repaints from the machine it already has.
       socket.emit('petscii-palette', { palette: next });
+      _displayWCommandMenu(socket, session);
+      return;
+    }
+
+    case 22: { // WEB_ which character ROM his PETSCII screen draws
+      const { db } = require('../../database');
+      const next = session.user?.petsciiCharset === 'swedish' ? 'standard' : 'swedish';
+      if (session.user) {
+        try {
+          await db.updateUser(session.user.id, { petsciiCharset: next });
+          session.user.petsciiCharset = next;
+        } catch (error) {
+console.error('[W] could not save the PETSCII character set:', error);
+        }
+      }
+      (session as any).petsciiSwedish = next === 'swedish';
+      // The atlas is rebuilt from the new set; the screen's machine is untouched.
+      socket.emit('petscii-charset', { charset: next });
+      emitText(socket, AnsiUtil.colorize(
+        next === 'swedish'
+          ? 'PETSCII character set: SWEDISH - \u00e5\u00e4\u00f6 where [ \u00a3 ] were\r\n'
+          : 'PETSCII character set: STANDARD\r\n',
+        'yellow'));
       _displayWCommandMenu(socket, session);
       return;
     }

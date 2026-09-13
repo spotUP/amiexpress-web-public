@@ -83,6 +83,8 @@ export interface User {
   fontPreference?: string;  // Terminal font preference (web extension)
   /** 'vdc' (a C128's 80-column colours) or 'vic' (a C64's). Web extension. */
   petsciiPalette?: string;
+  /** 'standard' or 'swedish' - which character ROM the PETSCII screen draws. */
+  petsciiCharset?: string;
   themePreference?: string; // Door colour theme (web extension); 'classic' is the board as it was
   editorType?: number;     // 0=line, 1=simple, 2=fullscreen (express.e loggedOnUser.editorType)
   internetName?: string;   // Internet/email name (express.e loggedOnUserMisc.internetName)

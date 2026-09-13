@@ -2372,6 +2372,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
     });
 
+    // W row 22, applied without a reconnect: the atlas is rebuilt from the
+    // new character set and the screen repaints from the machine it has.
+    socket.on('petscii-charset', (m: { charset?: string }) => {
+      setPetsciiSwedish(m?.charset === 'swedish');
+    });
+
     socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
       console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide

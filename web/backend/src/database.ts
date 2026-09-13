@@ -390,6 +390,16 @@ console.log('✓ Added autorejoin column');
 console.log('✓ Added fontpreference column');
       }
 
+      if (!columnNames.includes('petsciicharset')) {
+        // WEB_: which CHARACTER SET this caller's PETSCII screen draws. A C64
+        // sold in Sweden shipped ROM 325018-02, with a-ring and the umlauts
+        // where the bracket/pound trio sits, and a Swedish caller cannot type
+        // their own name without it. 'standard' by default, because $5C is the
+        // pound sign this board's MCI uses for its column tab.
+        this.db.exec("ALTER TABLE users ADD COLUMN petsciicharset TEXT DEFAULT 'standard'");
+console.log('✓ Added petsciicharset column');
+      }
+
       if (!columnNames.includes('petsciipalette')) {
         // Which sixteen colours this caller's PETSCII screen is painted with.
         // Only the 80-column screen has a choice - a C64 is a VIC-II - and a

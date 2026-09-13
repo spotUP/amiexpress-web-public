@@ -194,6 +194,15 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
       cols: session.petsciiColumns,
       rows: 25,
       palette: session.petsciiColumns === 80 ? 'vdc' : 'vic',
+      // THE CHARACTER SET, with the shape and the colours. A C64 sold in
+      // Sweden shipped ROM 325018-02, with a-ring and the umlauts where the
+      // bracket/pound trio sits; without it a Swedish caller cannot type
+      // their own name. The caller's own setting is W row 22 - at the
+      // graphics prompt nobody is logged in, so a session that has not said
+      // otherwise gets the standard set, and $5C stays the pound sign this
+      // board's MCI uses for its column tab.
+      charset: (session.user?.petsciiCharset === 'swedish'
+        || (session as any).petsciiSwedish === true) ? 'swedish' : 'standard',
     });
   } else if (hasT && transportCapabilities(session).teletext) {
     // WEB_: teletext session mode (T answer at the graphics prompt). The web

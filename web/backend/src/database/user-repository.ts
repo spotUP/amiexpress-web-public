@@ -274,6 +274,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       // a C128's 80-column screen is the VDC's own colours, which is why that
       // is the default (sdk/petscii/c64-palette.ts).
       petsciiPalette: user.petsciipalette === 'vic' ? 'vic' : 'vdc',
+      petsciiCharset: user.petsciicharset === 'swedish' ? 'swedish' : 'standard',
       themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
       // SCREEN theme - which set of board art this caller wears. Empty is
       // "no preference", which resolves to the board default and then to the
