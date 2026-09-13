@@ -295,17 +295,6 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
     return;
   }
 
-  // A help topic is a NAME, never a path: no separators, no parent segments,
-  // no absolute paths, and the resolved file must still sit under HELP/ after
-  // normalisation. Returns null for anything else, and the caller simply keeps
-  // shortening the term as express does.
-  const confineToHelp = (root: string, term: string): string | null => {
-    if (!term || term.includes('..') || path.isAbsolute(term)) return null;
-    if (term.includes('/') || term.includes('\\')) return null;
-    const full = path.resolve(root, term);
-    return full === root || full.startsWith(root + path.sep) ? full : null;
-  };
-
   // Progressive search — express.e:25094-25109: try BBS:help/{params}, strip last char, repeat
   let searchTerm = params.trim();
   let foundFile: string | null = null;
@@ -369,6 +358,26 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
  * with no help directory at all falls back to the literal, so the caller
  * still gets express.e's silence rather than an error.
  */
+/**
+ * A help topic is a NAME, never a path.
+ *
+ * No separators, no parent segments, no absolute paths, and the resolved file
+ * must still sit under the help directory after normalisation. Null for
+ * anything else, and the caller simply keeps shortening the term as express
+ * does.
+ *
+ * Exported so a test can bind THIS rule rather than restate it: it and
+ * `resolveHelpDir` are two fixes to one line - one confines the caller's term,
+ * the other finds the board's own spelling of the directory - and each is
+ * invisible from the other's test.
+ */
+export function confineToHelp(root: string, term: string): string | null {
+  if (!term || term.includes('..') || path.isAbsolute(term)) return null;
+  if (term.includes('/') || term.includes('\\')) return null;
+  const full = path.resolve(root, term);
+  return full === root || full.startsWith(root + path.sep) ? full : null;
+}
+
 export function resolveHelpDir(dataDir: string): string {
   const literal = path.join(dataDir, 'HELP');
   return amigafs.resolvePath(literal) ?? literal;
