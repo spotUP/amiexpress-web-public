@@ -50,6 +50,17 @@ int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
 void texttv_reader_box(int cols, int rows, int *left, int *width, int *height);
 
 /*
+ * The page's "title" out of the JSON and into Latin-1, in one step.
+ *
+ * The body was converted and the title was not, so a Swedish headline drew as
+ * `fÃ¶r val` in the frame while the same words read `för val` two rows below
+ * it - UTF-8 bytes painted one per column. Extraction and conversion belong
+ * together for exactly that reason. 0 on success, non-zero when the key is
+ * missing (out is left empty).
+ */
+int texttv_title(const char *json, char *out, unsigned long cap);
+
+/*
  * SGR colour escapes into the SDK's pen markers, everything else copied.
  *
  * The proxy converts texttv.nu's HTML to rows carrying real `ESC[0;37;44m`

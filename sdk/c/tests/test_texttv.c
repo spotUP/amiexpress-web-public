@@ -248,6 +248,39 @@ static void test_reader_box(void)
     CHECK(width == 77);
 }
 
+static void test_title_latin1(void)
+{
+    /* The real shape off the wire on 2026-09-13: a Swedish headline in
+       UTF-8. The body was converted and the title was not, so the frame drew
+       "Dags fÃ¶r val - vallokalerna har Ã¶ppnat" above a body that read it
+       correctly - the screenshot the sysop sent. */
+    const char *json =
+        "[{\"num\":\"100\",\"title\":\"Dags f\303\266r val - vallokalerna har \303\266ppnat\"}]";
+    char out[128];
+
+    CHECK(texttv_title(json, out, sizeof out) == 0);
+    /* Latin-1 o-umlaut is one byte, 0xF6 - one column on the caller's glass. */
+    CHECK(strcmp(out, "Dags f\366r val - vallokalerna har \366ppnat") == 0);
+    CHECK(strstr(out, "\303") == 0);
+
+    /* No title key: out is emptied and the caller falls back to its own. */
+    CHECK(texttv_title("[{\"num\":\"100\"}]", out, sizeof out) != 0);
+    CHECK(out[0] == '\0');
+    CHECK(texttv_title(0, out, sizeof out) != 0);
+    CHECK(texttv_title(json, out, 0) != 0);
+
+    /* A title longer than the buffer is cut, not overrun. */
+    {
+        struct { char buf[16]; char canary[8]; } frame;
+        int i;
+        memset(&frame, 0, sizeof frame);
+        memset(frame.canary, '#', sizeof frame.canary);
+        texttv_title(json, frame.buf, sizeof frame.buf);
+        CHECK(frame.buf[sizeof frame.buf - 1] == '\0');
+        for (i = 0; i < (int)sizeof frame.canary; i++) CHECK(frame.canary[i] == '#');
+    }
+}
+
 int main(void)
 {
     test_valid_page();
@@ -255,6 +288,7 @@ int main(void)
     test_page_line();
     test_ansi_to_ink();
     test_reader_box();
+    test_title_latin1();
     test_first_plain();
     test_pick_body();
     test_utf8();

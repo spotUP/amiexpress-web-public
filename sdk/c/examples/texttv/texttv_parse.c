@@ -151,6 +151,17 @@ void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
     if (height) *height = rows - 7;
 }
 
+int texttv_title(const char *json, char *out, unsigned long cap)
+{
+    char raw[256];
+    if (out == 0 || cap == 0) return -1;
+    out[0] = '\0';
+    if (json == 0) return -1;
+    if (json_extract_string(json, "title", raw, sizeof raw) != 0) return -1;
+    utf8_to_latin1(raw, out, cap);
+    return 0;
+}
+
 unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap)
 {
     unsigned long n = 0;

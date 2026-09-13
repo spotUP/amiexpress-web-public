@@ -354,7 +354,9 @@ static int fetch_page(int page)
         if (texttv_ansi_to_ink(page_body, inked, sizeof inked) > 0)
             memcpy(page_body, inked, strlen(inked) + 1);
     }
-    if (json_extract_string(body, "title", page_title, sizeof page_title) != 0)
+    /* Latin-1, like the body. A raw UTF-8 title painted `fÃ¶r` in the
+       frame while the body two rows below read `för`. */
+    if (texttv_title(body, page_title, sizeof page_title) != 0)
         sprintf(page_title, "Text-TV %d", page);
     if (json_extract_string(body, "next_page", page_next, sizeof page_next) != 0)
         page_next[0] = '\0';
