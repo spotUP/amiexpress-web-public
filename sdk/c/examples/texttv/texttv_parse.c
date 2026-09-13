@@ -155,6 +155,52 @@ void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
     if (height) *height = rows - 7;
 }
 
+int texttv_reader_title(char *out, unsigned long cap, int cols,
+                        int page, const char *title, int pickable)
+{
+    static const char *const HINT = " - ARROWS PICK, RETURN READS";
+    unsigned long width;
+    unsigned long used;
+    int cut = 0;
+
+    if (out == 0 || cap == 0) return -1;
+    out[0] = '\0';
+    if (title == 0) title = "";
+
+    /* The row the title is drawn on is the box's width, and never more of
+       the buffer than the caller gave us. */
+    width = (unsigned long) (cols > 0 ? cols : 0);
+    if (width + 1 > cap) width = cap - 1;
+
+    if (cols > TEXTTV_COMPACT_COLS) {
+        char head[16];
+        unsigned long headlen;
+        sprintf(head, "%d ", page);
+        headlen = strlen(head);
+        if (headlen >= width) { out[0] = '\0'; return 1; }
+        strcpy(out, head);
+        used = headlen;
+    } else {
+        /* Forty columns: the page number is already on the page's own first
+           row, and it is the TITLE that would be cut to make room for it. */
+        used = 0;
+    }
+
+    while (*title != '\0' && used < width) out[used++] = *title++;
+    cut = (*title != '\0');
+
+    /* Only where there is room to spare does the title also say what RETURN
+       does; the footer says it at every width. */
+    if (pickable && cols > TEXTTV_COMPACT_COLS && !cut
+        && used + strlen(HINT) <= width) {
+        strcpy(out + used, HINT);
+        used += strlen(HINT);
+    }
+
+    out[used] = '\0';
+    return cut ? 1 : 0;
+}
+
 int texttv_reader_frameless(int cols)
 {
     /* A framed reader needs width + 2 columns and a teletext row is exactly

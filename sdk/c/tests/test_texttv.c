@@ -260,6 +260,61 @@ static void test_reader_box(void)
     }
 }
 
+static void test_reader_title(void)
+{
+    /* The real page on 2026-09-13: "Rysarjamnt i SVT:s prognos over valet"
+       is thirty-seven columns. With "100 " in front of it the row is
+       forty-one on a forty-column screen and the caller read "...over vale"
+       (sysop's teletext walk). The page's own first row already says 100. */
+    const char *headline = "Rysarj\344mnt i SVT:s prognos \366ver valet";
+    char out[160];
+
+    CHECK(texttv_reader_title(out, sizeof out, 40, 100, headline, 1) == 0);
+    CHECK(strcmp(out, headline) == 0);
+    CHECK(strlen(out) <= 40);
+
+    /* Eighty columns can afford the number, and the hint as well. */
+    CHECK(texttv_reader_title(out, sizeof out, 80, 100, headline, 1) == 0);
+    CHECK(strncmp(out, "100 ", 4) == 0);
+    CHECK(strstr(out, headline) != 0);
+    CHECK(strstr(out, "ARROWS PICK") != 0);
+    CHECK(strlen(out) <= 80);
+
+    /* A page with nothing to choose says nothing about choosing. */
+    CHECK(texttv_reader_title(out, sizeof out, 80, 131, headline, 0) == 0);
+    CHECK(strstr(out, "ARROWS PICK") == 0);
+    CHECK(strncmp(out, "131 ", 4) == 0);
+
+    /* A headline longer than the row is cut, and says so - but only after
+       the number has been dropped, never instead of it. */
+    {
+        const char *monster =
+            "Ett alldeles f\366r l\344ngt nyhetsrubrikexempel som aldrig tar slut";
+        CHECK(texttv_reader_title(out, sizeof out, 40, 100, monster, 1) == 1);
+        CHECK(strlen(out) == 40);
+        CHECK(strncmp(out, monster, 40) == 0);
+    }
+
+    /* The hint never appears at a width that cannot hold it whole. */
+    CHECK(texttv_reader_title(out, sizeof out, 50, 100, headline, 1) == 0);
+    CHECK(strstr(out, "ARROWS") == 0);
+    CHECK(strlen(out) <= 50);
+
+    /* An unusable buffer is an error, and a tiny one still terminates. */
+    CHECK(texttv_reader_title(0, sizeof out, 40, 100, headline, 1) == -1);
+    CHECK(texttv_reader_title(out, 8, 40, 100, headline, 1) == 1);
+    CHECK(strlen(out) <= 7);
+
+    /* No width a caller can have overflows the row. */
+    {
+        int c;
+        for (c = 20; c <= 132; c++) {
+            texttv_reader_title(out, sizeof out, c, 100, headline, 1);
+            CHECK((int) strlen(out) <= c);
+        }
+    }
+}
+
 static void test_title_latin1(void)
 {
     /* The real shape off the wire on 2026-09-13: a Swedish headline in
@@ -351,6 +406,7 @@ int main(void)
     test_page_line();
     test_ansi_to_ink();
     test_reader_box();
+    test_reader_title();
     test_title_latin1();
     test_links();
     test_link_step();

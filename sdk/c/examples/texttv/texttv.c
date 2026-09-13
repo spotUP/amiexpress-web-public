@@ -533,14 +533,12 @@ static void read_page(void)
         style.fg = UI_TOKEN(UI_T_INK);
         style.bg = UI_TOKEN(UI_T_GROUND);
         style.ink = UI_TOKEN(UI_T_ACCENT);
-        /* A page the caller can walk says so in its own frame: the reader's
-           footer belongs to ui_doc and has no room for a second sentence. */
-        if (page_link_count >= 2 && wide)
-            sprintf(title, "%d %.100s - ARROWS PICK, RETURN READS", page_num, page_title);
-        else if (page_link_count >= 2)
-            sprintf(title, "%d %.60s", page_num, page_title);   /* the footer says ENTER READS */
-        else
-            sprintf(title, "%d %s", page_num, page_title);
+        /* A page the caller can walk says so in its own frame where there is
+           room; at forty the title is the title alone, because the page's own
+           first row already carries the number and the number was costing the
+           last word of the headline. */
+        texttv_reader_title(title, sizeof title, screen.cols, page_num,
+                            page_title, page_link_count >= 2);
         ansi_clear(&screen.buf);
         draw_masthead("TEXT-TV");
         ui_screen_flush(&screen);

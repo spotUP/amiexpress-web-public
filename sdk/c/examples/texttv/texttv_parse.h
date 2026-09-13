@@ -53,6 +53,24 @@ void texttv_reader_box(int cols, int rows, int *left, int *width, int *height);
 int texttv_reader_frameless(int cols);
 
 /*
+ * The reader's title row for a screen this wide.
+ *
+ * A teletext row is forty columns and the page's OWN first row already says
+ * which page this is ("100 SVT Text sondag 13 sep 2026"), so at forty the
+ * number is repetition that costs four columns - and the title is what gets
+ * cut for it: "...prognos over vale" (sysop, 2026-09-13). The compact tier
+ * gets the title alone, and only then, if it still does not fit, is it cut.
+ *
+ * `pickable` says the page offers headlines to choose, which the eighty-
+ * column title says out loud because there is room to.
+ *
+ * Returns 0 when everything fitted, 1 when the title was cut, -1 when out
+ * is unusable.
+ */
+int texttv_reader_title(char *out, unsigned long cap, int cols,
+                        int page, const char *title, int pickable);
+
+/*
  * What an index page points at: one entry per headline the caller can open.
  *
  * The proxy reads the anchors (`<a href="/331">331</a>`) and resolves each to
