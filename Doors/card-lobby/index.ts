@@ -246,8 +246,15 @@ export class CardLobbyApp {
     loader.update(50, 'Setting up game tables...');
 
     loader.update(70, 'Checking weekly bulletins...');
-    // TODO: Re-enable weekly bulletins after testing
-    // await this.writeWeeklyBulletinIfNeeded();
+    // ...and it really does check. This call sat commented out behind a
+    // "TODO: Re-enable weekly bulletins after testing" while the line
+    // above went on announcing it, so the lobby only ever wrote a
+    // bulletin after somebody finished a hand - and a lobby nobody had
+    // played in told the sysop "No bulletins have been posted yet"
+    // (2026-09-13). setupScreen() has already run by here, so
+    // dialogManager exists; the writer is gated on a week having passed
+    // AND on there being play to report, so an idle lobby pays nothing.
+    await this.dialogManager.writeWeeklyBulletinIfNeeded(this.lobby, this.profiles, this.session);
 
     loader.update(85, 'Saving state...');
     await this.persistState();

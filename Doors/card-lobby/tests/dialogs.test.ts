@@ -247,3 +247,43 @@ export async function aBulletinCanBeReadAndClosed(): Promise<void> {
     await h.finished;
   }
 }
+
+export async function theWeeklyBulletinIsWrittenOnceThereIsPlay(): Promise<void> {
+  // The loader said "Checking weekly bulletins..." while the call behind it
+  // was commented out - "TODO: Re-enable weekly bulletins after testing" -
+  // so the lobby only ever wrote one after somebody finished a hand, and a
+  // sysop opening the viewer was told nothing had been posted (2026-09-13).
+  const h = await openDoor();
+  const dm = h.app.dialogManager;
+
+  const written: Record<string, string> = {};
+  h.session.bbs.writeFile = async (name: string, body: string) => { written[name] = body; };
+
+  try {
+    const lobby: any = { lastBulletinAt: 0 };
+
+    // A lobby nobody has played in writes NOTHING: a header over an empty
+    // table reads as a broken bulletin rather than an empty one.
+    await dm.writeWeeklyBulletinIfNeeded(lobby, {}, h.session);
+    assert.deepStrictEqual(Object.keys(written), [], 'no play, no bulletin');
+    assert.strictEqual(lobby.lastBulletinAt, 0, 'and the week is not marked as reported');
+
+    // One hand played is enough to have something to say.
+    const profiles: any = {
+      ace: { username: 'ace', stats: { weekly: { wins: 1, hands: 3, net: 120 } } },
+    };
+    await dm.writeWeeklyBulletinIfNeeded(lobby, profiles, h.session);
+    const file = Object.keys(written)[0];
+    assert.ok(file && /bull\d+\.txt$/.test(file), 'it writes a bulletin file');
+    assert.ok(/ace/.test(written[file]), 'with the player in it');
+    assert.ok(lobby.lastBulletinAt > 0, 'and marks the week as reported');
+
+    // And not again in the same week.
+    const count = Object.keys(written).length;
+    await dm.writeWeeklyBulletinIfNeeded(lobby, profiles, h.session);
+    assert.strictEqual(Object.keys(written).length, count, 'once a week, not once a launch');
+  } finally {
+    await h.app.shutdown();
+    await h.finished;
+  }
+}

@@ -164,25 +164,20 @@ class DialogManager {
         // is every board until the weekly one is first written - offered one
         // anyway and answered "Bulletin not found." (sysop, 2026-09-02:
         // "there is no bulletin posted either so it cant display it").
-        // THE BOARD'S BULLETINS, not a table of this door's own.
+        // THE LOBBY'S OWN BULLETINS, and nothing else.
         //
-        // This read LOBBY_BULLETINS, which holds exactly one entry: the lobby's
-        // weekly leaderboard, bull20. So a board with twelve bulletins posted was
-        // told "No bulletins have been posted yet" (sysop, 2026-09-13), and the
-        // log showed the door looking for one file and giving up:
-        //   [BBSApi] Error reading file Bulletins/bull20.txt: ENOENT
-        // A bulletin VIEWER shows what the board has; the lobby's own weekly is
-        // one of them once written, and needs no special case beyond its title.
+        // I briefly made this list every bull*.txt on the board. That is wrong
+        // and the sysop said so: "why would i want to read bulletins not related
+        // to the cardlobby in the cardlobby? makes no sense". The board's own
+        // bulletins have a command at the menu; a door's viewer is for what the
+        // door itself posts. Only a bulletin that EXISTS is offered, so the empty
+        // state says the lobby has not written one yet instead of opening a
+        // reader onto "Bulletin not found." (2026-09-02).
         const available = [];
-        for (const number of await this.bulletinNumbers(session)) {
-            const content = await this.readBulletin(number, session);
-            if (!content || !content.trim())
-                continue;
-            const known = lib_1.LOBBY_BULLETINS.find((b) => b.number === number);
-            available.push({
-                entry: { number, title: known?.title ?? `Bulletin ${number}` },
-                content,
-            });
+        for (const entry of lib_1.LOBBY_BULLETINS) {
+            const content = await this.readBulletin(entry.number, session);
+            if (content && content.trim())
+                available.push({ entry, content });
         }
         if (available.length === 0) {
             this.showTextWindow('Bulletins', 'No bulletins have been posted yet.\n\n'
@@ -199,33 +194,6 @@ class DialogManager {
             return;
         this.showTextWindow(`Bulletin #${chosen.entry.number}`, chosen.content);
     }
-    /**
-     * Which bulletins the board actually has, lowest first.
-     *
-     * Asks the directory rather than guessing numbers: express writes
-     * Bulletins/bull<n>.txt and how many there are is the sysop's business,
-     * not this door's. Falls back to the door's own table when the board API
-     * cannot list files, so an older board still shows its weekly leaderboard.
-     */
-    async bulletinNumbers(session) {
-        if (typeof session.bbs?.listFiles !== 'function') {
-            return lib_1.LOBBY_BULLETINS.map((b) => b.number);
-        }
-        try {
-            const files = await session.bbs.listFiles('Bulletins', 'bull*.txt');
-            const numbers = (files ?? [])
-                .map((f) => /^bull(\d+)\.txt$/i.exec(f)?.[1])
-                .filter((n) => Boolean(n))
-                .map((n) => Number(n))
-                .filter((n) => Number.isFinite(n));
-            return [...new Set(numbers)].sort((a, b) => a - b);
-        }
-        catch {
-            // A board with no Bulletins directory is not an error to report at
-            // the player; it simply has nothing to read.
-            return [];
-        }
-    }
     async readBulletin(number, session) {
         if (!session.bbs?.readFile)
             return null;
@@ -239,6 +207,13 @@ class DialogManager {
             return;
         const now = Date.now();
         if (now - lobby.lastBulletinAt < lib_1.WEEK_MS)
+            return;
+        // Nothing to report is not a bulletin. The builder keeps only players
+        // with a hand or a win this week, so on a lobby nobody has played in
+        // this would post a header over an empty table - which reads as a
+        // broken bulletin rather than an empty one.
+        const played = Object.values(profiles).some((p) => (p?.stats?.weekly?.hands ?? 0) > 0 || (p?.stats?.weekly?.wins ?? 0) > 0);
+        if (!played)
             return;
         const content = (0, lib_1.buildWeeklyBulletin)(lobby, profiles);
         if (session.bbs?.writeFile) {
