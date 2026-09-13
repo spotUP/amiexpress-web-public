@@ -75,6 +75,51 @@ describe('the sidecar is a real listener a door can reach', () => {
     expect(body).toBe(SLIM);
   });
 
+
+  /**
+   * THE HEADER IS THE CONTRACT, NOT THE BODY.
+   *
+   * Every body-level test above passed while the door showed
+   * "[ERROR] Text-TV: proxy speaks chunked (-7)": a raw http server with no
+   * Content-Length makes Node frame the reply as Transfer-Encoding: chunked,
+   * and the door's HTTP reader is a few hundred bytes of C that refuses
+   * chunked outright. Express's res.send() had been setting the header, so
+   * moving off Express dropped it and nothing noticed.
+   */
+  it('frames the reply with Content-Length and never chunked, which is what the 68K reader requires', async () => {
+    const headers = await new Promise<any>((resolve, reject) => {
+      http
+        .get({ host: '127.0.0.1', port, path: '/api/texttv/100' }, (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.headers));
+        })
+        .on('error', reject);
+    });
+    expect(headers['transfer-encoding']).toBeUndefined();
+    expect(Number(headers['content-length'])).toBe(Buffer.byteLength(SLIM));
+  });
+
+  it('counts BYTES, not characters - a Swedish page is multi-byte and a short frame reads as -8 to the door', async () => {
+    const swedish = '[{"num":"100","title":"Dags för val - vallokalerna har öppnat"}]';
+    const s2 = createTextTvSidecar(async () => ({ status: 200, body: swedish }));
+    await new Promise<void>((r) => s2.listen(0, '127.0.0.1', r));
+    const p2 = (s2.address() as any).port;
+    const { length, body } = await new Promise<any>((resolve, reject) => {
+      http
+        .get({ host: '127.0.0.1', port: p2, path: '/api/texttv/100' }, (res) => {
+          let data = '';
+          res.setEncoding('utf-8');
+          res.on('data', (c) => (data += c));
+          res.on('end', () => resolve({ length: res.headers['content-length'], body: data }));
+        })
+        .on('error', reject);
+    });
+    expect(Number(length)).toBe(Buffer.byteLength(swedish));
+    expect(Number(length)).toBeGreaterThan(swedish.length);
+    expect(body).toBe(swedish);
+    await new Promise<void>((r) => s2.close(() => r()));
+  });
+
   // The point of the whole change: this listener is NOT the board's, so a
   // parked board loop cannot stop it answering.
   it('listens on a port of its own, not the board port', () => {

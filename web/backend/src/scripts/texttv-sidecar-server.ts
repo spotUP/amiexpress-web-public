@@ -42,7 +42,22 @@ export function createTextTvSidecar(
           return { status, body };
         });
       const answer = await answerTextTv(req.url ?? '', fetcher);
-      res.writeHead(answer.status, { 'Content-Type': answer.contentType });
+      // CONTENT-LENGTH IS NOT OPTIONAL HERE.
+      //
+      // Without it Node frames the body as `Transfer-Encoding: chunked`, and
+      // the door's HTTP reader is a few hundred bytes of C on a 68K that
+      // refuses chunked outright (texttv.c, error -7, "proxy speaks
+      // chunked"). The Express route this replaced never had to say so:
+      // res.send() sets the header itself, so moving to a raw http server
+      // dropped it silently and every body-level test still passed.
+      //
+      // byteLength, not .length: a Swedish page is full of multi-byte UTF-8
+      // and a character count frames the body short - which the door reports
+      // as -8, "proxy cut the reply short".
+      res.writeHead(answer.status, {
+        'Content-Type': answer.contentType,
+        'Content-Length': Buffer.byteLength(answer.body),
+      });
       res.end(answer.body);
     })();
   });
