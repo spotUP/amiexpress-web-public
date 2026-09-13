@@ -32,6 +32,7 @@ import {
   socketToUser,
   reclaimGraceGhost,
 } from "../server/session-manager";
+import { nodeHasReachableCaller } from '../server/session-emitter-registry';
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
@@ -477,12 +478,16 @@ export async function runPostAuthLogin(
    * login's maps. Reclaim first (only what still names the dead socket;
    * a live tab is never touched), so the check reads the board as it is.
    */
+  // The caller's own namespace, which is where every OTHER web socket lives
+  // too - so it answers both "is the ghost's socket still here" for the
+  // reclaim below and "is that node's caller still reachable" for the
+  // duplicate-login guard further down.
+  const nspSockets = (emitter as any)?.nsp?.sockets as
+    | { has?: (id: string) => boolean }
+    | undefined;
   {
     const userKey = String((user as any)?.id ?? '');
     if (userKey !== '') {
-      const nspSockets = (emitter as any)?.nsp?.sockets as
-        | { has?: (id: string) => boolean }
-        | undefined;
       reclaimGraceGhost(userKey, (id) => nspSockets?.has?.(id) === true);
     }
   }
@@ -501,10 +506,21 @@ export async function runPostAuthLogin(
       appConfig.get('dataDir'),
       user.username,
       session.nodeId ?? 0,
-      // Liveness: a name match with no session object behind it is a
-      // stale node file from a missed teardown, not a second login
-      // (ghosts, 2026-09-10 - the infant refusal was its own file).
-      (nodeId) => sessions.has(String(nodeId)),
+      // Liveness: REACHABILITY, not map membership.
+      //
+      // This asked `sessions.has(nodeId)`, and a session object outlives its
+      // transport - so a caller whose connection had gone still held the node
+      // and their own next login was refused against their own corpse. That
+      // is the reported bug: `infant` refused on the live board, `spot` and
+      // `sysop` repeatedly, 28 refusals in the node CallersLogs with the most
+      // recent AFTER the three previous attempts at this.
+      //
+      // `nodeHasReachableCaller` asks whether anything can still be SENT to
+      // that node: a registered emitter for telnet/SSH (both teardown and the
+      // admin's kick unregister it), or a socket still in the namespace for
+      // web. A stale node file with nobody behind it is cleaned up by
+      // userAlreadyOnNode's onStale, exactly as before.
+      (nodeId) => nodeHasReachableCaller(nodeId, (id) => nspSockets?.has?.(id) === true),
     );
     if (alreadyOn !== null) {
       try {

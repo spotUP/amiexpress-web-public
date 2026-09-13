@@ -144,6 +144,48 @@ function socketCarrying(session: BBSSession, io?: IOServer | null): Socket | nul
   return null;
 }
 
+/**
+ * Is there a REACHABLE caller on this node?
+ *
+ * The duplicate-login guard (express.e:29715-29727, via `userAlreadyOnNode`)
+ * used `sessions.has(nodeId)` to decide. That is map membership, not
+ * liveness: a session object outlives its transport, so a caller whose
+ * connection had gone was still "on" a node and their own next login was
+ * refused against their own corpse. Real callers hit it - `infant` was
+ * refused on the live board, and `spot` and `sysop` repeatedly; twenty-eight
+ * refusals are recorded in the node CallersLogs, the most recent AFTER the
+ * three previous attempts to fix this.
+ *
+ * Reachability is the question, and it is answered per transport:
+ *
+ *  - telnet and SSH register a connection emitter, and BOTH teardown
+ *    (`transport-session.ts`) and the admin's kick (`node-control-routes.ts`)
+ *    unregister it. A registered emitter therefore means a live transport.
+ *  - web has no registered emitter; its socket must still be in the
+ *    namespace. Socket.IO removes it on disconnect, so membership IS the
+ *    liveness test - the same one `reclaimGraceGhost` already uses.
+ *  - a session with neither is not reachable by definition, and refusing a
+ *    login on its behalf is the bug.
+ *
+ * `socketIsAlive` is injected rather than read from a module-level `io` so
+ * that the login path can pass the namespace it already holds, and so a test
+ * can answer the question without a server.
+ */
+export function nodeHasReachableCaller(
+  nodeId: number | string,
+  socketIsAlive: (socketId: string) => boolean,
+): boolean {
+  const session = sessions.get(String(nodeId));
+  if (!session) return false;
+
+  if ((session as SessionWithEmitter).connectionEmitter) return true;
+
+  const socketId = (session as { socketId?: string }).socketId;
+  if (socketId) return socketIsAlive(socketId) === true;
+
+  return false;
+}
+
 /** `{ emitter, session }` for a node number, or null. */
 export function emitterForNodeId(
   nodeId: number | string,
