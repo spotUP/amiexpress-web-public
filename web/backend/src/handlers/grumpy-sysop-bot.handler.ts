@@ -15,6 +15,7 @@
 import axios from 'axios';
 import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
 import { GROUNDING_RULES } from './sysop-ai/personas';
+import { BOT_cut } from '../services/bot-data/caps';
 import { askWithTools, withoutControlTokens } from './sysop-ai/loop';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
@@ -254,7 +255,7 @@ export const CHAT_REPLY_TOKENS = 250;
  * enough to get a turn, and one that just failed waits ten minutes for
  * another. Nothing here touches the network.
  */
-interface ModelCost { ewmaMs: number; failedAt?: number }
+interface ModelCost { ewmaMs: number; failedAt?: number; mute?: boolean }
 /**
  * REMEMBERED ACROSS RESTARTS.
  *
@@ -299,8 +300,35 @@ const PENALTY_MS = 10 * 60 * 1000;
 export function noteModelCost(model: string, ms: number, ok: boolean): void {
   const prev = costs().get(model);
   const ewmaMs = prev ? Math.round(prev.ewmaMs * 0.6 + ms * 0.4) : ms;
-  costs().set(model, { ewmaMs, failedAt: ok ? undefined : Date.now() });
+  costs().set(model, { ewmaMs, failedAt: ok ? undefined : Date.now(), ...(prev?.mute ? { mute: true } : {}) });
   rememberCosts();
+}
+
+/**
+ * A MODEL THAT ANSWERS WITH NO WORDS.
+ *
+ * The board measured how FAST a model was and nothing else, so the fastest
+ * thing on the list won - and the fastest thing on a free list is the
+ * smallest. liquid/lfm-2.5-2.6b:free took a caller's question about
+ * Fairlight's C64 era, called three tools correctly, and then wrote nothing
+ * at all; the caller got sixty lines of raw Demozoo (live, 2026-09-13).
+ *
+ * Muteness is a property of the model, not a bad minute, so unlike `failedAt`
+ * it does not time out. It is cleared the moment the model does answer.
+ */
+export function noteModelMute(model: string, mute: boolean): void {
+  const prev = costs().get(model);
+  if (!prev) { if (!mute) return; costs().set(model, { ewmaMs: UNTRIED_MS, mute: true }); rememberCosts(); return; }
+  if (Boolean(prev.mute) === mute) return;
+  const next: ModelCost = { ewmaMs: prev.ewmaMs, ...(prev.failedAt ? { failedAt: prev.failedAt } : {}) };
+  if (mute) next.mute = true;
+  costs().set(model, next);
+  rememberCosts();
+}
+
+/** True when this model has been seen to answer with no words at all. */
+export function modelIsMute(model: string): boolean {
+  return costs().get(model)?.mute === true;
 }
 
 /** What this model is expected to cost right now - a failure is worn for ten minutes. */
@@ -356,8 +384,15 @@ export async function probeAnUnmeasuredModel(
       },
     )).data);
 
-    await send(unmeasured, PROBE_TIMEOUT_MS);
+    // The probe already asks every unmeasured model a five-token question off
+    // the caller's path. It threw the ANSWER away and kept only the clock, so
+    // a model that replies with nothing looked perfect: instant, and mute.
+    // Reading the reply here is what stops a caller being the one to find out.
+    const reply: any = await send(unmeasured, PROBE_TIMEOUT_MS);
     noteModelCost(unmeasured, Date.now() - startedAt, true);
+    const saidSomething = typeof reply?.choices?.[0]?.message?.content === 'string'
+      && reply.choices[0].message.content.trim() !== '';
+    noteModelMute(unmeasured, !saidSomething);
   } catch {
     // A model that will not answer a five-token prompt is not one to hand a
     // caller. The failure is the measurement.
@@ -436,8 +471,16 @@ export function rankFreeModels(models: OpenRouterModel[], now = Date.now()): str
      * correlation is not neutral: the giant models are the slow ones, so the
      * guess costs the caller less when it leans small.
      */
+    /*
+     * A MUTE MODEL SINKS BELOW A SLOW ONE. Speed was the only signal, and the
+     * smaller-context tie-break below leans the guess towards small models on
+     * purpose (the giants are the slow ones) - which walked straight into a
+     * 2.6b model that is fast, tool-capable, and cannot write a sentence.
+     * Whether a model ANSWERS has to outrank how quickly it does not.
+     */
     .sort((a, b) =>
       Number(supportsTools(b)) - Number(supportsTools(a)) ||
+      Number(modelIsMute(a.id)) - Number(modelIsMute(b.id)) ||
       modelCostMs(a.id, now) - modelCostMs(b.id, now) ||
       (a.context_length ?? 0) - (b.context_length ?? 0))
     .map((m) => m.id);
@@ -1427,10 +1470,14 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.
       // our tags stripped), and a new array on the copy would be lost.
       (context.afters ??= []).push(...result.afters);
       if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+      // Whether it ANSWERED, not just how fast it did not: a model that took
+      // a tool call and wrote nothing sinks below the slow ones next time.
+      noteModelMute(freeModel, !result.text);
       if (result.text) {
 console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
         return result.truncated ? withContinuation(result.text) : result.text;
       }
+console.log(`[Grumpy Bot] ${freeModel} ran tools and wrote nothing - marked mute`);
       // THE BOARD ALREADY ANSWERED. When the model asked a tool and then ran
       // out of time before writing its reply, the cascade used to fall
       // through to the rule-based bot, which answers a question it never
@@ -1582,10 +1629,25 @@ const ENGINE_TAG = /^(?:\s*\[(?:AI|RB)\]\s*)+/;
  * read as prose when it is a raw dump, so a question that never got an answer
  * looked like it had been answered.
  */
+/** A caller reads a terminal; this is how much of a raw dump is worth reading. */
+const RAW_DUMP_LINES = 16;
+
 function rawToolAnswer(results: string[], slowly = false): string {
   const why = slowly ? 'I am typing slowly today' : 'I could not put it in my own words';
-  return `Here it is as it came back, ${why}:\n${results.join('\n')}`;
+  // CAPPED. Three tools answering a question about Fairlight's C64 era came to
+  // sixty lines - a group record, eighteen unrelated productions and a
+  // Wikipedia miss - pasted at the caller in one go. An uncomposed answer is
+  // worth less than a composed one, not more screen.
+  const lines = results.join('\n').split('\n');
+  const shown = lines.slice(0, RAW_DUMP_LINES).join('\n');
+  const rest = lines.length - RAW_DUMP_LINES;
+  const more = rest > 0 ? `\n(+${rest} more lines - ask me for the part you want)` : '';
+  return `Here it is as it came back, ${why}:\n${BOT_cut(shown).text}${more}`;
 }
+
+/** Test seam: the raw fallback's shape, without a whole cascade behind it. */
+export const __rawToolAnswerForTest = (results: string[], slowly = false): string =>
+  rawToolAnswer(results, slowly);
 
 export function stripEngineTag(text: string): string {
   return text.replace(ENGINE_TAG, '');
