@@ -92,6 +92,11 @@ fi
 # projects running on the dev machine.
 lsof -ti:3001 | xargs kill -9 2>/dev/null  # Backend (HTTP + WebSocket)
 lsof -ti:8080 | xargs kill -9 2>/dev/null  # SDK Preview backend
+# The Text-TV sidecar: a SEPARATE process the backend spawns (the TEXTTV door
+# must not fetch from the process running it). A SIGKILLed backend cannot kill
+# its own child, so the sidecar outlived every restart, kept port 3002, and
+# each new board burned its restart budget failing to bind (2026-09-13).
+lsof -ti:3002 | xargs kill -9 2>/dev/null  # Text-TV sidecar
 
 # Wait for ports to be free
 sleep 2
@@ -99,11 +104,12 @@ sleep 2
 # Verify
 BACKEND=$(lsof -ti:3001 | wc -l | tr -d ' ')
 PREVIEW=$(lsof -ti:8080 | wc -l | tr -d ' ')
+SIDECAR=$(lsof -ti:3002 | wc -l | tr -d ' ')
 
-if [ "$BACKEND" -eq 0 ] && [ "$PREVIEW" -eq 0 ]; then
+if [ "$BACKEND" -eq 0 ] && [ "$PREVIEW" -eq 0 ] && [ "$SIDECAR" -eq 0 ]; then
   echo "[OK] All servers killed"
   exit 0
 else
-  echo "[ERROR] Some servers still running (backend: $BACKEND, preview: $PREVIEW)"
+  echo "[ERROR] Some servers still running (backend: $BACKEND, preview: $PREVIEW, texttv sidecar: $SIDECAR)"
   exit 1
 fi

@@ -29,11 +29,45 @@ import { answerTextTv } from '../services/texttv-sidecar-handler';
 
 export const TEXTTV_SIDECAR_PORT = Number(process.env.TEXTTV_SIDECAR_PORT || 3002);
 
+/**
+ * The path a supervisor asks "is a sidecar already serving here?".
+ *
+ * Answered without touching the network, so a probe cannot be mistaken for
+ * a page fetch and cannot hang on texttv.nu being slow.
+ */
+export const TEXTTV_SIDECAR_HEALTH_PATH = '/health';
+
+/**
+ * Is that process still there?
+ *
+ * Signal 0 is the question, not an instruction: the kernel runs its
+ * permission and existence checks and delivers nothing. ESRCH means gone;
+ * EPERM means alive and owned by somebody else, which still counts as alive.
+ */
+export function processAlive(pid: number): boolean {
+  if (!(pid > 0)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 export function createTextTvSidecar(
   fetchPage?: (page: number) => Promise<{ status: number; body: string }>,
 ): http.Server {
   return http.createServer((req, res) => {
     void (async () => {
+      if ((req.url ?? '').split('?')[0] === TEXTTV_SIDECAR_HEALTH_PATH) {
+        const body = JSON.stringify({ status: 'ok', pid: process.pid });
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        });
+        res.end(body);
+        return;
+      }
       const fetcher =
         fetchPage ??
         (async (page: number) => {
@@ -74,6 +108,33 @@ export function createTextTvSidecar(
 const startedDirectly = (process.argv[1] ?? '').includes('texttv-sidecar-server');
 
 if (startedDirectly) {
+  /*
+   * DIE WITH THE BOARD.
+   *
+   * The supervisor kills its child on a clean shutdown, but a dev machine
+   * does not always get one: `kill-servers.sh` sends SIGKILL, and a killed
+   * parent cannot kill anything. The orphan kept port 3002, so every backend
+   * started afterwards failed to bind, burned its five restarts and told the
+   * sysop the door was broken - while the orphan quietly went on serving
+   * (2026-09-13, an orphan from 19:12 outlived three restarts).
+   *
+   * It watches the BOARD's pid, not its own parent's. In dev the sidecar is
+   * spawned through `npx tsx`, so its parent is the tsx wrapper: the board
+   * can die with that wrapper still standing, and a ppid check would see
+   * nothing wrong. The board tells us its pid on the way in; `kill(pid, 0)`
+   * asks the kernel whether it is still there without signalling it.
+   */
+  const boardPid = Number(process.env.TEXTTV_SIDECAR_PARENT_PID || 0);
+  if (boardPid > 0) {
+    const watchBoard = setInterval(() => {
+      if (!processAlive(boardPid)) {
+        console.log('[texttv-sidecar] the board went away - exiting');
+        process.exit(0);
+      }
+    }, 2000);
+    watchBoard.unref?.();
+  }
+
   const server = createTextTvSidecar();
   server.listen(TEXTTV_SIDECAR_PORT, '127.0.0.1', () => {
     console.log(`[texttv-sidecar] serving /api/texttv on 127.0.0.1:${TEXTTV_SIDECAR_PORT}`);
