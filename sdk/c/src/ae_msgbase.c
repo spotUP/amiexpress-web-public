@@ -618,3 +618,218 @@ long ae_msg_body(long number, char *out, unsigned long cap)
     out[got] = '\0';
     return got;
 }
+
+/* ---- writing ------------------------------------------------------------
+ *
+ * Release 1 deliberately wrote nothing: "a wrong byte in a 110-byte header is
+ * not a bug anyone notices until somebody's mail is unreadable". What makes it
+ * safe now is that the reader above already settles every record in the file,
+ * so the writer can REFUSE a base it would be guessing about - see
+ * every_record_is_amiga_shaped.
+ */
+
+/** Whether this node currently holds MailLock, so unlock cannot free another's. */
+static int lock_held;
+
+/**
+ * Refuse to append where the file is not uniformly AmiExpress-shaped.
+ *
+ * The board reads HeaderFile with a whole-file sequence pass and can cope with
+ * both layouts; this writer only knows how to add one of them. Appending an
+ * AmiExpress record after a run of port records shifts what the sequence pass
+ * concludes about ITS neighbours, which is how a base that read fine before a
+ * post stops reading afterwards.
+ */
+static int every_record_is_amiga_shaped(void)
+{
+    unsigned char record[AE_MSG_RECORD_SIZE];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long previous = 0;
+    int clean = 1;
+
+    if (!join_path(path, (int)sizeof(path), "HeaderFile")) return 0;
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f == 0) return 1;              /* a base with no HeaderFile yet is clean */
+
+    while (ae_dos_read_full(f, record, AE_MSG_RECORD_SIZE) == 1) {
+        int layout = classify_record(record);
+        if (layout == LAYOUT_UNKNOWN) layout = settle_with_sequence(record, layout, previous);
+        if (layout != LAYOUT_AMIGA) { clean = 0; break; }
+        previous = ae_dos_get_long(record + AMIGA_NUM);
+    }
+
+    ae_dos_close(f);
+    return clean;
+}
+
+/**
+ * Take MailLock, or report that somebody else has it.
+ *
+ * File-based, because that is what express.e uses and what another NODE can
+ * see - a flag in this door's memory would not stop the board itself posting.
+ * There is a window between the exists-check and the create; express.e has the
+ * same one, and a single caller per node makes it narrow enough that the board
+ * has lived with it for thirty years.
+ */
+static int take_lock(void)
+{
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+
+    if (!join_path(path, (int)sizeof(path), "MailLock")) return 0;
+    if (ae_dos_exists(path)) return 0;
+
+    f = ae_dos_open(path, AE_DOS_WRITE);
+    if (f == 0) return 0;
+    ae_dos_close(f);
+    lock_held = 1;
+    return 1;
+}
+
+void ae_msg_unlock(void)
+{
+    char path[AE_MSG_PATH_MAX];
+
+    if (!lock_held) return;            /* never free a lock this node did not take */
+    if (join_path(path, (int)sizeof(path), "MailLock")) ae_dos_delete(path);
+    lock_held = 0;
+}
+
+/** The next number, straight out of MailStats - express.e:10688. */
+static long next_number(void)
+{
+    unsigned char stats[18];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long high = 0;
+
+    if (join_path(path, (int)sizeof(path), "MailStats")) {
+        f = ae_dos_open(path, AE_DOS_READ);
+        if (f != 0) {
+            if (ae_dos_read_full(f, stats, 18) == 1) high = ae_dos_get_long(stats + 4);
+            ae_dos_close(f);
+        }
+    }
+    /* highMsgNum is the NEXT number, not the highest. An off-by-one here has
+       already caused data loss in this codebase once: express.e opens the body
+       MODE_NEWFILE, so a post at a number that exists truncates that message's
+       body. A base with no MailStats starts at 1. */
+    return high >= 1 ? high : 1;
+}
+
+/** Rewrite MailStats so the number after this one is free. */
+static int bump_stats(long written)
+{
+    unsigned char stats[18];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long lowest_key = written;
+    long lowest_not_del = written;
+    int i;
+
+    for (i = 0; i < 18; i++) stats[i] = 0;
+
+    if (!join_path(path, (int)sizeof(path), "MailStats")) return 0;
+
+    /* Keep the floors the base already had; only `high` is ours to move. */
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f != 0) {
+        unsigned char old[18];
+        if (ae_dos_read_full(f, old, 18) == 1) {
+            long k = ae_dos_get_long(old + 0);
+            long d = ae_dos_get_long(old + 8);
+            if (k >= 1) lowest_key = k;
+            if (d >= 1) lowest_not_del = d;
+        }
+        ae_dos_close(f);
+    }
+
+    ae_dos_put_long(stats + 0, lowest_key);
+    ae_dos_put_long(stats + 4, written + 1);
+    ae_dos_put_long(stats + 8, lowest_not_del);
+
+    f = ae_dos_open(path, AE_DOS_WRITE);
+    if (f == 0) return 0;
+    if (ae_dos_write(f, stats, 18) != 18) { ae_dos_close(f); return 0; }
+    ae_dos_close(f);
+    return 1;
+}
+
+/** Copy a C string into a fixed field, NUL-terminated, never overrunning. */
+static void put_field(unsigned char *record, int at, int cap, const char *s)
+{
+    int i = 0;
+    if (s) {
+        while (s[i] && i < cap - 1) { record[at + i] = (unsigned char)s[i]; i++; }
+    }
+    record[at + i] = 0;
+}
+
+long ae_msg_write(const ae_msg_new *msg, const char *body, unsigned long body_len)
+{
+    unsigned char record[AE_MSG_RECORD_SIZE];
+    char path[AE_MSG_PATH_MAX];
+    char name[16];
+    ae_file *f;
+    long number;
+    int i;
+
+    if (!base_open) return AE_MSG_ERR_NOBASE;
+    if (!msg) return AE_MSG_ERR_ARGS;
+    if (msg->status != AE_MSG_PUBLIC && msg->status != AE_MSG_PRIVATE)
+        return AE_MSG_ERR_ARGS;
+    if (!body) { body = ""; body_len = 0; }
+
+    if (!every_record_is_amiga_shaped()) return AE_MSG_ERR_MIXED;
+    if (!take_lock()) return AE_MSG_ERR_LOCKED;
+
+    number = next_number();
+
+    /* Body first, header second. A header pointing at a body that was never
+       written is a message the board lists and cannot open; a body with no
+       header is invisible and harmless, and the next post overwrites it. */
+    number_to_name(name, number);
+    if (!join_path(path, (int)sizeof(path), name)) { ae_msg_unlock(); return AE_MSG_ERR_IO; }
+
+    f = ae_dos_open(path, AE_DOS_WRITE);
+    if (f == 0) { ae_msg_unlock(); return AE_MSG_ERR_IO; }
+    if (body_len > 0 && ae_dos_write(f, body, (long)body_len) != (long)body_len) {
+        ae_dos_close(f);
+        ae_msg_unlock();
+        return AE_MSG_ERR_IO;
+    }
+    /* express.e writes each line LF-terminated, so the last one is too. */
+    if (body_len == 0 || body[body_len - 1] != '\n') {
+        if (ae_dos_write(f, "\n", 1) != 1) {
+            ae_dos_close(f);
+            ae_msg_unlock();
+            return AE_MSG_ERR_IO;
+        }
+    }
+    ae_dos_close(f);
+
+    for (i = 0; i < AE_MSG_RECORD_SIZE; i++) record[i] = 0;
+    record[0] = (unsigned char)msg->status;
+    ae_dos_put_long(record + AMIGA_NUM, number);
+    put_field(record, AMIGA_TO, 31, msg->to);
+    put_field(record, AMIGA_FROM, 31, msg->from);
+    put_field(record, AMIGA_SUBJ, 31, msg->subject);
+    ae_dos_put_long(record + AMIGA_DATE, msg->date);
+    ae_dos_put_long(record + AMIGA_RECV, 0);   /* 0 = unread by its recipient */
+
+    if (!join_path(path, (int)sizeof(path), "HeaderFile")) { ae_msg_unlock(); return AE_MSG_ERR_IO; }
+    f = ae_dos_open(path, AE_DOS_APPEND);
+    if (f == 0) { ae_msg_unlock(); return AE_MSG_ERR_IO; }
+    if (ae_dos_write(f, record, AE_MSG_RECORD_SIZE) != AE_MSG_RECORD_SIZE) {
+        ae_dos_close(f);
+        ae_msg_unlock();
+        return AE_MSG_ERR_IO;
+    }
+    ae_dos_close(f);
+
+    if (!bump_stats(number)) { ae_msg_unlock(); return AE_MSG_ERR_IO; }
+
+    ae_msg_unlock();
+    return number;
+}

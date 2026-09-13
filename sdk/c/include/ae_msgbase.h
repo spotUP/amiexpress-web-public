@@ -52,6 +52,9 @@ extern "C" {
 #define AE_MSG_OK            0
 #define AE_MSG_ERR_ARGS     -1
 #define AE_MSG_ERR_NOBASE   -2   /* no HeaderFile there, or it cannot be read */
+#define AE_MSG_ERR_LOCKED   -3   /* another node holds MailLock */
+#define AE_MSG_ERR_MIXED    -4   /* the base holds records this writer will not append to */
+#define AE_MSG_ERR_IO       -5   /* the write itself failed */
 
 #define AE_MSG_NAME_MAX    32
 #define AE_MSG_SUBJECT_MAX 32
@@ -191,6 +194,48 @@ long ae_msg_body(long number, char *out, unsigned long cap);
  * to ask the same question this module asks.
  */
 int ae_msg_may_read(const ae_msg_row *row);
+
+/** A message about to be written. Every string may be NULL, meaning empty. */
+typedef struct {
+    const char *to;
+    const char *from;
+    const char *subject;
+    /** AE_MSG_PUBLIC or AE_MSG_PRIVATE; anything else is refused. */
+    int status;
+    /** Unix seconds. 0 asks the board's own clock via the door, so pass one. */
+    long date;
+} ae_msg_new;
+
+/**
+ * Append one message to the open base.
+ *
+ * Returns the number it was given (>= 1), or a negative AE_MSG_ERR_*.
+ *
+ * `body` is the message text, lines separated by LF. It is written verbatim
+ * with a trailing LF added if missing - express.e:10700-10703 stores body
+ * lines and nothing else, no header metadata, which lives only in HeaderFile.
+ *
+ * THE ORDER IS express.e's, via the port's own writer
+ * (web/backend/src/utils/message-file.util.ts:157), because that one is
+ * already correct: lock, take highMsgNum as the new number, write the body,
+ * append the header, bump highMsgNum, unlock. Assigning the number before the
+ * lock is how two nodes post the same one and one body file wins.
+ *
+ * REFUSES (AE_MSG_ERR_MIXED) when the HeaderFile holds any record this reader
+ * cannot settle as AmiExpress layout. Appending an AmiExpress record to a file
+ * the board reads with a different classifier is how mail becomes unreadable,
+ * and a refusal the caller can explain beats a base nobody can open.
+ *
+ * DOES NOT RETRY THE LOCK. AE_MSG_ERR_LOCKED comes straight back so the door
+ * can wait with its own clock - this module does disk, not time, and a sleep
+ * in here would drag the whole door layer into it. express.e's own caller
+ * prints "Another task has the MsgBase locked!" (express.e:10744) after
+ * ~25 tries at 200ms.
+ */
+long ae_msg_write(const ae_msg_new *msg, const char *body, unsigned long body_len);
+
+/** Release a MailLock this node took. Safe to call when it holds none. */
+void ae_msg_unlock(void);
 
 #ifdef __cplusplus
 }

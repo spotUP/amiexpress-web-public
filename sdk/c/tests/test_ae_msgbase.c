@@ -531,6 +531,253 @@ TEST(nonsense_arguments_are_refused)
     ASSERT_EQ(ae_msg_body(1, body, 0), AE_MSG_ERR_ARGS, "no room");
 }
 
+
+/**
+ * A conference that exists but holds nothing yet - an empty HeaderFile, not a
+ * missing one. That is the real shape of a fresh base on this board: Conf5 was
+ * rebuilt to exactly this on 2026-09-13, and ae_msg_open needs the file there.
+ */
+static void empty_base(void)
+{
+    ae_file *f;
+    clear_base();
+    ae_dos_delete("./MailLock");
+    f = ae_dos_open(HEADERFILE, AE_DOS_WRITE);
+    if (f != 0) ae_dos_close(f);
+}
+
+/* ---- writing ------------------------------------------------------------
+ *
+ * R1 wrote nothing on purpose: "a wrong byte in a 110-byte header is not a bug
+ * anyone notices until somebody's mail is unreadable". So these assert the
+ * bytes, and the round trip through this module's own reader, and the refusal
+ * that keeps the writer away from a file it would be guessing about.
+ */
+
+TEST(a_written_message_reads_back)
+{
+    ae_msg_new msg;
+    ae_msg_row row;
+    char body[128];
+    long n;
+
+    empty_base();
+    ae_dos_delete("./1");
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "first post";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1600000000L;
+
+    n = ae_msg_write(&msg, "hello\nthere\n", 12);
+    ASSERT_EQ(n, 1, "n");                      /* an empty base starts at 1 */
+
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    ASSERT_EQ(ae_msg_header(1, &row), AE_MSG_OK, "ae_msg_header(1, &row)");
+    ASSERT_STR(row.from, "spot", "row.from");
+    ASSERT_STR(row.to, "EALL", "row.to");
+    ASSERT_STR(row.subject, "first post", "row.subject");
+    ASSERT_EQ(row.date, 1600000000L, "row.date");
+    ASSERT_EQ(ae_msg_body(1, body, sizeof body), 12, "ae_msg_body(1, body, sizeof body)");
+    ASSERT_STR(body, "hello\nthere\n", "body");
+}
+
+TEST(the_header_is_amiexpress_layout_byte_for_byte)
+{
+    unsigned char rec[AE_MSG_RECORD_SIZE];
+    ae_msg_new msg;
+    ae_file *f;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1600000000L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), 1, "ae_msg_write(&msg, \"x\n\", 2)");
+
+    f = ae_dos_open(HEADERFILE, AE_DOS_READ);
+    ASSERT_TRUE(f != 0, "f != 0");
+    ASSERT_EQ(ae_dos_read_full(f, rec, AE_MSG_RECORD_SIZE), 1, "ae_dos_read_full(f, rec, AE_MSG_RECORD_S");
+    ae_dos_close(f);
+
+    /* The AmiExpress offsets, never the port's: number at 2, names at 6/37,
+       subject at 68, date at 100, recv at 104. Writing the port layout here
+       is what would make the board's own reader disagree with this one. */
+    ASSERT_EQ(rec[0], (unsigned char)AE_MSG_PUBLIC, "rec[0]");
+    ASSERT_EQ(ae_dos_get_long(rec + 2), 1, "ae_dos_get_long(rec + 2)");
+    ASSERT_STR((char *)rec + 6, "EALL", "(char *)rec + 6");
+    ASSERT_STR((char *)rec + 37, "spot", "(char *)rec + 37");
+    ASSERT_STR((char *)rec + 68, "s", "(char *)rec + 68");
+    ASSERT_EQ(ae_dos_get_long(rec + 100), 1600000000L, "ae_dos_get_long(rec + 100)");
+    ASSERT_EQ(ae_dos_get_long(rec + 104), 0, "ae_dos_get_long(rec + 104)");   /* unread by its recipient */
+}
+
+TEST(the_next_number_comes_from_mailstats_not_the_count)
+{
+    unsigned char stats[18];
+    ae_msg_new msg;
+    ae_file *f;
+    long n;
+
+    empty_base();
+    /* A base whose MailStats says the next number is 500, with no records to
+       count. highMsgNum is the NEXT number, not the highest - getting this
+       backwards makes the post truncate an existing body, which has cost this
+       codebase data once already. */
+    memset(stats, 0, sizeof stats);
+    ae_dos_put_long(stats + 0, 400);
+    ae_dos_put_long(stats + 4, 500);
+    ae_dos_put_long(stats + 8, 400);
+    f = ae_dos_open(MAILSTATS, AE_DOS_WRITE);
+    ASSERT_TRUE(f != 0, "f != 0");
+    ae_dos_write(f, stats, 18);
+    ae_dos_close(f);
+
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    n = ae_msg_write(&msg, "x\n", 2);
+    ASSERT_EQ(n, 500, "n");
+
+    f = ae_dos_open(MAILSTATS, AE_DOS_READ);
+    ASSERT_TRUE(f != 0, "f != 0");
+    ASSERT_EQ(ae_dos_read_full(f, stats, 18), 1, "ae_dos_read_full(f, stats, 18)");
+    ae_dos_close(f);
+    ASSERT_EQ(ae_dos_get_long(stats + 4), 501, "ae_dos_get_long(stats + 4)");   /* the next one is free */
+    ASSERT_EQ(ae_dos_get_long(stats + 0), 400, "ae_dos_get_long(stats + 0)");   /* the floors are not ours to move */
+    ASSERT_EQ(ae_dos_get_long(stats + 8), 400, "ae_dos_get_long(stats + 8)");
+    ae_dos_delete("./500");
+}
+
+TEST(a_body_with_no_trailing_newline_gets_one)
+{
+    ae_msg_new msg;
+    char body[64];
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    ASSERT_EQ(ae_msg_write(&msg, "no newline", 10), 1, "ae_msg_write(&msg, \"no newline\", 10)");
+
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    ASSERT_EQ(ae_msg_body(1, body, sizeof body), 11, "ae_msg_body(1, body, sizeof body)");
+    ASSERT_STR(body, "no newline\n", "body");
+}
+
+TEST(it_refuses_a_base_holding_port_records)
+{
+    ae_msg_new msg;
+
+    /* The board copes with both layouts; this writer only adds one. Appending
+       an AmiExpress record after port ones changes what the whole-file
+       sequence pass concludes about their neighbours - a base that read fine
+       before the post stops reading after it. */
+    clear_base();
+    ASSERT_TRUE(put_headers(port_records, sizeof port_records), "put_headers(port_records, sizeof port_records)");
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_MIXED, "ae_msg_write(&msg, \"x\n\", 2)");
+}
+
+TEST(it_appends_to_a_real_amiexpress_base)
+{
+    ae_msg_new msg;
+    long before, n;
+    ae_msg_stat st;
+
+    clear_base();
+    ASSERT_TRUE(put_headers(amiga_records, sizeof amiga_records), "put_headers(amiga_records, sizeof amiga_records)");
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 1, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 1, 0)");
+    ASSERT_EQ(ae_msg_stat_read(&st), AE_MSG_OK, "ae_msg_stat_read(&st)");
+    before = st.total;
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "appended";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1600000000L;
+    n = ae_msg_write(&msg, "x\n", 2);
+    ASSERT_TRUE(n >= 1, "n >= 1");
+
+    /* The real fixture still reads, and it now has one more. */
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 1, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 1, 0)");
+    ASSERT_EQ(ae_msg_stat_read(&st), AE_MSG_OK, "ae_msg_stat_read(&st)");
+    ASSERT_EQ(st.total, before + 1, "st.total");
+    ASSERT_EQ(st.unreadable, 0, "st.unreadable");
+}
+
+TEST(a_held_lock_stops_a_second_write)
+{
+    ae_msg_new msg;
+    ae_file *f;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    /* Another node's lock, as a file - which is the only kind a different
+       process can see. */
+    f = ae_dos_open("./MailLock", AE_DOS_WRITE);
+    ASSERT_TRUE(f != 0, "f != 0");
+    ae_dos_close(f);
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write(&msg, \"x\n\", 2)");
+
+    /* And it did NOT free a lock it never took. */
+    ae_msg_unlock();
+    ASSERT_TRUE(ae_dos_exists("./MailLock"), "ae_dos_exists(\"./MailLock\")");
+    ae_dos_delete("./MailLock");
+}
+
+TEST(the_lock_is_released_after_a_write)
+{
+    ae_msg_new msg;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), 1, "ae_msg_write(&msg, \"x\n\", 2)");
+
+    /* A lock left behind bricks the base for every node until somebody
+       deletes it by hand. */
+    ASSERT_TRUE(!ae_dos_exists("./MailLock"), "!ae_dos_exists(\"./MailLock\")");
+    ASSERT_EQ(ae_msg_write(&msg, "y\n", 2), 2, "ae_msg_write(&msg, \"y\n\", 2)");
+    ae_dos_delete("./2");
+}
+
+TEST(a_status_the_board_does_not_use_is_refused)
+{
+    ae_msg_new msg;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.date = 1L;
+    msg.status = 'Z';
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_ARGS, "ae_msg_write(&msg, \"x\n\", 2)");
+    msg.status = AE_MSG_DELETED;         /* writing a deleted message is nonsense */
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_ARGS, "ae_msg_write(&msg, \"x\n\", 2)");
+}
+
+TEST(an_overlong_name_is_cut_not_overrun)
+{
+    ae_msg_new msg;
+    ae_msg_row row;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    msg.to = "EALL";
+    msg.from = "a-name-far-longer-than-the-thirty-one-bytes-the-record-has";
+    msg.subject = "also much much much too long to fit in the subject field here";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), 1, "ae_msg_write(&msg, \"x\n\", 2)");
+
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+    ASSERT_EQ(ae_msg_header(1, &row), AE_MSG_OK, "ae_msg_header(1, &row)");
+    ASSERT_TRUE(strlen(row.from) <= 30, "strlen(row.from) <= 30");
+    ASSERT_TRUE(strlen(row.subject) <= 30, "strlen(row.subject) <= 30");
+}
+
 int main(void)
 {
     printf("\n====== Message Base Tests ======\n\n");
@@ -568,6 +815,17 @@ int main(void)
     RUN_TEST(a_message_date_renders_the_way_the_board_renders_it);
     RUN_TEST(a_leap_day_is_not_off_by_one);
     RUN_TEST(nonsense_arguments_are_refused);
+
+    RUN_TEST(a_written_message_reads_back);
+    RUN_TEST(the_header_is_amiexpress_layout_byte_for_byte);
+    RUN_TEST(the_next_number_comes_from_mailstats_not_the_count);
+    RUN_TEST(a_body_with_no_trailing_newline_gets_one);
+    RUN_TEST(it_refuses_a_base_holding_port_records);
+    RUN_TEST(it_appends_to_a_real_amiexpress_base);
+    RUN_TEST(a_held_lock_stops_a_second_write);
+    RUN_TEST(the_lock_is_released_after_a_write);
+    RUN_TEST(a_status_the_board_does_not_use_is_refused);
+    RUN_TEST(an_overlong_name_is_cut_not_overrun);
 
     clear_base();
 
