@@ -15,11 +15,13 @@
  *   columns 256-511 = bank 1, screen codes 0-255
  */
 
+import { SWEDISH_GLYPHS } from './swedish';
+
 const GLYPHS_PER_BANK = 256;
 const BANK_COUNT = 2;
 const TOTAL_GLYPHS = GLYPHS_PER_BANK * BANK_COUNT;
 
-export async function buildGlyphAtlas(pxSize: number): Promise<HTMLCanvasElement> {
+export async function buildGlyphAtlas(pxSize: number, swedish = false): Promise<HTMLCanvasElement> {
   await document.fonts.load(`${pxSize}px PetMe64`);
 
   const canvas = document.createElement('canvas');
@@ -51,6 +53,26 @@ export async function buildGlyphAtlas(pxSize: number): Promise<HTMLCanvasElement
       ctx.rect(x, 0, pxSize, pxSize);
       ctx.clip();
       ctx.fillText(String.fromCodePoint(codepoint), x, 0);
+      ctx.restore();
+    }
+  }
+
+  // THE SWEDISH VARIANT, drawn over the cells it replaces.
+  //
+  // PetMe64 already carries real A-ring and umlaut glyphs at their Unicode
+  // codepoints - checked in the shipped file - so these are the font's own
+  // letterforms, not three characters invented here. The cell is cleared
+  // first: the symbol underneath ([, pound, ]) must not show through the
+  // letter drawn on top of it.
+  if (swedish) {
+    for (const g of SWEDISH_GLYPHS) {
+      const x = glyphCellIndex(g.bank, g.screenCode) * pxSize;
+      ctx.clearRect(x, 0, pxSize, pxSize);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, 0, pxSize, pxSize);
+      ctx.clip();
+      ctx.fillText(g.char, x, 0);
       ctx.restore();
     }
   }

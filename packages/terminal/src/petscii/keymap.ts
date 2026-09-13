@@ -1,3 +1,4 @@
+import { SWEDISH_KEY_TO_PETSCII } from './swedish';
 /**
  * Browser KeyboardEvent -> PETSCII byte translation.
  *
@@ -49,7 +50,10 @@ const SHIFTABLE_NAMED_KEYS: { [key: string]: [unshifted: number, shifted: number
   Home: [0x13, 0x93],
 };
 
-export function keyEventToPetscii(key: string, shiftKey: boolean): number[] | null {
+export function keyEventToPetscii(key: string, shiftKey: boolean, swedish = false): number[] | null {
+  // A Swedish caller's own letters, where a Swedish C64 keeps them. Off by
+  // default: in an ordinary session those bytes are [, pound and ].
+  if (swedish && key in SWEDISH_KEY_TO_PETSCII) return [SWEDISH_KEY_TO_PETSCII[key]!];
   if (key in SHIFTABLE_NAMED_KEYS) {
     const [unshifted, shifted] = SHIFTABLE_NAMED_KEYS[key];
     return [shiftKey ? shifted : unshifted];
@@ -75,7 +79,7 @@ export function keyEventToPetscii(key: string, shiftKey: boolean): number[] | nu
  * decides. A line break is RETURN, CRLF is one RETURN, and anything a C64
  * keyboard could not have typed is dropped rather than sent as rubbish.
  */
-export function pastedTextToPetscii(text: string): number[] {
+export function pastedTextToPetscii(text: string, swedish = false): number[] {
   const bytes: number[] = [];
   for (const ch of text) {
     if (ch === '\r' || ch === '\n') {
@@ -84,7 +88,7 @@ export function pastedTextToPetscii(text: string): number[] {
       continue;
     }
     // The case is read off the character itself, so shift does not matter.
-    const mapped = keyEventToPetscii(ch, false);
+    const mapped = keyEventToPetscii(ch, false, swedish);
     if (mapped) bytes.push(...mapped);
   }
   return bytes;

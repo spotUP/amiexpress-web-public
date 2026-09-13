@@ -353,6 +353,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // There is NO client-side baud pacing on this path, deliberately - see
   // enqueuePetscii below.
   const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
+  /** The Swedish character set, from the server's petscii-mode event. */
+  const [petsciiSwedish, setPetsciiSwedish] = useState(false);
   const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
   // The same instance as petsciiMachineRef, held in state so the render
@@ -2372,7 +2374,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
     });
 
-    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
+    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string; charset?: string }) => {
+      // The Swedish variant travels with the shape and the palette, and is
+      // off unless the board says otherwise - an ordinary session keeps the
+      // pound sign at $5C.
+      setPetsciiSwedish(shape.charset === 'swedish');
       console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide
       // screen is a C128's VDC unless the caller has said otherwise.
@@ -3548,11 +3554,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             cursorVisible={doorOwnsScreen ? false : undefined}
             focusable
             focusOnMount
+            swedish={petsciiSwedish}
             onData={(bytes) => {
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
               // function keys included), then the one input path.
-              const text = petsciiInputToAscii(bytes);
+              const text = petsciiInputToAscii(bytes, petsciiSwedish);
               if (text) processInputKeyRef.current(text);
             }}
           />

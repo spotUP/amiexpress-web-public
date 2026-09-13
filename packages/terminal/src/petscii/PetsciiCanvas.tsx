@@ -32,6 +32,8 @@ export interface PetsciiCanvasProps {
    * keyboard input via onData.
    */
   focusable?: boolean;
+  /** Draw the Swedish character set over the bracket/pound trio. */
+  swedish?: boolean;
   /** Focus the canvas as soon as it mounts (the full-canvas session makes it the keyboard surface). */
   focusOnMount?: boolean;
   /**
@@ -124,6 +126,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   onData,
   cursorVisible,
   focusable = false,
+  swedish = false,
   focusOnMount = false,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -197,10 +200,12 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   const width = cols * cellW + 2 * border;
   const height = rows * cellH + 2 * border;
 
-  // Build the glyph atlas once per mount.
+  // Build the glyph atlas once per mount - and again if the character set
+  // changes, since the Swedish letters are drawn INTO the atlas.
   useEffect(() => {
     let cancelled = false;
-    buildGlyphAtlas(ATLAS_PX_SIZE).then((atlas) => {
+    setAtlasReady(false);
+    buildGlyphAtlas(ATLAS_PX_SIZE, swedish).then((atlas) => {
       if (cancelled) return;
       atlasCacheRef.current = new TintedAtlasCache(atlas);
       setAtlasReady(true);
@@ -211,7 +216,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       console.error('[PETSCII] glyph atlas failed', e);
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [swedish]);
 
   // Cursor blink timer.
   useEffect(() => {
@@ -361,12 +366,12 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       const text = e.clipboardData?.getData('text') ?? '';
       if (!text) return;
       e.preventDefault();
-      const bytes = pastedTextToPetscii(text);
+      const bytes = pastedTextToPetscii(text, swedish);
       if (bytes.length) onData?.(bytes);
     };
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
-  }, [onData]);
+  }, [onData, swedish]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     // CTRL+C IS THE BOARD'S ABORT KEY, and it could not be pressed here at
@@ -389,12 +394,12 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     // keyEventToPetscii knows only `key` + shift, so without this guard a
     // Cmd+R would resolve to a mapped letter byte and eat the reload.
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const bytes = keyEventToPetscii(e.key, e.shiftKey);
+    const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish);
     if (bytes) {
       e.preventDefault();
       onData?.(bytes);
     }
-  }, [onData]);
+  }, [onData, swedish]);
 
   return (
     <div

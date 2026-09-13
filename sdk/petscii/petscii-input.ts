@@ -32,12 +32,19 @@ const CONTROL_KEYS: { [byte: number]: string } = {
   0x87: '\x1b[15~', 0x8B: '\x1b[17~', 0x88: '\x1b[18~', 0x8C: '\x1b[19~',
 };
 
-export function petsciiInputToAscii(bytes: ArrayLike<number>): string {
+/**
+ * The Swedish trio, read back as the Latin-1 letters the board already speaks
+ * everywhere else. A session that is not Swedish keeps [, pound and ].
+ */
+const SWEDISH_IN: { [byte: number]: string } = { 0x5B: '\u00e4', 0x5C: '\u00f6', 0x5D: '\u00e5' };
+
+export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): string {
   let out = '';
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
     const control = CONTROL_KEYS[b];
     if (control !== undefined) { out += control; continue; }
+    if (swedish && SWEDISH_IN[b] !== undefined) { out += SWEDISH_IN[b]; continue; }
     if (b >= 0x41 && b <= 0x5A) { out += String.fromCharCode(b + 0x20); continue; } // unshifted -> a-z
     if (b >= 0xC1 && b <= 0xDA) { out += String.fromCharCode(b - 0x80); continue; } // shifted -> A-Z
     if ((b >= 0x20 && b <= 0x40) || (b >= 0x5B && b <= 0x5F) || (b >= 0x61 && b <= 0x7A)) { out += String.fromCharCode(b); continue; }
