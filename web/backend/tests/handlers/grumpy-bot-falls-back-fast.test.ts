@@ -52,16 +52,26 @@ it('with no API key anywhere, no request leaves the box and the answer is immedi
   expect(Date.now() - t0).toBeLessThan(200);
 });
 
-it('a key that every model refuses is given two tries, not the whole model list', async () => {
+it('a key that every model refuses answers fast, without walking the whole list', async () => {
   mocked.get.mockResolvedValue({
     data: { data: Array.from({ length: 12 }, (_, i) => ({ id: `free-${i}`, pricing: { prompt: '0', completion: '0' } })) },
   } as any);
   mocked.post.mockRejectedValue(Object.assign(new Error('Request failed with status code 402'), { response: { status: 402, data: {} } }));
 
+  const startedAt = Date.now();
   const reply = await getGrumpySysopResponse('hello', context as any, { ...base, openRouterApiKey: 'sk-or-v1-test' });
 
   expect(reply).toBe(TRIED_AND_DIED);
-  expect(mocked.post.mock.calls.length).toBeLessThanOrEqual(2);
+  // WHAT MATTERS IS THE CALLER'S WAIT, not the number of tries. This asserted
+  // "at most two" when there was no time bound in the retry and a count was
+  // the only instrument available. There is one now, and two turned out to be
+  // the reason nothing was ever reached: OpenRouter offers this board nineteen
+  // tool-capable free models, most of them rate-limited upstream at any
+  // moment, and the sysop watched it fail four times running with seventeen
+  // untried (2026-09-13). Refusals this cheap cost the caller nothing; the
+  // budget stops the walk when they are not cheap, which the test below pins.
+  expect(Date.now() - startedAt).toBeLessThan(2000);
+  expect(mocked.post.mock.calls.length).toBeLessThanOrEqual(8);
 });
 
 it('a provider that hangs is cut off at the cascade budget, and the caller is told at once', async () => {

@@ -1398,10 +1398,24 @@ console.log('[Grumpy Bot] No free models from API, trying hardcoded fallback lis
   return freeModels[0];
 }
 
-/** How many OpenRouter models one message may try before giving up. */
-const MAX_OPENROUTER_MODELS_PER_MESSAGE = 2;
+/**
+ * HOW MANY MODELS ONE MESSAGE MAY TRY - bounded by TIME, not by a count.
+ *
+ * This was 2. OpenRouter offers this board nineteen tool-capable free models
+ * and most of them are rate-limited upstream at any given moment, so two
+ * attempts was almost always two refusals and a caller told nothing was
+ * reachable - four times running on the sysop's own board (2026-09-13), with
+ * seventeen models untried and seconds of budget left.
+ *
+ * A refusal is cheap: the 429s measured came back in 470 ms. A count cap
+ * cannot tell those apart from the 10 s one that follows, which is why it is
+ * the wrong instrument. The ceiling stays only to bound a pathological list.
+ */
+const MAX_OPENROUTER_MODELS_PER_MESSAGE = 8;
+/** A new attempt is only worth starting with at least this much budget left. */
+const MIN_ATTEMPT_MS = 1200;
 
-async function getOpenRouterResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig, modelsTried = 0): Promise<string | null> {
+async function getOpenRouterResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig, modelsTried = 0, notAfter?: number): Promise<string | null> {
   // The key, BEFORE the model discovery: a board with no key used to pay a
   // five-second round trip to openrouter.ai to find a model it could never
   // call, and the caller sat through that before the rule-based reply.
@@ -1420,6 +1434,15 @@ console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires 
 console.log('[Grumpy Bot] No OpenRouter free models available');
     return null;
   }
+
+  // When THIS attempt began - the catch needs it to record what the failure
+  // cost, and the tool loop's own timer is scoped inside its branch.
+  const attemptStartedAt = Date.now();
+  // THE WHOLE LEG'S DEADLINE, fixed on the first attempt and carried down the
+  // retry. `remainingBudget` answers from aiConfig.deadline, and when the
+  // caller set none it returns the full default EVERY time - so a retry bound
+  // on it alone is not bounded by time at all, only by the attempt ceiling.
+  const legDeadline = notAfter ?? Date.now() + remainingBudget(aiConfig, DEFAULT_AI_BUDGET_MS);
 
   const callTimeout = remainingBudget(aiConfig, 10000);
   if (callTimeout < 250) return null;
@@ -1529,13 +1552,25 @@ console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     // same refusal), and the fallback line says jammed, never "outside".
     if (error?.response?.status === 429) noteCascadeRateLimited();
 
-    // If this model failed, try the next one - but not every model on the
-    // list, and never past the deadline. The caller is waiting.
-    if (cachedFreeModels.length > 1 && modelsTried + 1 < MAX_OPENROUTER_MODELS_PER_MESSAGE) {
-console.log('[Grumpy Bot] Trying next OpenRouter model...');
+    // REMEMBER THE FAILURE. Nothing recorded it, so a model that had just
+    // refused was still the fastest thing on the list and was picked first
+    // again on the very next message - the log showed the same two models
+    // failing in the same order, message after message. A failure is worn for
+    // ten minutes (modelCostMs), which is long enough for the pool to move.
+    noteModelCost(freeModel, Date.now() - attemptStartedAt, false);
+    cachedFreeModels = rankFreeModels([...knownFreeModels.values()]);
+
+    // Try the next one while there is budget for it. The caller is waiting,
+    // so the deadline decides - not an arbitrary number of attempts.
+    const leftForAnother = Math.min(legDeadline - Date.now(), remainingBudget(aiConfig, DEFAULT_AI_BUDGET_MS));
+    if (cachedFreeModels.length > 1
+        && modelsTried + 1 < MAX_OPENROUTER_MODELS_PER_MESSAGE
+        && leftForAnother >= MIN_ATTEMPT_MS) {
+console.log(`[Grumpy Bot] Trying next OpenRouter model (${modelsTried + 2} of at most ${MAX_OPENROUTER_MODELS_PER_MESSAGE}, ${leftForAnother}ms left)...`);
       cachedFreeModels.shift();
-      return getOpenRouterResponse(userMessage, context, aiConfig, modelsTried + 1);
+      return getOpenRouterResponse(userMessage, context, aiConfig, modelsTried + 1, legDeadline);
     }
+console.log(`[Grumpy Bot] Giving up after ${modelsTried + 1} model(s) - ${leftForAnother}ms of budget left`);
 
     // Clear cache
     cachedFreeModels = [];

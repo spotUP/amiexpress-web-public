@@ -30,6 +30,14 @@ const REAL = 'some/proper-model:free';
 describe('a model that runs tools and writes nothing', () => {
   beforeEach(() => resetModelCosts());
 
+  // The handler probes an unmeasured model in the background after a message
+  // (probeAnUnmeasuredModel, fire and forget). With the environment torn down
+  // the moment the test returns, that lands as "import after the Jest
+  // environment has been torn down" - and jest charges it to whichever suite is
+  // unlucky, not to this one. Let it settle inside the test.
+  afterEach(async () => { resetModelCosts(); await new Promise((r) => setTimeout(r, 60)); });
+
+
   it('sinks below a slower model that does answer', () => {
     // The mute one is measurably FASTER - that used to be the whole ranking.
     noteModelCost(TINY, 300, true);
