@@ -177,51 +177,15 @@ describe('at fit the box touches the viewport on the constraining axis', () => {
     expect(grid.width + 2 * bezel).toBeCloseTo(900, 5);
     expect(grid.height + 2 * bezel).toBeLessThan(1200);
   });
-
-  it('leaves the plain bezel alone once the viewer scales the screen down', () => {
-    const { container, page } = mountAt(1280, 800);
-    act(() => { harness.props?.onZoomChange?.(0.5); });
-    void container;
-    expect(bezelOf(page)).toBe(TERMINAL_BEZEL_PX);
-  });
 });
 
-describe('the override survives a resize because it is a fraction', () => {
-  it('keeps three quarters of whatever the new window can hold', () => {
-    const { container } = mountAt(1280, 800);
-    const fitLarge = harness.props?.fontSize as number;
-    act(() => { harness.props?.onZoomChange?.(0.75); });
-    expect(harness.props?.fontSize as number).toBeCloseTo(fitLarge * 0.75, 6);
-
-    resizeTo(container, 800, 600);
-    const scaled = harness.props?.fontSize as number;
-    // The fit for the new window, recovered by undoing the fraction.
-    const fitSmall = scaled / 0.75;
-    expect(fitSmall).toBeLessThan(fitLarge);
-    expect(scaled).toBeCloseTo(fitSmall * 0.75, 6);
-    // An ABSOLUTE override would have kept the old pixel count instead.
-    expect(scaled).not.toBeCloseTo(fitLarge * 0.75, 3);
-  });
-
-  it('scales the screen down below the fit, which is what the override is for', () => {
-    mountAt(1280, 800);
-    const fit = harness.props?.fontSize as number;
-    act(() => { harness.props?.onZoomChange?.(0.5); });
-    expect(harness.props?.fontSize as number).toBeCloseTo(fit * 0.5, 6);
-    expect(harness.props?.fontSize as number).toBeLessThan(fit);
-  });
-
-  it('going home to fit-to-window puts the terminal back on the window exactly', () => {
-    const { page } = mountAt(1280, 800);
-    const fit = harness.props?.fontSize as number;
-    act(() => { harness.props?.onZoomChange?.(0.5); });
-    expect(harness.props?.fontSize as number).toBeLessThan(fit);
-    act(() => { harness.props?.onZoomChange?.(1); });
-    expect(harness.props?.fontSize as number).toBeCloseTo(fit, 6);
-    const grid = gridFor(harness.props?.fontSize as number);
-    expect(grid.height + 2 * bezelOf(page)).toBeCloseTo(800, 5);
-  });
-});
+/*
+ * REMOVED (sysop, 2026-09-12): the viewer's zoom override - zoomEnabled and
+ * onZoomChange - is gone from TerminalPage; the browser window alone decides
+ * the size now. Four tests pinned it and kept failing against a prop nobody
+ * passes any more, which is not a bug report, just noise on every run. The
+ * fit itself is pinned by the describes above.
+ */
 
 describe('a session whose xterm is hidden does not break the fit', () => {
   // A web P session hides the xterm host (display: none), so .xterm-screen
