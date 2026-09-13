@@ -281,6 +281,57 @@ static void test_title_latin1(void)
     }
 }
 
+static void test_links(void)
+{
+    /* The shape the proxy sends for an index page: the anchor sits on the row
+       with the number, and the headline is the block above it, which is why
+       row and labelRow differ. UTF-8 in, Latin-1 out, like the title. */
+    const char *json =
+        "[{\"num\":\"100\",\"ansi\":\"x\",\"links\":["
+        "{\"page\":106,\"row\":10,\"labelRow\":9,\"label\":\"Prelimin\303\244rt valresultat\"},"
+        "{\"page\":113,\"row\":22,\"labelRow\":22,\"label\":\"SD-politiker hotad 113\"}"
+        "]}]";
+    texttv_link links[TEXTTV_MAX_LINKS];
+    int n;
+
+    n = texttv_links_parse(json, links, TEXTTV_MAX_LINKS);
+    CHECK(n == 2);
+    CHECK(links[0].page == 106);
+    CHECK(links[0].row == 10);
+    CHECK(links[0].label_row == 9);
+    CHECK(strcmp(links[0].label, "Prelimin\344rt valresultat") == 0);
+    CHECK(links[1].page == 113);
+    CHECK(links[1].label_row == links[1].row);
+
+    /* A page with nothing to select, and rubbish, are both "no links". */
+    CHECK(texttv_links_parse("[{\"num\":\"100\",\"links\":[]}]", links, TEXTTV_MAX_LINKS) == 0);
+    CHECK(texttv_links_parse("[{\"num\":\"100\"}]", links, TEXTTV_MAX_LINKS) == 0);
+    CHECK(texttv_links_parse(0, links, TEXTTV_MAX_LINKS) == 0);
+    CHECK(texttv_links_parse(json, links, 0) == 0);
+
+    /* A page number outside 100-999 is not a page and is skipped. */
+    CHECK(texttv_links_parse(
+        "[{\"links\":[{\"page\":99,\"row\":1,\"labelRow\":1,\"label\":\"no\"}]}]",
+        links, TEXTTV_MAX_LINKS) == 0);
+
+    /* The cap is honoured rather than overrun. */
+    CHECK(texttv_links_parse(json, links, 1) == 1);
+}
+
+static void test_link_step(void)
+{
+    /* Nothing selected yet: down takes the first, up takes the last. */
+    CHECK(texttv_link_step(4, -1, 1) == 0);
+    CHECK(texttv_link_step(4, -1, -1) == 3);
+    /* Wraps at both ends - a four-headline page is a ring. */
+    CHECK(texttv_link_step(4, 3, 1) == 0);
+    CHECK(texttv_link_step(4, 0, -1) == 3);
+    CHECK(texttv_link_step(4, 1, 1) == 2);
+    /* A page with nothing to select has no cursor at all. */
+    CHECK(texttv_link_step(0, -1, 1) == -1);
+    CHECK(texttv_link_step(0, 0, -1) == -1);
+}
+
 int main(void)
 {
     test_valid_page();
@@ -289,6 +340,8 @@ int main(void)
     test_ansi_to_ink();
     test_reader_box();
     test_title_latin1();
+    test_links();
+    test_link_step();
     test_first_plain();
     test_pick_body();
     test_utf8();

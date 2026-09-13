@@ -69,6 +69,28 @@ int ui_doc_pages(int total_lines, int rows);
 int ui_doc(ansi_buf *b, const ui_key_source *src, int *pushback,
            const ui_doc_style *style, const char *title, const char *text);
 
+/**
+ * The same reader, with a cursor on the lines a caller may CHOOSE.
+ *
+ * `lines` holds the line numbers that can be selected, ascending - for a
+ * teletext index page, the row each headline starts on. `current` is the
+ * index INTO that array and is read and written, so a caller reopening the
+ * page keeps its place; pass -1 for "nothing selected yet".
+ *
+ * Up and Down move the cursor rather than the page, scrolling only when the
+ * cursor would leave the box; SPACE, PgUp and PgDn still page. RETURN picks.
+ *
+ * Returns 1 when the caller chose something (`*current` names it), 0 when
+ * they left, -1 when the line dropped. With `count` of 0 it behaves exactly
+ * like ui_doc().
+ *
+ * A cursor move repaints TWO rows - the one leaving and the one arriving -
+ * never the page (RULES.md, "Doors draw smart").
+ */
+int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
+                const ui_doc_style *style, const char *title, const char *text,
+                const int *lines, int count, int *current);
+
 #ifdef __cplusplus
 }
 #endif

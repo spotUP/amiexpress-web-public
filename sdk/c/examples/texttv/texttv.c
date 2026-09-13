@@ -297,6 +297,12 @@ static char page_prev[8];
  * silent, and the status line could not say which). */
 static int last_fetch_err;
 
+/* What the page in front of the caller points at, and which one the cursor
+   is on. An article page has none and the reader behaves as it always did. */
+static texttv_link page_links[TEXTTV_MAX_LINKS];
+static int page_link_count;
+static int page_link_cur = -1;
+
 static int fetch_page(int page)
 {
     ae_http_target target;
@@ -358,6 +364,10 @@ static int fetch_page(int page)
        frame while the body two rows below read `för`. */
     if (texttv_title(body, page_title, sizeof page_title) != 0)
         sprintf(page_title, "Text-TV %d", page);
+    /* The headlines this page offers, so the reader can put a cursor on one
+       instead of the caller reading a number off the screen and typing it. */
+    page_link_count = texttv_links_parse(body, page_links, TEXTTV_MAX_LINKS);
+    page_link_cur = page_link_count > 0 ? 0 : -1;
     if (json_extract_string(body, "next_page", page_next, sizeof page_next) != 0)
         page_next[0] = '\0';
     if (json_extract_string(body, "prev_page", page_prev, sizeof page_prev) != 0)
@@ -455,21 +465,74 @@ static int page_actions(void)
     return ACT_NONE;
 }
 
+/*
+ * Read the page, and follow it.
+ *
+ * An index page carries the page number of each headline as a link, so the
+ * reader puts a cursor on the headlines and RETURN opens the one under it.
+ * Q on an article goes BACK to the index it was opened from - which is what a
+ * teletext reader does - and Q on the index leaves the door. An article page
+ * has no links, and then this is exactly the reader it was before.
+ */
+#define TEXTTV_BACK_DEPTH 8
+
 static void read_page(void)
 {
-    ui_doc_style style;
-    char title[160];
-    ui_doc_style_init(&style);
-    style.top = 3;
-    texttv_reader_box(screen.cols, screen.rows, &style.left, &style.width, &style.height);
-    style.fg = UI_TOKEN(UI_T_INK);
-    style.bg = UI_TOKEN(UI_T_GROUND);
-    style.ink = UI_TOKEN(UI_T_ACCENT);
-    sprintf(title, "%d %s", page_num, page_title);
-    ansi_clear(&screen.buf);
-    draw_masthead("TEXT-TV");
-    ui_screen_flush(&screen);
-    ui_doc(&screen.buf, &keys, &pushback, &style, title, page_body);
+    int back[TEXTTV_BACK_DEPTH];
+    int depth = 0;
+
+    for (;;) {
+        ui_doc_style style;
+        char title[160];
+        int lines[TEXTTV_MAX_LINKS];
+        int i;
+        int cur;
+        int rc;
+
+        ui_doc_style_init(&style);
+        style.top = 3;
+        texttv_reader_box(screen.cols, screen.rows, &style.left, &style.width, &style.height);
+        style.fg = UI_TOKEN(UI_T_INK);
+        style.bg = UI_TOKEN(UI_T_GROUND);
+        style.ink = UI_TOKEN(UI_T_ACCENT);
+        /* A page the caller can walk says so in its own frame: the reader's
+           footer belongs to ui_doc and has no room for a second sentence. */
+        if (page_link_count > 0 && wide)
+            sprintf(title, "%d %.100s - ARROWS PICK, RETURN READS", page_num, page_title);
+        else if (page_link_count > 0)
+            sprintf(title, "%d %.60s - RETURN READS", page_num, page_title);
+        else
+            sprintf(title, "%d %s", page_num, page_title);
+        ansi_clear(&screen.buf);
+        draw_masthead("TEXT-TV");
+        ui_screen_flush(&screen);
+
+        for (i = 0; i < page_link_count; i++) lines[i] = page_links[i].label_row;
+        cur = page_link_cur;
+        rc = ui_doc_pick(&screen.buf, &keys, &pushback, &style, title, page_body,
+                         lines, page_link_count, &cur);
+        page_link_cur = cur;
+
+        if (rc < 0) return;                     /* the caller went away */
+
+        if (rc == 1 && cur >= 0 && cur < page_link_count) {
+            int target = page_links[cur].page;
+            int from = page_num;
+            show_page(target);
+            if (page_num == target) {
+                if (depth < TEXTTV_BACK_DEPTH) back[depth++] = from;
+                continue;
+            }
+            /* It did not open - status_line says why; stay where we are. */
+            continue;
+        }
+
+        if (depth > 0) {
+            show_page(back[--depth]);
+            continue;
+        }
+        return;
+    }
 }
 
 /* Share sheet: the subject the board's own editor wants, the page head,

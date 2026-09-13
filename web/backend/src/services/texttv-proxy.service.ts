@@ -234,7 +234,44 @@ function decodeTeletextEntities(text: string): string {
     });
 }
 
+/** A page number the page itself points at, and the row it sits on. */
+export interface TextTvLink {
+  /** The teletext page the anchor names: <a href="/331">331</a> -> 331. */
+  page: number;
+  /** Index of the row carrying the anchor - usually the page number itself. */
+  row: number;
+  /**
+   * The row the CURSOR sits on: the top of the headline block this page
+   * number belongs to. On an index page the number is right-aligned on its
+   * own row under the words, so `row` and `labelRow` differ.
+   */
+  labelRow: number;
+  /** The headline, joined from the block - what the caller is choosing. */
+  label: string;
+}
+
+export interface TextTvRows {
+  rows: string[];
+  links: TextTvLink[];
+}
+
 export function htmlToAnsiRows(html: string): string[] {
+  return htmlToAnsiPage(html).rows;
+}
+
+/**
+ * The rows AND what the page points at.
+ *
+ * An index page is a list of headlines, each carrying the page number of its
+ * article as an anchor: `<a href="/331">331</a>`. Flattened to text those
+ * numbers are unreachable - the caller reads "131" and has to type it. Picked
+ * up here in the same pass, the door can put a cursor on the headline and
+ * open it with RETURN.
+ *
+ * One link per row: an index row names one article, and the row is what the
+ * caller selects. A second anchor on the same row does not add an entry.
+ */
+export function htmlToAnsiPage(html: string): TextTvRows {
   const rows: string[] = [];
   let cur = '';
   let fg = TELETEXT_DEFAULT_FG;
@@ -243,11 +280,23 @@ export function htmlToAnsiRows(html: string): string[] {
   let emittedBg = -1;
   let dh = false;
   let rowOpen = false;
+  const links: TextTvLink[] = [];
+  let rowLink: number | null = null;
 
   const flushRow = (): void => {
     if (!rowOpen) return;
     if (cur !== '') {
       const line = cur + '\x1b[0m';
+      if (rowLink !== null) {
+        links.push({
+          page: rowLink,
+          row: rows.length,
+          // Both filled in by resolveLinkLabels once every row exists: the
+          // headline this number belongs to is the block ABOVE it.
+          labelRow: rows.length,
+          label: line.replace(/\x1b\[[0-9;]*m/g, '').trim(),
+        });
+      }
       rows.push(line);
       // A double-height row occupies TWO rows of the teletext screen: this
       // one and the one under it, which carries the same glyphs' BOTTOM
@@ -258,6 +307,7 @@ export function htmlToAnsiRows(html: string): string[] {
       if (dh) rows.push('');
     }
     cur = '';
+    rowLink = null;
     fg = TELETEXT_DEFAULT_FG;
     bg = TELETEXT_DEFAULT_BG;
     emittedFg = -1;
@@ -294,6 +344,11 @@ export function htmlToAnsiRows(html: string): string[] {
         dh = cls.includes('DH');
         continue;
       }
+      if (token.startsWith('<a ') || token.startsWith('<a>')) {
+        const href = token.match(/href="\/?(\d{3})"/)?.[1];
+        // The FIRST anchor on a row names it; a row is one headline.
+        if (href && rowLink === null) rowLink = Number(href);
+      }
       if (token.startsWith('</') || token.startsWith('<div')) continue;
       for (const c of cls) {
         if (c in TELETEXT_BG) bg = TELETEXT_BG[c];
@@ -305,7 +360,46 @@ export function htmlToAnsiRows(html: string): string[] {
     }
   }
   flushRow();
-  return rows;
+  return { rows, links: resolveLinkLabels(rows, links) };
+}
+
+/**
+ * Give each link the headline a caller would say it by.
+ *
+ * SVT right-aligns the page number on its OWN row beneath the words:
+ *
+ *     Preliminärt valresultat efter kl 22.30
+ *                        106
+ *
+ * so the anchor's row is "106" and a menu built from it reads 106, 107, 131.
+ * The headline is the block of non-empty rows directly above; the cursor
+ * belongs on the first of them. A row that carries both words and its number
+ * ("SD-politiker hotad under valarbete 113") is its own label.
+ */
+function resolveLinkLabels(rows: string[], links: TextTvLink[]): TextTvLink[] {
+  const plain = (i: number) =>
+    (rows[i] ?? '').replace(/\x1b\[[0-9;]*m/g, '').trim();
+
+  return links.map((link) => {
+    const own = plain(link.row);
+    if (own !== String(link.page)) return { ...link, labelRow: link.row, label: own };
+
+    const block: string[] = [];
+    let top = link.row;
+    // At most three rows: a teletext headline is one or two, and three is
+    // already more than the door can put on one line.
+    for (let i = link.row - 1; i >= 0 && block.length < 3; i--) {
+      const text = plain(i);
+      if (text === '') break;
+      block.unshift(text);
+      top = i;
+    }
+    return {
+      ...link,
+      labelRow: block.length > 0 ? top : link.row,
+      label: block.length > 0 ? block.join(' ') : own,
+    };
+  });
 }
 
 /** Rows joined for the door: one string, \n separators, no trailing newline. */
@@ -330,13 +424,18 @@ export function slimTextTvBody(upstreamBody: string): string {
   }
   const slim = parsed.map((row: any) => {
     const html = Array.isArray(row?.content) ? row.content.join('') : '';
+    const page = htmlToAnsiPage(html);
     return {
       num: row?.num ?? null,
       title: row?.title ?? null,
       content_plain: row?.content_plain ?? null,
       next_page: row?.next_page ?? null,
       prev_page: row?.prev_page ?? null,
-      ansi: html !== '' ? htmlToAnsiText(html) : null,
+      ansi: html !== '' ? page.rows.join('\n') : null,
+      // What the page points at, so the door can put a cursor on a headline
+      // and open it with RETURN instead of the caller reading a number off
+      // the screen and typing it.
+      links: page.links,
     };
   });
   return JSON.stringify(slim);

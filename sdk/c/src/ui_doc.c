@@ -116,6 +116,8 @@ typedef struct {
     int top_line;                       /* first line to draw */
     int drawn;                          /* how many rows have been used */
     int index;                          /* line counter as wrap walks */
+    int sel_line;                       /* line drawn inverted, -1 for none */
+    int only_line;                      /* draw ONLY this line, -1 for all */
 } paint_ctx;
 
 static void paint_line(void *context, const char *start, int len)
@@ -130,13 +132,28 @@ static void paint_line(void *context, const char *start, int len)
         return;
     }
 
+    /* Repainting ONE row: the others keep what they have. A cursor move on a
+     * 68K door costs two rows, not a page - every 198 bytes is one XIM
+     * message (RULES.md, "Doors draw smart"). */
+    if (c->only_line >= 0 && c->index != c->only_line) {
+        c->index++;
+        c->drawn++;
+        return;
+    }
+
     if (copy > room) copy = room;
     if (copy > c->st->width) copy = c->st->width;
     memcpy(row, start, (size_t) copy);
     row[copy] = '\0';
 
-    ansi_color(c->b, c->st->fg, c->st->bg, 0);
+    if (c->index == c->sel_line) {
+        /* The selected headline, inverted: ground and ink swapped. */
+        ansi_color(c->b, c->st->bg, c->st->fg, 0);
+    } else {
+        ansi_color(c->b, c->st->fg, c->st->bg, 0);
+    }
     ansi_text(c->b, c->st->top + 1 + c->drawn, c->st->left + 1, row, c->st->width);
+    ansi_color(c->b, c->st->fg, c->st->bg, 0);
 
     c->index++;
     c->drawn++;
@@ -144,22 +161,30 @@ static void paint_line(void *context, const char *start, int len)
 
 /** One frame of the reader: the box, the visible lines, the footer. */
 static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
-                       const char *text, int top_line, int total, int rows)
+                       const char *text, int top_line, int total, int rows,
+                       int sel_line, int only_line)
 {
     paint_ctx ctx;
     char footer[64];
     int page = rows > 0 ? (top_line / rows) + 1 : 1;
     int pages = ui_doc_pages(total, rows);
 
-    ansi_panel(b, st->top, st->left, st->height + 2, st->width + 2,
-               st->ink, st->bg, title);
+    /* Only a row changed: the frame, the footer and every other row are
+     * already on the caller's screen. */
+    if (only_line < 0) {
+        ansi_panel(b, st->top, st->left, st->height + 2, st->width + 2,
+                   st->ink, st->bg, title);
+    }
 
     ctx.b = b;
     ctx.st = st;
     ctx.top_line = top_line;
     ctx.drawn = 0;
     ctx.index = 0;
+    ctx.sel_line = sel_line;
+    ctx.only_line = only_line;
     ui_doc_wrap(text, st->width, paint_line, &ctx);
+    if (only_line >= 0) return;
 
     /* Blank whatever the last page does not fill, or the page before it
      * shows through - the reader would read stale text as content. */
@@ -225,7 +250,7 @@ int ui_doc(ansi_buf *b, const ui_key_source *src, int *pushback,
     for (;;) {
         int key;
 
-        paint_page(b, st, title, text, top, total, rows);
+        paint_page(b, st, title, text, top, total, rows, -1, -1);
 
         /* The prompt is in a buffer until something sends it. */
         if (src->flush) src->flush(src->ctx);
@@ -257,6 +282,110 @@ int ui_doc(ansi_buf *b, const ui_key_source *src, int *pushback,
             break;
         default:
             break;                      /* anything else is not a page turn */
+        }
+    }
+}
+
+/* The line the cursor sits on, or -1 when nothing is selected. */
+static int sel_line_of(const int *lines, int count, int current)
+{
+    if (!lines || count <= 0 || current < 0 || current >= count) return -1;
+    return lines[current];
+}
+
+int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
+                const ui_doc_style *style, const char *title, const char *text,
+                const int *lines, int count, int *current)
+{
+    ui_doc_style fallback;
+    const ui_doc_style *st = style;
+    int total, rows, top = 0;
+    int cur = current ? *current : -1;
+    int painted_top = -1;
+    int painted_sel = -2;
+
+    if (!b || !src) return -1;
+    if (!st) { ui_doc_style_init(&fallback); st = &fallback; }
+
+    rows = st->height;
+    if (rows < 1) rows = 1;
+    total = ui_doc_wrap(text, st->width, 0, 0);
+
+    if (count > 0 && cur < 0) cur = 0;
+
+    for (;;) {
+        int key;
+        int sel = sel_line_of(lines, count, cur);
+
+        /* Keep the cursor on screen without moving the page otherwise.
+         *
+         * When it HAS to scroll, put the selection in the middle rather than
+         * against the edge it came from: a scroll repaints the whole box, and
+         * landing on the edge means the very next move scrolls again.
+         * Measured on the live index page at 40 columns - edge scrolling cost
+         * two full repaints for four headlines (2778 and 2683 bytes),
+         * centring costs one. A move that does not scroll is 197 bytes, one
+         * XIM message. */
+        if (sel >= 0 && (sel < top || sel >= top + rows)) {
+            top = ui_doc_top_for(total, rows, sel - rows / 2);
+        }
+
+        if (top != painted_top || painted_sel == -2) {
+            paint_page(b, st, title, text, top, total, rows, sel, -1);
+        } else if (sel != painted_sel) {
+            /* TWO ROWS, not a page: the one losing the cursor and the one
+             * taking it. This is the whole reason the painter has a
+             * single-line mode. */
+            if (painted_sel >= 0)
+                paint_page(b, st, title, text, top, total, rows, sel, painted_sel);
+            if (sel >= 0)
+                paint_page(b, st, title, text, top, total, rows, sel, sel);
+        }
+        painted_top = top;
+        painted_sel = sel;
+
+        if (src->flush) src->flush(src->ctx);
+        key = ui_key_read(src, pushback);
+        if (key < 0) return -1;
+
+        switch (key) {
+        case 'q': case 'Q': case UI_KEY_ESC:
+            ansi_cursor(b, 1);
+            ansi_reset(b);
+            if (current) *current = cur;
+            return 0;
+        case UI_KEY_ENTER:
+            if (count > 0 && cur >= 0) {
+                ansi_cursor(b, 1);
+                ansi_reset(b);
+                if (current) *current = cur;
+                return 1;
+            }
+            ansi_cursor(b, 1);
+            ansi_reset(b);
+            return 0;
+        case UI_KEY_DOWN:
+            if (count > 0) cur = (cur + 1) % count;
+            else top = ui_doc_top_for(total, rows, top + 1);
+            break;
+        case UI_KEY_UP:
+            if (count > 0) cur = cur <= 0 ? count - 1 : cur - 1;
+            else top = ui_doc_top_for(total, rows, top - 1);
+            break;
+        case ' ': case UI_KEY_PGDN:
+            top = ui_doc_top_for(total, rows, top + rows);
+            break;
+        case UI_KEY_PGUP:
+            top = ui_doc_top_for(total, rows, top - rows);
+            break;
+        case UI_KEY_HOME:
+            top = 0;
+            break;
+        case UI_KEY_END:
+            top = ui_doc_top_for(total, rows, total);
+            break;
+        default:
+            break;
         }
     }
 }

@@ -151,6 +151,68 @@ void texttv_reader_box(int cols, int rows, int *left, int *width, int *height)
     if (height) *height = rows - 7;
 }
 
+/* "key":<digits> out of one JSON object slice. -1 when absent. */
+static int json_int_field(const char *obj, unsigned long len, const char *key)
+{
+    char pattern[32];
+    const char *p;
+    unsigned long i;
+    int value = 0;
+    int seen = 0;
+
+    sprintf(pattern, "\"%s\"", key);
+    p = 0;
+    for (i = 0; i + strlen(pattern) <= len; i++) {
+        if (strncmp(obj + i, pattern, strlen(pattern)) == 0) { p = obj + i + strlen(pattern); break; }
+    }
+    if (p == 0) return -1;
+    while (*p == ' ' || *p == ':' || *p == '\t') p++;
+    while (*p >= '0' && *p <= '9') { value = value * 10 + (*p - '0'); p++; seen = 1; }
+    return seen ? value : -1;
+}
+
+int texttv_links_parse(const char *json, texttv_link *out, int cap)
+{
+    unsigned long cursor = 0;
+    const char *obj;
+    unsigned long len;
+    int n = 0;
+
+    if (json == 0 || out == 0 || cap <= 0) return 0;
+    while (n < cap && json_next_array_object(json, "links", &cursor, &obj, &len) == 0) {
+        int page = json_int_field(obj, len, "page");
+        int row = json_int_field(obj, len, "row");
+        int label_row = json_int_field(obj, len, "labelRow");
+        char slice[1024];
+        unsigned long copy = len < sizeof slice - 1 ? len : sizeof slice - 1;
+
+        if (page < 100 || page > 999) continue;
+        memcpy(slice, obj, copy);
+        slice[copy] = '\0';
+
+        out[n].page = page;
+        out[n].row = row < 0 ? 0 : row;
+        out[n].label_row = label_row < 0 ? out[n].row : label_row;
+        out[n].label[0] = '\0';
+        {
+            char raw[256];
+            if (json_extract_string(slice, "label", raw, sizeof raw) == 0)
+                utf8_to_latin1(raw, out[n].label, sizeof out[n].label);
+        }
+        n++;
+    }
+    return n;
+}
+
+int texttv_link_step(int count, int current, int delta)
+{
+    if (count <= 0) return -1;
+    if (current < 0) return delta >= 0 ? 0 : count - 1;
+    current = (current + delta) % count;
+    if (current < 0) current += count;
+    return current;
+}
+
 int texttv_title(const char *json, char *out, unsigned long cap)
 {
     char raw[256];

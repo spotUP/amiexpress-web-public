@@ -4,6 +4,7 @@
  * bytes, the way knowledge.test.ts pins the chatbot's texttv tool.
  */
 import {
+  htmlToAnsiPage,
   fetchTextTvPage,
   clearTextTvCache,
   isTextTvPage,
@@ -125,6 +126,8 @@ describe('texttv-proxy.service', () => {
       next_page: '101',
       prev_page: '100',
       ansi: '',
+      // Nothing to select: no anchors on this page.
+      links: [],
     }]);
     expect(r.cached).toBe(false);
     expect(calls.n).toBe(1);
@@ -217,6 +220,7 @@ describe('texttv-proxy.service', () => {
       next_page: '101',
       prev_page: '100',
       ansi: '',
+      links: [],
     }]);
     expect(slimTextTvBody(fat)).not.toContain('div');
   });
@@ -342,5 +346,51 @@ describe('htmlToAnsiRows against the real markup', () => {
     // 27 rows became 53 lines before this: every row ended with its own
     // newline and the join added another.
     expect(htmlToAnsiText(REAL).split('\n')).toHaveLength(rows.length);
+  });
+});
+
+/**
+ * An index page is a list of headlines, each carrying its article's page
+ * number as an anchor. Flattened to text those numbers are unreachable - the
+ * caller reads "131" off the screen and types it. The door puts a cursor on
+ * the headline instead, which needs the links out of the same pass.
+ */
+describe('the page says what it points at', () => {
+  // SVT right-aligns the number on its OWN row under the words.
+  const INDEX = [
+    '<span class="line"><span class="bgBl">  Preliminart valresultat</span></span>',
+    '<span class="line"><span class="bgBl">          <a href="/106">106</a></span></span>',
+    '<span class="line"><span class="bgBl"></span></span>',
+    '<span class="line"><span class="bgBl">  SD-politiker hotad <a href="/113">113</a></span></span>',
+  ].join('\n');
+
+  it('reads each anchor as a page number', () => {
+    const { links } = htmlToAnsiPage(INDEX);
+    expect(links.map((l) => l.page)).toEqual([106, 113]);
+  });
+
+  it('labels a link with the headline above it, not with the number', () => {
+    const { links } = htmlToAnsiPage(INDEX);
+    expect(links[0].label).toBe('Preliminart valresultat');
+    // The cursor belongs on the words, which are a row ABOVE the anchor.
+    expect(links[0].row).toBe(1);
+    expect(links[0].labelRow).toBe(0);
+  });
+
+  it('leaves a row that carries both words and its number as its own label', () => {
+    const { links } = htmlToAnsiPage(INDEX);
+    expect(links[1].label).toBe('SD-politiker hotad 113');
+    expect(links[1].labelRow).toBe(links[1].row);
+  });
+
+  it('finds nothing to select on a page with no anchors', () => {
+    const plain = '<span class="line"><span class="bgBl">  just words</span></span>';
+    expect(htmlToAnsiPage(plain).links).toEqual([]);
+  });
+
+  it('takes one link per row - a row is one headline', () => {
+    const two =
+      '<span class="line"><span class="bgBl">a <a href="/101">101</a> b <a href="/102">102</a></span></span>';
+    expect(htmlToAnsiPage(two).links.map((l) => l.page)).toEqual([101]);
   });
 });

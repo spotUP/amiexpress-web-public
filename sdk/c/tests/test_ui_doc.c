@@ -237,6 +237,76 @@ static void a_pen_marker_costs_the_row_no_columns(void)
     printf("  [OK] a pen marker costs the row no columns\n");
 }
 
+static void a_cursor_picks_a_line_and_costs_two_rows(void)
+{
+    /* An index page: the caller moves a cursor between headlines and opens
+       one with RETURN. The rows between them are not selectable. */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text =
+        "one headline\n   101\n\ntwo headline\n   102\n\nthree headline\n   103";
+    const int lines[3] = { 0, 3, 6 };
+    int cur = -1;
+    int rc;
+    long full_bytes, move_bytes;
+
+    ui_doc_style_init(&st);
+    st.height = 8; st.width = 40; st.top = 1; st.left = 1;
+
+    /* Down, down, RETURN: the third headline. */
+    t.keys = "\x1b[B\x1b[B\r"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    rc = ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur);
+    assert(rc == 1);
+    assert(cur == 2);
+
+    /* Q leaves without choosing, and keeps where the cursor was. */
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    cur = 1;
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur) == 0);
+    assert(cur == 1);
+
+    /* With nothing selectable it is the plain reader: RETURN leaves. */
+    cur = -1;
+    t.keys = "\r"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, 0, 0, &cur) == 0);
+
+    /* THE COST. A cursor move repaints the row it left and the row it
+       reached - not the page. Measured as bytes into the buffer: the first
+       paint draws the frame, the footer and eight rows; a move must be a
+       small fraction of that. */
+    cur = 0;
+    t.keys = "q"; t.at = 0;                       /* paint once, then leave */
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur);
+    /* b.len, not strlen: ansi_begin rewinds the buffer without clearing it,
+       so the previous run's tail is still in `storage`. */
+    full_bytes = b.len;
+
+    cur = 0;
+    t.keys = "\x1b[Bq"; t.at = 0;                 /* one move, then leave */
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur);
+    move_bytes = b.len - full_bytes;
+
+    assert(move_bytes > 0);
+    /* One XIM message is 198 bytes. A move must fit well inside one; the
+       page costs ten. */
+    assert(move_bytes < 198);
+    assert(move_bytes < full_bytes / 4);
+    printf("  [OK] a cursor picks a line, and a move costs %ld bytes against %ld for the page\n",
+           move_bytes, full_bytes);
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -250,6 +320,7 @@ int main(void)
     the_reader_leaves_on_q_and_says_where_it_is();
     a_narrow_reader_keeps_the_way_out();
     a_lost_caller_is_not_a_page_turn();
+    a_cursor_picks_a_line_and_costs_two_rows();
     printf("ui_doc: all passed\n");
     return 0;
 }

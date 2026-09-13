@@ -50,6 +50,33 @@ int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
 void texttv_reader_box(int cols, int rows, int *left, int *width, int *height);
 
 /*
+ * What an index page points at: one entry per headline the caller can open.
+ *
+ * The proxy reads the anchors (`<a href="/331">331</a>`) and resolves each to
+ * the headline above it, because SVT right-aligns the page number on its own
+ * row under the words. `row` is where the anchor was; `label_row` is where the
+ * cursor belongs.
+ */
+#define TEXTTV_MAX_LINKS 24
+
+typedef struct {
+    int page;
+    int row;
+    int label_row;
+    char label[64];
+} texttv_link;
+
+/** Reads the "links" array. Returns how many were stored (0 = none). */
+int texttv_links_parse(const char *json, texttv_link *out, int cap);
+
+/**
+ * Move a selection by `delta` entries, wrapping at both ends. `current` of -1
+ * (nothing selected) lands on the first entry going forward and the last
+ * going back. Returns the new index, or -1 when there is nothing to select.
+ */
+int texttv_link_step(int count, int current, int delta);
+
+/*
  * The page's "title" out of the JSON and into Latin-1, in one step.
  *
  * The body was converted and the title was not, so a Swedish headline drew as
