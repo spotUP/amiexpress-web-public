@@ -389,8 +389,43 @@ describe('the page says what it points at', () => {
   });
 
   it('takes one link per row - a row is one headline', () => {
+    // The first anchor names the row. This one carries words, so it is a
+    // destination; the bare number after it is not a second entry.
     const two =
-      '<span class="line"><span class="bgBl">a <a href="/101">101</a> b <a href="/102">102</a></span></span>';
+      '<span class="line"><span class="bgBl"><a href="/101">Headline here</a> and <a href="/102">102</a></span></span>';
     expect(htmlToAnsiPage(two).links.map((l) => l.page)).toEqual([101]);
+  });
+});
+
+/**
+ * texttv.nu makes EVERY three-digit number an anchor, because a teletext
+ * viewer lets you type any page. Offered as destinations, those put the
+ * reader's cursor in the middle of a paragraph - "har slagit ned cirka 800
+ * meter" and "200 passagerare ombord" on page 131, which is exactly what the
+ * sysop saw.
+ */
+describe('a number in a sentence is not a destination', () => {
+  const row = (inner: string) => `<span class="line"><span class="bgBl">${inner}</span></span>`;
+
+  it('ignores a number with more sentence after it', () => {
+    const html = row('har slagit ned cirka <a href="/800">800</a> meter fran');
+    expect(htmlToAnsiPage(html).links).toEqual([]);
+  });
+
+  it('takes a number that ends its row, which is how a page number is written', () => {
+    const html = row('SD-politiker hotad under valarbete <a href="/113">113</a>');
+    expect(htmlToAnsiPage(html).links.map((l) => l.page)).toEqual([113]);
+  });
+
+  it('takes an anchor that carries words rather than digits', () => {
+    const html = row('  <a href="/132">Mer om Ukrainakriget pa nasta sida</a>');
+    const links = htmlToAnsiPage(html).links;
+    expect(links.map((l) => l.page)).toEqual([132]);
+    expect(links[0].label).toContain('Mer om Ukrainakriget');
+  });
+
+  it('takes a number alone on its row, under the headline it belongs to', () => {
+    const html = [row('  Preliminart valresultat'), row('        <a href="/106">106</a>')].join('\n');
+    expect(htmlToAnsiPage(html).links.map((l) => l.page)).toEqual([106]);
   });
 });

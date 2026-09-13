@@ -282,12 +282,16 @@ export function htmlToAnsiPage(html: string): TextTvRows {
   let rowOpen = false;
   const links: TextTvLink[] = [];
   let rowLink: number | null = null;
+  let rowLinkText = '';
+  let inAnchor = false;
+  /** Where the row's text ended when the anchor closed, to see what follows. */
+  let anchorEnd = -1;
 
   const flushRow = (): void => {
     if (!rowOpen) return;
     if (cur !== '') {
       const line = cur + '\x1b[0m';
-      if (rowLink !== null) {
+      if (rowLink !== null && selectable(line, rowLinkText, anchorEnd)) {
         links.push({
           page: rowLink,
           row: rows.length,
@@ -308,6 +312,9 @@ export function htmlToAnsiPage(html: string): TextTvRows {
     }
     cur = '';
     rowLink = null;
+    rowLinkText = '';
+    inAnchor = false;
+    anchorEnd = -1;
     fg = TELETEXT_DEFAULT_FG;
     bg = TELETEXT_DEFAULT_BG;
     emittedFg = -1;
@@ -347,7 +354,15 @@ export function htmlToAnsiPage(html: string): TextTvRows {
       if (token.startsWith('<a ') || token.startsWith('<a>')) {
         const href = token.match(/href="\/?(\d{3})"/)?.[1];
         // The FIRST anchor on a row names it; a row is one headline.
-        if (href && rowLink === null) rowLink = Number(href);
+        if (href && rowLink === null) {
+          rowLink = Number(href);
+          rowLinkText = '';
+          inAnchor = true;
+        }
+      }
+      if (token.startsWith('</a') && inAnchor) {
+        inAnchor = false;
+        anchorEnd = cur.replace(/\x1b\[[0-9;]*m/g, '').length;
       }
       if (token.startsWith('</') || token.startsWith('<div')) continue;
       for (const c of cls) {
@@ -356,11 +371,35 @@ export function htmlToAnsiPage(html: string): TextTvRows {
       }
     } else {
       if (!rowOpen) continue;
-      paint(decodeTeletextEntities(token));
+      const decoded = decodeTeletextEntities(token);
+      if (inAnchor) rowLinkText += decoded;
+      paint(decoded);
     }
   }
   flushRow();
   return { rows, links: resolveLinkLabels(rows, links) };
+}
+
+/**
+ * Is this anchor something a caller would CHOOSE, or a number in a sentence?
+ *
+ * texttv.nu makes EVERY three-digit number an anchor, because a teletext
+ * viewer lets you type any page. So "har slagit ned cirka 800 meter" links to
+ * page 800 and "200 passagerare ombord" to page 200 - and a reader that
+ * offered those as destinations put its cursor in the middle of a paragraph,
+ * which is what the sysop saw on page 131.
+ *
+ * A number a caller would choose either ENDS its row - teletext right-aligns
+ * the page number after or beneath its headline - or the anchor carries words
+ * rather than digits ("Mer om Ukrainakriget på nästa sida"). A bare number
+ * with more sentence after it is prose.
+ */
+function selectable(line: string, anchorText: string, anchorEnd: number): boolean {
+  const words = !/^\s*\d{3}\s*$/.test(anchorText);
+  if (words) return true;
+  if (anchorEnd < 0) return false;
+  const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+  return plain.slice(anchorEnd).trim() === '';
 }
 
 /**

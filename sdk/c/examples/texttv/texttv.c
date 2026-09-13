@@ -485,6 +485,7 @@ static void read_page(void)
         ui_doc_style style;
         char title[160];
         int lines[TEXTTV_MAX_LINKS];
+        int pick_count;
         int i;
         int cur;
         int rc;
@@ -497,9 +498,9 @@ static void read_page(void)
         style.ink = UI_TOKEN(UI_T_ACCENT);
         /* A page the caller can walk says so in its own frame: the reader's
            footer belongs to ui_doc and has no room for a second sentence. */
-        if (page_link_count > 0 && wide)
+        if (page_link_count >= 2 && wide)
             sprintf(title, "%d %.100s - ARROWS PICK, RETURN READS", page_num, page_title);
-        else if (page_link_count > 0)
+        else if (page_link_count >= 2)
             sprintf(title, "%d %.60s - RETURN READS", page_num, page_title);
         else
             sprintf(title, "%d %s", page_num, page_title);
@@ -507,15 +508,21 @@ static void read_page(void)
         draw_masthead("TEXT-TV");
         ui_screen_flush(&screen);
 
-        for (i = 0; i < page_link_count; i++) lines[i] = page_links[i].label_row;
-        cur = page_link_cur;
+        /* A page is an INDEX when it offers several destinations. One link
+           on a page of prose is an article pointing at its continuation -
+           the caller is reading, so the arrows must scroll, not hunt. Page
+           131 has exactly one ("Mer om Ukrainakriget på nästa sida") and the
+           cursor had no business being there. */
+        pick_count = page_link_count >= 2 ? page_link_count : 0;
+        for (i = 0; i < pick_count; i++) lines[i] = page_links[i].label_row;
+        cur = pick_count > 0 ? page_link_cur : -1;
         rc = ui_doc_pick(&screen.buf, &keys, &pushback, &style, title, page_body,
-                         lines, page_link_count, &cur);
+                         lines, pick_count, &cur);
         page_link_cur = cur;
 
         if (rc < 0) return;                     /* the caller went away */
 
-        if (rc == 1 && cur >= 0 && cur < page_link_count) {
+        if (rc == 1 && cur >= 0 && cur < pick_count) {
             int target = page_links[cur].page;
             int from = page_num;
             show_page(target);
