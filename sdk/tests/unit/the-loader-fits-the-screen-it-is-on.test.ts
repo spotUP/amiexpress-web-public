@@ -145,12 +145,60 @@ describe('the loader covers what is behind it', () => {
     // The dialog is the one that is NOT full-screen - Box has setText too,
     // so "has setText" alone finds the backdrop first.
     const dialog = order.find(
-      (el: any) => el !== screen && typeof el.setText === 'function' && el.width !== screen.width,
+      (el: any) => el !== screen && typeof el.setText === 'function' && typeof el.stop === 'function',
     );
     expect(backdrop).toBeTruthy();
     expect(dialog).toBeTruthy();
     // Later in the tree is painted later, so the dialog must come after.
     expect(order.indexOf(dialog)).toBeGreaterThan(order.indexOf(backdrop));
+    loader.hide();
+  });
+});
+
+/**
+ * The loader has to stay on top of a door that is still building itself.
+ *
+ * "i see it when the door ui has drawn already, then it's too late it
+ * should run before the door is ready" (sysop, 2026-09-14). Two halves to
+ * that: the door must raise the loader before it builds anything - that is
+ * the door's job - and the loader must survive what gets built afterwards,
+ * which is this one. Blessed paints in TREE ORDER, so a panel created after
+ * the loader is painted over it; the box looking transparent was never a
+ * transparency problem.
+ */
+describe('the loader stays above a door still being built', () => {
+  let screen: any;
+  afterEach(() => screen?.destroy());
+
+  const Box = require('../../engines/ui/blessed/widgets/box').Box;
+  const order = (s: any): any[] => {
+    const all = (node: any): any[] => [node, ...((node.children ?? []).flatMap(all))];
+    return all(s);
+  };
+
+  it('is painted after panels the door builds while it is showing', () => {
+    screen = screenOf(80);
+    const loader = new DoorLoader(screen);
+    loader.show('Initializing...');
+
+    // The door carries on assembling itself underneath.
+    const panel = new Box({
+      parent: screen, top: 2, left: 2, width: 20, height: 3, ch: ' ',
+    } as any);
+
+    loader.update(20, 'Loading player profiles...');
+
+    // screen.children IS the paint order - later is painted on top. A
+    // flattened depth-first walk is not: it interleaves each element's own
+    // children and says nothing about siblings.
+    const kids: any[] = screen.children;
+    const backdrop = kids.find((el: any) => el.options?.ch === ' ' && el.width === screen.width);
+    const dialog = kids.find(
+      (el: any) => typeof el.setText === 'function' && typeof el.stop === 'function',
+    );
+
+    expect(kids.indexOf(backdrop)).toBeGreaterThan(kids.indexOf(panel));
+    expect(kids.indexOf(dialog)).toBeGreaterThan(kids.indexOf(backdrop));
     loader.hide();
   });
 });

@@ -124,15 +124,16 @@ class CardLobbyApp {
         this.announcer = (0, announce_1.createAnnouncer)(session.bbs);
     }
     async run() {
-        this.setupScreen();
-        // Show loading screen while initializing
-        const loader = new DoorLoader_1.DoorLoader(this.screen, {
-            overlay: true,
-            overlayOpacity: 0.6,
-            barColor: 'green',
+        // The loader goes up INSIDE setupScreen, as soon as the screen exists -
+        // not after it, which is what let the sysop watch the lobby assemble
+        // itself and then be covered. DoorLoader re-fronts itself on every
+        // update(), so the panels built underneath it stay underneath it.
+        let loader;
+        this.setupScreen(() => {
+            loader = new DoorLoader_1.DoorLoader(this.screen, { barColor: 'green' });
+            loader.show('Initializing Card Lobby...');
+            this.screen.render();
         });
-        loader.show('Initializing Card Lobby...');
-        this.screen.render();
         await loader.delay(100);
         loader.update(20, 'Loading player profiles...');
         await this.reloadState();
@@ -172,7 +173,14 @@ class CardLobbyApp {
             this.screen.once('destroy', resolve);
         });
     }
-    setupScreen() {
+    /**
+     * @param onScreenReady runs the instant the blessed screen exists, BEFORE
+     * a single panel is built. The loader goes up there, so a caller sees a
+     * covered screen while the lobby is assembled rather than the lobby being
+     * assembled ("i see it when the door ui has drawn already, then it's too
+     * late it should run before the door is ready" - sysop, 2026-09-14).
+     */
+    setupScreen(onScreenReady) {
         // The board's theme decides every colour this door draws, and it has to
         // be resolved BEFORE the first widget: they read UI_THEME as they are
         // built. A door that skips this looks the same in all seven themes.
@@ -194,6 +202,8 @@ class CardLobbyApp {
             // NOTE: grabKeys is NOT a valid blessed constructor option
             // DoorInputManager.enable() sets screen.program.grabKeys = true (line 265)
         });
+        // The screen exists and nothing has been drawn on it yet: cover it now.
+        onScreenReady?.();
         // Clear terminal then flush blessed's internal buffer
         this.screen.program.write('\x1b[2J');
         this.screen.program.write('\x1b[H');

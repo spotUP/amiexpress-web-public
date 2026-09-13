@@ -161,11 +161,9 @@ export class DoorLoader {
     }
     
     this.bar.hide(); // Indeterminate mode shows the spinner alone
-    // Cover first, then draw on top of the cover.
     this.backdrop.show();
-    (this.backdrop as unknown as { setBack?: () => void }).setBack?.();
     this.loader.load();
-    (this.loader as unknown as { setFront?: () => void }).setFront?.();
+    this.raise();
     this.isVisible = true;
   }
 
@@ -185,6 +183,8 @@ export class DoorLoader {
     // Show the bar and update it
     this.bar.show();
     this.bar.setProgress(Math.max(0, Math.min(100, percent)));
+    // And stay on top of whatever the door has built since the last step.
+    this.raise();
     
     // In progress mode, we might want to hide spinner or keep it?
     // Loading widget always shows spinner. We'll keep it.
@@ -199,6 +199,21 @@ export class DoorLoader {
     this.loader.stop();
     this.backdrop.hide();
     this.isVisible = false;
+  }
+
+  /**
+   * Put the loader back on top of the door being built underneath it.
+   *
+   * A door creates its panels WHILE this is showing, and blessed paints in
+   * tree order - so anything built after the loader would be drawn over it.
+   * That is why the sysop saw the lobby's own bars around the box: not a
+   * transparency problem, an ORDER problem. Re-fronting the backdrop and
+   * then the dialog puts both at the end of the child list again, so the
+   * cover stays a cover for as long as the door is still assembling.
+   */
+  private raise(): void {
+    (this.backdrop as unknown as { setFront?: () => void }).setFront?.();
+    (this.loader as unknown as { setFront?: () => void }).setFront?.();
   }
 
   /**
