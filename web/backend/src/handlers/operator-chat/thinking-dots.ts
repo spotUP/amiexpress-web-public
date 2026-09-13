@@ -33,7 +33,7 @@
  * more cleverly is not the fix.
  */
 import type { ChatSession } from '../../types/operator-chat.types';
-import { chatIsLive, setThinkingDotsCanceller, clearThinkingDotsCanceller, cancelThinkingDots } from './chat-stream';
+import { chatIsLive, chatResetColourBytes, setThinkingDotsCanceller, clearThinkingDotsCanceller, cancelThinkingDots } from './chat-stream';
 
 /** Under this, the caller sees nothing. */
 /**
@@ -119,7 +119,14 @@ export function startThinkingDots(
       clearThinkingDotsCanceller(chatSession, stop);
       return;
     }
-    emit('\x1b[0;36m.\x1b[0m');
+    // The dot's colour and the LINE MODEL's idea of it go out together.
+    // '\x1b[0;36m.\x1b[0m' is self-contained on the wire - it cannot strand
+    // the terminal in cyan - but on its own it never told the model, so with
+    // lastSender still reading 'user' the caller's next keystroke took the
+    // same-sender branch, emitted no SGR of its own, and rendered in the
+    // terminal default instead of yellow. chatResetColourBytes returns
+    // '\x1b[0m' AND nulls lastSender, so the two cannot come apart.
+    emit('\x1b[0;36m.' + chatResetColourBytes(chatSession));
     written++;
     shownBySession.set(chatSession, written);
     timer = setTimeout(tick, gapMs());
