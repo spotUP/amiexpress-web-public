@@ -33,9 +33,18 @@
  * more cleverly is not the fix.
  */
 import type { ChatSession } from '../../types/operator-chat.types';
-import { chatIsLive, setThinkingDotsCanceller, clearThinkingDotsCanceller, cancelThinkingDots } from './chat-stream';
+import { chatIsLive, chatResetColourBytes, setThinkingDotsCanceller, clearThinkingDotsCanceller, cancelThinkingDots } from './chat-stream';
 
 /** Under this, the caller sees nothing. */
+/**
+ * The most dots one wait may leave on the line.
+ *
+ * 40 keeps the run inside a 78-column line with room for the reply that types
+ * after it, which is what the sysop asked for on 2026-09-10 ("a reply keeps
+ * the dots and types after them").
+ */
+export const MAX_THINKING_DOTS = 40;
+
 export const THINKING_DOTS_AFTER_MS = 1200;
 
 export interface ThinkingDotsOptions {
@@ -93,6 +102,16 @@ export function startThinkingDots(
 
   const tick = (): void => {
     if (stopped) return;
+    // A DOT RUN IS BOUNDED, because the line it sits on is 78 columns and
+    // these bytes are raw - the wrap model in chatCharBytes never sees them.
+    // With tools enabled the model deadline is 35s (TOOL_AI_BUDGET_MS) and
+    // humanGap averages ~455ms, so an unbounded run reaches ~75 dots: past
+    // the wrap, where a backspace cannot follow them back, and far enough
+    // that the board's idea of the current column is wrong for the rest of
+    // the line. Stop ADDING at the cap; the window stays open so the
+    // caller's key still cancels it and stop() still erases exactly what
+    // was written.
+    if (written >= MAX_THINKING_DOTS) { timer = null; return; }
     if (!chatIsLive(chatSession, pageId)) {
       // Nothing to erase into a chat that is over, but the slot must not keep
       // holding a stop() for a chat that has moved on.
@@ -100,7 +119,14 @@ export function startThinkingDots(
       clearThinkingDotsCanceller(chatSession, stop);
       return;
     }
-    emit('\x1b[0;36m.\x1b[0m');
+    // The dot's colour and the LINE MODEL's idea of it go out together.
+    // '\x1b[0;36m.\x1b[0m' is self-contained on the wire - it cannot strand
+    // the terminal in cyan - but on its own it never told the model, so with
+    // lastSender still reading 'user' the caller's next keystroke took the
+    // same-sender branch, emitted no SGR of its own, and rendered in the
+    // terminal default instead of yellow. chatResetColourBytes returns
+    // '\x1b[0m' AND nulls lastSender, so the two cannot come apart.
+    emit('\x1b[0;36m.' + chatResetColourBytes(chatSession));
     written++;
     shownBySession.set(chatSession, written);
     timer = setTimeout(tick, gapMs());

@@ -295,6 +295,17 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
     return;
   }
 
+  // A help topic is a NAME, never a path: no separators, no parent segments,
+  // no absolute paths, and the resolved file must still sit under HELP/ after
+  // normalisation. Returns null for anything else, and the caller simply keeps
+  // shortening the term as express does.
+  const confineToHelp = (root: string, term: string): string | null => {
+    if (!term || term.includes('..') || path.isAbsolute(term)) return null;
+    if (term.includes('/') || term.includes('\\')) return null;
+    const full = path.resolve(root, term);
+    return full === root || full.startsWith(root + path.sep) ? full : null;
+  };
+
   // Progressive search — express.e:25094-25109: try BBS:help/{params}, strip last char, repeat
   let searchTerm = params.trim();
   let foundFile: string | null = null;
@@ -303,9 +314,34 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
 
   while (searchTerm.length > 0) {
     // express.e:25089 internalCommandUpHat: board-root help/ + params.
-    const helpBasePath = path.join(helpDir, searchTerm);
-    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
-    if (foundFile) break;
+    // Two stacked production breaks lived here: the dir was CWD-relative
+    // ('help/<topic>', resolves nowhere - /app/web/backend/help does not
+    // exist), fixed to dataDir; and lowercase 'help' while the volume
+    // carries HELP/ (AmigaDOS is case-insensitive, ext4 is not - live log:
+    // "Not found: /app/data/bbs/help/TESTPAGE"). dataDir is the board
+    // root, HELP is the on-disk case.
+    //
+    // THE SEARCH TERM IS THE CALLER'S, AND IT IS CONFINED. `path.join`
+    // NORMALISES `..`, and _findSecurityScreen appends `.txt`/`.TXT` and
+    // displays whatever it lands on - so `^ ../../../<something>` read any
+    // text file on the container, for any logged-on caller. The two fixes
+    // above made this worse without meaning to: a path that "resolved
+    // nowhere" became one anchored at the real board root, which turned a
+    // latent traversal into a live one.
+    //
+    // express never had the exposure, because AmigaDOS resolved `BBS:help/`
+    // through an assign rather than a filesystem root a caller could climb
+    // out of. Confined here the way this codebase already confines a door's
+    // key (services/bot-data/doors.ts safeJoin).
+    // resolveHelpDir, not a hardcoded 'HELP': this line has broken twice in
+    // production on the case of the directory (AmigaDOS does not care, ext4
+    // does), and confining the caller's term does not make the board's own
+    // spelling of the directory any more certain.
+    const helpBasePath = confineToHelp(helpDir, searchTerm);
+    if (helpBasePath) {
+      foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
+      if (foundFile) break;
+    }
     searchTerm = searchTerm.slice(0, -1);
   }
 
