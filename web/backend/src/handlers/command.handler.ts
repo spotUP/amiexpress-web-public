@@ -2445,6 +2445,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       const flushRun = async () => {
         if (!run) return;
         session.inputBuffer += run;
+        (session as any).chatCursor = session.inputBuffer.length;
         callerTypedRun(socket.server, session, run);
         if (!session.inputBuffer.trim().startsWith('/')) {
           await keystroke(socket.server, session, run);
@@ -2484,9 +2485,30 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       return;
     }
 
-    // Arrow keys mean nothing in a chat.
-    if (data === '\x1b[D' || data === '\x1b[C' || data === '\x1b[A' || data === '\x1b[B') {
-      return;
+    // THE LINE THE CALLER IS STILL TYPING can be moved about in. express has
+    // no line editor - the arrows were dropped here - but a caller who typoes
+    // the first word of a long question should not have to rub out the line
+    // ("arrow keys and backspace needs to work in chats too", 2026-09-13).
+    // chatLineEditKey owns the cursor and says every edit in the model's own
+    // two primitives, so the shared line's wrap accounting cannot drift.
+    {
+      const { callerEditedLine } = require('./operator-chat.handler');
+      const before = session.inputBuffer || '';
+      const cursor = typeof (session as any).chatCursor === 'number'
+        ? (session as any).chatCursor
+        : before.length;
+      const edit = callerEditedLine(socket.server, session, before, cursor, data);
+      if (edit) {
+        session.inputBuffer = edit.buffer;
+        (session as any).chatCursor = edit.cursor;
+        // The sysop's panel follows the MESSAGE, not the cursor: it is told a
+        // character went in or came out, never which way an arrow moved.
+        if (edit.buffer !== before && !edit.buffer.trim().startsWith('/')) {
+          const grew = edit.buffer.length > before.length;
+          await handleOperatorChatKeystroke(socket.server, session, grew ? data : '\x7f');
+        }
+        return;
+      }
     }
 
     // Return ends the line. Some terminals send CR LF together.
@@ -2497,6 +2519,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       await handleOperatorChatKeystroke(socket.server, session, '\r');
 
       session.inputBuffer = '';
+      (session as any).chatCursor = 0;
 
       callerPressedReturn(socket.server, session);
 
@@ -2522,30 +2545,10 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
         scheduleSendHint(socket.server, session);
       }
     }
-    // Backspace - real-time transmission
-    else if (data === '\x7f' || data === '\b') {
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        callerBackspaced(socket.server, session);
-        // Don't transmit backspace if typing a command
-        const isCommand = session.inputBuffer.trim().startsWith('/');
-        if (!isCommand) {
-          await handleOperatorChatKeystroke(socket.server, session, '\x7f');
-        }
-      }
-    }
-    // Printable characters - real-time transmission. Latin-1, not just
-    // ASCII: Swedish åäö died silently here ("i can't type swedish åäö in
-    // the operator chat"). The predicate lives with the chat stream.
-    else if (chatAcceptsKeystroke(data)) {
-      session.inputBuffer += data;
-      callerTypedChar(socket.server, session, data);
-      // Don't transmit commands (starting with /) to sysop
-      const isCommand = session.inputBuffer.trim().startsWith('/');
-      if (!isCommand) {
-        await handleOperatorChatKeystroke(socket.server, session, data);
-      }
-    }
+    // Backspace and printable characters are the line editor's above: it owns
+    // the cursor, and two ways of editing one line is how a model and a screen
+    // drift apart. Latin-1 included - the predicate it uses is the same
+    // chatAcceptsKeystroke that kept Swedish åäö alive here.
     return;
   }
 

@@ -156,6 +156,84 @@ export function chatBackspaceBytes(chatSession: ChatSession): string {
   line.text = line.text.slice(0, -1);
   return '\b \b';
 }
+/**
+ * MOVING ABOUT IN THE LINE YOU ARE STILL TYPING.
+ *
+ * express's chat has no line editor: characters go onto the shared line as
+ * they are pressed and backspace rubs out the last one (6143-6152), which is
+ * why the arrows were dropped here for so long. The sysop asked for them
+ * anyway ("arrow keys and backspace needs to work in chats too", 2026-09-13),
+ * and they are worth having - a caller who typoes a word at the start of a
+ * long question should not have to rub out the whole line.
+ *
+ * THE MODEL IS THE CONSTRAINT. chatCharBytes appends and chatBackspaceBytes
+ * truncates; neither knows about a cursor, and the line's wrap accounting is
+ * what keeps the shared line legible at 78 columns. So an edit in the middle
+ * is expressed in exactly those two primitives: erase the tail back to the
+ * cursor, apply the change, write the new tail. The model then always matches
+ * what is on the screen, with no second way of counting.
+ *
+ * Pure, over a buffer and a cursor. Returns null when the key is not an
+ * editing key, so the caller can carry on with its own routing.
+ */
+export interface ChatLineEdit { buffer: string; cursor: number; bytes: string }
+
+export function chatLineEditKey(
+  chatSession: ChatSession,
+  buffer: string,
+  cursor: number,
+  key: string,
+): ChatLineEdit | null {
+  const at = Math.max(0, Math.min(cursor, buffer.length));
+
+  // Cursor-only moves: the screen's cursor, never the model - the characters
+  // they move over are already in line.text and stay there.
+  if (key === '\x1b[D') return at > 0 ? { buffer, cursor: at - 1, bytes: '\b' } : { buffer, cursor: at, bytes: '' };
+  if (key === '\x1b[C') return at < buffer.length ? { buffer, cursor: at + 1, bytes: '\x1b[C' } : { buffer, cursor: at, bytes: '' };
+  if (key === '\x1b[H' || key === '\x1bOH') return { buffer, cursor: 0, bytes: '\b'.repeat(at) };
+  if (key === '\x1b[F' || key === '\x1bOF') {
+    return { buffer, cursor: buffer.length, bytes: '\x1b[C'.repeat(buffer.length - at) };
+  }
+  // Up and down have no meaning on a single line, and must not fall through
+  // to be typed as text.
+  if (key === '\x1b[A' || key === '\x1b[B') return { buffer, cursor: at, bytes: '' };
+
+  const isBackspace = key === '\x7f' || key === '\b';
+  const isInsert = chatAcceptsKeystroke(key);
+  if (!isBackspace && !isInsert) return null;
+  if (isBackspace && at === 0) return { buffer, cursor: 0, bytes: '' };
+
+  // At the end of the line there is no tail to redraw - the common case, and
+  // the one express itself describes.
+  if (at === buffer.length) {
+    if (isBackspace) {
+      return { buffer: buffer.slice(0, -1), cursor: at - 1, bytes: chatBackspaceBytes(chatSession) };
+    }
+    return { buffer: buffer + key, cursor: at + 1, bytes: chatCharBytes(chatSession, 'user', key) };
+  }
+
+  // IN THE MIDDLE. Said only in the two primitives the model owns: erase the
+  // tail back to the cursor, apply the change, write the new tail. The model's
+  // text is then exactly what is on the screen, counted one way.
+  const tail = buffer.length - at;
+  const next = isBackspace
+    ? buffer.slice(0, at - 1) + buffer.slice(at)
+    : buffer.slice(0, at) + key + buffer.slice(at);
+  const nextCursor = isBackspace ? at - 1 : at + 1;
+
+  let bytes = '';
+  // The tail, and for a backspace the character being removed as well.
+  const erase = isBackspace ? tail + 1 : tail;
+  for (let i = 0; i < erase; i++) bytes += chatBackspaceBytes(chatSession);
+  // What now stands from the cursor onwards.
+  for (const ch of next.slice(nextCursor - (isBackspace ? 0 : 1))) {
+    bytes += chatCharBytes(chatSession, 'user', ch);
+  }
+  // Back to where the caller left the cursor.
+  bytes += '\b'.repeat(next.length - nextCursor);
+  return { buffer: next, cursor: nextCursor, bytes };
+}
+
 /** express.e:6130-6141: return ends the line. */
 export function chatReturnBytes(chatSession: ChatSession): string {
   chatLineOf(chatSession).text = '';
@@ -295,6 +373,34 @@ export function callerTypedRun(io: any, session: BBSSession, text: string): void
   }
   emitToCaller(io, session, bytes);
 }
+/**
+ * The caller edited the line they are still typing: the chat branch's one way
+ * in. Resolves the chat session itself and writes the bytes, like every other
+ * caller-side function here, so the cursor arithmetic stays in one place.
+ *
+ * Returns null when the key is not an editing key, or when there is no chat
+ * to edit - the branch then routes the key as it always did.
+ */
+export function callerEditedLine(
+  io: any,
+  session: BBSSession,
+  buffer: string,
+  cursor: number,
+  key: string,
+): { buffer: string; cursor: number } | null {
+  const cs = chatOfSession(session);
+  if (!cs) return null;
+  const edit = chatLineEditKey(cs, buffer, cursor, key);
+  if (!edit) return null;
+  // The caller's own key takes the dots off the line first, exactly as a
+  // typed character does.
+  if (edit.bytes) {
+    cancelThinkingDots(cs);
+    emitToCaller(io, session, edit.bytes);
+  }
+  return { buffer: edit.buffer, cursor: edit.cursor };
+}
+
 export function callerBackspaced(io: any, session: BBSSession): void {
   const cs = chatOfSession(session);
   if (cs) cancelThinkingDots(cs);
