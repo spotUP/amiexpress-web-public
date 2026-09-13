@@ -229,10 +229,19 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
  * right of where the caller's cursor actually is.
  */
 export function visibleColumns(text: string): number {
-  return text
+  // ONLY THE LAST LINE. A newline puts the cursor back at column 0, so the
+  // rows above it say nothing about where the cursor ends up - and the
+  // board's prompts are routinely multi-line: the connect question prints
+  // "COMMODORE 64: PRESS <DEL>" on its own row first. Counting every row
+  // measured that prompt at 101 columns instead of the 78 on its last, put
+  // the input start 17 columns left of the truth, and the wrap went
+  // undetected - the sysop, twice: "it gets stuck at the left edge",
+  // "still doesnt climb up to the previous row".
+  const lastLine = text.slice(text.lastIndexOf('\n') + 1);
+  return lastLine
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
     .replace(/\x1b\][^\x07]*\x07/g, '')
-    .replace(/[\r\n]/g, '')
+    .replace(/\r/g, '')
     .length;
 }
 

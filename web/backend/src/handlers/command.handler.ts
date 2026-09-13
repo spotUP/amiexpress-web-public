@@ -204,7 +204,8 @@ import type { LineInputOptions } from '../utils/line-input.util';
 import {
   MAX_COMMAND_LINE, MAX_MSG_LINE_NUMBER, MAX_MSG_LINE_TEXT,
   MAX_MSG_TO, MAX_MSG_SUBJECT, MAX_DOOR_PASSWORD,
-  rewrapEcho, wireColumns,
+  rewrapEcho, wireColumns, acceptTypedChar, acceptBackspace,
+  backspaceEcho, recordPromptColumn, ANSI_PROMPT_MAX_LEN,
 } from '../utils/line-input.util';
 
 // Import security/ACS system
@@ -1583,14 +1584,14 @@ console.log(' Connection screen viewed, showing ANSI prompt');
 console.log('[handleCommand] Await screen command still running, deferring prompt');
         session.pendingScreenCommand.then(() => {
           if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-            emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
+            emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
           }
         }).catch(error => {
 console.error('[handleCommand] Pending screen command rejected:', error);
-          emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
+          emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
         });
       } else {
-        emitPrompt(socket, ANSI_GRAPHICS_PROMPT);
+        emitPrompt(socket, recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
       }
       return;
     }
@@ -1736,16 +1737,29 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
         socket.emit('prompt-login'); // Tell frontend to show login form
         return;
       } else if (data === '\x7f' || data === '\b') {
-        // Backspace - remove last character from buffer
-        if (session.tempData?.inputBuffer && session.tempData.inputBuffer.length > 0) {
-          session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
-          emitText(socket, '\b \b'); // Echo backspace
+        // Backspace, wrap-aware. This prompt is 78 columns on its last row,
+        // so on anything narrower than that it has ALREADY wrapped before
+        // the caller types a character, and a bare `\b \b` strands the row
+        // above (the sysop, 2026-09-13, twice).
+        {
+          const had = (session.tempData?.inputBuffer as string) || '';
+          const edit = acceptBackspace(had);
+          if (edit.echo) {
+            session.tempData.inputBuffer = edit.buffer;
+            emitText(socket, backspaceEcho(had, edit.buffer, session as any));
+          }
         }
         return;
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        // Printable character - add to buffer and echo it
-        session.tempData.inputBuffer = (session.tempData?.inputBuffer || '') + data;
-        emitText(socket, data); // Echo the character
+        // Printable, and only while the field has room - express.e:2335,
+        // with the length express gives this prompt (29530: maxLen 10).
+        {
+          const edit = acceptTypedChar(
+            (session.tempData?.inputBuffer as string) || '', data, ANSI_PROMPT_MAX_LEN,
+          );
+          session.tempData.inputBuffer = edit.buffer;
+          if (edit.echo) emitText(socket, edit.echo);
+        }
         return;
       }
       // Ignore other control characters

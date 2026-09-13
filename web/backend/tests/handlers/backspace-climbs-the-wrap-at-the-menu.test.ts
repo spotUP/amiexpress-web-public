@@ -160,3 +160,65 @@ describe('the graphics prompt climbs the wrap too', () => {
     expect(backspaceEcho('AAAAAAAA', 'AAAAAAA', session)).toBe('\b \b');
   });
 });
+
+/**
+ * The branch that actually serves the connect question.
+ *
+ * There were FOUR copies of this prompt's input loop - pre-login.ts,
+ * core.ts, login-connect.service.ts and this one - and the first three are
+ * the ones I converted while the sysop kept reporting the bug. Only
+ * command.handler.ts's own branch runs for a web caller, which is why two
+ * rounds of unit tests passed against a board that never changed.
+ *
+ * So this drives handleCommand at ANSI_PROMPT and reads the wire.
+ */
+describe('the connect question climbs the wrap', () => {
+  const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
+  const { visibleColumns } = require('../../src/utils/line-input.util');
+
+  it('is 79 columns on its last row, so it wraps on an 80-column terminal at once', () => {
+    // Measured, not assumed: this is why every keystroke was already past
+    // the edge and the first row could never be reached.
+    expect(visibleColumns(ANSI_GRAPHICS_PROMPT)).toBeGreaterThan(70);
+  });
+
+  it('redraws rather than sending a bare backspace', async () => {
+    const socket = makeSocket();
+    const session: any = {
+      state: BBSState.AWAIT,
+      subState: LoggedOnSubState.ANSI_PROMPT,
+      screenWidth: 80,
+      wireWidth: 80,
+      tempData: { inputBuffer: '' },
+      promptColumn: visibleColumns(ANSI_GRAPHICS_PROMPT) % 80,
+    };
+
+    for (const ch of 'AAAAA') await handleCommand(socket as any, session, ch);
+    const before = socket.emitted.length;
+    await handleCommand(socket as any, session, '\x7f');
+    flushOutput(socket as any);
+
+    const out = socket.emitted.slice(before)
+      .filter((e: any) => e.event === 'ansi-output')
+      .map((e: any) => String(e.data ?? '')).join('');
+
+    expect(session.tempData.inputBuffer).toBe('AAAA');
+    // Up a row, to the input's column, clear, reprint, place the cursor.
+    expect(out).toContain('\x1b[0J');
+    expect(out).toMatch(/\x1b\[\d+A/);
+    expect(out).toMatch(/\x1b\[\d+G/);
+  });
+
+  it('still refuses the eleventh character (express.e:29530)', async () => {
+    const socket = makeSocket();
+    const session: any = {
+      state: BBSState.AWAIT,
+      subState: LoggedOnSubState.ANSI_PROMPT,
+      screenWidth: 80, wireWidth: 80,
+      tempData: { inputBuffer: '' },
+      promptColumn: 0,
+    };
+    for (const ch of 'ABCDEFGHIJKLMNO') await handleCommand(socket as any, session, ch);
+    expect(session.tempData.inputBuffer).toBe('ABCDEFGHIJ');
+  });
+});
