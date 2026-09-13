@@ -52,6 +52,14 @@ interface UserFormData {
   secLevel: number;
   timeLimit: number;
   expert: boolean;
+  /**
+   * Blocked, in the dialog rather than only as a row action.
+   *
+   * Unlocking lived on a button that appears only when the row is ALREADY
+   * locked, so there was nowhere to block anybody and nowhere to look when
+   * you wanted to know. A sysop editing an account expects to find it there.
+   */
+  accountLocked: boolean;
 }
 
 export function UsersPage() {
@@ -71,6 +79,7 @@ export function UsersPage() {
     secLevel: 10,
     timeLimit: 60,
     expert: false,
+    accountLocked: false,
   });
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -94,7 +103,10 @@ export function UsersPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, updates }: {
       id: string;
-      updates: Partial<UserFormData> & { accountLocked?: number; invalidAttempts?: number };
+      // accountLocked is a BOOLEAN on the form and a byte on the wire, so the
+      // form's version is omitted rather than intersected - the two meanings
+      // cannot both be called accountLocked in one type.
+      updates: Omit<Partial<UserFormData>, 'accountLocked'> & { accountLocked?: number; invalidAttempts?: number };
     }) => apiClient.updateUser(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -131,6 +143,7 @@ export function UsersPage() {
       secLevel: 10,
       timeLimit: 60,
       expert: false,
+    accountLocked: false,
     });
   };
 
@@ -159,6 +172,7 @@ export function UsersPage() {
       secLevel: user.secLevel,
       timeLimit: user.timeLimit,
       expert: user.expert,
+      accountLocked: Boolean(user.accountLocked),
     });
     setEditingUser(user);
     setIsModalOpen(true);
@@ -188,10 +202,18 @@ export function UsersPage() {
       delete (submitData as any).password;
     }
 
+    // The board stores the block as a byte in user.misc, and unblocking clears
+    // the failure count with it - the same pair the row's Unlock button sends,
+    // so the two ways of doing it cannot disagree.
+    const { accountLocked, ...rest } = submitData as typeof submitData & { accountLocked: boolean };
+    const locked = accountLocked
+      ? { accountLocked: 1 }
+      : { accountLocked: 0, invalidAttempts: 0 };
+
     if (editingUser) {
-      updateMutation.mutate({ id: editingUser.id, updates: submitData });
+      updateMutation.mutate({ id: editingUser.id, updates: { ...rest, ...locked } });
     } else {
-      createMutation.mutate(submitData);
+      createMutation.mutate(rest as typeof submitData);
     }
   };
 
@@ -354,6 +376,10 @@ export function UsersPage() {
         error={error as Error | null}
         onRetry={() => refetch()}
         emptyMessage={search ? 'No user matches that search.' : 'No users yet.'}
+        // The whole row opens the account, not just the pencil: this is a list
+        // people come to in order to change somebody, and the actions at the
+        // end stop the click themselves.
+        onRowClick={handleEdit}
         rowActions={(user) => (
           <>
             {(user.accountLocked || (user.invalidAttempts ?? 0) > 0) && (
@@ -570,6 +596,31 @@ export function UsersPage() {
                     -1 for unlimited time.
                   </p>
                 </div>
+
+                {/* Blocked, where a sysop editing an account looks for it.
+                    Unblocking clears the failure count too, exactly as the
+                    row's Unlock button does. */}
+                {editingUser && (
+                  <div className="md:col-span-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.accountLocked}
+                        onChange={(e) => setFormData({ ...formData, accountLocked: e.target.checked })}
+                        className="form-checkbox h-5 w-5 text-accent"
+                      />
+                      <span className="text-content-primary">
+                        Blocked (cannot log in)
+                        {!formData.accountLocked && (editingUser.invalidAttempts ?? 0) > 0 && (
+                          <span className="text-content-secondary">
+                            {' '}- clears {editingUser.invalidAttempts} failed password
+                            {editingUser.invalidAttempts === 1 ? ' attempt' : ' attempts'}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                )}
 
                 <div className="md:col-span-2">
                   <label className="flex items-center space-x-2 cursor-pointer">
