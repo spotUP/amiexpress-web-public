@@ -190,41 +190,37 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
     }
   });
 
-  // The Discord handle a user claims ("my Discord name" in the WHIP door).
-  // Empty clears it. Over-long input is refused, never silently cut.
-  router.patch('/users/:id', async (req: Request, res: Response) => {
-    const { discordName } = req.body ?? {};
-    if (typeof discordName !== 'string') {
-      sendError(res, 'discordName must be a string', 400);
-      return;
-    }
-    if (discordName.trim().length > 32) {
-      sendError(res, 'discordName is at most 32 characters', 400);
-      return;
-    }
-    try {
-      sendResponse(res, await whipService.setDiscordName(req.params.id, discordName));
-    } catch (error) {
-      const missing = error instanceof Error && error.message.startsWith('Unknown user');
-      sendError(res, error instanceof Error ? error.message : 'Failed to set Discord name',
-        missing ? 404 : 500);
-    }
-  });
-
   // ---- Writes (bot Phase 2). Every write names its acting BBS user; when
   // discordId is present the link must agree with actorUserId, so a linked
   // account can never write as somebody else. ----
+  /**
+   * Who a write is FROM, proved rather than claimed.
+   *
+   * The link check used to run only `if (discordId !== undefined)` - so a
+   * caller who simply left the field out was taken at their word about
+   * actorUserId, and the bot deliberately left it out for anyone it had
+   * matched by username. Any member of the Discord guild could rename
+   * themselves to a BBS handle (or pass `user: <handle>`) and complete, edit
+   * or delete that caller's work, with the points and achievements landing on
+   * the victim. The service token proves the REQUEST is the bot; it says
+   * nothing about who the bot says it is acting for, and that is the half
+   * that was missing.
+   *
+   * Every write now carries a discordId, and the link row is the authority.
+   * The board refuses on its own, so a compromised or replaced bot cannot
+   * hand itself an identity.
+   */
   const resolveActor = async (req: Request): Promise<WhipActor> => {
     const { actorUserId, discordId } = req.body ?? {};
     if (typeof actorUserId !== 'string' || !actorUserId) {
       throw new WhipWriteError('actorUserId is required', 400);
     }
-    if (discordId !== undefined) {
-      if (typeof discordId !== 'string' || !discordId) throw new WhipWriteError('discordId must be a string', 400);
-      const link = await database.getDiscordLinkByDiscordId(discordId);
-      if (!link || link.userId !== actorUserId) {
-        throw new WhipWriteError('discordId is not linked to actorUserId', 403);
-      }
+    if (typeof discordId !== 'string' || !discordId) {
+      throw new WhipWriteError('discordId is required: a write must come from a linked account', 403);
+    }
+    const link = await database.getDiscordLinkByDiscordId(discordId);
+    if (!link || link.userId !== actorUserId) {
+      throw new WhipWriteError('discordId is not linked to actorUserId', 403);
     }
     const user = await database.getUserById(actorUserId);
     if (!user) throw new WhipWriteError('Unknown actorUserId', 404);
@@ -245,6 +241,28 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
       }
     };
   };
+
+  // The Discord handle a user claims ("my Discord name" in the WHIP door).
+  // Empty clears it. Over-long input is refused, never silently cut.
+  //
+  // THIS IS A WRITE, so it names its actor like every other write here. It
+  // used to be the one exception: the caller named the target user in the
+  // path and nothing checked who was asking, so a service token could rename
+  // anybody. `write`/`resolveActor` resolve the acting BBS user, verify any
+  // `discordId` really is linked to them, and 404 an actorUserId the board
+  // does not know - and the path id must be that same user.
+  router.patch(
+    '/users/:id',
+    write(async (req, actor) => {
+      const { discordName } = req.body ?? {};
+      if (typeof discordName !== 'string') throw new WhipWriteError('discordName must be a string', 400);
+      if (discordName.trim().length > 32) throw new WhipWriteError('discordName is at most 32 characters', 400);
+      if (actor.userId !== req.params.id) {
+        throw new WhipWriteError('actorUserId must name the user being changed', 403);
+      }
+      return whipService.setDiscordName(actor.userId, discordName);
+    })
+  );
 
   router.post('/projects', write(async (req, actor) => whipService.createProject(req.body ?? {}, actor), 'Project created'));
   router.patch(

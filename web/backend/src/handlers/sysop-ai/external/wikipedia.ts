@@ -9,14 +9,20 @@
  */
 import axios from 'axios';
 
+import { createExternalCache } from './cache';
+
 const WIKI = 'https://en.wikipedia.org/w/rest.php/v1';
 export const EXTERNAL_TIMEOUT_MS = 8000;
-const CACHE_TTL_MS = 24 * 3600 * 1000;
 const UA = 'amiexpress-web-bbs/1.0 (AI co-sysop lookups; https://bbs.uprough.net)';
 
-const cache = new Map<string, { at: number; value: string }>();
+const cache = createExternalCache({
+  // A throttled edge answers a miss; a 24h-cached miss outlives the
+  // throttle by a day (live 2026-09-10: "Amiga" missed for hours while
+  // the article exists).
+  shouldCache: (value) => !value.startsWith('Wikipedia has nothing'),
+});
 /** Test seam. */
-export function resetWikipediaCache(): void { cache.clear(); }
+export function resetWikipediaCache(): void { cache.reset(); }
 
 export type Fetcher = (url: string, timeoutMs?: number) => Promise<any>;
 const httpGet: Fetcher = async (url, timeoutMs) =>
@@ -27,20 +33,8 @@ export function setWikipediaFetcher(f: Fetcher | null): void {
   fetcher = f ?? httpGet;
 }
 
-async function cachedLookup(key: string, build: () => Promise<string>): Promise<string> {
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
-  try {
-    const value = (await build()).slice(0, 1800);
-    // A miss is not cached: "Wikipedia has nothing" usually means a
-    // throttled edge, and a 24h-cached miss outlives the throttle by a day
-    // (live 2026-09-10: "Amiga" missed for hours while the article exists).
-    if (!value.startsWith('Wikipedia has nothing')) cache.set(key, { at: Date.now(), value });
-    return value;
-  } catch (err) {
-    return `No answer from the net right now (${(err as Error).message}).`;
-  }
-}
+const cachedLookup = (key: string, build: () => Promise<string>): Promise<string> =>
+  cache.lookup(key, build);
 
 export async function wikipediaSearch(query: string): Promise<string> {
   const q = query.trim().slice(0, 80);

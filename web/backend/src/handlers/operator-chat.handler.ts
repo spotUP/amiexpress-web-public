@@ -374,7 +374,13 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
   // and stops it being the reason the process stays alive. The handle is kept
   // as well, so a test - or a shutdown - can stop it outright.
   pageTimeoutChecker = setInterval(() => {
-    checkPageTimeouts(io, repository);
+    // The tick's promise is HANDLED. checkPageTimeouts awaits acceptPage, a
+    // database write: a rejection thrown into a discarded promise is an
+    // unhandled rejection, which ends the process on Node 15+ and takes
+    // every caller on the board with it.
+    void checkPageTimeouts(io, repository).catch((err) => {
+      console.error('[Operator Chat] Page timeout check failed:', err);
+    });
   }, 1000); // Check every 1 second for tight bot takeover
   pageTimeoutChecker.unref?.();
 }
@@ -610,16 +616,13 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
     // does the caller get express.e's "you may continue" and the menu.
     if (dotCount >= maxDots) {
       stopPagingDots(pageRequest.id);
-      void (async () => {
-        const page = repository.getPageRequest(pageRequest.id);
-        const currentSubState = session.subState as LoggedOnSubState;
-        const chatAccepted = page?.status === PageStatus.ACCEPTED ||
-                             currentSubState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
-        if (chatAccepted) return;
-
-        const taken = await activateGrumpyBot(io, repository, pageRequest.id, 'the paging wait ended');
-        if (taken) return;
-
+      // THE CALLER IS RELEASED WHATEVER HAPPENS. activateGrumpyBot writes to
+      // the database (acceptPage) and is try/FINALLY, not try/catch: a throw
+      // travels out of it. This used to be a floating promise with no
+      // `.catch`, so that throw skipped express.e's "you may continue" line
+      // and left the caller sitting in OPERATOR_CHAT_WAITING with no bot and
+      // no sysop - and, on Node 15+, took the process down with it.
+      const releaseCaller = (): void => {
         socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
         socket.emit('ansi-output', 'You may continue using the system\r\n');
         socket.emit('ansi-output', `until ${sysopName} answers your request.\r\n\r\n`);
@@ -627,7 +630,34 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
         if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
           session.subState = LoggedOnSubState.DISPLAY_MENU;
         }
-      })();
+      };
+      void (async () => {
+        const page = repository.getPageRequest(pageRequest.id);
+        const currentSubState = session.subState as LoggedOnSubState;
+        const chatAccepted = page?.status === PageStatus.ACCEPTED ||
+                             currentSubState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
+        if (chatAccepted) return;
+
+        let taken = false;
+        try {
+          taken = await activateGrumpyBot(io, repository, pageRequest.id, 'the paging wait ended');
+        } catch (err) {
+          console.error(`[Operator Chat] Page ${pageRequest.id}: GrumpyBot takeover threw, freeing the caller:`, err);
+        }
+        if (taken) return;
+
+        releaseCaller();
+      })().catch((err) => {
+        console.error(`[Operator Chat] Page ${pageRequest.id}: end-of-wait handling failed, freeing the caller:`, err);
+        try {
+          releaseCaller();
+        } catch (emitErr) {
+          console.error(`[Operator Chat] Page ${pageRequest.id}: could not reach the caller to free them:`, emitErr);
+          if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+          }
+        }
+      });
     }
   }, 1000);
 
@@ -868,8 +898,6 @@ console.log(`[Operator Chat] Sysop taking over bot-controlled page ${pageId}`);
     }
   }
 
-  stopPagingDots(pageId);
-
   // Add sysop socket to page room for chat fan-out
   // TP-10: room membership needs a real socket.io socket, and this one is
   // the SYSOP's admin-app socket, addressed by socket id - so it goes
@@ -886,6 +914,13 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
   }
 
   repository.updatePageStatus(pageId, PageStatus.ACCEPTED, sysopId, sysopHandle);
+
+  // THE DOTS STOP ONLY ONCE THE PAGE IS REALLY ACCEPTED. This used to run
+  // above the write: an accept whose database write then threw left the
+  // caller with no paging prompt, no dots, no bot and no sysop - the end-of-
+  // wait that frees them lives on the dot interval this line clears. Nothing
+  // between the two statements awaits, so the order costs nothing.
+  stopPagingDots(pageId);
 
   const existingMessages = repository.getChatMessages(pageId);
 
@@ -1581,9 +1616,17 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
   const pending = repository.getPendingPages();
   const now = Date.now();
 
-  // Debug: Log pending pages status
-  if (pending.length > 0) {
+  // This runs EVERY SECOND for the life of the process. The lines below used
+  // to print on every tick, one per pending page, so a single page nobody
+  // answered wrote 86,400 lines a day into the live board's log. They say the
+  // same thing every time, so they are printed when the thing they say
+  // CHANGES - a new count, a new page, a page crossing its timeout.
+  prunePageTickState(new Set(pending.map((p) => p.id)));
+  if (pending.length !== lastPendingPageCount) {
+    lastPendingPageCount = pending.length;
+    if (pending.length > 0) {
 console.log(`[Operator Chat] Checking ${pending.length} pending pages, timeout=${config.pageTimeout}s`);
+    }
   }
 
   // A sysop's accept that was waiting for the caller to leave a door: theirs
@@ -1607,9 +1650,13 @@ console.log(`[Operator Chat] Page ${pageId}: ${page.userHandle} is back at a pro
   for (const page of pending) {
     const elapsed = now - page.createdAt.getTime();
     const timeoutMs = config.pageTimeout * 1000;
-console.log(`[Operator Chat] Page ${page.id}: elapsed=${Math.floor(elapsed/1000)}s, timeout=${config.pageTimeout}s, willTimeout=${elapsed > timeoutMs}`);
+    const willTimeout = elapsed > timeoutMs;
+    if (pageTickLogged.get(page.id) !== willTimeout) {
+      pageTickLogged.set(page.id, willTimeout);
+console.log(`[Operator Chat] Page ${page.id}: elapsed=${Math.floor(elapsed/1000)}s, timeout=${config.pageTimeout}s, willTimeout=${willTimeout}`);
+    }
 
-    if (elapsed > timeoutMs) {
+    if (willTimeout) {
       // The normal path is the paging prompt's own end-of-wait (handlePageSysop);
       // this is the retry for a page that outlived it - the caller left the
       // prompt for a door, or the process that ran the prompt restarted.
@@ -1649,6 +1696,40 @@ const QUEUED_ACCEPT_TTL_MS = 15 * 60 * 1000;
 const deferredTakeovers = new Set<string>();
 /** Pages whose takeover is in progress, so the prompt's end and the retry cannot both accept. */
 const takeoversInFlight = new Set<string>();
+/** What the per-second tick last SAID about a page, so it only speaks on a change. */
+const pageTickLogged = new Map<string, boolean>();
+/** What the per-second tick last said about the pending count. -1 means nothing yet. */
+let lastPendingPageCount = -1;
+
+/**
+ * Forget the bookkeeping of pages that are no longer pending.
+ *
+ * `deferredTakeovers` was only ever deleted on a SUCCESSFUL takeover, so a
+ * page the caller cancelled - or one that ended while they were still inside
+ * a door - left its id in the set for the life of the process. The per-second
+ * tick holds the authoritative list of pending pages, so it is the one place
+ * that can tell a live page from an abandoned one: everything it does not
+ * name is gone.
+ */
+function prunePageTickState(pendingIds: Set<string>): void {
+  for (const id of Array.from(deferredTakeovers)) {
+    if (!pendingIds.has(id)) deferredTakeovers.delete(id);
+  }
+  for (const id of Array.from(pageTickLogged.keys())) {
+    if (!pendingIds.has(id)) pageTickLogged.delete(id);
+  }
+}
+
+/** Test seam: the per-page bookkeeping this module keeps between ticks. */
+export function operatorChatPageTickStateForTest(): {
+  deferredTakeovers: string[];
+  pageTickLogged: string[];
+} {
+  return {
+    deferredTakeovers: Array.from(deferredTakeovers),
+    pageTickLogged: Array.from(pageTickLogged.keys()),
+  };
+}
 
 /**
  * GrumpyBot takes a pending page - if the caller can be reached and interrupted.
@@ -1750,6 +1831,16 @@ console.log(`[Operator Chat] Page ${pageId}: no board card (${(err as Error).mes
         });
     }
     return repository.getPageRequest(pageId)?.sysopId === 'bot';
+  } catch (err) {
+    // THIS FUNCTION ANSWERS A BOOLEAN. It was try/FINALLY, not try/catch, so
+    // a throw out of acceptPage - a database write - travelled into callers
+    // that had none: the end-of-wait handler at the paging prompt skipped
+    // express.e's "you may continue" line and left the caller in
+    // OPERATOR_CHAT_WAITING for ever, and the per-second checker turned it
+    // into an unhandled rejection. A takeover that failed is a takeover that
+    // did not happen: say so, and let the caller be freed or retried.
+console.error(`[Operator Chat] Page ${pageId}: GrumpyBot could not take it (${reason}):`, err);
+    return false;
   } finally {
     takeoversInFlight.delete(pageId);
   }

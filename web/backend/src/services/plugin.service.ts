@@ -307,27 +307,60 @@ function parseEnvFile(file: string): Record<string, string> {
   return out;
 }
 
-/** Probe the bot's own /health (compose DNS name, localhost fallback). */
+/**
+ * A bot's /health answer is a small JSON object. Anything bigger is not one,
+ * and reading it into a string would be the bot deciding how much memory the
+ * board spends.
+ */
+export const HEALTH_BODY_CAP_BYTES = 64 * 1024;
+
+/**
+ * Probe the bot's own /health (compose DNS name, localhost fallback).
+ *
+ * BOUNDED IN BOTH DIRECTIONS. `raw += c` used to accumulate whatever the bot
+ * sent, with no cap; and http's own `timeout` option is SOCKET-IDLE time, not
+ * total time, so a bot dribbling one byte a second held the probe - and the
+ * admin's bot page - open for ever. The cap and the deadline below are what
+ * make this call finish.
+ */
 export function probeBotHealth(manifest: PluginManifest, timeoutMs = 3000): Promise<any | null> {
   const hosts = [manifest.composeService, 'localhost'];
   const tryHost = (host: string): Promise<any | null> =>
     new Promise((resolve) => {
+      let settled = false;
+      let deadline: NodeJS.Timeout | null = null;
+      const finish = (value: any | null): void => {
+        if (settled) return;
+        settled = true;
+        if (deadline) clearTimeout(deadline);
+        resolve(value);
+      };
       const req = http.get(
         { host, port: manifest.healthPort, path: manifest.healthPath || '/health', timeout: timeoutMs },
         (res) => {
           let raw = '';
-          res.on('data', (c) => { raw += c; });
+          res.on('data', (c) => {
+            if (settled) return;
+            raw += c;
+            if (raw.length > HEALTH_BODY_CAP_BYTES) {
+              req.destroy();
+              finish(null);
+            }
+          });
           res.on('end', () => {
             try {
-              resolve(res.statusCode === 200 ? JSON.parse(raw) : null);
+              finish(res.statusCode === 200 ? JSON.parse(raw) : null);
             } catch {
-              resolve(null);
+              finish(null);
             }
           });
         }
       );
-      req.once('error', () => resolve(null));
-      req.once('timeout', () => { req.destroy(); resolve(null); });
+      // The TOTAL time this probe may take, whatever the socket is doing.
+      deadline = setTimeout(() => { req.destroy(); finish(null); }, timeoutMs);
+      deadline.unref?.();
+      req.once('error', () => finish(null));
+      req.once('timeout', () => { req.destroy(); finish(null); });
     });
   return (async () => {
     for (const host of hosts) {

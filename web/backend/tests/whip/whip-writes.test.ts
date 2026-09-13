@@ -63,11 +63,15 @@ describe('WHIP write routes', () => {
     fs.rmSync(storageDir, { recursive: true, force: true });
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     events.length = 0;
+    await db.linkDiscord(ACTOR_DISCORD, actorId);
   });
 
-  const actor = (extra: any = {}) => ({ actorUserId: actorId, ...extra });
+  // Every write carries the link that proves who it is from. The board
+  // refuses a write without one - see "a write with no proof" below.
+  const ACTOR_DISCORD = 'd-actor';
+  const actor = (extra: any = {}) => ({ actorUserId: actorId, discordId: ACTOR_DISCORD, ...extra });
 
   it('creates a project and bumps projectsCreated', async () => {
     const res = await request(app)
@@ -84,13 +88,77 @@ describe('WHIP write routes', () => {
     expect((await request(app).post('/api/whip/projects').set(auth).send(actor({ name: 'x', type: 'nope' }))).status).toBe(
       400
     );
+    // A user id the link does not own is refused BEFORE the board looks it
+    // up, so "ghost" is a 403 (not linked), not a 404 (no such user).
     expect(
-      (await request(app).post('/api/whip/projects').set(auth).send({ actorUserId: 'ghost', name: 'x', type: 'demo' }))
-        .status
-    ).toBe(404);
+      (await request(app)
+        .post('/api/whip/projects')
+        .set(auth)
+        .send({ actorUserId: 'ghost', discordId: ACTOR_DISCORD, name: 'x', type: 'demo' })).status
+    ).toBe(403);
     expect(
       (await request(app).post('/api/whip/projects').set(auth).send({ name: 'x', type: 'demo' })).status
     ).toBe(400);
+  });
+
+  /**
+   * The hole this closes: the link was only checked `if (discordId !==
+   * undefined)`, and the bot deliberately omitted it for anyone it had
+   * matched by Discord USERNAME - so renaming a Discord account to a BBS
+   * handle, or passing `user: <handle>`, let any member of the guild
+   * complete, edit or delete that caller's work, with the points and
+   * achievements landing on the victim.
+   *
+   * The service token proves the request is the bot. It says nothing about
+   * who the bot claims to be acting for, and that is what these pin.
+   */
+  it('refuses a write that brings no proof of who it is from', async () => {
+    const res = await request(app)
+      .post('/api/whip/projects')
+      .set(auth)
+      .send({ actorUserId: actorId, name: 'No Proof', type: 'demo' });
+    expect(res.status).toBe(403);
+    expect(String(res.body.message)).toMatch(/linked account/i);
+  });
+
+  it('refuses every write verb without proof, not just the first one', async () => {
+    const made = await request(app)
+      .post('/api/whip/projects')
+      .set(auth)
+      .send({ ...actor(), name: 'Guarded', type: 'demo' });
+    expect(made.status).toBe(200);
+    const projectId = made.body.data.id;
+
+    const task = await request(app)
+      .post('/api/whip/tasks')
+      .set(auth)
+      .send({ ...actor(), projectId, title: 'Guarded task' });
+    expect(task.status).toBe(200);
+    const taskId = task.body.data.id;
+
+    for (const call of [
+      () => request(app).patch(`/api/whip/projects/${projectId}`).set(auth).send({ actorUserId: actorId, name: 'x' }),
+      () => request(app).delete(`/api/whip/projects/${projectId}`).set(auth).send({ actorUserId: actorId }),
+      () => request(app).patch(`/api/whip/tasks/${taskId}`).set(auth).send({ actorUserId: actorId, title: 'x' }),
+      () => request(app).delete(`/api/whip/tasks/${taskId}`).set(auth).send({ actorUserId: actorId }),
+      () =>
+        request(app)
+          .post(`/api/whip/tasks/${taskId}/move`)
+          .set(auth)
+          .send({ actorUserId: actorId, status: 'done' }),
+    ]) {
+      const res = await call();
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('an unlinked Discord account cannot act as a caller it can name', async () => {
+    await db.unlinkDiscordByDiscordId(ACTOR_DISCORD);
+    const res = await request(app)
+      .post('/api/whip/projects')
+      .set(auth)
+      .send({ actorUserId: actorId, discordId: 'd-impostor', name: 'Borrowed', type: 'demo' });
+    expect(res.status).toBe(403);
   });
 
   it('refuses a discordId linked to somebody else', async () => {

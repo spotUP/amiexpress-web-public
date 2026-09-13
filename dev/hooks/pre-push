@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# The gate that has to exist because CI does not.
+#
+# GitHub Actions is unpaid on this repo: `gh run list` answers HTTP 404, so
+# `backend-tests.yml` has never run a single time. `deploy/deploy.sh` runs no
+# tests either - deliberately, because nothing guarantees a node on the host
+# outside the container - and there is no branch protection. So between a
+# commit and the live board there was nothing at all, and it showed: four test
+# assertions sat red on `main` and on the live board for days, one of them a
+# real regression that hid an artist's own screens from them.
+#
+# This runs the cheap, high-signal half: both type-checks and the repo-rule
+# scans that are pure file reads. Together about 25 seconds. It deliberately
+# does NOT run the full backend suite (12,000+ tests) - a gate slow enough to
+# be resented is a gate that gets --no-verify'd, and the full suite is
+# `npm test`.
+#
+# Skip deliberately with:  git push --no-verify
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO_ROOT" || exit 0
+
+FAILED=""
+
+step() {
+  local name="$1"; shift
+  printf '[pre-push] %s ... ' "$name"
+  local output
+  if output=$("$@" 2>&1); then
+    echo "[OK]"
+  else
+    echo "[FAIL]"
+    echo "$output" | tail -25
+    FAILED="$FAILED $name"
+  fi
+}
+
+run_in() { (cd "$1" && shift && "$@"); }
+
+step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
+step "admin types"    run_in web/config-app npx tsc --noEmit
+step "admin design system" run_in web/config-app npx vitest run --reporter=basic \
+  src/test/design-system-usage.test.ts \
+  src/test/tailwind-tokens.test.ts \
+  src/test/modal-semantics.test.tsx
+
+if [ -n "$FAILED" ]; then
+  echo
+  echo "[pre-push] REFUSED:$FAILED"
+  echo "[pre-push] Fix it, or push with --no-verify if you mean to."
+  exit 1
+fi
+
+echo "[pre-push] [OK] pushing"
+exit 0

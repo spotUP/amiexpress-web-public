@@ -40,6 +40,7 @@ import {
 } from 'discord.js';
 import { loadConfig, type BotConfig } from './config';
 import { WhipApiClient, WhipApiError } from './whip-api';
+import { describeError } from './log-safe';
 import { BoardApiClient, BoardApiError, type BoardText } from './board-api';
 import { startFeedResilient } from './feed';
 import { createHealthState, startHealthServer, type HealthState } from './health';
@@ -599,16 +600,40 @@ async function boardEmbed(
   await interaction.editReply({ embeds: [embed] });
 }
 
-/** Resolved actor or null (already told the user). The Discord id travels
- *  only when a link row binds it: the backend 403s a discordId no link owns,
- *  so username-matched callers must not send one. */
+/**
+ * The actor for a WRITE, or null (the user has been told why).
+ *
+ * A write is only ever the person pressing the keys, proved by a link row -
+ * never a name match and never the `user:` option. Before this, every write
+ * path went through resolveUserId, which falls back to the Discord username,
+ * then to a stored discordName, then to a FUZZY substring of either - and
+ * deliberately sent no discordId for those, which is exactly the field the
+ * board checks. So any member of the guild could rename themselves to a BBS
+ * handle, or simply pass `user: <handle>`, and complete, edit or DELETE that
+ * caller's tasks and projects, with the points and achievements landing on
+ * the victim. Linking gave the victim no protection at all.
+ *
+ * Reads keep the friendlier resolution: knowing which tasks to SHOW someone
+ * is not the same question as being allowed to change them.
+ */
 async function requireLinkedUser(
   interaction: ChatInputCommandInteraction,
   api: WhipApiClient
-): Promise<{ userId: string; discordId?: string } | null> {
-  const identity = await resolveUserId(interaction, api);
-  if (!identity) return null;
-  return identity.discordId ? { userId: identity.userId, discordId: identity.discordId } : { userId: identity.userId };
+): Promise<{ userId: string; discordId: string } | null> {
+  try {
+    const status = await api.linkStatus(interaction.user.id);
+    return { userId: status.userId, discordId: interaction.user.id };
+  } catch (err) {
+    if (err instanceof WhipApiError && err.status === 404) {
+      await replyError(
+        interaction,
+        'Writing to WHIP needs a linked account. On the BBS, run LINKDISCORD and give me the code with `/link <code>`.',
+      );
+      return null;
+    }
+    await replyError(interaction, writeErrorMessage(err));
+    return null;
+  }
 }
 
 function writeErrorMessage(err: unknown): string {
@@ -864,7 +889,7 @@ async function main(): Promise<void> {
     await startHealthServer('whip', health, config.healthPort);
     console.log(`[whip-bot] Health on :${config.healthPort}/health`);
   } catch (err) {
-    console.warn('[whip-bot] Health endpoint unavailable, bot stays up:', (err as Error)?.message ?? err);
+    console.warn('[whip-bot] Health endpoint unavailable, bot stays up:', describeError(err));
   }
 
   client.once('ready', async () => {
@@ -882,7 +907,7 @@ async function main(): Promise<void> {
     try {
       await handleMessage(message);
     } catch (err) {
-      console.error('[whip-bot] Mention reply failed:', (err as Error)?.message ?? err);
+      console.error('[whip-bot] Mention reply failed:', describeError(err));
     }
   });
 
@@ -904,7 +929,7 @@ async function main(): Promise<void> {
         await handleWriteComponent(interaction, api);
       }
     } catch (err) {
-      console.error('[whip-bot] Interaction failed:', err);
+      console.error('[whip-bot] Interaction failed:', describeError(err));
       if (interaction.isRepliable()) {
         await replyError(interaction, 'Something went wrong talking to the BBS. Try again in a bit.');
       }
@@ -916,7 +941,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((err) => {
-    console.error('[whip-bot] Fatal:', err?.message ?? err);
+    console.error('[whip-bot] Fatal:', describeError(err));
     process.exit(1);
   });
 }

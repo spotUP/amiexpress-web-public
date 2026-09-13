@@ -90,9 +90,18 @@ function resilientDeps(over: Partial<FeedDeps> = {}): FeedDeps & {
     bbsPassword: 'pw',
     post: async (line: string) => { posts.push(line); },
     login: async () => { logins++; return `token-${logins}`; },
-    connect: (_url: string, _token: string, onEvent: (p: BbsEventPayload) => void, onDisconnect?: (r: string) => void) => {
+    connect: (
+      _url: string,
+      _token: string,
+      onEvent: (p: BbsEventPayload) => void,
+      onDisconnect?: (r: string) => void,
+      onConnected?: () => void,
+    ) => {
       drop = (reason: string) => onDisconnect?.(reason);
       void onEvent;
+      // A real socket.io socket announces its own connect; the loop reports
+      // 'live' from that, not from connect() having returned a handle.
+      onConnected?.();
       return { close: () => { drop = null; } };
     },
     ...over,
@@ -134,6 +143,49 @@ export async function resilientReconnectsAfterADrop(): Promise<void> {
     await new Promise((r) => setTimeout(r, 20));
     assert.strictEqual(deps.logins(), 2, 'a drop re-logs-in for a fresh token');
     assert.ok(states.includes('retrying'), 'drop surfaces as retrying');
+    // AND IT SAYS SO WHEN IT IS BACK. `onState('live')` was latched behind a
+    // one-shot flag, so the admin's bot page (health.feedState, index.ts)
+    // read 'retrying' for the life of the process after the first drop -
+    // while the feed was connected and delivering.
+    assert.strictEqual(states[states.length - 1], 'live', 'a reconnected feed reports live again');
+  } finally { feed.stop(); }
+}
+
+export async function resilientReportsLiveOnEveryReconnect(): Promise<void> {
+  const deps = resilientDeps();
+  const states: string[] = [];
+  const feed = startFeedResilient(deps, { ...FAST, onState: (s) => states.push(s) });
+  try {
+    await new Promise((r) => setTimeout(r, 10));
+    for (let i = 0; i < 4; i++) {
+      deps.disconnect();
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const live = states.filter((s) => s === 'live').length;
+    assert.strictEqual(live, 5, `one live per connection, saw ${live} in ${states.join(',')}`);
+    assert.strictEqual(states[states.length - 1], 'live', 'it ends connected');
+  } finally { feed.stop(); }
+}
+
+export async function resilientBackoffResetsAfterAGoodConnection(): Promise<void> {
+  // `failures` was never put back to zero, so every drop pushed the wait one
+  // doubling further out until it sat at maxDelayMs - a feed that dropped
+  // once an hour ended up an hour behind the board.
+  const at: number[] = [];
+  const deps = resilientDeps({ login: async () => { at.push(Date.now()); return 'token'; } });
+  const feed = startFeedResilient(deps, { initialDelayMs: 100, maxDelayMs: 10000 });
+  try {
+    await new Promise((r) => setTimeout(r, 30));
+    for (let i = 0; i < 5; i++) {
+      deps.disconnect();
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    assert.ok(at.length >= 6, `a login per reconnect, saw ${at.length}`);
+    const gaps = at.slice(1).map((t, i) => t - at[i]);
+    const first = gaps[0];
+    const last = gaps[gaps.length - 1];
+    // Doubling would have made the last gap 16x the first (100ms -> 1600ms).
+    assert.ok(last < first + 300, `the wait after a good connection stays at the first step (first=${first}ms, last=${last}ms)`);
   } finally { feed.stop(); }
 }
 

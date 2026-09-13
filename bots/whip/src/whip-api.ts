@@ -12,6 +12,8 @@
 
 import axios from 'axios';
 
+import { BOARD_HTTP_TIMEOUT_MS } from './http';
+
 export interface Envelope<T> {
   success: boolean;
   data?: T;
@@ -149,7 +151,7 @@ export interface RequestResponse {
 export type RequestFn = (config: RequestConfig) => Promise<RequestResponse>;
 
 function defaultRequestFn(baseUrl: string): RequestFn {
-  const instance = axios.create({ baseURL: baseUrl.replace(/\/$/, '') });
+  const instance = axios.create({ baseURL: baseUrl.replace(/\/$/, ''), timeout: BOARD_HTTP_TIMEOUT_MS });
   return async (config) => {
     try {
       const res = await instance.request({

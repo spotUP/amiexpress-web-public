@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "npm run test:sdk && npm run test:backend && npm run test:doors && npm run test:console",
+    "test": "npm run test:sdk && npm run test:backend && npm run test:admin && npm run test:doors && npm run test:doors:suites && npm run test:console",
     "test:sdk": "cd sdk && npm test",
     "test:backend": "cd web/backend && npm test",
     "test:doors": "npx tsx dev/tests/run-tests.ts",
@@ -26,7 +26,9 @@
     "xim:replay:real": "npx tsx dev/scripts/xim-replay-real.ts",
     "xim:record": "npx tsx dev/scripts/xim-record.ts",
     "xim:perf": "npx tsx dev/scripts/xim-perf.ts",
-    "generate:lvo": "node dev/scripts/generate-lvo-maps.js"
+    "generate:lvo": "node dev/scripts/generate-lvo-maps.js",
+    "test:doors:suites": "npx tsx dev/scripts/run-door-suites.ts",
+    "test:admin": "cd web/config-app && npm test"
   },
   "dependencies": {
     "axios": "^1.13.2",

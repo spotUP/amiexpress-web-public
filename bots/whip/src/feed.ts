@@ -14,6 +14,8 @@
 import axios from 'axios';
 import { io, type Socket } from 'socket.io-client';
 
+import { BOARD_HTTP_TIMEOUT_MS } from './http';
+
 export interface BbsEventPayload {
   type: string;
   username: string;
@@ -62,7 +64,13 @@ export interface FeedDeps {
     apiUrl: string,
     token: string,
     onEvent: (payload: BbsEventPayload) => void,
-    onDisconnect?: (reason: string) => void
+    onDisconnect?: (reason: string) => void,
+    /**
+     * The socket really connected. Not the same thing as connect() having
+     * returned a handle: socket.io answers a refused board with
+     * connect_error, so a handle is only an attempt.
+     */
+    onConnected?: () => void
   ) => { close: () => void };
   log?: (message: string) => void;
 }
@@ -71,7 +79,7 @@ async function defaultLogin(apiUrl: string, username: string, password: string):
   // POST /api/chat/login -> envelope { success, data: { token, user } }
   // Bounded: an untimed login against a half-booted board hangs forever
   // and wedges the retry loop below in silence (seen live 2026-09-10).
-  const res = await axios.post(`${apiUrl.replace(/\/$/, '')}/api/chat/login`, { username, password }, { timeout: 10000 });
+  const res = await axios.post(`${apiUrl.replace(/\/$/, '')}/api/chat/login`, { username, password }, { timeout: BOARD_HTTP_TIMEOUT_MS });
   const token = (res.data as { data?: { token?: string }; token?: string })?.data?.token ??
     (res.data as { token?: string })?.token;
   if (!token) throw new Error('chat login did not return a token');
@@ -82,13 +90,23 @@ function defaultConnect(
   apiUrl: string,
   token: string,
   onEvent: (payload: BbsEventPayload) => void,
-  onDisconnect?: (reason: string) => void
+  onDisconnect?: (reason: string) => void,
+  onConnected?: () => void
 ): { close: () => void } {
   // Same session shape as LiveChat: chat token in handshake auth so the
   // backend builds a chatOnly BBS session (web/backend/src/index.ts).
   // reconnection:false - the resilient loop above owns recovery (fresh
   // token per attempt); the client's own redial would double-socket.
   const socket: Socket = io(apiUrl, { auth: { token }, query: { chatOnly: 'true' }, reconnection: false });
+  if (onConnected) {
+    socket.on('connect', () => {
+      try {
+        onConnected();
+      } catch {
+        // Reporting the state must never kill the feed socket.
+      }
+    });
+  }
   socket.on('bbs:event', (payload: BbsEventPayload) => {
     try {
       onEvent(payload);
@@ -165,7 +183,6 @@ export function startFeedResilient(
   let stopped = false;
   let handle: { close: () => void } | null = null;
   let failures = 0;
-  let liveDone = false;
   let wake: (() => void) | null = null;
 
   const onEvent = (payload: BbsEventPayload) => {
@@ -195,13 +212,19 @@ export function startFeedResilient(
         const token = await login(deps.apiUrl, deps.bbsUser, deps.bbsPassword);
         if (stopped) return;
         const dropped = await new Promise<string | null>((resolve) => {
-          const h = connect(deps.apiUrl, token, onEvent, (reason) => resolve(reason));
+          // THE FEED IS LIVE EVERY TIME IT IS LIVE. `onState('live')` used to
+          // be latched behind a `liveDone` flag and `failures` was never put
+          // back to zero, so the FIRST drop pinned the admin's bot page at
+          // "retrying" for the life of the process and the backoff climbed to
+          // its cap and stayed there - while the feed was connected and
+          // delivering. A real connection says so, and clears the debt of
+          // the attempts it took to get here.
+          const h = connect(deps.apiUrl, token, onEvent, (reason) => resolve(reason), () => {
+            failures = 0;
+            onState('live');
+          });
           handle = h;
           wake = () => resolve(null);
-          if (!liveDone) {
-            liveDone = true;
-            onState('live');
-          }
         });
         wake = null;
         handle = null;

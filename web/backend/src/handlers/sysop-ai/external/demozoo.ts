@@ -8,6 +8,8 @@
  */
 import axios from 'axios';
 
+import { createExternalCache } from './cache';
+
 const BASE = 'https://demozoo.org/api/v1';
 export const EXTERNAL_TIMEOUT_MS = 3000;
 /**
@@ -20,12 +22,11 @@ export const EXTERNAL_TIMEOUT_MS = 3000;
  * group asked about.
  */
 export const DETAIL_TIMEOUT_MS = 9000;
-const CACHE_TTL_MS = 24 * 3600 * 1000;
 const UA = 'amiexpress-web-bbs/1.0 (AI co-sysop lookups; https://bbs.uprough.net)';
 
-const cache = new Map<string, { at: number; value: string }>();
+const cache = createExternalCache();
 /** Test seam. */
-export function resetExternalCache(): void { cache.clear(); }
+export function resetExternalCache(): void { cache.reset(); }
 
 export type Fetcher = (url: string, timeoutMs?: number) => Promise<any>;
 const httpGet: Fetcher = async (url, timeoutMs) =>
@@ -36,18 +37,8 @@ export function setExternalFetcher(f: Fetcher | null): void {
   fetcher = f ?? httpGet;
 }
 
-/** Cached, time-boxed, and an honest sentence when the net does not answer. */
-export async function cachedLookup(key: string, build: () => Promise<string>): Promise<string> {
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
-  try {
-    const value = (await build()).slice(0, 1800);
-    cache.set(key, { at: Date.now(), value });
-    return value;
-  } catch (err) {
-    return `No answer from the net right now (${(err as Error).message}).`;
-  }
-}
+export const cachedLookup = (key: string, build: () => Promise<string>): Promise<string> =>
+  cache.lookup(key, build);
 
 const names = (xs: any[] | undefined) => (xs ?? []).map((x) => x?.name ?? x?.releaser?.name).filter(Boolean);
 

@@ -13,6 +13,7 @@
 import axios from 'axios';
 
 import type { RequestConfig, RequestFn, RequestResponse } from './whip-api';
+import { BOARD_HTTP_TIMEOUT_MS } from './http';
 
 export interface BoardText {
   text: string;
@@ -31,7 +32,7 @@ export class BoardApiError extends Error {
 }
 
 function defaultRequestFn(baseUrl: string): RequestFn {
-  const instance = axios.create({ baseURL: baseUrl.replace(/\/$/, '') });
+  const instance = axios.create({ baseURL: baseUrl.replace(/\/$/, ''), timeout: BOARD_HTTP_TIMEOUT_MS });
   return async (config: RequestConfig) => {
     try {
       const res = await instance.request({
