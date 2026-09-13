@@ -44,8 +44,9 @@ typedef struct {
     /**
      * The caller treats LEFT and RIGHT as "the document before/after this
      * one" and wants the footer to say so. ui_doc_pick returns
-     * UI_DOC_PREV / UI_DOC_NEXT for those keys; ui_doc ignores them, as it
-     * always has.
+     * UI_DOC_PREV / UI_DOC_NEXT for those keys, and UI_DOC_HOME for H -
+     * the way out of a walk, back to the set's first document; ui_doc
+     * ignores all three, as it always has.
      */
     int page_keys;
 } ui_doc_style;
@@ -55,6 +56,7 @@ typedef struct {
 #define UI_DOC_PICKED 1   /* they chose the selected line */
 #define UI_DOC_PREV   2   /* LEFT: the document before this one */
 #define UI_DOC_NEXT   3   /* RIGHT: the document after it */
+#define UI_DOC_HOME   4   /* H: the set's first document - teletext page 100 */
 
 /** A frame in the middle of an 80x24 screen, white on black. */
 void ui_doc_style_init(ui_doc_style *style);

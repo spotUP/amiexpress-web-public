@@ -184,15 +184,40 @@ static int door_pending(void *ctx) { (void)ctx; return ae_input_pending(); }
 static void door_settle(void *ctx) { (void)ctx; ae_delay_ticks(1); }
 static void door_flush(void *ctx) { (void)ctx; ui_screen_flush(&screen); }
 
+/* ------------------------------------------------------------- masthead rail
+
+   The rail slides, the same way it does in SUBS and REQUESTS: a 68K door has
+   no timers, so the frames come from the idle hook while we wait for a key
+   (ui_key.h) - one row redrawn, about five frames a second.
+
+   This door drew it STILL for a while, to keep idle bytes out of the repaint
+   measurements. That was the wrong trade: the board's doors are supposed to
+   look like one board, and a dead rail is what the sysop noticed first
+   (2026-09-13). The measurement has its own answer - the probe reports idle
+   bytes separately from the per-key cost.
+
+   The current title is remembered so the hook can redraw the row it is on
+   without knowing which view put it there. */
+static int rail_tick;
+static const char *masthead_title = "TEXT-TV";
+
 static void draw_masthead(const char *title)
 {
-    /* Static, not the sliding rail: a 68K content door has no timers, and
-       the rail's 200 ms idle flushes cost ~700 bytes a second for
-       decoration - on a slow link that is the caller's bandwidth, and
-       it drowns every repaint measurement in idle noise. The masthead
-       looks identical standing still. */
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, title,
-                     theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    masthead_title = title;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+}
+
+static void door_idle(void *ctx)
+{
+    (void)ctx;
+    rail_tick++;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+    ui_screen_flush(&screen);
+    ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
 }
 
 static void say(int row, const char *text)
@@ -453,8 +478,8 @@ static int page_actions(void)
                 : "F favorite, S share, I index, Q quit.");
     /* The reader's own footer says "<> PAGE", but a caller who has already
        left it should not have to go back in to find that out. */
-    say(7, wide ? "While reading, LEFT and RIGHT flip to the previous and next page."
-                : "Reading: left/right flip pages.");
+    say(7, wide ? "While reading, LEFT and RIGHT flip pages and H goes back to 100."
+                : "Reading: left/right flip, H = page 100.");
     draw_status();
     if (page_next[0] != '\0' || page_prev[0] != '\0')
         draw_footer(hints_all, 5, "Q=Quit");
@@ -484,6 +509,7 @@ static int page_actions(void)
  * has no links, and then this is exactly the reader it was before.
  */
 #define TEXTTV_BACK_DEPTH 8
+#define TEXTTV_HOME_PAGE 100
 
 static void read_page(void)
 {
@@ -550,6 +576,18 @@ static void read_page(void)
            so they leave the back-stack alone - Q still returns to the page
            this one was opened from. At an edge there is nowhere to go and
            the reader simply stays. */
+        /* H goes home, and home is page 100 - the teletext main index, the
+           page every set starts on. It is a JUMP, not a step, so the walk
+           that led here is over: Q from page 100 leaves the reader instead
+           of retracing six pages the caller has finished with. */
+        if (rc == UI_DOC_HOME) {
+            if (page_num == TEXTTV_HOME_PAGE) { depth = 0; continue; }
+            show_page(TEXTTV_HOME_PAGE);
+            if (page_num == 0) return;
+            depth = 0;
+            continue;
+        }
+
         if (rc == UI_DOC_PREV || rc == UI_DOC_NEXT) {
             int target = texttv_valid_page(rc == UI_DOC_PREV ? page_prev : page_next);
             if (target == 0) continue;          /* an edge: stay put */
@@ -688,7 +726,7 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = 0; /* no rail animation - see draw_masthead */
+    keys.idle = door_idle;
     keys.flush = door_flush;
     keys.ctx = 0;
 

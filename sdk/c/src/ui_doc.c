@@ -58,6 +58,21 @@ int ui_doc_wrap(const char *text, int width,
             cols++;
         }
 
+        /* THE PENS THAT FOLLOW THE LAST COLUMN BELONG TO THIS LINE.
+         *
+         * A teletext row IS exactly forty columns and ends with a pen reset.
+         * The walk above stops on the fortieth column with the marker still
+         * ahead, and `p[len]` is then UI_INK rather than the newline - so
+         * the row broke and the marker became a LINE, which is why page 100
+         * wrapped to fifty-one lines at forty columns instead of twenty-seven:
+         * every second row was an invisible one. That also moved every line
+         * index, so the headline cursor sat on the wrong row and each move
+         * scrolled (1500 bytes a keypress, measured 2026-09-13).
+         *
+         * A zero-width marker cannot need a line of its own. */
+        while (p[len] == UI_INK && p[len + 1])
+            len += (p[len + 1] == 'T' && p[len + 2]) ? 3 : 2;
+
         if (p[len] == '\n') {
             if (line) line(context, start, len);
             count++;
@@ -252,6 +267,11 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
          * "what RETURN does" outranks "which page this is". */
         if (sel_line >= 0) {
             if (st->page_keys && counter[0] &&
+                (int) (strlen(counter) + 39) <= st->width) {
+                /* Eighty columns carry the home key too. */
+                strcpy(footer, counter);
+                strcat(footer, "  <> PAGE  H HOME  ENTER READS  Q LEAVE");
+            } else if (st->page_keys && counter[0] &&
                 (int) (strlen(counter) + 31) <= st->width) {
                 /* Forty columns fit all three: "PAGE 1/3  <> PAGE  ENTER
                    READS  Q LEAVE" is thirty-nine. */
@@ -267,6 +287,10 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
             } else {
                 strcpy(footer, "ENTER READS");
             }
+        } else if (st->page_keys && counter[0] &&
+                   (int) (strlen(counter) + 32) <= st->width) {
+            strcpy(footer, counter);
+            strcat(footer, "  <> PAGE  H HOME  Q LEAVE");
         } else if (st->page_keys && counter[0] &&
                    (int) (strlen(counter) + 24) <= st->width) {
             strcpy(footer, counter);
@@ -452,6 +476,16 @@ int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
             ansi_reset(b);
             if (current) *current = cur;
             return key == UI_KEY_LEFT ? UI_DOC_PREV : UI_DOC_NEXT;
+        case 'h': case 'H':
+            /* Not the HOME key, which still means "top of THIS document":
+               this is the way out of a walk - six flips deep into the
+               numbering, one key back to where the set starts. Only a
+               caller that navigates documents has such a place. */
+            if (!st->page_keys) break;
+            ansi_cursor(b, 1);
+            ansi_reset(b);
+            if (current) *current = cur;
+            return UI_DOC_HOME;
         case UI_KEY_HOME:
             top = 0;
             break;

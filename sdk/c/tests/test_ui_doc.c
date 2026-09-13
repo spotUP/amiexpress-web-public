@@ -426,6 +426,76 @@ static void left_and_right_page_unless_the_caller_wants_them(void)
     printf("  [OK] left and right page, unless the caller wants the direction\n");
 }
 
+static void a_pen_after_the_last_column_does_not_make_a_line(void)
+{
+    /* A teletext row is exactly forty columns and ends with a pen reset.
+       The row is ONE line: the marker is zero-width and cannot need a line
+       of its own. It used to get one, which doubled every Text-TV page at
+       forty columns and moved every line index under the headline cursor. */
+    char text[256];
+    int n = 0;
+    char row[64];
+    int i;
+
+    for (i = 0; i < 40; i++) row[i] = 'X';
+    row[40] = '\0';
+    sprintf(text, "\001""7%s\001R\n\001""7%s\001R\n", row, row);
+
+    n = ui_doc_wrap(text, 40, 0, 0);
+    assert(n == 2);
+
+    /* The same for the three-byte token form of a marker. */
+    sprintf(text, "\001""7%s\001T\001\n", row);
+    assert(ui_doc_wrap(text, 40, 0, 0) == 1);
+
+    /* And a row that really IS wider than the box still wraps. */
+    sprintf(text, "%s and more words here\n", row);
+    assert(ui_doc_wrap(text, 40, 0, 0) == 2);
+    printf("  [OK] a pen after the last column does not make a line\n");
+}
+
+static void h_is_the_way_home_for_a_caller_that_walks(void)
+{
+    /* Six flips into the numbering, one key back to where the set starts.
+       A reader that does NOT navigate documents must not lose an 'h' to
+       this - it is an ordinary letter there. */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text =
+        "line one\nline two\nline three\nline four\nline five\nline six";
+    int cur = -1;
+    const int lines[1] = { 0 };
+
+    ui_doc_style_init(&st);
+    st.height = 2; st.width = 76; st.top = 1; st.left = 1;
+
+    st.page_keys = 1;
+    t.keys = "h"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur) == UI_DOC_HOME);
+    /* And where there is room, the footer says the key exists. */
+    assert(strstr(storage, "H HOME") != 0);
+
+    /* Without page_keys 'h' is not a key at all: the reader stays put and
+       leaves on q, as it did before this existed. */
+    st.page_keys = 0;
+    t.keys = "hq"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur) == UI_DOC_LEFT);
+    assert(strstr(storage, "H HOME") == 0);
+
+    /* The plain reader never had an 'h' either. */
+    t.keys = "hq"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, " M ", text) == 0);
+    printf("  [OK] h is the way home, for a caller that walks documents\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -443,6 +513,8 @@ int main(void)
     a_frameless_reader_uses_every_column();
     a_coloured_row_keeps_its_tail();
     left_and_right_page_unless_the_caller_wants_them();
+    h_is_the_way_home_for_a_caller_that_walks();
+    a_pen_after_the_last_column_does_not_make_a_line();
     printf("ui_doc: all passed\n");
     return 0;
 }
