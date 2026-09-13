@@ -173,6 +173,22 @@ function ansiSession(commandText: string): any {
   return { ...c64Session(commandText), terminalType: 'ansi', petsciiMode: false, screenWidth: 80 };
 }
 
+/**
+ * The OTHER forty-column caller: teletext. Same grid as the C64 and none of
+ * the transduction - and the sysop's report on 2026-09-14 was that an
+ * 80-column door (Joincnf, over J) ran for one of these, which is the very
+ * thing this file exists to prevent for the C64.
+ */
+function teletextSession(commandText: string): any {
+  return {
+    ...c64Session(commandText),
+    terminalType: 'ansi',
+    petsciiMode: false,
+    texttvMode: true,
+    screenWidth: 40,
+  };
+}
+
 describe('a 40-column caller who types FR gets the file list', () => {
   beforeEach(async () => {
     await register(doorOver('FR'));
@@ -194,6 +210,16 @@ describe('a 40-column caller who types FR gets the file list', () => {
     const socket = makeSocket();
     await handleCommand(socket as any, c64Session('FR'), '');
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+  });
+
+  it('refuses the door for a TELETEXT caller too, and falls through', async () => {
+    const socket = makeSocket();
+    await handleCommand(socket as any, teletextSession('FR'), '');
+
+    const out = allOutput(socket);
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(out).toContain('Reverse scanning directory 1');
   });
 
   it('leaves the door serving 80-column callers exactly as before', async () => {
