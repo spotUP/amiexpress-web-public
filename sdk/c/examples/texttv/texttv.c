@@ -104,23 +104,41 @@ static int config_load(texttv_config *cfg, const char *path)
 /* Rewrite the whole cfg: Host/Port/Timeout/StartPage preserved, Favorites
  * current. Last writer wins across nodes - the same trade every door-side
  * cfg edit on this board makes, and a favorites list is what it costs. */
-static int config_save(const texttv_config *cfg, const char *path)
+/*
+ * The caller's favorites, in a file the board does not own.
+ *
+ * They used to live in TEXTTV.cfg beside Host and Port. That file is
+ * manifest-backed (Doors/TEXTTV/door.settings.json names Favorites), so
+ * renderAllDoorCfgs rewrites it from the settings at every boot - and every
+ * F a caller had pressed went back to the sysop's default list. Two writers,
+ * one file. TEXTTV.favs has one writer: this door. The manifest's Favorites
+ * is what a board starts with; this is what the callers made of it.
+ */
+static int favs_save(const texttv_config *cfg, const char *path)
 {
     FILE *f;
     int i;
     f = fopen(path, "w");
     if (f == 0) return 0;
-    fprintf(f, "# TEXTTV - SVT Text-TV client config (door rewrites Favorites)\n");
-    fprintf(f, "Host=%s\n", cfg->host);
-    fprintf(f, "Port=%d\n", cfg->port);
-    fprintf(f, "Timeout=%d\n", cfg->timeout_secs);
-    fprintf(f, "StartPage=%d\n", cfg->start_page);
-    fprintf(f, "Favorites=");
     for (i = 0; i < cfg->fav_count; i++)
         fprintf(f, "%s%d", i == 0 ? "" : ",", cfg->favs[i]);
     fprintf(f, "\n");
     fclose(f);
     return 1;
+}
+
+/* Replaces the manifest defaults when the file is there; silence when not. */
+static void favs_load(texttv_config *cfg, const char *path)
+{
+    FILE *f;
+    char line[256];
+    f = fopen(path, "r");
+    if (f == 0) return;
+    if (fgets(line, (int)sizeof line, f) != 0) {
+        cfg->fav_count = 0;
+        texttv_fav_parse(cfg, line);
+    }
+    fclose(f);
 }
 
 /* ------------------------------------------------------------------- fetch */
@@ -327,6 +345,15 @@ static int fetch_page(int page)
 
     if (texttv_pick_body(body, plain, sizeof plain) != 0) return -1;
     utf8_to_latin1(plain, page_body, sizeof page_body);
+    /* The proxy's rows carry real SGR escapes, and ansi_text turns every
+       byte below 32 into a space - so the colour printed as `[0;37;44m`
+       across the row. Translated to the SDK's pen markers, which cost the
+       row no columns. A plain body has no escapes and passes through. */
+    {
+        static char inked[sizeof page_body];
+        if (texttv_ansi_to_ink(page_body, inked, sizeof inked) > 0)
+            memcpy(page_body, inked, strlen(inked) + 1);
+    }
     if (json_extract_string(body, "title", page_title, sizeof page_title) != 0)
         sprintf(page_title, "Text-TV %d", page);
     if (json_extract_string(body, "next_page", page_next, sizeof page_next) != 0)
@@ -394,7 +421,7 @@ static void show_page(int page)
 
 static int page_actions(void)
 {
-    static const char *const hints_all[5] = { "N Next", "P Prev", "F Favorite", "S Share", "Q Quit" };
+    static const char *const hints_all[5] = { "N Next", "P Previous", "F Favorite", "S Share", "Q Quit" };
     static const char *const hints_edge[4] = { "F Favorite", "S Share", "I Index", "Q Quit" };
     char line[96];
     int key;
@@ -404,9 +431,9 @@ static int page_actions(void)
     texttv_page_line(line, sizeof line, page_num, page_title);
     say(3, line);
     say(5, wide ? "N next page, P previous, F favorite, S share it,"
-                : "N next, P prev, F fav,");
+                : "N next, P previous,");
     say(6, wide ? "I back to the index, or a number for any page 100-999."
-                : "S share, I index, Q quit.");
+                : "F favorite, S share, I index, Q quit.");
     draw_status();
     if (page_next[0] != '\0' || page_prev[0] != '\0')
         draw_footer(hints_all, 5, "Q=Quit");
@@ -545,9 +572,10 @@ int main(int argc, char **argv)
        it (express.e:7514-7528). Restored on every exit path. */
     ae_raw_arrows(1);
 
-    if (!config_load(&config, "TEXTTV.cfg")) {
-        /* No config, no problem: defaults fetch api.texttv.nu:80. */
-    }
+    /* No config, no problem: config_load leaves the defaults standing. The
+       sysop's file is read first, then the callers' own favorites on top. */
+    config_load(&config, "TEXTTV.cfg");
+    favs_load(&config, "TEXTTV.favs");
 
     ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     wide = !ui_is_compact_width(screen.cols);
@@ -692,7 +720,7 @@ int main(int argc, char **argv)
             } else {
                 sprintf(status_line, "[OK] Page %d %s favorites.", page_num,
                         added ? "added to" : "removed from");
-                config_save(&config, "TEXTTV.cfg");
+                favs_save(&config, "TEXTTV.favs");
             }
             full = 1;
             continue;

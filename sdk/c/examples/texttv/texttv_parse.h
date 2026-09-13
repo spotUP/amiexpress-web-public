@@ -40,6 +40,23 @@ int texttv_page_path(int page, char *out, unsigned long cap);
 int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
 
 /*
+ * SGR colour escapes into the SDK's pen markers, everything else copied.
+ *
+ * The proxy converts texttv.nu's HTML to rows carrying real `ESC[0;37;44m`
+ * sequences, and the door draws through ansi_text, which replaces every byte
+ * below 32 with a space on purpose - a raw ESC from a server would otherwise
+ * move a cursor-addressed layout wherever it liked. So the colour arrived as
+ * literal text: `[0;37;44m` printed across the row.
+ *
+ * A foreground colour becomes UI_INK + its palette digit, a reset becomes
+ * UI_INK 'R', and background and everything else is dropped - the door owns
+ * its ground. Markers cost no columns (ui_ansi.h), so the row still measures
+ * what the reader wraps by. Returns the number of bytes written, or 0 when
+ * out is unusable.
+ */
+unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap);
+
+/*
  * First string of the "content_plain" array into out. 0 on success;
  * non-zero (out left "") when the key, the bracket, the opening quote,
  * the terminator or room is missing - an off-air page answers `[]` and

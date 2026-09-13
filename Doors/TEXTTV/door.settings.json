@@ -45,7 +45,7 @@
       "label": "Favorite pages",
       "type": "string",
       "default": "100,300",
-      "help": "Comma-separated page numbers, kept in the index below the curated list."
+      "help": "Comma-separated page numbers a new board starts with, kept in the index below the curated list. A caller's own F list lives in TEXTTV.favs beside the door and is not overwritten by this - the two used to share TEXTTV.cfg, and every boot reverted what the callers had pressed."
     }
   ]
 }

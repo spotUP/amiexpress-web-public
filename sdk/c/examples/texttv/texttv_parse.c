@@ -129,6 +129,68 @@ int texttv_first_plain(const char *json, char *out, unsigned long outcap)
     return 0;
 }
 
+#define TEXTTV_INK '\001'
+
+static char ink_digit(int colour)
+{
+    if (colour < 0) colour = 0;
+    if (colour > 15) colour = 15;
+    return colour < 10 ? (char)('0' + colour) : (char)('a' + (colour - 10));
+}
+
+unsigned long texttv_ansi_to_ink(const char *in, char *out, unsigned long cap)
+{
+    unsigned long n = 0;
+    const char *p = in;
+    if (out == 0 || cap == 0) return 0;
+    out[0] = '\0';
+    if (in == 0) return 0;
+
+    while (*p != '\0' && n + 1 < cap) {
+        if (p[0] == 0x1b && p[1] == '[') {
+            const char *q = p + 2;
+            int value = -1;
+            int pen = -1;
+            int bright = 0;
+            int reset = 0;
+            /* Parameters up to the terminator. Only the final byte 'm'
+               carries colour; any other sequence is dropped whole. */
+            while (*q != '\0' && !(*q >= 0x40 && *q <= 0x7e)) {
+                if (*q >= '0' && *q <= '9') {
+                    value = (value < 0 ? 0 : value) * 10 + (*q - '0');
+                } else {
+                    if (value == 0) reset = 1;
+                    else if (value == 1) bright = 1;
+                    else if (value >= 30 && value <= 37) pen = value - 30;
+                    else if (value >= 90 && value <= 97) { pen = value - 90; bright = 1; }
+                    value = -1;
+                }
+                q++;
+            }
+            if (value == 0) reset = 1;
+            else if (value == 1) bright = 1;
+            else if (value >= 30 && value <= 37) pen = value - 30;
+            else if (value >= 90 && value <= 97) { pen = value - 90; bright = 1; }
+
+            if (*q == 'm') {
+                if (pen >= 0 && n + 2 < cap) {
+                    out[n++] = TEXTTV_INK;
+                    out[n++] = ink_digit(bright ? pen + 8 : pen);
+                } else if (reset && pen < 0 && n + 2 < cap) {
+                    out[n++] = TEXTTV_INK;
+                    out[n++] = 'R';
+                }
+            }
+            if (*q == '\0') break;
+            p = q + 1;
+            continue;
+        }
+        out[n++] = *p++;
+    }
+    out[n] = '\0';
+    return n;
+}
+
 int texttv_pick_body(const char *json, char *out, unsigned long outcap)
 {
     if (outcap > 0) out[0] = '\0';

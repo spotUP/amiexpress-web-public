@@ -176,11 +176,54 @@ static void test_page_line(void)
     CHECK(strcmp(frame.line, "Page 300: ") == 0);
 }
 
+static void test_ansi_to_ink(void)
+{
+    char out[256];
+    /* The proxy's own shape: SGR foreground, background, and a reset. The
+       door draws through ansi_text, which replaces control bytes with
+       spaces - so an untranslated escape printed as "[0;37;44m" across the
+       row, which is what a caller saw on every coloured page. */
+    CHECK(texttv_ansi_to_ink("\033[0;37;44mNEWS\033[0m", out, sizeof out) > 0);
+    CHECK(strcmp(out, "\001" "7NEWS\001R") == 0);
+
+    /* Bright is the top half of the palette, not a separate flag. */
+    CHECK(texttv_ansi_to_ink("\033[1;31mHOT", out, sizeof out) > 0);
+    CHECK(strcmp(out, "\001" "9HOT") == 0);
+    CHECK(texttv_ansi_to_ink("\033[93mHOT", out, sizeof out) > 0);
+    CHECK(strcmp(out, "\001" "bHOT") == 0);
+
+    /* A body with no escapes is copied through unchanged. */
+    CHECK(texttv_ansi_to_ink("plain rows\nsecond", out, sizeof out) > 0);
+    CHECK(strcmp(out, "plain rows\nsecond") == 0);
+
+    /* Anything that is not a colour is dropped whole, not printed. */
+    CHECK(texttv_ansi_to_ink("a\033[2Jb", out, sizeof out) > 0);
+    CHECK(strcmp(out, "ab") == 0);
+
+    /* A truncated escape at the end does not run off the string. */
+    CHECK(texttv_ansi_to_ink("tail\033[", out, sizeof out) > 0);
+    CHECK(strcmp(out, "tail") == 0);
+
+    /* Degenerate buffers: terminated, never written past. */
+    {
+        struct { char buf[8]; char canary[8]; } frame;
+        int i;
+        memset(&frame, 0, sizeof frame);
+        memset(frame.canary, '#', sizeof frame.canary);
+        texttv_ansi_to_ink("\033[31mtoo long for this", frame.buf, sizeof frame.buf);
+        CHECK(frame.buf[sizeof frame.buf - 1] == '\0');
+        for (i = 0; i < (int)sizeof frame.canary; i++) CHECK(frame.canary[i] == '#');
+    }
+    CHECK(texttv_ansi_to_ink("x", out, 0) == 0);
+    CHECK(texttv_ansi_to_ink(0, out, sizeof out) == 0);
+}
+
 int main(void)
 {
     test_valid_page();
     test_page_path();
     test_page_line();
+    test_ansi_to_ink();
     test_first_plain();
     test_pick_body();
     test_utf8();
