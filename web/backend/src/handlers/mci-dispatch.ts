@@ -352,6 +352,19 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     MN: (w) => applyMciWidth(msgBaseName, w),
     // Logon / system clocks (express.e:5391-5402)
     CT: (w) => applyMciWidth(formatLongTime(logonDate), w),
+    /*
+     * WEB_: the clock NOW, which express.e has no code for.
+     *
+     * It has the date (~DT) and the time the caller logged on (~CT), and
+     * between them no way to put the current time on a screen - which a
+     * teletext page's header row is made of: page number, board, clock. A
+     * static .ttx file cannot hold one, and the alternative was a special
+     * case in the screen path for one row of one mode.
+     *
+     * Reads the same clock every other code here reads, so a screen and the
+     * board's own log cannot disagree about what time it is.
+     */
+    TM: (w) => applyMciWidth(formatLongTime(now), w),
     VD: (w) => applyMciWidth('2.00', w),
     VE: (w) => applyMciWidth('AmiExpress-Web 2.0', w),
     ND: (w) => applyMciWidth((session.nodeId || 1).toString(), w),
