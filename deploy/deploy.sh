@@ -607,8 +607,28 @@ done
 #
 # Cheap, generic, and needs no JSON: `.Config.Image` is the tag the container
 # was created from, `.Image` is the ID it actually runs.
-echo "== running images match what was just built =="
+echo "== running code is the code just built =="
+#
+# For every RUNNING service, the commit its image was stamped with must be the
+# commit this deploy built.
+#
+# This used to compare docker image IDs: the container's `{{.Image}}` against
+# `docker image inspect {{.Id}}` of the tag it was created from. That was
+# WRONG on this host and fails towards a false alarm. Under the containerd
+# snapshotter a build that exports an attestation manifest gives the container
+# an `.Image` that is a manifest-list digest - a different identifier space
+# from an image config ID, and one `docker image inspect` cannot resolve at
+# all ("No such image"). On 2026-09-13 that reported the WHIP bot STALE while
+# its /app/bot/src checksum matched the repo exactly, and the check exits 1,
+# so it would have failed deploys over healthy code. A gate that cries wolf
+# gets ignored, which is worse than not having it.
+#
+# The label is stamped by the build from the GIT_SHA arg, so it answers the
+# question directly - which code is this? - without depending on the image
+# store, the builder, or whether attestations were exported.
 STALE_SERVICES=""
+UNLABELLED_SERVICES=""
+REVISION_LABEL="org.opencontainers.image.revision"
 # shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
 for svc in $(docker compose $PROFILE_ARGS ps --services --status running 2>/dev/null); do
   [ -n "$svc" ] || continue
@@ -616,21 +636,22 @@ for svc in $(docker compose $PROFILE_ARGS ps --services --status running 2>/dev/
   cid=$(docker compose $PROFILE_ARGS ps -q "$svc" 2>/dev/null | head -1)
   [ -n "$cid" ] || continue
 
-  running_id=$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null)
-  tag=$(docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null)
-  [ -n "$running_id" ] && [ -n "$tag" ] || continue
+  built_sha=$(docker inspect -f "{{index .Config.Labels \"$REVISION_LABEL\"}}" "$cid" 2>/dev/null || true)
 
-  tag_id=$(docker image inspect -f '{{.Id}}' "$tag" 2>/dev/null || true)
-  # A tag that no longer exists cannot be compared; say so rather than pass.
-  if [ -z "$tag_id" ]; then
-    echo "  $svc: WARNING cannot resolve image tag $tag"
+  # An image with no label cannot be verified. Say so rather than pass it
+  # silently - an unverifiable service is exactly what this check exists to
+  # surface - but do not fail the deploy over an image somebody has not got
+  # round to stamping yet.
+  if [ -z "$built_sha" ] || [ "$built_sha" = "unknown" ]; then
+    echo "  $svc: WARNING no $REVISION_LABEL - cannot verify what it is running"
+    UNLABELLED_SERVICES="$UNLABELLED_SERVICES $svc"
     continue
   fi
 
-  if [ "$running_id" = "$tag_id" ]; then
-    echo "  $svc: OK (running the current $tag)"
+  if [ "$built_sha" = "$ACTUAL_SHA" ]; then
+    echo "  $svc: OK (running $ACTUAL_SHA)"
   else
-    echo "  $svc: STALE - running ${running_id#sha256:} but $tag is now ${tag_id#sha256:}" >&2
+    echo "  $svc: STALE - running $built_sha but this deploy built $ACTUAL_SHA" >&2
     STALE_SERVICES="$STALE_SERVICES $svc"
   fi
 done
@@ -642,6 +663,12 @@ if [ -n "$STALE_SERVICES" ]; then
   # shellcheck disable=SC2086
   echo "       docker compose $PROFILE_ARGS up -d --force-recreate --no-build$STALE_SERVICES" >&2
   exit 1
+fi
+
+if [ -n "$UNLABELLED_SERVICES" ]; then
+  echo "NOTE: unverifiable (no revision label):$UNLABELLED_SERVICES" >&2
+  echo "      Give the image an ARG GIT_SHA + LABEL $REVISION_LABEL and pass" >&2
+  echo "      GIT_SHA in its docker-compose build args, as bbs and whip-bot do." >&2
 fi
 
 echo "== door sync verification =="

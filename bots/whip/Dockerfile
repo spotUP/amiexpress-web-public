@@ -28,6 +28,23 @@ RUN addgroup -g 1001 bbsuser \
     && chown -R bbsuser:bbsuser /app/bot
 USER bbsuser
 
+# Which commit this image was built from.
+#
+# The deploy proves a container is running what was just built by comparing
+# THIS label against the SHA it deployed (deploy/deploy.sh, "running images
+# match what was just built"). It used to compare docker image IDs instead,
+# and that was wrong on this host: under the containerd snapshotter a build
+# that exports an attestation manifest gives the container an .Image digest
+# that `docker image inspect` cannot resolve at all, so a bot running correct
+# code read as STALE and the deploy would have failed on it.
+#
+# A label the build stamps is the honest answer to "which code is this?" -
+# it does not depend on the image store, the builder, or attestations. The
+# BBS image has carried it since Dockerfile:251; this one did not, which is
+# why the bot was unverifiable.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="$GIT_SHA"
+
 # Health for compose + the admin status probe (bot's own /health).
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD node -e "fetch('http://localhost:3099/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

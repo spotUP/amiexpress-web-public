@@ -10,46 +10,56 @@
  * been committed, tested, merged and deployed green, and was not in the
  * running process.
  *
- * That is the shape this check exists for, and it is the same shape as a door
- * dist that is not rebuilt and a manifest the image never carried: green in
- * git, absent in production, and nothing says so.
+ * THE FIRST VERSION OF THIS CHECK WAS WRONG, and this file now pins the fix.
  *
- * The rule: for every RUNNING service, the container's image ID must still
- * equal the ID its tag points at. A tag that has moved since the container
- * started means something rebuilt that image and this container did not get
- * it. `.Config.Image` is the tag it was created from; `.Image` is the ID it
- * actually runs.
+ * It compared docker image IDs: the container's `{{.Image}}` against
+ * `docker image inspect {{.Id}}` of the tag it was created from. Those are
+ * different identifier spaces. Under the containerd snapshotter a build that
+ * exports an attestation manifest gives the container an `.Image` that is a
+ * manifest-LIST digest, which `docker image inspect` cannot resolve at all
+ * ("No such image"). On 2026-09-13 that reported the WHIP bot STALE while its
+ * /app/bot/src checksum matched the repo byte for byte - and the check does
+ * `exit 1`, so it would have failed deploys over healthy code.
  *
- * Proven against the live host while it was written: it reported `bbs: OK` and
- * caught `whip-bot` genuinely stale in the same breath.
+ * A gate that cries wolf gets ignored, which is worse than no gate. So the
+ * comparison is now the commit the image was STAMPED with at build time,
+ * against the commit this deploy built. That answers the real question -
+ * which code is this? - without depending on the image store, the builder, or
+ * whether attestations were exported.
  *
  * Assertions are on the shell, because the shell is what deploys.
  */
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DEPLOY = fs.readFileSync(
-  path.join(__dirname, '..', '..', '..', '..', 'deploy', 'deploy.sh'),
-  'utf8'
-);
+const REPO = path.join(__dirname, '..', '..', '..', '..');
+const DEPLOY = fs.readFileSync(path.join(REPO, 'deploy', 'deploy.sh'), 'utf8');
 
-/** The staleness check, isolated from the rest of the script. */
+/** The check, isolated from the rest of the script. */
 const CHECK = DEPLOY.slice(
-  DEPLOY.indexOf('== running images match what was just built =='),
+  DEPLOY.indexOf('== running code is the code just built =='),
   DEPLOY.indexOf('== door sync verification ==')
 );
+
+const LABEL = 'org.opencontainers.image.revision';
 
 describe('the deploy verifying what is running', () => {
   it('has the check at all', () => {
     expect(CHECK.length).toBeGreaterThan(0);
   });
 
-  it('compares the running image ID against the tag it was created from', () => {
-    // Both halves are needed: the ID the container runs, and the ID the tag
-    // resolves to NOW. Comparing tags to tags would always match.
-    expect(CHECK).toMatch(/\{\{\.Image\}\}/);
-    expect(CHECK).toMatch(/\{\{\.Config\.Image\}\}/);
-    expect(CHECK).toMatch(/docker image inspect -f '\{\{\.Id\}\}'/);
+  it('compares the commit the image was stamped with, not image IDs', () => {
+    // The whole point of the rewrite. `.Image` vs `.Id` is the bug.
+    //
+    // The negative half has to ignore comment lines: the block deliberately
+    // EXPLAINS the old comparison so the next reader does not reintroduce it,
+    // and a blunt search finds that prose and calls it a regression.
+    const code = CHECK.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+    expect(CHECK).toContain(LABEL);
+    expect(code).toMatch(/\$ACTUAL_SHA/);
+    expect(code).not.toMatch(/\{\{\.Image\}\}/);
+    expect(code).not.toMatch(/docker image inspect/);
   });
 
   it('checks every running service, not just the board', () => {
@@ -74,9 +84,69 @@ describe('the deploy verifying what is running', () => {
     expect(CHECK).toMatch(/up -d --force-recreate --no-build/);
   });
 
-  it('does not pass silently when a tag cannot be resolved', () => {
-    // An unresolvable tag is unknown, not healthy; saying so beats a green
-    // deploy built on a comparison that never happened.
-    expect(CHECK).toMatch(/WARNING cannot resolve image tag/);
+  it('reports an unlabelled image rather than passing it silently', () => {
+    // An image nobody stamped cannot be verified, and saying so beats a green
+    // deploy built on a comparison that never happened. It is a WARNING and
+    // not an exit, so one unstamped sidecar cannot block the board shipping.
+    expect(CHECK).toMatch(/WARNING no \$REVISION_LABEL/);
+    expect(CHECK).toMatch(/UNLABELLED_SERVICES/);
+  });
+
+  it('does not exit 1 merely because a label is missing', () => {
+    // The unlabelled branch must `continue`, not join STALE_SERVICES - or the
+    // check regains exactly the false-positive it was rewritten to remove.
+    const unlabelled = CHECK.slice(
+      CHECK.indexOf('if [ -z "$built_sha" ]'),
+      CHECK.indexOf('if [ "$built_sha" = "$ACTUAL_SHA" ]')
+    );
+    expect(unlabelled).toMatch(/continue/);
+    expect(unlabelled).not.toMatch(/STALE_SERVICES=/);
+  });
+});
+
+describe('the images the check depends on', () => {
+  /** Every service that declares a build in docker-compose.yml. */
+  const COMPOSE = fs.readFileSync(path.join(REPO, 'docker-compose.yml'), 'utf8');
+
+  it('the board image stamps the revision it was built from', () => {
+    const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf8');
+    expect(dockerfile).toMatch(new RegExp(`LABEL ${LABEL.replace(/\./g, '\\.')}`));
+    expect(dockerfile).toMatch(/ARG GIT_SHA/);
+  });
+
+  it('the bot image stamps it too, which is what it was missing', () => {
+    // Without this the bot builds as GIT_SHA=unknown and is unverifiable -
+    // the state it was actually in when the ID comparison flagged it.
+    const dockerfile = fs.readFileSync(path.join(REPO, 'bots', 'whip', 'Dockerfile'), 'utf8');
+    expect(dockerfile).toMatch(new RegExp(`LABEL ${LABEL.replace(/\./g, '\\.')}`));
+    expect(dockerfile).toMatch(/ARG GIT_SHA/);
+  });
+
+  it('every built service is passed GIT_SHA, or its label says "unknown"', () => {
+    // A LABEL with no build arg behind it is worse than none: it looks
+    // verified and reads "unknown".
+    // Everything under `services:` up to the next top-level key. Slicing from
+    // `services:` first is what keeps `bbs-data:` (a volume) and
+    // `doorserver-net:` (a network) out - they are indented identically.
+    const servicesBlock = COMPOSE.slice(
+      COMPOSE.indexOf('\nservices:\n') + 1
+    ).replace(/\n(?=[a-z])/i, '\n\u0000').split('\u0000')[0];
+
+    /** One service's body: its own line excluded, to the next service. */
+    function bodyOf(svc: string): string {
+      const header = `\n  ${svc}:\n`;
+      const from = servicesBlock.indexOf(header) + header.length;
+      const rest = servicesBlock.slice(from);
+      const next = rest.search(/^ {2}[a-z0-9-]+:$/m);
+      return next === -1 ? rest : rest.slice(0, next);
+    }
+
+    const services = [...servicesBlock.matchAll(/^ {2}([a-z0-9-]+):$/gm)].map((m) => m[1]);
+    const built = services.filter((s) => /^\s+build:/m.test(bodyOf(s)));
+
+    expect(built.sort()).toEqual(['bbs', 'whip-bot']);
+    for (const svc of built) {
+      expect([svc, /GIT_SHA:\s*\$\{GIT_SHA/.test(bodyOf(svc))]).toEqual([svc, true]);
+    }
   });
 });

@@ -219,6 +219,12 @@ services:
     build:
       context: .
       dockerfile: bots/whip/Dockerfile
+      args:
+        # Same reason as the bbs service above: the deploy verifies what is
+        # running by reading org.opencontainers.image.revision off the
+        # container. Without this the bot builds with GIT_SHA=unknown and
+        # cannot be verified at all.
+        GIT_SHA: ${GIT_SHA:-unknown}
     container_name: amiexpress-whip-bot
     hostname: amiexpress-whip-bot
     restart: unless-stopped
