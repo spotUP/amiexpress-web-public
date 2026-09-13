@@ -776,6 +776,7 @@ debugLog("[LibraryManager] Installing library call traps...");
     // The allocator continues forward naturally from where ports left off
 
     this.libraryTraps.installExecVectors();
+    mark("exec vectors installed");
     // CRITICAL: Sync exec trap addresses to MOIRA immediately after installation.
     // Exec traps (AllocMem, FindTask, etc.) fire in the SAS/C startup before
     // dos.library is opened, so they must be in MOIRA's WASM trap set from the start.
@@ -817,6 +818,7 @@ debugLog("[LibraryManager] Installing library call traps...");
 debugLog("[LibraryManager] Pre-opening utility.library and installing vectors...");
     this.execLibrary.openLibraryHybrid("utility.library", 37, false);
     this.libraryTraps.installUtilityVectors();
+    mark("utility.library opened + vectors");
 
     // Pre-open icon.library and install vectors immediately
     // CRITICAL: AquaScan and other doors call GetDiskObject for config files
@@ -824,6 +826,7 @@ debugLog("[LibraryManager] Pre-opening utility.library and installing vectors...
 debugLog("[LibraryManager] Pre-opening icon.library and installing vectors...");
     this.execLibrary.openLibraryHybrid("icon.library", 37, false);
     this.libraryTraps.installIconVectors();
+    mark("icon.library opened + vectors");
 
     this.execLibrary.addLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === "dos.library") {
