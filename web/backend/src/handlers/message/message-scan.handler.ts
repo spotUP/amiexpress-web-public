@@ -342,8 +342,21 @@ interface ConfScanResult {
  * express.e:11651-11735 searchNewMail. Replaces getMessagesForConfScan and
  * countNewMessages, which walked the same headers twice with two copies of
  * the rule.
+ *
+ * EXPORTED, because the message feed asks it too. `amiga-emulation/xim/
+ * msgfeed.ts` builds AEW_MSGQUERY's "new for me" set from this walk - one
+ * rule for the count STAT reports and the rows LIST flags - and reaches it
+ * through `require(...)`, which no type-check follows.
+ *
+ * The export was dropped in d1a297411 while tidying this scan's own callers.
+ * A require of a missing export is `undefined`, calling it is a TypeError,
+ * and msgfeed's catch - there so a door never hangs on an unreadable base -
+ * swallowed it. STAT then answered "<total>|0|..." to every caller in every
+ * base: the SUBS door telling everyone they had no new mail while the board
+ * held it. Nothing failed loudly and no test covered the pair; one does now
+ * (tests/handlers/the-feed-can-still-reach-the-mail-scan.test.ts).
  */
-async function scanConferenceForNewMail(
+export async function scanConferenceForNewMail(
   userId: string,
   conferenceId: number,
   messageBaseId: number,
