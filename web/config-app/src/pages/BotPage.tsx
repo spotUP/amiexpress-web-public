@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNotification } from '../contexts/NotificationContext';
 import { Bot, Play, Square, RotateCcw } from 'lucide-react';
 
 import { apiClient } from '../api/client';
@@ -31,12 +32,24 @@ function unwrapList(res: any): any[] {
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * The server's own words when it has them.
+ *
+ * `PUT /api/config/bots/:id/config` answers 500 with the write error - the
+ * plugin directory was root-owned and neither container could write it - and
+ * that sentence is the whole diagnosis. A generic "save failed" would have
+ * been almost as useless as the silence it replaces.
+ */
+const failure = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export function BotPage({ pluginId }: { pluginId: string }) {
   const queryClient = useQueryClient();
   const [logSearch, setLogSearch] = useState('');
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { showError } = useNotification();
 
   const pluginsQuery = useQuery({
     queryKey: ['bot-plugins'],
@@ -98,6 +111,10 @@ export function BotPage({ pluginId }: { pluginId: string }) {
       queryClient.invalidateQueries({ queryKey: ['bot-status', pluginId] });
       queryClient.invalidateQueries({ queryKey: ['bot-logs', pluginId] });
     },
+    // Start/stop answers "Docker compose is not available here" on a board
+    // whose backend has no docker socket. Saying so beats a button that
+    // appears to do nothing.
+    onError: (error: unknown) => showError(failure(error, 'The bot action failed')),
   });
 
   const saveMutation = useMutation({
@@ -106,6 +123,19 @@ export function BotPage({ pluginId }: { pluginId: string }) {
       setDirty(false);
       setNotice((res as any)?.message ?? 'Saved. Restart the bot to apply.');
       queryClient.invalidateQueries({ queryKey: ['bot-config', pluginId] });
+    },
+    // A SAVE THAT FAILS MUST SAY SO.
+    //
+    // This had onSuccess and nothing else, so a rejected write left the form
+    // exactly as it was: no message, no error, the button back to idle. The
+    // sysop pasted a rotated Discord token into a page that could not write
+    // its file (the plugin directory was root-owned, both containers run as
+    // bbsuser), was told nothing, and only found out because the bot kept
+    // crash-looping on the old token. The route was returning a correct 500
+    // the whole time; the page discarded it.
+    onError: (error: unknown) => {
+      setNotice(null);
+      showError(failure(error, 'Could not save the bot configuration'));
     },
   });
 

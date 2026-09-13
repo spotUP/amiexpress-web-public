@@ -25,6 +25,13 @@ const getBotStatus = vi.fn();
 const getBotLogs = vi.fn();
 const getBotConfig = vi.fn();
 
+// BotPage reports a failed save through the notification context now, so a
+// bare render needs it stubbed - the same shape a-failed-bot-save-says-so and
+// the persona suite use.
+vi.mock('../contexts/NotificationContext', () => ({
+  useNotification: () => ({ showError: vi.fn(), showSuccess: vi.fn(), confirm: vi.fn() }),
+}));
+
 vi.mock('../api/client', () => ({
   apiClient: {
     getBotPlugins: (...args: unknown[]) => getBotPlugins(...args),
