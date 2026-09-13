@@ -39,6 +39,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DialogManager = void 0;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const blessed_2 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const lib_1 = require("../lib");
 const CardStyleDialog_1 = require("./CardStyleDialog");
@@ -163,11 +164,25 @@ class DialogManager {
         // is every board until the weekly one is first written - offered one
         // anyway and answered "Bulletin not found." (sysop, 2026-09-02:
         // "there is no bulletin posted either so it cant display it").
+        // THE BOARD'S BULLETINS, not a table of this door's own.
+        //
+        // This read LOBBY_BULLETINS, which holds exactly one entry: the lobby's
+        // weekly leaderboard, bull20. So a board with twelve bulletins posted was
+        // told "No bulletins have been posted yet" (sysop, 2026-09-13), and the
+        // log showed the door looking for one file and giving up:
+        //   [BBSApi] Error reading file Bulletins/bull20.txt: ENOENT
+        // A bulletin VIEWER shows what the board has; the lobby's own weekly is
+        // one of them once written, and needs no special case beyond its title.
         const available = [];
-        for (const entry of lib_1.LOBBY_BULLETINS) {
-            const content = await this.readBulletin(entry.number, session);
-            if (content && content.trim())
-                available.push({ entry, content });
+        for (const number of await this.bulletinNumbers(session)) {
+            const content = await this.readBulletin(number, session);
+            if (!content || !content.trim())
+                continue;
+            const known = lib_1.LOBBY_BULLETINS.find((b) => b.number === number);
+            available.push({
+                entry: { number, title: known?.title ?? `Bulletin ${number}` },
+                content,
+            });
         }
         if (available.length === 0) {
             this.showTextWindow('Bulletins', 'No bulletins have been posted yet.\n\n'
@@ -183,6 +198,33 @@ class DialogManager {
         if (!chosen)
             return;
         this.showTextWindow(`Bulletin #${chosen.entry.number}`, chosen.content);
+    }
+    /**
+     * Which bulletins the board actually has, lowest first.
+     *
+     * Asks the directory rather than guessing numbers: express writes
+     * Bulletins/bull<n>.txt and how many there are is the sysop's business,
+     * not this door's. Falls back to the door's own table when the board API
+     * cannot list files, so an older board still shows its weekly leaderboard.
+     */
+    async bulletinNumbers(session) {
+        if (typeof session.bbs?.listFiles !== 'function') {
+            return lib_1.LOBBY_BULLETINS.map((b) => b.number);
+        }
+        try {
+            const files = await session.bbs.listFiles('Bulletins', 'bull*.txt');
+            const numbers = (files ?? [])
+                .map((f) => /^bull(\d+)\.txt$/i.exec(f)?.[1])
+                .filter((n) => Boolean(n))
+                .map((n) => Number(n))
+                .filter((n) => Number.isFinite(n));
+            return [...new Set(numbers)].sort((a, b) => a - b);
+        }
+        catch {
+            // A board with no Bulletins directory is not an error to report at
+            // the player; it simply has nothing to read.
+            return [];
+        }
     }
     async readBulletin(number, session) {
         if (!session.bbs?.readFile)
@@ -272,8 +314,12 @@ class DialogManager {
                 parent: this.overlayShade,
                 top: 'center',
                 left: 'center',
-                width: 60,
-                height: 16,
+                // From the screen, never a constant. Sixty columns is wider than a
+                // PETSCII caller's whole screen and wider than a narrow window, and
+                // a box drawn past the edge leaves its right-hand border behind as
+                // a stray glyph - the sysop's screenshot of a lone "]" (2026-09-13).
+                width: (0, blessed_2.calculateDialogWidth)(this.screen.width || 80),
+                height: Math.min(16, Math.max(8, (this.screen.height || 25) - 6)),
                 border: { type: 'ascii' },
                 label: ` ${title} `,
                 style: {

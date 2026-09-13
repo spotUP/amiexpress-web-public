@@ -40,7 +40,24 @@ function preloaderBox(cols: number, rows: number) {
   return { width, startCol, startRow };
 }
 
-function createPreloaderFrame(doorName: string, tick: number, cols: number, rows: number): string {
+/**
+ * The frame's corners and rules.
+ *
+ * Box-drawing ONLY for a caller that renders it. A telnet or Amiga terminal
+ * gets the ASCII frame, exactly as the achievements toast decides it
+ * (achievements/notices.ts): `=== true` keeps an unknown terminal on ASCII,
+ * because the alternative is mojibake - which is what a caller sees as
+ * "some other crap on the screen" (sysop, 2026-09-13).
+ */
+function frameGlyphs(unicode: boolean) {
+  return unicode
+    ? { tl: '\u250c', tr: '\u2510', bl: '\u2514', br: '\u2518', h: '\u2500', v: '\u2502' }
+    : { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' };
+}
+
+function createPreloaderFrame(
+  doorName: string, tick: number, cols: number, rows: number, unicode: boolean,
+): string {
   const spinnerChars = ['|', '/', '-', '\\'];
   const spinner = spinnerChars[tick % 4];
   const { width, startCol, startRow } = preloaderBox(cols, rows);
@@ -55,12 +72,12 @@ function createPreloaderFrame(doorName: string, tick: number, cols: number, rows
   let out = ANSI.CLEAR_SCREEN; // Clear screen and home
   
   // Draw the box using absolute positions
-  out += `${pos(startRow, startCol)}${ANSI.CYAN}┌${'─'.repeat(width - 2)}┐`;
-  out += `${pos(startRow + 1, startCol)}│${' '.repeat(width - 2)}│`;
-  out += `${pos(startRow + 2, startCol)}│${' '.repeat(width - 2)}│`;
-  out += `${pos(startRow + 3, startCol)}│${' '.repeat(width - 2)}│`;
-  out += `${pos(startRow + 4, startCol)}│${' '.repeat(width - 2)}│`;
-  out += `${pos(startRow + 5, startCol)}└${'─'.repeat(width - 2)}┘`;
+  const g = frameGlyphs(unicode);
+  out += `${pos(startRow, startCol)}${ANSI.CYAN}${g.tl}${g.h.repeat(width - 2)}${g.tr}`;
+  for (let r = 1; r <= 4; r++) {
+    out += `${pos(startRow + r, startCol)}${g.v}${' '.repeat(width - 2)}${g.v}`;
+  }
+  out += `${pos(startRow + 5, startCol)}${g.bl}${g.h.repeat(width - 2)}${g.br}`;
 
   // Draw content inside the box
   const msgText = `Loading ${name}...`;
@@ -78,6 +95,8 @@ export interface PreloaderGeometry {
   /** The caller's real terminal width; 80 when nothing has reported one. */
   cols?: number;
   rows?: number;
+  /** True only for a terminal that renders box-drawing; ASCII otherwise. */
+  unicode?: boolean;
 }
 
 export async function showPreloaderWhile<T>(
@@ -91,6 +110,7 @@ export async function showPreloaderWhile<T>(
   }
   const cols = Math.max(20, geometry.cols || 80);
   const rows = Math.max(8, geometry.rows || 25);
+  const unicode = geometry.unicode === true;
 
   let loaderFinished = false;
   let result: T | undefined;
@@ -118,7 +138,7 @@ export async function showPreloaderWhile<T>(
   const { width, startCol, startRow } = preloaderBox(cols, rows);
   const spinRow = startRow + 3;
   const spinCol = startCol + Math.floor(width / 2);
-  socket.emit('ansi-output', createPreloaderFrame(doorName, tick, cols, rows));
+  socket.emit('ansi-output', createPreloaderFrame(doorName, tick, cols, rows, unicode));
 
   while (!loaderFinished) {
     await new Promise((resolve) => setTimeout(resolve, animationDelay));

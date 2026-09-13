@@ -2371,6 +2371,17 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
       // the board's ONE width source - the same one the door itself will be
       // built against a moment later - so the preloader and the door agree
       // about the screen they are drawing on.
+      /**
+       * EVERYTHING THE BOARD ALREADY WROTE GOES OUT FIRST.
+       *
+       * emitText is 16ms-buffered; the preloader writes with socket.emit,
+       * which is not. So the menu the caller was looking at could still be
+       * sitting in that buffer when the preloader's CLEAR_SCREEN went out
+       * on the wire, and land on TOP of the box a moment later - the
+       * sysop's "the spinner has some other crap on the screen as well"
+       * (2026-09-13). Flushing first puts the two back in order.
+       */
+      flushOutput(socket);
       const { doorScreenWidth } = require('../amiga-emulation/xim/screen-width.util');
       doorModule = await showPreloaderWhile(
         socket,
@@ -2379,6 +2390,10 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath} (cache-busting: ${
         {
           cols: doorScreenWidth(session, 80),
           rows: (session as any).screenHeight || 25,
+          // Box-drawing only where it renders; an unknown terminal gets the
+          // ASCII frame rather than mojibake (achievements/notices.ts uses
+          // the same `=== true` rule for the same reason).
+          unicode: (session as any).unicodeCapable === true,
         }
       );
     } else {

@@ -4,6 +4,7 @@
  */
 
 import blessed, { Screen, Box, Button, List, ScrollableBox, DocModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { calculateDialogWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createTextbox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { UnoColor, HouseRule } from '../lib/uno-engine';
 import {
@@ -161,10 +162,24 @@ export class DialogManager {
     // is every board until the weekly one is first written - offered one
     // anyway and answered "Bulletin not found." (sysop, 2026-09-02:
     // "there is no bulletin posted either so it cant display it").
-    const available: Array<{ entry: typeof LOBBY_BULLETINS[number]; content: string }> = [];
-    for (const entry of LOBBY_BULLETINS) {
-      const content = await this.readBulletin(entry.number, session);
-      if (content && content.trim()) available.push({ entry, content });
+    // THE BOARD'S BULLETINS, not a table of this door's own.
+    //
+    // This read LOBBY_BULLETINS, which holds exactly one entry: the lobby's
+    // weekly leaderboard, bull20. So a board with twelve bulletins posted was
+    // told "No bulletins have been posted yet" (sysop, 2026-09-13), and the
+    // log showed the door looking for one file and giving up:
+    //   [BBSApi] Error reading file Bulletins/bull20.txt: ENOENT
+    // A bulletin VIEWER shows what the board has; the lobby's own weekly is
+    // one of them once written, and needs no special case beyond its title.
+    const available: Array<{ entry: { number: number; title: string }; content: string }> = [];
+    for (const number of await this.bulletinNumbers(session)) {
+      const content = await this.readBulletin(number, session);
+      if (!content || !content.trim()) continue;
+      const known = LOBBY_BULLETINS.find((b) => b.number === number);
+      available.push({
+        entry: { number, title: known?.title ?? `Bulletin ${number}` },
+        content,
+      });
     }
 
     if (available.length === 0) {
@@ -182,6 +197,33 @@ export class DialogManager {
     if (!chosen) return;
 
     this.showTextWindow(`Bulletin #${chosen.entry.number}`, chosen.content);
+  }
+
+  /**
+   * Which bulletins the board actually has, lowest first.
+   *
+   * Asks the directory rather than guessing numbers: express writes
+   * Bulletins/bull<n>.txt and how many there are is the sysop's business,
+   * not this door's. Falls back to the door's own table when the board API
+   * cannot list files, so an older board still shows its weekly leaderboard.
+   */
+  async bulletinNumbers(session: DoorSession): Promise<number[]> {
+    if (typeof session.bbs?.listFiles !== 'function') {
+      return LOBBY_BULLETINS.map((b) => b.number);
+    }
+    try {
+      const files: string[] = await session.bbs.listFiles('Bulletins', 'bull*.txt');
+      const numbers = (files ?? [])
+        .map((f: string) => /^bull(\d+)\.txt$/i.exec(f)?.[1])
+        .filter((n: string | undefined): n is string => Boolean(n))
+        .map((n: string) => Number(n))
+        .filter((n: number) => Number.isFinite(n));
+      return [...new Set(numbers)].sort((a, b) => a - b);
+    } catch {
+      // A board with no Bulletins directory is not an error to report at
+      // the player; it simply has nothing to read.
+      return [];
+    }
   }
 
   async readBulletin(number: number, session: DoorSession): Promise<string | null> {
@@ -279,8 +321,12 @@ export class DialogManager {
         parent: this.overlayShade,
         top: 'center',
         left: 'center',
-        width: 60,
-        height: 16,
+        // From the screen, never a constant. Sixty columns is wider than a
+        // PETSCII caller's whole screen and wider than a narrow window, and
+        // a box drawn past the edge leaves its right-hand border behind as
+        // a stray glyph - the sysop's screenshot of a lone "]" (2026-09-13).
+        width: calculateDialogWidth(this.screen.width || 80),
+        height: Math.min(16, Math.max(8, (this.screen.height || 25) - 6)),
         border: { type: 'ascii' },
         label: ` ${title} `,
         style: {

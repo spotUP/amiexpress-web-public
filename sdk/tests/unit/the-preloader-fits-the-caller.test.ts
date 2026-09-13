@@ -122,3 +122,39 @@ describe('the preloader fits the caller', () => {
     ).resolves.toBe('the module');
   });
 });
+
+/**
+ * A frame a caller cannot render is worse than no frame.
+ *
+ * The box was drawn with U+2500 line-drawing whatever the terminal was. A
+ * telnet or Amiga caller has no such glyphs, so the one thing shown before
+ * a slow door opened arrived as mojibake - "the spinner has some other crap
+ * on the screen as well" (sysop, 2026-09-13). achievements/notices.ts had
+ * already settled this rule: box-drawing only when unicodeCapable === true,
+ * so an UNKNOWN terminal stays on ASCII.
+ */
+describe('the preloader draws glyphs the caller has', () => {
+  const BOX_DRAWING = /[─-╿]/;
+
+  it('uses ASCII for a terminal that has not claimed unicode', async () => {
+    const spy = wireSpy();
+    await showPreloaderWhile(spy.socket, 'Door', async () => 'done', { cols: 80, rows: 25 });
+    expect(BOX_DRAWING.test(spy.all())).toBe(false);
+    expect(spy.all()).toContain('+');
+  });
+
+  it('stays on ASCII when the flag is merely truthy, not true', async () => {
+    const spy = wireSpy();
+    await showPreloaderWhile(
+      spy.socket, 'Door', async () => 'done',
+      { cols: 80, rows: 25, unicode: 'yes' as unknown as boolean },
+    );
+    expect(BOX_DRAWING.test(spy.all())).toBe(false);
+  });
+
+  it('uses box-drawing for a terminal that renders it', async () => {
+    const spy = wireSpy();
+    await showPreloaderWhile(spy.socket, 'Door', async () => 'done', { cols: 80, rows: 25, unicode: true });
+    expect(BOX_DRAWING.test(spy.all())).toBe(true);
+  });
+});
