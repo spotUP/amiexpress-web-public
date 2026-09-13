@@ -31,6 +31,15 @@ int texttv_valid_page(const char *s);
 int texttv_page_path(int page, char *out, unsigned long cap);
 
 /*
+ * "Page {n}: {title}" into out, truncated to fit and always terminated.
+ * The title comes off the wire - texttv.nu writes it and the board passes
+ * it through - so it is as long as the upstream cares to make it, while
+ * the caller's line is one screen row. Returns 0 when the whole title
+ * fitted, 1 when it was cut, -1 when out is unusable.
+ */
+int texttv_page_line(char *out, unsigned long cap, int page, const char *title);
+
+/*
  * First string of the "content_plain" array into out. 0 on success;
  * non-zero (out left "") when the key, the bracket, the opening quote,
  * the terminator or room is missing - an off-air page answers `[]` and

@@ -37,7 +37,7 @@ static void test_page_path(void)
     CHECK(texttv_page_path(100, out, sizeof out) == 0);
     CHECK(strcmp(out, "/api/texttv/100") == 0);
     CHECK(texttv_page_path(999, out, sizeof out) == 0);
-    CHECK(strncmp(out, "/api/texttv/999", 14) == 0);
+    CHECK(strcmp(out, "/api/texttv/999") == 0);
     CHECK(texttv_page_path(99, out, sizeof out) != 0);
     CHECK(texttv_page_path(1000, out, sizeof out) != 0);
     CHECK(texttv_page_path(100, out, 10) != 0);
@@ -140,10 +140,47 @@ static void test_favs(void){
     CHECK(texttv_fav_has(&cfg, 400) == 0);
 }
 
+static void test_page_line(void)
+{
+    /* The title is upstream text. texttv.nu writes it, the board passes it
+       through, and the door prints it on one row - so the row buffer is the
+       small one and the title is the long one. Before the fix this was a
+       sprintf into char[96] from a char[128] title. */
+    struct { char line[96]; char canary[16]; } frame;
+    char longtitle[128];
+    int i;
+
+    memset(&frame, 0, sizeof frame);
+    memset(frame.canary, '#', sizeof frame.canary);
+    for (i = 0; i < 127; i++) longtitle[i] = 'T';
+    longtitle[127] = '\0';
+
+    CHECK(texttv_page_line(frame.line, sizeof frame.line, 999, longtitle) == 1);
+    CHECK(strlen(frame.line) == sizeof frame.line - 1);
+    CHECK(strncmp(frame.line, "Page 999: TTT", 13) == 0);
+    for (i = 0; i < (int)sizeof frame.canary; i++) CHECK(frame.canary[i] == '#');
+
+    /* A title that fits is not cut and is not padded. */
+    CHECK(texttv_page_line(frame.line, sizeof frame.line, 100, "Nyheter") == 0);
+    CHECK(strcmp(frame.line, "Page 100: Nyheter") == 0);
+
+    /* Degenerate buffers: terminated, never written past. */
+    CHECK(texttv_page_line(frame.line, 4, 100, "Nyheter") == 1);
+    CHECK(strcmp(frame.line, "Pag") == 0);
+    CHECK(texttv_page_line(frame.line, 1, 100, "Nyheter") == 1);
+    CHECK(frame.line[0] == '\0');
+    CHECK(texttv_page_line(0, 96, 100, "Nyheter") == -1);
+
+    /* No title at all is an empty tail, not a crash. */
+    CHECK(texttv_page_line(frame.line, sizeof frame.line, 300, 0) == 0);
+    CHECK(strcmp(frame.line, "Page 300: ") == 0);
+}
+
 int main(void)
 {
     test_valid_page();
     test_page_path();
+    test_page_line();
     test_first_plain();
     test_pick_body();
     test_utf8();

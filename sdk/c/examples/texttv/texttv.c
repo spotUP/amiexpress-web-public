@@ -174,7 +174,7 @@ static void draw_masthead(const char *title)
        it drowns every repaint measurement in idle noise. The masthead
        looks identical standing still. */
     ui_masthead_draw(&screen.buf, 1, 1, screen.cols, title,
-                     UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+                     theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
 }
 
 static void say(int row, const char *text)
@@ -401,7 +401,7 @@ static int page_actions(void)
 
     ansi_clear(&screen.buf);
     draw_masthead("TEXT-TV");
-    sprintf(line, "Page %d: %s", page_num, page_title);
+    texttv_page_line(line, sizeof line, page_num, page_title);
     say(3, line);
     say(5, wide ? "N next page, P previous, F favorite, S share it,"
                 : "N next, P prev, F fav,");

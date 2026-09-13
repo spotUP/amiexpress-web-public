@@ -47,6 +47,34 @@ int texttv_page_path(int page, char *out, unsigned long cap)
     return 0;
 }
 
+int texttv_page_line(char *out, unsigned long cap, int page, const char *title)
+{
+    char head[24];
+    unsigned long headlen;
+    unsigned long room;
+    unsigned long i;
+
+    if (out == 0 || cap == 0) return -1;
+    out[0] = '\0';
+    if (title == 0) title = "";
+
+    sprintf(head, "Page %d: ", page);
+    headlen = strlen(head);
+    if (headlen + 1 > cap) {
+        /* Not even the prefix fits: give back as much of it as there is
+           room for rather than writing past the caller's buffer. */
+        for (i = 0; i + 1 < cap; i++) out[i] = head[i];
+        out[cap - 1] = '\0';
+        return 1;
+    }
+
+    strcpy(out, head);
+    room = cap - headlen - 1;
+    for (i = 0; i < room && title[i] != '\0'; i++) out[headlen + i] = title[i];
+    out[headlen + i] = '\0';
+    return title[i] == '\0' ? 0 : 1;
+}
+
 int texttv_first_plain(const char *json, char *out, unsigned long outcap)
 {
     const char *p;
