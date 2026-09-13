@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
-import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { doorScreenWidth, doorSessionGeometry } from '../amiga-emulation/xim/screen-width.util';
 import { routeAmigaDoorInput } from '../amiga-emulation/door-input-router';
 import { consumePendingSysopPage, runSysopPageWait } from './chat/chat.handler';
 import type { ChatSession } from '../services/use-cases/chat-session.use-case';
@@ -861,11 +861,12 @@ console.log(`[launchAmigaDoor] PAGINATION=${doorInfo.pagination}: autoPause=${au
         doorId: doorInfo.command || doorInfo.id,
         pauseLines: effectivePauseLines,
         autoPauseEnabled: autoPauseEnabled,
-        // PETSCII callers wrap at their own width (40) whatever tempData.termWidth
-        // still says from before the P answer; everyone else keeps terminalWidth.
-        lineWrap: doorScreenWidth(session, terminalWidth),
-        petsciiMode: session.petsciiMode === true,
-        screenWidth: session.screenWidth,
+        // PETSCII and teletext callers wrap at their own width (40) whatever
+        // tempData.termWidth still says from before the P/T answer; everyone
+        // else keeps terminalWidth. ONE helper, because a mode copied into
+        // this literal by hand is a mode that gets left out: texttvMode was,
+        // and the door then read 80 from BB_SCRWIDTH while lineWrap said 40.
+        ...doorSessionGeometry(session, terminalWidth),
         lineCount: 0,
         confAccess: confAccess,
         userSlotNumber: userSlotNumber,

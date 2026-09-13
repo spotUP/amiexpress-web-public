@@ -69,6 +69,34 @@ export function doorScreenWidth(
   return petsciiColumnsOf(session);
 }
 
+/**
+ * The geometry fields a 68K door's session must carry, taken from the
+ * caller's.
+ *
+ * It exists because a 68K door does not read the caller's session - it reads
+ * the COPY launchAmigaDoor builds, and a field left out of that copy is a
+ * field doorScreenWidth() cannot see. `petsciiMode` was copied and
+ * `texttvMode` was not, so a teletext caller's door was told it had eighty
+ * columns while `lineWrap` - derived from the real session in the same
+ * object literal - said forty. TEXTTV laid out an eighty-column reader on a
+ * forty-column screen: every row ran off the right edge and its tail
+ * reappeared at column one below (sysop's teletext walk, 2026-09-13).
+ *
+ * One function, so the copy and the readers cannot drift again: whatever is
+ * added to ScreenWidthSource is added here, and the launch site spreads it.
+ */
+export function doorSessionGeometry(
+  session: (ScreenWidthSource & { screenHeight?: number }) | null | undefined,
+  terminalWidth: number,
+): { lineWrap: number; petsciiMode: boolean; texttvMode: boolean; screenWidth?: number } {
+  return {
+    lineWrap: doorScreenWidth(session, terminalWidth),
+    petsciiMode: session?.petsciiMode === true,
+    texttvMode: session?.texttvMode === true,
+    screenWidth: session?.screenWidth,
+  };
+}
+
 export interface ScreenHeightSource extends ScreenWidthSource {
   screenHeight?: number;
 }

@@ -410,6 +410,7 @@ export interface BBSSessionData {
   lineCount?: number;
   lineWrap?: number;
   petsciiMode?: boolean;  // C64 caller: BB_SCRWIDTH and lineWrap answer with screenWidth (xim/screen-width.util.ts)
+  texttvMode?: boolean;   // Teletext caller: the same 40x25 grid on an ANSI terminal (xim/screen-width.util.ts)
   screenWidth?: number;   // Session terminal width (index.ts BBSSession.screenWidth); 40 for a C64
   pauseLines?: number;
   autoPauseEnabled?: boolean; // If true, XIM auto-pauses after pauseLines; if false (default), door handles pagination
