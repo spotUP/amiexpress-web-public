@@ -600,10 +600,23 @@ describe('petscii.util', () => {
     });
 
     it('should skip graphics and control codes', () => {
-      const buffer = Buffer.from([0x00, 0x03, 0x41, 0x08, 0x42]); // Controls + a + Controls + b (unshifted)
+      // 0x00 and 0x08 are unmapped and dropped; the letters come through.
+      const buffer = Buffer.from([0x00, 0x41, 0x08, 0x42]);
       const result = convertPetsciiInputToAscii(buffer);
 
       expect(result).toBe('ab'); // Only letters extracted
+    });
+
+    it('passes RUN/STOP through as ETX, because that is the abort key', () => {
+      // 0x03 used to be dropped with the rest. It is mapped on purpose since
+      // c753ef871: RUN/STOP on a real C64 and Ctrl+C on the web canvas are the
+      // same byte and the same meaning, and without it a PETSCII caller could
+      // not press the board's abort key at all - reported by the sysop as
+      // "ctrl+c and paste doesnt work at all in petscii mode", which left him
+      // unable to leave the operator chat.
+      const buffer = Buffer.from([0x00, 0x03, 0x41, 0x08, 0x42]);
+
+      expect(convertPetsciiInputToAscii(buffer)).toBe('\x03ab');
     });
 
     it('should handle graphics range 0x61-0x7A as lowercase', () => {
@@ -628,7 +641,10 @@ describe('petscii.util', () => {
     });
 
     it('should still drop CLR and other unmapped control bytes', () => {
-      const buffer = Buffer.from([0x93, 0x03, 0x05]);
+      // 0x93 CLR and 0x05 WHITE carry no ASCII meaning and go. 0x03 is NOT in
+      // this set any more - see the RUN/STOP case above - so it is not in the
+      // buffer here, or this test would be asserting two rules at once.
+      const buffer = Buffer.from([0x93, 0x05]);
       const result = convertPetsciiInputToAscii(buffer);
 
       expect(result).toBe('');
