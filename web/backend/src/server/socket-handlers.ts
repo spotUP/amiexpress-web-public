@@ -46,7 +46,7 @@ import {
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
-import { classifyTerminalInput, clearPauseHandler, commandPieces } from './terminal-input';
+import { classifyTerminalInput, clearPauseHandler, commandPieces, chatTakesTheWholeChunk } from './terminal-input';
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
@@ -712,6 +712,17 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
     // `[<35;X;Y;M` at the caller's cursor) is dropped, SS3 is folded to CSI so
     // an arrow key in application-cursor mode is understood, an escape
     // sequence is dispatched whole, and everything else a character at a time.
+    // The operator chat takes a pasted line whole - see chatTakesTheWholeChunk.
+    // Split into characters here it was dispatched as N un-awaited calls and
+    // trickled onto the caller's screen.
+    if (chatTakesTheWholeChunk(session.subState, data)) {
+      handleCommand(socket, session, data).catch((error: any) => {
+console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+        socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
+      });
+      return;
+    }
+
     for (const piece of commandPieces(data)) {
       handleCommand(socket, session, piece).catch((error: any) => {
 console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);

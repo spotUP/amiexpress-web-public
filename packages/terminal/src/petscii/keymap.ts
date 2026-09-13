@@ -66,3 +66,26 @@ export function keyEventToPetscii(key: string, shiftKey: boolean): number[] | nu
   if (code === 0x40 || (code >= 0x5B && code <= 0x5F)) return [code]; // @[\]^_
   return null;
 }
+
+/**
+ * PASTED TEXT as the bytes typing it would have produced.
+ *
+ * Beside keyEventToPetscii on purpose: a paste and a keypress must not
+ * disagree about what a character is, and this is the only place that
+ * decides. A line break is RETURN, CRLF is one RETURN, and anything a C64
+ * keyboard could not have typed is dropped rather than sent as rubbish.
+ */
+export function pastedTextToPetscii(text: string): number[] {
+  const bytes: number[] = [];
+  for (const ch of text) {
+    if (ch === '\r' || ch === '\n') {
+      if (ch === '\n' && bytes[bytes.length - 1] === 0x0D) continue;
+      bytes.push(0x0D);
+      continue;
+    }
+    // The case is read off the character itself, so shift does not matter.
+    const mapped = keyEventToPetscii(ch, false);
+    if (mapped) bytes.push(...mapped);
+  }
+  return bytes;
+}

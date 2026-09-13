@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef,
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
-import { keyEventToPetscii } from './keymap';
+import { keyEventToPetscii, pastedTextToPetscii } from './keymap';
 
 export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
@@ -339,12 +339,55 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     if (atlasReady) draw();
   }, [cursorOn, atlasReady, draw]);
 
+  /**
+   * PASTE, WHICH A CANVAS NEVER GETS BY ITSELF.
+   *
+   * Keys arrive through onKeyDown; pasted text does not arrive as keys at
+   * all, and a <canvas> is not an editable element, so nothing here saw a
+   * paste and it did nothing ("ctrl+c and paste doesnt work at all in petscii
+   * mode", 2026-09-13). The event fires on the document with the focused
+   * element as its target, so that is where this listens - and only while
+   * this canvas is the focused element, or a paste meant for the admin's
+   * text box would be swallowed too.
+   *
+   * The text becomes the same PETSCII bytes the keymap produces, so it takes
+   * the one input path the keys take. A line break is RETURN, exactly as
+   * typing it would have been.
+   */
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const el = canvasRef.current;
+      if (!el || document.activeElement !== el) return;
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (!text) return;
+      e.preventDefault();
+      const bytes = pastedTextToPetscii(text);
+      if (bytes.length) onData?.(bytes);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [onData]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
-    // Let Ctrl/Cmd/Alt chords (copy, select-all, browser reload, etc.) pass
-    // through untouched - keyEventToPetscii only knows about `key` + shift,
-    // so without this guard a Ctrl+C or Cmd+R would still resolve to a
-    // mapped letter byte and get preventDefault'd, eating the OS/browser
-    // shortcut.
+    // CTRL+C IS THE BOARD'S ABORT KEY, and it could not be pressed here at
+    // all: the guard below hands every Ctrl chord to the browser, which is
+    // right for Cmd+R and for copy, and wrong for the one key that leaves a
+    // door or an operator chat ("ctrl+c and paste doesnt work at all in
+    // petscii mode", 2026-09-13). It goes to the board as RUN/STOP, which is
+    // the same key on a real C64 - unless the caller has actually selected
+    // something, where copy is plainly what they meant. A canvas holds no
+    // selectable text of its own, so that is rare and cheap to honour.
+    if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+      const selected = typeof window !== 'undefined' && !window.getSelection()?.isCollapsed;
+      if (!selected) {
+        e.preventDefault();
+        onData?.([0x03]);
+        return;
+      }
+    }
+    // Every other Ctrl/Cmd/Alt chord still passes through untouched:
+    // keyEventToPetscii knows only `key` + shift, so without this guard a
+    // Cmd+R would resolve to a mapped letter byte and eat the reload.
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const bytes = keyEventToPetscii(e.key, e.shiftKey);
     if (bytes) {

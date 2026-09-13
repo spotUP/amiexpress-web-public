@@ -19,6 +19,12 @@ const CONTROL_KEYS: { [byte: number]: string } = {
   // doors navigate with them. Without these two entries the bytes fall
   // through every branch below and are dropped as "no input meaning".
   0x09: '\t', 0x1B: '\x1b',
+  // RUN/STOP on a real C64, Ctrl+C on the web canvas: the same byte and the
+  // same meaning - stop what you are doing. Without it the board's abort key
+  // could not be pressed at all in PETSCII (2026-09-13, sysop: "ctrl+c and
+  // paste doesnt work at all in petscii mode"), so a caller could not leave
+  // the operator chat.
+  0x03: '\x03',
   0x14: '\x7f', 0x7F: '\x7f',
   0x91: '\x1b[A', 0x11: '\x1b[B', 0x1D: '\x1b[C', 0x9D: '\x1b[D',
   0x13: '\x1b[H', 0x94: '\x1b[2~',

@@ -77,6 +77,30 @@ export function normaliseCursorKeys(input: string): string {
  * chunk is split per character, which is what web has always done and what
  * makes a paste and a fast burst behave the same on both transports.
  */
+/**
+ * ONE CHUNK, WHOLE, BECAUSE THE OPERATOR CHAT CAN TAKE IT.
+ *
+ * splitInputForDispatch gives the command handler a character at a time, and
+ * that is right for a menu, a hot key and a line editor - every one of them is
+ * written against a single keystroke. The operator chat is not: its branch
+ * accumulates a pasted run and writes it as one frame.
+ *
+ * While the split stood in front of it, a pasted line was dispatched as N
+ * un-awaited calls, each paying for the handler's preamble and its own emit to
+ * the sysop room. The sysop pasted and watched it trickle ("it still takes a
+ * long time for pastes to arrive in the chat", 2026-09-13) - after two fixes
+ * of mine that were both downstream of this line and could never have run.
+ *
+ * An escape sequence still goes the old way: F1 and the arrows are single
+ * keys, and the chat branch tests them as such.
+ */
+export function chatTakesTheWholeChunk(subState: unknown, input: string): boolean {
+  if (String(subState) !== 'operator_chat_active') return false;
+  if (input.length <= 1) return false;
+  if (input.startsWith('\x1b')) return false;
+  return !isStrayMouseReport(input);
+}
+
 export function splitInputForDispatch(input: string): string[] {
   if (input.startsWith('\x1b[') && input.length >= 2) return [input];
   return Array.from(input);
