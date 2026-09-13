@@ -137,6 +137,20 @@ typedef struct {
     int only_line;                      /* draw ONLY this line, -1 for all */
 } paint_ctx;
 
+/**
+ * Is this row the bottom half of the selected double-height line?
+ *
+ * The marker sits at the very start of the row (UI_INK 'H' '4'), because a
+ * line attribute is the line's, not a run's inside it. Only the row DIRECTLY
+ * under the selection can be its other half.
+ */
+static int dh_bottom_of(const char *start, int len, int index, int sel_line)
+{
+    if (sel_line < 0 || index != sel_line + 1) return 0;
+    if (len < 3) return 0;
+    return start[0] == UI_INK && start[1] == 'H' && start[2] == '4';
+}
+
 static void paint_line(void *context, const char *start, int len)
 {
     paint_ctx *c = (paint_ctx *) context;
@@ -152,7 +166,12 @@ static void paint_line(void *context, const char *start, int len)
     /* Repainting ONE row: the others keep what they have. A cursor move on a
      * 68K door costs two rows, not a page - every 198 bytes is one XIM
      * message (RULES.md, "Doors draw smart"). */
-    if (c->only_line >= 0 && c->index != c->only_line) {
+    /* A single-row repaint takes the row asked for, and the one under it when
+       that row is the other half of a double-height line - the two are one
+       line, and repainting half of one leaves half a highlight bar. Any other
+       row is skipped, so an ordinary page still costs two rows a move. */
+    if (c->only_line >= 0 && c->index != c->only_line
+        && !dh_bottom_of(start, len, c->index, c->only_line)) {
         c->index++;
         c->drawn++;
         return;
@@ -180,8 +199,12 @@ static void paint_line(void *context, const char *start, int len)
     memcpy(row, start, (size_t) copy);
     row[copy] = '\0';
 
-    if (c->index == c->sel_line) {
-        /* The selected headline, inverted: ground and ink swapped. */
+    if (c->index == c->sel_line || dh_bottom_of(start, copy, c->index, c->sel_line)) {
+        /* The selected headline, inverted: ground and ink swapped.
+           A double-height headline is TWO rows and one line, so the row
+           carrying its bottom half is selected with it - highlighting only
+           the top half cut the bar across the middle of the letters
+           (sysop, 2026-09-14). */
         ansi_color(c->b, c->st->bg, c->st->fg, 0);
     } else {
         ansi_color(c->b, c->st->fg, c->st->bg, 0);
@@ -420,7 +443,12 @@ int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
         } else if (sel != painted_sel) {
             /* TWO ROWS, not a page: the one losing the cursor and the one
              * taking it. This is the whole reason the painter has a
-             * single-line mode. */
+             * single-line mode.
+             *
+             * A double-height headline is two rows and one line, so the
+             * painter carries its other half along with it - and only its
+             * other half, which is why an ordinary page still costs two rows
+             * a move rather than four. */
             if (painted_sel >= 0)
                 paint_page(b, st, title, text, top, total, rows, sel, painted_sel);
             if (sel >= 0)

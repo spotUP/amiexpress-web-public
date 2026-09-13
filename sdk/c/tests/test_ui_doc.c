@@ -485,6 +485,51 @@ static void a_pen_after_the_last_column_does_not_make_a_line(void)
     printf("  [OK] a pen after the last column does not make a line\n");
 }
 
+static void a_double_height_headline_highlights_both_halves(void)
+{
+    /* A double-height headline is TWO rows and ONE line. Highlighting only
+       the row the cursor is on cut the bar across the middle of the letters
+       (sysop, 2026-09-14). */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    char text[256];
+    int cur = 0;
+    const int lines[2] = { 0, 2 };
+    const char *inverted;
+    int bars;
+
+    sprintf(text, "%sBIG\n%sBIG\nplain\n", UI_LINE_TOP, UI_LINE_BOTTOM);
+
+    ui_doc_style_init(&st);
+    st.height = 4; st.width = 20; st.top = 1; st.left = 1;
+    st.fg = 7; st.bg = 0;
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    (void) ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 2, &cur);
+
+    /* The inverted pen is ground-on-ink: both halves must carry it. */
+    bars = 0;
+    inverted = storage;
+    for (;;) {
+        inverted = strstr(inverted, "\x1b[0;30;47m");
+        if (!inverted) break;
+        bars++;
+        inverted += 1;
+    }
+    assert(bars >= 2);
+
+    /* And the row below the pair is NOT dragged into the selection. */
+    {
+        const char *plain = strstr(storage, "plain");
+        assert(plain != 0);
+    }
+    printf("  [OK] a double-height headline highlights both halves\n");
+}
+
 static void h_is_the_way_home_for_a_caller_that_walks(void)
 {
     /* Six flips into the numbering, one key back to where the set starts.
@@ -545,6 +590,7 @@ int main(void)
     a_coloured_row_keeps_its_tail();
     left_and_right_page_unless_the_caller_wants_them();
     h_is_the_way_home_for_a_caller_that_walks();
+    a_double_height_headline_highlights_both_halves();
     a_pen_after_the_last_column_does_not_make_a_line();
     a_line_attribute_costs_the_row_no_columns();
     printf("ui_doc: all passed\n");
