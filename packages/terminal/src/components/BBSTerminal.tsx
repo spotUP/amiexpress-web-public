@@ -2837,8 +2837,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       applyPointerCapture(capturePointer.current);
       console.log(`[ClientDoor] Loading door: ${data.doorId}`);
 
-      const doorName = data.manifest?.name || data.doorId;
-      writeTerm(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
+      // NOTHING IS WRITTEN TO THE SCREEN HERE.
+      //
+      // "Loading <door>..." and "[OK] Door bundle loaded" below were the
+      // terminal narrating a load the DOOR now draws properly: the SDK's
+      // preloader covers the screen and shows a real progress bar from the
+      // moment the door's screen exists. Two lines of chatter above it left
+      // the board's menu prompt and these notices on screen underneath, and
+      // the sysop asked for them to go once the bar worked (2026-09-14).
+      // The console.log lines stay - they are for whoever is debugging,
+      // not for the caller.
       doorActive.current = true;
       setActiveClientDoor(data.doorId, 'door:load-client');
       doorReadyMap.current[data.sessionId] = false;
@@ -2874,7 +2882,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       script.onload = () => {
         console.log(`[ClientDoor] Bundle loaded successfully: ${data.doorId}`);
-        writeTerm('\x1b[32m[OK] Door bundle loaded\x1b[0m\r\n');
         doorReadyMap.current[data.sessionId] = true;
         flushDoorMessages(data.sessionId);
       };

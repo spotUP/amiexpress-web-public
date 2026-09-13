@@ -111,15 +111,12 @@ export class DoorLoader {
       // has looked broken anywhere but a plain 80-column terminal.
       // calculateDialogWidth is the SDK's own ladder: nearly full width at
       // 40, padded on mobile, a share of the screen above that.
-      // `undefined`, not `false`. blessed treats both as "no border", but
-      // @types/blessed types this as `Border | "line" | "bg" | undefined`
-      // (index.d.ts:1574) and `false` is not in it. It typechecks in this
-      // working tree and NOT in the image, where `npm ci --ignore-scripts`
-      // resolves the types without whatever is widening them here - so the
-      // board's build failed on it while every local check passed, and no
-      // deploy could land. The line beside it already uses `undefined` for
-      // the same compact case.
-      border: compact ? undefined : { type: 'line' },
+      // No frame at 40 columns, via an explicit flag rather than a border
+      // value: `border: false` compiles here and NOT in the Docker image,
+      // where @types/blessed resolves narrower and rejects it - which broke
+      // every deploy on the board until it was caught. See LoadingOptions.
+      frameless: compact,
+      border: { type: 'line' },
       label: compact ? undefined : ' Loading ',
       width: calculateDialogWidth(screenWidth),
       // Three rows of content (message, spinner, bar) plus the frame. With

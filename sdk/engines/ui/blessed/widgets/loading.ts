@@ -19,6 +19,18 @@ import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 
 export interface LoadingOptions extends ElementOptions {
+  /**
+   * No frame at all - the compact profile's borderless look at 40 columns,
+   * where two columns of border are two too many.
+   *
+   * A boolean of its own rather than `border: false`: blessed treats false
+   * and undefined alike, but @types/blessed types border as
+   * `Border | "line" | "bg" | undefined` and false is not in that union.
+   * It compiled in the working tree and NOT in the Docker image, where
+   * `npm ci` resolves the types differently - so every deploy failed while
+   * local builds stayed green (caught by session_01QtFXWZ, 2026-09-14).
+   */
+  frameless?: boolean;
   text?: string;
   spinner?: string[];
   interval?: number;
@@ -47,7 +59,11 @@ export class Loading extends Box {
     super({
       ...options,
       parent: useOverlay ? undefined : originalParent,
-      border: options.border || { type: 'line' },
+      // `border: false` means NO frame, and is how a caller asks for the
+      // compact profile's borderless look at 40 columns (the door rules:
+      // "borders === false: no frames"). `undefined` still takes the line,
+      // so every existing caller is unchanged.
+      border: options.frameless ? undefined : (options.border || { type: 'line' }),
       label: options.label || ' Loading ',
       width: options.width || '50%',
       height: options.height || 5,
