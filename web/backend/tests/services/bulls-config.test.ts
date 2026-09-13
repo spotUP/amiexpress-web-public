@@ -9,7 +9,13 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { parseBullsConfig, saveBullsConfig, loadBullsConfig } from '../../src/services/bulls-config.service';
+import {
+  parseBullsConfig,
+  saveBullsConfig,
+  loadBullsConfig,
+  saveBullsMenuEntries,
+  BULLS_MENU_TITLE_MAX,
+} from '../../src/services/bulls-config.service';
 
 const CFG = [
   'DUAL_LISTING       YES                 ; Use 2 Listings [YES/NO]',
@@ -95,5 +101,80 @@ describe('bulletin content', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * Writing the menu goes through the Empire model (doors/text-cfg/empire.ts),
+ * which is the one that promises unmapped bytes survive. The hand-rolled
+ * writer this replaces split on '\n' and joined on '\n', so a CRLF file came
+ * back with every line ending rewritten - a whole-file diff for a one-row
+ * edit, on a file a 68K binary reads.
+ */
+describe('saving the bull menu keeps the rest of the file', () => {
+  function board(cfg: string): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bullswrite-'));
+    fs.mkdirSync(path.join(root, 'Doors', 'emp_tools'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Bulletins'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Bulletins', 'bull1.txt'), 'one\n');
+    fs.writeFileSync(path.join(root, 'Bulletins', 'bull2.txt'), 'two\n');
+    fs.writeFileSync(path.join(root, 'Doors', 'emp_tools', 'Bulls.CFG'), cfg, 'latin1');
+    return root;
+  }
+  const read = (root: string) =>
+    fs.readFileSync(path.join(root, 'Doors', 'emp_tools', 'Bulls.CFG'), 'latin1');
+
+  it('replaces the menu rows and leaves settings, masks and title art alone', () => {
+    const root = board(CFG);
+    saveBullsMenuEntries(root, [{ title: 'Only One', file: 'bull1.txt' }]);
+    const out = read(root);
+    expect(out).toContain('DUAL_LISTING       YES');
+    expect(out).toContain('XXXXXX--------------                               ; Conference 1');
+    expect(out).toContain('ART HERE');
+    expect(out).toContain('Only One');
+    expect(out).not.toContain('Top Uploaders');
+    expect(out.match(/bull12\.txt/g)).toBeNull();
+  });
+
+  it('keeps CRLF line endings when that is what the board wrote', () => {
+    const root = board(CFG.replace(/\n/g, '\r\n'));
+    saveBullsMenuEntries(root, [{ title: 'Only One', file: 'bull1.txt' }]);
+    const out = read(root);
+    expect(out).toContain('Only One');
+    expect((out.match(/\r\n/g) || []).length).toBeGreaterThan(5);
+    expect(out.match(/(?<!\r)\n/g)).toBeNull();
+  });
+
+  it("refuses a title carrying ';' - it would name a different bulletin file", () => {
+    const root = board(CFG);
+    expect(() =>
+      saveBullsMenuEntries(root, [{ title: 'Sneaky ; bull2.txt', file: 'bull1.txt' }]),
+    ).toThrow(/no ';'/);
+    expect(read(root)).toContain('Top Uploaders');
+  });
+
+  it('refuses a title carrying a line break - it would become two rows', () => {
+    const root = board(CFG);
+    expect(() =>
+      saveBullsMenuEntries(root, [{ title: 'One\nTwo', file: 'bull1.txt' }]),
+    ).toThrow(/line break/);
+  });
+
+  it('refuses a title too long to leave the row inside 80 columns', () => {
+    const root = board(CFG);
+    const long = 'T'.repeat(BULLS_MENU_TITLE_MAX + 1);
+    expect(() => saveBullsMenuEntries(root, [{ title: long, file: 'bull1.txt' }])).toThrow(
+      /at most/,
+    );
+    expect(() =>
+      saveBullsMenuEntries(root, [{ title: 'T'.repeat(BULLS_MENU_TITLE_MAX), file: 'bull1.txt' }]),
+    ).not.toThrow();
+  });
+
+  it('still refuses a path as the file', () => {
+    const root = board(CFG);
+    expect(() =>
+      saveBullsMenuEntries(root, [{ title: 'Ok', file: '../../etc/passwd' }]),
+    ).toThrow(/bare filename/);
   });
 });

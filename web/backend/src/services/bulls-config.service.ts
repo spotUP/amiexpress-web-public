@@ -11,6 +11,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import {
+  parseEmpireFile,
+  serializeEmpireFile,
+  setSectionBody,
+  findSection,
+  BULL_SECTION,
+} from '../doors/text-cfg/empire';
+
 export interface BullsMenuEntry {
   line: number;
   title: string;
@@ -165,6 +173,12 @@ export function saveBullsConfig(bbsRoot: string, raw: string): BullsConfig {
 /** Menu entry column: ';' sits at this index, like every shipped line. */
 export const BULLS_MENU_COLUMN = 51;
 
+/**
+ * The longest title that still leaves the ';' at BULLS_MENU_COLUMN and the
+ * whole row inside 80 columns, which is what the 68K door draws on.
+ */
+export const BULLS_MENU_TITLE_MAX = BULLS_MENU_COLUMN - 2;
+
 export function formatMenuLine(title: string, file: string): string {
   const t = title.trim();
   const pad = Math.max(1, BULLS_MENU_COLUMN - t.length);
@@ -190,18 +204,25 @@ export function saveBullsMenuEntries(
     if (/[\\/]/.test(e.file) || e.file.includes('..')) {
       throw new Error(`Entry ${i + 1} takes a bare filename, not a path.`);
     }
+    // ';' opens the comment that names the bulletin file, and a newline
+    // would make one row into two - either turns an edited title into a
+    // different entry pointing at a different file.
+    if (e.title.includes(';') || /[\r\n]/.test(e.title) || /[\r\n]/.test(e.file)) {
+      throw new Error(`Entry ${i + 1}: a title takes no ';' and no line break.`);
+    }
+    if (e.title.trim().length > BULLS_MENU_TITLE_MAX) {
+      throw new Error(
+        `Entry ${i + 1}: the title is ${e.title.trim().length} characters, at most ${BULLS_MENU_TITLE_MAX}.`,
+      );
+    }
   }
   const file = path.join(bbsRoot, 'Doors', 'emp_tools', 'Bulls.CFG');
-  const raw = fs.readFileSync(file, 'latin1');
-  const lines = raw.split('\n');
-  const start = lines.findIndex((l) => l.trim().startsWith('[Init_END]'));
-  const end = lines.findIndex((l) => l.trim().startsWith('[BullNames_END]'));
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Bulls.CFG has no menu section between [Init_END] and [BullNames_END].');
+  const model = parseEmpireFile(fs.readFileSync(file, 'latin1'));
+  if (!findSection(model, BULL_SECTION)) {
+    throw new Error('Bulls.CFG has no [BullNames_END] section.');
   }
-  const menu = entries.map((e) => formatMenuLine(e.title, e.file));
-  const next = [...lines.slice(0, start + 1), ...menu, ...lines.slice(end)].join('\n');
-  return saveBullsConfig(bbsRoot, next);
+  setSectionBody(model, BULL_SECTION, entries.map((e) => formatMenuLine(e.title, e.file)));
+  return saveBullsConfig(bbsRoot, serializeEmpireFile(model));
 }
 
 export interface BulletinInfo {
