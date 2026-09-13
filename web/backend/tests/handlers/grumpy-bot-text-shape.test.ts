@@ -52,3 +52,25 @@ describe('stripEmojis', () => {
     expect(stripEmojis('done \u{1F525}\nnext')).toBe('done\nnext');
   });
 });
+
+describe('the raw fallback', () => {
+  it('does not paste sixty lines at a terminal', () => {
+    const { __rawToolAnswerForTest } = require('../../src/handlers/grumpy-sysop-bot.handler');
+    const sixty = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
+    const out = __rawToolAnswerForTest([sixty]);
+    const lines = out.split('\n');
+    // The preamble, sixteen lines of data, and a count of what was left out.
+    expect(lines.length).toBeLessThan(20);
+    expect(out).toContain('line 16');
+    expect(out).not.toContain('line 17');
+    expect(out).toMatch(/\+44 more lines/);
+  });
+
+  it('says nothing about more when it all fits', () => {
+    const { __rawToolAnswerForTest } = require('../../src/handlers/grumpy-sysop-bot.handler');
+    const out = __rawToolAnswerForTest(['one', 'two']);
+    expect(out).not.toMatch(/more lines/);
+    expect(out).toContain('one');
+    expect(out).toContain('two');
+  });
+});

@@ -27,7 +27,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-export interface StoredCost { ewmaMs: number; failedAt?: number }
+/**
+ * `mute` is a model that answers with no words - it will take a tool call and
+ * then write nothing, so it is useless for a chat reply however fast it is.
+ * Speed was the only thing measured until a caller asked about Fairlight's C64
+ * era and got 60 lines of raw Demozoo back (2026-09-13).
+ */
+export interface StoredCost { ewmaMs: number; failedAt?: number; mute?: boolean }
 
 /**
  * Where the measurements live, beside the database on the board's volume.
@@ -61,6 +67,7 @@ export function loadModelCosts(): Map<string, StoredCost> {
       costs.set(model, {
         ewmaMs: cost.ewmaMs,
         ...(typeof cost.failedAt === 'number' ? { failedAt: cost.failedAt } : {}),
+        ...(cost.mute === true ? { mute: true } : {}),
       });
     }
     return costs;
