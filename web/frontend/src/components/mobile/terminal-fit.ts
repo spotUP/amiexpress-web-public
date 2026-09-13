@@ -43,6 +43,19 @@ export const DEFAULT_FIT_LIMITS: FitLimits = {
   maxProbes: 24,
 };
 
+/**
+ * The same search for a teletext session's 40x25 grid.
+ *
+ * Half the columns of the board's 80, so the cell that fills the same window
+ * is close to twice as wide - and the 48px ceiling, which is generous for
+ * eighty columns, would stop the fit short of the window for forty. Nothing
+ * else about the search changes.
+ */
+export const TELETEXT_FIT_LIMITS: FitLimits = {
+  ...DEFAULT_FIT_LIMITS,
+  max: 96,
+};
+
 /** Applies a font size and reports the rendered grid size. */
 export type Measure = (fontSize: number) => Size;
 

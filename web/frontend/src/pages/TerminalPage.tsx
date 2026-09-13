@@ -12,7 +12,7 @@ import {
 } from '../components/mobile/gesture-scheme';
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
 import { findGameControlLayout, trackpadColumn, trackpadStep } from '../components/mobile/game-controls';
-import { fitFontSize } from '../components/mobile/terminal-fit';
+import { fitFontSize, TELETEXT_FIT_LIMITS } from '../components/mobile/terminal-fit';
 import {
   FIT_TO_WINDOW,
   TERMINAL_BEZEL_PX,
@@ -157,15 +157,29 @@ export function TerminalPage(): JSX.Element {
     const element = term?.element;
     if (!term || !element) return;
 
-    // A teletext session owns its doubled cell (BBSTerminalRef.isTexttvMode):
-    // the fit probes real sizes onto the live terminal, and probing writes
-    // the calibrated size back over the mode's 2x - the mode applied, then
-    // un-applied itself (2026-09-10). Leave it alone, like a wide door.
-    if (terminalRef.current?.isTexttvMode?.() === true) return;
+    /*
+     * A teletext session is FITTED, not doubled.
+     *
+     * It used to own its cell: the mode set the calibrated size x2 and this
+     * refused to touch it, because probing wrote the 80-column size straight
+     * back and the mode un-applied itself (2026-09-10). Doubling only works
+     * if the teletext face has the board face's advance ratio, and TDAText
+     * does not - 40 of its columns at 2x are WIDER than 80 of the board's at
+     * 1x, so the right of every row sat outside the window and the box grew
+     * a horizontal scrollbar (sysop, 2026-09-13: "not scaled properly ...
+     * some content is outside the visible area").
+     *
+     * So it is measured like every other grid. What the 2026-09-10 note was
+     * really about is the CALIBRATION, and that is preserved below: a
+     * teletext fit leaves fitSize alone, so the 80-column size the rest of
+     * the app reads is still the 80-column size.
+     */
+    const teletext = terminalRef.current?.isTexttvMode?.() === true;
 
     // A door that took the terminal out of the standard 80-column grid (wide
     // mode, or a server-driven resize) owns its own sizing — leave it alone.
-    if (term.cols !== BBS_COLS) return;
+    // A teletext session's 40x25 is the BOARD's grid, not a door's.
+    if (!teletext && term.cols !== BBS_COLS) return;
 
     const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
     if (!screen) return;
@@ -206,6 +220,28 @@ export function TerminalPage(): JSX.Element {
         width: page.clientWidth - 2 * TERMINAL_BEZEL_PX,
         height: page.clientHeight - 2 * TERMINAL_BEZEL_PX,
       };
+    }
+
+    if (teletext) {
+      /*
+       * Half the columns, so the cell may be nearly twice as tall as the
+       * 80-column cap allows; the seed is the doubled size the mode applies
+       * as its first guess, and the search does the rest.
+       *
+       * fitSize is deliberately NOT written: it is the 80-column
+       * calibration, and the terminal's own size is what the fit leaves
+       * behind (fitFontSize measures the winner last).
+       */
+      const seed = zoomedFontSize(fitSizeRef.current, zoomFractionRef.current) * 2;
+      const size = fitFontSize(seed, available, measure, TELETEXT_FIT_LIMITS);
+      const box = measure(size);
+      if (!(box.width > 0) || !(box.height > 0)) return;
+      const teletextSlack = Math.min(available.width - box.width, available.height - box.height);
+      const teletextBezel = !isHandheld() && teletextSlack > 0
+        ? TERMINAL_BEZEL_PX + teletextSlack / 2
+        : TERMINAL_BEZEL_PX;
+      setBezelPx((previous) => (Math.abs(previous - teletextBezel) < 0.5 ? previous : teletextBezel));
+      return;
     }
 
     const fitted = fitFontSize(fitSizeRef.current, available, measure);
@@ -262,6 +298,18 @@ export function TerminalPage(): JSX.Element {
       gridObserver.current?.disconnect();
       gridObserver.current = null;
     };
+  }, [refit]);
+
+  // Teletext starts and ends with a new grid AND a new face: the terminal
+  // says when, the fit says how big (see the teletext branch in refit). Two
+  // frames' grace so the face's metrics have reached xterm's measurement.
+  useEffect(() => {
+    const onTexttv = () => {
+      refit();
+      requestAnimationFrame(() => refit());
+    };
+    window.addEventListener('bbs:texttv-mode', onTexttv);
+    return () => window.removeEventListener('bbs:texttv-mode', onTexttv);
   }, [refit]);
 
   // Showing or hiding the on-screen input changes how much height the grid has.

@@ -180,6 +180,20 @@ export interface BBSTerminalRef {
 }
 
 /**
+ * Tell the page a teletext session started or ended.
+ *
+ * The terminal owns the face and the grid; the PAGE owns how big a cell is,
+ * because only it knows the window. The mode's own first guess (the
+ * calibrated cell doubled) is what the caller sees until this lands, and it
+ * fires after the face has loaded so the fit measures TDAText rather than
+ * the fallback's metrics.
+ */
+function announceTexttvMode(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('bbs:texttv-mode', { detail: { enabled } }));
+}
+
+/**
  * Unified BBS Terminal Component
  *
  * Used by both:
@@ -413,6 +427,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const texttvPrevOverflowRef = useRef<string | null>(null);
   const texttvPrevColsRef = useRef<number | null>(null);
   const texttvPrevRowsRef = useRef<number | null>(null);
+  /** The cell size the session had before teletext fitted its own. */
+  const texttvPrevFontSizeRef = useRef<number | null>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -2382,6 +2398,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         if (texttvPrevColsRef.current === null) {
           texttvPrevColsRef.current = term.cols;
           texttvPrevRowsRef.current = term.rows;
+          texttvPrevFontSizeRef.current = term.options.fontSize ?? null;
         }
         // True 40x25 grid (same geometry PETSCII sessions use): the board
         // draws 40 columns for this session, so the terminal shows 40.
@@ -2392,7 +2409,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           texttvPrevOverflowRef.current = terminalRef.current.style.overflow || '';
           terminalRef.current.style.overflow = 'auto';
         }
-        void applyFont(term, TELETEXT_FONT, fontSizeRef.current * 2, false);
+        // Double the calibrated cell as a FIRST GUESS only. The page fits
+        // the 40x25 grid for real once the face has loaded (TerminalPage
+        // refit, teletext branch): TDAText is not the board face at 2x, and
+        // guessing put the right of every row outside the window.
+        void applyFont(term, TELETEXT_FONT, fontSizeRef.current * 2, false)
+          .then(() => announceTexttvMode(true));
       } else {
         console.log('[Terminal] Teletext mode off - restoring session face');
         texttvModeRef.current = false;
@@ -2409,7 +2431,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           terminalRef.current.style.overflow = texttvPrevOverflowRef.current;
           texttvPrevOverflowRef.current = null;
         }
-        void applyFont(term, readCachedFont() ?? DEFAULT_BBS_FONT, fontSizeRef.current);
+        // The size the session had before the fit, not the teletext one the
+        // page measured for forty columns.
+        void applyFont(
+          term,
+          readCachedFont() ?? DEFAULT_BBS_FONT,
+          texttvPrevFontSizeRef.current ?? fontSizeRef.current,
+        ).then(() => announceTexttvMode(false));
+        texttvPrevFontSizeRef.current = null;
       }
     });
 
