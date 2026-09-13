@@ -23,6 +23,7 @@ void ui_doc_style_init(ui_doc_style *style)
     style->bg = ANSI_BLACK;
     style->ink = ANSI_CYAN;
     style->frameless = 0;
+    style->page_keys = 0;
 }
 
 int ui_doc_wrap(const char *text, int width,
@@ -250,7 +251,15 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
          * needs telling. The keys outrank the counter (see above), and
          * "what RETURN does" outranks "which page this is". */
         if (sel_line >= 0) {
-            if (counter[0] && (int) (strlen(counter) + 28) <= st->width) {
+            if (st->page_keys && counter[0] &&
+                (int) (strlen(counter) + 31) <= st->width) {
+                /* Forty columns fit all three: "PAGE 1/3  <> PAGE  ENTER
+                   READS  Q LEAVE" is thirty-nine. */
+                strcpy(footer, counter);
+                strcat(footer, "  <> PAGE  ENTER READS  Q LEAVE");
+            } else if (st->page_keys && (int) strlen("<> PAGE  ENTER READS  Q LEAVE") <= st->width) {
+                strcpy(footer, "<> PAGE  ENTER READS  Q LEAVE");
+            } else if (counter[0] && (int) (strlen(counter) + 28) <= st->width) {
                 strcpy(footer, counter);
                 strcat(footer, "  ENTER READS  Q LEAVE");
             } else if ((int) strlen("ENTER READS  Q LEAVE") <= st->width) {
@@ -258,6 +267,12 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
             } else {
                 strcpy(footer, "ENTER READS");
             }
+        } else if (st->page_keys && counter[0] &&
+                   (int) (strlen(counter) + 24) <= st->width) {
+            strcpy(footer, counter);
+            strcat(footer, "  <> PAGE  Q LEAVE");
+        } else if (st->page_keys && (int) strlen("<> PAGE  SPACE NEXT  Q LEAVE") <= st->width) {
+            strcpy(footer, "<> PAGE  SPACE NEXT  Q LEAVE");
         } else if (counter[0] && (int) (strlen(counter) + 26) <= st->width) {
             strcpy(footer, counter);
             strcat(footer, "  SPACE NEXT  Q LEAVE");
@@ -303,10 +318,14 @@ int ui_doc(ansi_buf *b, const ui_key_source *src, int *pushback,
             ansi_cursor(b, 1);
             ansi_reset(b);
             return 0;
-        case ' ': case UI_KEY_PGDN:
+        /* LEFT and RIGHT still page here. ui_key used to decode them AS
+           PGUP/PGDN and this reader's callers expect that; only
+           ui_doc_pick, and only when the caller asks, reads them as a
+           document change. */
+        case ' ': case UI_KEY_PGDN: case UI_KEY_RIGHT:
             top = ui_doc_top_for(total, rows, top + rows);
             break;
-        case UI_KEY_PGUP:
+        case UI_KEY_PGUP: case UI_KEY_LEFT:
             top = ui_doc_top_for(total, rows, top - rows);
             break;
         case UI_KEY_DOWN:
@@ -419,6 +438,20 @@ int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
         case UI_KEY_PGUP:
             top = ui_doc_top_for(total, rows, top - rows);
             break;
+        case UI_KEY_LEFT:
+        case UI_KEY_RIGHT:
+            if (!st->page_keys) {
+                top = ui_doc_top_for(total, rows,
+                                     key == UI_KEY_LEFT ? top - rows : top + rows);
+                break;
+            }
+            /* The document before or after this one - a teletext set's
+               arrows, not a scroll. The caller fetches; SPACE still pages
+               within what is on screen. */
+            ansi_cursor(b, 1);
+            ansi_reset(b);
+            if (current) *current = cur;
+            return key == UI_KEY_LEFT ? UI_DOC_PREV : UI_DOC_NEXT;
         case UI_KEY_HOME:
             top = 0;
             break;

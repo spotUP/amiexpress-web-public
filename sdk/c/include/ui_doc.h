@@ -41,7 +41,20 @@ typedef struct {
      * Zero keeps the frame, which is every existing caller.
      */
     int frameless;
+    /**
+     * The caller treats LEFT and RIGHT as "the document before/after this
+     * one" and wants the footer to say so. ui_doc_pick returns
+     * UI_DOC_PREV / UI_DOC_NEXT for those keys; ui_doc ignores them, as it
+     * always has.
+     */
+    int page_keys;
 } ui_doc_style;
+
+/** ui_doc_pick outcomes. */
+#define UI_DOC_LEFT   0   /* the caller left */
+#define UI_DOC_PICKED 1   /* they chose the selected line */
+#define UI_DOC_PREV   2   /* LEFT: the document before this one */
+#define UI_DOC_NEXT   3   /* RIGHT: the document after it */
 
 /** A frame in the middle of an 80x24 screen, white on black. */
 void ui_doc_style_init(ui_doc_style *style);

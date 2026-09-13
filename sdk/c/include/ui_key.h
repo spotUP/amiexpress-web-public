@@ -49,6 +49,17 @@ extern "C" {
 #define UI_KEY_END   1005
 #define UI_KEY_ENTER 1006
 #define UI_KEY_ESC   1007
+/*
+ * LEFT and RIGHT arrive as themselves now.
+ *
+ * They used to be decoded straight to UI_KEY_PGUP/UI_KEY_PGDN, because every
+ * widget that read them wanted paging and nothing wanted the direction. A
+ * teletext reader does: its arrows mean "the page before / after this one".
+ * The widgets that wanted paging map them at their own switch, so their
+ * behaviour is unchanged - see ui_doc.c and ui_list.c.
+ */
+#define UI_KEY_LEFT  1008
+#define UI_KEY_RIGHT 1009
 
 /**
  * Where a door's keys come from.

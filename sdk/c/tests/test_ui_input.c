@@ -105,10 +105,17 @@ static void the_boards_own_arrow_codes_decode(void)
 
     assert(ui_key_read(&src, &pushback) == UI_KEY_UP);
     assert(ui_key_read(&src, &pushback) == UI_KEY_DOWN);
-    /* Left and right move a list by a page, which is what they do in the
-       ESC path above too. */
-    assert(ui_key_read(&src, &pushback) == UI_KEY_PGDN);
-    assert(ui_key_read(&src, &pushback) == UI_KEY_PGUP);
+    /* Left and right arrive as THEMSELVES now.
+     *
+     * They used to be decoded straight to PGDN/PGUP, because every widget
+     * that read them wanted paging. A teletext reader wants the direction -
+     * its arrows mean "the page before / after this one" - and a decoder
+     * that has thrown the direction away cannot give it back. The widgets
+     * that want paging map them at their own switch, so a list and the plain
+     * reader page under left and right exactly as before; test_ui_doc pins
+     * that half. */
+    assert(ui_key_read(&src, &pushback) == UI_KEY_RIGHT);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_LEFT);
     printf("  [OK] the board's own arrow codes decode\n");
 }
 

@@ -370,6 +370,62 @@ static void a_coloured_row_keeps_its_tail(void)
     printf("  [OK] a coloured row keeps its tail\n");
 }
 
+static void left_and_right_page_unless_the_caller_wants_them(void)
+{
+    /* ui_key used to decode LEFT and RIGHT as PGUP/PGDN because every widget
+       that read them wanted paging. They arrive as themselves now, so this
+       pins that the plain reader did NOT change: left and right still turn
+       the page here. */
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text =
+        "line one\nline two\nline three\nline four\nline five\nline six";
+    int cur = -1;
+    const int lines[1] = { 0 };
+
+    ui_doc_style_init(&st);
+    st.height = 2; st.width = 40; st.top = 1; st.left = 1;
+
+    t.keys = "\x1b[Cq"; t.at = 0;                 /* right, then leave */
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, " M ", text) == 0);
+    assert(strstr(storage, "line three") != 0);  /* it turned the page */
+
+    /* The picker pages too, until the caller says the arrows mean pages. */
+    t.keys = "\x1b[Cq"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur) == UI_DOC_LEFT);
+    assert(strstr(storage, "line three") != 0);
+
+    /* With page_keys the direction is handed back instead. */
+    st.page_keys = 1;
+    t.keys = "\x1b[C"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur) == UI_DOC_NEXT);
+    t.keys = "\x1b[D"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur) == UI_DOC_PREV);
+
+    /* And the footer says so, since the title has no room at forty. */
+    assert(strstr(storage, "<> PAGE") != 0);
+
+    /* Forty columns carry the counter as well - the sysop reads the page
+       number off the footer on a C64, where the title is already full. */
+    st.height = 2; st.width = 40;
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    (void) ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 1, &cur);
+    assert(strstr(storage, "PAGE 1/3  <> PAGE  ENTER READS  Q LEAVE") != 0);
+    printf("  [OK] left and right page, unless the caller wants the direction\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -386,6 +442,7 @@ int main(void)
     a_cursor_picks_a_line_and_costs_two_rows();
     a_frameless_reader_uses_every_column();
     a_coloured_row_keeps_its_tail();
+    left_and_right_page_unless_the_caller_wants_them();
     printf("ui_doc: all passed\n");
     return 0;
 }

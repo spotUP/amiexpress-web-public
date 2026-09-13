@@ -42,8 +42,8 @@ int ui_decode_escape(const ui_key_source *src, int *pushback)
     switch (c) {
     case 'A': return UI_KEY_UP;
     case 'B': return UI_KEY_DOWN;
-    case 'C': return UI_KEY_PGDN;
-    case 'D': return UI_KEY_PGUP;
+    case 'C': return UI_KEY_RIGHT;
+    case 'D': return UI_KEY_LEFT;
     case 'H': return UI_KEY_HOME;
     case 'F': return UI_KEY_END;
     case '5': case '6': case '1': case '4': {
@@ -102,8 +102,8 @@ int ui_key_read(const ui_key_source *src, int *pushback)
      *
      * The ESC path below stays for the rawArrow case and for a door driven
      * from a terminal directly. */
-    if (c == AE_ARROW_LEFT)  return UI_KEY_PGUP;
-    if (c == AE_ARROW_RIGHT) return UI_KEY_PGDN;
+    if (c == AE_ARROW_LEFT)  return UI_KEY_LEFT;
+    if (c == AE_ARROW_RIGHT) return UI_KEY_RIGHT;
     if (c == AE_ARROW_UP)    return UI_KEY_UP;
     if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
 

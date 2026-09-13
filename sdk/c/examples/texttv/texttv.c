@@ -451,6 +451,10 @@ static int page_actions(void)
                 : "N next, P previous,");
     say(6, wide ? "I back to the index, or a number for any page 100-999."
                 : "F favorite, S share, I index, Q quit.");
+    /* The reader's own footer says "<> PAGE", but a caller who has already
+       left it should not have to go back in to find that out. */
+    say(7, wide ? "While reading, LEFT and RIGHT flip to the previous and next page."
+                : "Reading: left/right flip pages.");
     draw_status();
     if (page_next[0] != '\0' || page_prev[0] != '\0')
         draw_footer(hints_all, 5, "Q=Quit");
@@ -499,6 +503,7 @@ static void read_page(void)
         style.top = 3;
         texttv_reader_box(screen.cols, screen.rows, &style.left, &style.width, &style.height);
         style.frameless = texttv_reader_frameless(screen.cols);
+        style.page_keys = 1;        /* LEFT/RIGHT flip the teletext page */
         style.fg = UI_TOKEN(UI_T_INK);
         style.bg = UI_TOKEN(UI_T_GROUND);
         style.ink = UI_TOKEN(UI_T_ACCENT);
@@ -537,6 +542,21 @@ static void read_page(void)
                 continue;
             }
             /* It did not open - status_line says why; stay where we are. */
+            continue;
+        }
+
+        /* LEFT and RIGHT are the teletext page keys, on an index page and
+           on an article alike: they move SIDEWAYS through the numbering,
+           so they leave the back-stack alone - Q still returns to the page
+           this one was opened from. At an edge there is nowhere to go and
+           the reader simply stays. */
+        if (rc == UI_DOC_PREV || rc == UI_DOC_NEXT) {
+            int target = texttv_valid_page(rc == UI_DOC_PREV ? page_prev : page_next);
+            if (target == 0) continue;          /* an edge: stay put */
+            show_page(target);
+            /* It did not open: status_line says why, and only the action
+               screen draws that - so leave the reader and let it. */
+            if (page_num == 0) return;
             continue;
         }
 
