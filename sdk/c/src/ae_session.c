@@ -213,6 +213,15 @@ int ae_set_last_scanned(ae_session *s, int msg_num)
     return set_pointer(s, "SCAN", msg_num, ae_last_scanned);
 }
 
+long ae_now(ae_session *s)
+{
+    char text[32];
+    int got = ask(s, AE_FIELD_CURR_TIME, text, (int)sizeof(text));
+
+    if (got <= 0) return 0;
+    return atol(text);
+}
+
 int ae_user_theme(ae_session *s, char *out, int n)
 {
     int got = ask(s, AE_FIELD_THEME, out, n);

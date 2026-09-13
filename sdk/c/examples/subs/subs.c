@@ -65,6 +65,7 @@
 #include "ui_ansi.h"
 #include "ui_chrome.h"
 #include "ui_doc.h"
+#include "ui_editor.h"
 #include "ui_input.h"
 #include "ui_key.h"
 #include "ui_list.h"
@@ -340,10 +341,18 @@ static const char *feed_row(void *context, int index)
  * (express.e:2068) - so an older board that answers only the second still
  * works.
  */
+/**
+ * Who is writing, filled in by open_base.
+ *
+ * A file static because the POSTER needs it too, and asking the board again at
+ * post time would be a second round trip for an answer that cannot have
+ * changed inside one session.
+ */
+static char caller[AE_MSG_NAME_MAX];
+
 static int open_base(void)
 {
     char dir[256];
-    char caller[AE_MSG_NAME_MAX];
     int level;
 
     dir[0] = '\0';
@@ -609,9 +618,29 @@ static void mark_read_on_the_way_out(void)
  * Returns 1 when the door should exit, 0 when the caller said no, -1 when the
  * caller went away.
  */
+/**
+ * Write a message, here, without leaving the door.
+ *
+ * This used to hand `EALL` back to the board and exit - which is what the
+ * sysop objected to on 2026-09-08 ("the subs door exits when i press P").
+ * Now the caller types the subject and the body in the door's own chrome and
+ * the door appends the message to the base itself.
+ *
+ * Returns 1 when something was posted, 0 when it was not, -1 for a lost
+ * caller. It no longer returns "the door is finished" for a post: the whole
+ * point is that the caller stays.
+ */
 static int post_flow(const char *question, const char *subject)
 {
-    int yes;
+    static ui_editor_text body;          /* static: ~15KB, too big for a door's stack */
+    ui_editor_style es;
+    ui_input_style is;
+    ae_msg_new msg;
+    char subj[64];
+    char flat[UI_EDITOR_MAX_LINES * (UI_EDITOR_WIDTH + 1)];
+    unsigned long used = 0;
+    long now, written;
+    int yes, rc, i, attempt;
 
     {
         ui_input_style st;
@@ -624,21 +653,96 @@ static int post_flow(const char *question, const char *subject)
         return 0;
     }
 
+    /* A reply arrives with the original subject, so the caller amends rather
+       than retypes - and "Re: " is not added twice to a reply to a reply. */
+    subj[0] = '\0';
     if (subject != 0 && subject[0] != '\0') {
-        char line[160];
-        ansi_clear(&screen.buf);
-        draw_masthead("POST TO EVERYONE");
-        say(3, "You are replying to:");
-        sprintf(line, "  \"%.60s\"", subject);
-        say(4, line);
-        say(6, wide ? "There is no quoting here, and no prefilled subject."
-                    : "No quoting, no prefilled subject.");
-        say(7, wide ? "Type that subject again at the prompt the board gives you."
-                    : "Retype the subject at the prompt.");
-        ui_screen_flush(&screen);
+        if ((subject[0] == 'R' || subject[0] == 'r') &&
+            (subject[1] == 'E' || subject[1] == 'e') && subject[2] == ':') {
+            strncat(subj, subject, sizeof subj - 1);
+        } else {
+            strcpy(subj, "Re: ");
+            strncat(subj, subject, sizeof subj - 5);
+        }
     }
 
-    ae_return_command("EALL");
+    ansi_clear(&screen.buf);
+    draw_masthead(wide ? "POST TO EVERYONE" : "POST");
+    confirm_style(&is);
+    is.row = 3;
+    rc = ui_input(&screen.buf, &keys, &pushback, &is, "Subject:", subj, (int) sizeof subj);
+    if (rc < 0) return -1;
+    if (subj[0] == '\0') {
+        strcpy(status_line, "[INFO] No subject, nothing posted.");
+        return 0;
+    }
+
+    ui_editor_style_init(&es);
+    es.top = 2;
+    es.left = screen.profile.borders ? 2 : 1;
+    es.cols = screen.cols - (screen.profile.borders ? 4 : 1);
+    es.rows = screen.rows - 2;
+    es.fg = UI_TOKEN(UI_T_INK);
+    es.bg = UI_TOKEN(UI_T_GROUND);
+    es.ink = UI_TOKEN(UI_T_ACCENT);
+    es.to = "EALL";
+    es.subject = subj;
+
+    ui_editor_text_init(&body);
+    rc = ui_editor(&screen.buf, &keys, &pushback, &es, &body);
+    if (rc < 0) return -1;
+    if (rc == 0 || body.count == 0) {
+        strcpy(status_line, "[INFO] Nothing posted.");
+        return 0;
+    }
+
+    /* One buffer, LF between lines - express.e:10700-10703 stores body lines
+       and nothing else. */
+    for (i = 0; i < body.count; i++) {
+        unsigned long len = (unsigned long) strlen(body.line[i]);
+        if (used + len + 1 >= sizeof flat) break;
+        memcpy(flat + used, body.line[i], len);
+        used += len;
+        flat[used++] = '\n';
+    }
+
+    /* The BOARD's clock, never time(): AmigaOS's C epoch is not reliably the
+       Unix one, and a wrong date is invisible until somebody sorts the list. */
+    now = ae_now(&session);
+
+    msg.to = "EALL";
+    msg.from = caller;
+    msg.subject = subj;
+    msg.status = AE_MSG_PUBLIC;
+    msg.date = now;
+
+    /* ae_msg_write does disk, not time, so the WAIT for another node's lock
+       lives here. express.e's own caller gives up after about five seconds and
+       says so (express.e:10744). */
+    written = AE_MSG_ERR_LOCKED;
+    for (attempt = 0; attempt < 25; attempt++) {
+        written = ae_msg_write(&msg, flat, used);
+        if (written != AE_MSG_ERR_LOCKED) break;
+        ae_delay_ticks(10);              /* a fifth of a second on PAL */
+    }
+
+    if (written == AE_MSG_ERR_LOCKED) {
+        strcpy(status_line, "[INFO] Another task has the MsgBase locked. Not posted.");
+        return 0;
+    }
+    if (written == AE_MSG_ERR_MIXED) {
+        /* The honest message. This base mixes record layouts and appending to
+           it could make the board misread its neighbours; say so rather than
+           risk it, and the caller can still post through the board's own E. */
+        strcpy(status_line, "[INFO] This base needs the board's own editor. Not posted.");
+        return 0;
+    }
+    if (written < 0) {
+        strcpy(status_line, "[INFO] The message could not be written.");
+        return 0;
+    }
+
+    sprintf(status_line, "[INFO] Posted as message %ld.", written);
     return 1;
 }
 
@@ -863,7 +967,23 @@ int main(int argc, char **argv)
         if (key == 'p' || key == 'P') {
             int rc = post_flow(wide ? "Post to everyone in this conference?" : "Post to everyone?", 0);
             if (rc < 0) break;
-            if (rc == 1) { running = 0; continue; }
+            /* A post no longer ends the door. It used to hand EALL back and
+               exit, which is the behaviour being removed; the caller now stays
+               in the list, and a successful post means the list has one more
+               message in it. */
+            if (rc == 1) {
+                /* build_status() recomputes the line from the counts, which
+                   would throw away "Posted as message N" - the one thing the
+                   caller is waiting to read. Reload, then put it back. */
+                char posted[sizeof status_line];
+                strncpy(posted, status_line, sizeof posted - 1);
+                posted[sizeof posted - 1] = '\0';
+                state = load_feed();
+                build_status();
+                strcpy(status_line, posted);
+                list.count = row_count;
+                ui_list_select(&list, row_count > 0 ? row_count - 1 : 0);
+            }
             full = 1;
             continue;
         }
@@ -872,7 +992,23 @@ int main(int argc, char **argv)
             int rc = post_flow(wide ? "Reply to everyone in this conference?" : "Reply to everyone?",
                                rows[list.selected].subject);
             if (rc < 0) break;
-            if (rc == 1) { running = 0; continue; }
+            /* A post no longer ends the door. It used to hand EALL back and
+               exit, which is the behaviour being removed; the caller now stays
+               in the list, and a successful post means the list has one more
+               message in it. */
+            if (rc == 1) {
+                /* build_status() recomputes the line from the counts, which
+                   would throw away "Posted as message N" - the one thing the
+                   caller is waiting to read. Reload, then put it back. */
+                char posted[sizeof status_line];
+                strncpy(posted, status_line, sizeof posted - 1);
+                posted[sizeof posted - 1] = '\0';
+                state = load_feed();
+                build_status();
+                strcpy(status_line, posted);
+                list.count = row_count;
+                ui_list_select(&list, row_count > 0 ? row_count - 1 : 0);
+            }
             full = 1;
             continue;
         }

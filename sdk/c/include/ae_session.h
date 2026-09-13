@@ -88,6 +88,18 @@ typedef enum {
      */
     AE_FIELD_MENU_COMMAND   = 605,  /* GET_CUSTOM_MSGBASE_MENUCMD */
     /*
+     * THE BOARD'S CLOCK, in Unix seconds - express.e:3771,
+     * `StringF(tempstring,'\d',getSystemTime())`.
+     *
+     * A door that wrote a message header needs a date, and must not reach for
+     * time() to get one: on AmigaOS the C library's epoch is not reliably the
+     * Unix one, so a door built with the wrong toolchain would stamp every
+     * message eight years out and nobody would notice until the list was
+     * sorted. The board already knows, and it is the same clock express.e
+     * stamps its own messages with.
+     */
+    AE_FIELD_CURR_TIME      = 145,  /* DT_CURR_TIME */
+    /*
      * THIS BOARD'S OWN, above express.e's MAX_CMD (1003).
      *
      * A classic board answers an unknown command with nothing, which is the
@@ -279,6 +291,14 @@ int ae_last_read(ae_session *s);
  * that decides what counts as new; ae_last_read is where he stopped reading.
  */
 int ae_last_scanned(ae_session *s);
+
+/**
+ * The board's clock, in Unix seconds, or 0 where it will not say.
+ *
+ * 0 rather than a guess: a message stamped with a wrong date is worse than one
+ * the door refuses to write, and the caller can decide which.
+ */
+long ae_now(ae_session *s);
 
 /**
  * Tell the board the caller has read up to `msg_num`.
