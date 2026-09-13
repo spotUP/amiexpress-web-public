@@ -140,6 +140,39 @@ ops, freeze a golden, mine cluster reps), see
 
 ---
 
+## Drawing cost - the first design decision
+
+A 68K door repaints what CHANGED, never the screen.
+
+Every 198 bytes is one XIM message, ~45 ms of emulation. A full repaint of a
+seven-row list is ~1,900 bytes: ten messages, half a second, on every
+keypress. THEMEC did that until 2026-09-07, and the sysop's bug report was
+"its slow".
+
+- Keep `drawn_*` state per widget and repaint only the cells that differ.
+  `ui_list_draw_changed(list, buf, rows_changed)` does it for a list.
+- Full draw on the first frame and after something that moves many rows -
+  theme change, resize, a mark moving. Not otherwise.
+- Animation ticks touch ONE row (the masthead), never the frame.
+- Never `ansi_clear()` between keypresses.
+- Compose the whole frame into the buffer and flush ONCE. Two writes are two
+  messages, and at 198 bytes each that is the budget gone.
+
+Measure it before shipping:
+
+```
+npx tsx --tsconfig web/backend/tsconfig.json \
+  dev/scripts/door-probe/repaint-cost.ts <binary> --cols 80
+npx tsx --tsconfig web/backend/tsconfig.json \
+  dev/scripts/door-probe/repaint-cost.ts <binary> --cols 40
+make -C sdk/c probe
+```
+
+It drives the real binary through the board's emulator and prints, per key,
+the bytes net of animation and the XIM message count. THEMEC after the fix:
+~210 bytes, 2 messages, first byte in 100-250 ms. More than a few hundred
+bytes for a cursor move means the door is not drawing smart.
+
 ## Technical Considerations
 
 ### Executable Format

@@ -20,6 +20,7 @@ Before you start coding, remember these critical rules:
 - ✅ **Add backgrounds** - `bg: 'black'` in all widget styles
 - ✅ **Import correctly** - Use `@amiexpress/bbs-door-sdk/utils/...`, not relative paths
 - ✅ **Check reference doors** - Look at `Doors/grandmaster/ui/` for patterns
+- **Repaint only what changed** - mutate the element that changed and call `screen.render()`. See "Drawing cost" below; this is the note the sysop has had to write on door after door.
 
 **If your door has any of these issues, you did it wrong:**
 - ❌ Mouse clicks don't work
@@ -27,6 +28,57 @@ Before you start coding, remember these critical rules:
 - ❌ BBS input broken after exiting door
 - ❌ Colors don't display (`{cyan-fg}` shows as literal text)
 - ❌ Widgets don't clean up (ghost boxes after exit)
+
+## Drawing cost (read before you write a render loop)
+
+A door repaints what CHANGED, never the screen. This shapes how the code is
+written, so decide it now rather than tuning it later.
+
+`Screen` keeps differential rendering ON by default: `render()` diffs against
+the last frame and emits only the cells that actually changed. Your job is to
+not defeat it.
+
+**Do**
+
+- Mutate the widget that changed - `setContent()`, `setLabel()`, `setItems()` -
+  then call `screen.render()` once.
+- Keep the widget tree alive across frames. Build it when the screen opens.
+
+**Do not**
+
+- Rebuild or destroy widgets per frame. An element destroy sets
+  `_fullRedrawNeeded`, and the next render ships the whole 80x24 screen.
+- Call `forceFullRedraw()` to "make sure it's right". It is for a real
+  transition: a dialog closed, a screen swapped. That is also what the
+  `clearRegion() + alloc() + render()` line in the checklist above is for -
+  changing SCREENS, never a keypress.
+- Reach for `setDifferentialRendering(false)` without a comment saying why.
+  It exists for doors that bypass the cell buffer entirely.
+
+**What it costs when you get it wrong.** Until 2026-08-25 differential
+rendering was gated behind modem emulation, so ordinary web play invalidated
+the last buffer cell by cell and every frame shipped the entire screen: 10-40
+KB of ANSI per frame, 0.2-0.8 MB/s per player during gameplay. Nothing looked
+broken - it was just eating the caller's line.
+
+**68K doors have the same rule and a harder budget.** Every 198 bytes is one
+XIM message at ~45 ms of emulation, so a full seven-row list repaint is ten
+messages and half a second per keypress. Use `ui_list_draw_changed()`, keep
+`drawn_*` state, never `ansi_clear()` between keypresses, and compose a frame
+into the buffer before flushing ONCE. See `RULES.md` - "Doors draw smart" -
+and `68K_DOOR_DEVELOPMENT.md`.
+
+**Measure, do not guess:**
+
+```
+npx tsx --tsconfig web/backend/tsconfig.json \
+  dev/scripts/door-probe/repaint-cost.ts <binary> --cols 80
+make -C sdk/c probe
+```
+
+Per key, it prints the bytes net of animation and the XIM message count. More
+than a few hundred bytes for a cursor move means the door is not drawing
+smart. Put the numbers in the handoff.
 
 ## Door Types
 

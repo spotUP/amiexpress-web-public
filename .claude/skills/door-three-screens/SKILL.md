@@ -18,6 +18,56 @@ test that drives the door's real screen, not a source pin.
 Read `Documentation/2-Sysops/CONFIGURATION.md` section 5 (the tooltypes) and
 `thoughts/shared/handoffs/2026-09-02_c64-40col-adaptation.md` (the walk) once.
 
+## 0. A door repaints what CHANGED, never the screen
+
+This comes first because it decides how the code is written, not how it is
+tuned afterwards. The sysop has had to ask for it on door after door; if you
+are writing door UI and have not thought about repaint cost, you are not
+finished designing.
+
+**68K door (C SDK).** Every 198 bytes is one XIM message, ~45 ms of emulation.
+A full repaint of a seven-row list is ~1,900 bytes - ten messages, half a
+second, on every keypress. THEMEC did exactly that until 2026-09-07 and the
+sysop's report was "its slow".
+
+- Keep `drawn_*` state per widget; on a keypress repaint only the cells that
+  differ. `ui_list_draw_changed(list, buf, rows_changed)` does this for a list.
+- Full draw only on the first frame and after something that moves many rows:
+  theme change, resize, a mark moving.
+- Animation ticks touch ONE row (the masthead), never the frame.
+- Never `ansi_clear()` between keypresses.
+- Compose a frame into the buffer and flush ONCE - two writes are two
+  messages.
+
+**TypeScript door (blessed SDK).** `Screen._differentialRendering` is ON by
+default, so `screen.render()` already emits only changed cells - your job is
+not to defeat it:
+
+- Mutate the element that changed (`setContent`, `setLabel`) and call
+  `screen.render()`. Do not rebuild the widget tree per frame: destroying an
+  element sets `_fullRedrawNeeded` and ships the whole 80x24 screen.
+- `forceFullRedraw()` is for a real transition (dialog closed, screen
+  swapped), not for "make sure it's right".
+- `setDifferentialRendering(false)` is an escape hatch for a door that
+  bypasses the cell buffer. If you reach for it, say why in a comment.
+- Before 2026-08-25 this was gated behind modem emulation and every frame
+  shipped 10-40 KB - 0.2-0.8 MB/s per player. That is what a full redraw
+  costs when nobody is watching.
+
+**Measure it, do not guess.** Numbers, not an opinion that it "feels fine":
+
+    npx tsx --tsconfig web/backend/tsconfig.json \
+      dev/scripts/door-probe/repaint-cost.ts <binary> --cols 80
+    npx tsx --tsconfig web/backend/tsconfig.json \
+      dev/scripts/door-probe/repaint-cost.ts <binary> --cols 40
+    make -C sdk/c probe     # both widths against the proof door
+
+It drives the real binary through the board's emulator and prints, per key,
+the bytes net of animation and the XIM message count. THEMEC after the fix:
+~210 bytes, 2 messages, first byte in 100-250 ms. **More than a few hundred
+bytes for a cursor move means the door is not drawing smart** - fix it before
+shipping, and put the measurement in the handoff.
+
 ## 1. Geometry comes from the screen, never from a number
 
 - Build the screen with `createScreen(bbs, {...})` from
@@ -125,6 +175,8 @@ regenerate the eighty-col snapshot.
   backend before any manual walk.
 - Manual walk (sysop): web `P` session and a telnet C64, the door at 40; an
   80-column session shows no change. Record the walk in the handoff.
+- Repaint cost measured at 80 and 40 (section 0), and the numbers recorded
+  beside the walk.
 
 ## What not to do
 
@@ -134,3 +186,6 @@ regenerate the eighty-col snapshot.
 - Do not add a second width source, a second breakpoint ladder, or a second
   art detector; extend the one that exists.
 - Do not silence a 40-column test with `it.todo`; unmark the door instead.
+- Do not repaint the screen on a keypress, and do not ship a door whose
+  repaint cost you have not measured (section 0). This is the note the sysop
+  has had to write on door after door.

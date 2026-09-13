@@ -404,8 +404,12 @@ Checklist:
 - [ ] `.info` file registered
 - [ ] Modern neo-blessed UI (windows/panels/mouse), >=3 footer rows, blue hover/active
 - [ ] Full keyboard navigation (tab, arrows, hotkeys)
+- [ ] Repaints only what changed, and the cost is MEASURED at 80 and 40 (see
+      "Doors draw smart" below). The sysop has had to ask for this on door
+      after door - it is a build step, not a review note.
 
-Never: skip SDK docs, guess at input handling, assume game mode, skip `.info`.
+Never: skip SDK docs, guess at input handling, assume game mode, skip `.info`,
+ship a door whose repaint cost you have not measured.
 
 ---
 

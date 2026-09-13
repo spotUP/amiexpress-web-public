@@ -15,6 +15,15 @@ Always aim for modern, desktop-like doors using neo-blessed windows, panels, and
 - **[Templates](./templates/)** - Starter templates
 - **[68K SDK](./68k/README.md)** - Create authentic 68K Amiga binaries (C/Assembly)
 
+**Before you write a render loop, either language:** a door repaints what
+CHANGED, never the screen. TypeScript - mutate the widget and call
+`screen.render()`, which already diffs; never rebuild the tree per frame. 68K -
+`ui_list_draw_changed()`, `drawn_*` state, one flush per frame, never
+`ansi_clear()` between keypresses. Then MEASURE it with
+`dev/scripts/door-probe/repaint-cost.ts` (or `make -C sdk/c probe`) at 80 and
+40 columns. Full details in the guides above and in `RULES.md` under "Doors
+draw smart".
+
 ## SDK 2.0 - Three Development Approaches
 
 ### 1. TypeScript SDK (`/sdk/core/`, `/sdk/engines/`, etc.)
