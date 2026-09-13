@@ -493,6 +493,21 @@ COPY Documentation/1-Users/USER_GUIDE.md /app/Documentation/1-Users/USER_GUIDE.m
 COPY Documentation/2-Sysops/SYSOP_GUIDE.md /app/Documentation/2-Sysops/SYSOP_GUIDE.md
 COPY express /app/default-data/express
 
+# BOT MANIFESTS, which the admin's Bots page is built on.
+#
+# `plugin.service.ts` resolves `bots/` from the backend CODE tree and its
+# comment says "manifests ship with the image (bots/ is COPYd)" - but nothing
+# ever COPYd it. So /app/bots did not exist on the live board, `listPlugins()`
+# read an empty list, and the page answered "Bot not installed" for a bot that
+# was running and delivering. The sysop could not set the Discord token
+# through the UI at all, which is why rotating it sat open as "unknown if
+# done": it was not parked, it was impossible.
+#
+# The whole directory rather than `bots/*/bot.json`, so a second bot needs no
+# edit here. node_modules is dockerignored, so this is ~130 KB of manifest and
+# source, not the 67 MB the tree measures on disk. Only bot.json is read.
+COPY bots /app/bots
+
 # The defaults a NEW board is seeded with must not be THIS board's history.
 #
 # The COPYs above take whole directories, and this board's node directories
