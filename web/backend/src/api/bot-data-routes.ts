@@ -171,7 +171,7 @@ export function createBotDataRouter(
     send(res, await BOT_boardTotals(db, actor(req)));
   });
   router.get('/activity/recent-callers', requireBotDomain('activity'), async (req, res) => {
-    send(res, await BOT_recentCallers(db, limitOf(req)));
+    send(res, await BOT_recentCallers(db, actor(req), limitOf(req)));
   });
 
   return router;

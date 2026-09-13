@@ -46,12 +46,40 @@ export async function BOT_boardTotals(db: BOTDb | undefined, _actor: BOTActor): 
   };
 }
 
-export async function BOT_recentCallers(db: BOTDb | undefined, limit?: unknown): Promise<BOTResult> {
+/**
+ * Recent caller activity, filtered the way every other read in this layer is.
+ *
+ * This took no actor at all and selected the whole table, so any caller could
+ * ask the co-sysop who had been on and read back what the SYSOP had been
+ * doing, plus the handles of accounts that had been erased - both named as
+ * leaks in the header of users.ts, where the existence of the account is
+ * itself the thing hidden.
+ *
+ * The gate belongs in the row set, not in the tool wrapper and not in the
+ * model's prompt, so it is a join: a row whose account is erased, or sits
+ * above the caller's level, is never selected. That also keeps LIMIT honest -
+ * filtering after it would return fewer rows than were asked for.
+ *
+ * A row that resolves to NO account is kept. `user_id` is null for pre-login
+ * activity and for rows whose user was hard-deleted (ON DELETE SET NULL), and
+ * a handle with no account behind it is not an account to protect.
+ */
+export async function BOT_recentCallers(
+  db: BOTDb | undefined,
+  actor: BOTActor,
+  limit?: unknown,
+): Promise<BOTResult> {
   if (!db) return { text: 'Caller history is unreachable right now.', truncated: false };
   const n = BOT_clampLimit(limit);
   const r = await db.query(
-    'SELECT username, action, timestamp FROM caller_activity ORDER BY timestamp DESC LIMIT ?',
-    [n + 1],
+    `SELECT ca.username AS username, ca.action AS action, ca.timestamp AS timestamp
+       FROM caller_activity ca
+       LEFT JOIN users u ON u.id = ca.user_id
+      WHERE COALESCE(u.deleted_at, u.erased_at) IS NULL
+        AND COALESCE(u.seclevel, 0) <= ?
+      ORDER BY ca.timestamp DESC
+      LIMIT ?`,
+    [actor.secLevel ?? 0, n + 1],
   );
   if (!r.rows.length) return { text: 'No recent caller activity.', truncated: false };
   const shown = r.rows.slice(0, n);

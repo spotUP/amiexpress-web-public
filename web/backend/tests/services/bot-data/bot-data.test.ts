@@ -249,7 +249,7 @@ describe('activity and board', () => {
       },
     });
     expect((await BOT_boardTotals(db, actor(30))).text).toContain('5 users, 7 messages, 3 files');
-    expect((await BOT_recentCallers(db)).text).toContain('ann: login');
+    expect((await BOT_recentCallers(db, actor(30))).text).toContain('ann: login');
   });
   it('names the board and lists runnable doors', async () => {
     const board = {

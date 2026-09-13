@@ -468,13 +468,13 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'recent_callers',
-    description: 'Recent caller activity: who called, what they did.',
+    description: 'Recent caller activity: who called, what they did - within the caller\'s own level.',
     parameters: noArgs,
     tier: 'caller',
     async run(ctx) {
       const db = reads(ctx.db, 'query');
       if (!db) return { content: 'Caller history is unreachable right now.' };
-      return { content: (await BOT_recentCallers(db)).text };
+      return { content: (await BOT_recentCallers(db, actorOf(ctx))).text };
     },
   },
   {
