@@ -742,17 +742,25 @@ export class ANSIEditor extends Box {
       clearChar: ' ',
     });
 
-    // Enable all-motion mouse tracking when canvas is focused
+    // Drag-to-draw needs motion reports, so the canvas asks for mouse the way
+    // every other widget in this engine does - Button and RadioSet both call
+    // `enableMouse()` on themselves.
+    //
+    // This used to call `program.setMouse({ allMotion: true }, true)`, which
+    // is real blessed's API and does not exist on THIS engine's Program: the
+    // widget was forked from blessed and kept the call. `program` is always
+    // truthy, so the old guard never caught it and every focus of the draw
+    // canvas threw `setMouse is not a function` - in doors, not only in
+    // tests. `enableMouse()` writes `?1003h`, which IS all-motion, so the
+    // intent survives intact.
+    //
+    // Blur deliberately does nothing. Blessed's `allMotion: false` drops back
+    // to button-only reporting, and this Program has no such middle setting -
+    // `disableMouse()` would take the mouse away from every other widget on
+    // the screen, and clearing `clickable` would stop the caller clicking
+    // back into the canvas.
     this.drawCanvas.on('focus', () => {
-      if (this.screen && (this.screen as any).program) {
-        (this.screen as any).program.setMouse({ allMotion: true }, true);
-      }
-    });
-
-    this.drawCanvas.on('blur', () => {
-      if (this.screen && (this.screen as any).program) {
-        (this.screen as any).program.setMouse({ allMotion: false }, true);
-      }
+      this.drawCanvas.enableMouse();
     });
 
     // 6. Cursor overlay for draw mode
