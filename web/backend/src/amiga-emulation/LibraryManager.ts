@@ -214,11 +214,25 @@ console.warn("[LibraryManager] romtool not found; cannot extract ROM libraries")
         const split = spawnSync("romtool", ["split", romPath, "-o", outDir, "--no-version-dir"], {
           encoding: "utf-8",
         });
+        // The stamp records THIS ROM WAS TRIED, not "it worked".
+        //
+        // It used to be written only on success, so a ROM romtool cannot split
+        // re-ran the whole attempt on EVERY door launch, for ever: a `which`,
+        // a subprocess, and the copy sweep below, per caller per door. Both
+        // ROMs on this board fail it - romtool answers "was not found in split
+        // database!" for the AROS image and for the Kickstart beside it - so
+        // the retry was the normal case, not the rare one.
+        //
+        // A failure is still reported, once per ROM rather than once per
+        // launch, and a romtool that learns the ROM later changes the stamp.
+        fs.writeFileSync(stampPath, stamp);
         if (split.status !== 0) {
-console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
+console.warn(
+            `[LibraryManager] romtool cannot split this ROM; door libraries will come from stubs. ` +
+            `Not retried until the ROM changes. ${String(split.stderr || split.stdout || '').trim().slice(0, 200)}`
+          );
           return;
         }
-        fs.writeFileSync(stampPath, stamp);
       }
 
       const entries = amigafs.readdirSync(outDir);
@@ -305,7 +319,48 @@ console.warn("[LibraryManager] Failed to extract ROM libraries", err);
   }
 
   private async initializeExec(): Promise<void> {
+    /*
+     * PHASE TIMING, because nobody knew where the launch went.
+     *
+     * A real BBS launch spends ~13 seconds between "ROM mapped" and
+     * "libraries initialized" with the event loop BLOCKED for all of it -
+     * measured 2026-09-13, when the sysop reported a door as "stuck". The
+     * plan for it (thoughts/shared/plans/2026-09-08-68k-door-launch-speed.md)
+     * had no diagnosis because the window had no marks inside it: the four
+     * obvious suspects each measured in single-digit milliseconds when probed
+     * in isolation, so the cost is somewhere the outside cannot see.
+     *
+     * Same shape as AmigaDoorSession.start()'s marks, so the two interleave
+     * in one log, and the lag figure says whether a step BLOCKED the board or
+     * merely took a while.
+     */
+    const __t0 = Date.now();
+    let __lagMax = 0;
+    let __lagLast = Date.now();
+    const __lagTimer = setInterval(() => {
+      const late = Date.now() - __lagLast - 20;
+      if (late > __lagMax) __lagMax = late;
+      __lagLast = Date.now();
+    }, 20);
+    __lagTimer.unref?.();
+    const mark = (what: string): void => {
+      this.logger?.log(
+        'INFO',
+        `[timing] exec: ${what} +${Date.now() - __t0}ms (loop lag max ${__lagMax}ms)`
+      );
+    };
+
+    try {
+      await this.initializeExecTimed(mark);
+    } finally {
+      clearInterval(__lagTimer);
+      mark('initializeExec done');
+    }
+  }
+
+  private async initializeExecTimed(mark: (what: string) => void): Promise<void> {
     const projectRoot = this.resolveBbsRoot();
+    mark("bbs root resolved");
 debugLog(`[LibraryManager] BBS root resolved to ${projectRoot}`);
 debugLog("[LibraryManager] Loading ROM...");
 
@@ -341,8 +396,11 @@ console.warn("[LibraryManager] Failed to persist combined AROS ROM for extractio
 
 debugLog("[LibraryManager] Creating ExecBase structure...");
 
+    mark("ROM read and loaded");
+
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
+    mark("ExecBase built");
 
     const libraryLoader = new LibraryLoader(this.emulator, undefined, this.kickstartRom);
     // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
@@ -351,6 +409,7 @@ debugLog("[LibraryManager] Creating ExecBase structure...");
     libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
     libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
+    mark("library loader ready");
 debugLog(
       `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
     );
@@ -360,16 +419,19 @@ debugLog(
     // only when files are missing.
     if (romPath) {
       this.ensureRomLibrariesExtracted(romPath, projectRoot);
+      mark("ROM libraries extracted");
     }
 
     if (!this.execLibrary.loadRealAEDoorLibrary()) {
 console.warn("[LibraryManager] Real AEDoor.library failed to load");
     }
+    mark("AEDoor.library loaded");
 
     // Pre-register any libraries present on disk so getLibraryBase() can
     // resolve them before OpenLibrary is invoked.
     this.registerLibrariesFromDisk(path.join(this.bbsRoot, "Libs"));
     this.registerLibrariesFromDisk(path.join(this.bbsRoot, "System", "Libs"));
+    mark("disk libraries registered");
 
     // Normalize and update doorType in config to ensure consistency throughout initialization
     const doorType = (this.config.doorType || "SIM").toUpperCase();

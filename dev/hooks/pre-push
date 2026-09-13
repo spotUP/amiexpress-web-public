@@ -19,7 +19,20 @@
 # Skip deliberately with:  git push --no-verify
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# THE TREE BEING PUSHED, not the tree this file happens to live in.
+#
+# `BASH_SOURCE` resolves to the shared checkout for every worktree, because
+# worktrees run hooks out of the shared `.git/hooks`. So this gate used to
+# type-check ~/Code/amiexpress-web whatever you were pushing from:
+# a clean worktree was refused because somebody else's uncommitted file in
+# the shared tree was red, and the push it was actually inspecting was never
+# looked at. Reported 2026-09-13 by a session whose worktree was green and
+# whose push was blocked anyway.
+#
+# `--show-toplevel` is the worktree git invoked us in, which is the one whose
+# commits are going out.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$REPO_ROOT" ] || exit 0
 cd "$REPO_ROOT" || exit 0
 
 FAILED=""

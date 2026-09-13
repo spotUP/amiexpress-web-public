@@ -12,6 +12,7 @@
  * today's nav: if a new destination is given to level 100, this failing is
  * the decision being noticed, which is what should happen.
  */
+import { describe, expect, it } from 'vitest';
 import { navItemsForLevel, hardcodedMinLevel } from '../components/AppShell/nav-config';
 
 function labels(level: number): string[] {
