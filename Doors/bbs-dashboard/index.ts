@@ -17,6 +17,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
   themeStyles,
   themeById,
@@ -99,10 +100,24 @@ class BBSDashboard {
   async start(): Promise<void> {
     this.createUI();
 
+    /**
+     * The board is asked for its stats before anything can be drawn, and
+     * that wait was shown to the caller as an empty dashboard. The SDK's
+     * loader covers the screen and says what is happening, the way
+     * card-lobby does - one loader for every door that waits (sysop,
+     * 2026-09-14: "apply the door loader").
+     */
+    const loader = new DoorLoader(this.screen);
+    loader.show('Asking the board for its statistics...');
+    this.screen.render();
+
     // Fetch initial data
     await this.fetchBBSStats();
 
+    loader.update(60, 'Reading node status...');
     await this.renderDashboard();
+    loader.hide();
+    this.screen.render();
     this.refreshSeconds = loadSettings().refreshSeconds;
     this.startAutoRefresh();
 

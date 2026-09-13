@@ -21,6 +21,7 @@ import { showMyProfile, normalizeDiscordName } from './ui/my-profile';
 import { attachResponsiveMode } from './ui/responsive';
 import type { TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { T, applyTheme } from './door-theme';
+import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 
 export class WhipApp {
   private screen: Screen;
@@ -87,11 +88,26 @@ export class WhipApp {
       this.screen.render();
     });
 
+    /**
+     * The two waits below are a database read and a party-calendar refresh
+     * that can reach the network, and the caller was shown a cleared screen
+     * for the length of both. The SDK's loader is the board's one answer to
+     * that (sysop, 2026-09-14: "apply the door loader"), and this door
+     * already declares PRELOADER=YES in its .info - it just had nothing
+     * drawing one once the module was in.
+     */
+    const loader = new DoorLoader(this.screen);
+    loader.show('Reading your stats...');
+    this.screen.render();
+
     // Load/create user stats
     await this.loadUserStats();
 
+    loader.update(60, 'Refreshing the party calendar...');
     // Refresh party calendar (with cache)
     await this.partyCalendar.refreshParties();
+    loader.hide();
+    this.screen.render();
 
     // Show main menu and navigation loop
     await this.showMainMenu();

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 /** The caller's tokens, for the stats lines' inline tags. */
 let T = (0, theme_1.themeById)('classic').tokens;
@@ -56,9 +57,22 @@ class BBSDashboard {
     }
     async start() {
         this.createUI();
+        /**
+         * The board is asked for its stats before anything can be drawn, and
+         * that wait was shown to the caller as an empty dashboard. The SDK's
+         * loader covers the screen and says what is happening, the way
+         * card-lobby does - one loader for every door that waits (sysop,
+         * 2026-09-14: "apply the door loader").
+         */
+        const loader = new DoorLoader_1.DoorLoader(this.screen);
+        loader.show('Asking the board for its statistics...');
+        this.screen.render();
         // Fetch initial data
         await this.fetchBBSStats();
+        loader.update(60, 'Reading node status...');
         await this.renderDashboard();
+        loader.hide();
+        this.screen.render();
         this.refreshSeconds = (0, settings_1.loadSettings)().refreshSeconds;
         this.startAutoRefresh();
         // Wait for exit
