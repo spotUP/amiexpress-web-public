@@ -53,11 +53,19 @@ export async function searchDoors(query: string): Promise<string> {
   });
 }
 
+/**
+ * What doorDetail says when the archive is not there. The tool layer routes a
+ * miss on to the right sibling tool, and reads it through isNoSuchDoor rather
+ * than matching the prose - so the wording stays changeable here.
+ */
+export const NO_SUCH_DOOR = 'No door called';
+export const isNoSuchDoor = (answer: string): boolean => answer.startsWith(NO_SUCH_DOOR);
+
 export async function doorDetail(archive: string): Promise<string> {
   const a = archive.trim().toUpperCase().slice(0, 40);
   return cachedLookup(`dr:detail:${a}`, async () => {
     const r = await fetcher(`${DOORS}/doors/${encodeURIComponent(a)}`);
-    if (!r || r.error) return `No door called "${a}" in the archive.`;
+    if (!r || r.error) return `${NO_SUCH_DOOR} "${a}" in the archive.`;
     const score = (r.votesUp ?? 0) - (r.votesDown ?? 0);
     const diz = r.fileIdDiz ? `\nDIZ: ${String(r.fileIdDiz).split('\n')[0]}` : '';
     return `${doorLine(r)}\nScore ${score} (${r.votesUp ?? 0}/${r.votesDown ?? 0}). Download: ${r.downloadUrl ?? 'n/a'}.${diz}`;

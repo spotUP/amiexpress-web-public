@@ -26,7 +26,7 @@ import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, POST_MESSA
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { searchProductions, searchGroups, searchParties } from './external/demozoo';
 import {
-  searchDoors, doorDetail, doorRandom, doorStats,
+  searchDoors, doorDetail, doorRandom, doorStats, isNoSuchDoor,
   searchFiles, fileDetail, fileRandom, listingStats, listingFacts,
 } from './external/doorrepo';
 import { lookupGame } from './external/games';
@@ -201,7 +201,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_doors',
-    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind is exactly one of search, detail, random, stats - there is no party kind (demoparties are search_demozoo). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me with a door".',
+    description: 'The Up Rough door archive: BBS DOOR SOFTWARE ONLY - programs a board runs, searchable by name, author, releasing group, description and DIZ. It knows nothing about a group or a scener themselves: for who a group is, its history, members or releases, use search_demozoo with kind=group, and for a demoparty kind=party. kind is exactly one of search, detail, random, stats. kind=search needs query; kind=detail needs an ARCHIVE FILENAME like MST-CM20.LHA, never a group or handle; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y.LHA", "surprise me with a door".',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
@@ -212,7 +212,17 @@ export const CALLER_TOOLS: SysopTool[] = [
         }
         case 'detail': {
           const q = str(args.query, 40);
-          return { content: q ? await doorDetail(q) : 'Which archive? Like MST-CM20.LHA.' };
+          if (!q) return { content: 'Which archive? Like MST-CM20.LHA.' };
+          const answer = await doorDetail(q);
+          // A DEAD END SHOULD SAY WHERE THE ANSWER LIVES. A caller asked for
+          // the group history of Fairlight and the model came here with
+          // kind=detail; "No door called FAIRLIGHT" gave it nowhere to go, so
+          // that was the reply. In a tool loop the result IS the recovery
+          // path, so a miss names the sibling that can answer.
+          if (isNoSuchDoor(answer)) {
+            return { content: `${answer} If ${q} is a demoscene group, a scener or a handle, it is search_demozoo with kind=group that knows - this tool only holds BBS door software.` };
+          }
+          return { content: answer };
         }
         case 'random': return { content: await doorRandom() };
         case 'stats': return { content: await doorStats() };

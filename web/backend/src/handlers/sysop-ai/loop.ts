@@ -54,6 +54,68 @@ function parseArgs(raw: unknown): Record<string, unknown> {
   try { const v = JSON.parse(String(raw ?? '{}')); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
 }
 
+/**
+ * A TOOL CALL THE MODEL WROTE OUT AS TEXT.
+ *
+ * Not every model that advertises tools answers in `tool_calls`. Several of
+ * the free OpenRouter models emit the call into `content` instead, wrapped in
+ * their own control tokens:
+ *
+ *   <|tool_call_start|>[search_demozoo(kind='group', query='fairlight')]<|tool_call_end|>
+ *
+ * The loop read `tool_calls`, found nothing, and handed that string to the
+ * caller as the reply - so the board answered a question about Fairlight with
+ * its own control tokens, and the tool it had just asked for never ran
+ * (reported live 2026-09-13).
+ *
+ * The model DID ask; we failed to hear it. This reads the dialect back into
+ * the same shape a native `tool_calls` entry has, so one code path runs the
+ * tool either way. Both argument forms are accepted: python keywords, and a
+ * single JSON object.
+ */
+const TEXT_TOOL_CALL = /<\|tool_call(?:_start|_begin)\|>\s*\[?\s*([A-Za-z_][\w-]*)\s*\(([\s\S]*?)\)\s*\]?\s*<\|tool_call(?:_end|_close)\|>/g;
+
+/** `kind='group', query="up rough"` -> an arguments object. */
+function parseKeywordArgs(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) {
+    try { const v = JSON.parse(trimmed); if (v && typeof v === 'object') return v; } catch { /* fall through */ }
+  }
+  const args: Record<string, unknown> = {};
+  const pair = /([A-Za-z_][\w-]*)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^,]+))/g;
+  for (let m = pair.exec(trimmed); m; m = pair.exec(trimmed)) {
+    args[m[1]!] = (m[2] ?? m[3] ?? String(m[4] ?? '').trim()).trim();
+  }
+  return args;
+}
+
+export function toolCallsWrittenAsText(content: unknown): any[] {
+  if (typeof content !== 'string' || !content.includes('tool_call')) return [];
+  const out: any[] = [];
+  TEXT_TOOL_CALL.lastIndex = 0;
+  for (let m = TEXT_TOOL_CALL.exec(content); m; m = TEXT_TOOL_CALL.exec(content)) {
+    out.push({ id: `text-${out.length}`, type: 'function', function: { name: m[1]!, arguments: parseKeywordArgs(m[2] ?? '') } });
+  }
+  return out;
+}
+
+/**
+ * A caller reads a terminal, and no model's control tokens belong on it. This
+ * is the last line of defence, not the fix: a dialect we DO parse never gets
+ * here, and one we do not is at least not printed raw.
+ */
+export function withoutControlTokens(text: string): string {
+  return text
+    // A call's whole SPAN goes, body and all - what sits between the tokens is
+    // the call the model made, not something it said to the caller.
+    .replace(/<\|tool_call(?:_start|_begin)\|>[\s\S]*?<\|tool_call(?:_end|_close)\|>/g, '')
+    // Then any lone token of a dialect nobody here parses, keeping the prose
+    // around it - those wrap what the model is saying, not a call.
+    .replace(/<\|[^|>]*\|>/g, '')
+    .replace(/[^\S\r\n]{2,}/g, ' ')
+    .trim();
+}
+
 export async function askWithTools(req: ToolLoopRequest): Promise<ToolLoopResult> {
   const messages = [...req.messages];
   const afters: Array<() => Promise<void>> = [];
@@ -91,14 +153,21 @@ console.log('[Tool loop] tool loop: out of time before the reply');
     const message = choice?.message;
     if (!message) return { text: null, truncated: false, afters, calls, toolResults };
 
-    const toolCalls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    const native: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    // A model that writes its call into `content` has still asked for a tool.
+    const toolCalls: any[] = native.length ? native : toolCallsWrittenAsText(message.content);
     if (toolCalls.length === 0 || round === MAX_ROUNDS) {
-      const text = typeof message.content === 'string' && message.content.trim() ? message.content : null;
+      const cleaned = typeof message.content === 'string' ? withoutControlTokens(message.content) : '';
+      const text = cleaned ? cleaned : null;
       return { text, truncated: choice.finish_reason === 'length', afters, calls, toolResults };
     }
 
     // The assistant's turn, tool calls and all, then one tool message per call.
-    messages.push({ role: 'assistant', content: message.content ?? null, tool_calls: toolCalls });
+    // The assistant's own turn goes back without its control tokens too: a
+    // text-dialect call is already represented in `tool_calls` beside it, and
+    // echoing the raw markup teaches the next round to answer in it again.
+    const said = typeof message.content === 'string' ? withoutControlTokens(message.content) : '';
+    messages.push({ role: 'assistant', content: said || null, tool_calls: toolCalls });
     for (const call of toolCalls) {
       const name = String(call?.function?.name ?? '');
       const args = parseArgs(call?.function?.arguments);
