@@ -616,11 +616,26 @@ export class UserDatabaseManager {
   }
 
   /**
-   * Write a single user stat to disk
-   * Field offsets in user.data structure (232 bytes per user)
+   * Write a single user stat to disk.
+   *
+   * `slotNumber` is the 1-INDEXED Amiga slot, the same as everywhere else in
+   * this class since 15296b912. That change converted every read
+   * (`readUserFromDisk`, `readConfAccessFromDisk`) and left this write behind,
+   * so a door updating a caller's uploads wrote them into the NEXT account's
+   * record while the read came back from the caller's own - the same
+   * neighbour-corruption the lockout fix was about, still live on the stat
+   * path. Verified before fixing: slot 1's uploads landed in record 2.
+   *
+   * Field offsets are the ones `parseUserStruct` reads, which is the only
+   * description of this 232-byte record the port has.
    */
   writeUserStatToDisk(slotNumber: number, field: string, value: number): void {
     if (!fs.existsSync(this.userDataPath)) return;
+    // Slot 0 is not a record. readUserFromDisk refuses it; so does this.
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+console.warn(`[UserDatabaseManager] writeUserStatToDisk: slot ${slotNumber} is not a 1-indexed slot`);
+      return;
+    }
 
     // Field offsets within the 232-byte user record
     const fieldOffsets: Record<string, { offset: number; size: number }> = {
@@ -633,6 +648,12 @@ export class UserDatabaseManager {
       timeTotal: { offset: 166, size: 4 },
       bytesDownload: { offset: 170, size: 4 },
       bytesUpload: { offset: 174, size: 4 },
+      // Three fields 68K doors write through DT_ that this map did not carry,
+      // so every such write was dropped with a warning and the door's change
+      // never reached the record. Offsets derived from parseUserStruct above.
+      timeLastOn: { offset: 154, size: 4 },
+      dailyBytesLimit: { offset: 178, size: 4 },
+      dailyBytesDld: { offset: 182, size: 4 },
     };
 
     const fieldInfo = fieldOffsets[field];
@@ -641,7 +662,7 @@ console.warn(`[UserDatabaseManager] Unknown field: ${field}`);
       return;
     }
 
-    const fileOffset = slotNumber * this.USER_SIZE + fieldInfo.offset;
+    const fileOffset = (slotNumber - 1) * this.USER_SIZE + fieldInfo.offset;
     const buffer = Buffer.alloc(fieldInfo.size);
 
     if (fieldInfo.size === 2) {

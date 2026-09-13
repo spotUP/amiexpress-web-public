@@ -419,7 +419,8 @@ debugLog(`  [WRITE] DT_EXPERT: ${expertStr}`);
         {
           // Read from disk (user.data) via diskUserStats, not from session.user (database)
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const msgs = diskStats?.messagesPosted ?? user?.messagesPosted ?? 0;
             this.messageParser.writeString(stringAddr, msgs.toString(), 200);
@@ -428,7 +429,7 @@ debugLog(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'sess
             const newMsgs = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newMsgs)) {
               if (user) user.messagesPosted = newMsgs;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'messagesPosted', newMsgs);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'messagesPosted', newMsgs);
             }
 debugLog(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
           }
@@ -438,7 +439,8 @@ debugLog(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
       case XIMCommand.DT_UPLOADS:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
             this.messageParser.writeString(stringAddr, uploads.toString(), 200);
@@ -447,7 +449,7 @@ debugLog(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'
             const newUploads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newUploads)) {
               if (user) user.uploads = newUploads;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'uploads', newUploads);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'uploads', newUploads);
             }
 debugLog(`  [WRITE] DT_UPLOADS: ${newUploads}`);
           }
@@ -457,7 +459,8 @@ debugLog(`  [WRITE] DT_UPLOADS: ${newUploads}`);
       case XIMCommand.DT_DOWNLOADS:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
             this.messageParser.writeString(stringAddr, downloads.toString(), 200);
@@ -466,7 +469,7 @@ debugLog(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'sess
             const newDownloads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDownloads)) {
               if (user) user.downloads = newDownloads;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'downloads', newDownloads);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'downloads', newDownloads);
             }
 debugLog(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
           }
@@ -476,7 +479,8 @@ debugLog(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
       case XIMCommand.DT_TIMESCALLED:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const calls = diskStats?.timesCalled ?? user?.timesCalled ?? 0;
             this.messageParser.writeString(stringAddr, calls.toString(), 200);
@@ -485,7 +489,7 @@ debugLog(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'sessio
             const newCalls = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCalls)) {
               if (user) user.timesCalled = newCalls;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timesCalled', newCalls);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timesCalled', newCalls);
             }
 debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           }
@@ -495,7 +499,8 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
       case XIMCommand.DT_TIMELASTON:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           // express.e MiscFuncs.e:255 dateStampToDateTime():
           //   c_time = (days+2922)*86400 + minute*60 + tick/50 + 21600
           // i.e. timeLastOn is **Unix epoch seconds + 21600 (6h offset)** —
@@ -532,7 +537,7 @@ console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} unixSec=${unixSec} cTime=${cTime
             const cTime = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(cTime)) {
               const unixSec = Math.max(0, cTime - C_TIME_OFFSET);
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', unixSec);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', unixSec);
             }
 debugLog(`  [WRITE] DT_TIMELASTON: cTime=${cTime}`);
           }
@@ -542,7 +547,8 @@ debugLog(`  [WRITE] DT_TIMELASTON: cTime=${cTime}`);
       case XIMCommand.DT_TIMEUSED:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const timeUsed = diskStats?.timeUsed ?? user?.timeUsed ?? 0;
             this.messageParser.writeString(stringAddr, timeUsed.toString(), 200);
@@ -551,7 +557,7 @@ debugLog(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'sessio
             const newTimeUsed = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeUsed)) {
               if (user) user.timeUsed = newTimeUsed;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeUsed', newTimeUsed);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeUsed', newTimeUsed);
             }
 debugLog(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
           }
@@ -561,7 +567,8 @@ debugLog(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
       case XIMCommand.DT_TIMETOTAL:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const timeTotal = diskStats?.timeTotal ?? user?.timeTotal ?? 0;
             this.messageParser.writeString(stringAddr, timeTotal.toString(), 200);
@@ -570,7 +577,7 @@ debugLog(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'sess
             const newTimeTotal = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeTotal)) {
               if (user) user.timeTotal = newTimeTotal;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeTotal', newTimeTotal);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeTotal', newTimeTotal);
             }
 debugLog(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
           }
@@ -580,7 +587,8 @@ debugLog(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
       case XIMCommand.DT_BYTESUPLOAD:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
             this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
@@ -589,7 +597,7 @@ debugLog(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'sess
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesUpload = newBytes;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesUpload', newBytes);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesUpload', newBytes);
             }
 debugLog(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
           }
@@ -599,7 +607,8 @@ debugLog(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
       case XIMCommand.DT_BYTEDOWNLOAD:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
             this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
@@ -608,7 +617,7 @@ debugLog(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 's
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesDownload = newBytes;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesDownload', newBytes);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesDownload', newBytes);
             }
 debugLog(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
           }
@@ -618,7 +627,8 @@ debugLog(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
       case XIMCommand.DT_DAILYBYTELIMIT:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const limit = diskStats?.dailyBytesLimit ?? user?.dailyBytesLimit ?? 0;
             this.messageParser.writeString(stringAddr, limit.toString(), 200);
@@ -627,7 +637,7 @@ debugLog(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'ses
             const newLimit = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLimit)) {
               if (user) user.dailyBytesLimit = newLimit;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesLimit', newLimit);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesLimit', newLimit);
             }
 debugLog(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
           }
@@ -637,7 +647,8 @@ debugLog(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
       case XIMCommand.DT_DAILYBYTEDLD:
         {
           const diskStats = (this.bbsSession as any)?.diskUserStats;
-          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
           if (isRead) {
             const dailyDld = diskStats?.dailyBytesDld ?? user?.dailyBytesDld ?? 0;
             this.messageParser.writeString(stringAddr, dailyDld.toString(), 200);
@@ -646,7 +657,7 @@ debugLog(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'se
             const newDld = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDld)) {
               if (user) user.dailyBytesDld = newDld;
-              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesDld', newDld);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesDld', newDld);
             }
 debugLog(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
           }
