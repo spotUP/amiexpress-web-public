@@ -144,15 +144,37 @@ describe('a door that exits while a screen is half-shown', () => {
     }
   });
 
-  it('DRAINS the segments rather than only saying it will', () => {
+  it('HANDS THE SEGMENTS ON rather than only saying it will', () => {
+    /*
+     * This used to require `await processNextScreenSegment(socket, session)`,
+     * because the bug it was written for was segments DROPPED - the caller
+     * went straight to the menu with half the screen unshown.
+     *
+     * Drawing the next piece immediately turned out to be the wrong way to
+     * keep them, and cost a different bug: a segment boundary exists BECAUSE
+     * the screen had a `~SP` there, so the caller is owed that pause, and
+     * drawing straight on spends it silently. "global last callers is missing
+     * a pause prompt" (sysop, 2026-09-15) - `~CC_gl ~SP` ran the door and the
+     * next segment wiped its output with nothing in between.
+     *
+     * The property this protects is unchanged and is the one that matters:
+     * the remaining segments must be handed to something that will show them.
+     * `armSegmentBoundaryPause` arms the same pause any other `~SP` arms and
+     * leaves the segments on the session; `handleCommand` consults
+     * `session.paginatedScreen` BEFORE any subState logic, so the caller's key
+     * reaches `handlePaginatedScreenInput` and drains the next piece from
+     * whatever state the door restored.
+     */
     for (const [name, marker] of PATHS) {
       const from = DOORS.indexOf(marker);
       // A generous window: each branch carries a long comment explaining the
       // bug before the code, and the assertion is about presence anyway.
       const branch = DOORS.slice(from, from + 3000);
-      expect([name, /processNextScreenSegment/.test(branch)]).toEqual([name, true]);
-      expect([name, /await processNextScreenSegment\(socket, session\)/.test(branch)])
+      expect([name, /armSegmentBoundaryPause\(socket, session/.test(branch)])
         .toEqual([name, true]);
+      // And it must NOT go back to drawing the next piece itself.
+      expect([name, /await processNextScreenSegment\(socket, session\)/.test(branch)])
+        .toEqual([name, false]);
     }
   });
 

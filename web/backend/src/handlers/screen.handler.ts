@@ -196,6 +196,50 @@ export function screenCatalogueName(screenName: string): string {
 }
 
 /**
+ * THE PAUSE A `~SP` BOUNDARY STANDS FOR.
+ *
+ * A boundary between two segments exists BECAUSE the screen had a `~SP`
+ * there - that is what split it - so whenever segments remain, the caller is
+ * owed exactly this prompt. express.e:5455-5461 stops at the `~SP` wherever
+ * it falls.
+ *
+ * One definition, because there are two ways to arrive at a boundary and they
+ * must be indistinguishable downstream: finishing a segment's text, and a
+ * `~CC_` door in a segment exiting (`door.handler`). The door path used to
+ * render the NEXT segment instead of pausing, which spent the boundary
+ * silently - "global last callers is missing a pause prompt" (sysop,
+ * 2026-09-15): `~CC_gl ~SP` ran the door and the next segment wiped its
+ * output with nothing in between.
+ *
+ * @returns true when a pause was armed, false when no segments remain and the
+ *          screen is simply over.
+ */
+export function armSegmentBoundaryPause(
+  socket: any,
+  session: BBSSession,
+  site: string = 'segment-boundary',
+): boolean {
+  const segState = session.screenSegments;
+  if (!segState || segState.segments.length === 0) return false;
+
+  session.paginatedScreen = {
+    lines: [''],  // No additional content, just hold for a key
+    nextIndex: 1,
+    pageSize: 1,
+    eventName: segState.eventName,
+    commands: [],
+    kind: 'doPause',
+  };
+  session.lastScreenHadPause = true;
+  // Same reason as `doPause`: this prompt lands between two chunks of the
+  // SAME `.seq`, so the model must see the rows it moves through - which
+  // the transport choke guarantees for every emit on this socket.
+  tracePause(site, session);
+  emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  return true;
+}
+
+/**
  * TEMPORARY INSTRUMENTATION - 2026-09-14, remove once the double pause is found.
  *
  * "two prompts in a row, and the prompt from the prior screen is missing"
@@ -3611,21 +3655,7 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
   }
 
   // If there are more segments, set up another pause
-  if (segState.segments.length > 0) {
-    session.paginatedScreen = {
-      lines: [''],  // No additional content, just hold for a key
-      nextIndex: 1,
-      pageSize: 1,
-      eventName: segState.eventName,
-      commands: [],
-      kind: 'doPause',
-    };
-    session.lastScreenHadPause = true;
-    // Same reason as `doPause`: this prompt lands between two chunks of the
-    // SAME `.seq`, so the model must see the rows it moves through - which
-    // the transport choke guarantees for every emit on this socket.
-    tracePause('segment-resume', session);
-    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  if (armSegmentBoundaryPause(socket, session, 'segment-resume')) {
     return true;
   }
 
