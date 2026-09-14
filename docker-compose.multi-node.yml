@@ -54,6 +54,12 @@ services:
       - BBS_DATA_DIR=/app/data/bbs
       - ROM_DIR=/app/data/amiga-roms
 
+      # A busy 68K door must not stop this process answering - see the long
+      # note in docker-compose.yml. It matters MORE here: one parked event
+      # loop is shared by every node in this file, so one door on one node
+      # darkened all of them.
+      - DOOR_ASYNC_WAIT=${DOOR_ASYNC_WAIT:-1}
+
       # Multi-node coordination
       - MULTI_NODE=true
 

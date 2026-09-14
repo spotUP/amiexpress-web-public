@@ -104,6 +104,27 @@ services:
       - BBS_DATA_DIR=/app/data/bbs
       - ROM_DIR=/app/data/amiga-roms
 
+      # A 68K door waits for the BBS to reply to every JH_xx message it
+      # sends, and that wait used to be a tight loop holding the whole JS
+      # event loop - so while any door was busy, this process answered
+      # NOTHING. It took the board down on 2026-09-13: /health gave no reply
+      # from inside its own container, with fifteen callers queued on the
+      # socket, until a deploy recreated it.
+      #
+      # Measured on localhost 2026-09-14, same board, same door (THEMEC),
+      # /health sampled once a second:
+      #     flag off:  17 of 56 checks got NO answer, one unbroken 28s block
+      #     flag on:    0 of 49 failed, median 0.29 s
+      # The cost is that 0.29 s against 0.02 s idle - each pump iteration
+      # drains XIM before libuv gets its turn. A board that answers slowly is
+      # a different thing from a board that does not answer.
+      #
+      # Safe to run because the two deasync pumps can no longer nest
+      # (api/pump-owner.ts): waitForReply owns the pump and the XIM processor
+      # defers to it. Set to 0 to go back to the old loop.
+      # thoughts/shared/plans/2026-04-21-aedoor-waitforreply-event-loop.md
+      - DOOR_ASYNC_WAIT=${DOOR_ASYNC_WAIT:-1}
+
       # Telnet/SSH ports — these MUST match the host:container port
       # mapping above. If a sysop wants different external ports they
       # need to (a) update the `ports:` block above, (b) set the env
