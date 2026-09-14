@@ -159,14 +159,17 @@ body {
   justify-content: center;
 }
 
-/* Override terminal container font size */
-#terminal {
-  font-size: 16px !important;
-}
-
 /* BBS Terminal Styles */
+/*
+ * No font-size here, and none on .xterm-rows / .xterm-row below: xterm sets
+ * those itself, per terminal, from options.fontSize. A `16px !important` on
+ * them (96b9128d8, before the terminal was ever fitted to the window) went
+ * unnoticed for a year because the canvas renderer draws from the option
+ * and ignores the CSS - and the moment a teletext session took the DOM
+ * renderer, every row shrank to 16px and the whole page came apart (sysop,
+ * 2026-09-14).
+ */
 .xterm {
-  font-size: 16px !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
@@ -179,7 +182,6 @@ body {
 }
 
 .xterm .xterm-rows {
-  font-size: 16px !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
@@ -191,7 +193,6 @@ body {
 }
 
 .xterm .xterm-viewport {
-  font-size: 16px !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
@@ -210,8 +211,6 @@ body {
 }
 
 .xterm .xterm-rows .xterm-row {
-  font-size: 16px !important;
-  line-height: 1.0 !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;

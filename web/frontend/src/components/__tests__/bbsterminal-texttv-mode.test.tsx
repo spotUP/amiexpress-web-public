@@ -11,6 +11,7 @@ const rec = vi.hoisted(() => ({
   ctorArgs: [] as any[],
   terminals: [] as any[],
   socket: null as any,
+  canvasAddons: [] as any[],
 }));
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
@@ -64,7 +65,12 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
 });
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/addon-canvas', () => ({
-  CanvasAddon: class { activate() {} dispose() {} },
+  CanvasAddon: class {
+    constructor() { rec.canvasAddons.push(this); }
+    disposed = false;
+    activate() {}
+    dispose() { this.disposed = true; }
+  },
 }));
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/addon-fit', () => ({
   FitAddon: class {
@@ -95,6 +101,7 @@ let socket: FakeSocket;
 beforeEach(() => {
   rec.ctorArgs.length = 0;
   rec.terminals.length = 0;
+  rec.canvasAddons.length = 0;
   socket = new FakeSocket();
   rec.socket = socket;
   window.localStorage.clear();
@@ -121,6 +128,33 @@ function mount() {
  * tells the two palettes apart without screenshotting. */
 const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
+
+describe('teletext draws without the canvas atlas', () => {
+  /*
+   * xterm's canvas atlas blits a glyph that comes from the FACE at
+   * `cellWidth - 1` device pixels, so a 40-cell teletext rule drew with a
+   * gap at every cell boundary (sysop, 2026-09-14) - measured by
+   * screenshot: 44 lit of a 45px cell. No font and no size changes it, and
+   * WebGL shares the atlas. The DOM renderer tiles the face's blocks, so
+   * teletext takes it and gives the canvas back on the way out. ANSI is
+   * untouched: xterm draws U+2580-259F itself.
+   */
+  it('puts the canvas renderer down when the mode starts', async () => {
+    mount();
+    expect(rec.canvasAddons).toHaveLength(1);
+    expect(rec.canvasAddons[0].disposed).toBe(false);
+    await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
+    expect(rec.canvasAddons[0].disposed).toBe(true);
+  });
+
+  it('takes it back up for the eighty-column session', async () => {
+    mount();
+    await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
+    await act(async () => { socket.fire('texttv-mode', { enabled: false }); });
+    expect(rec.canvasAddons).toHaveLength(2);
+    expect(rec.canvasAddons[1].disposed).toBe(false);
+  });
+});
 
 describe('texttv-mode on', () => {
   it('never opens on a fractional cell, because mosaics seam on one', async () => {

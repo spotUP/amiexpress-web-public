@@ -427,6 +427,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const texttvModeRef = useRef<boolean>(false);
   const texttvPrevThemeRef = useRef<any>(null);
   const texttvPrevOverflowRef = useRef<string | null>(null);
+  /*
+   * The canvas renderer, held so teletext can put it down.
+   *
+   * xterm's canvas atlas blits a glyph that comes from the FACE at
+   * `cellWidth - 1` device pixels - 44 of a 45px cell, 47 of 48 - so every
+   * mosaic cell boundary shows a one-pixel gap. No size and no font changes
+   * it (a face with its blocks widened past their advance measures the
+   * same) and the WebGL renderer shares that atlas. U+2580-259F escape it
+   * only because xterm draws those itself, which is why ordinary ANSI art
+   * never showed it; teletext mosaics are sextants (U+1FB00-1FB3B) and come
+   * from the face. The DOM renderer tiles them - at a whole CSS cell, which
+   * seamlessTeletextSize provides, and without an app stylesheet pinning
+   * .xterm-rows to 16px, which index.css no longer does.
+   */
+  const canvasAddonRef = useRef<CanvasAddon | null>(null);
   const texttvPrevColsRef = useRef<number | null>(null);
   const texttvPrevRowsRef = useRef<number | null>(null);
   /** The cell size the session had before teletext fitted its own. */
@@ -1056,6 +1071,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
+    canvasAddonRef.current = canvasAddon;
 
     // Load fit addon for responsive sizing
     const fitAddon = new FitAddon();
@@ -2431,6 +2447,28 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         term.reset();
         doubleHeightRef.current.reset();
 
+        /*
+         * Put the canvas renderer down for the duration.
+         *
+         * A teletext page is drawn in MOSAICS, and the canvas atlas blits a
+         * face's glyph a device pixel short of its cell, so a drawn rule
+         * reads as a row of dashes (sysop, 2026-09-14). The DOM renderer
+         * lays the row out as text and the cells touch - one run of 1920
+         * device pixels across forty cells, double-height halves aligned -
+         * PROVIDED the cell is a whole CSS pixel (seamlessTeletextSize: the
+         * DOM renderer rounds per span, and a 22.5px cell breaks the same
+         * row into seven).
+         *
+         * ANSI art keeps the canvas: xterm draws U+2580-259F itself, so
+         * ordinary block art never seams, and 80x25 of animation is what
+         * the atlas is for. Only teletext pays the DOM renderer's price,
+         * and a teletext page is a static screen.
+         */
+        if (canvasAddonRef.current) {
+          try { canvasAddonRef.current.dispose(); } catch { /* already gone */ }
+          canvasAddonRef.current = null;
+        }
+
         // True 40x25 grid (same geometry PETSCII sessions use): the board
         // draws 40 columns for this session, so the terminal shows 40.
         // Direct resize, never the 'terminal-resize' socket event - that
@@ -2463,6 +2501,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // eighty are the same mess in the other direction.
           term.reset();
           doubleHeightRef.current.reset();
+          // The canvas renderer comes back with the 80-column session: ANSI
+          // art does not seam under it, and it is what keeps animation cheap.
+          if (!canvasAddonRef.current) {
+            try {
+              const restored = new CanvasAddon();
+              term.loadAddon(restored);
+              canvasAddonRef.current = restored;
+            } catch { /* a disposed terminal takes no addons */ }
+          }
           term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
           texttvPrevColsRef.current = null;
           texttvPrevRowsRef.current = null;
