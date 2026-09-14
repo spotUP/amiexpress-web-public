@@ -41,7 +41,17 @@ export function ScreenPreview({ content, cols = 80 }: ScreenPreviewProps) {
       convertEol: true,
       disableStdin: true,
       cursorBlink: false,
-      fontFamily: 'IBM VGA, Consolas, monospace',
+      /*
+       * THE FACE THE CALLER ACTUALLY SEES. `IBM VGA` is a PC font and is not
+       * shipped here at all, so this preview drew Amiga art in whatever
+       * monospace the browser picked - which is not what the board sends and
+       * not what the artist drew for.
+       *
+       * TopazPlus_a1200 is the board's default (`DEFAULT_BBS_FONT`,
+       * packages/terminal/src/utils/session-font.ts:34); plain Topaz is the
+       * fallback for the same metrics, and both are half-width cells.
+       */
+      fontFamily: "'TopazPlus_a1200', 'Topaz_a1200', monospace",
       fontSize: 14,
       theme: { background: '#000000' },
     });
