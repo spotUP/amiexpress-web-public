@@ -85,6 +85,7 @@ import {
   FONT_CACHE_KEY,
   TELETEXT_FONT,
   fontFamilyFor,
+  seamlessTeletextSize,
 } from '../../../../../packages/terminal/src/utils/session-font';
 import { XTERM_CONFIG } from '../../../../../packages/terminal/src/utils/terminal-utils';
 import { FakeSocket } from './helpers/fake-socket';
@@ -122,7 +123,7 @@ const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
 
 describe('texttv-mode on', () => {
-  it('never opens on a fractional size, because mosaics seam on one', async () => {
+  it('never opens on a fractional cell, because mosaics seam on one', async () => {
     /*
      * xterm's canvas renderer draws a face's block glyph one device pixel
      * short of its cell at a fractional font size, so a teletext rule
@@ -135,8 +136,8 @@ describe('texttv-mode on', () => {
     await act(async () => {
       socket.fire('texttv-mode', { enabled: true });
     });
-    const size = rec.terminals[0].options.fontSize as number;
-    expect(size).toBe(Math.floor(size));
+    const cell = (rec.terminals[0].options.fontSize as number) * 0.6;
+    expect(Math.abs(cell - Math.round(cell))).toBeLessThan(0.001);
   });
 
   it('swaps the face to TDAText at double size and the palette to teletext colours', async () => {
@@ -146,9 +147,10 @@ describe('texttv-mode on', () => {
     });
     const term = rec.terminals[0];
     expect(term.options.fontFamily).toBe(fontFamilyFor(TELETEXT_FONT));
-    // Classic 40x25 grid on the 80x24 model: integer 2x cells, so 40
-    // teletext columns fill the width exactly.
-    expect(term.options.fontSize).toBe(32);
+    // Twice the calibrated cell as a first guess, snapped so the CELL is a
+    // whole CSS pixel - the DOM renderer rounds per span and a fractional
+    // cell gaps.
+    expect(term.options.fontSize).toBe(seamlessTeletextSize(32));
     expect(term.options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
     expect(term.options.theme.background).toBe('#000000');
   });
@@ -219,12 +221,12 @@ describe('texttv-mode on', () => {
     await act(async () => {
       socket.fire('texttv-mode', { enabled: true });
     });
-    expect(rec.terminals[0].options.fontSize).toBe(32);
+    expect(rec.terminals[0].options.fontSize).toBe(seamlessTeletextSize(32));
     await act(async () => {
       view.rerender(<BBSTerminal backendUrl="http://localhost:3001" fontSize={18} />);
     });
     expect(rec.terminals[0].options.fontFamily).toBe(fontFamilyFor(TELETEXT_FONT));
-    expect(rec.terminals[0].options.fontSize).toBe(32);
+    expect(rec.terminals[0].options.fontSize).toBe(seamlessTeletextSize(32));
   });
 
   it('does not pollute the pre-login font cache', async () => {
@@ -263,7 +265,7 @@ describe('texttv-mode off', () => {
       socket.fire('texttv-mode', { enabled: true });
     });
     expect(rec.terminals[0].options.theme.brightRed).toBe(TELETEXT_BRIGHT_RED);
-    expect(rec.terminals[0].options.fontSize).toBe(32);
+    expect(rec.terminals[0].options.fontSize).toBe(seamlessTeletextSize(32));
     expect(rec.terminals[0].cols).toBe(40);
     await act(async () => {
       socket.fire('texttv-mode', { enabled: false });

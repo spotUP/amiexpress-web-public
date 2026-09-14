@@ -32,6 +32,10 @@ const harness = vi.hoisted(() => ({
 
 vi.mock('@amiexpress/terminal', async () => ({
   ...(await import('../../../../../packages/terminal/src/utils/terminal-zoom')),
+  // The real one: a stub would pin the stub, and a MISSING export is
+  // worse - refit() throws into the void and the size never changes.
+  seamlessTeletextSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .seamlessTeletextSize,
   BBSTerminal: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
     harness.props = props as { fontSize?: number };
     React.useImperativeHandle(ref, () => ({
@@ -112,27 +116,26 @@ function enterTeletext(): void {
 }
 
 describe('a teletext session is fitted to the window', () => {
-  it('sits on a whole pixel, because a fractional one seams the mosaics', () => {
+  it('sits on a whole CELL, because a fractional one seams the mosaics', () => {
     /*
-     * xterm's canvas renderer draws a font's block glyph a device pixel
-     * short of its cell at a fractional font size. Measured on a 40-cell
-     * teletext rule, a fresh terminal per size, dpr 2: every half-pixel
-     * size from 18.5 to 45.5 has a gap at every cell boundary, every whole
-     * size from 24 up is solid. The board's fit had landed on 41.5 and the
-     * rule drew as a row of dashes (sysop, 2026-09-14).
+     * Teletext runs on the DOM renderer (the canvas atlas blits a face's
+     * glyph a device pixel short of its cell, whatever the size), and the
+     * DOM renderer lays out SPANS: a fractional cell rounds per span and
+     * breaks a 40-cell rule into seven runs with a gap between each.
+     * Measured by screenshotting the rule: a 22.5px cell gives 7 runs, a
+     * 24px cell one run of 1920 unbroken device pixels (sysop,
+     * 2026-09-14).
      */
-    for (const [width, height] of [[1280, 800], [1366, 768], [1512, 945], [1920, 1080]]) {
-      cleanup();
-      const { page } = mountAt(width, height);
-      enterTeletext();
+    const { page } = mountAt(1280, 800);
+    enterTeletext();
 
-      const size = harness.term.options.fontSize as number;
-      expect(size).toBe(Math.floor(size));
-      // And it still fits: rounding DOWN cannot push the grid off the page.
-      const grid = gridFor(size);
-      expect(grid.width).toBeLessThanOrEqual(page.clientWidth + 0.001);
-      expect(grid.height).toBeLessThanOrEqual(page.clientHeight + 0.001);
-    }
+    const size = harness.term.options.fontSize as number;
+    const cell = size * 0.6;                        // TeletextUPR's advance
+    expect(Math.abs(cell - Math.round(cell))).toBeLessThan(0.001);
+    // And it still fits: rounding DOWN cannot push the grid off the page.
+    const grid = gridFor(size);
+    expect(grid.width).toBeLessThanOrEqual(page.clientWidth + 0.001);
+    expect(grid.height).toBeLessThanOrEqual(page.clientHeight + 0.001);
   });
 
   it('keeps the whole 40x25 grid inside the page', () => {

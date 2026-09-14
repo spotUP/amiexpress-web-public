@@ -53,6 +53,10 @@ const harness = vi.hoisted(() => ({
 
 vi.mock('@amiexpress/terminal', async () => ({
   ...(await import('../../../../../packages/terminal/src/utils/terminal-zoom')),
+  // The real one: a stub would pin the stub, and a MISSING export is
+  // worse - refit() throws into the void and the size never changes.
+  seamlessTeletextSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .seamlessTeletextSize,
   BBSTerminal: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
     harness.props = props as NonNullable<typeof harness.props>;
     React.useImperativeHandle(ref, () => ({
