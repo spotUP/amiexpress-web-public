@@ -122,6 +122,23 @@ const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
 
 describe('texttv-mode on', () => {
+  it('never opens on a fractional size, because mosaics seam on one', async () => {
+    /*
+     * xterm's canvas renderer draws a face's block glyph one device pixel
+     * short of its cell at a fractional font size, so a teletext rule
+     * gaps at every cell boundary (sysop, 2026-09-14). The calibrated
+     * 80-column size is usually fractional and doubling keeps the
+     * fraction; this is the window before the page's fit lands.
+     */
+    // A real calibration: the 80-column fit lands on fractions like this.
+    render(<BBSTerminal backendUrl="http://localhost:3001" fontSize={18.7} />);
+    await act(async () => {
+      socket.fire('texttv-mode', { enabled: true });
+    });
+    const size = rec.terminals[0].options.fontSize as number;
+    expect(size).toBe(Math.floor(size));
+  });
+
   it('swaps the face to TDAText at double size and the palette to teletext colours', async () => {
     mount();
     await act(async () => {

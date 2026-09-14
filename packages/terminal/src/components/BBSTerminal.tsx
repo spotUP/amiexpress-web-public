@@ -2443,7 +2443,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // the 40x25 grid for real once the face has loaded (TerminalPage
         // refit, teletext branch): TDAText is not the board face at 2x, and
         // guessing put the right of every row outside the window.
-        void applyFont(term, TELETEXT_FONT, fontSizeRef.current * 2, false)
+        // WHOLE PIXELS, even for the guess. xterm's canvas renderer draws a
+        // face's block glyph one device pixel short of its cell at a
+        // fractional font size, so a mosaic rule seams at every cell
+        // boundary (sysop, 2026-09-14); the calibrated 80-column size is
+        // usually fractional, and doubling it keeps the fraction. The fit
+        // rounds the size it settles on the same way - this is the window
+        // between the mode starting and the fit landing.
+        void applyFont(term, TELETEXT_FONT, Math.floor(fontSizeRef.current * 2), false)
           .then(() => announceTexttvMode(true));
       } else {
         console.log('[Terminal] Teletext mode off - restoring session face');
