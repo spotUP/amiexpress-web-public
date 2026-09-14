@@ -1063,7 +1063,7 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
        * Screen files that exist but have nothing in them, in search order.
        *
        * The loader skips them while it has anywhere else to look and keeps
-       * the first as a last resort (screens/hollow-screen.ts). This walk has
+       * the first as a last resort (screens/screen-blankness.ts). This walk has
        * to do the same or the manager credits a screen to a placeholder the
        * board never serves.
        */

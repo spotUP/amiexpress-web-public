@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { findCaseInsensitive } from './amigafs';
-import { isHollowScreenFile } from '../screens/hollow-screen';
+import { screenFileDrawsNothing } from '../screens/screen-blankness';
 
 // Default extensions if ScreenTypes.info not available
 const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
@@ -123,7 +123,7 @@ export function findSecurityScreen(
    */
   const takeHollow = (resolved: string | null): string | null => {
     if (!resolved || !options?.hollow) return resolved;
-    if (!isHollowScreenFile(resolved)) return resolved;
+    if (!screenFileDrawsNothing(resolved)) return resolved;
     options.hollow.push(resolved);
     return null;
   };

@@ -36,7 +36,7 @@ import * as path from 'path';
 import { isScreenFile, resolveNodeScreenDir } from '../screens/screen-resolution';
 import { applyTooltypes, parseInfoFile } from '../utils/info-file.util';
 import { planScreenCollapse, type CollapsePlan, type CollapsibleScreen } from './screen-collapse';
-import { isHollowScreenContent } from '../screens/hollow-screen';
+import { screenDrawsNothing } from '../screens/screen-blankness';
 
 export interface SeedCollapseReport {
   /** Screens that now exist once, and how many nodes read that one copy. */
@@ -286,7 +286,7 @@ export function collapseSeedNodeScreens(
        * The node's bytes win instead, and the hollow file is kept beside them
        * the same way a losing copy always is - this never deletes anything.
        */
-      if (isHollowScreenContent(existing) && !isHollowScreenContent(file.content)) {
+      if (screenDrawsNothing(existing) && !screenDrawsNothing(file.content)) {
         fs.writeFileSync(`${target}.hollow-replaced`, existing);
         fs.writeFileSync(target, file.content);
         report.refreshed.push(path.basename(file.relPath));
@@ -441,9 +441,9 @@ function refreshKeptNodes(
      * generation of this screen, so a node that still has content keeps it.
      * Without this a kept node follows the majority straight into a
      * placeholder and serves a cleared screen and a pause
-     * (screens/hollow-screen.ts).
+     * (screens/screen-blankness.ts).
      */
-    if (isHollowScreenContent(shared.content) && !isHollowScreenContent(mine)) continue;
+    if (screenDrawsNothing(shared.content) && !screenDrawsNothing(mine)) continue;
     const agreed = unanimous.get(key);
     const stale = previous.has(key)
       ? previous.get(key) === sha256(mine)

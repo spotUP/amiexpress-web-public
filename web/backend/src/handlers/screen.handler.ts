@@ -32,7 +32,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
-import { isHollowScreenFile } from '../screens/hollow-screen';
+import { screenFileDrawsNothing } from '../screens/screen-blankness';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
@@ -1133,12 +1133,12 @@ export function loadScreenFile(
    * blanked on purpose is a screen that exists and draws nothing; it is not a
    * screen that is MISSING, and reporting it as missing would put a
    * CRITICAL in the log and a notification in front of the sysop on every
-   * login. See screens/hollow-screen.ts.
+   * login. See screens/screen-blankness.ts.
    */
   const hollow: string[] = [];
   const takeHollow = (resolved: string | null | undefined): string | null => {
     if (!resolved) return null;
-    if (!isHollowScreenFile(resolved)) return resolved;
+    if (!screenFileDrawsNothing(resolved)) return resolved;
     screenDebug(`[loadScreenFile]  Skipping hollow screen file ${resolved}`);
     hollow.push(resolved);
     return null;
@@ -1659,7 +1659,7 @@ try {
     const nodeFallbackDir = path.join(baseDir, 'Node1');
 
     // Prefer ANSI text fallback for the await screen
-    // A hollow fallback is no fallback (screens/hollow-screen.ts).
+    // A hollow fallback is no fallback (screens/screen-blankness.ts).
     const ansiFallback = takeHollow(
       findCaseInsensitive(nodeFallbackDir, 'bbstitle.txt') || findCaseInsensitive(nodeFallbackDir, 'bbstitle.TXT')
     );
@@ -2094,7 +2094,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
      * was empty - is what the loader's hollow last resort is for: the screen
      * EXISTS (so nothing reports it missing) and there is nothing to draw.
      */
-    if (isHollowScreenFile(filePath)) {
+    if (screenFileDrawsNothing(filePath)) {
       screenFlowLog(screenName, `Hollow screen ${filePath}: nothing drawn`);
       session.lastScreenFilePath = filePath;
       return true;
