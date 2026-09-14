@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Download, History, Trash2, Upload } from 'lucide-react';
+import { Download, History, Trash2, Upload } from 'lucide-react';
 import { useRef } from 'react';
 
 import { apiClient, type ApiError } from '../api/client';
@@ -31,6 +31,8 @@ import type { ArtistTheme } from './use-my-theme';
 import { describeProblem, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { CodeChip } from '../components/CodeChip';
+import { ScreenSlotBanner } from '../components/ScreenSlotBanner';
+import { screenSlotState } from './screen-slot-state';
 
 interface ScreenFilePayload {
   content: string;
@@ -277,7 +279,6 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
    * the route answered a refusal rather than "not found" and the dialog had
    * nowhere to put either. Now it says so, and points at the way to make one.
    */
-  const missingFile = !isLoading && !file && !isNew && !!path;
   /**
    * Drawing a `.seq` that does not exist yet.
    *
@@ -291,6 +292,16 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
    */
   const [drawingBlankSeq, setDrawingBlankSeq] = useState(false);
   const isSeqPath = !!path && path.toLowerCase().endsWith('.seq');
+
+  /**
+   * WHAT THIS SLOT IS, computed once.
+   *
+   * The dialog used to derive this four different ways in six places and show
+   * none of it, which is how an artist ended up looking at art they could not
+   * change with nothing on screen saying why. `screenSlotState` is the single
+   * answer and `ScreenSlotBanner` renders it.
+   */
+  const slotState = screenSlotState({ path, file, isLoading, theme, index });
 
   const save = useMutation({
     mutationFn: (base64: string) =>
@@ -452,42 +463,33 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         </p>
       )}
 
-      {missingFile && !drawingBlankSeq && (
-        <div className="space-y-2" data-testid="screen-not-there">
-          <p className="text-sm text-content-secondary">
-            Nothing is drawn at <span className="font-mono">{path}</span> yet. Use
-            &ldquo;Upload a drawing&rdquo; on the version that does exist, or the
-            format buttons above, to make one.
-          </p>
-          {isSeqPath && mine && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 px-2 py-1 border border-border-strong text-sm"
-              onClick={() => setDrawingBlankSeq(true)}
-            >
-              Draw one here
-            </button>
-          )}
+      {/*
+        ONE LINE SAYING WHAT THIS SLOT IS, and every way forward it permits.
+        It replaces two paragraphs that each answered part of the question in a
+        different place - and the "board's own screen" one, which said that
+        even when the file belonged to another ARTIST. The state machine knows
+        the difference; the paragraph never did.
+      */}
+      {!isNew && !drawingBlankSeq && slotState.kind !== 'loading' && (
+        <div data-testid="screen-not-there">
+          <ScreenSlotBanner
+            state={slotState}
+            themeTitle={theme.title}
+            busy={redraw.isPending || writeBytes.isPending}
+            onDraw={isSeqPath && mine ? () => setDrawingBlankSeq(true) : undefined}
+            /*
+             * Upload only where the toolbar below does NOT already offer it -
+             * i.e. on an EMPTY slot, which has no toolbar. Two "Upload a
+             * drawing" buttons on one screen would be more clutter, which is
+             * the thing this banner exists to remove.
+             */
+            onUpload={mine && slotState.kind === 'yours-undrawn' ? () => replaceInput.current?.click() : undefined}
+            onRedrawIntoMine={!mine ? () => redraw.mutate() : undefined}
+          />
         </div>
       )}
 
-      {file && !mine && (
-        <div className="space-y-3">
-          <p className="text-sm text-content-secondary">
-            The board&apos;s own screen. Redraw it to make a copy in{' '}
-            <span className="text-content-primary">{theme.title}</span> - callers wearing your
-            theme see yours, everybody else keeps this one.
-          </p>
-          <button
-            type="button"
-            className="btn-primary inline-flex items-center gap-2"
-            disabled={redraw.isPending}
-            onClick={() => redraw.mutate()}
-          >
-            <Copy size={16} /> Redraw this in {theme.title}
-          </button>
-        </div>
-      )}
+
 
       {/* Every format this screen has, and the ones it does not. A caller is
           served by extension, so this is the difference between a theme that

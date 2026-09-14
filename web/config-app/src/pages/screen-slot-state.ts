@@ -64,8 +64,7 @@ export type SlotAction =
   | 'upload'
   | 'copy-board'
   | 'redraw-into-mine'
-  | 'download'
-  | 'delete';
+  | 'download';
 
 /**
  * The board's own screens have no theme of their own.
@@ -138,7 +137,10 @@ export function slotAffordances(state: ScreenSlotState): SlotAffordances {
     case 'yours-drawn':
       return {
         sentence: 'Yours, and drawn.',
-        actions: ['draw', 'upload', 'download', 'delete'],
+        // No `delete` here on purpose: removing a screen is the SYSOP's page,
+        // not the artist's dialog. An action in this table that the chrome
+        // cannot honour would be a worse lie than the silence it replaces.
+        actions: ['draw', 'upload', 'download'],
       };
 
     case 'yours-undrawn':
