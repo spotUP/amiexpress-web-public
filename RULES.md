@@ -211,6 +211,31 @@ Full protocol: `Documentation/3-Developers/CLAUDE_68K_DEBUGGING_PROTOCOL.md`. Us
 
 No per-door hacks or heuristics. Every change must be generic (works for every door) and backed by AmiExpress / AEDoor / AmigaOS evidence. Mirror express.e + AEDoor message flow and ABI 1:1. Reference runs (archived Amiga door logs) are validation only, not excuses for per-door branching.
 
+### 9b. Narrow Door Art
+
+A door that keeps its logo INSIDE its own config file - an Empire
+`artSections` entry in `door.settings.json`: Bulls' `[Title]`, joincnf's
+conference banner - can have a 40-column drawing per alphabet:
+
+    Screens/doors/<COMMAND>/<section>.c64.ans    a 40-column PETSCII caller
+    Screens/doors/<COMMAND>/<section>.ttx.ans    a teletext caller
+
+Drawn in the ANSI Studio (door settings -> the art card -> the Wide / C64 /
+Teletext switch), stored as latin1 ANSI, capped at 40 columns on save. The
+Empire narrow shadow (`api/file-shadow.ts`) splices the matching one into
+the copy the door is served, so the DOOR prints it and the C64 frame adapter
+never has to fold art - which it cannot: an 80-column logo has no seams, and
+cropping one gives half a drawing.
+
+No drawing for this caller's alphabet: he reads the door's own wide art,
+cropped at 40, exactly as before. The drawings live under `Screens/` and not
+beside the door because they are the BOARD'S - they survive a door
+re-install.
+
+Art the door keeps inside its BINARY cannot be reached this way. Art a door
+opens as a file of its own already has the `_C64` redirect
+(`io-file-display.ts` for `JH_SF`, `DosLibrary.ts` for `dos Open`).
+
 ### 10. Disk-Based Configuration
 
 AmiExpress is **disk-based**, not database-driven.
