@@ -58,11 +58,29 @@
         background: #000 !important;
       }
 
-      /* Authentic BBS cursor styling */
-      .xterm .xterm-cursor {
-        background-color: #fff !important;
-        color: #000 !important;
-      }
+      /*
+       * NO CURSOR RULE HERE. THE THEME OWNS THE CURSOR.
+       *
+       * This block used to read:
+       *
+       *     .xterm .xterm-cursor { background-color: #fff !important; color: #000 !important; }
+       *
+       * from the first commit, "Authentic BBS cursor styling", written before
+       * the terminal theme had a cursor colour or blink was configured. An
+       * `!important` declaration is the ONE thing in the cascade that beats a
+       * running CSS animation - and xterm's DOM renderer blinks the cursor
+       * with exactly such an animation - so this painted every cursor solid
+       * white and stopped the blink for eleven months, on a board whose theme
+       * says the cursor is red.
+       *
+       * It cost four reports from the sysop and five fixes aimed at focus,
+       * the renderer's focus class and the theme, none of which could have
+       * changed what he saw: the cascade was decided above all of them. Found
+       * only by asking the browser which rules matched the cursor span
+       * (2026-09-14). An inline <style> in index.html is invisible to every
+       * component test and every grep over src/, which is why the pin for
+       * this lives in a test that reads THIS FILE.
+       */
 
       /* Selection styling */
       .xterm .xterm-selection div {
