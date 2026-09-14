@@ -85,7 +85,9 @@ export {
 
 // Export true-PETSCII (C64 screen-editor emulation) components and utilities
 export { PetsciiMachine, type PetsciiMachineState } from '@amiexpress/bbs-door-sdk/petscii';
-export { PetsciiCanvas, type PetsciiCanvasProps, type PetsciiCanvasHandle } from './petscii/PetsciiCanvas';
+export { PetsciiCanvas, type PetsciiCanvasProps, type PetsciiCanvasHandle,
+  type PetsciiCellPointer, type PetsciiHighlight } from './petscii/PetsciiCanvas';
+export { PetsciiGlyph, type PetsciiGlyphProps } from './petscii/PetsciiGlyph';
 export { keyEventToPetscii } from './petscii/keymap';
 export { C64_PALETTE_COLODORE, C64_PALETTE_PEPTO } from '@amiexpress/bbs-door-sdk/petscii';
 
