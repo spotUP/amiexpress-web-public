@@ -20,6 +20,7 @@ import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from '../screens/screen
 
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
+import { screenDrawsNothing } from '../screens/screen-blankness';
 import {
   LOGIN_SEQUENCE,
   readScreenProgram,
@@ -35,7 +36,6 @@ import { config } from '../config';
 import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
-import { isHollowScreenContent } from '../screens/hollow-screen';
 import { findTheme } from '../screens/theme-registry';
 import { svgToRip } from '../screens/svg-to-rip';
 import { resolveCallerTheme } from '../screens/caller-theme';
@@ -574,7 +574,7 @@ screensRouter.put('/login-sequence', (req: Request, res: Response) => {
    * lines is a real screen), which is why this asks about ITEMS and not about
    * the byte count.
    */
-  if (drawsNothing(after)) {
+  if (screenDrawsNothing(after)) {
     return res.status(409).json({
       success: false,
       error: `Nothing would be left to draw. An empty ${screen} still opens, and a screen that opens costs the caller a keypress on a blank screen - remove ${rel} instead of emptying it.`,
@@ -594,23 +594,6 @@ screensRouter.put('/login-sequence', (req: Request, res: Response) => {
   sendOk(res, { screen, file: rel, items: readScreenProgram(after).items });
 });
 
-/**
- * Would a caller shown this file see anything at all?
- *
- * The board's own rule, shared with `the-board-ships-no-blank-screen.test.ts`:
- * an include, a recursion or a command PUTS INK ON THE SCREEN, so a file of
- * nothing but `~SS_` lines draws. What does not draw is a file with no items
- * left and nothing but bare control codes and whitespace around them - `~f|`
- * on its own being the case this picker can produce.
- */
-export function drawsNothing(content: string): boolean {
-  const program = readScreenProgram(content);
-  if (program.items.length > 0) return false;
-  return program.lines.every(line => {
-    const text = line.text.trim();
-    return text === '' || /^~[^\s]*$/.test(text);
-  });
-}
 
 /**
  * GET /api/screens/preview?screen=&theme=&node=&conf=&sec=&term=ansi|c64|rip
@@ -805,7 +788,7 @@ function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buf
        * it clears the terminal, prints nothing and leaves the caller pausing
        * for a key - and it does it silently, because the file is not corrupt
        * and nothing logs a problem. The loader tolerates one now
-       * (screens/hollow-screen.ts) because a file can arrive by hand or by
+       * (screens/screen-blankness.ts) because a file can arrive by hand or by
        * FTP, but nothing the BOARD writes is allowed to create one.
        *
        * Refused rather than deleted: a save is not a delete, and the sysop
@@ -819,7 +802,7 @@ function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buf
        * recorded on PUT /file.
        */
       const payload = typeof bytes === 'function' ? bytes(rel) : bytes;
-      if (isHollowScreenContent(payload)) {
+      if (screenDrawsNothing(payload)) {
         throw new Error(
           `${rel}: a screen file cannot be empty - it would clear the caller's screen and pause for a key. ` +
           `Put something in it, or delete the file.`,

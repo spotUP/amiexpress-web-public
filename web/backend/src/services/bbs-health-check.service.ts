@@ -12,6 +12,7 @@ import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { buildScreenIndex, invalidateScreenIndex } from '../screens/screen-index.service';
+import { screenDrawsNothing, SCREEN_EXTENSIONS, SERVED_PATH } from '../screens/screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { repairOneFile } from '../screens/screen-repair';
 import { InfoFileParser } from './info-file-parser';
@@ -766,14 +767,69 @@ export class BBSHealthCheckService {
         });
       }
 
-      const empty = files.filter(f => f.problems?.includes('empty'));
-      for (const file of empty) {
+      /*
+       * A SCREEN THAT OPENS AND DRAWS NOTHING, on the board as it stands.
+       *
+       * This asked the index for its `empty` flag, which is ZERO BYTES - and
+       * the defect on this board was never zero bytes. It was `~\n`: two
+       * bytes, the MCI gate and a newline, 272 of them. `displayScreen`
+       * answers TRUE for any file that OPENS (express.e:6773) and the display
+       * flow pauses on that answer, so each one costs a caller a full
+       * `(Pause)...Space To Resume:` on a blank terminal while an ABSENT
+       * screen is skipped in silence. "i get an empty prompt after loging in
+       * with ansi mode ... it has been like this for a while" (sysop,
+       * 2026-09-14).
+       *
+       * `screenDrawsNothing` is the board's one definition of that question -
+       * shared with the login-sequence route, which refuses to leave a screen
+       * in this state, and with the repository test that asks the same thing
+       * of what git tracks.
+       *
+       * AND THE REPOSITORY TEST CANNOT SEE THESE. The volume is not the repo:
+       * it keeps files the image stopped shipping, and an untracked one is
+       * invisible to `git ls-files`. An empty `Screens/LOGON.TXT` appeared on
+       * the live volume at 14:52 on 2026-09-14, three minutes after the
+       * tracked copies were removed, and nothing in this repository could have
+       * noticed. This runs against the board, so it can.
+       *
+       * Grouped by screen NAME, like the dead references above: 41 nodes
+       * holding one empty `Logon.txt` is one decision, not 41 findings.
+       *
+       * Raised as a WARNING, not info: it is a keypress every caller pays on
+       * every login, which is what took four sessions and a live board to find
+       * the first time. Never auto-fixable - deleting a caller's screen is a
+       * decision, and the answer is sometimes to draw something in it.
+       */
+      const blanks = new Map<string, string[]>();
+      for (const file of files) {
+        if (!SERVED_PATH.test(file.relPath.replace(/\\/g, '/'))) continue;
+        if (!SCREEN_EXTENSIONS.has(path.extname(file.relPath).toLowerCase())) continue;
+        let bytes: Buffer;
+        try {
+          bytes = fs.readFileSync(path.join(this.bbsRoot, file.relPath));
+        } catch {
+          continue;   // indexed and since removed; not this check's business
+        }
+        if (!screenDrawsNothing(bytes)) continue;
+        const name = path.basename(file.relPath).toLowerCase();
+        if (!blanks.has(name)) blanks.set(name, []);
+        blanks.get(name)!.push(file.relPath);
+      }
+
+      for (const [, copies] of [...blanks].sort((a, b) => b[1].length - a[1].length)) {
+        const where = copies.length === 1
+          ? copies[0]
+          : `${copies[0]} and ${copies.length - 1} other cop${copies.length === 2 ? 'y' : 'ies'}`;
         issues.push({
-          severity: 'info',
+          severity: 'warning',
           category: 'Screens',
-          description: `${file.relPath}: empty, so it draws nothing`,
-          path: path.join(this.bbsRoot, file.relPath),
-          fixAction: 'Draw something, or delete it'
+          description:
+            `${where}: empty, so it draws nothing`
+            + ' - the caller pays a keypress for a blank screen',
+          path: path.join(this.bbsRoot, copies[0]),
+          fixAction: copies.length === 1
+            ? 'Draw something in it, or remove it in the screen manager'
+            : `Draw something in them, or remove all ${copies.length} in the screen manager`,
         });
       }
 

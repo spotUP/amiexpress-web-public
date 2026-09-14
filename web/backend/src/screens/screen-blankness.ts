@@ -1,0 +1,102 @@
+/**
+ * Whether a screen file draws anything at all.
+ *
+ * A screen that DOES NOT EXIST and a screen that exists with nothing in it are
+ * not the same thing to AmiExpress, and the difference is a keypress from the
+ * caller. express.e:6773-6774:
+ *
+ *     IF (fh:=Open(filename,OLDFILE))<>0
+ *       res:=TRUE
+ *
+ * `displayScreen` answers TRUE for any file that OPENS, whatever is in it, and
+ * the display flow pauses on that answer - `IF displayScreen(SCREEN_BULL) THEN
+ * doPause()` (express.e:28556, command.handler.ts:864). So an empty screen file
+ * buys a full `(Pause)...Space To Resume:` on a blank terminal, while an ABSENT
+ * one is skipped in silence.
+ *
+ * "i get an empty prompt after loging in with ansi mode ... it has been like
+ * this for a while" (sysop, 2026-09-14). It was 272 tracked files of two bytes
+ * - `~\n`, the MCI gate and a newline - and nobody was wrong at any step:
+ * `Screens/LOGON.TXT` went 26 bytes, then 16, then 2, then 0 across three
+ * sensible commits that each removed one MCI line.
+ *
+ * ONE DEFINITION, THREE CALLERS. The rule was written twice within an hour -
+ * in `the-board-ships-no-blank-screen.test.ts`, which asks the REPOSITORY, and
+ * in the login-sequence route, which asks whether an edit just emptied a file.
+ * A third copy was about to be written for the health check. This is the
+ * shared one; two copies of a rule about what a caller sees is how this board
+ * collected its two-sources-of-truth bugs.
+ */
+
+import * as fs from 'fs';
+
+/** Extensions the board loads as a screen. */
+export const SCREEN_EXTENSIONS: ReadonlySet<string> =
+  new Set(['.txt', '.ttx', '.seq', '.ans', '.rip', '.tti']);
+
+/**
+ * The directories a caller can be served from, relative to the board root.
+ *
+ * The question is what a CALLER can be shown, so the scope is where
+ * `loadScreenFile` looks: the board root, `Screens/`, a node's own directory,
+ * a conference's, and a theme's copy of any of those. An empty file anywhere
+ * else is a fixture or build output and cannot reach a terminal.
+ */
+export const SERVED_PATH =
+  /^(?:Screens\/|Node\d+\/|Conf\d+\/|Themes\/[^/]+\/|[^/]+\.(?:txt|ttx|seq|ans|rip|tti)$)/i;
+
+/**
+ * Would a caller shown this file see nothing?
+ *
+ * The leading `~` gate (express.e:6800-6806) and the MCI lines behind it are
+ * instructions, not ink; a file made only of those draws nothing on its own.
+ * `~SS_`, `~SR_`, `~SX_`, `~XI` and `~CC_` are the exception - an include, a
+ * recursion or a door PUTS something on the screen - so a file carrying one of
+ * those is not blank even though every line of it is a code.
+ *
+ * `~f` IS NOT AN EXCEPTION, deliberately. It clears; clearing is not drawing,
+ * and a file of nothing but `~f|` is exactly the blank pause this exists to
+ * find - it is also what the login-sequence picker would produce if unticking
+ * the last item were allowed. Measured before deciding: of 813 tracked screens
+ * on this board, ZERO are `~f` and nothing else, so the stricter rule costs
+ * nothing today and closes the case the picker can create tomorrow.
+ */
+export function screenDrawsNothing(content: string | Buffer): boolean {
+  const text = typeof content === 'string' ? content : content.toString('latin1');
+  if (/~(?:SS_|SR_|SX_|XI|CC_)/.test(text)) return false;
+  const withoutCodes = text
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')   // ANSI
+    .replace(/~[A-Za-z0-9_]*\|?/g, '')        // MCI, including the bare gate
+    .replace(/[\s\x00\x0c\x1a]/g, '');        // whitespace, NULs, form feed, EOF
+  return withoutCodes.length === 0;
+}
+
+/**
+ * Would a caller shown the file at `filePath` see nothing?
+ *
+ * The same rule as `screenDrawsNothing`, asked about a path - which is what
+ * RESOLUTION needs, because it is holding a candidate filename and has not
+ * read it yet. It lives here rather than beside its caller for the reason
+ * written at the top of this file: one definition. A second copy of it -
+ * `screens/hollow-screen.ts`, written in parallel on 2026-09-14 - disagreed
+ * with this one about a file made of nothing but `~f|` and about a file made
+ * of nothing but ANSI escapes, and that is exactly how the board collects the
+ * two-sources-of-truth bugs this module was created to end.
+ *
+ * A file that cannot be READ is not blank: that must never turn a permission
+ * error or a race into a silently skipped screen. Resolution has already
+ * established the name is there; an unreadable file is a different fault and
+ * belongs to the loader's own error handling.
+ *
+ * Latin-1, never UTF-8: a screen carries Amiga high-bit bytes and a UTF-8
+ * round trip turns 0xA1 into U+FFFD.
+ */
+export function screenFileDrawsNothing(filePath: string): boolean {
+  try {
+    // Cheap first: a zero-byte file is the common case and needs no read.
+    if (fs.statSync(filePath).size === 0) return true;
+    return screenDrawsNothing(fs.readFileSync(filePath));
+  } catch {
+    return false;
+  }
+}
