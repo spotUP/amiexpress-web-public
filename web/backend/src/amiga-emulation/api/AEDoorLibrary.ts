@@ -1806,6 +1806,55 @@ console.warn(
   }
 
   /**
+   * THE WAIT ENDS WHEN THE SESSION DOES - express.e:5147-5150.
+   *
+   * `doPause` and `readChar` stop waiting the moment `reqState<>REQ_STATE_NONE`
+   * and hand back RESULT_NO_CARRIER; a caller who has gone is not waited for.
+   *
+   * This port had no such exit. Under DOOR_ASYNC_WAIT=1 the loop above pumps
+   * the Node event loop on every turn, so a browser reload - the socket's
+   * `disconnect` - is delivered INSIDE the wait: `AmigaDoorSession.terminate()`
+   * runs re-entrantly, `ExecLibrary.cleanup()` empties the port registry, the
+   * CPU is deleted, and control comes back here to a loop that knows none of
+   * it. It then polled the two ports it had just lost - the reply port and
+   * the BBS port, alternating - for the full JH_LI/JH_HK budget, pumping the
+   * whole event loop each time. That is `[ExecLibrary] Port not found:
+   * 0x12230c` / `0x126f00` thousands of times a second, a node that never
+   * comes back, and a board that feels jammed. The sysop hit it three times
+   * on 2026-09-15 through GWall: "i am stuck in the global wall prompt now",
+   * "the whole bbs seems jammed now", "bbs jammed".
+   *
+   * The signal is the wait's OWN ports: they leave the registry only when the
+   * session is torn down, so no teardown path - socket disconnect,
+   * `door:terminate`, JH_SHUTDOWN - has to remember to tell this loop
+   * anything. `waitForReply` then returns "not replied", `dispatchCommand`
+   * returns -1, and -1 is what the XIM layer already answers on a dropped
+   * carrier (`xim/io.ts`), so the door sees exactly what express.e would have
+   * told it.
+   */
+  private sessionTornDownUnderThisWait(state: DoorInterfaceState): boolean {
+    return this.waitsAbandoned
+      || !this.execLibrary.hasPort(state.replyPortAddr)
+      || !this.execLibrary.hasPort(state.bbsPortAddr);
+  }
+
+  /**
+   * Set once the caller is gone. express.e's `reqState`, for this library.
+   *
+   * Two signals end a wait, on purpose. The ports vanishing covers any
+   * teardown that has already cleaned up. This flag covers the case where
+   * cleanup must NOT happen yet: a disconnect delivered from inside the wait
+   * itself, where deleting the CPU would pull the floor out from under the
+   * trap handler we are standing in. `AmigaDoorSession.terminate()` sets this
+   * and defers the rest until the door has unwound - see there.
+   */
+  private waitsAbandoned = false;
+
+  public abandonWaits(): void {
+    this.waitsAbandoned = true;
+  }
+
+  /**
    * True while a synchronous trap handler is blocked in waitForReply below.
    * Used by XIMProtocol.shouldInjectNativeInput to decide whether the
    * async socket input path should push a JH_HK message into the door's
@@ -1859,6 +1908,7 @@ console.warn(
         // there.
         ownPump(() => deasync.loopWhile(() => {
           iterations++;
+          if (this.sessionTornDownUnderThisWait(state)) return false;
           if (this.processXIMMessageCallback && state.bbsPortAddr) {
             this.processXIMMessageCallback(state.bbsPortAddr);
           }
@@ -1875,6 +1925,7 @@ console.warn(
         const diagCmd = command; // capture for diagnostic logging below
         for (let i = 0; i < 10000; i++) {
           iterations++;
+          if (this.sessionTornDownUnderThisWait(state)) break;
           if (this.processXIMMessageCallback && state.bbsPortAddr) {
             this.processXIMMessageCallback(state.bbsPortAddr);
           }

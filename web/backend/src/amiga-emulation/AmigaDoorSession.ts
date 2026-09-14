@@ -1197,6 +1197,34 @@ debugLog(
     // "already cleaned up" flag.
     if (!this.isRunning) return;
 
+    /*
+     * ASKED FROM INSIDE THE DOOR'S OWN WAIT? UNWIND FIRST.
+     *
+     * Under DOOR_ASYNC_WAIT=1 the door pumps the event loop while it waits
+     * for a keystroke or a line, so a browser reload is delivered here from
+     * INSIDE that trap handler. Running the teardown below at that moment
+     * empties the port registry and deletes the CPU the handler is standing
+     * in. The old code never survived to find out - its wait never returned:
+     * it polled the two ports it had just lost for the full ten-minute budget,
+     * pumping the whole event loop each turn. That is `Port not found:
+     * 0x12230c` / `0x126f00` thousands of times a second and a board that
+     * feels jammed - the sysop, three times on 2026-09-15 through GWall.
+     *
+     * So, from inside a wait: tell the wait the caller is gone, stop the
+     * loop, and return. The trap hands the door NO_CARRIER, the loop ends on
+     * its own condition, and the lifecycle's `finally` calls back into this
+     * method with nothing on the emulator's stack. `isRunning` stays true
+     * until then, so that second call is the one that does the work.
+     */
+    const aedoor = this.libraryManager?.aedoorLibrary;
+    if (aedoor?.isInWaitForReply() && this.lifecycleManager?.isRunning()) {
+console.log("[AmigaDoorSession] terminate() reached from inside the door's wait - unwinding first, teardown deferred");
+      if (this.sharedState.ximProtocol) this.sharedState.ximProtocol.markCarrierDropped();
+      aedoor.abandonWaits();
+      this.lifecycleManager.requestTermination();
+      return;
+    }
+
 debugLog("[AmigaDoorSession] Terminating refactored door session...");
     this.logger.info("Terminating session...");
 

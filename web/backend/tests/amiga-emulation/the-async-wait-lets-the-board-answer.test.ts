@@ -33,6 +33,8 @@ function libraryUnderTest() {
   const execLibrary: any = {
     // The door's reply never comes: the loop runs to its deadline.
     getMsg: () => 0,
+    // The session is alive throughout - its ports stay registered.
+    hasPort: () => true,
     putMsg: () => undefined,
     replyMsg: () => undefined,
   };

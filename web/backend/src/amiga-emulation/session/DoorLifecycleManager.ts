@@ -34,6 +34,8 @@ import {
 } from "./lifecycle/DoorStartupHelper.js";
 import { installMessageCallbacks } from "./lifecycle/door-message-callbacks.js";
 import { DoorExitDetector, type CodeBoundsRef } from "./lifecycle/DoorExitDetector.js";
+import { DeferredTermination } from "./lifecycle/DeferredTermination";
+import { TimMessagePoller } from "./lifecycle/TimMessagePoller";
 import { DoorTrapDispatcher } from "./lifecycle/DoorTrapDispatcher.js";
 import { DoorPostMortemDebug } from "./lifecycle/DoorPostMortemDebug.js";
 import { getSystemTime } from '../../utils/date-time.util';
@@ -999,7 +1001,6 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
         const pcAfterBatch = this.emulator.getRegister(16);
 
-
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
         if (TRACE_PC_JUMPS && pcBeforeBatch > 0 && pcAfterBatch > 0) {
           const pcDelta = pcAfterBatch - pcBeforeBatch;
@@ -1200,8 +1201,13 @@ debugLog(
       );
     } catch (error) {
       await this.exitDetector.handleExecutionError(error);
+    } finally {
+      this.deferral.settle(() => this.terminate()); // outside every trap handler now
     }
   }
+
+  public requestTermination(): void { this.deferral.request(this.executionState); }
+  private readonly deferral = new DeferredTermination();
 
   // handlePausedState + formatPC + checkExitConditions extracted to
   // lifecycle/DoorExitDetector.
@@ -1675,101 +1681,16 @@ console.log(`[DoorLifecycleManager] UPDATING to actual AEDoorPort: 0x${actualDoo
     }
   }
 
-  private timPollCount = 0;
-  private lastTimPollLog = 0;
+  // TIM/SIM/IIM/SUP DoorControl polling extracted to lifecycle/TimMessagePoller.
+  private readonly timPoller = new TimMessagePoller({
+    emulator: () => this.emulator,
+    config: () => this.config,
+    execLibrary: () => this.libraryManager?.execLibrary,
+    timHandler: () => this.timHandler,
+    executionState: () => this.executionState,
+  });
 
-  /**
-   * Poll for TIM door messages from DoorControl{n} port
-   * Reference: express.e lines 4371-4525
-   * TIM doors use simpler doorMsg structure instead of jhMessage
-   */
-  private async pollTIMMessages(): Promise<void> {
-    this.timPollCount++;
-
-    // Log doorType on first poll
-    if (this.timPollCount === 1) {
-debugLog(`[DoorLifecycleManager] pollTIMMessages called: doorType="${this.config.doorType}"`);
-    }
-
-    // Log every 10000 polls to confirm polling is active
-    if (this.timPollCount - this.lastTimPollLog >= 10000) {
-debugLog(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} polls so far`);
-      this.lastTimPollLog = this.timPollCount;
-    }
-
-    // Poll for all DoorControl-using doors (TIM, SIM, IIM, SUP)
-    const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
-    const usesDoorControl = effectiveDoorType === "TIM" ||
-                            effectiveDoorType === "SIM" ||
-                            effectiveDoorType === "IIM" ||
-                            effectiveDoorType === "SUP";
-    if (!usesDoorControl) {
-      if (this.timPollCount === 1) {
-debugLog(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${effectiveDoorType} (not a DoorControl type)`);
-      }
-      return;
-    }
-
-    const execLib = this.libraryManager?.execLibrary;
-    if (!execLib) {
-      if (this.timPollCount === 1) {
-debugLog(`[DoorLifecycleManager] TIM polling FAILED: execLib is null`);
-      }
-      return;
-    }
-
-    // Get the DoorControl port address
-    // For TIM doors, port name is DoorControl{nodeId} (e.g., "DoorControl1")
-    // Must match port creation - use nodeId ?? nodeNumber ?? 1
-    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
-    const portName = `DoorControl${nodeId}`;
-
-    // Write port name to temporary memory for findPort
-    const portNameAddr = 0x500; // Temporary address for port name
-    this.emulator.writeString(portNameAddr, portName);
-
-    const timPortAddr = execLib.findPort(portNameAddr);
-    if (!timPortAddr || timPortAddr === 0) {
-      // Port not found yet, door might not have registered
-      if (this.timPollCount === 1) {
-debugLog(`[DoorLifecycleManager] TIM polling: DoorControl port not found yet (will retry)`);
-      }
-      return;
-    }
-
-    if (this.timPollCount === 1) {
-debugLog(`[DoorLifecycleManager] TIM polling: Found DoorControl port at 0x${timPortAddr.toString(16)}`);
-    }
-
-    // Poll for messages with GetMsg
-    try {
-      const msgAddr = execLib.getMsg(timPortAddr);
-      if (msgAddr && msgAddr !== 0) {
-debugLog(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toString(16)}`);
-
-        // Found a message! Handle it with TIM handler
-        if (this.timHandler) {
-          const result = await this.timHandler.handleMessage(msgAddr);
-
-          // CRITICAL: Reply to the message so door's GetMsg receives it!
-          // TIM/SIM doors poll their reply port waiting for the replied message
-          execLib.replyMsg(msgAddr);
-debugLog(`[DoorLifecycleManager] TIM polling: Replied to message at 0x${msgAddr.toString(16)}`);
-
-          if (result.exit) {
-debugLog(`[DoorLifecycleManager] TIM door requested exit`);
-            this.executionState.isRunning = false;
-          }
-        } else {
-debugLog(`[DoorLifecycleManager] TIM polling: timHandler is null`);
-          // Even without handler, reply so door doesn't hang
-          execLib.replyMsg(msgAddr);
-        }
-      }
-    } catch (error) {
-console.error(`[DoorLifecycleManager] TIM polling error:`, error);
-    }
-  }
+  private pollTIMMessages(): Promise<void> { return this.timPoller.poll(); }
 
   private async trackProgressAndYield(): Promise<void> {
     this.executionState.iterationCount++;
@@ -1924,7 +1845,7 @@ debugLog(
    * Terminate the door lifecycle
    */
   terminate(): void {
-    if (!this.executionState.isRunning) return;
+    if (!this.deferral.claim() && !this.executionState.isRunning) return;
 
 debugLog("[DoorLifecycleManager] Terminating door lifecycle");
 

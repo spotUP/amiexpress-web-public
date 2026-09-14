@@ -5221,8 +5221,10 @@ console.warn(
 console.error(
         `[ExecLibrary]   Port not found: 0x${portAddr.toString(16)}`
       );
+      this.noteMissingPort(portAddr);
       return;
     }
+    this.missingPortStrikes = 0;
 
     // If door is sending a message (not suppressed), clear from repliedMessages
     // This handles when door reuses a message buffer for a new command
@@ -6706,6 +6708,65 @@ debugLog(
     }
 
     return result;
+  }
+
+  /**
+   * A door that cannot reach its port is not failing - it is RETRYING.
+   *
+   * `putMsg` returning quietly is right for one lost message. It is wrong
+   * without end: a 68K door whose port has gone calls `PutMsg` again
+   * immediately, so nothing progresses, the CPU never yields anything useful,
+   * the log fills at thousands of lines a second, and the node never comes
+   * back. Two callers watched their board go down this way on 2026-09-15
+   * ("the whole bbs seems jammed now", then "bbs jammed"), both times with
+   * `Port not found: 0x12230c` and `0x126f00` repeating to the end of the
+   * file.
+   *
+   * WHY THE PORT VANISHES IS STILL OPEN. `ExecLibrary.cleanup()` is the only
+   * thing that empties the registry and it runs in `AmigaDoorSession.
+   * terminate()`, three lines before `emulator.cleanup()` deletes the CPU -
+   * so a door reaching this state means the teardown cleared the ports and
+   * the CPU outlived it. This does NOT fix that. It stops the board being
+   * taken down by it, and prints the state once so the next occurrence names
+   * the cause instead of drowning it.
+   *
+   * The strike count exists because a single miss is survivable and normal
+   * (a door that RemPorts its own reply port, mid-teardown races). A door
+   * that has missed this many in a row is not going to recover.
+   */
+  private missingPortStrikes = 0;
+  private static readonly MISSING_PORT_LIMIT = 200;
+
+  private noteMissingPort(portAddr: number): void {
+    this.missingPortStrikes++;
+    if (this.missingPortStrikes !== ExecLibrary.MISSING_PORT_LIMIT) return;
+
+console.error(
+      `[ExecLibrary] STOPPING A RUNAWAY DOOR: ${ExecLibrary.MISSING_PORT_LIMIT} consecutive ` +
+      `PutMsg calls to port 0x${portAddr.toString(16)}, which is not in the registry. ` +
+      `The door cannot make progress and was spinning. ` +
+      `ports=${this.messagePorts.size} public=${this.publicPorts.size} ` +
+      `pc=0x${this.emulator.getRegister(16).toString(16)}`
+    );
+
+    try {
+      // No resume callback: the door stops here rather than burning the board's
+      // event loop. Whatever tears the session down still tears it down.
+      this.emulator.pause();
+    } catch (error) {
+console.error('[ExecLibrary] Could not pause the runaway door:', error);
+    }
+  }
+
+  /**
+   * Whether a port is still in the registry.
+   *
+   * The question `AEDoorLibrary.waitForReply` asks on every turn of its pump:
+   * `cleanup()` below empties this map when the session is torn down, and a
+   * wait whose own ports have gone has nothing left to wait for.
+   */
+  hasPort(portAddr: number): boolean {
+    return this.messagePorts.has(portAddr);
   }
 
   /**
