@@ -262,6 +262,9 @@ export function UsersPage() {
     });
     if (confirmed) {
       deleteMutation.mutate(user.id);
+      // Deleting from inside the dialog leaves it editing an account that no
+      // longer exists, and Update would recreate it.
+      if (editingUser?.id === user.id) closeModal();
     }
   };
 
@@ -428,9 +431,21 @@ export function UsersPage() {
         error={error as Error | null}
         onRetry={() => refetch()}
         emptyMessage={search ? 'No user matches that search.' : 'No users yet.'}
-        // The whole row opens the account, not just the pencil: this is a list
-        // people come to in order to change somebody, and the actions at the
-        // end stop the click themselves.
+        /*
+         * The whole row opens the account, not just the pencil: this is a list
+         * people come to in order to change somebody, and the actions at the
+         * end stop the click themselves.
+         *
+         * DELETE IS NOT HERE ANY MORE. It was a 14px trash icon at the end of
+         * the row - the sysop's report was "i cant delete users in the web
+         * admin ui", and when I asked what happened the answer was that he
+         * could not get to Delete at all. A destructive action on a
+         * fixed-width Amiga account has no business being the neighbour of
+         * the button that opens it, at that size. It lives in the account's
+         * own dialog now, where the thing being deleted is on screen and
+         * named: "move the delete button to the dialog a click on a user
+         * should open the edit dialog" (2026-09-15).
+         */
         onRowClick={handleEdit}
         rowActions={(user) => (
           <>
@@ -452,14 +467,6 @@ export function UsersPage() {
               className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
             >
               <Edit2 size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(user)}
-              aria-label={`Delete ${user.username}`}
-              className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
-            >
-              <Trash2 size={14} />
             </button>
           </>
         )}
@@ -730,7 +737,30 @@ export function UsersPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
+              <div className="flex items-center justify-between gap-4 pt-6 border-t border-border">
+                {/*
+                  Delete sits with the account it deletes, and apart from the
+                  buttons that save it: far left, danger-coloured, while
+                  Cancel and Update stay together on the right. An existing
+                  account only - there is nothing to delete while creating one.
+                */}
+                {editingUser ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(editingUser)}
+                    disabled={deleteMutation.isPending}
+                    className="h-control rounded border border-status-danger/40 px-3 text-sm text-status-danger transition-colors hover:bg-status-danger/10 disabled:opacity-50"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Trash2 size={14} />
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete user'}
+                    </span>
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex justify-end space-x-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -753,6 +783,7 @@ export function UsersPage() {
                       ? 'Update User'
                       : 'Create User'}
                 </button>
+                </div>
               </div>
             </form>
         </Modal>
