@@ -146,6 +146,10 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     return () => { live = false; };
   }, [file, mine, path, isNew]);
 
+  /** A file the converter can take: by type, or by name when the OS gave none. */
+  const isSvg = (chosen: File): boolean =>
+    chosen.type === 'image/svg+xml' || /\.svg$/i.test(chosen.name);
+
   const redraw = useMutation({
     mutationFn: () => apiClient.copyScreenIntoTheme(theme.slug, path as string),
     onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
@@ -556,12 +560,24 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               <input
                 ref={replaceInput}
                 type="file"
+                accept=".ans,.txt,.rip,.seq,.ttx,.tti,.svg,image/svg+xml"
                 aria-label="Upload a drawing"
                 className="hidden"
                 onChange={async event => {
                   const chosen = event.target.files?.[0];
                   event.target.value = '';
                   if (!chosen || !path) return;
+                  /*
+                   * An SVG picked HERE is still an SVG the board can convert.
+                   *
+                   * "Upload a drawing" is the control an artist reaches for
+                   * when they have a drawing, and the raw bytes of an export
+                   * are refused by the loader's own guard - "the target is a
+                   * .rip but these bytes are not RIP" (sysop, 2026-09-14),
+                   * which is true and useless. The conversion is right here;
+                   * offering it is better than explaining the refusal.
+                   */
+                  if (isSvg(chosen)) { importSvg.mutate(chosen); return; }
                   const bytes = await readAsBase64(chosen);
                   setPendingUpload({ bytes, name: chosen.name });
                   // A dry run: the board answers what it would carry and

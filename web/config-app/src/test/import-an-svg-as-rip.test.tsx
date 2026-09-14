@@ -155,6 +155,47 @@ describe('importing an SVG as RIP', () => {
     expect((written[0].body as { content: string }).content).toBe(answer.content);
   });
 
+  it('converts an SVG picked through "Upload a drawing" too', async () => {
+    /*
+     * That is the control an artist reaches for when they have a drawing,
+     * and the raw bytes of an export are refused by the loader's own guard:
+     * "the target is a .rip but these bytes are not RIP" (sysop,
+     * 2026-09-14) - true, and useless when the conversion is right there.
+     */
+    const user = userEvent.setup();
+    openDialog();
+
+    const upload = await screen.findByLabelText('Upload a drawing');
+    const svg = new File(
+      ['<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"/></svg>'],
+      'uptown.svg',
+      { type: 'image/svg+xml' },
+    );
+    await user.upload(upload as HTMLInputElement, svg);
+
+    // Converted, not uploaded raw: the board was asked to convert, and
+    // nothing was written.
+    await waitFor(() => expect(converted).toHaveLength(1));
+    expect(converted[0].svg).toContain('<rect');
+    expect(await screen.findByTestId('svg-import')).toBeTruthy();
+    expect(written).toHaveLength(0);
+  });
+
+  it('still uploads anything that is not an SVG unchanged', async () => {
+    const user = userEvent.setup();
+    openDialog();
+
+    const upload = await screen.findByLabelText('Upload a drawing');
+    await user.upload(
+      upload as HTMLInputElement,
+      new File(['!|c0F'], 'logo.rip', { type: 'application/octet-stream' }),
+    );
+
+    // No conversion was asked for; the ordinary replace flow has it.
+    await waitFor(() => expect(screen.queryByText(/Replace with logo.rip/)).toBeTruthy());
+    expect(converted).toHaveLength(0);
+  });
+
   it('names what RIP could not carry', async () => {
     answer = {
       content: btoa('!|c0F'), commands: 3,
