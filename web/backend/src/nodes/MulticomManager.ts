@@ -58,6 +58,13 @@ interface EmulatorRegistration {
   emulator: MoiraEmulator;
   sessionId: string;
   initialized: boolean;
+  /**
+   * The node this emulator IS - not merely one it can see.
+   *
+   * Its own entry in the table holds its door's live message port, so another
+   * session's teardown must not zero it. See `clearNode`.
+   */
+  nodeId: number;
 }
 
 export class MulticomManager {
@@ -107,7 +114,8 @@ export class MulticomManager {
       this.emulators.set(sessionId, {
         emulator,
         sessionId,
-        initialized: true
+        initialized: true,
+        nodeId,
       });
 
       console.error(`[MulticomManager] Session ${sessionId} initialized successfully, emulators.size now=${this.emulators.size}`);
@@ -159,10 +167,34 @@ export class MulticomManager {
   }
 
   /**
-   * Clear node information when user logs out.
-   * Zeros out the node's data in ALL emulators.
+   * Clear node information when a session on that node ends.
+   *
+   * Zeroing the node's entry in every OTHER emulator is the point: a door
+   * showing who is online must stop showing a caller who has gone.
+   *
+   * WHAT IT MUST NOT ZERO IS A LIVE DOOR'S OWN NODE.
+   *
+   * `singlePort` is where that door's message port lives. Wipe it under a
+   * running door and the door's next `PutMsg` finds nothing - and it does not
+   * fail, it RETRIES, for ever: the board fills with
+   * `[ExecLibrary] Port not found: 0x...`, the node never comes back, and
+   * every reconnect adds another spinner. That is how the sysop's board
+   * jammed on 2026-09-15 ("the whole bbs seems jammed now"): his GWall door
+   * was live on node 1 while the MultiTop logoff batch - also node 1 -
+   * finished and cleared node 1 in ALL emulators, his included.
+   *
+   * Two sessions were on node 1 at once because `sessionId` used to fall back
+   * to `session-<nodeId>`, so every door on a node shared one registry key and
+   * overwrote the last (six registrations in his log, all `session-1`). That
+   * is fixed at the source in AmigaDoorSession; this is the invariant that
+   * makes the damage unreachable even when two sessions do share a node:
+   * a teardown clears its OWN emulator and never another emulator that is
+   * itself that node.
+   *
+   * @param callerSessionId the session doing the clearing, so its own
+   *        emulator is still cleared - it is shutting down anyway.
    */
-  public clearNode(nodeId: number): void {
+  public clearNode(nodeId: number, callerSessionId?: string): void {
     if (nodeId < 0 || nodeId >= MAX_NODES) {
       debugLog(`[MulticomManager] Invalid node ID: ${nodeId}`);
       return;
@@ -176,6 +208,13 @@ export class MulticomManager {
     // Clear in ALL active emulators
     for (const reg of this.emulators.values()) {
       if (reg.initialized) {
+        if (reg.nodeId === nodeId && callerSessionId !== undefined && reg.sessionId !== callerSessionId) {
+console.warn(
+            `[MulticomManager] Not clearing node ${nodeId} in session ${reg.sessionId}: ` +
+            `that emulator IS node ${nodeId} and its door's port lives there`
+          );
+          continue;
+        }
         try {
           // NOTE: nodeId is already the array index (0-31), don't subtract 1
           // Old code used: for (i=0; i<32; i++) { if (i === nodeId) ... }

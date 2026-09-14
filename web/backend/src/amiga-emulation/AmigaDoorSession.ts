@@ -43,7 +43,24 @@ import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapt
  * Version: 2025-12-01 - Generic door emulation
  */
 
+/** Distinguishes two door sessions that share a node. See `multicomSessionId`. */
+let doorSessionSerial = 0;
+
 export class AmigaDoorSession {
+  /**
+   * THIS DOOR SESSION'S OWN IDENTITY in the MULTICOM registry.
+   *
+   * It used to be derived as `session-<nodeId>` whenever the BBS session had
+   * no id of its own, so EVERY door on a node shared one key: a logoff batch
+   * running on node 1 and a caller's door on node 1 were the same entry, each
+   * overwriting the other, and either one exiting cleared the node for both.
+   * The sysop's jammed board on 2026-09-15 had six registrations, all
+   * `session-1`.
+   *
+   * Computed once, here, so init and teardown cannot disagree about it - they
+   * used to derive it independently at two call sites.
+   */
+  private readonly multicomSessionId: string;
   private emulator: MoiraEmulator | null = null;
   private socket: Socket;
   private config: DoorConfig;
@@ -178,6 +195,11 @@ export class AmigaDoorSession {
 
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
+    {
+      const ownNode = config.bbsSession?.nodeId ?? config.bbsSession?.nodeNumber ?? 1;
+      this.multicomSessionId =
+        config.bbsSession?.id || `session-${ownNode}-${++doorSessionSerial}`;
+    }
     const baseEnv = config.env ?? process.env;
     const normalizedEnv: Record<string, string> = {};
     for (const [key, value] of Object.entries(baseEnv ?? {})) {
@@ -308,7 +330,19 @@ debugLog("[AmigaDoorSession] Termination requested by user");
    * Initialize and start the door - REFACTORED
    */
   async start(): Promise<void> {
+    const __t0 = Date.now();
+    let __lagMax = 0;
+    let __lagLast = Date.now();
+    const __lagTimer = setInterval(() => {
+      const late = Date.now() - __lagLast - 20;
+      if (late > __lagMax) __lagMax = late;
+      __lagLast = Date.now();
+    }, 20);
+    __lagTimer.unref?.();
+    const mark = (what: string) =>
+      this.logger.info(`[timing] ${what} +${Date.now() - __t0}ms (loop lag max ${__lagMax}ms)`);
     try {
+      mark("start() entered");
 debugLog(
         `[AmigaDoorSession] 🚀 Starting refactored door: ${this.config.executablePath}`
       );
@@ -342,12 +376,14 @@ debugLog(
       // installed (every non-PETSCII session).
       this.emulator.onPause(() => c64AdapterFor(this.socket)?.flush());
       await this.emulator.initialize();
+      mark("emulator initialized");
 debugLog("[AmigaDoorSession] ✅ Emulator initialized");
 
       // Load Kickstart ROM (CRITICAL - must load before libraries)
 debugLog("[AmigaDoorSession] Loading Kickstart ROM...");
       this.sharedState.kickstartRom = new KickstartRom();
       this.sharedState.kickstartRom.dumpInfo();
+      mark("kickstart ready");
 
       // Load door tooltypes from .info file if available
       // Try full path first (e.g. Doors/aquascan/AquaScan.020.info)
@@ -390,6 +426,7 @@ debugLog(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeToolt
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
       this.emulator.loadROM(romData);
+      mark("ROM mapped");
 debugLog("[AmigaDoorSession] ✅ Main ROM loaded and mapped to 0xF80000-0xFFFFFF");
 
       // For AROS, also load extension ROM at 0xE00000-0xE7FFFF
@@ -412,6 +449,7 @@ debugLog("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
         this.sharedState.kickstartRom
       );
       await this.initializeLibraries();
+      mark("libraries initialized");
 
       // Provide a CLI structure so doors see a real pr_CLI (matches /X SystemTagList)
       this.setupCliEnvironment();
@@ -448,6 +486,7 @@ debugLog(
         this.logger
       );
       await this.doorLoader.loadDoor();
+      mark("door loaded");
 debugLog(
         "[AmigaDoorSession] ✅ Door binary loaded and CPU configured"
       );
@@ -642,6 +681,7 @@ debugLog("[AmigaDoorSession] 🚪 Emitting door:status = running");
       this.socket.emit("door:status", { status: "running" });
 
       // Start the lifecycle management
+      clearInterval(__lagTimer);
       await this.lifecycleManager.startLifecycle();
       this.logger.info(`Door completed: ${path.basename(this.config.executablePath)} status=ok`);
     } catch (error) {
@@ -685,7 +725,7 @@ debugLog(
     // Initialize MULTICOM structures in this session's emulator
     // This matches express.e where ACP creates structures at startup
     const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
-    const sessionId = this.config.bbsSession?.id || `session-${nodeId}`;
+    const sessionId = this.multicomSessionId;
     const username = this.config.bbsSession?.user?.username || 'Guest';
     const location = this.config.bbsSession?.user?.location || 'Unknown';
 
@@ -1204,10 +1244,12 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     // Clear node status and unregister from MULTICOM manager
     const { multicomManager } = require("../nodes/MulticomManager.js");
     const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
-    const sessionId = this.config.bbsSession?.id || `session-${nodeId}`;
+    const sessionId = this.multicomSessionId;
 
-    // Clear this node's status (user logged out or door exited)
-    multicomManager.clearNode(nodeId);
+    // Clear this node's status (user logged out or door exited). The id says
+    // WHO is clearing, so another session still live on this node keeps the
+    // structures its door's port lives in - see MulticomManager.clearNode.
+    multicomManager.clearNode(nodeId, sessionId);
 
     // Return ENV:STATS@<nodeId> to IDLE so pollers stop reporting the user
     // as "Using A Door" after the door exits back to the BBS menu.
