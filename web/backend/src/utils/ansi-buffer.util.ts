@@ -19,6 +19,7 @@
 
 import { Socket } from 'socket.io';
 import { wrapForSession } from './wrap-for-session.util';
+import { foldColoursForBoard } from './eight-colour-session.util';
 
 export class AnsiBuffer {
   private buffer: string[] = [];
@@ -218,7 +219,12 @@ export function emitText(socket: Socket, text: string, immediate: boolean = fals
   // columns, for door-owned sessions, and for positioned/art payloads.
   const session = (socket as any).session;
   const buffer = getAnsiBuffer(socket);
-  buffer.append(wrapForSession(text, session));
+  // Width first, then colour: the fold rewrites SGR parameters and never
+  // changes how many columns a line takes, so the order costs nothing - but
+  // wrapping text whose colours have already been folded is the same work
+  // twice. foldColoursForBoard is identity on a sixteen-colour board, which
+  // is every board that has not asked for the Amiga's eight.
+  buffer.append(foldColoursForBoard(wrapForSession(text, session)));
 
   if (immediate) {
     buffer.flushImmediate();

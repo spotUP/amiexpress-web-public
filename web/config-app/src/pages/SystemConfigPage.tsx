@@ -1027,6 +1027,29 @@ export function SystemConfigPage() {
               </label>
             </div>
 
+            {/*
+              How many colours the board's callers have.
+
+              AmiExpress ran on console.device, which has eight pens: sixteen
+              needed `ibmcon` and almost nobody ran it, and the Amiga had no
+              iCE colours at all. On eight, every bright code the board sends
+              is folded onto those pens, so sixteen-colour art still displays
+              in the colours an Amiga would have shown it in.
+            */}
+            <div>
+              <label htmlFor="terminal_colours" className="block text-sm text-content-primary mb-1">
+                Colours a caller's terminal has
+              </label>
+              <select
+                id="terminal_colours"
+                {...register('terminal_colours', { valueAsNumber: true })}
+                className="input"
+              >
+                <option value={16}>16 - every caller (default)</option>
+                <option value={8}>8 - the Amiga's pens, bright colours folded</option>
+              </select>
+            </div>
+
             <div className="flex items-center space-x-3">
               <input
                 id="allow_custom_screens"

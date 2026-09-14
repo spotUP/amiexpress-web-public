@@ -97,6 +97,17 @@ export interface BBSConfigData {
 
   // Display
   ansi_enabled?: boolean;
+  /**
+   * How many colours the board's CALLERS have.
+   *
+   * AmiExpress ran on console.device, which has eight pens; sixteen needed
+   * `ibmcon` and almost nobody ran it, and the Amiga had no iCE colours at
+   * all (sysop, 2026-09-14). A board that wants to look like that sets this
+   * to 8 and every bright code it sends is folded onto the eight - art drawn
+   * in sixteen still displays, in the colours an Amiga would have shown.
+   * 16, the default, changes nothing about what the board sends.
+   */
+  terminal_colours?: number;
   color_scheme?: string;
   allow_custom_screens?: boolean;
 
@@ -375,6 +386,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
 
   // Display
   'ANSI_ENABLED': 'ansi_enabled',
+  'TERMINAL_COLOURS': 'terminal_colours',
   'COLOR_SCHEME': 'color_scheme',
   'ALLOW_CUSTOM_SCREENS': 'allow_custom_screens',
 
@@ -1103,6 +1115,9 @@ function getDefaultConfig(): BBSConfigData {
     new_user_quiet_node: false,
     new_user_auto_rejoin: true,
     ansi_enabled: true,
+    // Sixteen: what a web or telnet caller has, and what the board has always
+    // sent. A sysop who wants the Amiga's eight sets TERMINAL_COLOURS=8.
+    terminal_colours: 16,
     color_scheme: 'standard',
     allow_custom_screens: true,
     language_base: 'Languages',

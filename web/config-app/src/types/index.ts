@@ -67,6 +67,8 @@ export interface SystemConfig {
 
   // Display Settings
   ansi_enabled: boolean;
+  /** How many colours the board's callers have: 16, or 8 for the Amiga's pens. */
+  terminal_colours: number;
   color_scheme: string;
   allow_custom_screens: boolean;
 

@@ -85,6 +85,12 @@
       "require": "./dist/engines/ui/theme/index.js",
       "default": "./dist/engines/ui/theme/index.js"
     },
+    "./engines/ui/ansi/eight-pens": {
+      "types": "./dist/engines/ui/ansi/eight-pens.d.ts",
+      "import": "./dist-esm/engines/ui/ansi/eight-pens.js",
+      "require": "./dist/engines/ui/ansi/eight-pens.js",
+      "default": "./dist/engines/ui/ansi/eight-pens.js"
+    },
     "./petscii": {
       "types": "./dist/petscii/index.d.ts",
       "import": "./dist-esm/petscii/index.js",

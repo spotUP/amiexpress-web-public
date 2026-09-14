@@ -110,7 +110,7 @@ export const SYSTEM_CONFIG_SECTIONS: PageSection[] = [
   {
     name: 'Display Settings',
     category: 'General',
-    fields: ['ansi_enabled', 'allow_custom_screens'],
+    fields: ['ansi_enabled', 'terminal_colours', 'allow_custom_screens'],
     keywords: ['ansi', 'screens', 'art'],
   },
   {
