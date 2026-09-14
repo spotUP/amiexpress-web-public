@@ -7,6 +7,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as amigafs from '../../src/utils/amigafs';
 
@@ -804,5 +805,57 @@ describe('AmigaFS Utility Functions', () => {
       const entries = amigafs.readdirSync(testDir);
       expect(entries.length).toBeGreaterThanOrEqual(files.length);
     });
+  });
+});
+
+/**
+ * A snapshot sees the board as it was WHEN IT STARTED - and no earlier.
+ *
+ * `withStableListings` lets one pass trust a directory listing without
+ * re-checking it, which is what took a screen-index build from 279,250 stats
+ * to a few thousand. The first version trusted any listing already in hand,
+ * including one left behind by an EARLIER snapshot, so a screen written
+ * between two index builds was invisible to the second: the live-theme check
+ * stopped reporting a board variant the sysop had just added.
+ *
+ * A snapshot may only skip the check for a directory IT has already checked.
+ */
+describe('withStableListings', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stable-listings-'));
+    fs.writeFileSync(path.join(dir, 'FIRST.TXT'), 'one', 'latin1');
+  });
+
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('shows a file written between two snapshots to the second one', () => {
+    const before = amigafs.withStableListings(() => amigafs.listFiles(dir));
+    expect(before).toEqual(['FIRST.TXT']);
+
+    fs.writeFileSync(path.join(dir, 'SECOND.TXT'), 'two', 'latin1');
+
+    const after = amigafs.withStableListings(() => amigafs.listFiles(dir));
+
+    expect(after.slice().sort()).toEqual(['FIRST.TXT', 'SECOND.TXT']);
+  });
+
+  it('holds one view for the whole of a single snapshot', () => {
+    const seen = amigafs.withStableListings(() => {
+      const first = amigafs.listFiles(dir);
+      fs.writeFileSync(path.join(dir, 'MIDWAY.TXT'), 'three', 'latin1');
+      return [first, amigafs.listFiles(dir)];
+    });
+
+    expect(seen[1]).toEqual(seen[0]);
+    expect(seen[1]).not.toContain('MIDWAY.TXT');
+  });
+
+  it('finds a file by any case through the same snapshot', () => {
+    const found = amigafs.withStableListings(() =>
+      amigafs.findCaseInsensitive(dir, 'first.txt'));
+
+    expect(found).toBe(path.join(dir, 'FIRST.TXT'));
   });
 });

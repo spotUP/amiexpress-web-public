@@ -14,28 +14,28 @@ const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
 const TEXT_EXTENSIONS = ['.TXT', '.txt'];
 
 function resolveCaseInsensitivePath(targetPath: string): string | null {
-  if (fs.existsSync(targetPath)) {
-    return targetPath;
-  }
-
-  const dirPath = path.dirname(targetPath);
-  const targetName = path.basename(targetPath);
-
+  /*
+   * THE LISTING ANSWERS THIS, and nothing else needs to.
+   *
+   * This used to try `fs.existsSync(targetPath)` first and, when the cached
+   * listing then found a match, `fs.existsSync(match)` to confirm it - two
+   * syscalls per call on the miss path, which is the common one: the level
+   * walk below asks about ~200 names per screen per scope and almost all of
+   * them are absent. Measured on this board, those existence checks were 931
+   * ms of a 1.35 second index rebuild.
+   *
+   * `findCaseInsensitive` reads a directory listing that amigafs remembers
+   * until the directory's mtime moves, so it already knows whether the name
+   * is there - in any case - without asking the filesystem again. A listing
+   * taken from a real readdir IS the existence check.
+   */
   try {
-    // Through amigafs, which remembers a directory's listing until its mtime
-    // moves. This function is called ~200 times per screen per scope by the
-    // level walk below, and a readdir each time is what made the screen index
-    // take twelve seconds on this board.
-    const match = findCaseInsensitive(dirPath, targetName);
-    if (match && fs.existsSync(match)) {
-      return match;
-    }
-  } catch (error) {
-    // Directory may not exist or is unreadable
+    return findCaseInsensitive(path.dirname(targetPath), path.basename(targetPath));
+  } catch {
+    // A directory that will not list has nothing in it as far as this is
+    // concerned.
     return null;
   }
-
-  return null;
 }
 
 /**

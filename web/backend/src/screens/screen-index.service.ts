@@ -22,7 +22,7 @@ import {
   resolveNodeScreenDir, screenSearchLocations, isScreenFile,
 } from './screen-resolution';
 import { BOARD_WRITTEN_NAME } from './screen-tables';
-import { countMciCodes, scanMciCodes } from './mci-catalog';
+import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
@@ -232,18 +232,18 @@ export interface ScreenIndex {
   builtAt: string;
 }
 
+/**
+ * The FILES in a directory.
+ *
+ * This read the directory itself, once per call, and the index asks it for
+ * every search location of every screen: thousands of readdir calls per build
+ * against the same hundred-odd directories, 1.5 seconds of a 3 second build
+ * (measured, 2026-09-14). amigafs already remembers a directory's listing
+ * until the directory changes, so the answer comes from there rather than
+ * from a second cache that could disagree with it about what is on disk.
+ */
 function listDir(dir: string): string[] {
-  try {
-    return fs.readdirSync(dir).filter(name => {
-      try {
-        return fs.statSync(path.join(dir, name)).isFile();
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return [];
-  }
+  return amigafs.listFiles(dir);
 }
 
 function nodeIds(baseDir: string): number[] {
@@ -543,27 +543,41 @@ function classifyGenerated(
  * config-app artist filter that read it, went the same way and are NOT
  * restored here - see the report.
  */
-export function isCodesOnly(text: string): boolean {
-  let rest = text;
-  // Back to front, so an earlier removal never shifts a later offset.
-  for (const code of scanMciCodes(text).sort((a, b) => b.at - a.at)) {
-    rest = rest.slice(0, code.at) + rest.slice(code.at + code.text.length);
+export function isCodesOnly(text: string, scanned?: ScannedMciCode[]): boolean {
+  /*
+   * One pass, keeping what lies BETWEEN the codes.
+   *
+   * This removed the codes one at a time, back to front, and each removal
+   * copied the whole remaining string: a screen that is mostly MCI - the
+   * board has several with hundreds of codes - cost time in the square of its
+   * length, and it was 564 ms of a 2.2 second index build (measured,
+   * 2026-09-14). The kept segments are the same characters in the same order.
+   */
+  const codes = (scanned ?? scanMciCodes(text)).slice().sort((a, b) => a.at - b.at);
+  const kept: string[] = [];
+  let cursor = 0;
+  for (const code of codes) {
+    // A code inside one already removed contributes nothing, which is what
+    // back-to-front removal did with it too.
+    if (code.at < cursor) continue;
+    kept.push(text.slice(cursor, code.at));
+    cursor = code.at + code.text.length;
   }
+  kept.push(text.slice(cursor));
 
-  return rest
+  return kept.join('')
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
     .replace(/[\s\x00-\x1f\x7f]/g, '')
     .length === 0;
 }
 
-function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
+function fileProblems(buf: Buffer, text: string, format: ScreenFormat): ScreenProblem[] {
   const problems: ScreenProblem[] = [];
   if (buf.length === 0) problems.push('empty');
 
   // Only for text-shaped screens: RIP, PETSCII and native teletext
   // carry their own byte conventions and `[` means nothing special in them.
   if (format !== 'rip' && format !== 'petscii' && format !== 'teletext-native') {
-    const text = buf.toString('latin1');
     const hasEscape = text.includes('\x1b');
     const hasBareCsi = /\[[0-9][0-9;]*m/.test(text);
     if (!hasEscape && hasBareCsi) problems.push('colour-codes-without-escape');
@@ -878,11 +892,21 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
   const name = path.basename(absPath);
   const format = sniffFormat(name, buf);
 
+  /*
+   * The bytes as text, and the MCI scan of them, ONCE.
+   *
+   * Four questions below each decoded the whole buffer again and two of them
+   * walked it looking for codes. latin1: an Amiga high-bit byte is not UTF-8,
+   * and a code is ASCII either way.
+   */
+  const text = buf.toString('latin1');
+  const scanned = scanMciCodes(text);
+
   // Only a text-shaped screen carries MCI; RIP, PETSCII and native
   // teletext bytes would produce noise that looks like references.
   const mci = format === 'rip' || format === 'petscii' || format === 'teletext-native'
     ? []
-    : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
+    : resolveRefs(baseDir, parseMciReferences(text));
 
   /*
    * Measured on the bytes already in hand, beside the MCI census. Only for a
@@ -890,7 +914,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
    * "strip the escapes" means nothing in them.
    */
   const codesOnly = (format === 'ansi' || format === 'text' || format === 'teletext') && buf.length > 0
-    ? isCodesOnly(buf.toString('latin1'))
+    ? isCodesOnly(text, scanned)
     : false;
 
   const facts: ScreenFileFacts = {
@@ -898,10 +922,9 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     // knows which nodes and conferences exist and what each one reads.
     readBy: [],
     sauce: readSauce(buf),
-    problems: fileProblems(buf, format),
+    problems: fileProblems(buf, text, format),
     generated: classifyGenerated(path.relative(baseDir, absPath), buf, baseDir),
-    // latin1: an Amiga high-bit byte is not UTF-8, and a code is ASCII either way.
-    mciCodes: countMciCodes(buf.toString('latin1')),
+    mciCodes: countMciCodes(text, scanned),
     codesOnly,
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
@@ -1361,7 +1384,14 @@ export function getScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex
   const slot = themeSlug ?? '';
   const cached = cachedByTheme.get(slot);
   if (cached && cached.key === key) return cached.index;
-  const index = buildScreenIndex(baseDir, themeSlug);
+  /*
+   * One snapshot of the board for the whole build: the directory listings
+   * are validated once each rather than on every one of the thousands of
+   * name lookups the level walk makes. It is also the more consistent
+   * answer - a build sees the board as it was when it started, rather than
+   * half a directory that was written while it ran.
+   */
+  const index = amigafs.withStableListings(() => buildScreenIndex(baseDir, themeSlug));
   cachedByTheme.set(slot, { key, index });
 
   // A themed view is a VIEW; the live-theme check below is about the board.
@@ -1386,7 +1416,10 @@ export function getScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex
    */
   try {
     const { liveThemeRegressions, announceLiveThemeRegressions } = require('./theme-live-check');
-    announceLiveThemeRegressions(liveThemeRegressions(baseDir, index.builtAt));
+    // Same snapshot as the build it is checking: the question "does this theme
+    // shadow the board" is only answerable against ONE state of the disk.
+    amigafs.withStableListings(() =>
+      announceLiveThemeRegressions(liveThemeRegressions(baseDir, index.builtAt)));
   } catch (error) {
     console.warn(`[Themes] live theme check skipped: ${(error as Error).message}`);
   }

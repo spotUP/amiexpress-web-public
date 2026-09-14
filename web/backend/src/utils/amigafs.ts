@@ -35,9 +35,69 @@ import * as path from 'path';
  * directory is not, and a screen written by the admin bumps the directory's
  * mtime, so the next lookup sees it.
  */
-const listings = new Map<string, { mtimeMs: number; entries: string[] }>();
+interface DirectoryListing {
+  mtimeMs: number;
+  entries: string[];
+  /**
+   * The same entries as lowercase -> real name.
+   *
+   * `findCaseInsensitive` scanned the array and lowercased every entry on
+   * every call. The screen index asks it about two hundred names per screen
+   * per scope, and a node directory holds hundreds of files, so that scan was
+   * hundreds of thousands of `toLowerCase` calls per build. Built once per
+   * listing instead, and thrown away with it when the directory changes.
+   */
+  byLowerName: Map<string, string>;
+  /** `listFiles`, once something has asked for it. */
+  files?: string[];
+  /** The snapshot this listing was last checked against the disk in. */
+  seenIn?: number;
+}
 
-function entriesOf(directory: string): string[] | null {
+const listings = new Map<string, DirectoryListing>();
+
+/**
+ * The snapshot being taken, or 0 outside one. See `withStableListings`.
+ *
+ * A NUMBER rather than a flag: a listing may only be trusted unchecked by the
+ * snapshot that checked it. Trusting one left by an EARLIER snapshot is how a
+ * screen written between two index builds stayed invisible to the second.
+ */
+let snapshot = 0;
+let snapshotsTaken = 0;
+
+/**
+ * Run `work` against ONE snapshot of the board's directories.
+ *
+ * Every lookup validated its cached listing with a `statSync`, which is
+ * right for a long-lived process and wasteful inside a single pass that asks
+ * about thousands of names: the screen index probes ~200 filenames per screen
+ * per scope, and that came to 279,250 stats for one build of this board
+ * (measured, 2026-09-14). Inside a snapshot each directory is checked once
+ * and trusted for the rest of the pass.
+ *
+ * A build is also more CONSISTENT for it. Without this, a directory written
+ * while the index is being built is half in the answer and half not,
+ * depending on which lookup happened to come after the write; with it, a
+ * build sees the board as it was when the build started.
+ *
+ * Not reentrant on purpose - a nested call keeps the outer snapshot, which is
+ * what "one build, one view" means.
+ */
+export function withStableListings<T>(work: () => T): T {
+  if (snapshot !== 0) return work();
+  snapshot = ++snapshotsTaken;
+  try {
+    return work();
+  } finally {
+    snapshot = 0;
+  }
+}
+
+function listingOf(directory: string): DirectoryListing | null {
+  const held = listings.get(directory);
+  if (snapshot !== 0 && held?.seenIn === snapshot) return held;
+
   let mtimeMs: number;
   try {
     mtimeMs = fs.statSync(directory).mtimeMs;
@@ -47,15 +107,93 @@ function entriesOf(directory: string): string[] | null {
   }
 
   const cached = listings.get(directory);
-  if (cached && cached.mtimeMs === mtimeMs) return cached.entries;
+  if (cached && cached.mtimeMs === mtimeMs) {
+    cached.seenIn = snapshot;
+    return cached;
+  }
 
   try {
     const entries = fs.readdirSync(directory);
-    listings.set(directory, { mtimeMs, entries });
-    return entries;
+    const byLowerName = new Map<string, string>();
+    // First wins, which is what a linear scan did: a directory holding both
+    // `Menu.txt` and `MENU.TXT` keeps answering whichever the OS lists first.
+    for (const entry of entries) {
+      const lower = entry.toLowerCase();
+      if (!byLowerName.has(lower)) byLowerName.set(lower, entry);
+    }
+    const listing: DirectoryListing = { mtimeMs, entries, byLowerName, seenIn: snapshot };
+    listings.set(directory, listing);
+    return listing;
   } catch {
     return null;
   }
+}
+
+/**
+ * The FILES in a directory, remembered with the listing.
+ *
+ * The screen index asks this for every search location of every screen -
+ * thousands of readdir calls per build against the same hundred-odd
+ * directories, and 1.5 seconds of a 3 second build (measured, 2026-09-14).
+ * It shares the listing cache rather than keeping a second one, so a written
+ * screen invalidates both at once and `withStableListings` covers both.
+ *
+ * A symlink is the one case the directory entry cannot settle: `isFile()` is
+ * false for the ENTRY even when it points at a file. Those are stat'd, and
+ * only those, so a board that symlinks a screen behaves as it always has.
+ */
+export function listFiles(directory: string): string[] {
+  const listing = listingOf(directory);
+  if (!listing) return [];
+  if (!listing.files) listing.files = fileNamesIn(directory, listing.entries);
+  return listing.files;
+}
+
+/**
+ * Which of a directory's entries are files.
+ *
+ * `withFileTypes` answers for most of them from the directory entry the
+ * readdir already returned, which is what replaced a stat per name - a
+ * thousand stats per index build on this board. A symlink is the one case an
+ * entry cannot settle: `isFile()` is false for the ENTRY even when it points
+ * at a file, so those are stat'd, and only those.
+ *
+ * Not every filesystem behind this module is the real one - the write tests
+ * drive amigafs against an in-memory board whose readdir answers with plain
+ * names - so an answer without directory entries falls back to asking about
+ * each name, which is what this did before.
+ */
+function fileNamesIn(directory: string, entries: string[]): string[] {
+  let dirents: fs.Dirent[];
+  try {
+    dirents = fs.readdirSync(directory, { withFileTypes: true }) as fs.Dirent[];
+  } catch {
+    return [];
+  }
+
+  if (dirents.length > 0 && typeof dirents[0]?.isFile !== 'function') {
+    const named: string[] = [];
+    for (const name of entries) {
+      try {
+        if (fs.statSync(path.join(directory, name)).isFile()) named.push(name);
+      } catch { /* a name that will not stat is not a file */ }
+    }
+    return named;
+  }
+
+  const files: string[] = [];
+  for (const dirent of dirents) {
+    if (dirent.isFile()) { files.push(dirent.name); continue; }
+    if (!dirent.isSymbolicLink()) continue;
+    try {
+      if (fs.statSync(path.join(directory, dirent.name)).isFile()) files.push(dirent.name);
+    } catch { /* a link pointing nowhere is not a file */ }
+  }
+  return files;
+}
+
+function entriesOf(directory: string): string[] | null {
+  return listingOf(directory)?.entries ?? null;
 }
 
 /** Drop the remembered listings. For a caller that has just written files. */
@@ -65,22 +203,16 @@ export function forgetDirectoryListings(): void {
 
 export function findCaseInsensitive(directory: string, filename: string): string | null {
   try {
-    const entries = entriesOf(directory);
-    if (!entries) return null;
+    const listing = listingOf(directory);
+    if (!listing) return null;
 
-    const lowerFilename = filename.toLowerCase();
-
-    for (const entry of entries) {
-      if (entry.toLowerCase() === lowerFilename) {
-        return path.join(directory, entry);
-      }
-    }
-
-    return null;
+    const match = listing.byLowerName.get(filename.toLowerCase());
+    return match ? path.join(directory, match) : null;
   } catch {
     return null;
   }
 }
+
 
 /**
  * Resolve a full path with case-insensitive component matching

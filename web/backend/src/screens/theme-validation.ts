@@ -21,6 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../utils/amigafs';
 
 import {
   getScreenIndex,
@@ -114,16 +115,6 @@ function levelOf(stem: string, fileName: string): number | null | undefined {
   if (!match) return undefined;
   if (!isScreenFile(fileName)) return undefined;
   return match[1] === '' ? null : parseInt(match[1], 10);
-}
-
-function listNames(dir: string): string[] {
-  try {
-    return fs.readdirSync(dir, { withFileTypes: true })
-      .filter(entry => entry.isFile())
-      .map(entry => entry.name);
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -262,7 +253,14 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
       const scope = scopeDirectory(entry.dirType, resolution);
       if (!scope) continue;
 
-      const themeNames = listNames(path.join(root, scope));
+      /*
+       * amigafs remembers the listing until the directory changes. This read
+       * the directory itself, once per screen per resolution - 920 readdir
+       * calls of the same theme directories per index build on this board
+       * (measured, 2026-09-14) - and a second answer to "what files are here"
+       * is a second thing to keep in step with the disk.
+       */
+      const themeNames = amigafs.listFiles(path.join(root, scope));
       const themeLevels = new Map<number | null, string>();
       for (const name of themeNames) {
         const level = levelOf(stem, name);

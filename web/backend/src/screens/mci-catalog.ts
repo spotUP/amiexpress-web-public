@@ -434,10 +434,12 @@ export function scanMciCodes(text: string): ScannedMciCode[] {
   return found;
 }
 
-export function countMciCodes(text: string): Record<string, number> {
+export function countMciCodes(text: string, scanned?: ScannedMciCode[]): Record<string, number> {
   const counts: Record<string, number> = {};
 
-  for (const found of scanMciCodes(text)) {
+  // `scanned`: the screen index scans each file once and asks several
+  // questions of the one answer, rather than walking the bytes per question.
+  for (const found of scanned ?? scanMciCodes(text)) {
     const key = found.entry ? found.entry.code : found.text === '~' ? MCI_ENABLED_KEY : undefined;
     if (key) counts[key] = (counts[key] || 0) + 1;
   }
