@@ -172,6 +172,49 @@ describe('PUT /api/screens/login-sequence', () => {
       .toBe('the board bulletin\r\n');
   });
 
+  it('refuses a step that resolves to no file, instead of creating one', async () => {
+    /*
+     * THE CASE NOBODY DESIGNED FOR.
+     *
+     * ACHIEVETOP is not on this board, so the step resolves to nothing. The
+     * path check only fired when there WAS a resolution, so an unresolved step
+     * fell past it and the write ran against whatever path the body carried -
+     * creating a screen file where the board had none. A page whose Save
+     * button sent `path: null` would have written a file literally called
+     * `null` into the board root.
+     *
+     * Asked by session_01QtFX after an empty `Screens/LOGON.TXT` appeared on
+     * the live volume at 14:52 UTC: not this code, which reached the board at
+     * 15:06, but this is the shape that WOULD have done it.
+     */
+    const res = await request(app())
+      .put('/api/screens/login-sequence')
+      .send({
+        screen: 'ACHIEVETOP',
+        path: 'Screens/AchieveTop.txt',
+        node: 1,
+        items: [{ code: 'SS', target: 'BBS:Bulletins/bull1.txt', pause: false }],
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/resolves to no file/);
+    expect(fs.existsSync(path.join(root, 'Screens', 'AchieveTop.txt'))).toBe(false);
+  });
+
+  it('will not write a path the caller invented for a step that has one', async () => {
+    const res = await request(app())
+      .put('/api/screens/login-sequence')
+      .send({
+        screen: 'NODE_BULL',
+        path: 'Screens/SomethingElse.txt',
+        node: 1,
+        items: [{ code: 'SS', target: 'BBS:Bulletins/bull1.txt', pause: false }],
+      });
+
+    expect(res.status).toBe(409);
+    expect(fs.existsSync(path.join(root, 'Screens', 'SomethingElse.txt'))).toBe(false);
+  });
+
   it('refuses a screen that is not part of the login walk', async () => {
     const res = await request(app())
       .put('/api/screens/login-sequence')

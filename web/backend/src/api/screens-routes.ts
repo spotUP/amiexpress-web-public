@@ -35,6 +35,7 @@ import { config } from '../config';
 import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
+import { isHollowScreenContent } from '../screens/hollow-screen';
 import { findTheme } from '../screens/theme-registry';
 import { svgToRip } from '../screens/svg-to-rip';
 import { resolveCallerTheme } from '../screens/caller-theme';
@@ -518,7 +519,27 @@ screensRouter.put('/login-sequence', (req: Request, res: Response) => {
   }
 
   const resolved = resolutionFor(baseDir, screen, nodeId, confId)?.file ?? null;
-  if (resolved && path.normalize(resolved) !== path.normalize(rel)) {
+  /*
+   * A STEP THAT RESOLVES TO NOTHING IS NOT A PLACE TO PUT A FILE.
+   *
+   * The check below only fired when there WAS a resolution, so an unresolved
+   * step fell straight past it and the write ran against whatever path the
+   * body carried - CREATING a screen where the board had none, at whatever
+   * name the caller chose. A page whose Save sent `path: null` would have
+   * written a file called `null` into the board root.
+   *
+   * This route edits what a step already shows. Giving a step a screen it does
+   * not have is a different act - a new file, chosen and named deliberately -
+   * and it belongs to the screen manager, which asks about type extensions,
+   * security variants and which nodes should receive it.
+   */
+  if (!resolved) {
+    return res.status(409).json({
+      success: false,
+      error: `${screen} resolves to no file on this board - create the screen in the screen manager before editing what it shows`,
+    });
+  }
+  if (path.normalize(resolved) !== path.normalize(rel)) {
     return res.status(409).json({
       success: false,
       error: `${screen} resolves to ${resolved}, not ${rel} - reload the sequence before saving`,
@@ -776,6 +797,35 @@ function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buf
       const full = resolveScreenPathAllowingNew(rel);
       if (!full) throw new Error(`Path outside the board root: ${rel}`);
 
+      /*
+       * THE BOARD NEVER HOLDS AN EMPTY SCREEN FILE. The sysop's rule,
+       * 2026-09-14, after a night spent chasing what one costs.
+       *
+       * express.e:6773 shows any file that OPENS, so a file with nothing in
+       * it clears the terminal, prints nothing and leaves the caller pausing
+       * for a key - and it does it silently, because the file is not corrupt
+       * and nothing logs a problem. The loader tolerates one now
+       * (screens/hollow-screen.ts) because a file can arrive by hand or by
+       * FTP, but nothing the BOARD writes is allowed to create one.
+       *
+       * Refused rather than deleted: a save is not a delete, and the sysop
+       * who wants the screen gone has DELETE /api/screens/file, which backs
+       * the file up and reports which scopes stop resolving without it.
+       *
+       * This sits in the shared writer so every route inherits it - the file
+       * editor, the login sequence, the upload and the archive import. Put it
+       * in one route and the next route is the one that lets an empty file
+       * through, which is the shape of the three-times-in-one-day RIP fix
+       * recorded on PUT /file.
+       */
+      const payload = typeof bytes === 'function' ? bytes(rel) : bytes;
+      if (isHollowScreenContent(payload)) {
+        throw new Error(
+          `${rel}: a screen file cannot be empty - it would clear the caller's screen and pause for a key. ` +
+          `Put something in it, or delete the file.`,
+        );
+      }
+
       let backup: string | null = null;
       if (fs.existsSync(full)) {
         // Snapshot to .Revisions before overwriting. The `.backup` beside the
@@ -785,7 +835,7 @@ function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buf
         backup = `${full}.backup`;
         fs.copyFileSync(full, backup);
       }
-      fs.writeFileSync(full, typeof bytes === 'function' ? bytes(rel) : bytes);
+      fs.writeFileSync(full, payload);
       done.push({ full, backup });
     }
   } catch (error) {
