@@ -1,5 +1,6 @@
 import { Socket } from "socket.io";
 import * as deasync from "deasync";
+import { ownPump } from "./pump-owner";
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { ExecLibrary } from "./ExecLibrary";
 import { XIMCommand } from "../xim/types";
@@ -1806,7 +1807,11 @@ console.warn(
         // practical terms — neither is a correctness timeout, just a safety
         // stop.
         const deadline = Date.now() + 5000;
-        deasync.loopWhile(() => {
+        // This loop OWNS the pump while it runs. The XIM processor it calls
+        // below drains its own handler promises with deasync too, and two
+        // pumps must not nest - see api/pump-owner.ts. Registered here, read
+        // there.
+        ownPump(() => deasync.loopWhile(() => {
           iterations++;
           if (this.processXIMMessageCallback && state.bbsPortAddr) {
             this.processXIMMessageCallback(state.bbsPortAddr);
@@ -1817,7 +1822,7 @@ console.warn(
             return false;
           }
           return Date.now() < deadline;
-        });
+        }));
       } else {
         // Default sync loop — holds the JS event loop. See
         // thoughts/shared/plans/2026-04-21-aedoor-waitforreply-event-loop.md

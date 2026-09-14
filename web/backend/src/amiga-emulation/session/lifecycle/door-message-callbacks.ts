@@ -26,6 +26,7 @@
 // only falls back to replyMsg when the handler failed to reply.
 
 import * as deasync from "deasync";
+import { isPumping } from '../../api/pump-owner';
 import type { LibraryManager } from "../../LibraryManager.js";
 import type { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import type { XIMProtocol } from "../../XIMProtocol.js";
@@ -102,8 +103,45 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
   const XIM_TIMING = process.env.XIM_TIMING === '1';
   let lastCallEnd = 0;
 
+  /**
+   * A drain this processor left for the outer pump to finish.
+   *
+   * Set only when something else already owns the pump (see the isPumping
+   * branch below). The door is still waiting on this message - it has not
+   * been replied to - so the next pass through this callback finishes it
+   * before looking at anything new.
+   */
+  let pendingDrain: {
+    msgAddr: number;
+    isDone: () => boolean;
+    deadline: number;
+  } | null = null;
+
   libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
     const callStart = XIM_TIMING ? Date.now() : 0;
+
+    // Finish what was left pending before taking a new message off the port.
+    if (pendingDrain) {
+      const waiting = pendingDrain;
+      if (!waiting.isDone() && Date.now() < waiting.deadline) {
+        return;                       // still settling; the outer pump runs on
+      }
+      if (!waiting.isDone()) {
+        console.warn(
+          `[DoorLifecycleManager] XIMProcessor: deferred handler did not resolve within the deadline - replying anyway (door may be desynced)`,
+        );
+      }
+      pendingDrain = null;
+      const proto = getXimProtocol();
+      // Same reply rule as the inline path below: only reply if the handler
+      // did not, and not while a line input is outstanding.
+      if (proto && !proto.isWaitingForLineInput() && !proto.wasReplyHandled()) {
+        execLib.replyMsg(waiting.msgAddr);
+      }
+      if (XIM_TIMING) lastCallEnd = Date.now();
+      return;
+    }
+
     const gapMs = XIM_TIMING && lastCallEnd > 0 ? callStart - lastCallEnd : 0;
     // Get one message from the BBS port (the message the door just sent)
     const msgAddr = execLib.getMsg(bbsPortAddr);
@@ -192,6 +230,26 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
         }
       );
       const deadline = Date.now() + ASYNC_HANDLER_DEADLINE_MS;
+      if (isPumping()) {
+        /*
+         * SOMEBODY ELSE IS ALREADY PUMPING - do not start a second one.
+         *
+         * waitForReply under DOOR_ASYNC_WAIT=1 calls this processor from
+         * inside its own deasync.loopWhile, and nesting two pumps is the
+         * hazard that has kept that flag dark since 2026-04-21. The owner is
+         * registered in api/pump-owner.ts.
+         *
+         * Waiting here is not an option either: the outer loop only advances
+         * when this callback returns, so blocking would deadlock the thing
+         * we are waiting for. Instead the promise is left to settle on the
+         * outer pump's iterations, and this message is finished on a later
+         * pass - the door has not been replied to, so it is still waiting
+         * and the ordering the drain exists for is kept.
+         */
+        pendingDrain = { msgAddr: parsed.msgAddr, isDone: () => done, deadline };
+        if (XIM_TIMING) lastCallEnd = Date.now();
+        return;
+      }
       deasync.loopWhile(() => !done && Date.now() < deadline);
       if (!done) {
         console.warn(
