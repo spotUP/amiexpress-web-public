@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import type { ApiResponse } from '../types';
 import { SkeletonRows } from '../components/ui/states';
 
 interface LoginItem {
@@ -74,12 +75,29 @@ export function LoginSequencePage() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<{ steps: LoginStep[]; available: Available[] }>(
+      /*
+       * `request()` returns the WHOLE envelope, so `apiClient.get<T>` answers
+       * `{ data: ApiResponse<T> }` and the payload is one level further in.
+       * Typed as the payload instead, `data.steps` was undefined, `setSteps`
+       * put undefined into state, and the next render died on `steps.map` -
+       * a white page with "Cannot read properties of undefined (reading
+       * 'map')" (sysop, 2026-09-14). The generic ASSERTS the shape, so
+       * TypeScript could not see it. Every other caller in this admin types
+       * the envelope; this one did not.
+       */
+      const { data: envelope } = await apiClient.get<ApiResponse<{ steps: LoginStep[]; available: Available[] }>>(
         `/api/screens/login-sequence?node=${node}`,
       );
-      setSteps(data.steps);
-      setAvailable(data.available);
-      setDrafts(Object.fromEntries(data.steps.map(s => [s.screen, s.items.map(i => ({ ...i }))])));
+      const payload = envelope?.data;
+      // A response that does not carry what this page needs is an ERROR, not
+      // an empty page pretending the board has no login sequence.
+      if (!payload || !Array.isArray(payload.steps)) {
+        throw new Error('The board did not return a login sequence for this node.');
+      }
+      const loaded = payload.steps;
+      setSteps(loaded);
+      setAvailable(Array.isArray(payload.available) ? payload.available : []);
+      setDrafts(Object.fromEntries(loaded.map(s => [s.screen, (s.items ?? []).map(i => ({ ...i }))])));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
