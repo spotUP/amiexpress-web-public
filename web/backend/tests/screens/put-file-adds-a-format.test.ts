@@ -88,3 +88,81 @@ test('a .rip that does not hold RIP is refused', async () => {
   expect(res.status).toBe(400);
   expect(res.body.error).toMatch(/not RIP/);
 });
+
+/**
+ * AN SVG WRITTEN TO A `.rip` SLOT IS CONVERTED, whichever picker sent it.
+ *
+ * The conversion was written into the artist dialog's file pickers and was
+ * fixed there three times in one day, once per picker, because the rule lived
+ * in the dialog instead of in the write. The screen manager has two more
+ * pickers - "add a format" and "replace" - and neither of them converted, so
+ * the sysop went on getting the same refusal from the same board:
+ * "Node0/BBSTITLE.rip: The target is a .rip but these bytes are not RIP"
+ * (2026-09-14).
+ *
+ * Every picker goes through this route, so the rule is here now.
+ */
+describe('an SVG sent to a .rip target', () => {
+  // Shaped like Illustrator's export, which is what the sysop had: an XML
+  // declaration first, the paint in a <style> class rather than on the
+  // element, and the geometry in a <path>.
+  const illustratorSvg = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 350">',
+    '  <defs><style>.cls-1 { fill: #c9325c; }</style></defs>',
+    '  <path class="cls-1" d="M10,10 L200,10 L200,120 L10,120 Z"/>',
+    '</svg>',
+  ].join('\n');
+
+  const put = (body: Record<string, unknown>) =>
+    request(app()).put('/api/screens/file?path=Node1/BBSTITLE.rip').send(body);
+
+  it('is converted and written as RIP, not refused', async () => {
+    const res = await put({
+      content: Buffer.from(illustratorSvg, 'utf8').toString('base64'),
+      targets: ['Node1/BBSTITLE.rip'],
+      carryCodes: 'none',
+    });
+
+    expect(res.status).toBe(200);
+    const written = fs.readFileSync(path.join(root, 'Node1', 'BBSTITLE.rip'), 'latin1');
+    expect(written.startsWith('!|')).toBe(true);
+  });
+
+  it('reaches every node the write names', async () => {
+    const res = await put({
+      content: Buffer.from(illustratorSvg, 'utf8').toString('base64'),
+      targets: ['Node1/BBSTITLE.rip', 'Node2/BBSTITLE.rip'],
+      carryCodes: 'none',
+    });
+
+    expect(res.status).toBe(200);
+    for (const node of ['Node1', 'Node2']) {
+      expect(fs.readFileSync(path.join(root, node, 'BBSTITLE.rip'), 'latin1').startsWith('!|')).toBe(true);
+    }
+  });
+
+  it('still refuses bytes that are neither RIP nor an SVG', async () => {
+    const res = await put({
+      content: b64('just some text\r\n'),
+      targets: ['Node1/BBSTITLE.rip'],
+      carryCodes: 'none',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('not RIP');
+  });
+
+  it('leaves an SVG alone when the target is not a .rip', async () => {
+    const res = await request(app())
+      .put('/api/screens/file?path=Node1/DRAWING.txt')
+      .send({
+        content: Buffer.from(illustratorSvg, 'utf8').toString('base64'),
+        targets: ['Node1/DRAWING.txt'],
+        carryCodes: 'none',
+      });
+
+    expect(res.status).toBe(200);
+    expect(fs.readFileSync(path.join(root, 'Node1', 'DRAWING.txt'), 'latin1')).toContain('<svg');
+  });
+});

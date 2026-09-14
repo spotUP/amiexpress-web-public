@@ -24,6 +24,7 @@
  */
 import {
   encodeRipArgs,
+  RIP_MAX_POLYGON_POINTS,
   serializeRipDocument,
   type RipDocument,
   type RipInstruction,
@@ -344,6 +345,92 @@ interface Style {
 }
 
 /** An instruction, built from an opcode and its numbers. */
+/**
+ * BGI's solid fill pattern (vendor/BGI.js:87, index 01 of fill_patterns).
+ *
+ * Every fill this converter emits is solid: an SVG fill is a flat colour, so
+ * a pattern would be a different picture rather than a closer one.
+ */
+const SOLID_FILL = 1;
+
+/**
+ * Points that carry the same shape, within RIP's polygon limit.
+ *
+ * The flattener works in SVG user units and the canvas is 640x350 integers,
+ * so a curve arrives with far more points than the screen can show: one
+ * letter of the sysop's logo came to 707, and RIPscrip allows 512. A reader
+ * meeting a longer polygon draws NOTHING, which is how a letter went missing
+ * from an otherwise correct conversion (2026-09-14).
+ *
+ * Two passes, cheapest first. Collinear points are free to drop - after
+ * rounding to device pixels they are literally on the line their neighbours
+ * describe. Only if that is not enough does it start choosing, by
+ * Ramer-Douglas-Peucker at a widening tolerance: that keeps the corners a
+ * letterform is recognised by and spends the points along its flat runs,
+ * which is the opposite of dropping every Nth point.
+ */
+function withinPolygonLimit(points: Array<[number, number]>): Array<[number, number]> {
+  const open = dropCollinear(points);
+  if (open.length <= RIP_MAX_POLYGON_POINTS) return open;
+
+  for (let tolerance = 1; tolerance <= 16; tolerance *= 2) {
+    const thinned = douglasPeucker(open, tolerance);
+    if (thinned.length <= RIP_MAX_POLYGON_POINTS) return thinned;
+  }
+
+  // A shape that is still too detailed at 16 pixels of tolerance is not a
+  // shape this canvas can show; keep its start and spend the budget evenly.
+  const step = open.length / RIP_MAX_POLYGON_POINTS;
+  const spread: Array<[number, number]> = [];
+  for (let i = 0; i < RIP_MAX_POLYGON_POINTS; i++) spread.push(open[Math.floor(i * step)]);
+  return spread;
+}
+
+/** Drop any point that sits exactly on the line between its neighbours. */
+function dropCollinear(points: Array<[number, number]>): Array<[number, number]> {
+  if (points.length < 3) return points;
+  const out: Array<[number, number]> = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const [ax, ay] = out[out.length - 1];
+    const [bx, by] = points[i];
+    const [cx, cy] = points[i + 1];
+    if ((bx - ax) * (cy - ay) !== (by - ay) * (cx - ax)) out.push(points[i]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+/** Perpendicular distance from `p` to the segment `a`-`b`. */
+function distanceToSegment(
+  p: [number, number], a: [number, number], b: [number, number],
+): number {
+  const [px, py] = p; const [ax, ay] = a; const [bx, by] = b;
+  const dx = bx - ax; const dy = by - ay;
+  if (dx === 0 && dy === 0) return Math.hypot(px - ax, py - ay);
+  const along = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(px - (ax + along * dx), py - (ay + along * dy));
+}
+
+/** Ramer-Douglas-Peucker: keep the points that carry the silhouette. */
+function douglasPeucker(
+  points: Array<[number, number]>, tolerance: number,
+): Array<[number, number]> {
+  if (points.length < 3) return points;
+
+  let worst = 0;
+  let at = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = distanceToSegment(points[i], points[0], points[points.length - 1]);
+    if (distance > worst) { worst = distance; at = i; }
+  }
+
+  if (worst <= tolerance) return [points[0], points[points.length - 1]];
+
+  const left = douglasPeucker(points.slice(0, at + 1), tolerance);
+  const right = douglasPeucker(points.slice(at), tolerance);
+  return [...left.slice(0, -1), ...right];
+}
+
 function instruction(opcode: string, values: number[]): RipInstruction {
   const args = encodeRipArgs(opcode, values);
   return { opcode, args, terminator: '', start: 0, end: 0 };
@@ -502,10 +589,31 @@ export function svgToRip(svg: string): SvgToRipResult {
   const seen = new Set<string>();
   const out: RipInstruction[] = [];
   let colour = -1;
+  let fillColour = -1;
 
   const setColour = (rgb: [number, number, number]): void => {
     const index = nearestEga(rgb[0], rgb[1], rgb[2]);
     if (index !== colour) { out.push(instruction('c', [index])); colour = index; }
+  };
+
+  /**
+   * The colour a FILLED shape is filled with, which is not the drawing colour.
+   *
+   * `p` fills with the fill style and outlines in the drawing colour, and BGI
+   * starts at `{ style: SOLID_FILL, color: WHITE }` (vendor/BGI.js:169). So
+   * setting only `c` drew every letter of a logo as a WHITE shape with a
+   * coloured outline round it - "progress but it renders broken" with a pink
+   * keyline round white glyphs (sysop, 2026-09-14).
+   *
+   * SOLID_FILL is pattern 1 (vendor/BGI.js:87). Nothing here emits a pattern
+   * other than solid: an SVG fill is a flat colour, and a dither would be a
+   * different picture rather than a closer one.
+   */
+  const setFillColour = (rgb: [number, number, number]): void => {
+    const index = nearestEga(rgb[0], rgb[1], rgb[2]);
+    if (index === fillColour) return;
+    out.push(instruction('S', [SOLID_FILL, index]));
+    fillColour = index;
   };
 
   const clampX = (v: number): number => Math.max(0, Math.min(RIP_WIDTH - 1, Math.round(v)));
@@ -527,19 +635,26 @@ export function svgToRip(svg: string): SvgToRipResult {
       if (!last || last[0] !== point[0] || last[1] !== point[1]) kept.push(point);
     }
     if (kept.length < 2) return;
+    // RIP will not draw a polygon over its limit at all, so the shape is
+    // brought within it here rather than written and silently skipped.
+    const shape = withinPolygonLimit(kept);
+    if (shape.length < 2) return;
 
     const fill = parseColour(style.fill);
-    if (fill && closed && kept.length >= 3) {
+    if (fill && closed && shape.length >= 3) {
+      // BOTH: `p` outlines in the drawing colour and fills with the fill
+      // colour, so a shape whose outline alone was set came out white.
       setColour(fill);
-      out.push(instruction('p', [kept.length, ...kept.flat()]));
+      setFillColour(fill);
+      out.push(instruction('p', [shape.length, ...shape.flat()]));
     }
     const stroke = parseColour(style.stroke);
     if (stroke) {
       setColour(stroke);
-      if (kept.length === 2) {
-        out.push(instruction('L', [kept[0][0], kept[0][1], kept[1][0], kept[1][1]]));
+      if (shape.length === 2) {
+        out.push(instruction('L', [shape[0][0], shape[0][1], shape[1][0], shape[1][1]]));
       } else {
-        out.push(instruction('l', [kept.length, ...kept.flat()]));
+        out.push(instruction('l', [shape.length, ...shape.flat()]));
       }
     }
   };

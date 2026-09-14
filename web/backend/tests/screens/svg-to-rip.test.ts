@@ -21,7 +21,11 @@ import {
   RIP_WIDTH,
   RIP_HEIGHT,
 } from '../../src/screens/svg-to-rip';
-import { decodeRipArgs, parseRipDocument } from '../../src/screens/rip-document';
+import {
+  decodeRipArgs,
+  parseRipDocument,
+  RIP_MAX_POLYGON_POINTS,
+} from '../../src/screens/rip-document';
 
 const BOARD = path.resolve(__dirname, '../../../..');
 const UPTOWN = path.join(BOARD, '!ASCII-Art/rip/uPtOwN.svg');
@@ -161,5 +165,84 @@ describe('the pieces', () => {
     expect(nearestEga(0, 0, 0)).toBe(0);
     expect(nearestEga(201, 50, 92)).toBe(12);
     expect(nearestEga(128, 128, 128)).toBe(7);
+  });
+});
+
+/**
+ * WHAT THE SYSOP SAW: "progress but it renders broken" - white letters with a
+ * pink keyline, and one letter missing (2026-09-14). Two separate defects,
+ * both only visible once a real export reached a real renderer.
+ */
+describe('the scene a RIP reader can actually draw', () => {
+  const svg = fs.readFileSync(UPTOWN, 'utf8');
+
+  /*
+   * `p` outlines in the DRAWING colour and fills with the FILL colour, and
+   * BGI starts at solid WHITE (packages/terminal/src/rip/vendor/BGI.js:169).
+   * Setting only `c` drew the logo as white glyphs with a coloured edge.
+   */
+  it('sets the fill colour, not only the colour it outlines with', () => {
+    const scene = instructions(svgToRip(svg).text);
+
+    const fillStyle = scene.find(one => one.opcode === 'S');
+    expect(fillStyle).toBeDefined();
+    const colour = scene.find(one => one.opcode === 'c')!.args[0];
+    // Solid pattern, and the same colour the shape is drawn in - a filled
+    // letter is one colour, not an outline round a white middle.
+    expect(fillStyle!.args[0]).toBe(1);
+    expect(fillStyle!.args[1]).toBe(colour);
+  });
+
+  it('fills every polygon it draws with that colour', () => {
+    const scene = instructions(svgToRip(svg).text);
+
+    // No polygon may be drawn before a fill colour has been chosen.
+    const firstFill = scene.findIndex(one => one.opcode === 'S');
+    const firstPoly = scene.findIndex(one => one.opcode === 'p');
+    expect(firstFill).toBeGreaterThanOrEqual(0);
+    expect(firstFill).toBeLessThan(firstPoly);
+  });
+
+  /*
+   * RIPscrip allows 512 points in a polygon and a reader that meets a longer
+   * one draws NOTHING. The flattener worked in SVG units on a 640x350 canvas
+   * and produced 707 for one letter, so that letter silently vanished.
+   */
+  it('keeps every polygon inside the limit a RIP reader will read', () => {
+    const text = svgToRip(svg).text;
+
+    for (const line of parseRipDocument(text).lines) {
+      for (const one of line.instructions) {
+        if (one.opcode !== 'p' && one.opcode !== 'l') continue;
+        const decoded = decodeRipArgs(one.opcode, one.args);
+        // null is the reader refusing it - which is the renderer's answer too.
+        expect(decoded).not.toBeNull();
+        expect(decoded![0] as number).toBeLessThanOrEqual(RIP_MAX_POLYGON_POINTS);
+      }
+    }
+  });
+
+  it('draws the same number of shapes after thinning them', () => {
+    // Six paths, one of which has two subpaths: seven filled shapes. Losing
+    // points must not lose a LETTER.
+    const polygons = instructions(svgToRip(svg).text).filter(one => one.opcode === 'p');
+
+    expect(polygons).toHaveLength(7);
+  });
+
+  it('spends points on the corners, not evenly along the outline', () => {
+    // A dense curve that is mostly a straight run: the straight part costs
+    // almost nothing once collinear points go, so the shape survives whole
+    // rather than being decimated.
+    const points: string[] = [];
+    for (let x = 0; x <= 600; x += 1) points.push(`${x},10`);
+    for (let x = 600; x >= 0; x -= 1) points.push(`${x},200`);
+    const dense = `<svg viewBox="0 0 640 350"><path fill="#ff0000" d="M${points.join(' L')} Z"/></svg>`;
+
+    const polygon = instructions(svgToRip(dense).text).find(one => one.opcode === 'p')!;
+
+    expect(polygon.args[0] as number).toBeLessThanOrEqual(RIP_MAX_POLYGON_POINTS);
+    // Two straight runs and their corners - not 512 points spread along them.
+    expect(polygon.args[0] as number).toBeLessThan(12);
   });
 });

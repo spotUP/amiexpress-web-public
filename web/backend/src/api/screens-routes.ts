@@ -644,6 +644,21 @@ function resolutionsLost(baseDir: string, before: ReturnType<typeof buildScreenI
  * it, the editor's PUT did not, and the PUT is what the "add a RIP version"
  * button goes through.
  */
+/**
+ * Bytes that are an SVG document, whatever the picker called the file.
+ *
+ * Sniffed rather than trusted from a filename: the refusal these bytes used
+ * to earn came from the TARGET's extension, and the source's name never
+ * reached the board at all. A leading XML declaration or comment is normal,
+ * so the check is "an `<svg` element starts the document".
+ */
+export function looksSvg(bytes: Buffer): boolean {
+  const head = bytes.subarray(0, 1024).toString('utf8').trimStart();
+  if (head.startsWith('<svg')) return true;
+  if (!head.startsWith('<?xml') && !head.startsWith('<!--') && !head.startsWith('<!DOCTYPE')) return false;
+  return /<svg[\s>]/i.test(bytes.subarray(0, 4096).toString('utf8'));
+}
+
 export function ripMismatch(rel: string, bytes: Buffer): string | null {
   const looksRip = bytes.subarray(0, 2).toString('latin1') === '!|';
   const namedRip = rel.toLowerCase().endsWith('.rip');
@@ -676,7 +691,36 @@ screensRouter.put('/file', (req: Request, res: Response) => {
 
   // Latin1 both ways: a screen carries Amiga high-bit bytes, and a UTF-8 round
   // trip turns one into U+FFFD.
-  const uploaded = Buffer.from(content, 'base64').toString('latin1');
+  const raw = Buffer.from(content, 'base64');
+  let uploaded = raw.toString('latin1');
+
+  /*
+   * AN SVG HEADED FOR A `.rip` IS CONVERTED, wherever it came from.
+   *
+   * This rule was written into the artist dialog's file pickers, which is
+   * the wrong place for it: the dialog has three pickers, the screen manager
+   * has two more, and each one that was missed answered the sysop with
+   * "Node0/BBSTITLE.rip: The target is a .rip but these bytes are not RIP".
+   * It was fixed three times in one day, once per door, and the fourth door
+   * was still shut (2026-09-14).
+   *
+   * "An SVG written to a .rip slot becomes RIP" is a property of THIS
+   * ENDPOINT - the one thing every picker, present and future, already goes
+   * through - so it lives here and the dialogs keep their own conversion
+   * only for the progress and the loss report.
+   */
+  if (looksSvg(raw) && targets.some(target => target.toLowerCase().endsWith('.rip'))) {
+    try {
+      // UTF-8: an SVG is XML, and its text is not Amiga bytes.
+      uploaded = svgToRip(raw.toString('utf8')).text;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: `That SVG could not be read: ${(error as Error).message}`,
+      });
+    }
+  }
+
   for (const target of targets) {
     const mismatch = ripMismatch(target, Buffer.from(uploaded, 'latin1'));
     if (mismatch) return res.status(400).json({ success: false, error: `${target}: ${mismatch}` });

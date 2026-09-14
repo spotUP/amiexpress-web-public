@@ -206,13 +206,23 @@ export type RipArgValue = number | string;
  * is a fact about the command, not a failure: the document keeps its bytes
  * either way.
  */
+/**
+ * The most points one RIP polygon may carry.
+ *
+ * RIPscrip's own limit. A reader that meets a longer one cannot draw it, so a
+ * writer that emits one has written a shape nothing will render - which is
+ * what a 707-point letter from the SVG converter turned out to be
+ * (2026-09-14). Exported so the writer and the reader agree on the number.
+ */
+export const RIP_MAX_POLYGON_POINTS = 512;
+
 export function decodeRipArgs(opcode: string, args: string): RipArgValue[] | null {
   const fmt = RIP_ARG_FORMATS[opcode];
   if (fmt === undefined) return null;
   if (fmt === 'POLY') {
     const npoints = decodeMegaNum(args.slice(0, 2));
     const out: RipArgValue[] = [npoints];
-    if (!Number.isFinite(npoints) || npoints > 512) return null;
+    if (!Number.isFinite(npoints) || npoints > RIP_MAX_POLYGON_POINTS) return null;
     for (let n = 0; n < npoints * 2; n++) {
       out.push(decodeMegaNum(args.substr(n * 2 + 2, 2)));
     }
