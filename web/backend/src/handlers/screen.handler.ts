@@ -2227,7 +2227,34 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // (inline mode emits content directly and sets parsed='', breaking wipe animation)
     // Inline MCI stays disabled whenever a wipe code is present, animation or
     // not: the PETSCII reflow below needs the whole screen in `parsed` too.
-    const mciSocket = wipeCodePresent ? undefined : socket;
+    /*
+     * LONG PLAIN ART PAGINATES, and it could not while it was drawn inline.
+     *
+     * Inline mode emits the screen DURING the parse, chunk by chunk, and the
+     * only thing that can stop it is a `~SP` the artist typed. So a screen
+     * with no `~SP` and more lines than the caller's screen simply scrolled:
+     * `Bulletins/bull6.txt` is 38 lines, a phone is 25, and thirteen lines of
+     * a last-callers bulletin went past before the caller could read them
+     * (sysop, 2026-09-14, with a screenshot of its tail).
+     *
+     * The NON-inline path has always paginated - page, `(Pause)...More
+     * (y/n/ns)?`, the `n` abort and the `ns` dump, all of it - so a screen
+     * that needs paging takes that path instead.
+     *
+     * ONLY PLAIN ART. A screen carrying `~CC_`, `~SS_`, `~SR_`, `~SX_`, `~XI`
+     * or `~SP` depends on inline semantics - commands run in document order,
+     * includes draw where they stand, the pause carries its own remainder -
+     * and those keep the inline path whatever their length. What is left is
+     * art with at most a `~f` in it, which is what a long bulletin is.
+     */
+    const inlineOnlyCodes = /~(?:CC_|SS_|SR_|SX_|XI|SP)/.test(contentForMci);
+    const artLines = contentForMci.split('\n').length;
+    const callerLines = session?.screenHeight || 25;
+    const needsPaging = !inlineOnlyCodes && artLines > callerLines;
+    const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
+    if (needsPaging && !wipeCodePresent) {
+      screenDebug(`[displayScreen] ${screenName}: ${artLines} lines over ${callerLines} - paginating instead of streaming inline`);
+    }
     if (wipeCodePresent) {
       contentForMci = earlyWipeResult.content; // Remove wipe code from content before MCI processing
       console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`
