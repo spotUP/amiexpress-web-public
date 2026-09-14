@@ -100,7 +100,7 @@ export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = 
       }
       if (wantReverse !== reverse) { out.push(wantReverse ? RVS_ON : RVS_OFF); reverse = wantReverse; }
 
-      out.push(screenCodeToPetscii(code & 0x7f));
+      out.push(seqByteFor(code & 0x7f));
     }
 
     // Reverse never crosses the end of a row: a C64 turns it off at the end
@@ -122,6 +122,32 @@ export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = 
   }
 
   return Uint8Array.from(out);
+}
+
+/**
+ * The PETSCII byte this writer chooses for a screen code.
+ *
+ * A C64 has TWO bytes for every screen code in $40-$5F - the low mirror
+ * $60-$7F and the shifted range $C0-$DF - and they draw the same glyph in
+ * both banks. `screenCodeToPetscii` answers the shifted one, which is a
+ * correct answer and the wrong one for a FILE.
+ *
+ * `~` ($7E) and `|` ($7C) live in that band. They are express.e's MCI opt-in
+ * byte, tested on a `.seq`'s FIRST byte (express.e:6800-6806, implemented at
+ * petscii-screen.render.ts:252), and the default MCI terminator. Written as
+ * $DE and $DC, every token an artist authors in the studio reaches
+ * `preparePetsciiSeq` as bytes it does not recognise: the gate never opens
+ * and the screen prints the token's letters as art. Nothing throws and
+ * nothing logs, and the round trip stays green either way - which is why this
+ * needed a test that names the BYTE rather than the picture.
+ *
+ * So the writer prefers the LOW mirror. The picture is unchanged on a real
+ * C64; the file becomes byte-compatible with the ASCII the MCI tokenizer
+ * reads.
+ */
+function seqByteFor(screenCode: number): number {
+  if (screenCode >= 0x40 && screenCode <= 0x5f) return screenCode + 0x20;
+  return screenCodeToPetscii(screenCode);
 }
 
 /** A cell nothing is drawn in: a space, in no reverse. */

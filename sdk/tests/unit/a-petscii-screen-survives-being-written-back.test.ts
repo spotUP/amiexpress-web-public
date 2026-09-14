@@ -121,3 +121,50 @@ describe('writing a PETSCII screen back out', () => {
     expect(render(written).charsetBank).toBe(1);
   });
 });
+
+/**
+ * THE BYTE A GLYPH IS WRITTEN AS, and it is not a free choice.
+ *
+ * A C64 has TWO PETSCII bytes for every screen code in $40-$5F: the low
+ * mirror $60-$7F and the shifted range $C0-$DF. They draw the same glyph in
+ * both banks, so a round trip is green either way - which is exactly why this
+ * shipped wrong and nothing caught it.
+ *
+ * `~` ($7E) and `|` ($7C) live in that band. They are express.e's MCI opt-in
+ * byte, tested on a `.seq`'s FIRST byte (express.e:6800-6806,
+ * petscii-screen.render.ts:252), and the default MCI terminator. Written as
+ * $DE and $DC, every token an artist authors in the studio reaches
+ * `preparePetsciiSeq` as bytes it does not recognise: the gate never opens and
+ * the screen prints the token's letters as art. Nothing throws and nothing
+ * logs.
+ */
+describe('the bytes a tilde and a bar are written as', () => {
+  /** A screen holding exactly one screen code, at 0,0, in white. */
+  function oneCell(screenCode: number): PetsciiMachineState {
+    const machine = new PetsciiMachine();
+    machine.state.screen[0] = screenCode;
+    machine.state.colorRam[0] = 1; // white
+    return machine.state;
+  }
+
+  it('writes the pi glyph as 0x7E, the byte the MCI gate reads', () => {
+    const written = writeSeq(oneCell(0x5e), { declareCharset: false });
+    expect([...written]).toContain(0x7e);
+    expect([...written]).not.toContain(0xde);
+  });
+
+  it('writes screen code 0x5C as 0x7C, the default MCI terminator', () => {
+    const written = writeSeq(oneCell(0x5c), { declareCharset: false });
+    expect([...written]).toContain(0x7c);
+    expect([...written]).not.toContain(0xdc);
+  });
+
+  it('still reads back to the same screen codes across the whole band', () => {
+    for (let code = 0x40; code <= 0x5f; code++) {
+      const written = writeSeq(oneCell(code), { declareCharset: false });
+      const back = new PetsciiMachine();
+      back.feed(written);
+      expect(back.state.screen[0]).toBe(code);
+    }
+  });
+});
