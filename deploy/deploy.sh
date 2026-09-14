@@ -473,6 +473,51 @@ if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || ech
   fi
 fi
 
+# A LOGOFF BATCH IN FLIGHT IS WORK A RECREATE WOULD THROW AWAY.
+#
+# The batch is seven 68K doors run one at a time, and it is what
+# rebuilds every bulletin on the board. It deliberately outlives
+# the caller who triggered it (the G logoff waits 3s and drops
+# the line), so it is normally running with NOBODY on the board -
+# precisely when the caller gate above says deploying is safe.
+#
+# On 2026-09-14 that is exactly what happened: the batch ran for
+# the first time, got as far as MultiTop, and a deploy recreated
+# the container mid-door. The bulletins were unchanged before and
+# stayed unchanged after, and nothing in the pipeline knew.
+#
+# So wait for it, with a cap - the per-door timeout is 300s and
+# there are seven of them, but a batch that is genuinely wedged
+# must not block deploys for ever. Past the cap, deploy anyway
+# and say so: the next logoff runs the batch again, and a stuck
+# batch is its own bug rather than a reason to stop shipping.
+# `force=true` skips the wait entirely, like it skips the caller
+# gate.
+BATCH_WAIT_SECONDS="${BATCH_WAIT_SECONDS:-420}"
+if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ] \
+   && [ "$FORCE_DEPLOY" != "true" ]; then
+  waited=0
+  while [ "$waited" -lt "$BATCH_WAIT_SECONDS" ]; do
+    BATCH=$(curl -s --max-time 5 http://127.0.0.1:3001/health \
+      | sed -n 's/.*"batch":\([0-9]*\).*/\1/p')
+    # A board that does not answer, or one built before /health
+    # carried `batch`, reports nothing - that is not a reason to
+    # wait.
+    [ -n "$BATCH" ] || break
+    [ "$BATCH" -gt 0 ] 2>/dev/null || break
+    if [ "$waited" -eq 0 ]; then
+      echo "== a logoff batch is running ($BATCH queued); waiting up to ${BATCH_WAIT_SECONDS}s =="
+    fi
+    sleep 10
+    waited=$((waited + 10))
+  done
+  if [ "$waited" -ge "$BATCH_WAIT_SECONDS" ]; then
+    echo "== batch still running after ${BATCH_WAIT_SECONDS}s; deploying anyway =="
+  elif [ "$waited" -gt 0 ]; then
+    echo "== batch finished after ${waited}s; deploying =="
+  fi
+fi
+
 NOTICE_SECONDS=60
 if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ]; then
   echo "== restart notice: SIGUSR1, then ${NOTICE_SECONDS}s countdown =="

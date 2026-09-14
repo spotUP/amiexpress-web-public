@@ -13,6 +13,7 @@ import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
 import { sessions } from './session-manager';
 import { ftpCallersOnline } from '../ftp/ftp-presence';
+import { batchQueueDepth } from '../services/batch-scheduler';
 import { BBSState } from '../constants/bbs-states';
 
 /**
@@ -259,6 +260,22 @@ app.get('/health', (req, res) => {
     timestamp: getSystemTime().toISOString(),
     revision: getRepoRevision(),
     callers: loggedOn.length + ftp.length,
+    /*
+     * `batch` is here for the same reason `callers` is: so a DEPLOY can
+     * refuse to interrupt something.
+     *
+     * The logoff batch is seven 68K doors, run one at a time, and it is what
+     * rebuilds every bulletin on the board. It outlives the caller
+     * deliberately (handleGoodbyeCommand's 3 s grace), so it is usually
+     * running with NOBODY on the board - which is exactly when the deploy
+     * decides it is safe to recreate the container. On 2026-09-14 that is
+     * what happened: the batch finally ran for the first time, reached
+     * MultiTop, and a deploy killed it mid-door. The bulletins had not
+     * changed since 18:40 and still had not afterwards.
+     *
+     * Zero means nothing is queued or running and a recreate costs nothing.
+     */
+    batch: batchQueueDepth(),
     // Named, because "3 callers" and "3 callers, one of them you" are
     // different decisions for whoever is about to deploy.
     online: [
