@@ -344,6 +344,68 @@ interface Style {
   transform: Matrix;
 }
 
+/**
+ * What a hole is punched to: the RIP canvas's own black.
+ *
+ * RIP has no transparency, so a counter has to be PAINTED rather than left
+ * out. Black is what the canvas starts as and what every screen on this board
+ * sits on; a screen that later paints a background behind this art is the one
+ * case this cannot express.
+ */
+const BACKGROUND_RGB: [number, number, number] = [0, 0, 0];
+
+/**
+ * Is `inner` inside `outer`?
+ *
+ * The BOX first, and not only because it is cheap: a centroid alone is not an
+ * ordering. A square with a square hole has both centroids at the same point,
+ * so each run reads as inside the other and BOTH come out holes - which is
+ * what the donut test caught. A box that fits inside another cannot also
+ * contain it, so the containment is asymmetric where it has to be.
+ *
+ * Then the centroid against the outline, because a bounding box says nothing
+ * about a concave shape: the box of a `C` contains the box of a dot that sits
+ * in its mouth, and that dot is not a counter.
+ */
+function containsRun(
+  outer: Array<[number, number]>,
+  inner: Array<[number, number]>,
+): boolean {
+  if (outer.length < 3 || inner.length === 0) return false;
+
+  const box = (run: Array<[number, number]>) => {
+    let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+    for (const [x, y] of run) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return { minX, minY, maxX, maxY };
+  };
+  const o = box(outer);
+  const i = box(inner);
+  if (i.minX < o.minX || i.minY < o.minY || i.maxX > o.maxX || i.maxY > o.maxY) return false;
+  // Same box both ways is the same shape, not a nesting.
+  if (i.minX === o.minX && i.minY === o.minY && i.maxX === o.maxX && i.maxY === o.maxY) return false;
+
+  let cx = 0;
+  let cy = 0;
+  for (const [x, y] of inner) { cx += x; cy += y; }
+  return pointInPolygon(cx / inner.length, cy / inner.length, outer);
+}
+
+/** Crossing number: odd is inside. */
+function pointInPolygon(x: number, y: number, poly: Array<[number, number]>): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 /** An instruction, built from an opcode and its numbers. */
 /**
  * BGI's solid fill pattern (vendor/BGI.js:87, index 01 of fill_patterns).
@@ -442,12 +504,56 @@ function instruction(opcode: string, values: number[]): RipInstruction {
  * Every RIP line opens with `!|` and holds instructions separated by `|`.
  * `rip-document.ts` serialises that shape; this only has to produce it.
  */
+/**
+ * The longest PHYSICAL line this writer emits, before a continuation.
+ *
+ * One instruction per line was supposed to keep lines short, and does for
+ * everything except a polygon: a 409-point letter is 1,642 characters, where
+ * the longest line in this board's entire existing RIP corpus is 290
+ * (measured, 2026-09-14). RIPtermJS streams bytes through a state machine and
+ * has no line limit, which is why nothing complained - but a terminal with a
+ * fixed line buffer is under no obligation to be so forgiving, and RIP art is
+ * meant to be portable: "are we doing something half assed now that syncterm
+ * will not render correct?" (sysop, 2026-09-14).
+ *
+ * 200 is comfortably under the 255 a byte-oriented reader is likely to hold
+ * and under everything the corpus actually contains.
+ */
+const MAX_RIP_LINE = 200;
+
+/**
+ * A logical RIP line, folded with backslash continuations.
+ *
+ * `\` immediately before the line ending joins the next line, which is how
+ * every long instruction in real RIP art is written - RIPtermJS reads it
+ * (ST_BSLASH in its state machine) and so does `parseRipDocument`, through
+ * `escapeLength`, so the document model still sees ONE line.
+ *
+ * Never folded straight after a backslash: that would split an escape in
+ * half and change what it escapes.
+ */
+function foldRipLine(raw: string): string {
+  if (raw.length <= MAX_RIP_LINE) return raw;
+  const out: string[] = [];
+  let at = 0;
+  while (raw.length - at > MAX_RIP_LINE) {
+    let take = MAX_RIP_LINE;
+    while (take > 1 && raw[at + take - 1] === '\\') take -= 1;
+    out.push(raw.slice(at, at + take));
+    at += take;
+  }
+  out.push(raw.slice(at));
+  return out.join('\\\r\n');
+}
+
 function ripLines(instructions: RipInstruction[]): RipDocument {
   const lines: RipLine[] = [];
-  // One instruction per line keeps a line inside the 80-odd characters a
-  // modem-era file used, and makes a diff readable when art is re-exported.
+  // One instruction per logical line, folded where it is too long for a
+  // byte-oriented reader to hold. A diff stays readable when art is
+  // re-exported, and the file stays portable.
   for (const one of instructions) {
-    lines.push({ raw: `!|${one.opcode}${one.args}`, eol: '\r\n', rip: true, instructions: [one] });
+    const raw = foldRipLine(`!|${one.opcode}${one.args}`);
+    lines.push({ raw, eol: '\r\n', rip: true, instructions: [one] });
   }
   return { lines };
 }
@@ -623,7 +729,13 @@ export function svgToRip(svg: string): SvgToRipResult {
   const root: Style = { fill: undefined, stroke: undefined, transform: canvas };
 
   /** A polyline, drawn as a fill or as a stroke, in device coordinates. */
-  const emitPolyline = (points: Array<[number, number]>, style: Style, closed: boolean): void => {
+  const emitPolyline = (
+    points: Array<[number, number]>,
+    style: Style,
+    closed: boolean,
+    /** Fill this shape with a colour of our choosing - see `emitPath`. */
+    fillOverride?: [number, number, number],
+  ): void => {
     const device = points.map(([x, y]) => {
       const [dx, dy] = apply(style.transform, x, y);
       return [clampX(dx), clampY(dy)] as [number, number];
@@ -640,7 +752,7 @@ export function svgToRip(svg: string): SvgToRipResult {
     const shape = withinPolygonLimit(kept);
     if (shape.length < 2) return;
 
-    const fill = parseColour(style.fill);
+    const fill = fillOverride ?? parseColour(style.fill);
     if (fill && closed && shape.length >= 3) {
       // BOTH: `p` outlines in the drawing colour and fills with the fill
       // colour, so a shape whose outline alone was set came out white.
@@ -657,6 +769,37 @@ export function svgToRip(svg: string): SvgToRipResult {
         out.push(instruction('l', [shape.length, ...shape.flat()]));
       }
     }
+  };
+
+  /**
+   * A path's subpaths, with its COUNTERS knocked back out.
+   *
+   * SVG fills a path by the even-odd rule, so the bowl of a `P` is a second
+   * subpath INSIDE the first and the renderer leaves it empty. RIP has no
+   * such rule: `p` fills each polygon solid on its own, so drawing the inner
+   * one in the same colour simply fills the hole in - "the P is missing the
+   * hole in the P" (sysop, 2026-09-14), the last thing wrong with his logo
+   * after the fill colour and the point limit.
+   *
+   * Nesting is counted and the rule applied here instead: a subpath inside an
+   * odd number of others is a hole, drawn LAST in the background colour over
+   * the solid that swallowed it. Depth rather than a plain inside/outside
+   * test, because a counter can hold an island of its own.
+   */
+  const emitPath = (
+    runs: Array<Array<[number, number]>>,
+    style: Style,
+    closed: boolean,
+  ): void => {
+    if (runs.length === 1) { emitPolyline(runs[0], style, closed); return; }
+
+    const depths = runs.map((run, i) =>
+      runs.reduce((depth, other, j) => (i !== j && containsRun(other, run) ? depth + 1 : depth), 0));
+
+    // Solids first, holes over them: a hole drawn before the shape that
+    // swallows it is simply overwritten.
+    runs.forEach((run, i) => { if (depths[i] % 2 === 0) emitPolyline(run, style, closed); });
+    runs.forEach((run, i) => { if (depths[i] % 2 === 1) emitPolyline(run, style, closed, BACKGROUND_RGB); });
   };
 
   const num = (attrs: Record<string, string>, name: string, fallback = 0): number => {
@@ -679,10 +822,7 @@ export function svgToRip(svg: string): SvgToRipResult {
 
     switch (tag) {
       case 'path':
-        for (const run of flattenPath(attrs.d ?? '')) {
-          const closed = /[zZ]\s*$/.test(attrs.d ?? '');
-          emitPolyline(run, style, closed);
-        }
+        emitPath(flattenPath(attrs.d ?? ''), style, /[zZ]\s*$/.test(attrs.d ?? ''));
         break;
       case 'polygon':
       case 'polyline': {

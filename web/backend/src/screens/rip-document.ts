@@ -216,9 +216,27 @@ export type RipArgValue = number | string;
  */
 export const RIP_MAX_POLYGON_POINTS = 512;
 
-export function decodeRipArgs(opcode: string, args: string): RipArgValue[] | null {
+/**
+ * A continuation is not an argument.
+ *
+ * `\` immediately before the line ending joins the next line, and every long
+ * instruction in real RIP art is written that way. The bytes belong to the
+ * FILE, not to the command: a reader that leaves them in `args` decodes the
+ * backslash and the newline as MegaNum digits and every coordinate after the
+ * fold comes out shifted. RIPtermJS drops them in its byte state machine
+ * (ST_BSLASH) before a command ever sees them; this is the same rule, applied
+ * where this module decodes.
+ *
+ * The raw line keeps its bytes, so a document still round-trips unchanged.
+ */
+function unfoldContinuations(args: string): string {
+  return args.replace(/\\\r?\n/g, '');
+}
+
+export function decodeRipArgs(opcode: string, rawArgs: string): RipArgValue[] | null {
   const fmt = RIP_ARG_FORMATS[opcode];
   if (fmt === undefined) return null;
+  const args = unfoldContinuations(rawArgs);
   if (fmt === 'POLY') {
     const npoints = decodeMegaNum(args.slice(0, 2));
     const out: RipArgValue[] = [npoints];
@@ -607,6 +625,101 @@ export function removeRipHotspot(doc: RipDocument, spot: { line: number; index: 
     .join('');
   lines[spot.line] = { ...line, raw, instructions: splitInstructions(raw) };
   return { lines };
+}
+
+/**
+ * How RIP draws a button: `1B`, RIP_BUTTON_STYLE.
+ *
+ * One style is in force at a time and every `1U` after it is drawn with it,
+ * which is why this is a property of the SCREEN rather than of each button.
+ *
+ * The field names are RIPtermJS's own (vendor/ripterm.js, the `1B` handler),
+ * given their meanings here: `dfore`/`dback` are the label and its shadow,
+ * `bright`/`dark` are the two bevel edges, `surface` is the face. Every
+ * colour is an EGA index, 0-15.
+ */
+export interface RipButtonStyle {
+  /** Where the instruction lives, when the screen already has one. */
+  line?: number;
+  index?: number;
+  width: number;
+  height: number;
+  orientation: number;
+  flags: number;
+  bevelSize: number;
+  /** The label, and the shadow behind it. */
+  labelColour: number;
+  labelShadowColour: number;
+  /** The two bevel edges: lit and shaded. */
+  brightColour: number;
+  darkColour: number;
+  /** The button's face. */
+  surfaceColour: number;
+  group: number;
+  flags2: number;
+  underlineColour: number;
+  cornerColour: number;
+}
+
+/** The order `1B` writes its fourteen arguments in. */
+const BUTTON_STYLE_FIELDS = [
+  'width', 'height', 'orientation', 'flags', 'bevelSize',
+  'labelColour', 'labelShadowColour', 'brightColour', 'darkColour',
+  'surfaceColour', 'group', 'flags2', 'underlineColour', 'cornerColour',
+] as const;
+
+/**
+ * The button style a screen sets, or null when it sets none.
+ *
+ * The LAST one wins, because that is what the terminal is left holding: a
+ * scene may set a style, draw some buttons and set another.
+ */
+export function readRipButtonStyle(doc: RipDocument): RipButtonStyle | null {
+  let found: RipButtonStyle | null = null;
+  doc.lines.forEach((line, lineIndex) => {
+    line.instructions.forEach((inst, index) => {
+      if (inst.opcode !== '1B') return;
+      const values = decodeRipArgs('1B', inst.args);
+      if (!values) return;
+      const style = { line: lineIndex, index } as RipButtonStyle;
+      BUTTON_STYLE_FIELDS.forEach((field, at) => {
+        (style as unknown as Record<string, number>)[field] = Number(values[at]) || 0;
+      });
+      found = style;
+    });
+  });
+  return found;
+}
+
+/**
+ * Set the screen's button style, replacing the one it has.
+ *
+ * Placed before the first button when the screen has none yet - a style
+ * written after a button does not reach it - and before the end-of-scene
+ * marker when there are no buttons at all.
+ */
+export function writeRipButtonStyle(doc: RipDocument, style: RipButtonStyle): RipDocument {
+  const values: RipArgValue[] = BUTTON_STYLE_FIELDS.map(
+    field => (style as unknown as Record<string, number>)[field] ?? 0,
+  );
+  const body = '1B' + encodeRipArgs('1B', values);
+
+  const existing = readRipButtonStyle(doc);
+  if (existing && existing.line !== undefined && existing.index !== undefined) {
+    return replaceInstruction(doc, existing.line, existing.index, body);
+  }
+
+  const raw = '!|' + body;
+  const eol = documentEol(doc);
+  const lines = doc.lines.slice();
+  const line: RipLine = { raw, eol, rip: true, instructions: splitInstructions(raw) };
+
+  const firstButton = lines.findIndex(l => l.instructions.some(i => i.opcode === '1U'));
+  if (firstButton >= 0) {
+    lines.splice(firstButton, 0, line);
+    return { lines };
+  }
+  return withHotspotLine(doc, body);
 }
 
 export interface NewRipMouseField {

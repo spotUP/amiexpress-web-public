@@ -26,6 +26,8 @@ import {
   writeRipHotspot,
   removeRipHotspot,
   addRipButton,
+  readRipButtonStyle,
+  writeRipButtonStyle,
   addRipMouseField,
   decodeRipArgs,
   encodeRipArgs,
@@ -359,5 +361,108 @@ describe('the editable subset, measured against this board', () => {
     const known = (entry: string) =>
       /BBSTITLE\.rip: /i.test(entry) || /PLAYPOOL\.RIP: /i.test(entry);
     expect(residue.filter(entry => !known(entry))).toEqual([]);
+  });
+});
+
+/**
+ * HOW a button is drawn, as opposed to where it is.
+ *
+ * `1B` is in force for every `1U` after it, so the style belongs to the
+ * screen rather than to each button. The sysop wants them styled - "they
+ * could offer styling, colord border radius etc" (2026-09-14) - and the
+ * colours live here, in the file, so they travel with the screen instead of
+ * living somewhere only this board can see.
+ */
+describe('a RIP screen s button style', () => {
+  const withStyle =
+    '!|c0F\r\n' +
+    '!|1B0A040200E8010F000F080700000F00\r\n' +
+    '!|1U0A0K2S141Y10<>Files<>F\r\n' +
+    '!|#\r\n';
+
+  it('reads the colours the screen already sets', () => {
+    const style = readRipButtonStyle(parseRipDocument(withStyle));
+
+    expect(style).not.toBeNull();
+    // Read against the same fourteen fields RIPtermJS parses.
+    expect(style!.width).toBe(10);
+    expect(style!.height).toBe(4);
+    expect(typeof style!.surfaceColour).toBe('number');
+  });
+
+  it('answers null for a screen that sets none', () => {
+    expect(readRipButtonStyle(parseRipDocument('!|c0F\r\n!|#\r\n'))).toBeNull();
+  });
+
+  it('replaces the style in place, leaving the artwork and the button alone', () => {
+    const doc = parseRipDocument(withStyle);
+    const style = readRipButtonStyle(doc)!;
+
+    const out = serializeRipDocument(writeRipButtonStyle(doc, { ...style, surfaceColour: 9 }));
+
+    const lines = out.split('\r\n');
+    expect(lines[0]).toBe('!|c0F');
+    expect(lines[2]).toBe('!|1U0A0K2S141Y10<>Files<>F');
+    expect(lines.filter(l => l.startsWith('!|1B'))).toHaveLength(1);
+    expect(readRipButtonStyle(parseRipDocument(out))!.surfaceColour).toBe(9);
+  });
+
+  it('puts a new style BEFORE the first button, or it never reaches it', () => {
+    const noStyle = '!|c0F\r\n!|1U0A0K2S141Y10<>Files<>F\r\n!|#\r\n';
+    const doc = parseRipDocument(noStyle);
+
+    const out = serializeRipDocument(writeRipButtonStyle(doc, {
+      width: 10, height: 4, orientation: 2, flags: 0, bevelSize: 1,
+      labelColour: 15, labelShadowColour: 0, brightColour: 15, darkColour: 8,
+      surfaceColour: 7, group: 0, flags2: 0, underlineColour: 15, cornerColour: 0,
+    }));
+
+    const lines = out.split('\r\n');
+    expect(lines.findIndex(l => l.startsWith('!|1B')))
+      .toBeLessThan(lines.findIndex(l => l.startsWith('!|1U')));
+  });
+
+  it('round-trips every field it wrote', () => {
+    const doc = parseRipDocument('!|c0F\r\n!|#\r\n');
+    const wanted = {
+      width: 12, height: 5, orientation: 2, flags: 3, bevelSize: 2,
+      labelColour: 14, labelShadowColour: 1, brightColour: 15, darkColour: 8,
+      surfaceColour: 9, group: 1, flags2: 0, underlineColour: 12, cornerColour: 4,
+    };
+
+    const back = readRipButtonStyle(parseRipDocument(
+      serializeRipDocument(writeRipButtonStyle(doc, wanted)),
+    ))!;
+
+    for (const [field, value] of Object.entries(wanted)) {
+      expect([field, (back as unknown as Record<string, number>)[field]]).toEqual([field, value]);
+    }
+  });
+});
+
+/**
+ * A continuation belongs to the FILE, not to the command.
+ *
+ * `\` before the line ending joins the next line. A reader that leaves those
+ * bytes in the arguments decodes the backslash and the newline as MegaNum
+ * digits, and every coordinate after the fold comes out shifted - which is
+ * exactly what happened the first time the SVG converter folded its polygons.
+ */
+describe('an instruction folded across lines', () => {
+  it('decodes to the same numbers as the unfolded one', () => {
+    const unfolded = '!|L0A0K2S14\r\n';
+    const folded = '!|L0A0K\\\r\n2S14\r\n';
+
+    const a = parseRipDocument(unfolded).lines[0].instructions[0];
+    const b = parseRipDocument(folded).lines[0].instructions[0];
+
+    expect(decodeRipArgs('L', b.args)).toEqual(decodeRipArgs('L', a.args));
+  });
+
+  it('keeps its own bytes when written back', () => {
+    const folded = '!|L0A0K\\\r\n2S14\r\n';
+
+    // The document round-trips the file it read, fold and all.
+    expect(serializeRipDocument(parseRipDocument(folded))).toBe(folded);
   });
 });
