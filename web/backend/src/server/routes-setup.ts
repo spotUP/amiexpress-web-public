@@ -17,6 +17,7 @@ import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
+import { boardRoot } from '../utils/board-root.util';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
@@ -192,7 +193,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // declaration, so resolve the same way. Mounted bare of JWT: the bot
   // token is the auth.
   app.use('/api/bot/v1', authenticateBotToken, createBotDataRouter(db, {
-    bbsRoot: process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
+    bbsRoot: boardRoot(),
   }));
 
   // ===== Bot plugin admin API - sysop JWT like every other /api/config route
@@ -256,11 +257,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
 
   // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
   const { createBullsRouter } = require('../api/bulls-routes');
-  app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(
-    process.env.BBS_DATA_DIR ? path.resolve(process.env.BBS_DATA_DIR)
-      : process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT)
-      : path.resolve(__dirname, '../../../..'),
-  ));
+  app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(boardRoot()));
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
@@ -285,8 +282,15 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   //
   // __dirname is web/backend/src/server in both dev and the container,
   // which run the TypeScript directly. BBS_ROOT overrides it if set.
-  const projectRoot = process.env.BBS_ROOT
-    ? path.resolve(process.env.BBS_ROOT)
+  // NOT boardRoot(). This is where the BUILT BUNDLES are - web/frontend/dist,
+  // web/config-app/dist, the SDK's docs - which live with the code, while the
+  // board's own files live on a volume that BBS_DATA_DIR names. Reading the
+  // board's root here would serve the admin app out of /app/data/bbs, where
+  // there is no admin app. BBS_ROOT still overrides, for a host that keeps
+  // the checkout somewhere unusual.
+  const codeRootOverride = process.env.BBS_ROOT;
+  const projectRoot = codeRootOverride
+    ? path.resolve(codeRootOverride)
     : path.resolve(__dirname, '../../../..');
 
   // Helper: Serve SPA with fallback to index.html
