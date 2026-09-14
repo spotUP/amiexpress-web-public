@@ -303,6 +303,23 @@ export const MCI_CATALOG: MciCode[] = [
     family: 'extension', argument: { kind: 'door' },
     takesWidth: false, terminator: '|', source: 'web', handledBy: 'caller',
   },
+  /*
+   * THE CLOCK NOW, which AmiExpress cannot put on a screen.
+   *
+   * express.e has the date (`~DT`) and the time the call STARTED (`~CT`,
+   * `~OT`), and between them no way to print the current time - which is most
+   * of what a teletext page's header row is: page number, board, clock. So
+   * this is ours, and it is catalogued here rather than left undescribed
+   * because the catalog is what the screens editor offers a designer.
+   *
+   * A value code like its siblings: takes a width, substituted by the
+   * tokenizer, `|` to terminate. See mci-dispatch.ts's `TM`.
+   */
+  {
+    code: 'TM', summary: 'The time right now, as the board reads its own clock',
+    family: 'extension', argument: { kind: 'none' },
+    takesWidth: true, terminator: '|', source: 'web', handledBy: 'dispatch',
+  },
 ];
 
 /** By code, for a lookup that does not walk the array. */
