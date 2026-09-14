@@ -7,7 +7,6 @@
 
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
@@ -172,10 +171,9 @@ export default function ChatTerminal() {
       return true;
     });
 
-    // Canvas renderer: xterm draws the box-drawing and block glyphs itself,
-    // and no Amiga face carries any of them (see BBSTerminal).
-    const canvasAddon = new CanvasAddon();
-    term.loadAddon(canvasAddon);
+    // No canvas renderer: its atlas draws every face glyph a device pixel
+    // short of its cell, and BBSGraphics means the DOM renderer has every
+    // glyph a screen can ask for (see BBSTerminal).
 
     // Load fit addon for responsive sizing
     const fitAddon = new FitAddon();

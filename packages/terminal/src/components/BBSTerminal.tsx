@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState, useReducer } from 'react';
 import { Terminal } from '@xterm/xterm';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
@@ -427,25 +426,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const texttvModeRef = useRef<boolean>(false);
   const texttvPrevThemeRef = useRef<any>(null);
   const texttvPrevOverflowRef = useRef<string | null>(null);
-  /*
-   * The canvas renderer, held so teletext can put it down and ANSI can keep
-   * it. Neither renderer is right for both:
-   *
-   *   - CANVAS blits a glyph that comes from the FACE at `cellWidth - 1`
-   *     device pixels, so teletext mosaics - sextants, which only the face
-   *     has - seam at every cell boundary.
-   *   - DOM draws only what the FONT has, and the Amiga faces have none of
-   *     the DOS graphics: zero of 128 box-drawing codepoints, zero of 32
-   *     block elements. xterm draws those itself under canvas; under DOM
-   *     they fall to Courier New and stop tiling - dashed borders and
-   *     banded fills in every door (sysop, 2026-09-14).
-   *
-   * So each session takes the renderer that draws ITS alphabet: canvas for
-   * eighty columns of CP437, DOM for forty columns of teletext, whose face
-   * carries its own mosaics. The real fix for both at once is a companion
-   * font that gives the Amiga faces U+2500-259F; until then, this split.
-   */
-  const canvasAddonRef = useRef<CanvasAddon | null>(null);
   const texttvPrevColsRef = useRef<number | null>(null);
   const texttvPrevRowsRef = useRef<number | null>(null);
   /** The cell size the session had before teletext fitted its own. */
@@ -1072,11 +1052,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     (terminalRef.current as any)._wheelHandler = nativeWheelHandler;
     (terminalRef.current as any)._wheelElement = xtermElement;
 
-    // The canvas renderer, so xterm draws the DOS graphics the Amiga faces
-    // do not carry. Teletext puts it down (see the texttv-mode handler).
-    const canvasAddon = new CanvasAddon();
-    term.loadAddon(canvasAddon);
-    canvasAddonRef.current = canvasAddon;
+    /*
+     * NO canvas renderer, for any session.
+     *
+     * Its texture atlas blits every glyph that comes from the FACE at
+     * `cellWidth - 1` device pixels - measured by screenshot, eighty Topaz
+     * underscores are eighty runs with a one-pixel gap between each - and no
+     * font and no size changes it. That is the artists' complaint: "det ar
+     * liksom inte tillrackligt med plats, dom overlappar".
+     *
+     * It was kept this long for one reason: it draws U+2500-259F out of a
+     * table of its own, and the Amiga faces carry none of them, so the DOM
+     * renderer had nothing to put in a box border. BBSGraphics carries them
+     * now, on the same cell at the same advance (session-font.ts:
+     * fontFamilyFor), so every glyph on the screen comes from a face and the
+     * DOM renderer can draw the lot - seamlessly, at a whole CSS cell, which
+     * seamlessSize provides.
+     */
 
     // Load fit addon for responsive sizing
     const fitAddon = new FitAddon();
@@ -2452,18 +2444,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         term.reset();
         doubleHeightRef.current.reset();
 
-        /*
-         * Put the canvas renderer down for the duration. Its atlas blits a
-         * face's glyph a device pixel short of its cell, and a teletext
-         * page is drawn in mosaics the face alone carries, so the rule read
-         * as a row of dashes. The DOM renderer tiles them - at a whole CSS
-         * cell, which seamlessTeletextSize provides.
-         */
-        if (canvasAddonRef.current) {
-          try { canvasAddonRef.current.dispose(); } catch { /* already gone */ }
-          canvasAddonRef.current = null;
-        }
-
         // True 40x25 grid (same geometry PETSCII sessions use): the board
         // draws 40 columns for this session, so the terminal shows 40.
         // Direct resize, never the 'terminal-resize' socket event - that
@@ -2496,16 +2476,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // eighty are the same mess in the other direction.
           term.reset();
           doubleHeightRef.current.reset();
-          // And the canvas renderer comes back with the eighty-column
-          // session: xterm draws the box-drawing and block glyphs there,
-          // which no Amiga face has.
-          if (!canvasAddonRef.current) {
-            try {
-              const restored = new CanvasAddon();
-              term.loadAddon(restored);
-              canvasAddonRef.current = restored;
-            } catch { /* a disposed terminal takes no addons */ }
-          }
           term.resize(texttvPrevColsRef.current, texttvPrevRowsRef.current ?? 24);
           texttvPrevColsRef.current = null;
           texttvPrevRowsRef.current = null;

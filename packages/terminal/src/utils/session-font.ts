@@ -148,9 +148,23 @@ const LINE_HEIGHTS: Record<string, number> = {
   'TopazPlus_a1200': 1.0,
 };
 
-/** The CSS font stack for a BBS font: the bitmap face, then fallbacks. */
+/**
+ * The CSS font stack for a BBS font: the bitmap face, the DOS graphics it
+ * does not have, then the generic fallbacks.
+ *
+ * Every Amiga face this board ships stops at U+00FF - zero of the 128
+ * box-drawing codepoints, zero of the 32 block elements - and CP437 art is
+ * made of exactly those. They used to come from a table inside xterm's
+ * canvas addon; BBSGraphics puts them in a FACE, drawn on the same 8x16 cell
+ * at the same 0.5em advance, so the DOM renderer can draw a screen without
+ * falling through to a font that does not tile.
+ *
+ * Per-character fallback is what makes this work: the browser takes each
+ * codepoint from the first family that has it, so the board's own letters
+ * still come from Topaz and only the graphics come from here.
+ */
 export function fontFamilyFor(font: string): string {
-  return `${font}, "Courier New", monospace`;
+  return `${font}, BBSGraphics, "Courier New", monospace`;
 }
 
 /** The xterm line height for a BBS font. Unknown fonts get the safe 1.0. */

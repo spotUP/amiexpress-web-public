@@ -129,34 +129,20 @@ function mount() {
 const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
 
-describe('each session takes the renderer that draws its alphabet', () => {
+describe('no session loads the canvas atlas', () => {
   /*
-   * Neither renderer is right for both. Canvas blits a FACE glyph at
-   * `cellWidth - 1` device pixels, so teletext mosaics - sextants, which
-   * only the face has - seam at every cell. DOM draws only what the font
-   * has, and the Amiga faces carry zero of 128 box-drawing codepoints and
-   * zero of 32 block elements; xterm draws those itself under canvas, and
-   * under DOM they fell to Courier New and stopped tiling, which dashed
-   * every door's borders (sysop, 2026-09-14).
+   * It blits every glyph that comes from the FACE at `cellWidth - 1` device
+   * pixels - eighty Topaz underscores are eighty runs with a gap between each
+   * - which is the artists' complaint. It was kept while the Amiga faces had
+   * no box drawing and no blocks; BBSGraphics carries those now, so the DOM
+   * renderer has every glyph a screen can ask for and the atlas has no
+   * remaining excuse (sysop, 2026-09-14).
    */
-  it('keeps the canvas renderer for eighty columns of CP437', () => {
-    mount();
-    expect(rec.canvasAddons).toHaveLength(1);
-    expect(rec.canvasAddons[0].disposed).toBe(false);
-  });
-
-  it('puts it down for teletext, whose face carries its own mosaics', async () => {
-    mount();
-    await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
-    expect(rec.canvasAddons[0].disposed).toBe(true);
-  });
-
-  it('takes it back up for the eighty-column session', async () => {
+  it('constructs no CanvasAddon, in any mode', async () => {
     mount();
     await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
     await act(async () => { socket.fire('texttv-mode', { enabled: false }); });
-    expect(rec.canvasAddons).toHaveLength(2);
-    expect(rec.canvasAddons[1].disposed).toBe(false);
+    expect(rec.canvasAddons).toHaveLength(0);
   });
 });
 

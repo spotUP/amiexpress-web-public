@@ -1,13 +1,16 @@
 /**
  * The Amiga faces carry no box drawing and no block elements.
  *
- * That is why an eighty-column session must keep xterm's canvas renderer:
- * xterm draws U+2500-259F itself there, and under the DOM renderer those
- * codepoints fall through to whatever the browser has, which does not tile -
- * dashed borders and banded fills in every door (sysop, 2026-09-14).
+ * For one night that meant an eighty-column session had to keep xterm's
+ * canvas renderer, which draws U+2500-259F out of a table of its own -
+ * under the DOM renderer those codepoints fell through to whatever the
+ * browser had, which does not tile: dashed borders and banded fills in every
+ * door (sysop, 2026-09-14).
  *
- * If a face ever gains them - a companion font is the proper fix for both
- * renderers at once - this test is what says the split can go.
+ * BBSGraphics carries them now (bbs-graphics-font.test.ts), so the renderer
+ * split is gone and every session draws on the DOM renderer. This test
+ * stands because the reason still does: if the fallback ever disappears from
+ * the stack, these faces will still have nothing to put in a border.
  */
 import * as fs from 'fs';
 import * as path from 'path';

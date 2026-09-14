@@ -4,6 +4,28 @@
  * Fonts are available in public/fonts/ and MUST load before terminal displays
  * NOTE: CSS variables cannot be used inside url() for @font-face declarations
  */
+/*
+ * The DOS graphics no Amiga face has: U+2500-259F, generated geometry
+ * (dev/scripts/fonts/build-bbs-graphics-font.py).
+ *
+ * xterm's canvas renderer drew these out of a table inside the addon, which
+ * is the only reason CP437 art has ever rendered here - Topaz and its
+ * siblings stop at U+00FF. That table is also what cost the artists their
+ * seam: the canvas atlas blits every glyph that comes from a FACE at
+ * `cellWidth - 1` device pixels. With the drawing in a face instead, the DOM
+ * renderer can serve the session and the seam goes with the atlas.
+ *
+ * Browser only. The wire is Latin-1 and utils/wire-encoding.util.ts folds
+ * these codepoints to Amiga ASCII before a byte is written; a real Amiga
+ * still has Topaz and nothing else.
+ */
+@font-face {
+  font-family: 'BBSGraphics';
+  src: url('/fonts/BBSGraphics.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @font-face {
   font-family: 'mosoul';
   src: url('/fonts/mOsOul_v1.0.ttf') format('truetype');

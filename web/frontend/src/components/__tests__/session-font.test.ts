@@ -46,7 +46,10 @@ describe('session font defaults', () => {
   });
 
   it('builds the BBS font stack with the bitmap face first', () => {
-    expect(fontFamilyFor('Topaz_a1200')).toBe('Topaz_a1200, "Courier New", monospace');
+    // BBSGraphics carries U+2500-259F, which no Amiga face has; per-character
+    // fallback means the letters still come from Topaz.
+    expect(fontFamilyFor('Topaz_a1200'))
+      .toBe('Topaz_a1200, BBSGraphics, "Courier New", monospace');
   });
 });
 
