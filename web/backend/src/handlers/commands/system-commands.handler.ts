@@ -77,6 +77,14 @@ export function partUploadsForCaller(session: BBSSession): string[] {
   }
 }
 
+/**
+ * How long a logging-off caller waits for the LOGOFF sys-commands before the
+ * line drops. Long enough for a logoff door that prints something; nowhere
+ * near long enough for the batch, which is the point - see the note in
+ * handleGoodbyeCommand.
+ */
+const LOGOFF_COMMAND_GRACE_MS = 3000;
+
 export async function handleGoodbyeCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // express.e:25050-25055 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
@@ -283,14 +291,44 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   try {
     // Renamed/moved: processSysCommand → runSysCommand in command-execution.handler.
     const { runSysCommand: processSysCommand } = require('../command-execution.handler');
-    await processSysCommand(socket, session, 'LOGOFF');
-    await processSysCommand(socket, session, `LOGOFF${session.nodeId || 0}`);
     // These ARE the logoff batches on this board: LOGOFF<n> resolves to
     // BBS:Batch<n>. The disconnect handler runs a mirror of them for a
-    // caller whose carrier drops and never reaches here; mark the session so
-    // it stands down rather than running the same script a second time
-    // (services/batch-scheduler.ts `logoffBatchesAlreadyRan`).
+    // caller whose carrier drops and never reaches here; mark the session
+    // BEFORE they start so it stands down rather than running the same
+    // script beside this one (services/batch-scheduler.ts
+    // `logoffBatchesAlreadyRan`). Before, the mark came after the await -
+    // harmless while the commands finished instantly, a second set of
+    // emulators once they did not.
     (session as any).logoffBatchesRan = true;
+    /*
+     * OFF THE BOARD FIRST, THEN THE PAPERWORK - the deliberate goodbye too.
+     *
+     * express.e:8222/8231 runs these before the line drops, and this port
+     * awaited them. Once LOGOFF<n> actually executes BBS:Batch<n> (it did
+     * not until 6b2506a02 - it was dispatched as a 68K door and exited at
+     * once) that is seven emulators with a 300 s budget each, and the caller
+     * sat at `Click...` for as long as they took, with the session still
+     * counted on the board. That is the "batch doors never exit" shape this
+     * board has been bitten by before, and the disconnect handler was
+     * rewritten to avoid it. The commands are SILENT on this board, so the
+     * caller loses nothing by leaving before they finish.
+     *
+     * The grace is for the quick case - a real logoff door that prints a
+     * line - not for the batch. Whatever is still running when it ends
+     * carries on in the background, serialised by the batch queue, and says
+     * so in the log.
+     */
+    const { settleWithin } = require('../../utils/settle-within');
+    const commands = (async () => {
+      await processSysCommand(socket, session, 'LOGOFF');
+      await processSysCommand(socket, session, `LOGOFF${session.nodeId || 0}`);
+    })().catch(err => {
+      console.error('[LOGOFF] Error processing LOGOFF sys-commands:', err);
+    });
+    const finished = await settleWithin(commands, LOGOFF_COMMAND_GRACE_MS);
+    if (!finished) {
+      console.log(`[LOGOFF] LOGOFF sys-commands for node ${session.nodeId || 0} outlived the caller; continuing in the background`);
+    }
   } catch (err) {
     console.error('[LOGOFF] Error processing LOGOFF sys-commands:', err);
   }

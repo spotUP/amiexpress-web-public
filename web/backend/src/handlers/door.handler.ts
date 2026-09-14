@@ -2061,8 +2061,9 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
            * have had for ages, bulls not generating when they should" (the
            * sysop, 2026-09-14).
            */
-          const { runBatchFile } = require('../services/batch-scheduler');
-          await runBatchFile(amigaDosScriptPath(door.path), session.nodeId || 1);
+          // Queued, never side by side: see runBatchFileQueued.
+          const { runBatchFileQueued } = require('../services/batch-scheduler');
+          await runBatchFileQueued(amigaDosScriptPath(door.path), session.nodeId || 1);
         } else {
           await executeAmigaDoor(socket, session, door, doorSession);
         }

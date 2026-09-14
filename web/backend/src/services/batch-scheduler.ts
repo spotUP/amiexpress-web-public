@@ -637,6 +637,80 @@ console.warn('[BatchScheduler] Skipping missing program:', parts[0]);
   await runProgram(resolvedProg, amigaArgs, redirect, nodeId);
 }
 
+/**
+ * ONE BATCH AT A TIME, ACROSS THE WHOLE BOARD.
+ *
+ * A batch file runs 68K doors - batch1 on this board is MultiTop five times,
+ * ByteKillHandler and QuickNew, each a spawned emulator with a 300 s budget.
+ * Nothing serialised them: a second logoff while the first batch was still
+ * grinding started a second set of emulators beside it, and the login path
+ * once needed a reentrancy guard for exactly this after two OOM kills (see
+ * runLoginBatches' note above). That guard went with the function; this is
+ * the one that stays, and it covers every path that runs a batch - the
+ * LOGOFF<n> sys-command and the disconnect handler's mirror alike.
+ *
+ * "we have had big issues with the batch doors never exiting in the past
+ * make sure it doesnt come back" (the sysop, 2026-09-14). A door that never
+ * exits is bounded by the per-door timeout below; a PILE of them is bounded
+ * here. And a run already waiting for the SAME file is not queued twice -
+ * three quick logoffs regenerate the bulletins once, not three times.
+ */
+let batchChain: Promise<void> = Promise.resolve();
+const batchWaiting = new Set<string>();
+let batchRunning = 0;
+
+/** How many batch runs are queued or running - for logs and tests. */
+export function batchQueueDepth(): number {
+  return batchWaiting.size + batchRunning;
+}
+
+/**
+ * The queue itself: run `work` after everything already queued, one at a time.
+ *
+ * Resolves when THIS run has finished, or at once with the run already waiting
+ * when `key` is still queued and not yet started - a run that is waiting is a
+ * run that will happen, and queueing it again only adds a copy. Never
+ * rejects: work that throws is logged and the queue moves on, because a
+ * wedged queue would stop every later logoff from regenerating anything.
+ *
+ * Kept apart from `runBatchFile` so the ordering can be tested with a
+ * controllable stand-in rather than an emulator.
+ */
+export function enqueueBatch(key: string, label: string, work: () => Promise<void>): Promise<void> {
+  if (batchWaiting.has(key)) {
+console.log(`[BatchScheduler] ${label} is already waiting; not queued twice`);
+    return batchChain;
+  }
+  batchWaiting.add(key);
+  const depth = batchQueueDepth();
+  if (depth > 1) {
+console.log(`[BatchScheduler] ${label} queued behind ${depth - 1} other batch run(s)`);
+  }
+
+  const run = batchChain.then(async () => {
+    batchWaiting.delete(key);
+    batchRunning++;
+    try {
+      await work();
+    } catch (err) {
+console.error(`[BatchScheduler] ${label} failed:`, err);
+    } finally {
+      batchRunning--;
+    }
+  });
+  batchChain = run;
+  return run;
+}
+
+/** `runBatchFile`, through the queue. Every batch path uses this. */
+export function runBatchFileQueued(batchPath: string, nodeId: number): Promise<void> {
+  return enqueueBatch(
+    `${batchPath}#${nodeId}`,
+    `${path.basename(batchPath)} for node ${nodeId}`,
+    () => runBatchFile(batchPath, nodeId),
+  );
+}
+
 export async function runBatchFile(batchPath: string, nodeId: number): Promise<void> {
   if (!fs.existsSync(batchPath)) {
     return;
@@ -726,10 +800,11 @@ console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${d
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (!fs.existsSync(candidate)) continue;
 console.log(`[BatchScheduler] Found batch file: ${candidate}`);
-    }
-    await runBatchFile(candidate, nodeId || 1);
+    // Through the queue: this mirror and the LOGOFF<n> sys-command must never
+    // run emulators side by side.
+    await runBatchFileQueued(candidate, nodeId || 1);
   }
 
 console.log(`[BatchScheduler] Logoff batches completed for node ${nodeId}`);
