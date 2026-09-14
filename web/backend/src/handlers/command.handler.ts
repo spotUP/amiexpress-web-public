@@ -824,6 +824,38 @@ console.error('[pauseDisplayFlow] Error during pause:', error);
 
 // Dependency injection setters
 export async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+  /*
+   * A PAUSE ON SCREEN MEANS THE CALLER OWES A KEY, AND THE FLOW OWES HIM TIME.
+   *
+   * This function is entered from more than one place for the same keystroke:
+   * `continueJoinAfterBull` kicks it when the join finishes, and `handleCommand`
+   * kicks it again when the pagination that ran the join reports itself done.
+   * Whichever runs first may install a pause - and the second one then walked
+   * straight over it, printing `(Pause)...Space To Resume:` and continuing in
+   * the same breath.
+   *
+   * The sysop, 2026-09-14: "there is a pause prompt but no pause". His login
+   * shows it exactly, with no keystroke between the two lines:
+   *
+   *     [DISPLAY FLOW] pause before TIP
+   *     [DISPLAY FLOW] advance state=display_menu menuPause=N
+   *     [DISPLAY FLOW] running TIP before MENU
+   *
+   * Which is my own `pause before TIP` being spent by the re-entry rather than
+   * by him - a prompt he never got the chance to answer.
+   *
+   * Asking it here rather than at each pause site is the point: the rest of
+   * this function decides WHO owes a pause, and every one of those decisions
+   * was already wrong if a pause is standing when it starts. The keypress path
+   * (`handlePaginatedScreenInput`) resumes the flow when he answers, so
+   * nothing is dropped by standing still.
+   */
+  if (session.paginatedScreen) {
+    displayFlowLog('a pause is already on screen; not advancing over it',
+      `state=${session.subState}`);
+    return;
+  }
+
   let loopCount = 0;
   const maxLoops = 20; // Prevent infinite loops
   try {
