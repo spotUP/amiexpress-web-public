@@ -282,10 +282,25 @@ export function TerminalPage(): JSX.Element {
     setBezelPx((previous) => (Math.abs(previous - bezel) < 0.5 ? previous : bezel));
   }, []);
 
+  /*
+   * How far down the screen the visible area begins, when the browser OVERLAYS
+   * its chrome instead of insetting it.
+   *
+   * `visibleTop` already told the FIT to stop counting that band as usable
+   * height, and nothing moved the content out of it - so the rows were sized
+   * to fit and then drawn underneath the bar anyway. This is the other half:
+   * the page starts below it.
+   *
+   * Zero on every browser that insets its chrome, which is all of them on a
+   * desktop, so it cannot move a session that already sits right.
+   */
+  const [viewportTop, setViewportTop] = useState<number>(() => visibleTop(window));
+
   useEffect(() => {
     const handleViewportChange = () => {
       setIsMobile(isPortraitMobile());
       setIsHandheldMode(isHandheld());
+      setViewportTop(visibleTop(window));
       refit();
     };
     window.addEventListener('resize', handleViewportChange);
@@ -610,7 +625,17 @@ export function TerminalPage(): JSX.Element {
        * is what knows the leftover - lives here; BBSTerminal keeps reading the
        * same `var(--bbs-terminal-bezel)` it always did.
        */
-      style={{ ['--bbs-terminal-bezel' as string]: `${bezelPx}px` } as CSSProperties}
+      style={{
+        ['--bbs-terminal-bezel' as string]: `${bezelPx}px`,
+        /*
+         * The band the browser's own bar covers, ON TOP of the notch inset
+         * the stylesheet applies. `calc` rather than a replacement: a phone
+         * has both, and they are different bands.
+         */
+        ...(viewportTop > 0
+          ? { paddingTop: `calc(env(safe-area-inset-top) + ${viewportTop}px)` }
+          : {}),
+      } as CSSProperties}
     >
       {/* ONE host element for the life of the page. The frame is a class,
           never a structural wrapper: moving BBSTerminal between parents

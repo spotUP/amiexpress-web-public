@@ -34,9 +34,9 @@ describe('a key tapped on the on-screen keyboard', () => {
     // Held-key tracking pairs a release with its press through `code`. If a
     // shifted Q and a plain q were two keys, a release could never find its
     // press and the door would hold a key down for ever.
-    expect(injectedKeyEvent('Q').code).toBe('KeyQ');
-    expect(injectedKeyEvent('q').code).toBe('KeyQ');
-    expect(injectedKeyEvent('Q').key).toBe('Q');
+    expect(injectedKeyEvent('Q')?.code).toBe('KeyQ');
+    expect(injectedKeyEvent('q')?.code).toBe('KeyQ');
+    expect(injectedKeyEvent('Q')?.key).toBe('Q');
   });
 
   it('carries return, space, escape and backspace under their event names', () => {

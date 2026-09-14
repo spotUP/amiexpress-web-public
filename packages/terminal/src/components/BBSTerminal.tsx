@@ -3528,9 +3528,28 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // cannot go missing with a stylesheet again. `centerInHost` is the
         // host's veto: a handheld page keeps its terminal at the top of the
         // strip the on-screen keyboard leaves it.
-        ...(terminalMode === 'fixed' && centerInHost && {
+        /*
+         * WHERE THE GRID SITS IN THE BAND IT IS GIVEN.
+         *
+         * A desktop centres it. A handheld puts it at the BOTTOM, against the
+         * on-screen keyboard - and that is not a taste: iOS draws its address
+         * bar OVER the top of the page and reports nothing a layout can read
+         * (`visualViewport.offsetTop` stays 0), so anything at the top of the
+         * band is under the bar. The sysop, 2026-09-14, with screenshots:
+         * "the bbs draws under the adress bar".
+         *
+         * The grid is ~200px of a ~580px band on a phone, so the slack goes
+         * above it where the browser's chrome already is, instead of below it
+         * where nothing is. A terminal above a keyboard is also where a
+         * phone puts text anyway.
+         *
+         * Horizontal centring applies either way: an 80-column grid is
+         * narrower than the screen at every size the fit picks, and it used
+         * to sit against the left edge on a phone.
+         */
+        ...(terminalMode === 'fixed' && {
           display: 'flex',
-          alignItems: 'center',
+          alignItems: centerInHost ? 'center' : 'flex-end',
           justifyContent: 'center',
         }),
         ...(terminalMode === 'wide' && {

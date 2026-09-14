@@ -253,14 +253,25 @@ describe('a PETSCII canvas session is framed and centred on a desktop like an xt
     expect(escaped).toEqual([]);
   });
 
-  // The host keeps a veto: the BBS page reserves the bottom of a phone for the
-  // on-screen keyboard and wants the terminal at the top of what is left.
-  it('leaves the box where the host put it when the host vetoes centring', () => {
+  /*
+   * The host keeps a veto, and it now means BOTTOM rather than "no placement
+   * at all". The BBS page reserves the bottom of a phone for the on-screen
+   * keyboard and puts the grid against it, because iOS draws its address bar
+   * OVER the top of the page and reports nothing a layout can read - so the
+   * ~380px of slack goes above the grid, where the browser's chrome already
+   * is, instead of below it where nothing is (sysop, 2026-09-14: "the bbs
+   * draws under the adress bar").
+   *
+   * Horizontal centring applies on a handheld too: the grid is narrower than
+   * the screen at every size the fit picks, and it used to sit against the
+   * left edge.
+   */
+  it('puts the box at the BOTTOM of the band when the host vetoes centring', () => {
     const { container } = render(
       <BBSTerminal backendUrl="http://localhost:3001" centerInHost={false} />
     );
     expect(centring(container.firstElementChild as HTMLElement)).toEqual({
-      display: '', alignItems: '', justifyContent: '',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
     });
   });
 });

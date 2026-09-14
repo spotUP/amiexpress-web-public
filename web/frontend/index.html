@@ -27,9 +27,27 @@
         width: 100vw;
       }
 
+      /*
+       * THE ROOT BOX, and its height is the whole argument.
+       *
+       * `100vh` on iOS is the LARGE viewport - the height the page would have
+       * if the browser's UI were hidden - so the box is taller than what a
+       * caller can actually see, and everything the page puts at the bottom
+       * (the prompt, under the on-screen keyboard's reserved strip) hangs off
+       * the screen. `100svh` is the SMALL viewport: the height with the
+       * browser's UI shown, which is the honest floor and never changes as
+       * the bar retracts.
+       *
+       * `100vh` stays as the fallback for a browser without svh, where the
+       * two are the same number anyway.
+       *
+       * Reported by the sysop with screenshots, 2026-09-14: the board drawing
+       * under Safari's address bar with no prompt in sight.
+       */
       #terminal {
         width: 100vw;
         height: 100vh;
+        height: 100svh;
         position: absolute;
         top: 0;
         left: 0;
