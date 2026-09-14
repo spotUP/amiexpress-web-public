@@ -3,6 +3,7 @@ import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
+import { useBoardPalette } from '../hooks/useBoardPalette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, insertCharacter, centreLine,
@@ -113,7 +114,17 @@ export function ScreenEditor({
    * shows what the other half of the board's callers get, before the screen
    * is published rather than after.
    */
-  const [palette, setPalette] = useState<PaletteMode>('full');
+  /**
+   * `null` until the artist says otherwise, and then their choice for the
+   * rest of the session. Until then the preview follows the BOARD: a sysop
+   * running eight colours has artists who should be looking at eight, not
+   * remembering to press a button.
+   */
+  const [chosenPalette, setChosenPalette] = useState<PaletteMode | null>(null);
+  const boardPalette = useBoardPalette();
+  const palette = chosenPalette ?? boardPalette;
+  const setPalette = (next: (mode: PaletteMode) => PaletteMode) =>
+    setChosenPalette(next(palette));
   /**
    * Typing pushes the rest of the row right instead of overwriting it.
    *

@@ -12,8 +12,9 @@
  */
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
 import { createCanvas, setCell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 
 const paintCalls: unknown[][] = [];
@@ -37,10 +38,17 @@ function brightSurface() {
   return createSurface(canvas);
 }
 
-/** The editor pulls the MCI catalogue, so it needs a query client. */
+/** The editor pulls the MCI catalogue and the board's config. */
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+/** A board that answers with the given colour depth. */
+function boardWith(colours: number | undefined): void {
+  vi.spyOn(apiClient, 'getSystemConfig').mockResolvedValue(
+    { data: { terminal_colours: colours } } as never,
+  );
 }
 
 /** The palette argument of the last paint. */
@@ -57,6 +65,7 @@ describe('the Amiga colours toggle', () => {
     HTMLCanvasElement.prototype.getContext = (() => ({
       setTransform: () => {},
     })) as never;
+    boardWith(16);
   });
 
   it('starts in full colour, and says so', () => {
@@ -87,6 +96,41 @@ describe('the Amiga colours toggle', () => {
 
     expect(button).toHaveAttribute('aria-pressed', 'false');
     expect(button).toHaveTextContent('All 16 colours');
+    expect(lastPalette()).toBe('full');
+  });
+});
+
+/**
+ * An eight-colour board's artists should be looking at eight colours without
+ * having to remember a button - and the button still wins once they press it.
+ */
+describe('the preview follows the board', () => {
+  beforeEach(() => {
+    paintCalls.length = 0;
+    HTMLCanvasElement.prototype.getContext = (() => ({ setTransform: () => {} })) as never;
+  });
+
+  it('opens in the Amiga palette on an eight-colour board', async () => {
+    boardWith(8);
+    render(<ScreenEditor surface={brightSurface()} onChange={() => {}} />, { wrapper });
+
+    await waitFor(() => expect(lastPalette()).toBe('amiga'));
+    expect(screen.getByRole('button', { name: /amiga 8 colours/i })).toBeInTheDocument();
+  });
+
+  it('opens in full colour on a sixteen-colour board', async () => {
+    boardWith(16);
+    render(<ScreenEditor surface={brightSurface()} onChange={() => {}} />, { wrapper });
+
+    await waitFor(() => expect(lastPalette()).toBe('full'));
+  });
+
+  it('lets the artist look at the other one, whatever the board runs', async () => {
+    boardWith(8);
+    render(<ScreenEditor surface={brightSurface()} onChange={() => {}} />, { wrapper });
+    await waitFor(() => expect(lastPalette()).toBe('amiga'));
+
+    fireEvent.click(screen.getByRole('button', { name: /amiga 8 colours/i }));
     expect(lastPalette()).toBe('full');
   });
 });

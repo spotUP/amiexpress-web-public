@@ -1043,7 +1043,7 @@ export function SystemConfigPage() {
               <select
                 id="terminal_colours"
                 {...register('terminal_colours', { valueAsNumber: true })}
-                className="input"
+                className="input-field w-full"
               >
                 <option value={16}>16 - every caller (default)</option>
                 <option value={8}>8 - the Amiga's pens, bright colours folded</option>

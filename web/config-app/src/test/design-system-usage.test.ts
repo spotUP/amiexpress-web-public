@@ -113,6 +113,87 @@ describe('every admin page', () => {
     expect(found, found.join('\n')).toEqual([]);
   });
 
+  /**
+   * A FIELD THE THEME DOES NOT REACH IS A LIGHT-MODE FIELD.
+   *
+   * An unstyled `<select>` or `<input>` is not invisible and not obviously
+   * wrong on a developer's machine - the browser draws its own control, which
+   * on this dark admin means white on white. It shipped because the class was
+   * spelled `input` and the design system's is `input-field`: a name that
+   * does not exist applies nothing, and nothing is what the browser styles.
+   * "can you do something so you stop adding light mode components everytime
+   * i ask for new stuff for the admin ui?" (sysop, 2026-09-14).
+   *
+   * So: every text-ish input, select and textarea carries a class that
+   * reaches the theme. `input-field` is the design system's; a component may
+   * also build the classes in a variable, which is why a className that is an
+   * expression rather than a literal string is accepted - it cannot be read
+   * here, and the palette rules above already cover what it can contain.
+   */
+  it('gives every field a class the theme reaches', () => {
+    // <input type="checkbox"> and type="radio" draw from the accent colour,
+    // not from a field background; they are not what this is about.
+    const SKIP_TYPES = /type=["'](?:checkbox|radio|hidden|file|range|color)["']/;
+    /** The design system's field class, or the tokens it is built from. */
+    const THEMED = /\b(?:input-field|bg-surface-\d|bg-transparent|text-content-|border-border)/;
+    const found: string[] = [];
+
+    /**
+     * The attributes of one JSX tag, brace-aware.
+     *
+     * `[^>]*` cannot be used: `onChange={(e) => ...}` contains a `>` and the
+     * match stops there, before the className - which reported every
+     * correctly styled field on the page as unstyled.
+     */
+    const attributesAt = (text: string, from: number): string => {
+      let depth = 0;
+      let quote: string | null = null;
+      for (let i = from; i < text.length; i++) {
+        const ch = text[i];
+        if (quote) {
+          if (ch === quote) quote = null;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        else if (ch === '>' && depth === 0) return text.slice(from, i);
+      }
+      return text.slice(from);
+    };
+
+    for (const file of sourceFiles(SRC)) {
+      if (!/\.tsx$/.test(file)) continue;
+      // Comments first: this file's own doc comments talk ABOUT `<input
+      // type="number">`, and prose is not a control. Replaced with spaces so
+      // the offsets - and so the reported lines - stay true.
+      const text = readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, blank => blank.replace(/[^\n]/g, ' '))
+        .replace(/\/\/[^\n]*/g, blank => ' '.repeat(blank.length));
+      for (const match of text.matchAll(/<(select|textarea|input)\b/g)) {
+        const tag = match[1];
+        const attrs = attributesAt(text, match.index! + match[0].length);
+        if (SKIP_TYPES.test(attrs)) continue;
+
+        const className = /className=(?:"([^"]*)"|\{)/.exec(attrs);
+        const where = `${file.slice(SRC.length + 1)}: <${tag}>`;
+        if (!className) { found.push(`${where} has no className at all`); continue; }
+        // An expression builds its classes elsewhere, and the palette rules
+        // above cover what it may build them from.
+        if (className[1] === undefined) continue;
+        // Either the design system's own field class, or the tokens it is
+        // made of. What is NOT acceptable is a field dressed only in layout
+        // - `w-full px-2` leaves the browser to colour it, and the browser
+        // colours it for a light page.
+        if (!THEMED.test(className[1])) {
+          found.push(`${where} className="${className[1]}" reaches no theme colour`);
+        }
+      }
+    }
+
+    expect(found, found.join('\n')).toEqual([]);
+  });
+
   it('renders tables through DataTable, except the grids that are edited', () => {
     const found = sourceFiles(SRC)
       .filter(file => /<table[\s>]/.test(readFileSync(file, 'utf8')))
