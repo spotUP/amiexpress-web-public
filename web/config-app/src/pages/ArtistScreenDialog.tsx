@@ -903,6 +903,15 @@ function formatLabel(filePath: string): string {
   if (lower.endsWith('.seq')) return 'PETSCII';
   if (lower.endsWith('.rip')) return 'RIP';
   if (lower.endsWith('.gr')) return 'Amiga ANSI';
+  /*
+   * Teletext is not "ANSI / text", and saying so put TWO tabs with the same
+   * name on one screen - Node0 carries BBSTITLE.txt and BBSTITLE.ttx, and the
+   * sysop had no way to tell which tab was which (2026-09-14). `.ttx` is this
+   * board's ANSI teletext, drawn like ANSI by the TDAText face; `.tti` is
+   * native packet-level teletext, which is listed and never parsed here.
+   */
+  if (lower.endsWith('.ttx')) return 'Teletext';
+  if (lower.endsWith('.tti')) return 'Teletext (native)';
   return 'ANSI / text';
 }
 

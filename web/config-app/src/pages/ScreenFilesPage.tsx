@@ -136,6 +136,15 @@ function formatLabel(filePath: string): string {
   if (lower.endsWith('.seq')) return 'PETSCII';
   if (lower.endsWith('.rip')) return 'RIP';
   if (lower.endsWith('.gr')) return 'Amiga ANSI';
+  /*
+   * Teletext is not "ANSI / text", and saying so put TWO tabs with the same
+   * name on one screen - Node0 carries BBSTITLE.txt and BBSTITLE.ttx, and the
+   * sysop had no way to tell which tab was which (2026-09-14). `.ttx` is this
+   * board's ANSI teletext, drawn like ANSI by the TDAText face; `.tti` is
+   * native packet-level teletext, which is listed and never parsed here.
+   */
+  if (lower.endsWith('.ttx')) return 'Teletext';
+  if (lower.endsWith('.tti')) return 'Teletext (native)';
   if (lower.endsWith('.ibm')) return 'IBM ANSI';
   return 'ANSI / text';
 }
@@ -270,6 +279,20 @@ export function ScreenFilesPage() {
    */
   const [editingRip, setEditingRip] = useState(false);
   const [editingPetscii, setEditingPetscii] = useState(false);
+
+  /**
+   * Put every editor away.
+   *
+   * Three booleans decide which editor is mounted and nothing cleared them
+   * together, so one left set by a previous file outlived the file it was
+   * editing.
+   */
+  const closeEditors = () => {
+    setEditing(null);
+    setEditingRip(false);
+    setEditingPetscii(false);
+    setEditorWrite(false);
+  };
   const detailRef = useRef<HTMLElement>(null);
   const [showRevisions, setShowRevisions] = useState(false);
 
@@ -388,11 +411,15 @@ export function ScreenFilesPage() {
     // one editor cannot serve them: a .rip is a vector program, a .seq is
     // PETSCII bytes, ANSI and plain text are cells.
     if (file.format === 'rip') {
+      setEditing(null);
+      setEditingPetscii(false);
       setEditingRip(true);
       setPendingEdit(null);
       return;
     }
     if (file.format === 'petscii') {
+      setEditing(null);
+      setEditingRip(false);
       // A .seq is screen codes and colour RAM, not cells - so it does not go
       // through screenToCanvas below, the same way a .rip does not.
       setEditingPetscii(true);
@@ -400,9 +427,14 @@ export function ScreenFilesPage() {
       return;
     }
     if (file.format !== 'ansi' && file.format !== 'text') {
+      // Nothing here edits it, and whatever is open belongs to another file:
+      // it must not stay on screen over this one.
+      setEditing(null);
       setPendingEdit(null);
       return;
     }
+    setEditingRip(false);
+    setEditingPetscii(false);
 
     let cancelled = false;
     screenToCanvas(file.content).then(canvas => {
@@ -1622,7 +1654,18 @@ export function ScreenFilesPage() {
                 type="button"
                 role="tab"
                 aria-selected={sibling === openFile}
-                onClick={() => setOpenFile(sibling)}
+                /*
+                 * A TAB ROUTES LIKE A ROW DOES.
+                 *
+                 * It used only to change the open file, so whichever editor
+                 * was already on screen stayed: open an ANSI screen, click the
+                 * PETSCII tab, and the ANSI editor was still mounted, drawing
+                 * the .seq bytes as text - "petscii selected it shows ansi"
+                 * (sysop, 2026-09-14), the PETSCII art arriving as scattered
+                 * dots. The FORMAT decides the editor, so changing format has
+                 * to re-decide it.
+                 */
+                onClick={() => { closeEditors(); setOpenFile(sibling); setPendingEdit(sibling); }}
                 className={
                   sibling === openFile
                     ? 'px-3 py-1 text-sm rounded-t bg-surface-3 text-content-primary'
