@@ -1310,14 +1310,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Force cursor blinking immediately after open
     term.options.cursorBlink = true;
     term.options.cursorStyle = 'block';
-    term.options.cursorInactiveStyle = 'block';
+    term.options.cursorInactiveStyle = 'outline';  // see the note below
 
     // Apply font smoothing settings
     setTimeout(() => {
       term.options.theme = XTERM_CONFIG.theme;
       term.options.cursorBlink = true;
       term.options.cursorStyle = 'block';
-      term.options.cursorInactiveStyle = 'block';
+      /*
+       * AN UNFOCUSED TERMINAL LOOKS UNFOCUSED.
+       *
+       * 'block' drew the inactive cursor as a solid box that does not blink -
+       * xterm only blinks while focused - so a terminal that had simply not
+       * taken focus was indistinguishable from a broken cursor. The sysop
+       * reported it three times as "the cursor is white and doesn't blink",
+       * and two fixes went after the focus desync without changing what the
+       * state LOOKED like.
+       *
+       * 'outline' is xterm's own default and says it plainly: hollow means
+       * "click me, I am not focused", solid-and-blinking means "typing here
+       * works". The focus resync above stays - this is about the state being
+       * legible when it fails, not a substitute for getting it right.
+       */
+      term.options.cursorInactiveStyle = 'outline';
       term.options.fontSize = fontSizeRef.current;
 
       const termElement = terminalRef.current?.querySelector('.xterm');
