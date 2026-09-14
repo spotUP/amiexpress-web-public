@@ -70,7 +70,7 @@ describe('what a node is doing', () => {
       resolve(__dirname, '..', 'pages', 'node-activity.ts'),
       'utf8',
     );
-    const exact = [...source.matchAll(/^  ([a-z_0-9]+): '/gm)].map(m => m[1]);
+    const exact = [...source.matchAll(/^ {2}([a-z_0-9]+): '/gm)].map(m => m[1]);
     const groups = [...source.matchAll(/\['([a-z_0-9]+)', '/g)].map(m => m[1]);
 
     const uncovered = everySubState()

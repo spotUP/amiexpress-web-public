@@ -94,13 +94,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const showInfo = useCallback((message: string) => showToast(message, 'info'), [showToast]);
   const showWarning = useCallback((message: string) => showToast(message, 'warning'), [showToast]);
 
+  // The cast goes on the RESULT, not on the function handed to useCallback:
+  // wrapped the other way round the rule cannot see a function literal at all
+  // and warns that the dependencies are unknown. `[]` is correct either way -
+  // the body only calls a state setter, which React keeps stable.
   const confirm = useCallback(
-    ((options: ConfirmOptions) =>
+    (options: ConfirmOptions) =>
       new Promise<boolean | ConfirmWithCheckboxResult>((resolve) => {
         setConfirmDialog({ options, resolve });
-      })) as NotificationContextType['confirm'],
+      }),
     []
-  );
+  ) as NotificationContextType['confirm'];
 
   const closeConfirm = useCallback(
     (confirmed: boolean, checked = false) => {

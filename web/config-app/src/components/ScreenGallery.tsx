@@ -22,7 +22,7 @@ import { apiClient } from '../api/client';
  *  limit, so one gallery can never ask for more than the transport allows. */
 export const MAX_CONCURRENT = 6;
 
-let pending: Array<() => void> = [];
+const pending: Array<() => void> = [];
 let inFlight = 0;
 
 function acquire(): Promise<void> {

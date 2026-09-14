@@ -13,7 +13,7 @@
  * the server invented per request would answer both yes and leave the artist
  * with two themes.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiClient } from '../api/client';
@@ -77,7 +77,15 @@ export function useMyTheme(): {
     queryFn: () => apiClient.getScreenThemes(),
   });
   const payload = (data as { data?: ThemesPayload } | undefined)?.data;
-  const themes = payload?.themes ?? [];
+  /*
+   * MEMOISED because it is a useEffect DEPENDENCY below.
+   *
+   * `?? []` mints a new array on every render, so the effect that creates an
+   * artist's theme re-ran on every single one. Its own guards (`creating`,
+   * `attempts`) meant that cost nothing worse than churn, but they were doing
+   * a job the dependency list should have been doing.
+   */
+  const themes = useMemo(() => payload?.themes ?? [], [payload]);
   const mine = themes.filter(entry => entry.mine);
   /*
    * A sysop stands in ANY artist's studio.

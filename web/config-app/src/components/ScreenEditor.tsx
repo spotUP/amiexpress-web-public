@@ -291,7 +291,12 @@ export function ScreenEditor({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [surface, cursor, cols, rows, onChange, readOnly]);
+    // `insertMode` belongs here: the listener READS it, so without it the
+    // handler registered before the Insert key was pressed keeps the old
+    // value. The effect happens to re-run on the next keystroke - `surface`
+    // changes - so the cost was exactly one character typed in the wrong
+    // mode straight after toggling, which is the hardest kind to notice.
+  }, [surface, cursor, cols, rows, onChange, readOnly, insertMode]);
 
   // Selected tools, colours and brushes all read the same: a ring in the
   // board's accent, not a slightly stronger border (sysop, 2026-09-10:

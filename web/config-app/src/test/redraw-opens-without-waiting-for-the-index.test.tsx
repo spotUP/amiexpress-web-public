@@ -127,5 +127,11 @@ describe('redrawing does not wait for the board index', () => {
     await waitFor(() => expect(copies).toHaveLength(1));
     expect(await screen.findByText('Save')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Redraw this/ })).toBeNull();
+
+    // And the hanging refetch was REAL. This counter was incremented and never
+    // read, so the comment above was an assumption: if the index were simply
+    // never refetched after a copy, every assertion here would still pass and
+    // the test would no longer be about waiting for anything.
+    expect(indexRefetchesAfterCopy).toBeGreaterThan(0);
   });
 });

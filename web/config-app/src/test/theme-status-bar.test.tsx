@@ -21,7 +21,7 @@ const envelope = (data: unknown) => Promise.resolve({
 } as unknown as Response);
 
 const writes: Array<{ method: string; url: string; body: unknown }> = [];
-let report = {
+const report = {
   blocking: [{ rule: 'shadows-security-variant', severity: 'blocking', file: 'Board/BULL.TXT', message: 'This covers the sysop bulletin' }],
   advisory: [],
   publishable: false,
