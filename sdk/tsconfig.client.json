@@ -39,7 +39,12 @@
     // ESM, so the "import" condition resolves dist-esm; leaving this out is
     // the same fault again, and it would only show up when a themed door
     // was actually run.
-    "engines/ui/theme/**/*"
+    "engines/ui/theme/**/*",
+    // And the fifth time (2026-09-14): ecbab30e0 added an "import" condition
+    // for ./engines/ui/ansi/eight-pens and no ESM output for it, so an ESM
+    // door importing it resolved a file that has never existed. Pure colour
+    // arithmetic - no I/O - so it belongs in the client build like the rest.
+    "engines/ui/ansi/eight-pens.ts"
   ],
   "exclude": [
     "node_modules",

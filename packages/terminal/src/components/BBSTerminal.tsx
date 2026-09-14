@@ -25,6 +25,7 @@ import { ModemEmulator } from '../utils/modem-emulator';
 import { classifyKey, trackKeyId, repeatAlive } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
+import { injectedKeyEvent } from '../utils/injected-key-event';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
@@ -3019,6 +3020,31 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (surfaceRef.current === 'canvas' && petsciiTransducerRef.current) {
         enqueuePetscii(petsciiTransducerRef.current.flush());
       }
+
+      /*
+       * IN GAME MODE, PRESS THE KEY INSTEAD OF TYPING IT.
+       *
+       * `sendInput` drops characters while game mode is on, because a physical
+       * keyboard is already sending the key-down/key-up EDGES and the
+       * character would arrive twice. An on-screen keyboard produces no edges
+       * at all - so on a phone this path dropped every keystroke and the door
+       * received nothing. The sysop, 2026-09-14, on the tip door: "the osd
+       * keyboard doesnt seem to reach it q does nothing".
+       *
+       * The press and the release go through the same functions the mobile
+       * game pads use, so a tapped key and a held one are the same thing to
+       * the door. `null` is a paste or a terminal report - not a keystroke -
+       * and falls through to the ordinary path.
+       */
+      if (gameMode.current) {
+        const event = injectedKeyEvent(key);
+        if (event) {
+          gameKeyPressRef.current?.(event.key, event.code);
+          gameKeyReleaseRef.current?.(event.key, event.code);
+          return;
+        }
+      }
+
       sendInput(key);
     };
 

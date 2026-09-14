@@ -90,11 +90,31 @@ export class Door {
 
     const { socket, bbsSession, user, params = [], bbs } = rawSession;
 
-    // Enable game mode for smooth keyboard input (bypasses OS key repeat delay)
-    // This tells the frontend to send raw keydown/keyup events
-    if (bbs?.enableGameMode) {
-      bbs.enableGameMode();
-    }
+    /*
+     * GAME MODE IS NOT TURNED ON HERE, and it used to be.
+     *
+     * "Enable game mode for smooth keyboard input" - for every door built on
+     * this class, whether it was a game or a menu. Game mode tells the browser
+     * to stop sending characters and send raw key-down / key-up EDGES instead
+     * (`BBSTerminal.tsx`: `sendInput` returns early while it is on), which a
+     * physical keyboard produces and AN ON-SCREEN ONE DOES NOT.
+     *
+     * So every blessed door on this board was unreachable from a phone. The
+     * sysop, 2026-09-14, on the tip-of-the-day door: "the osd keyboard doesnt
+     * seem to reach it q does nothing". It had been true of the doors menu,
+     * the dashboard, the card lobby and the ANSI editor too, and it was
+     * invisible from a desktop because a real keydown still arrives.
+     *
+     * It also overrode what the doors ASKED for: fourteen of them construct a
+     * DoorInputManager with `enableGameMode: false` and a comment saying why,
+     * and this line turned it on again before any of them ran.
+     *
+     * A door that wants key edges asks for them - `DoorInputManager({
+     * enableGameMode: true })`, or `bbs.enableGameMode()` directly, which is
+     * what ncurses-pong and GrandMaster do. That is also what
+     * `services/game-mode.service.ts` has always documented: "Should ONLY be
+     * called for doors that need raw keydown/keyup events."
+     */
 
     // Create context
     const context = this.createContext(socket, bbsSession, user, params, bbs);
