@@ -1,5 +1,5 @@
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
-import { ansiColor } from '../utils/ansi-palette';
+import { ansiColor, paletteColor, type PaletteMode } from '../utils/ansi-palette';
 
 /** VGA text-mode cell, the shape every one of these screens was drawn in. */
 export const CELL_WIDTH = 8;
@@ -27,6 +27,16 @@ export function paintScreen(
   canvas: Cell[][],
   cursor?: { x: number; y: number } | null,
   highlights: Highlight[] = [],
+  /**
+   * Which palette the ART is drawn in. 'amiga' collapses every colour onto
+   * console.device's eight pens, which is what a caller dialling this board
+   * from an Amiga actually sees - the drawing is unchanged, only the view.
+   *
+   * The editor's OWN marks - the cursor, the MCI rungs - keep the full
+   * palette: they are the tool talking, not the art, and a preview that dims
+   * them makes them hard to see for no gain.
+   */
+  palette: PaletteMode = 'full',
 ): void {
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
@@ -51,13 +61,13 @@ export function paintScreen(
       const left = x * CELL_WIDTH;
       const top = y * CELL_HEIGHT;
 
-      ctx.fillStyle = ansiColor(cell.bg);
+      ctx.fillStyle = paletteColor(cell.bg, palette);
       ctx.fillRect(left, top, CELL_WIDTH, CELL_HEIGHT);
 
       // A space carries its background and nothing else - drawing it costs a
       // glyph per cell on a screen that is mostly spaces.
       if (cell.char && cell.char !== ' ') {
-        ctx.fillStyle = ansiColor(cell.fg);
+        ctx.fillStyle = paletteColor(cell.fg, palette);
         ctx.fillText(cell.char, left, top);
       }
     }

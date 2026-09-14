@@ -26,6 +26,31 @@ export const ANSI_PALETTE: readonly string[] = [
   '#FFFFFF', // 15 - Bright white
 ];
 
+/**
+ * What an Amiga caller actually sees.
+ *
+ * AmiExpress ran on console.device, which has EIGHT pens: `ibmcon` gave a
+ * board sixteen, and almost nobody ran it (sysop, 2026-09-14). The Amiga had
+ * no iCE colours either, so a bright BACKGROUND is not a thing a caller could
+ * be shown - it lands on the same eight.
+ *
+ * The collapse is the low three bits, which is what dropping the bold
+ * attribute does: bright yellow (11) is yellow (3), bright green (10) is
+ * green (2). It is a PREVIEW, not a restriction - the art keeps the colour it
+ * was drawn in, and a web or telnet caller still sees all sixteen.
+ */
+export function amigaPen(index: number): number {
+  return ((index % 8) + 8) % 8;
+}
+
+/** How a preview names its palette. */
+export type PaletteMode = 'full' | 'amiga';
+
+/** The colour of a Cell index in the palette a preview is showing. */
+export function paletteColor(index: number, mode: PaletteMode = 'full'): string {
+  return ansiColor(mode === 'amiga' ? amigaPen(index) : index);
+}
+
 /** The colour of a Cell's `fg`/`bg`, with anything out of range read as black. */
 export function ansiColor(index: number): string {
   return ANSI_PALETTE[index] ?? ANSI_PALETTE[0];

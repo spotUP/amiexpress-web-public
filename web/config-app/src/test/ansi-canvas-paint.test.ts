@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { paintScreen, CELL_WIDTH, CELL_HEIGHT } from '../components/ansi-canvas-paint';
+import { ANSI_PALETTE } from '../utils/ansi-palette';
 import { createCanvas, setCell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 
 interface Call { fill: string; args: number[] }
@@ -130,5 +131,68 @@ describe('painting a screen', () => {
     expect(rects[0]).toEqual({
       fill: '#000000', args: [0, 0, 80 * CELL_WIDTH, 25 * CELL_HEIGHT],
     });
+  });
+});
+
+/**
+ * The Amiga preview: eight pens, which is what console.device had.
+ *
+ * AmiExpress on a real Amiga showed eight colours - sixteen needed `ibmcon`,
+ * which almost nobody ran - and the Amiga had no iCE colours, so a bright
+ * BACKGROUND was never something a caller could be shown (sysop,
+ * 2026-09-14). An artist drawing here has all sixteen, because the web and
+ * telnet callers have all sixteen; this is how they see the other half of
+ * the board before publishing rather than after.
+ */
+describe('the Amiga preview', () => {
+  function screenWith(fg: number, bg: number) {
+    const canvas = createCanvas(1, 1);
+    setCell(canvas, 0, 0, { char: 'A', fg, bg, bold: false, blink: false });
+    return canvas;
+  }
+
+  it('draws a bright foreground on the pen it collapses to', () => {
+    const amiga = recordingContext();
+    paintScreen(amiga.ctx, screenWith(11, 0), null, [], 'amiga');
+    // Bright yellow (11) is yellow (3) on eight pens.
+    expect(amiga.glyphs[0].fill).toBe(ANSI_PALETTE[3]);
+
+    const full = recordingContext();
+    paintScreen(full.ctx, screenWith(11, 0), null, [], 'full');
+    expect(full.glyphs[0].fill).toBe(ANSI_PALETTE[11]);
+  });
+
+  it('collapses a bright background too, because the Amiga had no iCE', () => {
+    const amiga = recordingContext();
+    paintScreen(amiga.ctx, screenWith(7, 12), null, [], 'amiga');
+    // The LAST cell-sized rect: on a one-cell screen the initial clear is
+    // exactly the same size, and it is black.
+    const cellFill = amiga.rects.filter(
+      (rect: Call) => rect.args[2] === CELL_WIDTH && rect.args[3] === CELL_HEIGHT,
+    ).at(-1);
+    // Bright blue (12) is blue (4).
+    expect(cellFill?.fill).toBe(ANSI_PALETTE[4]);
+  });
+
+  it('leaves the eight it already had alone', () => {
+    const amiga = recordingContext();
+    paintScreen(amiga.ctx, screenWith(2, 1), null, [], 'amiga');
+    expect(amiga.glyphs[0].fill).toBe(ANSI_PALETTE[2]);
+  });
+
+  it('keeps the editor own marks in full colour', () => {
+    // The cursor and the MCI rungs are the TOOL talking, not the art: dimming
+    // them makes them hard to find and shows the artist nothing.
+    const amiga = recordingContext();
+    paintScreen(amiga.ctx, screenWith(7, 0), { x: 0, y: 0 }, [{ x: 0, y: 0, length: 1 }], 'amiga');
+    const strokeColours = amiga.strokes.map((stroke: Call) => stroke.fill);
+    expect(strokeColours).toContain(ANSI_PALETTE[11]); // the rung
+    expect(strokeColours).toContain(ANSI_PALETTE[15]); // the cursor
+  });
+
+  it('paints in full colour when nothing asks otherwise', () => {
+    const plain = recordingContext();
+    paintScreen(plain.ctx, screenWith(10, 0));
+    expect(plain.glyphs[0].fill).toBe(ANSI_PALETTE[10]);
   });
 });

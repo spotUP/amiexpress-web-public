@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
-import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
+import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
@@ -102,6 +102,17 @@ export function ScreenEditor({
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
+  /**
+   * Which palette the art is SHOWN in.
+   *
+   * AmiExpress on a real Amiga ran console.device, which has eight pens -
+   * sixteen needed `ibmcon`, which almost nobody ran - and the Amiga had no
+   * iCE colours at all (sysop, 2026-09-14). An artist drawing here has all
+   * sixteen, because a web or telnet caller sees all sixteen; this switch
+   * shows what the other half of the board's callers get, before the screen
+   * is published rather than after.
+   */
+  const [palette, setPalette] = useState<PaletteMode>('full');
   /** What Alt+C/X lifted: stamped back down by Alt+V at the cursor. A ref,
    *  not state - the canvas shows it only after a paste, which re-renders
    *  through onChange anyway. Dies with the dialog, like a real clipboard
@@ -325,6 +336,25 @@ export function ScreenEditor({
           {swatches('bg')}
         </label>
         <div className="space-y-1">
+          <span className="block text-content-secondary">Preview</span>
+          {/*
+            Not a restriction: the art keeps every colour it was drawn in and
+            a web or telnet caller sees all sixteen. This shows the other half
+            of the board - a caller on a real Amiga, where console.device had
+            eight pens and no iCE colours - while there is still time to
+            change the drawing.
+          */}
+          <button
+            type="button"
+            aria-pressed={palette === 'amiga'}
+            title="Show the eight pens an Amiga caller has"
+            className={`px-2 h-6 border ${selectedRing(palette === 'amiga')}`}
+            onClick={() => setPalette(mode => (mode === 'amiga' ? 'full' : 'amiga'))}
+          >
+            Amiga colours
+          </button>
+        </div>
+        <div className="space-y-1">
           <span className="block text-content-secondary">Character</span>
           <div className="flex flex-wrap gap-1">
             {BRUSHES.map(char => (
@@ -363,6 +393,7 @@ export function ScreenEditor({
       >
         <AnsiCanvas
           canvas={surface.canvas}
+          palette={palette}
           cursor={!readOnly && surface.tool === 'text' ? cursor : null}
           highlights={[...tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
