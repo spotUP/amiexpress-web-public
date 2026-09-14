@@ -44,6 +44,21 @@ const bbs = {
   writeLine: (d) => { captured.push(String(d) + '\r\n'); },
   on: () => {}, off: () => {}, emit: () => {},
   getUser: () => ({ username: 'SYSOP', securityLevel: 255 }),
+  /*
+   * WHICH ALPHABET THIS CALLER READS, asked the way the door asks it.
+   *
+   * `session.petsciiMode` above is what BBSApi reads; the door never sees the
+   * session. sdk/utils/blessed-helpers.ts calls `bbs.isPetsciiMode()`, and a
+   * fake without it answered "not PETSCII" - so the screen was built with
+   * `petscii: false`, `cellsCanCarryBackground` said yes, and solid cells were
+   * converted to a background colour that a C64 cannot carry. The door was
+   * right and the harness was lying: BBSApi.isPetsciiMode() returns
+   * `session.petsciiMode === true`, so a real 40-column caller keeps its ink.
+   *
+   * The assertion that caught it reads reverse video, which is the only way a
+   * PETSCII cell gets filled.
+   */
+  isPetsciiMode: () => session.petsciiMode === true,
 };
 
 const socket = {
