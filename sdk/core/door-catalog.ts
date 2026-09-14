@@ -14,6 +14,27 @@
  * duplicated here.
  */
 
+/**
+ * One spelling for one kind of door.
+ *
+ * The registry carries both `TYPE=TS` and `TYPE=typescript` - 44 of one and
+ * one of the other on this board, and the odd one out is TIP, whose own
+ * spotlight picker then left TIP off the list. The launcher takes either
+ * (`door.handler.ts:1406` tests 'TS' || 'typescript'), so a door spelled
+ * the long way RUNS while every reader that compares against 'TS' - this
+ * catalog's `types` filter, `amigaDoorManager.ts:1040` - decides it is
+ * something else.
+ *
+ * The board is the authority on what runs, so the reader follows it rather
+ * than the other way round: both spellings mean TS here. Anything else is
+ * upper-cased and passed through, because an unknown type is not this
+ * function's to invent.
+ */
+export function normaliseDoorType(raw: string | undefined): string {
+  const upper = (raw ?? '').toUpperCase();
+  return upper === 'TYPESCRIPT' ? 'TS' : upper;
+}
+
 export interface CatalogEntry {
   /** Directory under Doors/, e.g. "whip". */
   name: string;
@@ -141,7 +162,7 @@ export function joinCatalog(
     });
   const out: CatalogEntry[] = [];
   for (const entry of entries) {
-    const doorType = (entry.tooltypes['TYPE'] ?? '').toUpperCase();
+    const doorType = normaliseDoorType(entry.tooltypes['TYPE']);
     if (types && !types.includes(doorType)) continue;
     const location = (entry.tooltypes['LOCATION'] ?? '').trim();
     const m = /^Doors\/([^/]+)\/?$/.exec(location);

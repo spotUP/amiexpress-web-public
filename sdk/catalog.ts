@@ -14,6 +14,7 @@ export {
   readRegistryEntry,
   joinCatalog,
   loadDoorCatalog,
+  normaliseDoorType,
   nodeCatalogIO,
   PORT_MARKERS,
 } from './core/door-catalog';
