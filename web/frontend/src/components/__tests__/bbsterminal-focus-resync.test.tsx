@@ -26,6 +26,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
     options: Record<string, any>;
     textarea: HTMLTextAreaElement | null = null;
+    rows: HTMLElement | null = null;
     element: HTMLElement | null = null;
     cols = 80;
     rows = 25;
@@ -40,6 +41,12 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
       this.textarea = document.createElement('textarea');
       this.textarea.className = 'xterm-helper-textarea';
       this.element.appendChild(this.textarea);
+      // The DOM renderer's own row container. Its `xterm-focus` is a
+      // DIFFERENT class on a DIFFERENT node from `.xterm`'s `focus`, and it
+      // is the one the blink animation is selected by.
+      this.rows = document.createElement('div');
+      this.rows.className = 'xterm-rows';
+      this.element.appendChild(this.rows);
       el.appendChild(this.element);
     }
     focus() {
@@ -49,7 +56,11 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
       // xterm never learns. Only a real transition sets the class.
       const already = document.activeElement === this.textarea;
       this.textarea?.focus();
-      if (!already && document.hasFocus()) this.element?.classList.add('focus');
+      if (!already && document.hasFocus()) {
+        this.element?.classList.add('focus');
+        // handleFocus() adds the renderer's class and re-renders the row.
+        this.rows?.classList.add('xterm-focus');
+      }
     }
     blur() {
       this.focusCalls.push('blur');
@@ -57,6 +68,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
       // a real transition rather than another no-op.
       this.textarea?.blur();
       this.element?.classList.remove('focus');
+      this.rows?.classList.remove('xterm-focus');
     }
     loadAddon() {} onData() { return { dispose() {} }; } onKey() { return { dispose() {} }; }
     attachCustomKeyEventHandler() {} write() {} writeln() {} input() {} refresh() {}
@@ -128,6 +140,43 @@ describe('a terminal focused while the window was inactive', () => {
     expect(term.focusCalls.slice(-2)).toEqual(['blur', 'focus']);
   });
 
+  /**
+   * COMING BACK TO THE BOARD WITH THE CARET SOMEWHERE ELSE.
+   *
+   * `resyncFocus` returned early unless the TEXTAREA already held focus. That
+   * covers the desync - DOM right, xterm stale - and nothing else. When the
+   * caret is genuinely elsewhere (DevTools, another window, another element)
+   * the board came back untypeable and stayed that way until clicked.
+   *
+   * The sysop's own readout, taken with DevTools focused, showed exactly
+   * this: `xterm: terminal xterm xterm-dom-renderer-owner-1` - no `focus`
+   * class - with the cursor drawn in the inactive style, which is xterm doing
+   * the right thing with the wrong state. A terminal is for typing into; when
+   * its window comes back it should be ready.
+   */
+  it('takes the caret back when the window returns, even if it held nothing', async () => {
+    windowInactive();
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    await act(async () => { await new Promise(r => setTimeout(r, 150)); });
+    const term = rec.terminals[0];
+
+    /*
+     * NOTHING IN THE PAGE HOLDS THE CARET - which is what DevTools having it
+     * looks like from in here: `document.activeElement` falls back to <body>.
+     * That is the difference from the test below, where the viewer is typing
+     * in a real field on the page and must be left alone.
+     */
+    term.textarea?.blur();
+    expect(document.activeElement).toBe(document.body);
+    expect(term.element.classList.contains('focus')).toBe(false);
+
+    // The viewer comes back to the board's window.
+    windowActive();
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+
+    expect(term.element.classList.contains('focus')).toBe(true);
+  });
+
   it('leaves a genuinely unfocused terminal alone', async () => {
     windowInactive();
     render(<BBSTerminal backendUrl="http://localhost:3001" />);
@@ -145,6 +194,43 @@ describe('a terminal focused while the window was inactive', () => {
 
     expect(term.focusCalls.length).toBe(before);
     expect(document.activeElement).toBe(elsewhere);
+  });
+});
+
+describe('a renderer rebuilt under a focused terminal', () => {
+  /**
+   * THE ONE THAT WAS ACTUALLY WRONG, and it hid behind every focus check.
+   *
+   * xterm puts `focus` on `.xterm`; the blink animation is selected by
+   * `.xterm-rows.xterm-focus`, a different class on a different node added by
+   * the DOM renderer's `handleFocus()` - which only runs on a real focus
+   * EVENT. Writing `options.fontFamily`/`fontSize`/`lineHeight` rebuilds the
+   * renderer, and `applyFont` writes all three once the caller has answered
+   * the graphics prompt, by which time the terminal is already focused. The
+   * new row container therefore never gets the class.
+   *
+   * The outer `focus` survives, so every "am I focused?" check says yes while
+   * nothing paints the cursor: xterm still renders it through the FOCUSED
+   * branch (`xterm-cursor-blink xterm-cursor-block`, because the service says
+   * focused) and no rule matches it. The sysop's own readout showed exactly
+   * that pairing - blink and block classes present, `.xterm` focused, and a
+   * white cursor that never blinked.
+   */
+  it('gets the renderer class back, so the cursor blinks again', async () => {
+    windowActive();
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    await act(async () => { await new Promise(r => setTimeout(r, 200)); });
+    const term = rec.terminals[0];
+    expect(term.rows.classList.contains('xterm-focus')).toBe(true);
+
+    // A font change rebuilds the renderer: a fresh row container, without the
+    // class, under a terminal that is still focused.
+    term.rows.classList.remove('xterm-focus');
+    expect(term.element.classList.contains('focus')).toBe(true);
+
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+
+    expect(term.rows.classList.contains('xterm-focus')).toBe(true);
   });
 });
 

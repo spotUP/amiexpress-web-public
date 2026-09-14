@@ -925,8 +925,50 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * disagreement, so a terminal that is genuinely unfocused stays that way.
      */
     const resyncFocus = () => {
-      if (document.activeElement !== term.textarea) return;
-      if (term.element?.classList.contains('focus')) return;
+      /*
+       * THE RENDERER HAS ITS OWN FOCUS CLASS, AND IT IS THE ONE THAT MATTERS.
+       *
+       * xterm puts `focus` on `.xterm`, but the blink animation is selected
+       * by `.xterm-rows.xterm-focus` - a DIFFERENT class on a DIFFERENT node,
+       * added by the DOM renderer's `handleFocus()`, which only runs on a
+       * real focus EVENT.
+       *
+       * Rebuild the renderer while the terminal is already focused - which is
+       * what writing `options.fontFamily`/`fontSize`/`lineHeight` does, and
+       * `applyFont` writes all three after the caller answers the graphics
+       * prompt - and the new row container never gets it. The outer class is
+       * still there, so every "am I focused?" check says yes, while the
+       * cursor's blink rule no longer matches anything: xterm renders it with
+       * `xterm-cursor-blink xterm-cursor-block` (the focused branch, because
+       * the SERVICE still says focused) and no rule paints it. That is the
+       * sysop's white cursor that never blinks, reported four times.
+       */
+      const rows = term.element?.querySelector('.xterm-rows');
+      const rendererLostIt = !!term.element?.classList.contains('focus')
+        && !!rows && !rows.classList.contains('xterm-focus');
+      if (term.element?.classList.contains('focus') && !rendererLostIt) return;
+
+      /*
+       * WHO HOLDS THE CARET DECIDES WHETHER WE MAY TAKE IT.
+       *
+       * Two different failures wear the same face, and only this tells them
+       * apart:
+       *
+       *  - the TEXTAREA holds it and xterm is stale. The DOM is right; blur
+       *    and focus again to fire the event xterm missed.
+       *  - NOTHING in the page holds it - `activeElement` has fallen back to
+       *    <body>, which is what DevTools or another window having the caret
+       *    looks like from in here. The board is a terminal and its window
+       *    has just come back, so it takes the caret.
+       *
+       * And the case that must keep working: a real element on the page holds
+       * it, because the viewer is typing in a field. That is left alone - the
+       * board must never yank the caret out from under them.
+       */
+      const holder = document.activeElement;
+      const nobodyHasIt = holder === null || holder === document.body;
+      if (holder !== term.textarea && !nobodyHasIt) return;
+
       term.blur();
       term.focus();
     };
@@ -2521,7 +2563,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // 2026-09-14). The page's fit rounds what it settles on the same
         // way; this covers the window before that lands.
         void applyFont(term, TELETEXT_FONT, seamlessTeletextSize(fontSizeRef.current * 2), false)
-          .then(() => announceTexttvMode(true));
+          .then(() => announceTexttvMode(true)).then(resyncFocus);
       } else {
         console.log('[Terminal] Teletext mode off - restoring session face');
         texttvModeRef.current = false;
@@ -3034,7 +3076,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // (the canvas does), so the pick goes straight to xterm. The
       // calibrated size (fontSizeRef) is passed through — never the
       // hardcoded desktop 16 on mobile.
-      void applyFont(term, fontName, fontSizeRef.current);
+      void applyFont(term, fontName, fontSizeRef.current).then(resyncFocus);
     });
 
     // Handle font preference loaded from database on login
@@ -3049,7 +3091,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // renders on the PetsciiCanvas, whose glyphs come from the
       // character-ROM atlas, not from a CSS font - so a saved Amiga font
       // can no longer clobber a C64 session's look.
-      void applyFont(term, data.font, fontSizeRef.current);
+      void applyFont(term, data.font, fontSizeRef.current).then(resyncFocus);
     });
 
     // Post-login input to the server (was the tail of term.onData).
