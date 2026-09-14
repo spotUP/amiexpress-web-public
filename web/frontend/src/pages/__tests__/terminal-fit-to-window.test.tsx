@@ -57,6 +57,8 @@ vi.mock('@amiexpress/terminal', async () => ({
   // worse - refit() throws into the void and the size never changes.
   seamlessTeletextSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
     .seamlessTeletextSize,
+  seamlessSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .seamlessSize,
   BBSTerminal: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
     harness.props = props as NonNullable<typeof harness.props>;
     React.useImperativeHandle(ref, () => ({
@@ -131,6 +133,28 @@ function resizeTo(container: HTMLElement, width: number, height: number): HTMLEl
   return page;
 }
 
+describe('the cell lands on a whole CSS pixel', () => {
+  /*
+   * The DOM renderer rounds per span, so a fractional cell shows a one-pixel
+   * gap wherever the rounding lands - between underscores, between any two
+   * Amiga ASCII strokes drawn to meet. Eighty Topaz underscores at a 14.975px
+   * cell: 80 runs with a gap between each; at 15px: one run of 2400 device
+   * pixels (measured by screenshot, sysop 2026-09-14).
+   */
+  it('gives the 80-column fit a whole cell, and it still fits', () => {
+    for (const [width, height] of [[1280, 800], [1366, 768], [1512, 945], [1920, 1080]]) {
+      cleanup();
+      const { page } = mountAt(width, height);
+      const size = harness.term!.options.fontSize as number;
+      const cell = size * CHAR_ASPECT;
+      expect(Math.abs(cell - Math.round(cell))).toBeLessThan(0.001);
+      const grid = gridFor(size);
+      expect(grid.width + 2 * TERMINAL_BEZEL_PX).toBeLessThanOrEqual(page.clientWidth + 0.001);
+      expect(grid.height + 2 * TERMINAL_BEZEL_PX).toBeLessThanOrEqual(page.clientHeight + 0.001);
+    }
+  });
+});
+
 describe('the cell size follows the browser window', () => {
   it('fits the 80x25 grid to a 1280x800 window instead of a fixed 16px', () => {
     mountAt(1280, 800);
@@ -153,7 +177,7 @@ describe('the cell size follows the browser window', () => {
   it('never hands down a size whose grid does not fit the window', () => {
     for (const [w, h] of [[1280, 800], [800, 600], [1920, 1080], [900, 1200]] as const) {
       const { container, page } = mountAt(w, h);
-      const grid = gridFor(harness.props?.fontSize as number);
+      const grid = gridFor(harness.term!.options.fontSize);
       const bezel = bezelOf(page);
       expect(grid.width + 2 * bezel).toBeLessThanOrEqual(w + 0.001);
       expect(grid.height + 2 * bezel).toBeLessThanOrEqual(h + 0.001);
@@ -166,7 +190,7 @@ describe('the cell size follows the browser window', () => {
 describe('at fit the box touches the viewport on the constraining axis', () => {
   it('is flush on a 1280x800 window, where height constrains', () => {
     const { page } = mountAt(1280, 800);
-    const grid = gridFor(harness.props?.fontSize as number);
+    const grid = gridFor(harness.term!.options.fontSize);
     const bezel = bezelOf(page);
     // The bezel absorbed the leftover, so the box is exactly the page height.
     expect(grid.height + 2 * bezel).toBeCloseTo(800, 5);
@@ -176,7 +200,7 @@ describe('at fit the box touches the viewport on the constraining axis', () => {
 
   it('is flush on a portrait-ish 900x1200 window, where width constrains', () => {
     const { page } = mountAt(900, 1200);
-    const grid = gridFor(harness.props?.fontSize as number);
+    const grid = gridFor(harness.term!.options.fontSize);
     const bezel = bezelOf(page);
     expect(grid.width + 2 * bezel).toBeCloseTo(900, 5);
     expect(grid.height + 2 * bezel).toBeLessThan(1200);

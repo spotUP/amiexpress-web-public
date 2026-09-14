@@ -13,7 +13,7 @@ import {
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
 import { findGameControlLayout, trackpadColumn, trackpadStep } from '../components/mobile/game-controls';
 import { fitFontSize, TELETEXT_FIT_LIMITS } from '../components/mobile/terminal-fit';
-import { seamlessTeletextSize } from '@amiexpress/terminal';
+import { seamlessSize, seamlessTeletextSize } from '@amiexpress/terminal';
 import {
   FIT_TO_WINDOW,
   TERMINAL_BEZEL_PX,
@@ -256,7 +256,15 @@ export function TerminalPage(): JSX.Element {
     // ended on. Two reasons: the viewer's override may scale it down, and a
     // net size change here would wake the grid observer that called us and
     // start the search over.
-    const effective = zoomedFontSize(fitted, zoomFractionRef.current);
+    //
+    // And on a whole CELL. The DOM renderer rounds per span, and every glyph
+    // that fills its cell edge to edge - an underscore, any Amiga ASCII
+    // stroke drawn to meet its neighbour - shows a one-pixel gap wherever a
+    // fractional cell lands: "det ar liksom inte tillrackligt med plats, dom
+    // overlappar" (an artist, via the sysop, 2026-09-14). seamlessSize is
+    // the one owner of that rule; the face's advance decides the step.
+    const family = String(term.options.fontFamily ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
+    const effective = seamlessSize(zoomedFontSize(fitted, zoomFractionRef.current), family);
     const grid = measure(effective);
     // A hidden xterm host (a web P session: display none) measures 0x0.
     // fitFontSize returned its seed unmeasured; the slack below must not read

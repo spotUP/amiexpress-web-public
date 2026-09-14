@@ -7,7 +7,6 @@
 
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
@@ -172,9 +171,8 @@ export default function ChatTerminal() {
       return true;
     });
 
-    // Load canvas addon for better performance
-    const canvasAddon = new CanvasAddon();
-    term.loadAddon(canvasAddon);
+    // No canvas addon: its atlas draws every face glyph a device pixel short
+    // of its cell (see BBSTerminal). The DOM renderer keeps the cells touching.
 
     // Load fit addon for responsive sizing
     const fitAddon = new FitAddon();

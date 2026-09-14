@@ -50,41 +50,62 @@ export const DEFAULT_BBS_FONT = 'TopazPlus_a1200';
 export const TELETEXT_FONT = 'TeletextUPR';
 
 /**
- * How wide a TeletextUPR cell is, as a fraction of the font size: 600
- * units of advance against an em of 1000, a property of the shipped file
- * rather than a guess.
+ * How wide each face's cell is, as a fraction of the font size: the advance
+ * of its glyphs over its em. A property of the shipped files, not a guess -
+ * pinned against them in session-font-advance.test.ts.
  */
-export const TELETEXT_ADVANCE_RATIO = 0.6;
+const ADVANCE_RATIOS: Record<string, number> = {
+  'mosoul': 0.5,
+  'MicroKnight': 0.5,
+  'MicroKnightPlus': 0.5,
+  'P0T-NOoDLE': 0.5,
+  'Topaz_a500': 0.5,
+  'Topaz_a1200': 0.5,
+  'TopazPlus_a500': 0.5,
+  'TopazPlus_a1200': 0.5,
+  'PetMe64': 1.0,
+  'TeletextUPR': 0.6,
+};
+
+/** How wide a TeletextUPR cell is: 600 units of advance over an em of 1000. */
+export const TELETEXT_ADVANCE_RATIO = ADVANCE_RATIOS['TeletextUPR'];
+
+/** The advance ratio of a BBS face. Every Amiga face the board ships is 0.5. */
+export function advanceRatioFor(font: string): number {
+  return ADVANCE_RATIOS[font] ?? 0.5;
+}
 
 /**
- * A teletext font size whose CELL is a whole CSS pixel.
+ * The largest size at or below `size` whose CELL is a whole CSS pixel.
  *
- * Teletext is block graphics and blocks show every rounding error. What
- * the pixels say, measured by screenshotting a 40-cell mosaic rule and
- * counting runs (dpr 2, sysop 2026-09-14):
+ * The terminal draws with xterm's DOM renderer, which lays a row out as
+ * spans of text; a fractional cell width rounds per span, and the glyphs
+ * that fill their cell edge to edge - a mosaic, an underscore, every Amiga
+ * ASCII glyph drawn to meet its neighbour - show a one-pixel gap wherever
+ * the rounding lands. Measured by screenshotting rows and counting runs
+ * (dpr 2, sysop 2026-09-14): a 22.5px teletext cell breaks a 40-cell rule
+ * into seven runs; a 24px cell gives one run of 1920 unbroken pixels. Eighty
+ * underscores in Topaz at a 15px cell: one run of 2400.
  *
- *   - xterm's CANVAS renderer blits a glyph that comes from the FACE at
- *     `cellWidth - 1` device pixels - 44 lit of a 45px cell, 47 of 48 -
- *     so every cell boundary keeps a one-pixel gap. Not the face (a build
- *     with the blocks widened past their advance measures the same), not
- *     the size, and not the atlas's trim: the WebGL renderer shares it and
- *     shares the gap. U+2580-259F escape only because xterm draws those
- *     itself, which is why ordinary ANSI art is seamless.
- *   - The DOM renderer draws the row as text and the cells touch - but it
- *     lays out spans, and a fractional cell rounds per span: a 22.5px cell
- *     breaks the rule into seven runs, a 24px cell gives one run of 1920
- *     unbroken device pixels.
- *
- * A whole cell is therefore necessary, and on the canvas renderer not yet
- * sufficient - that half needs a terminal built on the DOM renderer, which
- * cannot be swapped in mid-session (the renderer xterm falls back to keeps
- * the CSS it was created with and ignores every option change after).
+ * (The canvas renderer was worse and could not be fixed from here: its
+ * atlas blits any glyph that comes from the face at `cellWidth - 1` device
+ * pixels, whatever the size and whatever the font - 44 lit of a 45px cell -
+ * and WebGL shares that atlas. U+2580-259F escaped it only because xterm
+ * draws those itself, which is why block art looked fine while the artists'
+ * underscores did not: "det ar liksom inte tillrackligt med plats, dom
+ * overlappar". The board no longer loads it.)
  *
  * DOWN, never up: the caller's size is already the largest that fits.
  */
+export function seamlessSize(size: number, font: string): number {
+  const ratio = advanceRatioFor(font);
+  const cell = Math.floor(size * ratio);
+  return cell > 0 ? cell / ratio : size;
+}
+
+/** seamlessSize for the teletext face. */
 export function seamlessTeletextSize(size: number): number {
-  const cell = Math.floor(size * TELETEXT_ADVANCE_RATIO);
-  return cell > 0 ? cell / TELETEXT_ADVANCE_RATIO : size;
+  return seamlessSize(size, TELETEXT_FONT);
 }
 
 /**
@@ -279,7 +300,10 @@ export async function applyFont(term: FontTarget, font: string, fontSize?: numbe
   const family = fontFamilyFor(font);
   const familyChanged = term.options.fontFamily !== family;
   term.options.fontFamily = family;
-  if (typeof fontSize === 'number') term.options.fontSize = fontSize;
+  // Through seamlessSize: this is the one place a face and a size meet, so
+  // it is where the cell is made whole (a fractional cell gaps every glyph
+  // that fills its cell - see seamlessSize).
+  if (typeof fontSize === 'number') term.options.fontSize = seamlessSize(fontSize, font);
   term.options.lineHeight = lineHeightFor(font);
   // A changed family already fired the measure; an unchanged one did not.
   if (!familyChanged) forceRemeasure(term);

@@ -95,6 +95,7 @@ import {
   FIT_TO_WINDOW,
   ZOOM_STORAGE_KEY,
 } from '../../../../../packages/terminal/src/utils/terminal-zoom';
+import { DEFAULT_BBS_FONT, seamlessSize } from '../../../../../packages/terminal/src/utils/session-font';
 import { FakeSocket } from './helpers/fake-socket';
 
 /** The desktop board's own box, once fitted: 960 wide, 632 tall. */
@@ -177,7 +178,11 @@ describe('the terminal follows the window until the viewer overrides it', () => 
     const { term } = mountBox({ fontSize: 25.4 });
     expect(rec.ctorArgs[0].fontSize).toBe(25.4);
     await flushFrames();
-    expect(term.options.fontSize).toBe(25.4);
+    // No zoom fraction of its own - the only thing between the handed-down
+    // size and the one held is the whole-cell snap for the face (applyFont
+    // via seamlessSize): 25.4 in a 0.5-advance face is a 12.7px cell, so 24.
+    expect(term.options.fontSize).toBe(seamlessSize(25.4, DEFAULT_BBS_FONT));
+    expect(term.options.fontSize).toBe(24);
   });
 
   it('has no width cap on the box - a cap could only clip a screen fitted to the window', () => {

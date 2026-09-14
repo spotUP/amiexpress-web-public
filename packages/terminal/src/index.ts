@@ -48,6 +48,8 @@ export {
   forceRemeasure,
   applyFont,
   seamlessTeletextSize,
+  seamlessSize,
+  advanceRatioFor,
   type BbsFont,
   type FontTarget,
 } from './utils/session-font';

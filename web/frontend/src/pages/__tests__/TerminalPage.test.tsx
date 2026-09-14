@@ -33,6 +33,8 @@ vi.mock('@amiexpress/terminal', async () => ({
   // worse - refit() throws into the void and the size never changes.
   seamlessTeletextSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
     .seamlessTeletextSize,
+  seamlessSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .seamlessSize,
   BBSTerminal: React.forwardRef((props: Record<string, any>, ref: React.Ref<unknown>) => {
     harness.props = props;
     React.useEffect(() => { harness.mounts += 1; }, []);
