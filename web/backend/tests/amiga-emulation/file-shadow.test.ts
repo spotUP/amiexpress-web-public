@@ -124,7 +124,7 @@ describe('FileManager shadow branch', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PathManager } = require('../../src/amiga-emulation/api/PathManager');
 
-  function stageDoor(cfg: string): string {
+  function stageDoor(cfg: string, artSections?: unknown): string {
     const fs = require('fs');
     const os = require('os');
     const path = require('path');
@@ -139,18 +139,19 @@ describe('FileManager shadow branch', () => {
             default: 'YES', cfgKey: 'DUAL_LISTING', narrowValue: 'NO',
             choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
         ],
+        ...(artSections ? { artSections } : {}),
       }),
     );
     return dir;
   }
 
-  function managerFor(dir: string, session: any) {
+  function managerFor(dir: string, session: any, artRoot?: string) {
     const pm = new PathManager(dir);
     pm.setProgDir(dir);
     const fm = new FileManager(dir, pm);
     fm.setCurrentDir('progdir:');
     fm.setShadowProvider(
-      createEmpireNarrowShadow({ session, doorDir: dir }),
+      createEmpireNarrowShadow({ session, doorDir: dir, artRoot }),
     );
     return fm;
   }
@@ -182,6 +183,103 @@ describe('FileManager shadow branch', () => {
     wide.close(bptr2);
 
     expect(fs.readFileSync(path.join(dir, 'Bulls.CFG'), 'latin1')).toContain('DUAL_LISTING       YES');
+  });
+
+  /**
+   * REACHABILITY: the drawing reaches the DOOR, not just the provider.
+   *
+   * Bulls opens `DOORS:EmP_Tools/Bulls.CFG` and prints what it finds between
+   * the body and `[Title_END]`. This drives the same FileManager open the
+   * door drives, through the real provider and the real store on disk, and
+   * reads the bytes the door would have been handed.
+   */
+  describe('the drawing reaches the door', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { writeVariant } = require('../../src/doors/door-art-variants');
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+
+    const TITLE_CFG = [
+      'DUAL_LISTING       YES                 ; Use 2 Listings [YES/NO]',
+      '[Init_END] ====================================================================',
+      '\x1b[36m     ________  EIGHTY COLUMN LOGO',
+      '[Title_END] ==================================================================',
+    ].join('\n');
+
+    const ART = [
+      { file: 'Bulls.CFG', section: 'title', label: 'Title logo', maxLines: 20, maxLineLength: 200, commands: ['B'] },
+    ];
+
+    function artRootDir(): string {
+      return fs.mkdtempSync(path.join(os.tmpdir(), 'shadow-art-'));
+    }
+
+    /** The title body of the bytes the door reads for its own config. */
+    function titleTheDoorReads(session: any, artRoot: string, dir: string): string[] | undefined {
+      const fm = managerFor(dir, session, artRoot);
+      const bptr = fm.open('PROGDIR:Bulls.CFG', 1005);
+      expect(bptr).toBeGreaterThan(0);
+      const served = readAll(fm, bptr);
+      fm.close(bptr);
+      return getSectionBody(parseEmpireFile(served), 'title');
+    }
+
+    test('a 40-column PETSCII caller reads the drawing the sysop made for him', () => {
+      const dir = stageDoor(TITLE_CFG, ART);
+      const artRoot = artRootDir();
+      try {
+        writeVariant(artRoot, 'B', 'title', 'c64', ['  UP ROUGH BULLS']);
+        expect(titleTheDoorReads({ ...C64, doorCommand: 'B' }, artRoot, dir))
+          .toEqual(['  UP ROUGH BULLS']);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(artRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('a teletext caller with no drawing of his own reads the wide art', () => {
+      const dir = stageDoor(TITLE_CFG, ART);
+      const artRoot = artRootDir();
+      try {
+        writeVariant(artRoot, 'B', 'title', 'c64', ['  UP ROUGH BULLS']);
+        expect(titleTheDoorReads({ ...TELETEXT, doorCommand: 'B' }, artRoot, dir))
+          .toEqual(['\x1b[36m     ________  EIGHTY COLUMN LOGO']);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(artRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('an 80-column caller reads the file on disk, byte for byte', () => {
+      const dir = stageDoor(TITLE_CFG, ART);
+      const artRoot = artRootDir();
+      try {
+        writeVariant(artRoot, 'B', 'title', 'c64', ['  UP ROUGH BULLS']);
+        const fm = managerFor(dir, { ...ANSI80, doorCommand: 'B' }, artRoot);
+        const bptr = fm.open('PROGDIR:Bulls.CFG', 1005);
+        const served = readAll(fm, bptr);
+        fm.close(bptr);
+        expect(served).toBe(fs.readFileSync(path.join(dir, 'Bulls.CFG'), 'latin1'));
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(artRoot, { recursive: true, force: true });
+      }
+    });
+
+    test('the drawing on disk is never written by the door reading it', () => {
+      const dir = stageDoor(TITLE_CFG, ART);
+      const artRoot = artRootDir();
+      try {
+        writeVariant(artRoot, 'B', 'title', 'c64', ['  UP ROUGH BULLS']);
+        const before = fs.readFileSync(path.join(dir, 'Bulls.CFG'), 'latin1');
+        titleTheDoorReads({ ...C64, doorCommand: 'B' }, artRoot, dir);
+        expect(fs.readFileSync(path.join(dir, 'Bulls.CFG'), 'latin1')).toBe(before);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(artRoot, { recursive: true, force: true });
+      }
+    });
   });
 
   test('no provider means no shadow, and unshadowed doors behave as before', () => {
