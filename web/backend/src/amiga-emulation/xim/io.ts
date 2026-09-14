@@ -827,6 +827,15 @@ debugLog(
 debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
+    // THE DOOR'S OWN FRAME BOUNDARY. It has stopped painting and wants a
+    // key, which is the only signal that a REPAINT has finished - a timer
+    // cannot know. This emulator writes a repaint's rows 200-400 ms apart,
+    // so the adapter's quiet gap used to land inside one and the caller was
+    // shown a list with an entry in its old position and its new one at
+    // once (sysop, 2026-09-14). Telling the adapter here also teaches it
+    // that this door asks at all, which is what stops the guessing.
+    c64AdapterFor(this.socket)?.flushForInput();
+
     // Mark that this door uses XIM input commands - prevents native input injection
     debugLog(`[XIMIOHandler] JH_HK (Hotkey) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;

@@ -81,6 +81,12 @@ function sampleFor(shape: unknown): unknown {
         return walk(def._def.options[0]);
       case 'ZodEnum':
         return def._def.values[0];
+      // A LITERAL IS ITS OWN SAMPLE. Without this the default below handed
+      // `terminal_colours` - `z.union([z.literal(8), z.literal(16)])`, the
+      // eight-colour work - the string 'x', which the union rejects, and the
+      // guard reported a schema fault where there was none.
+      case 'ZodLiteral':
+        return def._def.value;
       case 'ZodBoolean':
         return true;
       case 'ZodNumber': {
@@ -95,7 +101,13 @@ function sampleFor(shape: unknown): unknown {
         const min = checks.find((c: { kind: string }) => c.kind === 'min')?.value ?? 0;
         return 'x'.repeat(Math.max(min, 1));
       }
+      // A type this does not know hands the schema a string, which a
+      // non-string field rejects - and the failure then reads as a schema
+      // fault rather than a gap here. Say which type it was.
       default:
+        if (name && name !== 'ZodString') {
+          throw new Error(`sampleFor: no sample for ${name} - teach the generator this type`);
+        }
         return 'x';
     }
   };

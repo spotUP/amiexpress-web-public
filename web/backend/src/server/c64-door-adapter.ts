@@ -108,6 +108,18 @@ import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit, 
 export const C64_ADAPT_TICK_MS = 30;
 /** Hard cap on how long a frame may accumulate before it is cut anyway. */
 export const C64_ADAPT_MAX_FRAME_MS = 250;
+/**
+ * The cap once the door has shown it ASKS FOR INPUT - a liveness guard, not
+ * a frame boundary.
+ *
+ * A door that asks for a key tells the adapter when its screen is finished,
+ * so the timers stop guessing. This is only here so a door that asks once
+ * and then paints for ever cannot leave the caller looking at nothing: at
+ * that point a cut mid-paint is the lesser evil, and progressive output is
+ * what a listing wants anyway. Ten seconds is far longer than any repaint
+ * measured on this emulator (a twelve-row list redraw is under two).
+ */
+export const C64_ADAPT_INTERACTIVE_CAP_MS = 10_000;
 
 /** The grid a 68K door believes it is painting on. */
 const SOURCE_COLS = 80;
@@ -272,13 +284,44 @@ export class C64DoorFrameAdapter {
     return this.disposed;
   }
 
+  /**
+   * Has this door asked the caller for a key? Then IT says when a screen is
+   * finished, and the quiet gap stops guessing. See `flushForInput`.
+   */
+  private asksForInput = false;
+
   write(text: string): void {
     this.screen.write(text);
     this.dirty = true;
     this.writeSeq += 1;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), this.tickMs);
-    if (!this.capTimer) this.capTimer = setTimeout(() => this.flush(), this.maxFrameMs);
+    // THE QUIET GAP IS A GUESS, and only worth making while the door's own
+    // rhythm is unknown. This emulator writes a repaint's rows 200-400 ms
+    // apart, so a 30 ms gap lands INSIDE one: the caller was shown a list
+    // with one entry in its old position and its new one at once, and which
+    // entry doubled moved with the cut (sysop, 2026-09-14).
+    if (!this.asksForInput) {
+      this.timer = setTimeout(() => this.flush(), this.tickMs);
+    }
+    if (!this.capTimer) {
+      this.capTimer = setTimeout(
+        () => this.flush(),
+        this.asksForInput ? C64_ADAPT_INTERACTIVE_CAP_MS : this.maxFrameMs,
+      );
+    }
+  }
+
+  /**
+   * The door has stopped painting and is asking for a key: THE frame
+   * boundary, and the only one that knows a repaint has finished.
+   *
+   * Called from the XIM input path (`xim/io.ts`, JH_HK). It also records
+   * that this door asks at all, which is what lets `write` stop cutting on
+   * the quiet gap.
+   */
+  flushForInput(): void {
+    this.asksForInput = true;
+    this.flush();
   }
 
   flush(): void {
