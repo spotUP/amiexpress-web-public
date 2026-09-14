@@ -1,8 +1,20 @@
+/*
+ * IN THE PAGE'S FLOW, not fixed to the viewport.
+ *
+ * `position: fixed` anchors to iOS's LAYOUT viewport - the tall one that runs
+ * under Safari's bars - while the page box is sized from the SMALL viewport
+ * (`100svh`, index.html), which is the one a caller can see. Two coordinate
+ * systems: the page reserved a 260px strip at the bottom of ITS box and the
+ * keyboard drew itself 260px up from the bottom of a taller one, so the strip
+ * landed over the last rows of the grid. The sysop, 2026-09-14: "now its
+ * hidden behind the osd keyboard".
+ *
+ * A flex row in the page's own column cannot disagree with the page about
+ * where the bottom is, and the band left for the terminal is then literally
+ * what is left - no constant to keep in sync with this height.
+ */
 .mobile-bbs-keyboard {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex: 0 0 auto;
   height: var(--bbs-onscreen-input-height, 260px);
   background: #1a1a1a;
   border-top: 2px solid #444;

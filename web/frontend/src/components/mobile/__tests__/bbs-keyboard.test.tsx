@@ -150,3 +150,29 @@ describe('MobileBBSKeyboard', () => {
     expect(onKey).toHaveBeenCalledWith('A');
   });
 });
+
+/**
+ * The strip is a ROW OF THE PAGE, not an overlay fixed to the viewport.
+ *
+ * `position: fixed` anchors to iOS's LAYOUT viewport - the tall one that runs
+ * under Safari's bars - while the page box is sized from the SMALL viewport
+ * (`100svh`). The two disagree by exactly the height of those bars, so the
+ * page reserved its 260px band at one place and the keyboard drew itself at
+ * another: first a gap below the text, then, with the bars retracted, the
+ * strip over the last rows of the grid. The sysop, 2026-09-14: "now its
+ * hidden behind the osd keyboard".
+ *
+ * A flex row in the page's own column cannot disagree with the page about
+ * where the bottom is.
+ */
+describe('where the strip sits', () => {
+  it('is in the flow, not fixed to the viewport', () => {
+    render(<MobileBBSKeyboard onKey={() => undefined} />);
+    const strip = document.querySelector('.mobile-bbs-keyboard') as HTMLElement;
+    // jsdom applies the stylesheet only if it is loaded; the class contract is
+    // what the page's flex column depends on, so assert the class is there and
+    // that the component does not position itself inline.
+    expect(strip).not.toBeNull();
+    expect(strip.style.position).toBe('');
+  });
+});

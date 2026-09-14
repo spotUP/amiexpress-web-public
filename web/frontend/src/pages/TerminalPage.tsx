@@ -199,13 +199,23 @@ export function TerminalPage(): JSX.Element {
       // the top rows behind the bar.
       const host = element.parentElement;
       if (!host) return;
+      /*
+       * THE HOST'S OWN BOX, when it has one. With the BBS keyboard showing,
+       * the page is a flex column and the host is the row that takes what is
+       * left - so its height IS the band, measured rather than computed, and
+       * it cannot drift from the strip's real height the way a constant does.
+       *
+       * The fallback is for the game pads, which are still fixed overlays and
+       * leave the host at `display: contents` (no box at all, clientHeight 0).
+       */
       available = {
         width: host.clientWidth || window.innerWidth,
-        // Minus the band the browser's own chrome sits over, where a
-        // browser overlays rather than insets - see visibleTop.
-        height: visibleHeight(window)
-          - visibleTop(window)
-          - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0),
+        height: host.clientHeight
+          // Minus the band the browser's own chrome sits over, where a
+          // browser overlays rather than insets - see visibleTop.
+          || (visibleHeight(window)
+            - visibleTop(window)
+            - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0)),
       };
     } else {
       // Desktop fit-to-window. The PAGE's content box, not the terminal's
@@ -292,9 +302,17 @@ export function TerminalPage(): JSX.Element {
     // Absorb the leftover into the bezel so the box reads flush (see bezelPx).
     const following = isFollowingWindow(zoomFractionRef.current) && !isHandheld();
     const slack = Math.min(available.width - grid.width, available.height - grid.height);
-    const bezel = following && slack > 0
-      ? TERMINAL_BEZEL_PX + slack / 2
-      : TERMINAL_BEZEL_PX;
+    /*
+     * NO BEZEL ON A PHONE. Sixteen pixels a side is a frame on a desktop and
+     * eight per cent of the screen on a 390px handheld - and the grid is the
+     * one thing a caller came for. The rounded corners it carries are a
+     * desktop flourish; a phone has the browser's own frame around it already.
+     */
+    const bezel = isHandheld()
+      ? 0
+      : following && slack > 0
+        ? TERMINAL_BEZEL_PX + slack / 2
+        : TERMINAL_BEZEL_PX;
     setBezelPx((previous) => (Math.abs(previous - bezel) < 0.5 ? previous : bezel));
   }, []);
 
@@ -633,7 +651,21 @@ export function TerminalPage(): JSX.Element {
   return (
     <div
       ref={pageRef}
-      className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}${showFrame ? ' terminal-page--framed' : ''}`}
+      /*
+       * Two ways to make room for the on-screen input, because they are two
+       * different things. A game PAD is fixed to the viewport and overlays the
+       * screen, so the page reserves its band as padding. The BBS KEYBOARD is
+       * a row of this page: a fixed element anchors to iOS's layout viewport
+       * while the page is sized from the small one, and the two disagreed by
+       * exactly the height of Safari's bars - the strip landed over the last
+       * rows of the grid.
+       */
+      className={[
+        'terminal-page',
+        showOnscreenInput && gameControls !== null ? 'terminal-page--with-input' : '',
+        showOnscreenInput && gameControls === null ? 'terminal-page--with-keyboard' : '',
+        showFrame ? 'terminal-page--framed' : '',
+      ].filter(Boolean).join(' ')}
       /*
        * The bezel token, with the fit's leftover absorbed into it, so the
        * terminal box ends flush against the window on the constraining axis.
