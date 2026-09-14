@@ -312,6 +312,8 @@ export interface SystemConfig {
 
   // Display Settings
   ansi_enabled: boolean;
+  /** 16, or 8 for a board whose callers see the Amiga's pens. */
+  terminal_colours?: number;
   color_scheme: string;
   allow_custom_screens: boolean;
 

@@ -70,6 +70,15 @@ export const SystemConfigSchema = z.object({
 
   // Display Settings
   ansi_enabled: z.boolean().optional(),
+  /**
+   * How many colours the board's callers have: 16, or 8 for the Amiga's pens.
+   *
+   * A field missing from this schema is DROPPED - zod strips what it does not
+   * know - so the dropdown saved, reported success, and changed nothing. The
+   * admin form and the tooltype writer both had it; this is the third place
+   * a new board setting has to be named, and the only one that fails silently.
+   */
+  terminal_colours: z.union([z.literal(8), z.literal(16)]).optional(),
   color_scheme: z.string().max(50).optional(),
   allow_custom_screens: z.boolean().optional(),
 
