@@ -34,43 +34,56 @@ import * as path from 'path';
 const HANDLER = path.join(__dirname, '..', '..', 'src', 'handlers', 'command.handler.ts');
 const SOURCE = fs.readFileSync(HANDLER, 'utf8');
 
-/** The DISPLAY_CONF_BULL branch, isolated from the rest of the flow. */
-const BRANCH = SOURCE.slice(
-  SOURCE.indexOf('if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL)'),
-  SOURCE.indexOf('if (session.subState === LoggedOnSubState.AUTO_REJOIN)')
+/**
+ * The advanceDisplayFlow loop, which is where BOTH routes into a conference
+ * meet - the login display flow and the `J` command.
+ *
+ * The guard lived in the DISPLAY_CONF_BULL branch first and that was wrong:
+ * only the login route passes through that state, so joining with `J` still
+ * lost the segment. The live log showed it failing identically with the fix
+ * in place (2026-09-14, subState=process_command).
+ */
+const LOOP = SOURCE.slice(
+  SOURCE.indexOf('export async function advanceDisplayFlow'),
+  SOURCE.indexOf("if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {")
 );
 
-describe('a conference bulletin with a ~SP in it', () => {
-  it('has a DISPLAY_CONF_BULL branch to check at all', () => {
-    expect(BRANCH.length).toBeGreaterThan(0);
+describe('a screen with a ~SP left half-shown', () => {
+  it('has the loop to check at all', () => {
+    expect(LOOP.length).toBeGreaterThan(0);
   });
 
   it('does not advance while segments are still waiting', () => {
-    // The whole bug: this branch used to set AUTO_REJOIN unconditionally, and
-    // session.screenSegments was left holding content nobody would ever draw.
-    expect(BRANCH).toMatch(/session\.screenSegments/);
-    expect(BRANCH).toMatch(/segments\.length\s*>\s*0/);
+    expect(LOOP).toMatch(/session\.screenSegments/);
+    expect(LOOP).toMatch(/segments\.length\s*>\s*0/);
   });
 
   it('arms the pause and RETURNS, rather than falling through', () => {
-    // Returning is what hands control to the keypress path, which completes
-    // the pagination and then drains the remaining segments
-    // (screen.handler.ts:3160-3170). Falling through would advance the flow
-    // and lose them exactly as before.
-    // Comments stripped first: the block above this guard EXPLAINS the old
-    // behaviour and names AUTO_REJOIN, so a raw search finds the prose and
-    // measures the wrong distance.
-    const code = BRANCH.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    // Returning hands control to the keypress path, which completes the
+    // pagination and then drains the remaining segments
+    // (screen.handler.ts:3160-3170). Falling through advances the flow and
+    // loses them exactly as before.
+    const code = LOOP.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
     const guard = code.slice(code.indexOf('session.screenSegments'));
 
     expect(guard).toMatch(/pauseDisplayFlow\(socket, session\)/);
-    expect(guard.slice(0, guard.indexOf('AUTO_REJOIN'))).toMatch(/return;/);
+    expect(guard.slice(0, guard.indexOf('}'))).toMatch(/return;/);
   });
 
-  it('still advances when there is nothing left to show', () => {
-    // A bulletin with no ~SP has no segments, and must reach the menu exactly
-    // as it always did - the guard is a detour, not a new gate.
-    expect(BRANCH).toMatch(/session\.subState = LoggedOnSubState\.AUTO_REJOIN;/);
+  it('does not re-arm over a pause that is already up', () => {
+    // Without this it would install a second pause on top of a paginated
+    // screen that is already waiting for a key.
+    expect(LOOP).toMatch(/!session\.paginatedScreen/);
+  });
+
+  it('guards in the loop, NOT in the login-only branch', () => {
+    // The bug that made the first fix useless. DISPLAY_CONF_BULL is reached
+    // by the login flow alone; `J` never goes near it.
+    const branch = SOURCE.slice(
+      SOURCE.indexOf('if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL)'),
+      SOURCE.indexOf('if (session.subState === LoggedOnSubState.AUTO_REJOIN)')
+    );
+    expect(branch).not.toMatch(/session\.screenSegments/);
   });
 });
 
