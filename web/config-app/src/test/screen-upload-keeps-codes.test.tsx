@@ -140,7 +140,7 @@ describe('replacing a screen that carries codes', () => {
     await user.selectOptions(
       screen.getByRole('combobox', { name: /Keep these codes/i }), 'below',
     );
-    await user.click(screen.getByRole('button', { name: /this file only/i }));
+    await user.click(screen.getByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
 
     await waitFor(() => expect(puts.some(p => p.body.dryRun !== true)).toBe(true));
     const write = puts.filter(p => p.body.dryRun !== true).pop()!;
@@ -152,7 +152,7 @@ describe('replacing a screen that carries codes', () => {
     await chooseReplacement(user);
 
     await screen.findByText(/2 lines of codes kept/);
-    await user.click(screen.getByRole('button', { name: /this file only/i }));
+    await user.click(screen.getByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
 
     await waitFor(() => expect(puts.some(p => p.body.dryRun !== true)).toBe(true));
     expect(puts.filter(p => p.body.dryRun !== true).pop()!.body.carryCodes).toBe('above');

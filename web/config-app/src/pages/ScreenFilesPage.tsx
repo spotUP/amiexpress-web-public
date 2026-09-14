@@ -3,7 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil, History } from 'lucide-react';
 import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import { fanOutOptions, type FanOutOption } from './screen-write-plan';
+import {
+  everyCopyOption,
+  fanOutOptions,
+  writeEverywhereLabel,
+  type FanOutOption,
+} from './screen-write-plan';
 import { describeScreen } from './screen-descriptions';
 import { callSitesFor } from './screen-provenance';
 import { summariseShare, type ShareSummary } from './screen-share-view';
@@ -179,6 +184,12 @@ export function ScreenFilesPage() {
     label: string; maxLines: number; maxLineLength: number;
   } | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
+  /**
+   * Whether the "what is this file" control is showing on a file the manager
+   * already reads as art. It is the rare correction, so it is not on screen
+   * until the sysop says the guess is wrong.
+   */
+  const [kindOpen, setKindOpen] = useState(false);
   /** The sibling path a chosen file will be written to as a NEW format of the open screen. */
   const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
   const addFormatInput = useRef<HTMLInputElement | null>(null);
@@ -411,6 +422,19 @@ export function ScreenFilesPage() {
     [data, openScreen, openFile],
   );
 
+  /*
+   * What the page DOES, and what it merely offers.
+   *
+   * A screen exists once per node because AmiExpress keeps it that way, not
+   * because a sysop wants forty-one different titles, so writing every copy
+   * is the action and the rest are alternatives beside it.
+   */
+  const everyCopy = useMemo(() => everyCopyOption(options), [options]);
+  const otherWrites = useMemo(
+    () => options.filter(option => option.choice !== everyCopy?.choice),
+    [options, everyCopy],
+  );
+
   /** Read the chosen file as base64 - bytes, never text, all the way through. */
   const readAsBase64 = (chosen: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -453,9 +477,11 @@ export function ScreenFilesPage() {
     if (!addingFormat || !openFile) return;
     try {
       const bytes = await readAsBase64(chosen);
-      const everyCopy = options.find(o => o.choice === 'all-copies')?.targets ?? [openFile];
+      // The same rule the upload uses, so a new format lands on the same set
+      // of files the sysop would have written the screen itself to.
+      const copies = everyCopy?.targets ?? [openFile];
       const swap = (p: string) => p.replace(/\.[^./]+$/, '') + '.' + addingFormat.ext;
-      const targets = [...new Set(everyCopy.map(swap))];
+      const targets = [...new Set(copies.map(swap))];
       await apiClient.putScreenFile(addingFormat.path, bytes, targets, { carryCodes: 'none' });
       showSuccess(`Added the ${addingFormat.label} version - ${targets.length} file${targets.length === 1 ? '' : 's'}`);
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
@@ -1672,7 +1698,7 @@ export function ScreenFilesPage() {
             <p className="text-sm text-content-primary">
               Write <span className="font-mono">{openFile}</span> where?
             </p>
-            {options.map(option => (
+            {[...(everyCopy ? [everyCopy] : []), ...otherWrites].map((option, at) => (
               <button
                 key={option.choice}
                 className="block text-left underline"
@@ -1685,9 +1711,7 @@ export function ScreenFilesPage() {
                   setOpenFile(null);
                 }}
               >
-                {option.label}
-                {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
-                {option.suggested && <span className="text-content-secondary"> (suggested)</span>}
+                {at === 0 && everyCopy ? writeEverywhereLabel(option) : option.label}
               </button>
             ))}
             <button
@@ -1905,22 +1929,31 @@ export function ScreenFilesPage() {
                 )}
 
                 {/*
-                  Buttons, not links: one of these writes to the board and one
-                  throws the upload away, and as underlined text they looked
-                  identical. The suggested fan-out is the primary action.
+                  ONE action, not a question with four answers.
+                  "when do i not want to replace the 41 files for the
+                  bbstitle?" (sysop) - almost never, so the page writes every
+                  copy and keeps the rest as alternatives rather than asking
+                  which of four before anything happens.
                 */}
                 <div>
-                  <span className="label">Write it to</span>
-                  <div className="flex flex-wrap gap-2">
-                    {options.map(option => (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {everyCopy && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => applyWrite(everyCopy)}
+                      >
+                        {writeEverywhereLabel(everyCopy)}
+                      </button>
+                    )}
+                    {otherWrites.map(option => (
                       <button
                         key={option.choice}
                         type="button"
-                        className={option.suggested ? 'btn-primary' : 'btn-secondary'}
+                        className="btn-secondary"
                         onClick={() => applyWrite(option)}
                       >
                         {option.label}
-                        {option.choice === 'all-copies' && ` (${option.targets.length} backups)`}
                       </button>
                     ))}
                   </div>
@@ -1942,32 +1975,63 @@ export function ScreenFilesPage() {
             )}
 
             {/*
-              The manager's classification is a guess, and the sysop is the one
-              who knows. `art` says the guess is wrong and a designer does edit
-              this file - which is the case the gallery hides by default.
+              THE MANAGER'S GUESS, and only where it can be wrong about
+              something the sysop can see.
+              "this stuff is a bit weird as well - artist can only edit the
+              editable ones anyway?" (sysop, 2026-09-14). It read as a
+              permission because "art a designer edits" names a person; it is
+              really "what IS this file", and it decides whether the gallery
+              shows the file or files it away as something the board wrote.
+              On a file the manager already reads as art - almost all of them -
+              it is a control with nothing to do, so it waits behind a link.
             */}
-            <div className="flex flex-wrap items-end gap-2 text-sm">
-              <div>
-                <label className="label" htmlFor="screen-kind">This file is</label>
-                <select
-                  id="screen-kind"
-                  className="input-field"
-                  value={file.generated ?? 'art'}
-                  onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
+            {file.generated ? (
+              <div className="space-y-2 text-sm">
+                <p className="text-status-warn">
+                  {file.generated === 'runtime'
+                    ? 'The manager thinks the board writes this file, so the gallery keeps it out of the way.'
+                    : 'The manager thinks this is an old copy kept beside the real file, so the gallery keeps it out of the way.'}
+                </p>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => flagFile(openFile, 'art')}
                 >
-                  <option value="art">art a designer edits</option>
-                  <option value="runtime">written by the board</option>
-                  <option value="backup">an old copy kept beside the real one</option>
-                </select>
+                  It is art - show it
+                </button>
               </div>
+            ) : kindOpen ? (
+              <div className="flex flex-wrap items-end gap-2 text-sm">
+                <div>
+                  <label className="label" htmlFor="screen-kind">This file is</label>
+                  <select
+                    id="screen-kind"
+                    className="input-field"
+                    value={file.generated ?? 'art'}
+                    onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
+                  >
+                    <option value="art">art a designer edits</option>
+                    <option value="runtime">written by the board</option>
+                    <option value="backup">an old copy kept beside the real one</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => flagFile(openFile, null)}
+                >
+                  Use the manager's guess
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                className="btn-secondary"
-                onClick={() => flagFile(openFile, null)}
+                className="text-sm text-content-secondary underline"
+                onClick={() => setKindOpen(true)}
               >
-                Use the manager's guess
+                Not art?
               </button>
-            </div>
+            )}
 
             {file.problems && file.problems.length > 0 && (
               <div className="text-sm space-y-1">

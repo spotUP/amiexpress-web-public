@@ -149,6 +149,9 @@ describe('the sysop overruling the manager about a file', () => {
     render(<ScreenFilesPage />, { wrapper });
 
     await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+    // The manager reads this one as art, so the control waits behind the
+    // link rather than sitting on screen with nothing to correct.
+    await user.click(await screen.findByRole('button', { name: /not art\?/i }));
     const select = await screen.findByRole('combobox', { name: /This file is/i });
     await user.selectOptions(select, 'runtime');
 
@@ -158,11 +161,29 @@ describe('the sysop overruling the manager about a file', () => {
     });
   });
 
+  /*
+   * "this stuff is a bit weird as well - artist can only edit the editable
+   * ones anyway?" (sysop, 2026-09-14). The control read as a permission
+   * because it was on every file whether or not it had anything to say. It
+   * only has something to say when the manager has decided the board writes
+   * this file, because that is when the gallery hides it.
+   */
+  it('offers nothing to correct on a file the manager already reads as art', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+
+    await screen.findByRole('button', { name: /not art\?/i });
+    expect(screen.queryByRole('combobox', { name: /This file is/i })).toBeNull();
+  });
+
   it('clears the mark and gives the heuristic its say back', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
     await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+    await user.click(await screen.findByRole('button', { name: /not art\?/i }));
     await user.click(await screen.findByRole('button', { name: /use the manager's guess/i }));
 
     await waitFor(() => expect(posts.some(p => p.url.includes('/screens/flag'))).toBe(true));

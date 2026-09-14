@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { fanOutOptions } from '../pages/screen-write-plan';
+import {
+  everyCopyOption,
+  fanOutOptions,
+  writeEverywhereLabel,
+} from '../pages/screen-write-plan';
 import type { ScreenIndexShape } from '../pages/screen-index-view';
 
 const twoNodes = (hashA: string, hashB: string): ScreenIndexShape => ({
@@ -123,5 +127,60 @@ describe('writing every copy that is already identical', () => {
     const options = fanOutOptions(twoNodes('a', 'b'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
 
     expect(options.find(o => o.choice === 'same-content')).toBeUndefined();
+  });
+});
+
+describe('the write-everywhere option the page acts on', () => {
+  test('is every node that has the screen when the copies have drifted', () => {
+    const options = fanOutOptions(twoNodes('a', 'b'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+
+    expect(everyCopyOption(options)?.choice).toBe('all-copies');
+  });
+
+  test('is still every node when the copies already match, not the share', () => {
+    // `suggested` is share-then-write here, and that MOVES files. An upload
+    // must not restructure the board without being asked.
+    const options = fanOutOptions(twoNodes('a', 'a'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+    expect(options.find(o => o.suggested)?.choice).toBe('share-then-write');
+
+    expect(everyCopyOption(options)?.choice).toBe('all-copies');
+  });
+
+  test('falls back to the file itself when it is the only copy', () => {
+    const one: ScreenIndexShape = {
+      builtAt: '',
+      unused: [],
+      screens: [{
+        screen: 'BBSTITLE',
+        dirType: 'node',
+        missingScopes: 0,
+        duplicateGroups: [],
+        resolutions: [
+          { scope: 'node', id: 1, dir: 'Node1', dirIsShared: false, file: 'Node1/BBSTITLE.txt', variants: [] },
+        ],
+      }],
+      files: {
+        'Node1/BBSTITLE.txt': {
+          relPath: 'Node1/BBSTITLE.txt', bytes: 1, format: 'text', sha256: 'a', mci: [],
+        },
+      },
+    };
+
+    expect(everyCopyOption(fanOutOptions(one, 'BBSTITLE', 'Node1/BBSTITLE.txt'))?.choice)
+      .toBe('this-file');
+  });
+});
+
+describe('what the write button says', () => {
+  test('names the number of copies, so the sysop knows the board ends consistent', () => {
+    const options = fanOutOptions(twoNodes('a', 'b'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+
+    expect(writeEverywhereLabel(everyCopyOption(options)!)).toBe('Write all 2 copies');
+  });
+
+  test('does not claim copies when the file stands alone', () => {
+    expect(writeEverywhereLabel({
+      choice: 'this-file', label: 'this file only', targets: ['Node1/BBSTITLE.txt'], suggested: false,
+    })).toBe('Write this file');
   });
 });

@@ -110,3 +110,43 @@ export function fanOutOptions(
 
   return options;
 }
+
+/**
+ * The option a sysop almost always means: every copy of this screen.
+ *
+ * "this file only or all 41 files needs to be click but i dunno the ux is not
+ * so nice - when do i not want to replace the 41 files for the bbstitle?"
+ * (sysop, 2026-09-14). Almost never: a board keeps one BBSTITLE per node
+ * because AmiExpress stores it per node, not because anyone wants forty-one
+ * different titles. Asking every time is asking a question with one answer,
+ * and picking `this file only` by mistake is what left the board serving an
+ * old PETSCII title from a copy nothing matched.
+ *
+ * So the page writes THIS and offers the rest, rather than asking first.
+ *
+ * Deliberately not `suggested`: when every copy already matches, that is
+ * `share-then-write`, which MOVES the files into a shared directory. It is a
+ * good idea and it is a change to how the board is laid out, so it stays a
+ * choice the sysop makes on purpose rather than the default action of an
+ * upload.
+ */
+export function everyCopyOption(options: FanOutOption[]): FanOutOption | undefined {
+  return options.find(option => option.choice === 'all-copies')
+    ?? options.find(option => option.choice === 'same-content')
+    ?? options.find(option => option.choice === 'this-file');
+}
+
+/**
+ * What the write-everywhere button says it will do.
+ *
+ * The count is the point - a sysop who reads "Write all 41 copies" knows the
+ * board will be consistent afterwards, which is the thing the old four-way
+ * question kept failing to make obvious.
+ */
+export function writeEverywhereLabel(option: FanOutOption): string {
+  const count = option.targets.length;
+  if (count <= 1) return 'Write this file';
+  return option.choice === 'same-content'
+    ? `Write all ${count} identical copies`
+    : `Write all ${count} copies`;
+}

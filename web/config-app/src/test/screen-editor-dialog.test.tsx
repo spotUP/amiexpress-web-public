@@ -105,7 +105,7 @@ describe('the editor as a dialog', () => {
     await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
 
     // The fan-out choice used to render in the page underneath.
-    expect(await within(dialog).findByText('this file only')).toBeTruthy();
+    expect(await within(dialog).findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i })).toBeTruthy();
   });
 
   it('writes the bytes and closes', async () => {
@@ -113,7 +113,7 @@ describe('the editor as a dialog', () => {
     const dialog = await openEditor(user);
 
     await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
-    await user.click(await within(dialog).findByText('this file only'));
+    await user.click(await within(dialog).findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
