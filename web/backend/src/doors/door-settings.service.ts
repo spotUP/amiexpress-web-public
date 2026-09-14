@@ -1004,6 +1004,13 @@ function writeEmpireSettings(
  * shows a textarea pretending to be an art tool.
  * ------------------------------------------------------------------ */
 
+import {
+  readVariant,
+  writeVariant,
+  VARIANT_COLUMNS,
+  type ArtAlphabet,
+} from './door-art-variants';
+
 export interface DoorArtSection {
   /** Bare filename inside the door directory (e.g. `Bulls.CFG`). */
   file: string;
@@ -1031,6 +1038,12 @@ export interface DoorArtContent {
   lines: number;
   maxLines: number;
   maxLineLength: number;
+  /**
+   * Which narrow drawings exist for this section, so the Studio can say
+   * "not drawn yet" rather than open a blank canvas that looks the same as
+   * a drawing somebody made and emptied.
+   */
+  variants: { c64: boolean; ttx: boolean };
 }
 
 /**
@@ -1069,12 +1082,24 @@ function loadArtFile(doorDir: string, file: string): EmpireFile {
   return parseEmpireFile(raw);
 }
 
-/** Every art section the manifest declares, with its current body. */
-export function readDoorArtSections(doorDir: string, command?: string): DoorArtContent[] {
+/**
+ * Every art section the manifest declares, with its current body.
+ *
+ * `artRoot` is the board's Screens directory. Without it the narrow
+ * drawings cannot be looked for and every section reports none - which is
+ * what the callers that do not care about variants want.
+ */
+export function readDoorArtSections(
+  doorDir: string,
+  command?: string,
+  artRoot?: string,
+): DoorArtContent[] {
   return listDoorArtSections(doorDir, command).map((entry) => {
     const file = loadArtFile(doorDir, entry.file);
     const body = getSectionBody(file, entry.section);
     if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
+    const drawn = (alphabet: ArtAlphabet): boolean =>
+      !!artRoot && !!command && readVariant(artRoot, command, entry.section, alphabet) !== null;
     return {
       file: entry.file,
       section: entry.section,
@@ -1083,6 +1108,7 @@ export function readDoorArtSections(doorDir: string, command?: string): DoorArtC
       lines: body.length,
       maxLines: entry.maxLines,
       maxLineLength: entry.maxLineLength,
+      variants: { c64: drawn('c64'), ttx: drawn('ttx') },
     };
   });
 }
@@ -1154,4 +1180,73 @@ export function writeDoorArtSection(
   return readDoorArtSections(doorDir).find(
     (a) => a.file === entry.file && a.section.toLowerCase() === entry.section.toLowerCase()
   )!;
+}
+
+/**
+ * The section entry this door declares, or a throw.
+ *
+ * Scoped like every other art call: a request in one door's name cannot
+ * reach the other door's logo just by naming its file.
+ */
+function artEntryFor(doorDir: string, command: string, fileName: string, section: string) {
+  const manifest = readArtManifest(doorDir, command);
+  const entry = manifest.artSections.find(
+    (a) => a.file === fileName && a.section.toLowerCase() === section.toLowerCase(),
+  );
+  if (!entry) throw new Error(`No art section ${section} in ${fileName} - the manifest must declare it`);
+  return entry;
+}
+
+/**
+ * One narrow drawing, or empty content when it has never been drawn.
+ *
+ * An empty canvas is the honest answer for a variant nobody has made: the
+ * Studio opens it and the artist starts drawing. `maxLineLength` is the
+ * caller's FORTY columns, not the door's DOC number - that is the one limit
+ * that differs between the wide art and a variant.
+ */
+export function readDoorArtVariant(
+  doorDir: string,
+  artRoot: string,
+  command: string,
+  fileName: string,
+  section: string,
+  alphabet: ArtAlphabet,
+): DoorArtContent {
+  const entry = artEntryFor(doorDir, command, fileName, section);
+  const lines = readVariant(artRoot, command, entry.section, alphabet) ?? [];
+  return {
+    file: entry.file,
+    section: entry.section,
+    label: entry.label,
+    content: Buffer.from(lines.join('\n'), 'latin1').toString('base64'),
+    lines: lines.length,
+    maxLines: entry.maxLines,
+    maxLineLength: VARIANT_COLUMNS,
+    variants: {
+      c64: readVariant(artRoot, command, entry.section, 'c64') !== null,
+      ttx: readVariant(artRoot, command, entry.section, 'ttx') !== null,
+    },
+  };
+}
+
+/** Save one narrow drawing. The door's own file is never touched. */
+export function writeDoorArtVariant(
+  doorDir: string,
+  artRoot: string,
+  command: string,
+  fileName: string,
+  section: string,
+  alphabet: ArtAlphabet,
+  contentBase64: string,
+): DoorArtContent {
+  const entry = artEntryFor(doorDir, command, fileName, section);
+  const text = Buffer.from(contentBase64, 'base64').toString('latin1');
+  const lines = text.split(/\r\n|\n/);
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  if (lines.length > entry.maxLines) {
+    throw new Error(`${entry.label}: ${lines.length} lines, at most ${entry.maxLines}`);
+  }
+  writeVariant(artRoot, command, entry.section, alphabet, lines);
+  return readDoorArtVariant(doorDir, artRoot, command, fileName, section, alphabet);
 }

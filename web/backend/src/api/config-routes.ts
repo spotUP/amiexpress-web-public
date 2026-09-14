@@ -10,7 +10,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
-import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
+import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
@@ -681,7 +681,18 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       const doorDir = doorDirectoryFor(config.get('dataDir'), door);
       if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
 
-      sendResponse(res, readDoorArtSections(doorDir, command));
+      // The board's Screens directory: where the narrow drawings live, and
+      // how a section knows whether one has been made for it.
+      const artRoot = path.join(config.get('dataDir'), 'Screens');
+      const variant = req.query?.variant;
+      if (variant === 'c64' || variant === 'ttx') {
+        const { file, section } = req.query as { file?: string; section?: string };
+        if (!file || !section) {
+          return handleError(res, new Error('A variant read needs ?file= and ?section='));
+        }
+        return sendResponse(res, readDoorArtVariant(doorDir, artRoot, command, file, section, variant));
+      }
+      sendResponse(res, readDoorArtSections(doorDir, command, artRoot));
     } catch (error) {
       handleError(res, error);
     }
@@ -704,11 +715,26 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       const doorDir = doorDirectoryFor(config.get('dataDir'), door);
       if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
 
-      const { file, section, content } = req.body ?? {};
+      const { file, section, content, variant } = req.body ?? {};
       if (typeof file !== 'string' || typeof section !== 'string' || typeof content !== 'string') {
         return handleError(res, new Error('Expected { file, section, content } with string values'));
       }
-      const updated = writeDoorArtSection(doorDir, file, section, content, command);
+      if (variant !== undefined && variant !== 'c64' && variant !== 'ttx') {
+        return handleError(res, new Error("variant must be 'c64' or 'ttx' when given"));
+      }
+      // A variant is the BOARD's file and is capped at the caller's forty
+      // columns; the wide art is the door's own and keeps its DOC numbers.
+      const updated = variant
+        ? writeDoorArtVariant(
+            doorDir,
+            path.join(config.get('dataDir'), 'Screens'),
+            command,
+            file,
+            section,
+            variant,
+            content,
+          )
+        : writeDoorArtSection(doorDir, file, section, content, command);
       sendResponse(res, updated, `${command} art saved`);
     } catch (error) {
       handleError(res, error);
