@@ -748,9 +748,48 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
   }
 }
 
+/**
+ * Note that this screen is NOT finished, so the flow still owes it a pause.
+ *
+ * A screen split by `~SP` is parked on `session.screenSegments` with the first
+ * piece already on the wire, and the pause the caller is now looking at - this
+ * flow's own `doPause`, or one the screen installed - belongs to the JOIN
+ * between piece one and piece two. The pause that belongs AFTER the screen has
+ * not happened yet, and without it the LAST piece is drawn and taken away by
+ * whatever the flow draws next.
+ */
+function rememberTheDebtIfSegmentsRemain(session: BBSSession): void {
+  const segments = session.screenSegments?.segments;
+  if (segments && segments.length > 0) {
+    session.flowPauseAfterSegments = true;
+  }
+}
+
 function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false): boolean {
   // If a screen already installed a pause (e.g., ~SP or pagination), honor it
   if (session.paginatedScreen) {
+    /*
+     * A `~SP` IS NOT THE FLOW'S PAUSE. It is a pause INSIDE the screen, and
+     * honouring it here spends the one the flow owes AFTER the screen.
+     *
+     * express.e:28557 is `IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()`
+     * - the file is displayed in full, `~SP` stopping at each occurrence along
+     * the way (express.e:5455-5461), and THEN the flow pauses. Two different
+     * pauses, and this returned `true` for the first as though it were the
+     * second.
+     *
+     * On this board NODE_BULL is five MultiTop bulletins joined by `~SP`, so
+     * the last one - bull5 - was drawn and immediately erased by ACHIEVETOP's
+     * clear, with no pause between them. The sysop, 2026-09-14: "the last
+     * multitop has no pause". Same shape as the tip door erasing the join:
+     * something clears the screen before the caller has read what is on it.
+     *
+     * So the debt is REMEMBERED rather than written off, and settled when the
+     * segments run out (handleCommand's pagination-finished branch). Only when
+     * segments actually remain: a screen that paginated into a single page has
+     * already had its pause and must not get a second.
+     */
+    rememberTheDebtIfSegmentsRemain(session);
     return true;
   }
 
@@ -764,6 +803,17 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
     doPause(socket, session);
     // If a pause was installed, stop advancing until the user presses a key
     if (session.paginatedScreen) {
+      /*
+       * AND THIS IS THE COMMON CASE, not the branch above.
+       *
+       * A screen split by `~SP` parks its remaining pieces on
+       * `session.screenSegments` and returns WITHOUT installing a pause of
+       * its own, so it is this doPause that ends up standing between piece
+       * one and piece two. The flow's pause is therefore spent before the
+       * screen has finished - which is exactly how the last MultiTop came to
+       * be wiped by ACHIEVETOP with nothing in between.
+       */
+      rememberTheDebtIfSegmentsRemain(session);
       return true;
     }
   } catch (error) {
@@ -1545,6 +1595,24 @@ console.log(`[handleCommand] handlePaginatedScreenInput returned: handled=${hand
       if (handled) {
         // If pagination finished and we're still in a display-flow state, resume it
         if (!session.paginatedScreen && isDisplayFlowState(session.subState)) {
+          /*
+           * THE SCREEN HAS ONLY NOW FINISHED, so the pause the flow owes it
+           * is due HERE - see pauseDisplayFlow, which deferred it because a
+           * `~SP` had already stopped the screen mid-way.
+           *
+           * Without this the last segment is drawn and the next screen's
+           * clear takes it away in the same breath: five MultiTop bulletins
+           * where the fifth is never readable.
+           */
+          if (session.flowPauseAfterSegments) {
+            session.flowPauseAfterSegments = false;
+            const { doPause } = require('./screen.handler');
+            doPause(socket, session);
+            if (session.paginatedScreen) {
+              displayFlowLog('pause after the last segment', `subState=${session.subState}`);
+              return;
+            }
+          }
 console.log(`[handleCommand] Pagination finished, resuming display flow (subState=${session.subState})`);
           await advanceDisplayFlow(socket, session);
         }

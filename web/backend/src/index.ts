@@ -467,6 +467,15 @@ export interface BBSSession {
   conferences?: import("./database/types").Conference[]; // Cached conference accounting stats (express.e confBases)
   queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
+  /**
+   * The display flow owes this screen a pause, once its `~SP` segments end.
+   *
+   * express.e:28557 pauses AFTER a flow screen is displayed in full; `~SP`
+   * pauses DURING it (express.e:5455-5461). They are different pauses, and
+   * `pauseDisplayFlow` used to spend the second on the first - leaving the
+   * last segment of a segmented screen to be wiped by whatever drew next.
+   */
+  flowPauseAfterSegments?: boolean;
   // express.e's non-stop text flag (`~NS` / `~NSF`): suppresses further
   // pauses for the rest of the display. Set by the MCI dispatch and the
   // pre-passes, read by the XIM bridge (`XIMProtocol.ts:150`) and ARexx
