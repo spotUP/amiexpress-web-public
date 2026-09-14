@@ -1106,11 +1106,31 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           continue;
         }
 
-        // joinConference sets subState to DISPLAY_MENU and menuPause to true
-        if (pauseDisplayFlow(socket, session)) {
-          displayFlowLog('pause after auto-rejoin');
-          // Clear menuPause since we already paused here - prevents double pause in DISPLAY_MENU
-          session.menuPause = false;
+        /*
+         * THE JOIN'S PAUSE IS THE JOIN'S. The flow must not book a second.
+         *
+         * express.e:28574 calls joinConf and goes on to the menu; the only
+         * pause in between is the one joinConf itself does at 5059, after
+         * CONF_BULL. There is no flow pause after an auto-rejoin.
+         *
+         * `pauseDisplayFlow` did more than nothing here: seeing the join's
+         * pause already on screen it honoured it AND remembered a debt (the
+         * `~SP`-inside-NODE_BULL case it was written for), which was then
+         * settled once the caller answered - printing a SECOND
+         * `(Pause)...Space To Resume:` directly under "Joining Conference"
+         * with nothing between them. The sysop, 2026-09-15, of that second
+         * prompt: "a hidden prompt?".
+         *
+         * That debt is right for a screen whose `~SP` paused mid-file and
+         * wrong here, where the pause after the screen is exactly what the
+         * join already did.
+         *
+         * `menuPause` is left set (express.e:28579), so the caller still
+         * meets one pause before the menu - after the mail scan, which is
+         * where express.e puts it.
+         */
+        if (session.paginatedScreen) {
+          displayFlowLog('auto-rejoin holds its own pause; the flow adds none');
           return;
         }
         continue;
