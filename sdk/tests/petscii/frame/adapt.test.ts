@@ -1,4 +1,4 @@
-import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, statRow, proseRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, leaderRow, recordFields, statRow, proseRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
 import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
 import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
@@ -989,6 +989,64 @@ describe('repeat', () => {
     const out = applyRule('repeat', cells, 40);
     expect(out.map(2)).toEqual({ row: 0, x: 0 });    // first cell of the first tag
     expect(out.map(13)).toEqual({ row: 0, x: 9 });   // first cell of the second tag
+  });
+});
+
+/**
+ * BULLS AT 40 COLUMNS, the sysop's 2026-09-13 report. The source rows are the
+ * ones the door really paints when its narrow shadow is in effect
+ * (DUAL_LISTING=NO: one bulletin per row), captured from a live 40-column
+ * session, byte for byte.
+ */
+describe('leader', () => {
+  /** `Bulls` at an indent of 18, one bulletin per row: 62 columns. */
+  const BULL = ' '.repeat(18) + '[01] ......................... Top Uploaders';
+
+  it('keeps the whole menu row by spending the dots, where split severed it', () => {
+    expect(chooseRule(row(BULL), 40)).toBe('leader');
+    const out = applyRule('leader', row(BULL), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('[01] ..................... Top Uploaders');
+    expect(str(out.rows[0])).not.toContain(TRUNCATION_MARK);
+    // Every word survives, in order - only leader dots are gone.
+    expect(words(str(out.rows[0])).filter((w) => !/^\.+$/.test(w)))
+      .toEqual(['[01]', '.....................', 'Top', 'Uploaders'].filter((w) => !/^\.+$/.test(w)));
+  });
+
+  it('declines on a box rule, whose junction belongs to the column below it', () => {
+    // `kd_confstats` row 19: the dashes are the box's own rule and the '+' is a
+    // column junction. Shortening them would move the junction off its column.
+    const BOXED = '|' + '-'.repeat(49) + '+ Up B4 Dn Files:' + ' '.repeat(10) + '|';
+    expect(leaderRow(row(BOXED), 40)).toBeNull();
+  });
+
+  it('declines when the row has no run long enough to be a leader', () => {
+    expect(leaderRow(row(PROSE + ' and again and again'), 40)).toBeNull();
+  });
+
+  it('declines when the run cannot pay the whole difference', () => {
+    // Four dots, and twenty columns to find: what is left would not read as a
+    // leader, and half-fitting a row only hands the rest to `fitRow`.
+    const short = 'Some rather long label here .... and a value that runs past the edge';
+    expect(leaderRow(row(short), 40)).toBeNull();
+  });
+
+  it('declines on a row that fits, and on one de-indenting alone would fit', () => {
+    expect(leaderRow(row('[01] ..... Top Uploaders'), 40)).toBeNull();
+    expect(leaderRow(row(' '.repeat(30) + '[01] ..... Top Uploaders'), 40)).toBeNull();
+  });
+
+  it('a pinned leader on a row with no run falls through to the row\'s own rule', () => {
+    expect(applyRule('leader', row(TABLE), 40).applied).toBe('gutter');
+  });
+
+  it('the cursor follows its source column, and the dropped dots land on the last one kept', () => {
+    const cells = row(BULL);
+    const out = applyRule('leader', cells, 40);
+    expect(out.applied).toBe('leader');                // not the fall-through
+    expect(out.map(18)).toEqual({ row: 0, x: 0 });     // '[' of '[01]'
+    expect(out.map(61)).toEqual({ row: 0, x: 39 });    // 's' of 'Uploaders', the last column
+    expect(out.map(45)).toEqual({ row: 0, x: 25 });    // inside the dropped tail of the run
   });
 });
 

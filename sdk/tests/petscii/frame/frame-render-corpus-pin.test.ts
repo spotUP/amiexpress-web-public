@@ -181,6 +181,22 @@ interface Pin {
  * column: `six_status` reads `0 Bytes` flush at column 40 where the field was
  * right-aligned one column short of the edge it was aligned to, and `what`'s
  * `Total bytes: [ 0 ]` the same. The other 27 hashes are untouched.
+ *
+ * ONE was RE-MEASURED on 2026-09-14 for the `leader` rung (adapt.ts), which
+ * the sysop's Bulls-at-40-columns report asked for: a row that reaches across
+ * a run of dots now spends the dots instead of being cut in two. Named by the
+ * rule census before the hash was touched - every frame of all 36 fixtures
+ * through `chooseRule`, which finds exactly TWO source rows taking the new
+ * rung and both of them in `ustats`. The pin agreed exactly: `ustats` moved
+ * and the other 35 did not. Both rows GAIN - `LaST cAll.....: Thu 21-May-2026
+ * 08:27:48` and `CuRRenT tIMe..: Thu 21-May-2026 08:27:54` are now one row
+ * each, where the reflow put the TIME alone on a row of its own
+ * (`... 21-May-2026` / `08:27:48`) - so the fixture grows 1189 bytes carrying
+ * the same characters on fewer rows. Bulls itself is not in this count: the
+ * `b` capture is its DUAL_LISTING=YES screen, whose bulletin rows are two
+ * bulletins wide and rightly split one per row; the row this rung was written
+ * for is the narrow shadow's single-column row, measured in
+ * `c64-door-adapter.test.ts` against a live capture.
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
@@ -192,7 +208,7 @@ const PINS: Record<string, Pin> = {
   super_stats: { renders: 21, bytes: 10315, sha256: '3369da21e831138c23dedfe41665ea642cdc6aa4197ee50bffca22f3742f2eef' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
   rtw: { renders: 69, bytes: 144781, sha256: 'd486e063a54f7a77a200c47a87563aba403a037ad1c62bbec90b6afb5b9dcaa8' },
-  ustats: { renders: 217, bytes: 287701, sha256: '5a084d2f207ff792fc329a472d287f958a1b5074930d27a155eae14a4115a60a' },
+  ustats: { renders: 217, bytes: 288890, sha256: '2c62434fd8ac573ca240eba25e7bcdc008742acfe36b29ca357b19ac9f6888b5' },
   what: { renders: 13, bytes: 3705, sha256: '584a221ff8cc779495319ba7ece4e97a814bc540f3f416af5720cfb21ae5edb1' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
   j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },

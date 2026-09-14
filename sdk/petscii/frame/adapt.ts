@@ -93,7 +93,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnParts, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stack' | 'stat';
+export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'leader' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stack' | 'stat';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -239,6 +239,11 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
   if (contentWidth(cells) <= cols) return 'crop';
   if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
   if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
+  // DIRECTLY AFTER THE LOSSLESS PAIR, because it loses less than any rung
+  // below it: a leader run is decoration whose only job is to reach across
+  // the gap, and shortening it costs the row nothing a reader can name. See
+  // `leaderRow`.
+  if (leaderRow(cells, cols) !== null) return 'leader';
   // BEFORE narrow, and only ever instead of it: a row of identical columns is
   // decoration, and narrow would shorten every copy.
   if (repeatRow(cells, cols) !== null) return 'repeat';
@@ -938,6 +943,108 @@ export function repeatRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/** A leader run is decoration only while it is long enough to read as one. */
+const MIN_LEADER_RUN = 4;
+/** What is left of a shortened leader: enough that it still reads as a leader. */
+const MIN_LEADER_KEPT = 2;
+
+/**
+ * A leader RUN: a stretch of one repeated non-alphanumeric glyph with content
+ * on both sides of it. `[01] ......................... Top Uploaders` has one;
+ * a rule of dashes across the whole row does not, because nothing precedes it.
+ *
+ * Returns the longest such run as `[start, end)` within `[from, width)`, or
+ * null. Longest rather than first because it is the one with the most to give,
+ * and a row with two leaders (`Name .... Value .... Total`) should spend the
+ * bigger one.
+ */
+function leaderRun(cells: Row, from: number, width: number): [number, number] | null {
+  let best: [number, number] | null = null;
+  let x = from;
+  while (x < width) {
+    const cell = cells[x];
+    if (isBlank(cell) || cell.rvs || /[A-Za-z0-9]/.test(cell.ch)) { x++; continue; }
+    let end = x;
+    while (end < width && cells[end].ch === cell.ch && !cells[end].rvs) end++;
+    const length = end - x;
+    // WORDS on both sides, not merely ink. A leader connects two things a
+    // reader reads; a box's interior rule has a '|' on its left and a column
+    // junction inside it, and shortening THAT moves the junction away from the
+    // column it belongs to on every other row of the box (`kd_confstats` row
+    // 19, measured). Alphanumeric on both sides is what tells the two apart.
+    const isWord = (c: Readonly<Cell>) => /[A-Za-z0-9]/.test(c.ch);
+    const before = cells.slice(from, x).some(isWord);
+    const after = cells.slice(end, width).some(isWord);
+    if (length >= MIN_LEADER_RUN && before && after && (!best || length > best[1] - best[0])) {
+      best = [x, end];
+    }
+    x = end;
+  }
+  return best;
+}
+
+/**
+ * LOSSLESS in text, one row: the rung for a DOT-LEADER row.
+ *
+ * `Bulls` paints its menu as an atom, a run of dots and a label, at an indent
+ * of 18: `[01] ......................... Top Uploaders`, 62 columns wide.
+ * Nothing above this rung wanted it - `deindent` leaves 44, four too many,
+ * `record` declines because the right-hand field is prose, `narrow` needs
+ * gutters and the dots are not blanks - so it fell all the way to
+ * `classifiedRule`, which calls a row of punctuation ART and hands it to
+ * `split`. The caller read `[01] .................` with `........ Top
+ * Uploaders` on the row below: the leader severed, the label orphaned and the
+ * screen twice as tall (sysop's 40-column walk, 2026-09-13).
+ *
+ * The dots are the one thing on that row that MEANS nothing. They are a rule
+ * drawn between two things to tie them together, and a shorter one ties them
+ * together just as well - which is the same argument `isCroppable` already
+ * makes for a repeated non-alphanumeric glyph past column `cols`, and
+ * `repeatRow` for a repeated alphanumeric COLUMN. This is the interior case:
+ * the repetition is in the middle of the row, with content on both sides that
+ * every other rung would rather break.
+ *
+ * So: drop the indent (`deindent`'s trade, and free), then take the rest out
+ * of the longest leader run. Every glyph that carries meaning survives, in its
+ * original order, on ONE row.
+ *
+ * DECLINES when the row already fits (`crop` owns it), when de-indenting alone
+ * is enough (`deindent` owns it), when there is no leader run, and when the
+ * run cannot pay the whole difference without falling below MIN_LEADER_KEPT -
+ * a two-dot leader still reads as one, a row ending in a single dot does not,
+ * and a rung that half-fixes a row leaves `fitRow` to truncate the rest, which
+ * is the tail-cut this rung exists to avoid.
+ */
+export function leaderRow(cells: Row, cols: number): RuleResult | null {
+  const width = contentWidth(cells);
+  if (width <= cols) return null;                 // `crop` is the identity here
+  const lead = indentOf(cells);
+  const over = width - lead - cols;
+  if (over <= 0) return null;                     // `deindent` loses only blanks
+  const run = leaderRun(cells, lead, width);
+  if (!run) return null;
+  const keep = run[1] - run[0] - over;
+  if (keep < MIN_LEADER_KEPT) return null;
+
+  const out: Cell[] = [];
+  const where: number[] = new Array(cells.length);
+  for (let x = lead; x < width; x++) {
+    // The dropped tail of the run maps onto the last leader cell kept, the way
+    // a dropped copy maps onto the last copy kept in `repeatRow`.
+    if (x >= run[0] + keep && x < run[1]) { where[x] = clampCol(cols, out.length - 1); continue; }
+    where[x] = clampCol(cols, out.length);
+    out.push(cloneCell(cells[x]));
+  }
+  for (let x = 0; x < lead; x++) where[x] = 0;
+  for (let x = width; x < cells.length; x++) where[x] = clampCol(cols, out.length - 1);
+
+  return {
+    rows: [padRow(out, cols)],
+    applied: 'leader',
+    map: (x) => ({ row: 0, x: where[clampIndex(cells, x)] }),
+  };
+}
+
 /**
  * A span is a LABEL when it carries a colon with an alphanumeric before it, in
  * the same column: `Bytes:`, `Init Baud is:`, `Top Uploader Last Period:`. The
@@ -1391,6 +1498,9 @@ function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResul
     // pinned 'banner' or 'record' the guard declines.
     case 'stack': return applyRule(classifiedRule(cells), cells, cols);
     case 'deindent': return deindentRow(cells, cols);
+    // A pinned 'leader' on a row with no leader run to spend falls through to
+    // the rule the row would have had without the pin, as 'banner' does.
+    case 'leader': return leaderRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
     // A pinned 'narrow' on a row `narrowRow` declines falls through to the
     // rule it would have had before the ladder grew: plain halves.
     case 'narrow': return narrowRow(cells, cols) ?? splitRow(cells, cols);

@@ -339,7 +339,7 @@ for (const [id, entry] of Object.entries(manifest)) {
      * because that - and not `adaptRows` - is what the emitter renders.
      */
     it('no row a C64 caller sees is wider than the screen, under any rule', () => {
-      const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'narrow', 'prose', 'record', 'repeat', 'reflow', 'split', 'stat'];
+      const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'leader', 'narrow', 'prose', 'record', 'repeat', 'reflow', 'split', 'stat'];
       for (const f of frames) {
         for (const r of adaptRows(f).rows) {
           expect({ source: r.source, rule: r.rule, width: contentWidth(r.cells) <= COLS })
@@ -479,6 +479,21 @@ for (const [id, entry] of Object.entries(manifest)) {
             // Lossless: one row, and only LEADING blanks are gone.
             expect({ ...where, rows: out.length }).toEqual({ ...where, rows: 1 });
             expect({ ...where, kept: text(joined).trimEnd() }).toEqual({ ...where, kept: text(src).trim() });
+          } else if (rule === 'leader') {
+            // ONE row, every word kept in order, and the ONLY thing shorter is
+            // the leader run itself. Collapsing every run of a repeated
+            // non-alphanumeric glyph to a single copy makes the two rows
+            // comparable without the test having to know which run was spent
+            // or how much of it - if anything else had been dropped, moved or
+            // cut, this equality would not hold.
+            expect({ ...where, rows: out.length }).toEqual({ ...where, rows: 1 });
+            const deLeader = (t: string) => t.replace(/([^A-Za-z0-9 ])\1+/g, '$1');
+            expect({ ...where, chars: deLeader(squeeze(text(joined))) })
+              .toEqual({ ...where, chars: deLeader(squeeze(text(src))) });
+            // The run is glued to the word beside it (`cAll..........:`), so
+            // the word list is compared through the same collapse.
+            expect({ ...where, words: words(rowsText(out)).map(deLeader) })
+              .toEqual({ ...where, words: words(text(src)).map(deLeader) });
           } else if (rule === 'prose') {
             // The row's ONE column, wrapped. Like `narrow` it drops the row's
             // border and the padding outside the column; unlike `narrow` it
