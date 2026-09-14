@@ -195,3 +195,89 @@ describe('a logging-off caller', () => {
     await expect(settleWithin(broken, 1000)).resolves.toBe(true);
   });
 });
+
+/**
+ * A batch that only partly ran says so.
+ *
+ * Every line is tried and a failure never stops the ones after it - one broken
+ * door must not cost the board its other bulletins. But the outcome was never
+ * reported, so a run that did two of eight things looked exactly like a run
+ * that did all eight.
+ *
+ * On 2026-09-14 a logoff rebuilt bull1 and bull2 and stopped, and there was
+ * nothing to say whether the rest had failed, been skipped, or never been
+ * reached. The container was recreated before that window could be read, so
+ * the cause is still unknown. This is what makes the next one diagnose itself.
+ */
+describe('a batch file that half worked', () => {
+  function batchOf(lines: string[]): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-report-'));
+    fs.writeFileSync(path.join(dir, 'batch1'), lines.join('\n') + '\n');
+    return path.join(dir, 'batch1');
+  }
+
+  /**
+   * Run a real batch file and capture what it said about itself.
+   *
+   * The steps name programs that do not exist, so `executeLine` resolves
+   * nothing and no emulator starts - what is under test is the TALLY, not the
+   * doors.
+   */
+  async function runAndCapture(lines: string[]) {
+    const said: string[] = [];
+    const log = jest.spyOn(console, 'log').mockImplementation((...a) => { said.push(a.join(' ')); });
+    const err = jest.spyOn(console, 'error').mockImplementation((...a) => { said.push(a.join(' ')); });
+    const file = batchOf(lines);
+    try {
+      let mod!: typeof import('../src/services/batch-scheduler');
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        mod = require('../src/services/batch-scheduler');
+      });
+      await mod.runBatchFile(file, 1);
+    } finally {
+      log.mockRestore();
+      err.mockRestore();
+      fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    }
+    return said.join('\n');
+  }
+
+  test('says how many steps it ran, so a partial run is visible', async () => {
+    const out = await runAndCapture(['.key node', 'doors:nope/nope one', 'doors:alsonope/x two']);
+
+    // Three steps in the file; the tally names a number either way, which is
+    // the whole point - before this a run that did two of eight said nothing.
+    expect(out).toMatch(/batch1 finished/);
+    expect(out).toMatch(/node 1/);
+  });
+
+  test('comments and blanks are not steps, so the denominator is honest', async () => {
+    const out = await runAndCapture([
+      '; a comment', '', '  ; another', '# hash comment', '',
+    ]);
+
+    // Nothing but prose: no steps, and NOT an incomplete run.
+    expect(out).toMatch(/0 steps, all ran/);
+    expect(out).not.toMatch(/INCOMPLETE/);
+  });
+
+  test('a file that is not there says nothing at all', async () => {
+    const said: string[] = [];
+    const log = jest.spyOn(console, 'log').mockImplementation((...a) => { said.push(a.join(' ')); });
+    try {
+      let mod!: typeof import('../src/services/batch-scheduler');
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        mod = require('../src/services/batch-scheduler');
+      });
+      await mod.runBatchFile(path.join(os.tmpdir(), 'no-such-batch-file'), 1);
+    } finally {
+      log.mockRestore();
+    }
+
+    // runLogoffBatches probes six candidate paths and most never exist; a
+    // tally line for each would bury the one that matters.
+    expect(said.join('\n')).not.toMatch(/finished/);
+  });
+});

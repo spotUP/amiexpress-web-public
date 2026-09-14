@@ -691,8 +691,30 @@ export async function initializeData(io?: SocketIOServer) {
         process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get("dataDir"),
         "Doors",
       );
-      const n = renderAllDoorCfgs(doorsRoot, resolveSystemValue);
-      if (n > 0) console.log(`[Init] rendered ${n} door cfg file(s) from saved settings`);
+      /*
+       * A TEST RUN DOES NOT WRITE THE BOARD'S DOOR FILES.
+       *
+       * This renders a cfg beside every door binary under `dataDir/Doors`,
+       * and under jest `dataDir` is THE REPOSITORY - so every suite that
+       * boots a server rewrote the tracked `Doors/` tree as a side effect.
+       * On 2026-09-14 that surfaced as `GWALL.cfg` and `GLCViewer.cfg`
+       * turning up modified with their comment lines gone, during a parallel
+       * run: several workers rendering the same file, one reading it inside
+       * another's rename, and the failed read discarding everything that was
+       * not a setting (e1f026f3c fixed that half).
+       *
+       * The comment loss was the visible symptom. The fault is that booting a
+       * board in a test writes to the checkout at all, so the boot does not
+       * do it: a suite that wants the render calls `renderAllDoorCfgs`
+       * itself, against a directory it made.
+       */
+      const underTest = process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === "test";
+      if (underTest) {
+        console.log("[Init] door cfg render skipped: test run does not write the board's Doors/");
+      } else {
+        const n = renderAllDoorCfgs(doorsRoot, resolveSystemValue);
+        if (n > 0) console.log(`[Init] rendered ${n} door cfg file(s) from saved settings`);
+      }
     } catch (err: any) {
       console.error(`[Init] door cfg render failed: ${err?.message || err}`);
     }

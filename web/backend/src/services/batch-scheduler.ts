@@ -719,12 +719,48 @@ export async function runBatchFile(batchPath: string, nodeId: number): Promise<v
   const contents = fs.readFileSync(batchPath, 'utf-8');
   const lines = contents.split(/\r?\n/);
 
+  /*
+   * A BATCH THAT ONLY PARTLY RAN MUST SAY SO.
+   *
+   * Every line is tried and a failure never stops the ones after it, which is
+   * right - one broken door must not cost the board its other bulletins. But
+   * the outcome was never reported, so a run that did two of eight things
+   * looked exactly like a run that did all eight: the only trace was one
+   * `Error executing line` somewhere in a log full of emulator output.
+   *
+   * On 2026-09-14 a logoff rebuilt bull1 and bull2 and stopped. Nothing said
+   * whether the rest had failed, been skipped, or never been reached, and the
+   * container was recreated before the window could be read - so the cause is
+   * still unknown and had to be left open. A line at the end naming the
+   * counts is what makes the NEXT partial run diagnose itself.
+   *
+   * Counted here rather than inside executeLine because only this loop knows
+   * how many lines the file actually had.
+   */
+  let ran = 0;
+  let failed = 0;
+  const broken: string[] = [];
+
   for (const rawLine of lines) {
+    // A comment or a blank is not a step, and counting them would make every
+    // batch look busier than it is.
+    const step = rawLine.trim();
+    if (!step || step.startsWith(';') || step.startsWith('#')) continue;
     try {
       await executeLine(rawLine, nodeId);
+      ran++;
     } catch (err) {
+      failed++;
+      broken.push(step);
 console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
     }
+  }
+
+  const name = path.basename(batchPath);
+  if (failed > 0) {
+console.error(`[BatchScheduler] ${name} finished INCOMPLETE for node ${nodeId}: ${ran} of ${ran + failed} steps ran, ${failed} failed: ${broken.join(' | ')}`);
+  } else {
+console.log(`[BatchScheduler] ${name} finished for node ${nodeId}: ${ran} steps, all ran`);
   }
 }
 
