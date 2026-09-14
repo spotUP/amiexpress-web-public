@@ -166,3 +166,77 @@ describe('a teletext page as ANSI', () => {
     expect(foldLine(out)).toEqual([out]);
   });
 });
+
+/**
+ * And it fits the screen's HEIGHT, not only its width.
+ *
+ * An SVT teletext page is 32 rows, which is what these bulletins came out at -
+ * so the board paginated its own news, putting `(Pause)...More(y/n/ns)?`
+ * through the headlines. A bulletin is one composed screen and should not need
+ * a page break; a caller who wants the whole page has the Text-TV door.
+ *
+ * The same class as the Last Callers bulletin, found the same way: by
+ * measuring the files on the board rather than trusting that they fitted.
+ */
+import { fitNewsBulletin, BULLETIN_ROWS } from '../../src/services/news-bulletins';
+import { renderedRows, paginatesAt } from '../../src/screens/screen-rows';
+
+const newsPage = (headlines: number) =>
+  [
+    'SVT Text news headlines',
+    'Updated 2026-09-15T00:00:00.000Z',
+    '',
+    ...Array.from({ length: headlines }, (_, i) => `${100 + i} A headline about something`),
+    '',
+    'Source: SVT Text via texttv.nu (unofficial mirror)',
+  ].join('\n') + '\n';
+
+describe('a news bulletin taller than the screen', () => {
+  it('is trimmed to the budget', () => {
+    const fitted = fitNewsBulletin(newsPage(40), BULLETIN_ROWS);
+
+    expect(renderedRows(fitted)).toBeLessThanOrEqual(BULLETIN_ROWS);
+  });
+
+  it('does not paginate on the 25-row screen it was fitted for', () => {
+    // Asked the way screen.handler's needsPaging asks it.
+    expect(paginatesAt(fitNewsBulletin(newsPage(40), BULLETIN_ROWS), 25)).toBe(false);
+  });
+
+  it('keeps the title, the freshness line and the attribution', () => {
+    const fitted = fitNewsBulletin(newsPage(40), BULLETIN_ROWS);
+
+    expect(fitted).toContain('SVT Text news headlines');
+    expect(fitted).toContain('Updated 2026-09-15');
+    expect(fitted).toContain('Source: SVT Text via texttv.nu');
+  });
+
+  it('drops the OLDEST headlines - the tail of the page, not the top', () => {
+    const fitted = fitNewsBulletin(newsPage(40), BULLETIN_ROWS);
+
+    expect(fitted).toContain('100 A headline');       // the first survives
+    expect(fitted).not.toContain('139 A headline');   // the last does not
+  });
+
+  it('leaves a page that already fits completely alone', () => {
+    const short = newsPage(5);
+
+    expect(fitNewsBulletin(short, BULLETIN_ROWS)).toBe(short);
+  });
+
+  it('does not end on a blank line left behind by the cut', () => {
+    const fitted = fitNewsBulletin(newsPage(40), BULLETIN_ROWS).split('\n');
+    const sourceAt = fitted.findIndex((l) => l.startsWith('Source:'));
+
+    // The blank before Source: is the frame's own, not a cut artefact.
+    expect(fitted[sourceAt - 2]?.trim()).not.toBe('');
+  });
+
+  it('hands back a bulletin it cannot fit rather than gutting it', () => {
+    // No room for a single headline: too tall and readable beats fitted and
+    // empty, and it tells the sysop the budget is wrong for this page.
+    const text = newsPage(40);
+
+    expect(fitNewsBulletin(text, 3)).toBe(text);
+  });
+});

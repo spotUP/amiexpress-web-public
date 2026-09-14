@@ -18,6 +18,7 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { renderedRows, rowBudgetFor } from '../screens/screen-rows';
 import { config } from '../config';
 
 const TEXTTV = 'https://api.texttv.nu/api/get';
@@ -206,6 +207,12 @@ export function defaultNewsBulletinDeps(): NewsBulletinDeps {
 export const BULLETIN_COLUMNS = 40;
 
 /**
+ * How tall a news bulletin may be: one less than a 25-row terminal, so
+ * `needsPaging` never fires for it. See screens/screen-rows.
+ */
+export const BULLETIN_ROWS = rowBudgetFor(25);
+
+/**
  * Fold one line onto `width`, breaking between words.
  *
  * A word longer than the width is cut rather than left to overflow - a URL or
@@ -325,6 +332,48 @@ function writeFileAtomic(target: string, contents: string): void {
   }
 }
 
+/**
+ * A news bulletin, trimmed to a screen.
+ *
+ * An SVT teletext page is 32 rows, which is what these came out at - so the
+ * board paginated its own news, putting `(Pause)...More(y/n/ns)?` through the
+ * headlines. A bulletin is one composed screen; it should not need a page
+ * break, and a caller who wants the whole page has the Text-TV door.
+ *
+ * HEADLINES GO FROM THE BOTTOM, and the frame never does. The first two lines
+ * say what this is and how old it is, and the Source line is an attribution -
+ * dropping any of those to save a row would be the wrong trade. What gives is
+ * the tail of the list, which is the least recent news on the page.
+ *
+ * A budget it cannot meet leaves the bulletin alone rather than reducing it to
+ * a title and a credit: too tall and readable beats fitted and empty, and it
+ * is the sysop's cue that the budget is wrong for this page.
+ */
+export function fitNewsBulletin(text: string, rows: number): string {
+  if (rows <= 0 || renderedRows(text) <= rows) return text;
+
+  const lines = text.split('\n');
+  const trailingBreak = text.endsWith('\n');
+  if (trailingBreak) lines.pop();
+
+  // The frame: the title and its Updated line at the top, and from the blank
+  // line before `Source:` to the end at the bottom.
+  const head = lines.slice(0, 2);
+  const sourceAt = lines.findIndex((line) => line.startsWith('Source:'));
+  const tail = sourceAt >= 0 ? lines.slice(Math.max(2, sourceAt - 1)) : [];
+  const body = lines.slice(head.length, sourceAt >= 0 ? Math.max(2, sourceAt - 1) : lines.length);
+
+  const room = rows - head.length - tail.length;
+  // Nothing left for news: hand back what we were given.
+  if (room < 1) return text;
+
+  const kept = body.slice(0, room);
+  // A trimmed list should not end on a blank line left behind by the cut.
+  while (kept.length > 0 && kept[kept.length - 1].trim() === '') kept.pop();
+
+  return [...head, ...kept, ...tail].join('\n') + (trailingBreak ? '\n' : '');
+}
+
 export async function refreshNewsBulletins(
   deps: NewsBulletinDeps = defaultNewsBulletinDeps(),
 ): Promise<NewsBulletinOutcome> {
@@ -345,11 +394,10 @@ export async function refreshNewsBulletins(
     }
     // Folded to forty BEFORE the CRLF pass: a C64 caller has forty columns,
     // and text that fits forty reads correctly at eighty.
-    const text = toCRLF(
-      foldBulletin(
-        `${src.title}\nUpdated ${deps.now().toISOString()}\n\n${body}\n\nSource: SVT Text via texttv.nu (unofficial mirror)`,
-      ),
+    const folded = foldBulletin(
+      `${src.title}\nUpdated ${deps.now().toISOString()}\n\n${body}\n\nSource: SVT Text via texttv.nu (unofficial mirror)`,
     );
+    const text = toCRLF(fitNewsBulletin(folded, BULLETIN_ROWS));
     fs.mkdirSync(dir, { recursive: true });
     writeFileAtomic(path.join(dir, src.file), text);
     if (Number.isFinite(num)) {

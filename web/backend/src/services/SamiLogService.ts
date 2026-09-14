@@ -4,6 +4,7 @@ import * as path from 'path';
 import { config } from '../config';
 import { BBSState } from '../constants/bbs-states';
 import { getSystemTime } from '../utils/date-time.util';
+import { renderedRows } from '../screens/screen-rows';
 import type { BBSSession } from '../index';
 
 const DATA_DIR = config.get('dataDir');
@@ -21,24 +22,6 @@ const USER_COUNT = 20;
  * A bulletin that has been squeezed down to one caller has stopped being a
  * Last Callers list, so the fit gives up and lets the screen run long instead.
  */
-/**
- * The rows a bulletin really has.
- *
- * NOT `split('\n').length`: a file that ends in a newline - every one of
- * these does - yields a final empty element that is not a row. The first
- * version of the fit compared that number against the budget, so a bulletin
- * it believed was 24 rows was 25, and `needsPaging` (screen.handler:
- * `artLines > callerLines`, where artLines IS the split length) then put a
- * page break through a screen built specifically to avoid one.
- *
- * The loader's own count is the split length, so a bulletin escapes
- * pagination when its REAL rows are at most one less than the caller's
- * height - which is what a budget of 24 against a 25-row screen means.
- */
-function renderedRows(text: string): number {
-  const parts = text.split('\n');
-  return text.endsWith('\n') ? parts.length - 1 : parts.length;
-}
 
 const DEFAULT_MIN_CALLERS = 5;
 const USER_ENTRY_BYTES = 144;
