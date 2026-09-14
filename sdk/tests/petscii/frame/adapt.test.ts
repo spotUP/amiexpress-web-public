@@ -998,6 +998,36 @@ describe('repeat', () => {
  * (DUAL_LISTING=NO: one bulletin per row), captured from a live 40-column
  * session, byte for byte.
  */
+describe('a rule that ends in a corner', () => {
+  /**
+   * JoinCnf's current-conference row: a label, its value, and then the box's
+   * bottom rule running to the right edge and closing on a corner.
+   *
+   * `isCroppable` asked for ONE repeated glyph past the screen edge and
+   * found two - the dashes and the corner - so the row fell to `split` and
+   * the caller read the value with the rule's tail on the row below. A
+   * corner is the end of the rule, not content: the rule crops, and so does
+   * its corner.
+   */
+  const CORNERED = ':  Amiga Warez!' + '-'.repeat(63) + "'";
+
+  it('crops to one row instead of splitting across two', () => {
+    expect(chooseRule(row(CORNERED), 40)).toBe('crop');
+    const out = applyRule('crop', row(CORNERED), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe(':  Amiga Warez!' + '-'.repeat(25));
+  });
+
+  it('still refuses to crop a WORD off the right edge', () => {
+    expect(isCroppable(row('Label' + '-'.repeat(40) + 'VALUE'), 40)).toBe(false);
+  });
+
+  it('takes ONE corner, not a second run of something else', () => {
+    expect(isCroppable(row('Label' + '-'.repeat(50) + "'''"), 40)).toBe(false);
+    expect(isCroppable(row('Label' + '-'.repeat(40) + "'" + '='.repeat(10)), 40)).toBe(false);
+  });
+});
+
 describe('leader', () => {
   /** `Bulls` at an indent of 18, one bulletin per row: 62 columns. */
   const BULL = ' '.repeat(18) + '[01] ......................... Top Uploaders';

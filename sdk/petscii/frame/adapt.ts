@@ -171,14 +171,53 @@ const clampCol = (cols: number, x: number) => Math.max(0, Math.min(cols - 1, x))
  */
 const RVS_SPACE = '\u0001';
 
-/** Fits, or the right half is blank, or every non-blank cell of the right half is one repeated non-alphanumeric glyph (a border extension such as a rule of '='). */
+/**
+ * The glyphs a door draws a box's SIDES with, for the crop test.
+ *
+ * The record rung's `BOX_RAILS` further down is the same list without `:`,
+ * and the two are deliberately separate: a colon opens `JoinCnf`'s
+ * current-conference row and closes its box, but a colon is also how every
+ * `Label: value` row in the corpus separates its halves - which `record` and
+ * `stat` must keep reading as a label, not a rail.
+ */
+const CROP_RAILS = ['|', '\u00a6', '!', ':'];
+
+/**
+ * Fits, or the right half is blank, or every non-blank cell of the right half
+ * is one repeated non-alphanumeric glyph (a border extension such as a rule of
+ * '=') - optionally CLOSED BY ONE DIFFERENT GLYPH, which is a box corner.
+ *
+ * The corner was the difference between a row and two. JoinCnf's
+ * current-conference row is a label, its value, and the box's bottom rule
+ * running to the right edge and closing on `'`: two distinct glyphs past
+ * column 40, so this said no and the row fell to `split`. The caller read
+ * `:  Amiga Warez!------------------------` with `-----------------------'`
+ * on the row below (sysop's 40-column JoinCnf walk, 2026-09-14).
+ *
+ * A corner is the END of the rule, not content. One of them, last, and
+ * non-alphanumeric: a rule that closes and then carries on is not a rule
+ * with a corner, and neither is one that ends in a word.
+ */
 export function isCroppable(cells: Row, cols: number): boolean {
   if (contentWidth(cells) <= cols) return true;
   const glyphs = cells.slice(cols).filter((c) => !isBlank(c));
   if (glyphs.length === 0) return true;
   const glyph = glyphs[0].ch;
   if (/[A-Za-z0-9]/.test(glyph)) return false;
-  return glyphs.every((c) => c.ch === glyph && !c.rvs);
+  const run = glyphs.every((c) => c.ch === glyph && !c.rvs);
+  if (run) return true;
+  // A CORNER, and only on a row that is part of a box.
+  //
+  // The rail is what makes it a corner rather than a one-character value.
+  // Without that test this ate `Bulls`' unused slots - `[10] .......... -`,
+  // whose `-` is a LABEL at the end of a dot leader, not the end of a rule -
+  // and it called a rule of dashes closing on '=' croppable, which the pin
+  // above deliberately says it is not.
+  const ink = cells.filter((c) => !isBlank(c));
+  if (ink.length === 0 || !CROP_RAILS.includes(ink[0].ch)) return false;
+  const last = glyphs[glyphs.length - 1];
+  if (/[A-Za-z0-9]/.test(last.ch) || last.rvs || last.ch === glyph) return false;
+  return glyphs.slice(0, -1).every((c) => c.ch === glyph && !c.rvs);
 }
 
 /** The truncation mark a narrowed column ends in: a plain PETSCII glyph, unlike an ellipsis. */

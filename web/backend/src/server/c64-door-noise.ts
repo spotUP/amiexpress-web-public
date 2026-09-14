@@ -63,6 +63,37 @@ function textOf(row: ReadonlyArray<Readonly<Cell>>): string {
 }
 
 /**
+ * A row whose only ink is its BOX RAILS, with nothing between them.
+ *
+ * The third kind, and the only structural one: JoinCnf frames its conference
+ * list in a box and leaves four interior rows empty - `|` then 77 blanks then
+ * `|`, 79 columns wide. The ladder answers `crop`, because the only ink past
+ * column 40 is the closing rail, and crop keeps columns 0-39: the opening
+ * rail and nothing else. Four of the caller's 25 rows went on four lone
+ * pipes, and no row of that box has a right-hand rail to pair them with -
+ * every CONTENT row in it is a `narrow` row, and narrow drops both rails.
+ *
+ * An empty box row has nothing to frame, so at this width it is blank. Four
+ * blanks in a row then cost ONE, because `collapseLongBlankRuns` already
+ * rules that a run of three or more is a hole rather than a door's spacing.
+ *
+ * RAILS, not any punctuation: the same rail set the record rung recognises,
+ * first and last ink on the row and nothing between them. A row with a
+ * single `|` and no partner is left alone - it is not a box, and blanking it
+ * would be this function guessing.
+ */
+const BOX_RAILS = ['|', '\u00a6', '!', ':'];
+
+function isEmptyBoxRow(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return false;
+  const rail = trimmed[0];
+  if (!BOX_RAILS.includes(rail)) return false;
+  if (trimmed[trimmed.length - 1] !== rail) return false;
+  return trimmed.slice(1, -1).trim() === '';
+}
+
+/**
  * The frame with every noise phrase blanked out in place.
  *
  * Returns the SAME frame object when nothing matched, so the common case
@@ -95,7 +126,7 @@ export function stripNarrowNoise(frame: Frame): Frame {
       text = textOf(out);
     }
 
-    if (NARROW_PLACEHOLDER_ROWS.some((pattern) => pattern.test(text))) {
+    if (NARROW_PLACEHOLDER_ROWS.some((pattern) => pattern.test(text)) || isEmptyBoxRow(text)) {
       hit = true;
       return row.map(() => blankCell());
     }
