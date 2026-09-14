@@ -125,3 +125,73 @@ test('RIP bytes uploaded under a .txt name are refused - the extension is the ro
   expect(res.status).toBe(400);
   expect(String(res.body.error)).toMatch(/RIP/);
 });
+
+/**
+ * THE BOARD NEVER WRITES AN EMPTY SCREEN FILE. The sysop's rule, 2026-09-14:
+ * "no empty file".
+ *
+ * express.e:6773 shows any file that OPENS, so one with nothing in it clears
+ * the caller's terminal, prints nothing and pauses for a key - silently, since
+ * the file is not corrupt and nothing logs a problem. The loader tolerates a
+ * hollow file that is already on disk (one can arrive by hand or by FTP); the
+ * writer must never make one.
+ *
+ * The guard lives in the shared writer so every route inherits it. Pinned
+ * through the routes rather than the helper, because the fault the board had
+ * was always "this ONE route forgot".
+ */
+describe('an empty screen file cannot be written', () => {
+  test('PUT refuses it, and leaves what was there alone', async () => {
+    const before = fs.readFileSync(path.join(root, 'Node1/BBSTITLE.txt'));
+
+    const res = await request(app).put('/api/screens/file')
+      .query({ path: 'Node1/BBSTITLE.txt' })
+      .send({ content: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/cannot be empty/i);
+    // The rule is refuse, not delete: a save is not a delete.
+    expect(fs.readFileSync(path.join(root, 'Node1/BBSTITLE.txt'))).toEqual(before);
+  });
+
+  test('the `~\\n` stub shape is refused too', async () => {
+    const res = await request(app).put('/api/screens/file')
+      .query({ path: 'Node1/BBSTITLE.txt' })
+      .send({ content: Buffer.from('~\n', 'latin1').toString('base64') });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/cannot be empty/i);
+  });
+
+  test('a fan-out is refused whole - no node gets the empty file', async () => {
+    const res = await request(app).put('/api/screens/file')
+      .query({ path: 'Node1/BBSTITLE.txt' })
+      .send({ content: '', targets: ['Node1/BBSTITLE.txt', 'Node2/BBSTITLE.txt'] });
+
+    expect(res.status).toBe(400);
+    for (const node of ['Node1', 'Node2']) {
+      expect({ node, bytes: fs.readFileSync(path.join(root, node, 'BBSTITLE.txt')).length })
+        .toEqual({ node, bytes: 3 });
+    }
+  });
+
+  test('an upload of an empty file is refused as well', async () => {
+    const res = await request(app).post('/api/screens/upload')
+      .field('path', 'Node1/BBSTITLE.txt')
+      .attach('file', Buffer.alloc(0), 'BBSTITLE.txt');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/cannot be empty/i);
+  });
+
+  test('a screen with content still writes, which is the whole point', async () => {
+    const bytes = Buffer.from([0xa1, 0x42, 0x0a]);
+
+    const res = await request(app).put('/api/screens/file')
+      .query({ path: 'Node1/BBSTITLE.txt' })
+      .send({ content: bytes.toString('base64') });
+
+    expect(res.status).toBe(200);
+    expect(fs.readFileSync(path.join(root, 'Node1/BBSTITLE.txt'))).toEqual(bytes);
+  });
+});
