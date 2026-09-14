@@ -20,7 +20,7 @@ import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from '../screens/screen
 
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
-import { screenDrawsNothing } from '../screens/screen-blankness';
+import { screenDrawsNothing, screenIsProgram } from '../screens/screen-blankness';
 import {
   LOGIN_SEQUENCE,
   readScreenProgram,
@@ -462,12 +462,15 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
 
     let items: LoginItem[] = [];
     let bytes = 0;
+    let program = false;
     if (full && fs.existsSync(full)) {
       // Latin1: a screen carries Amiga high-bit bytes and a UTF-8 round trip
       // turns one into U+FFFD.
       const content = fs.readFileSync(full).toString('latin1');
       bytes = Buffer.byteLength(content, 'latin1');
       items = readScreenProgram(content).items;
+      // Whether a THEME could change this step, or only the board can.
+      program = screenIsProgram(content);
     }
 
     return {
@@ -479,6 +482,14 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
       exists: Boolean(full && fs.existsSync(full)),
       bytes,
       items,
+      /*
+       * A step that RUNS something is the board's, whatever theme is picked
+       * above - the loader reads programs from the board. Said here so the
+       * page can stop a sysop believing a theme selection will change it,
+       * which is the mistake that started this whole thread: he removed a
+       * logo from a themed copy and the board went on drawing it.
+       */
+      program,
       /*
        * A file that OPENS earns its pause, even with nothing in it
        * (express.e:6773) - so an empty step costs the caller a keypress on a

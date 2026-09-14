@@ -41,6 +41,8 @@ interface LoginStep {
   bytes: number;
   items: LoginItem[];
   blankPause: boolean;
+  /** This step RUNS things, so the board owns it and no theme can change it. */
+  program: boolean;
 }
 
 interface Available {
@@ -286,6 +288,12 @@ export function LoginSequencePage() {
                   )}
                 </h2>
                 <p className="text-xs text-content-secondary">{step.note}</p>
+                {step.program && (
+                  <p className="text-xs text-content-secondary">
+                    [BOARD] This step runs things, so it comes from the board itself -
+                    changing the theme above will not change it.
+                  </p>
+                )}
                 <p className="text-xs text-content-muted">
                   {step.file
                     ? `${step.file}${step.exists ? '' : ' [not on disk]'}`

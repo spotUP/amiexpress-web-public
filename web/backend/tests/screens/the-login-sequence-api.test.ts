@@ -91,6 +91,26 @@ describe('GET /api/screens/login-sequence', () => {
     ]);
   });
 
+  it('marks a step the board owns, so a theme choice cannot mislead', async () => {
+    // The mistake that started this: he removed a logo from a THEMED copy of
+    // a step that runs things, and the board went on drawing it from its own.
+    const res = await request(app()).get('/api/screens/login-sequence?node=1');
+
+    const nodeBull = res.body.data.steps.find((s: { screen: string }) => s.screen === 'NODE_BULL');
+    expect(nodeBull.program).toBe(true);
+  });
+
+  it('does not mark a step that only shows art', async () => {
+    fs.writeFileSync(path.join(root, 'Screens', 'AchieveTop.txt'), '\x1b[31mJUST ART\r\n', 'latin1');
+    invalidateScreenIndex();
+
+    const res = await request(app()).get('/api/screens/login-sequence?node=1');
+
+    const achieve = res.body.data.steps.find((s: { screen: string }) => s.screen === 'ACHIEVETOP');
+    expect(achieve.exists).toBe(true);
+    expect(achieve.program).toBe(false);
+  });
+
   it('says a step has no file rather than pretending it has none to show', async () => {
     const res = await request(app()).get('/api/screens/login-sequence?node=1');
 

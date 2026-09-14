@@ -25,6 +25,7 @@ import { BOARD_WRITTEN_NAME } from './screen-tables';
 import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
+import { screenIsProgram } from './screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
@@ -146,6 +147,21 @@ export interface ScreenFileFacts {
    * nothing.
    */
   codesOnly: boolean;
+
+  /**
+   * Does this screen RUN something, as opposed to only showing something?
+   *
+   * Wider than `codesOnly`, and asked for a different reason. `codesOnly` is
+   * "an artist should not open this, there is no art in it". This is "a THEME
+   * does not own this": a screen carrying `~SS_`, `~CC_`, `~XI` and friends
+   * decides which bulletins a caller sees and which doors run, so the board's
+   * copy is what the loader reads whatever theme the caller wears
+   * (thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md).
+   *
+   * A conference bulletin is BOTH - 1745 bytes of ANSI logo with one include
+   * at the end - which is exactly why the two flags cannot be one.
+   */
+  program: boolean;
 
   /**
    * The door that owns this file, when it is a DOOR's art rather than the
@@ -947,6 +963,13 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     ? isCodesOnly(text, scanned)
     : false;
 
+  /*
+   * One predicate, shared with the loader and the theme seeder - the answer
+   * has to be the same in all three or a screen the admin calls board-owned
+   * is one a theme still overrides.
+   */
+  const program = screenIsProgram(buf);
+
   const facts: ScreenFileFacts = {
     // Readers are filled in by buildScreenIndex, which is the only place that
     // knows which nodes and conferences exist and what each one reads.
@@ -956,6 +979,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     generated: classifyGenerated(path.relative(baseDir, absPath), buf, baseDir),
     mciCodes: countMciCodes(text, scanned),
     codesOnly,
+    program,
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,
