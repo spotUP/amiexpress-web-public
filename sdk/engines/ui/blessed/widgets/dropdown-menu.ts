@@ -154,9 +154,8 @@ export class DropdownMenu extends Element {
   }
 
   openAt(left: number, top: number): void {
-    console.log('[DropdownMenu] openAt called:', { left, top });
     if (!this.screen) {
-      console.log('[DropdownMenu] ERROR: No screen in openAt!');
+      console.warn('[DropdownMenu] ERROR: No screen in openAt!');
       return;
     }
 
@@ -169,14 +168,12 @@ export class DropdownMenu extends Element {
 
     const cols = this.screen.cols;
     const rows = this.screen.rows;
-    console.log('[DropdownMenu] Screen size:', { cols, rows });
 
     const width = typeof this.width === 'number' ? this.width : 20;
     const height = typeof this.height === 'number' ? this.height : 10;
 
     const clampedLeft = Math.max(0, Math.min(left, cols - width));
     const clampedTop = Math.max(0, Math.min(top, rows - height));
-    console.log('[DropdownMenu] Clamped position:', { clampedLeft, clampedTop, width, height });
 
     this.left = clampedLeft;
     this.top = clampedTop;
@@ -188,11 +185,8 @@ export class DropdownMenu extends Element {
     // "once one menu is showing I can tab between menus and they show"
     // (reported 2026-08-26).
     this._invalidateCoords();
-    console.log('[DropdownMenu] Calling show()');
     this.show();
-    console.log('[DropdownMenu] Calling focus()');
     this.focus();
-    console.log('[DropdownMenu] hidden:', this.hidden, 'visible:', this.visible);
 
     // Track this menu as open
     DropdownMenu.openMenus.add(this);
@@ -213,15 +207,13 @@ export class DropdownMenu extends Element {
   }
 
   openFor(anchor: Element, align: 'left' | 'right' = 'left'): void {
-    console.log('[DropdownMenu] openFor called');
     if (!this.screen) {
-      console.log('[DropdownMenu] ERROR: No screen!');
+      console.warn('[DropdownMenu] ERROR: No screen!');
       return;
     }
     const coords = anchor._getCoords();
-    console.log('[DropdownMenu] anchor coords:', coords);
     if (!coords) {
-      console.log('[DropdownMenu] ERROR: No coords from anchor!');
+      console.warn('[DropdownMenu] ERROR: No coords from anchor!');
       return;
     }
 
@@ -229,7 +221,6 @@ export class DropdownMenu extends Element {
       ? coords.xl - (typeof this.width === 'number' ? this.width : 20)
       : coords.xi;
     const top = coords.yl;
-    console.log('[DropdownMenu] Calculated position:', { left, top });
     this.openAt(left, top);
   }
 

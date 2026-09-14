@@ -162,27 +162,22 @@ export class MenuBar extends Element {
       this.menuButtons.push(button);
 
       // Dropdown menu
-      console.log('[MenuBar] Creating dropdown for:', item.label);
       const dropdown = new DropdownMenu({
         parent: screen,
         width: this.calculateMenuWidth(item.items),
         items: item.items,
       });
 
-      console.log('[MenuBar] Dropdown created, type:', typeof dropdown, 'hasOpenFor:', typeof dropdown.openFor);
       dropdown.registerAnchor(button);
       this.dropdowns.push(dropdown);
-      console.log('[MenuBar] Dropdown registered, total dropdowns:', this.dropdowns.length);
 
       // Button click opens menu
       button.on('click', () => {
-        console.log('[MenuBar] Button clicked:', item.label, 'index:', index);
         this.openMenu(index);
       });
 
       // Hover opens menu immediately (always, not just when another is open)
       button.on('mouseenter', () => {
-        console.log('[MenuBar] Button hover:', item.label, 'index:', index);
         this.openMenu(index);
       });
 
@@ -290,7 +285,6 @@ export class MenuBar extends Element {
    * Open a specific menu by index
    */
   private openMenu(index: number): void {
-    console.log('[MenuBar] openMenu called, index:', index, 'dropdowns:', this.dropdowns.length, 'buttons:', this.menuButtons.length);
 
     // Close all other menus
     this.dropdowns.forEach((menu, i) => {
@@ -301,14 +295,9 @@ export class MenuBar extends Element {
 
     // Open selected menu
     if (this.dropdowns[index]) {
-      console.log('[MenuBar] Opening dropdown at index:', index);
-      console.log('[MenuBar] Dropdown type:', typeof this.dropdowns[index]);
-      console.log('[MenuBar] Dropdown openFor type:', typeof this.dropdowns[index].openFor);
-      console.log('[MenuBar] Button type:', typeof this.menuButtons[index]);
       this.dropdowns[index].openFor(this.menuButtons[index]);
-      console.log('[MenuBar] openFor call completed');
     } else {
-      console.log('[MenuBar] ERROR: No dropdown at index:', index);
+      console.warn('[MenuBar] ERROR: No dropdown at index:', index);
     }
   }
 
