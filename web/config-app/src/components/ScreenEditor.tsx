@@ -5,7 +5,8 @@ import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
-  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
+  pointerToCanvas, typeCharacter, typeText, insertCharacter, centreLine,
+  undo, redo, type EditorSurface, selectionHighlightRuns,
   copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
   type ClipboardRegion,
 } from '../pages/screen-editor-state';
@@ -113,6 +114,16 @@ export function ScreenEditor({
    * is published rather than after.
    */
   const [palette, setPalette] = useState<PaletteMode>('full');
+  /**
+   * Typing pushes the rest of the row right instead of overwriting it.
+   *
+   * Overwrite is what this editor has always done, and it is wrong for the
+   * commonest job there is: dropping a missing letter into a finished line
+   * without redrawing the rest of it (artists, 2026-09-14). Off by default,
+   * because overwrite is what an artist drawing blocks wants, and the Insert
+   * key toggles it.
+   */
+  const [insertMode, setInsertMode] = useState(false);
   /** What Alt+C/X lifted: stamped back down by Alt+V at the cursor. A ref,
    *  not state - the canvas shows it only after a paste, which re-renders
    *  through onChange anyway. Dies with the dialog, like a real clipboard
@@ -188,6 +199,12 @@ export function ScreenEditor({
           case 'delete':
             onChange?.(typeCharacter(surface, cursor.x, cursor.y, ' '));
             return;
+          case 'insert-mode':
+            setInsertMode(on => !on);
+            return;
+          case 'centre-line':
+            onChange?.(centreLine(surface, cursor.y));
+            return;
           case 'copy': {
             // Both clipboards: the system one carries plain text out to the
             // sysop's own editor, the internal one keeps colours for
@@ -250,7 +267,9 @@ export function ScreenEditor({
 
       if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
       else if (event.key.length === 1) {
-        onChange?.(typeCharacter(surface, cursor.x, cursor.y, event.key));
+        onChange?.(insertMode
+          ? insertCharacter(surface, cursor.x, cursor.y, event.key)
+          : typeCharacter(surface, cursor.x, cursor.y, event.key));
         setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) }));
       } else {
         return;
@@ -335,6 +354,28 @@ export function ScreenEditor({
           <span className="block text-content-secondary">Background</span>
           {swatches('bg')}
         </label>
+        <div className="space-y-1">
+          <span className="block text-content-secondary">Typing</span>
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              aria-pressed={insertMode}
+              title="Insert - typing pushes the rest of the row right"
+              className={`px-2 h-6 border ${selectedRing(insertMode)}`}
+              onClick={() => setInsertMode(on => !on)}
+            >
+              {insertMode ? 'Insert' : 'Overwrite'}
+            </button>
+            <button
+              type="button"
+              title="Alt+Shift+C - centre this row between the edges"
+              className="px-2 h-6 border border-border"
+              onClick={() => onChange?.(centreLine(surface, cursor.y))}
+            >
+              Centre line
+            </button>
+          </div>
+        </div>
         <div className="space-y-1">
           <span className="block text-content-secondary">Preview</span>
           {/*

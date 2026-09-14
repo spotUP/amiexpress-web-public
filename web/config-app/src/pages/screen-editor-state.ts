@@ -166,6 +166,86 @@ export function typeText(
 }
 
 /**
+ * Type a character with INSERT on: the rest of the row moves right.
+ *
+ * Overwriting is what this editor has always done, and it is wrong for the
+ * commonest job an artist has - dropping a missing letter into a finished
+ * line without redrawing the rest of it. What falls off the right-hand edge
+ * is gone, which is what every ANSI editor does: the row is 80 columns and
+ * there is nowhere else for it to go.
+ */
+export function insertCharacter(
+  surface: EditorSurface,
+  x: number,
+  y: number,
+  char: string,
+): EditorSurface {
+  const state = apply(surface);
+  const canvas = state.getCanvas();
+  if (!canvas || !canvas[y]) return surface;
+
+  const width = canvas[y].length;
+  if (x < 0 || x >= width) return surface;
+
+  // One undo step for the whole shift, not one per cell.
+  snapshotUndoState(state);
+  for (let column = width - 1; column > x; column--) {
+    const left = canvas[y][column - 1];
+    state.setCanvasCell(column, y, { ...left });
+  }
+  state.setCanvasCell(x, y, { char, fg: surface.fg, bg: surface.bg });
+
+  return settle(surface, surface.pending);
+}
+
+/** A cell with nothing on it: no glyph and the screen's own background. */
+function isBlank(cell: Cell | undefined): boolean {
+  if (!cell) return true;
+  const empty = !cell.char || cell.char === ' ' || cell.char === '\u0000';
+  // A space on a coloured background is INK - it is how half the art on this
+  // board is drawn - so only a space over the screen's own black is blank.
+  return empty && (cell.bg ?? 0) === 0;
+}
+
+/**
+ * Centre what is on a row between the edges of the screen.
+ *
+ * The ink is everything from the first non-blank cell to the last, moved as
+ * one block - so a line of text centres, and so does a rule or a run of
+ * blocks. A row with nothing on it is left exactly as it was, and so is one
+ * already centred: the shift is computed, and a shift of zero writes nothing.
+ */
+export function centreLine(surface: EditorSurface, y: number): EditorSurface {
+  const state = apply(surface);
+  const canvas = state.getCanvas();
+  if (!canvas || !canvas[y]) return surface;
+
+  const row = canvas[y];
+  const width = row.length;
+
+  let first = 0;
+  while (first < width && isBlank(row[first])) first++;
+  if (first === width) return surface;            // an empty row centres to itself
+
+  let last = width - 1;
+  while (last > first && isBlank(row[last])) last--;
+
+  const ink = row.slice(first, last + 1).map(cell => ({ ...cell }));
+  const target = Math.floor((width - ink.length) / 2);
+  if (target === first) return surface;           // already where it belongs
+
+  snapshotUndoState(state);
+  const blank = { char: ' ', fg: 7, bg: 0 };
+  for (let column = 0; column < width; column++) {
+    const source = column - target;
+    const cell = source >= 0 && source < ink.length ? ink[source] : blank;
+    state.setCanvasCell(column, y, { ...cell });
+  }
+
+  return settle(surface, surface.pending);
+}
+
+/**
  * An empty 80x25 screen, for a slot the theme has not drawn yet.
  *
  * The board's own size: 80 columns is what every screen here is, and 25 rows

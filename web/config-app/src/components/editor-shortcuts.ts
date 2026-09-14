@@ -20,8 +20,13 @@
  *   so Cmd+C on highlighted help text still copies the text.
  * - Delete: both Delete and Backspace erase the cell. Mac keyboards have
  *   no forward-delete key - the key labelled Delete sends Backspace.
+ * - Insert: toggles insert mode, where typing pushes the rest of the row
+ *   right instead of overwriting it. Moebius spells this Q; the Insert key
+ *   is what the artists reached for, and nothing else here wants it.
+ * - Alt+Shift+C: centre the ink on the cursor's row. Beside Alt+C, which
+ *   copies, because that is the key an artist's hand is already on.
  * - Deliberately absent (no counterpart here): F-keys (Moebius font
- *   slots), H/J/K/L charlist, Q insert, Alt+Numpad ascii entry, Alt+arrows
+ *   slots), H/J/K/L charlist, Alt+Numpad ascii entry, Alt+arrows
  *   row/column ops, Alt+letter menu ops, Ctrl+arrows.
  */
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
@@ -48,6 +53,10 @@ export type EditorShortcut =
   | { action: 'copy' }
   | { action: 'cut' }
   | { action: 'paste' }
+  /** Insert key: typing pushes the row right instead of overwriting it. */
+  | { action: 'insert-mode' }
+  /** Alt+Shift+C: centre the ink on the cursor's row between the edges. */
+  | { action: 'centre-line' }
   | { action: 'none' };
 
 const DIGIT_INDEX: Record<string, number> = {
@@ -80,7 +89,9 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
 
   if (ev.altKey && !ev.ctrlKey && !ev.metaKey && ev.code) {
     if (ev.code in DIGIT_INDEX) return { action: 'bg', index: DIGIT_INDEX[ev.code] };
-    if (ev.code === 'KeyC') return { action: 'copy' };
+    // Shift first: Alt+C copies, and Alt+Shift+C centres the row - the
+    // artists asked for centring beside the thing they already reach for.
+    if (ev.code === 'KeyC') return ev.shiftKey ? { action: 'centre-line' } : { action: 'copy' };
     if (ev.code === 'KeyX') return { action: 'cut' };
     if (ev.code === 'KeyV') return { action: 'paste' };
     const tool = ALT_TOOLS[ev.code];
@@ -102,6 +113,7 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
       case 'End': return { action: 'row', edge: 'end' };
       case 'PageUp': return { action: 'page', dy: -10 };
       case 'PageDown': return { action: 'page', dy: 10 };
+      case 'Insert': return { action: 'insert-mode' };
       case 'Delete':
       case 'Backspace':
         return { action: 'delete' };

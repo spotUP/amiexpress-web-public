@@ -40,3 +40,20 @@ describe('editorShortcut', () => {
     expect(editorShortcut({ key: 'q', ctrlKey: true })).toEqual({ action: 'none' });
   });
 });
+
+describe('what the artists asked for', () => {
+  it('toggles insert mode on the Insert key', () => {
+    expect(editorShortcut({ key: 'Insert' })).toEqual({ action: 'insert-mode' });
+  });
+
+  it('centres the row on Alt+Shift+C, and still copies on Alt+C', () => {
+    expect(editorShortcut({ key: 'C', code: 'KeyC', altKey: true, shiftKey: true }))
+      .toEqual({ action: 'centre-line' });
+    expect(editorShortcut({ key: 'c', code: 'KeyC', altKey: true }))
+      .toEqual({ action: 'copy' });
+  });
+
+  it('leaves Insert alone when a modifier is held', () => {
+    expect(editorShortcut({ key: 'Insert', ctrlKey: true })).toEqual({ action: 'none' });
+  });
+});
