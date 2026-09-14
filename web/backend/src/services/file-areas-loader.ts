@@ -142,16 +142,14 @@ export async function ensureDirFilesExist(
   // Intentionally left blank: placeholder creation for conferences is disabled.
 }
 
-async function touchFile(filePath: string): Promise<void> {
-  try {
-    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-    const handle = await fs.promises.open(filePath, 'a');
-    await handle.close();
-  } catch (error) {
-console.error(`[FileAreas] Failed to touch file ${filePath}:`, error);
-    throw error;
-  }
-}
+/*
+ * `touchFile` lived here, and creating an empty file is the one operation
+ * this module must not offer: `ensureDirFilesExist` above is already a
+ * deliberate no-op for the same reason, and `ensureScreensDirectory` below
+ * stopped calling it because a 0-byte screen is a blank pause at every login.
+ * Removed rather than left unused, so the next person needing "make sure this
+ * exists" has to decide what should be IN it.
+ */
 
 /**
  * Ensure every conference has the directories/files AmiExpress expects
@@ -224,49 +222,47 @@ export function loadConferenceFileAreas(bbsRoot: string, confId: number): FileAr
 // It handles more assign types (BBS:, DOORS:, NODE#:, T:, RAM:, etc.)
 
 /**
- * Ensure root Screens has placeholders for core screens only.
+ * Ensure the root Screens DIRECTORY exists. No files.
  *
- * BULL/NODE_BULL/CONF_BULL are intentionally NOT in this list. Per express.e
- * (express.e:6539-6550 + 6773-6845), `displayScreen(SCREEN_BULL)` returns
- * TRUE if the file opens — and `displayFile()` returns TRUE for an empty
- * file because Open() succeeds. The caller (express.e:28556) then triggers
- * `doPause()` whenever displayScreen returns TRUE. So a 0-byte BULL.TXT
- * causes a press-enter prompt with no content above it. The express.e-faithful
- * way to suppress the pause is to NOT have the file at all (findSecurityScreen
- * returns FALSE → displayScreen returns FALSE → no pause).
+ * This used to touch `BBSTITLE.TXT`, `LOGON.TXT`, `MENU.TXT` and
+ * `LOGOFF.TXT` into existence, empty, on every boot - and the comment that
+ * stood here explained, correctly and at length, why that is the one thing it
+ * must not do:
+ *
+ *   Per express.e (6539-6550 + 6773-6845), `displayScreen` returns TRUE if
+ *   the file OPENS - and `displayFile()` returns TRUE for an empty file
+ *   because Open() succeeds. The caller (express.e:28556) then triggers
+ *   `doPause()` whenever displayScreen returns TRUE. So a 0-byte screen
+ *   causes a press-enter prompt with no content above it. The
+ *   express.e-faithful way to suppress the pause is to NOT have the file at
+ *   all: findSecurityScreen returns FALSE, displayScreen returns FALSE, no
+ *   pause.
+ *
+ * That paragraph was used to justify keeping BULL/NODE_BULL/CONF_BULL OUT of
+ * the list while LOGON stayed IN it, which is the same defect with a
+ * different name on it. LOGON pauses exactly like BULL does
+ * (login-post.service.ts), so a caller who had nothing to read got a blank
+ * screen and `(Pause)...Space To Resume:` every single login.
+ *
+ * It was doing it on THIS board, tonight. The sysop, 2026-09-14: "i get an
+ * empty prompt after loging in with ansi mode", and "it has been like this
+ * for a while". The 161 hollow screens removed from the repository in
+ * 93e12958a and the eleven moved aside on the live volume were both the
+ * symptom; this function wrote a fresh `Screens/LOGON.TXT` at the very next
+ * container start - measured, 15:11:34 UTC, on a board where it had been
+ * gone for twenty minutes.
+ *
+ * So it creates NOTHING now. A screen the board should show is a screen
+ * somebody wrote; a screen nobody wrote is a screen the board skips in
+ * silence, which is what AmiExpress does and what a sysop means by leaving it
+ * out. The directory is still ensured, because the screens editor needs
+ * somewhere to put the first one.
  */
-export async function ensureRootScreens(bbsRoot: string): Promise<void> {
-  const screensDir = path.join(bbsRoot, 'Screens');
-  const requiredScreens = [
-    'BBSTITLE.TXT',
-    'LOGON.TXT',
-    'MENU.TXT',
-    'LOGOFF.TXT'
-  ];
-
+export async function ensureScreensDirectory(bbsRoot: string): Promise<void> {
   try {
-    await fs.promises.mkdir(screensDir, { recursive: true });
+    await fs.promises.mkdir(path.join(bbsRoot, 'Screens'), { recursive: true });
   } catch (error) {
-    return;
-  }
-
-  let existingScreens: Set<string> = new Set();
-  try {
-    const entries = await fs.promises.readdir(screensDir);
-    existingScreens = new Set(entries.map((entry) => entry.toLowerCase()));
-  } catch (error) {
-    // Silent catch
-  }
-
-  for (const screenName of requiredScreens) {
-    if (existingScreens.has(screenName.toLowerCase())) {
-      continue;
-    }
-    const targetPath = path.join(screensDir, screenName);
-    try {
-      await touchFile(targetPath);
-    } catch (error) {
-      // Silent catch
-    }
+    // Silent catch: a board that cannot make this directory has larger
+    // problems, and every screen read is already guarded for absence.
   }
 }

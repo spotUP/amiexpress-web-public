@@ -12,7 +12,7 @@ import { conferenceFileManager } from '../services/ConferenceFileManager';
 import {
   loadFileAreasFromDisk,
   ensureConferenceStructure,
-  ensureRootScreens
+  ensureScreensDirectory
 } from '../services/file-areas-loader';
 import { refreshStorageContext } from '../storage';
 import { remoteAreaFromDisk } from '../storage/remote-areas';
@@ -530,7 +530,7 @@ export async function initializeData(io?: SocketIOServer) {
     // Conferences, message bases and file areas, from disk - the same
     // path an admin write re-runs, so a rename reaches the board without
     // a restart. See refreshConferencesFromDisk.
-    // The listener FIRST. It used to be registered after ensureRootScreens,
+    // The listener FIRST. It used to be registered after ensureScreensDirectory,
     // so any throw in between left the server up with no listener - every
     // admin write then "succeeded" while nothing reached the board until a
     // restart, silently, which is the original rename bug wearing a new hat.
@@ -549,7 +549,7 @@ export async function initializeData(io?: SocketIOServer) {
     });
 
     await refreshConferencesFromDisk(bbsRoot);
-    await ensureRootScreens(bbsRoot);
+    await ensureScreensDirectory(bbsRoot);
 
     // Task 12: build the pooled-storage subsystem from Drives.info and make
     // every branch Tasks 8, 9 and 11 built reachable. `refreshStorageContext`

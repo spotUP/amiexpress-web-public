@@ -40,7 +40,7 @@ import { bbsEventEmitter } from "./services/bbs-event-emitter";
 import {
   loadFileAreasFromDisk,
   ensureConferenceStructure,
-  ensureRootScreens,
+  ensureScreensDirectory,
 } from "./services/file-areas-loader";
 import { BBSState, LoggedOnSubState } from "./constants/bbs-states";
 export { BBSState, LoggedOnSubState };
