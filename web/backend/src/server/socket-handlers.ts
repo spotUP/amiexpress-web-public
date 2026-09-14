@@ -34,7 +34,7 @@ import { nodeManager } from '../services/node-manager.service';
 import { arexxEngine } from '../services/arexx.service';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
-import { runLogoffBatches, runExecuteOn } from '../services/batch-scheduler';
+import { runLogoffBatches, runExecuteOn, logoffBatchesAlreadyRan } from '../services/batch-scheduler';
 import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
@@ -1149,9 +1149,14 @@ console.error('[BBSEvent] Error emitting logout event:', error);
     // Achievements (SP2): the minutes snapshot and the PETSCII session. Non-throwing.
     reportLogout(session as any, session.user, session.connectionStart ? Math.floor((Date.now() - session.connectionStart) / 1000) : undefined);
 
-    // Run logoff batches (mirror logon batch runner)
+    // Run logoff batches (mirror logon batch runner), unless the `G` path
+    // already ran them through express.e's own LOGOFF<n> sys-command - on
+    // this board that command IS BBS:Batch<n>, and running both regenerated
+    // the bulletins twice per logoff.
     try {
-      await runLogoffBatches(session.nodeId || 0);
+      if (!logoffBatchesAlreadyRan(session as any)) {
+        await runLogoffBatches(session.nodeId || 0);
+      }
     } catch (err) {
 console.error('[LOGOFF] Logoff batch runner failed:', err);
       SysopDebugUtil.debug(

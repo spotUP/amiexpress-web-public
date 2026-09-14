@@ -676,6 +676,27 @@ console.warn(`[BatchScheduler] Login batches already running for node ${effectiv
 }
 
 /**
+ * Has this session's logoff batch already run?
+ *
+ * TWO PATHS REACH THE SAME BATCH, and only one of them is express.e's. A
+ * deliberate `G` runs `processSysCommand('LOGOFF')` and `LOGOFF<node>`
+ * (express.e:8222, 8231), which resolve to `BBS:Batch<n>`; the disconnect
+ * handler then runs `runLogoffBatches` as well, because a caller whose
+ * carrier drops never reaches the `G` path and his batch has to run
+ * somewhere. On a clean logoff both fired and the batch ran TWICE - the
+ * bulletins regenerated twice per logoff (sysop's live log, 2026-09-14).
+ *
+ * The sys-command path marks the session when it has run them, so the
+ * mirror stands down. The mark - and not `cleanLogoff` - because what
+ * matters is whether the BATCH ran, not how the caller left: if the
+ * sys-command path ever stops running them, the mirror picks them up again
+ * with no second change.
+ */
+export function logoffBatchesAlreadyRan(session: { logoffBatchesRan?: boolean } | null | undefined): boolean {
+  return session?.logoffBatchesRan === true;
+}
+
+/**
  * Run logoff batches (same batch0–batch6/000 set as logon).
  * AmiExpress runs these at logoff via system commands; mirror that behavior here.
  */

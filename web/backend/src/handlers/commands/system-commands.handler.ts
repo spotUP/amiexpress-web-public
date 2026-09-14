@@ -268,6 +268,12 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
     const { runSysCommand: processSysCommand } = require('../command-execution.handler');
     await processSysCommand(socket, session, 'LOGOFF');
     await processSysCommand(socket, session, `LOGOFF${session.nodeId || 0}`);
+    // These ARE the logoff batches on this board: LOGOFF<n> resolves to
+    // BBS:Batch<n>. The disconnect handler runs a mirror of them for a
+    // caller whose carrier drops and never reaches here; mark the session so
+    // it stands down rather than running the same script a second time
+    // (services/batch-scheduler.ts `logoffBatchesAlreadyRan`).
+    (session as any).logoffBatchesRan = true;
   } catch (err) {
     console.error('[LOGOFF] Error processing LOGOFF sys-commands:', err);
   }

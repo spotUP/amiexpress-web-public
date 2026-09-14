@@ -341,9 +341,14 @@ function isAppendedText(buffer: Buffer, offset: number): boolean {
   }
 
   const records = trailing.toString('latin1').split('\0').filter(r => r.length > 0);
+  const KEY = /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/;
+  // A record is `KEY=VALUE` or a BARE KEY - the Amiga's way of writing a
+  // flag, and one this rejected outright, which threw away the whole array
+  // when a door declared `SILENT` on a line of its own.
   return records.length > 0 && records.every(record => {
     const eqIdx = record.indexOf('=');
-    return eqIdx > 0 && /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/.test(record.slice(0, eqIdx).trim());
+    if (eqIdx === -1) return KEY.test(record.trim());
+    return eqIdx > 0 && KEY.test(record.slice(0, eqIdx).trim());
   });
 }
 
@@ -546,18 +551,32 @@ function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, 
       continue;
     }
 
+    // A COMMENT IS NOT A FLAG. `#` and `;` open a comment in these files,
+    // and while only `KEY=VALUE` records were kept they fell out on their
+    // own. Read as bare flags, `# Type setting` becomes the key TYPE with an
+    // empty value - and first-wins then beats the real `TYPE=TIM` below it.
+    if (trimmed.startsWith('#') || trimmed.startsWith(';')) {
+      continue;
+    }
+
+    // A TOOLTYPE NEEDS NO VALUE. `SILENT` on a line of its own is how the
+    // Amiga writes a flag, and express.e reads exactly that with
+    // `checkToolTypeExists` (4774). This kept only `KEY=VALUE` records, so a
+    // bare flag was dropped here and no existence test downstream could ever
+    // see it - the board's logoff batch could not be silenced, and painted
+    // over the logoff screen (sysop, 2026-09-14).
+    //
+    // Stored with an EMPTY value, which is what FindToolType answers for one.
     const eqIdx = trimmed.indexOf('=');
-    if (eqIdx !== -1) {
-      // Strip leading non-alphabetic chars (e.g., '%' from NewIcons length prefix bytes)
-      let rawKey = trimmed.substring(0, eqIdx).toUpperCase().trim();
-      const keyMatch = rawKey.match(/[A-Z][A-Z0-9_.]*/);
-      const key = keyMatch ? keyMatch[0] : '';
-      const value = trimmed.substring(eqIdx + 1).trim();
-      // Accept any reasonable KEY=VALUE pair, and keep the FIRST of a
-      // repeated key - the answer FindToolType would give.
-      if (key && key.length >= 2 && key.length <= 32 && !tooltypes.has(key)) {
-        tooltypes.set(key, value);
-      }
+    // Strip leading non-alphabetic chars (e.g., '%' from NewIcons length prefix bytes)
+    const rawKey = (eqIdx === -1 ? trimmed : trimmed.substring(0, eqIdx)).toUpperCase().trim();
+    const keyMatch = rawKey.match(/[A-Z][A-Z0-9_.]*/);
+    const key = keyMatch ? keyMatch[0] : '';
+    const value = eqIdx === -1 ? '' : trimmed.substring(eqIdx + 1).trim();
+    // Accept any reasonable KEY=VALUE pair, and keep the FIRST of a
+    // repeated key - the answer FindToolType would give.
+    if (key && key.length >= 2 && key.length <= 32 && !tooltypes.has(key)) {
+      tooltypes.set(key, value);
     }
   }
 
@@ -768,15 +787,29 @@ console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.loc
     }
   }
 
-  cmd.resident = tooltypes.get('RESIDENT') === 'YES';
-  // EXPRESS.E treats EXPERT_MODE as a flag; presence triggers doorExpertMode
-  cmd.expertMode = tooltypes.has('EXPERT_MODE');
-  cmd.trapOn = tooltypes.get('TRAPON') === 'YES';
-  cmd.silent = tooltypes.get('SILENT') === 'YES';
+  // A FLAG TOOLTYPE IS ITS PRESENCE, NOT ITS VALUE.
+  //
+  // express.e reads every one of these with `checkToolTypeExists` - RESIDENT
+  // 4769, EXPERT_MODE 4770, TRAPON 4772, SILENT 4774, LOG_INPUTS 4780,
+  // SCRIPTCHECK 4784, QUICKMODE 4755 - so the Amiga convention of a bare
+  // `SILENT` line on its own turns the flag on. This asked whether the VALUE
+  // was the string 'YES', so a bare flag read as FALSE: the board's logoff
+  // batch could not be silenced and painted its maintenance output over the
+  // logoff screen (sysop, 2026-09-14). `SILENT=YES` still works - a tooltype
+  // with a value exists too.
+  //
+  // MULTINODE is NOT in this list on purpose: express.e has no such tooltype
+  // at all, it is this board's own, and its `.info` files carry
+  // `MULTINODE=NO` meaning it.
+  const flagSet = (name: string): boolean => tooltypes.has(name);
+  cmd.resident = flagSet('RESIDENT');
+  cmd.expertMode = flagSet('EXPERT_MODE');
+  cmd.trapOn = flagSet('TRAPON');
+  cmd.silent = flagSet('SILENT');
   cmd.multiNode = tooltypes.get('MULTINODE') === 'YES';
-  cmd.quickMode = tooltypes.get('QUICKMODE') === 'YES';
-  cmd.scriptCheck = tooltypes.get('SCRIPTCHECK') === 'YES';
-  cmd.logInputs = tooltypes.get('LOG_INPUTS') === 'YES';
+  cmd.quickMode = flagSet('QUICKMODE');
+  cmd.scriptCheck = flagSet('SCRIPTCHECK');
+  cmd.logInputs = flagSet('LOG_INPUTS');
 
   const banner = tooltypes.get('BANNER');
   if (banner) {

@@ -29,6 +29,7 @@ import { Socket } from "socket.io";
 import { c64AdapterFor } from "../server/c64-door-adapter";
 import { C64_COLUMNS } from "./xim/screen-width.util";
 import { createEmpireNarrowShadow } from "./api/file-shadow";
+import { stdoutReachesCaller } from "./door-stdout-policy";
 import * as path from "path";
 import * as fs from "fs";
 import * as amigafs from "../utils/amigafs";
@@ -683,7 +684,13 @@ debugLog(
     // SIM/SUP doors that DO use stdout legitimately (no AEDoor messages)
     // keep their forwarding. Transfer-raw passthrough still applies in both
     // cases (binary file transfers route through stdout).
-    const stdoutGoesToUser = !useXimProtocol;
+    //
+    // ...unless the door declares SILENT, which is how a board runs
+    // MAINTENANCE through the door path. See `door-stdout-policy.ts`.
+    const stdoutGoesToUser = stdoutReachesCaller({
+      doorType: useXimProtocol ? doorType : 'SIM',
+      silent: this.config.silent,
+    });
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
