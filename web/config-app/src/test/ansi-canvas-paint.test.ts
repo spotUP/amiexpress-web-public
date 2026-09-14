@@ -167,9 +167,12 @@ describe('the Amiga preview', () => {
     paintScreen(amiga.ctx, screenWith(7, 12), null, [], 'amiga');
     // The LAST cell-sized rect: on a one-cell screen the initial clear is
     // exactly the same size, and it is black.
-    const cellFill = amiga.rects.filter(
+    // Indexed rather than `.at(-1)`: the admin's tsconfig targets a library
+    // without it, and the pre-push type gate refuses the build.
+    const cellRects = amiga.rects.filter(
       (rect: Call) => rect.args[2] === CELL_WIDTH && rect.args[3] === CELL_HEIGHT,
-    ).at(-1);
+    );
+    const cellFill = cellRects[cellRects.length - 1];
     // Bright blue (12) is blue (4).
     expect(cellFill?.fill).toBe(ANSI_PALETTE[4]);
   });
