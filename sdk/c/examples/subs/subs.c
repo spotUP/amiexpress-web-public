@@ -46,9 +46,10 @@
  * (public, or private and yours) rather than pretending to evaluate ACS. See
  * ae_msgbase.h.
  *
- * ONE BINARY, TWO REGISTRATIONS. Under SUBS it draws the feed. Under any other
- * name - SUBSCAN - it prints a three-line digest and leaves, which is what a
- * conference bulletin runs with ~XISUBSCAN.
+ * ONE BINARY, TWO REGISTRATIONS. Under SUBS it draws the feed and holds the
+ * caller until he leaves. Under SUBSCAN it lists the topics that are new to
+ * him and EXITS - that is what a conference join runs, and a join must never
+ * hold anybody.
  *
  * Drawn at all three widths the board serves (80-column ANSI, wider terminals,
  * and the 40-column compact tier ui_is_compact_width picks). ASCII tokens only,
@@ -61,6 +62,7 @@
 
 #include "aedoor.h"
 #include "ae_msgbase.h"
+#include "subs_scan.h"
 #include "ae_session.h"
 #include "ui_ansi.h"
 #include "ui_chrome.h"
@@ -149,7 +151,7 @@ typedef enum { FEED_OK, FEED_EMPTY, FEED_NOBASE, FEED_GONE } feed_state;
  * A file-static like `screen` and `keys` beside it, rather than a local of
  * main(): reading the message base needs to ask the board where that base is
  * and who is calling, and those questions are asked from load_feed() and
- * digest(), which are not main(). This door already keeps its screen and its
+ * scan_listing(), which are not main(). This door already keeps its screen and its
  * key source here for the same reason.
  */
 static ae_session session;
@@ -512,23 +514,31 @@ static void draw_footer(const char *const *optional, int n, const char *suffix)
     }
 }
 
-/* ------------------------------------------------------------- digest mode */
+/* --------------------------------------------------------------- scan mode */
 
 /**
- * Three lines, no frame, no key wait - what a conference bulletin runs.
+ * The conference join: the topics, then out of the way.
  *
- * Nothing at all when the conference has no public messages: a bulletin that
- * says "0" at every join is worse than one that says nothing. And nothing when
- * the board cannot answer, which is the case on a classic AmiExpress - a
+ * No frame, no key wait, no clear - this runs INSIDE joinConf, with the
+ * board's own screen half-drawn around it, and a door that cleared or paused
+ * there would be holding a caller who did not ask for anything.
+ *
+ * Nothing at all when the conference has no traffic this caller may read, and
+ * nothing when the board cannot answer - the case on a classic AmiExpress. A
  * silent no-op is the only acceptable behaviour for something that runs on
  * every single join.
+ *
+ * The sysop, 2026-09-14: "its not nice that we are stuck inside a door when
+ * joining a conf (subs), it should only list the topics here and exit to the
+ * prompt." This is that. The full door is still one word away - SUBS - and
+ * says so on its last line.
  */
-static void digest(void)
+static void scan_listing(void)
 {
     ae_msg_stat stat;
-    ae_msg_row latest;
-    char line[200];
-    int got;
+    ae_msg_row window[SUBS_SCAN_ROWS];
+    char lines[SUBS_SCAN_LINES][SUBS_SCAN_LINE];
+    int got, count, i;
 
     if (!open_base()) return;
     if (ae_msg_stat_read(&stat) != AE_MSG_OK) return;
@@ -537,18 +547,20 @@ static void digest(void)
     conf_name[0] = '\0';
     ae_conf_name(&session, conf_name, (int)sizeof conf_name);
 
-    sprintf(line, "[INFO] %.30s: %ld messages, %ld new for you.",
-            conf_name[0] != '\0' ? conf_name : "This conference",
-            stat.total, stat.unread);
-    ae_put(line, 1);
+    /*
+     * The NEWEST window, not the first page: `first` < 0 is what ae_msg_list
+     * takes for "the last cap readable messages, still ascending". Message
+     * numbers are sparse, so there is no arithmetic that finds the end of a
+     * base from its total.
+     */
+    got = ae_msg_list(-1, window, SUBS_SCAN_ROWS);
+    if (got < 0) got = 0;
 
-    got = ae_msg_list(-1, &latest, 1);
-    if (got == 1) {
-        sprintf(line, "       Latest: %.20s - \"%.40s\"", latest.from, latest.subject);
-        ae_put(line, 1);
-    }
+    count = subs_scan_compose(&stat, window, got, conf_name,
+                              ae_screen_cols(&session),
+                              lines, SUBS_SCAN_LINES);
 
-    ae_put("       Type SUBS to join in, or R to read your new mail.", 1);
+    for (i = 0; i < count; i++) ae_put(lines[i], 1);
 }
 
 /* --------------------------------------------------------------- one message */
@@ -775,7 +787,7 @@ static int post_flow(const char *question, const char *subject)
 /* --------------------------------------------------------------------- door */
 
 /**
- * Is this the digest registration?
+ * Is this the scan registration?
  *
  * Case-insensitive without <ctype.h>: a BBSCMD name is ASCII by definition
  * (Commands/BBSCmd/<NAME>.info), and tolower() drags a locale table into a
@@ -819,24 +831,26 @@ int main(int argc, char **argv)
     ae_menu_command(&session, launched_as, (int)sizeof launched_as);
 
     /*
-     * DIGEST MODE, before the screen is ever opened: this runs at conference
+     * SCAN MODE, before the screen is ever opened: this runs at conference
      * join, inside a bulletin, and must not clear anything or wait for a key.
      *
      * The quiet mode is opted INTO by name, and only by the exact name
      * SUBSCAN. The plan had it the other way round - "anything that is not
      * SUBS" - and that is wrong twice over: a board that does not answer
      * command 605 at all (a classic AmiExpress) would then only ever get the
-     * three-line digest, and so would every harness that launches a binary
+     * topic listing, and so would every harness that launches a binary
      * under its own name. dev/scripts/door-probe/repaint-cost.ts passes
-     * doorCommand 'PROBE', which is how this was found: the door printed three
-     * lines and exited before a single keypress could be measured.
+     * doorCommand 'PROBE', which is how this was found: the door printed its
+     * listing and exited before a single keypress could be measured.
      *
      * So an unrecognised name draws the real door. A sysop who wants the
-     * digest asks for it by registering SUBSCAN, which is what Phase 4's
-     * ~XISUBSCAN token runs.
+     * listing asks for it by registering SUBSCAN, which is what a conference
+     * bulletin's ~XISUBSCAN token runs today - and what the CUSTOM message-base
+     * hook will call as MAIL_SCAN once it exists
+     * (thoughts/shared/plans/2026-09-14-subs-is-the-conference-message-base.md).
      */
     if (name_is_subscan(launched_as)) {
-        digest();
+        scan_listing();
         ae_close(&session);
         ae_shutdown();
         return 0;

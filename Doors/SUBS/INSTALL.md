@@ -36,11 +36,33 @@ that argument is the node number.
 | Command   | What it does                                                |
 |-----------|-------------------------------------------------------------|
 | `SUBS`    | the full screen: the message list, the reader, post and reply |
-| `SUBSCAN` | three lines and exits - for a conference bulletin             |
+| `SUBSCAN` | the topics that are new to this caller, then exits            |
 
 A board with no command 605 - a classic AmiExpress - gets the full door under
-either name, which is the right way round: three unexplained lines is a worse
+either name, which is the right way round: an unexplained listing is a worse
 failure than a door that works.
+
+### What SUBSCAN prints
+
+The conference's count, then the NEW messages only, newest last, at most
+fifteen of them with `+N more.` when there are more than that, and a last line
+saying `Type SUBS to read them.` A caller who is caught up gets the count and
+nothing else; a conference with nothing he may read prints nothing at all.
+
+```
+[INFO] Amiga Chat: 740 messages, 6 new for you.
+
+  #735  Spot           Re: the 060 board
+  #736  Mahoney        DEMO party rules
+  ...
+  Type SUBS to read them.
+```
+
+It does not clear the screen and it does not wait for a key. It runs inside a
+conference join, with the board's own screen half-drawn around it, and the
+sysop's rule for that (2026-09-14) is plain: "it should only list the topics
+here and exit to the prompt". At forty columns the sender goes and the subject
+is clipped rather than wrapped.
 
 ## Launching it when a caller joins a conference
 
@@ -51,7 +73,10 @@ One line in the conference's bulletin:
 ```
 
 `~XI` starts a door without announcing it and strips the token from the text.
-Use `~XISUBS` instead to open the full door on every join.
+
+`~XISUBS` there would open the FULL door on every join and hold the caller
+until they pressed Q. Do not do that - it is what the sysop asked to be rid of.
+The full door is for a caller who types `SUBS`.
 
 Three things that will waste an afternoon if you do not know them:
 

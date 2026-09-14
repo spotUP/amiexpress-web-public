@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -66,6 +66,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ae_msgbase
 	./build/test_ae_dos
 	./build/test_texttv
+	./build/test_subs_scan
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -96,6 +97,12 @@ build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c examples/texttv/texttv_parse.h include/json_lite.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/texttv -I include examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c -o $@
+
+# The join listing, which every caller sees and nobody asked for - so it is a
+# pure function in its own translation unit, the way texttv_parse.c is.
+build/test_subs_scan: examples/subs/subs_scan.c tests/test_subs_scan.c examples/subs/subs_scan.h include/ae_msgbase.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I examples/subs -I include examples/subs/subs_scan.c tests/test_subs_scan.c -o $@
 
 build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/ae_dos.h
 	@mkdir -p build
@@ -260,9 +267,9 @@ build/amiga/requests: examples/requests/requests.c build/amiga/libae.lib
 
 # The public-discussion door: reads through ae_msgbase, hands EALL back to the
 # board to compose, drawn with the same widgets at all three widths.
-build/amiga/subs: examples/subs/subs.c build/amiga/libae.lib
+build/amiga/subs: examples/subs/subs.c examples/subs/subs_scan.c examples/subs/subs_scan.h build/amiga/libae.lib
 	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/subs examples/subs/subs.c examples/subs/subs_scan.c build/amiga/libae.lib -lauto -o $@
 
 # The Text-TV client: fetches api.texttv.nu over plain HTTP through ae_http,
 # drawn with the same widgets at both widths. Two translation units - the
