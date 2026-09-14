@@ -30,6 +30,7 @@ import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
 import { findTheme } from '../screens/theme-registry';
+import { svgToRip } from '../screens/svg-to-rip';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import { readThemeRegistry } from '../screens/theme-registry';
 import { themeOfPath, validateThemeFile, type ThemeFinding } from '../screens/theme-validation';
@@ -239,6 +240,51 @@ screensRouter.get('/', (req: Request, res: Response) => {
   }
 
   sendOk(res, { ...index, callersByLevel });
+});
+
+/**
+ * POST /api/screens/svg-to-rip - an SVG, as RIP commands.
+ *
+ * Converts and ANSWERS; it writes nothing. The artist sees what the
+ * projection made - and what it could not carry - before anything lands on
+ * the board, because a `.rip` that turns out to be a blank screen is only
+ * discoverable by looking, and the losses are the whole reason to look.
+ *
+ * The write is the existing `PUT /file`, which already asks the sandbox
+ * whether this caller may write that path. Converting is not writing, so
+ * this needs no second copy of that question.
+ */
+screensRouter.post('/svg-to-rip', (req: Request, res: Response) => {
+  const svg = String((req.body || {}).svg ?? '');
+  if (!svg.trim()) {
+    return res.status(400).json({ success: false, error: 'Send an SVG to convert' });
+  }
+  // A megabyte of SVG is a drawing with an embedded photograph in it, which
+  // this cannot carry anyway; refusing early beats flattening it first.
+  if (svg.length > 2_000_000) {
+    return res.status(413).json({
+      success: false,
+      error: 'That SVG is over 2 MB - RIP is a few hundred drawing commands, so something in it (an embedded image?) will not survive the conversion',
+    });
+  }
+
+  let result;
+  try {
+    result = svgToRip(svg);
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      error: `That SVG could not be read: ${(error as Error).message}`,
+    });
+  }
+
+  sendOk(res, {
+    content: Buffer.from(result.text, 'latin1').toString('base64'),
+    commands: result.commands,
+    losses: result.losses,
+  }, result.commands > 0
+    ? `Converted - ${result.commands} drawing command${result.commands === 1 ? '' : 's'}`
+    : 'Nothing was drawn');
 });
 
 /**

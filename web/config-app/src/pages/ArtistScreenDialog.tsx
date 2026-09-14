@@ -73,6 +73,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   /** Set when the bytes cannot be read as a screen at all. */
   const [undrawable, setUndrawable] = useState<string | null>(null);
   const replaceInput = useRef<HTMLInputElement | null>(null);
+  const svgInput = useRef<HTMLInputElement | null>(null);
   const addFormatInput = useRef<HTMLInputElement | null>(null);
   const ansiUploadInput = useRef<HTMLInputElement | null>(null);
   /** Which format the artist is about to add, once they pick a file. */
@@ -302,6 +303,35 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
       reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
       reader.readAsDataURL(chosen);
     });
+
+  /**
+   * An SVG, converted and held for a look before it is written.
+   *
+   * `!ASCII-Art/rip/` has carried `uptown.ai` and its `uPtOwN.svg` export
+   * since before this existed: the art is drawn in Illustrator and had
+   * nowhere to go (sysop, 2026-09-14). The conversion is a PROJECTION onto a
+   * 640x350 canvas with sixteen colours, so what it could not carry matters
+   * as much as what it could - and both are shown before anything lands.
+   */
+  const [pendingSvg, setPendingSvg] = useState<
+    { name: string; bytes: string; commands: number; losses: Array<{ element: string; reason: string }> } | null
+  >(null);
+
+  const importSvg = useMutation({
+    mutationFn: async (chosen: File) => {
+      const svg = await chosen.text();
+      const answer = await apiClient.convertSvgToRip(svg);
+      const data = (answer as { data?: { content?: string; commands?: number; losses?: Array<{ element: string; reason: string }> } }).data;
+      return {
+        name: chosen.name,
+        bytes: String(data?.content ?? ''),
+        commands: Number(data?.commands ?? 0),
+        losses: data?.losses ?? [],
+      };
+    },
+    onSuccess: (converted) => setPendingSvg(converted),
+    onError: (error: Error) => showError(error.message),
+  });
 
   const writeBytes = useMutation({
     mutationFn: ({ target, bytes, carry }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below' }) =>
@@ -545,6 +575,29 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
                   }
                 }}
               />
+              {/* RIP art is DRAWN in a vector program - RipScreenEditor says
+                  so itself ("editable without being a drawing program") - so
+                  the way in is an export, not a canvas. */}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 underline"
+                onClick={() => svgInput.current?.click()}
+                disabled={importSvg.isPending}
+              >
+                <Upload size={14} /> {importSvg.isPending ? 'Converting…' : 'Import SVG as RIP'}
+              </button>
+              <input
+                ref={svgInput}
+                type="file"
+                accept=".svg,image/svg+xml"
+                aria-label="Choose an SVG"
+                className="hidden"
+                onChange={event => {
+                  const chosen = event.target.files?.[0];
+                  event.target.value = '';
+                  if (chosen) importSvg.mutate(chosen);
+                }}
+              />
             </>
           )}
           {/* Through the API CLIENT, never an <a href>: these endpoints are
@@ -607,6 +660,53 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               <Trash2 size={14} /> Drop mine
             </button>
           )}
+        </div>
+      )}
+
+      {/* What the conversion made, and what it could not carry, BEFORE it
+          is written. A `.rip` that came out blank is otherwise only
+          discoverable by opening it. */}
+      {pendingSvg && (
+        <div className="mt-3 space-y-2 border border-border p-3 text-sm" data-testid="svg-import">
+          <p className="text-content-primary">
+            {pendingSvg.name} converted to {pendingSvg.commands} drawing
+            command{pendingSvg.commands === 1 ? '' : 's'}.
+          </p>
+          {pendingSvg.commands === 0 && (
+            <p className="text-status-warn">
+              Nothing was drawn. Writing this would leave a blank screen.
+            </p>
+          )}
+          {pendingSvg.losses.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-status-warn">RIP cannot carry everything in it:</p>
+              <ul className="list-disc pl-5 text-content-secondary">
+                {pendingSvg.losses.map(loss => (
+                  <li key={`${loss.element}:${loss.reason}`}>
+                    <span className="font-mono">{loss.element}</span> - {loss.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={writeBytes.isPending || pendingSvg.commands === 0}
+              onClick={async () => {
+                if (!path || !pendingSvg) return;
+                if (!(await confirmAuditWrite(pendingSvg.name))) return;
+                writeBytes.mutate({ target: path, bytes: pendingSvg.bytes, carry: 'above' });
+                setPendingSvg(null);
+              }}
+            >
+              Write it to {path?.split('/').pop()}
+            </button>
+            <button type="button" className="underline" onClick={() => setPendingSvg(null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

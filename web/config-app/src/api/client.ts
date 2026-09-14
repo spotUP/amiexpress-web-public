@@ -692,6 +692,20 @@ class ApiClient {
     });
   }
 
+  /**
+   * An SVG, as RIP drawing commands. Converts and answers; writes nothing.
+   *
+   * The artist sees the command count and everything the projection could
+   * not carry BEFORE any of it lands on the board - a `.rip` that turns out
+   * to be a blank screen is otherwise only discoverable by looking at it.
+   */
+  async convertSvgToRip(svg: string) {
+    return this.request<ApiResponse>(`${API_BASE}/screens/svg-to-rip`, {
+      method: 'POST',
+      body: JSON.stringify({ svg }),
+    });
+  }
+
   /** Copy a board screen into a theme, as the artist's starting point. */
   async copyScreenIntoTheme(slug: string, boardPath: string) {
     return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}/copy`, {
