@@ -38,7 +38,7 @@ import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
 import { userAlreadyOnNode } from "./user-already-online";
 import { writeToCallersLog } from "../utils/download-logging.util";
-import { runLoginBatches, runExecuteOn } from "./batch-scheduler";
+import { runExecuteOn } from "./batch-scheduler";
 import { mailOnLogon } from "./mail-notification.service";
 import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
 import { sessionLogManager } from "./SessionLogManager";
@@ -304,10 +304,25 @@ export async function runPostAuthLogin(
     session.nodeId,
   );
 
-  // Login batches (non-blocking).
-  runLoginBatches(session.nodeId || 0).catch((err) => {
-    console.error("[LOGIN] Batch scheduler failed:", err);
-  });
+  /**
+   * NO BATCH FILE HERE. `BBS:Batch<weekday>` is a LOGOFF path.
+   *
+   * express.e reaches it in exactly one place: `processSysCommand('LOGOFF')`
+   * and `LOGOFF<node>` (express.e:8222, 8230-8231), and on this board
+   * `Commands/SysCmd/LOGOFF0..6.info` are `LOCATION=BBS:Batch<n>`. At logon it
+   * runs `runExecuteOn('LOGON')` (express.e:6715) and nothing else.
+   *
+   * This port also ran the same file on the way IN, which is why a caller
+   * watched MultiTop-II paint five screens while logging in (sysop,
+   * 2026-09-14): today's `batch1` invokes `doors:multitop/mtop` once per
+   * design, writing bull1..bull5. Five 68K emulator spawns per login, plus
+   * QuickNew, ByteKillHandler, GLCUpdater and SAmiLog - all of it work the
+   * logoff already does, done twice.
+   *
+   * `screens/quicknew.txt`, which `logon20.txt` displays, is written by that
+   * same batch. It is now the copy written at the PREVIOUS logoff, which is
+   * what the Amiga board showed.
+   */
 
   // EXECUTE_ON_LOGON from bbsConfig.info (express.e:6715).
   runExecuteOn("LOGON", session.nodeId || 1, {

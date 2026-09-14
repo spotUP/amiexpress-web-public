@@ -626,54 +626,32 @@ console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
   }
 }
 
-// runLoginBatches() is fired non-blocking from login-post.service.ts on
-// every successful login (one real BBS session's worth of work per call:
-// several batch files, each running one or more spawned door processes
-// like QuickNew's new-mail scan). It is keyed only by nodeId, with no
-// guard against a second login on the SAME node overlapping a first run
-// that hasn't finished yet - e.g. a client that disconnects and quickly
-// reconnects to the same node slot while the prior connection's
-// still-running QuickNew scan is orphaned in the background (it's a
-// detached child process, so it outlives the socket that spawned it).
-// Real incident: 5 duplicate QuickNew emulator processes (2 on Node2, 2
-// on Node4) accumulated within a 20-second window on the live BBS,
-// ~2GB combined RSS, contributing to two OOM kills. Guard by nodeId so a
-// reconnect's login-batch run never overlaps its predecessor's.
-const activeLoginBatchNodes = new Set<number>();
-
-export async function runLoginBatches(nodeId: number): Promise<void> {
-  const effectiveNodeId = nodeId || 1;
-
-  if (activeLoginBatchNodes.has(effectiveNodeId)) {
-console.warn(`[BatchScheduler] Login batches already running for node ${effectiveNodeId} - skipping duplicate run (likely a fast reconnect to the same node)`);
-    return;
-  }
-  activeLoginBatchNodes.add(effectiveNodeId);
-
-  try {
-    const baseDir = config.getConfig().dataDir;
-    const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
-    const appRoot = process.cwd(); // App root where batch files live
-    const day = getSystemTime().getDay(); // 0-6, Sunday = 0
-    const batchName = `batch${day}`;
-    const batch000 = 'batch000';
-
-    const candidates = [
-      path.join(appRoot, batchName),           // App root batch files (primary)
-      path.join(baseDir, batchName),           // Data dir batch files
-      path.join(bbsRoot, `Node${nodeId}`, batchName),
-      path.join(appRoot, batch000),            // App root batch000
-      path.join(baseDir, batch000),
-      path.join(bbsRoot, `Node${nodeId}`, batch000),
-    ];
-
-    for (const candidate of candidates) {
-      await runBatchFile(candidate, effectiveNodeId);
-    }
-  } finally {
-    activeLoginBatchNodes.delete(effectiveNodeId);
-  }
-}
+/**
+ * THERE IS NO LOGIN-SIDE BATCH RUNNER, AND THERE MUST NOT BE ONE.
+ *
+ * `BBS:Batch<weekday>` is reached in express.e from exactly one place - the
+ * logoff sys-commands `LOGOFF` and `LOGOFF<node>` (express.e:8222,
+ * 8230-8231), which on this board resolve to `LOCATION=BBS:Batch<n>`. At
+ * logon express.e runs `runExecuteOn('LOGON')` (express.e:6715) and nothing
+ * else; the live `BBSConfig.info` declares no `EXECUTE_ON_*` at all.
+ *
+ * `runLoginBatches()` used to fire the same file from `login-post.service.ts`
+ * on every successful login. It had no express.e counterpart and it was
+ * VISIBLE: today's `batch1` runs `doors:multitop/mtop` five times, once per
+ * design, so a caller watched MultiTop-II paint five screens on the way in
+ * (sysop, 2026-09-14) - plus QuickNew, ByteKillHandler, GLCUpdater and
+ * SAmiLog, five 68K emulator spawns of it, all repeating what the logoff had
+ * already done.
+ *
+ * It also needed a per-node reentrancy guard that nothing else needs: a fast
+ * reconnect to the same node fired it twice and orphaned duplicate QuickNew
+ * emulators - 5 on the live board inside 20 seconds, ~2GB RSS, contributing
+ * to two OOM kills. The guard went with the function; the logoff path runs
+ * once per caller leaving, which is not a race.
+ *
+ * `tests/services/a-login-does-not-run-the-logoff-batch.test.ts` drives the
+ * real login pipeline and asks whether the batch file was read.
+ */
 
 /**
  * Has this session's logoff batch already run?

@@ -245,7 +245,6 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
-import { runLoginBatches } from '../services/batch-scheduler';
 import { initializeSecurity } from '../utils/security.util';
 
 // Dependencies (injected)
