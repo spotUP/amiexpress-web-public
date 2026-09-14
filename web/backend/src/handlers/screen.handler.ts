@@ -2933,6 +2933,31 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
   }
   session.lastScreenCommandsHash = commandsHash;
 
+  try {
+    await runScreenCommands(socket, session, commands);
+  } finally {
+    session.queuedScreenCommands = [];
+  }
+}
+
+/**
+ * Run screen-triggered commands (`~CC_`, `~XC_`, `~XI`) NOW.
+ *
+ * Split out of runQueuedScreenCommands so a screen SEGMENT can run the
+ * commands it carries. Deliberately WITHOUT that function's
+ * `lastScreenCommandsHash` guard: the hash is never reset, so a second join of
+ * the same conference would find the same command list and silently skip it -
+ * which is exactly the bug this split exists to fix, one layer down.
+ */
+export async function runScreenCommands(
+  socket: any,
+  session: BBSSession,
+  commands: string[],
+): Promise<void> {
+  if (commands.length === 0) {
+    return;
+  }
+
   const { handleCommand } = require('./command-handler/core');
   session.pendingScreenCommand = new Promise<void>(resolve => {
     session.screenCommandResolver = resolve;
@@ -2959,7 +2984,6 @@ console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, 
       }
     }
   } finally {
-    session.queuedScreenCommands = [];
     session.executingScreenCommand = false;
     if (session.screenCommandResolver) {
       session.screenCommandResolver();
@@ -3128,6 +3152,10 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
           parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
           socket.emit(eventName, parsed, segStateNS.sourceAttrs);
         }
+        // A `~XI` / `~XC_` in a later segment is a command, not text. Same gap
+        // as processNextScreenSegment below, same fix - a caller who answers
+        // `ns` must not get a different board than one who answers `y`.
+        await runScreenCommands(socket, session, result.commands);
       }
       session.screenSegments = undefined;
     }
@@ -3204,6 +3232,26 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
 console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: ${segState.petscii ? `${segment.length} PETSCII bytes` : `"${segment.substring(0, 100)}..."`}`);
   screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segState.petscii ? segment.length + ' PETSCII bytes' : segment.substring(0, 50) + '...'}`);
 
+  /*
+   * COMMANDS A LATER SEGMENT CARRIES.
+   *
+   * parseMciCodes returns two things: text to emit and commands to run
+   * (`~XI<door>`, `~XC_<cmd>`). displayScreen runs them for the FIRST segment
+   * and this function parsed them out of every later one and THREW THEM AWAY -
+   * so on this board, whose conference bulletins end
+   *
+   *     ~SP
+   *     ~f
+   *     ~CC_ctop
+   *     ~XISUBS
+   *
+   * the log read "FOUND ~XI DOOR: SUBS / Total commands to execute: 1" and
+   * SUBS never opened. The `~CC_ctop` on the line above DID run, because
+   * inline mode executes `~CC_` through a sentinel during the parse - which is
+   * what made it look like segment commands worked.
+   */
+  let segmentCommands: string[] = [];
+
   if (segState.petscii && segState.petsciiCtx) {
     // The PETSCII resume (plan Task 8, decision 7). The remainder is ALREADY
     // gated, pre-passed and tokenized - it is a suffix of the plan this
@@ -3231,6 +3279,7 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
 
   // Parse and execute this segment's MCI codes
   const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+  segmentCommands = result.commands;
 
   let parsed = result.parsed;
   if (result.slowmo !== undefined) session.slowmo = result.slowmo;
@@ -3254,6 +3303,22 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
   }
 
   } // end else (ANSI segment)
+
+  // Now run what this segment asked for. After the text, because a door paints
+  // over whatever is on the screen and the art belongs underneath it.
+  if (segmentCommands.length > 0) {
+    await runScreenCommands(socket, session, segmentCommands);
+    /*
+     * A command displays screens of its own - a door's, or another conference
+     * bulletin - so the segment state this closure captured may no longer be
+     * the session's. Whatever is on the session now is the truth: arming a
+     * pause or firing onComplete off a stale `segState` would talk about a
+     * screen the caller has already left.
+     */
+    if (session.screenSegments !== segState) {
+      return true;
+    }
+  }
 
   // If there are more segments, set up another pause
   if (segState.segments.length > 0) {
