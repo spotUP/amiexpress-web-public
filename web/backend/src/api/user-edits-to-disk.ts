@@ -27,6 +27,13 @@ export interface UserEdits {
   email?: string;
   secLevel?: number;
   timeLimit?: number;
+  /**
+   * Which conferences they may join: either an AREA NAME, or the `X`/`_` flag
+   * string, exactly as express.e:8499-8512 reads it. The shape of the value
+   * decides which - see conferences/access-areas.ts - so it is carried
+   * verbatim and never normalised here.
+   */
+  confAccess?: string;
   expert?: boolean;
   ansi?: boolean;
   passwordHash?: string;
@@ -97,6 +104,7 @@ console.warn(
   carry('email');
   carry('secLevel');
   carry('timeLimit');
+  carry('confAccess');
   carry('expert');
   carry('ansi');
   carry('accountLocked');

@@ -28,6 +28,7 @@ import { listOrphanConferenceDirs, removeOrphanConferenceDir } from '../conferen
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
+import { listAccessAreas, writeAccessArea, deleteAccessArea } from '../conferences/access-areas';
 import { applyUserEditsToDisk } from './user-edits-to-disk';
 import type { Database } from '../database';
 import * as fs from 'fs';
@@ -269,6 +270,84 @@ console.error('Config API error:', error);
     try {
       const healthChecks = await conferenceSetup.checkAllConferences();
       sendResponse(res, healthChecks, 'Conference health check complete');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * ACCESS AREAS - the named conference grants a user can be pointed at.
+   *
+   * express.e:8499-8512 reads a user's access field either as `X`/`_` flags or
+   * as the NAME of an area whose icon carries a `Conf.<n>` per conference it
+   * grants. Neither could be edited from the admin at all: the user form has
+   * no conference field, and nothing wrote `Access/AREA.*.info` - so deciding
+   * who may read a private conference meant editing binary icons on the
+   * volume by hand. That is how this board's fifteen internal members were set
+   * on 2026-09-14.
+   */
+  router.get('/access-areas', async (_req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const areas = listAccessAreas(bbsRoot);
+
+      // Membership is a property of the USERS, so it is counted where they
+      // are read. A name that matches no area is reported too: that account
+      // has no conference at all (checkToolTypeExists on a missing file is
+      // false for every conference), and it is invisible otherwise.
+      const members = new Map<string, number>();
+      let onFlags = 0;
+      for (const u of userFileManager.readAllUsers()) {
+        const acc = String((u as { confAccess?: string }).confAccess ?? '').trim();
+        if (!acc) continue;
+        if (/^[X_]*$/i.test(acc)) { onFlags++; continue; }
+        members.set(acc, (members.get(acc) ?? 0) + 1);
+      }
+
+      const known = new Set(areas.map(a => a.name.toLowerCase()));
+      const dangling = [...members.entries()]
+        .filter(([name]) => !known.has(name.toLowerCase()))
+        .map(([name, count]) => ({ name, users: count }));
+
+      sendResponse(res, {
+        areas: areas.map(a => ({
+          ...a,
+          users: members.get(a.name) ?? 0,
+        })),
+        usersOnFlagStrings: onFlags,
+        danglingAreas: dangling,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /** PUT /api/config/access-areas/:name - set which conferences it grants. */
+  router.put('/access-areas/:name', async (req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const name = String(req.params.name);
+      const raw = (req.body?.conferences ?? []) as unknown[];
+      const conferences = raw
+        .map(n => Number(n))
+        .filter(n => Number.isInteger(n) && n >= 1);
+      sendResponse(res, writeAccessArea(bbsRoot, name, conferences));
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /** DELETE /api/config/access-areas/:name - refused while anyone uses it. */
+  router.delete('/access-areas/:name', async (req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const name = String(req.params.name);
+      const inUse = userFileManager.readAllUsers().filter(
+        (u: { confAccess?: string }) =>
+          String(u.confAccess ?? '').trim().toLowerCase() === name.toLowerCase(),
+      ).length;
+      deleteAccessArea(bbsRoot, name, inUse);
+      sendResponse(res, { deleted: true, name });
     } catch (error) {
       handleError(res, error);
     }
