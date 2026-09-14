@@ -745,7 +745,6 @@ export class DockablePanel extends Panel {
     const panelHeight = coords.yl - coords.yi;
 
     // DEBUG: Log edge detection
-    console.log(`[EDGE-DEBUG] mouse=(${mouseX},${mouseY}) panel=(${panelLeft},${panelTop})-(${panelRight},${panelBottom}) size=${panelWidth}x${panelHeight} rel=(${mouseX - panelLeft},${mouseY - panelTop}) pos.width=${this.position.width} pos.left=${this.position.left}`);
 
     // Check if mouse is within panel bounds
     if (mouseX < panelLeft || mouseX > panelRight ||
@@ -2665,7 +2664,6 @@ export class DockablePanel extends Panel {
               if ((this as any).screen?.log) {
                 ((this as any).screen as any).log(debugMsg);
               }
-              console.log(debugMsg);
             }
           }
         }
@@ -2733,7 +2731,6 @@ export class DockablePanel extends Panel {
       if ((this.screen as any)?.log) {
         (this.screen as any).log(debugMsg);
       }
-      console.log(debugMsg);
     }
 
     let newWidth = this.width as number;

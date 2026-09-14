@@ -671,27 +671,6 @@ export class MultiplayerLobby extends EventEmitter {
       },
     });
 
-    console.log('[MultiplayerLobby] playerList created, keys:', (this.playerList as any).options?.keys, 'mouse:', (this.playerList as any).options?.mouse);
-
-    this.playerList.on('focus', () => {
-      console.log('[MultiplayerLobby] playerList FOCUSED');
-    });
-
-    this.playerList.on('blur', () => {
-      console.log('[MultiplayerLobby] playerList BLURRED');
-    });
-
-    this.playerList.on('click', () => {
-      console.log('[MultiplayerLobby] playerList CLICKED');
-    });
-
-    this.playerList.on('keypress', (ch: any, key: any) => {
-      console.log('[MultiplayerLobby] playerList keypress:', { ch, keyName: key?.name, keyFull: key?.full });
-    });
-
-    this.playerList.on('select item', (_item: any, index: number) => {
-      console.log('[MultiplayerLobby] playerList select item:', index);
-    });
 
     // Right column panels (stacked: Team, Room Settings, Game Options).
     // Compact: each one is the whole area, and only the focused one is shown.
@@ -807,40 +786,19 @@ export class MultiplayerLobby extends EventEmitter {
         tags: true,
       });
 
-      console.log('[MultiplayerLobby] settingsEditorList created, keys:', (this.settingsEditorList as any).options?.keys, 'mouse:', (this.settingsEditorList as any).options?.mouse);
 
       this.settingsEditorList.key(['left', 'h'], () => {
-        console.log('[MultiplayerLobby] settingsEditorList LEFT key pressed');
         this.changeSettingValue(-1);
       });
       this.settingsEditorList.key(['right', 'l'], () => {
-        console.log('[MultiplayerLobby] settingsEditorList RIGHT key pressed');
         this.changeSettingValue(1);
       });
       this.settingsEditorList.key(['enter', 'space'], () => {
-        console.log('[MultiplayerLobby] settingsEditorList ENTER/SPACE key pressed');
         this.changeSettingValue(1);
       });
 
       this.settingsEditorList.on('select item', (_item: unknown, index: number) => {
-        console.log('[MultiplayerLobby] settingsEditorList select item:', index);
         this.selectedSettingIndex = index;
-      });
-
-      this.settingsEditorList.on('focus', () => {
-        console.log('[MultiplayerLobby] settingsEditorList FOCUSED');
-      });
-
-      this.settingsEditorList.on('blur', () => {
-        console.log('[MultiplayerLobby] settingsEditorList BLURRED');
-      });
-
-      this.settingsEditorList.on('click', () => {
-        console.log('[MultiplayerLobby] settingsEditorList CLICKED');
-      });
-
-      this.settingsEditorList.on('keypress', (ch: any, key: any) => {
-        console.log('[MultiplayerLobby] settingsEditorList keypress:', { ch, keyName: key?.name, keyFull: key?.full });
       });
 
       this.updateSettingsEditor();
@@ -966,7 +924,6 @@ export class MultiplayerLobby extends EventEmitter {
     const hasReadyFlow = this.features.readyFlow !== false;
     const buttonTop = screenHeight - 3;
     let buttonLeft = 2;
-    console.log('[MultiplayerLobby] Creating buttons at row', buttonTop, 'screenHeight=', screenHeight);
 
     // Ready button — hidden permanently when readyFlow is disabled.
     // `inline: true` is required here, not cosmetic: Button hardcodes
@@ -1131,27 +1088,13 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // Log ALL screen-level keypresses for debugging
-    this.parent.on('keypress', (ch: any, key: any) => {
-      console.log('[MultiplayerLobby] SCREEN keypress:', {
-        ch,
-        keyName: key?.name,
-        keyFull: key?.full,
-        focused: this.focusedElement() ? {
-          type: (this.focusedElement() as any).type,
-          name: (this.focusedElement() as any).name
-        } : null
-      });
-    });
-
     // Keyboard shortcuts (only trigger if no input widget has focus)
     if (hasReadyFlow) {
       this.parent.key(['r'], () => {
-        console.log('[MultiplayerLobby] R key handler triggered');
         if (!this.widgetHasFocus()) void this.toggleReady();
       });
     }
     this.parent.key(['s'], () => {
-      console.log('[MultiplayerLobby] S key handler triggered');
       if (!this.widgetHasFocus()) void this.startMatch();
     });
     this.parent.key(['escape', 'q'], () => {
@@ -1161,7 +1104,6 @@ export class MultiplayerLobby extends EventEmitter {
       // back to the main menu. That is the most likely cause of a remote
       // player reporting they "got thrown out" mid-lobby (2026-08-25).
       if (this.widgetHasFocus()) return;
-      console.log('[MultiplayerLobby] ESC/Q key handler triggered');
       void this.leaveLobby();
       return true;
     });
@@ -1263,12 +1205,7 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // Start with player list focused so user can navigate immediately
-    console.log('[MultiplayerLobby] Focusing player list, exists:', !!this.playerList, 'keys:', (this.playerList as any)?.options?.keys, 'mouse:', (this.playerList as any)?.options?.mouse);
     this.playerList?.focus();
-    console.log('[MultiplayerLobby] After focus, screen.focused:', this.focusedElement() ? {
-      type: (this.focusedElement() as any).type,
-      name: (this.focusedElement() as any).name
-    } : null);
   }
 
   /**
@@ -1592,7 +1529,6 @@ export class MultiplayerLobby extends EventEmitter {
 
     // Setup button handlers
     createButton.on('press', () => {
-      console.log('[MultiplayerLobby] Create button pressed!');
       void this.browserCreateTable();
     });
     joinButton.on('press', () => void this.browserJoinTable());
@@ -1616,8 +1552,6 @@ export class MultiplayerLobby extends EventEmitter {
     // Sort cycling with S key
     this.parent.key(['s'], () => this.cycleBrowserSort());
 
-    console.log('[MultiplayerLobby] Browser mode key handlers registered');
-    console.log('[MultiplayerLobby] parent.grabKeys:', (this.parent.screen?.program as any)?.grabKeys);
 
     // Focus on table list initially (or search if enabled)
     if (this.browserSearchInput) {
@@ -1797,11 +1731,8 @@ export class MultiplayerLobby extends EventEmitter {
    * Browser mode: Create new table
    */
   private async browserCreateTable(): Promise<void> {
-    console.log('[MultiplayerLobby] browserCreateTable() called');
     // Emit event for door to handle mode selection and table creation
-    console.log('[MultiplayerLobby] Emitting browser:create-table event');
     this.emit('browser:create-table');
-    console.log('[MultiplayerLobby] Event emitted');
   }
 
   /**
@@ -1914,10 +1845,8 @@ export class MultiplayerLobby extends EventEmitter {
    * Setup network event listeners
    */
   private setupEventListeners(): void {
-    console.log('[MultiplayerLobby] Setting up event listeners');
     // Player joined
     this.adapter.on('player:joined', (player: LobbyPlayerInfo) => {
-      console.log('[MultiplayerLobby] player:joined event received:', player);
       this.playSound('join');
       this.updatePlayerList();
       this.updateStatus(`${player.name} joined the lobby`);
@@ -1987,9 +1916,7 @@ export class MultiplayerLobby extends EventEmitter {
 
     // State updated (generic)
     this.adapter.on('state:updated', () => {
-      console.log('[MultiplayerLobby] state:updated event received');
       const state = this.adapter.getState();
-      console.log('[MultiplayerLobby] Current state from adapter:', state);
       this.updatePlayerList();
       if (state) {
         this.updateSettings(state.mode, state.lobbyId);
@@ -2055,7 +1982,6 @@ export class MultiplayerLobby extends EventEmitter {
       const state = this.adapter.getState();
       if (state && state.players.length === 1 && state.players[0]?.id === this.localPlayerId) {
         this.setAsHost(true);
-        console.log('[MultiplayerLobby] joinMatchmaking: set as host (first player in local mode)');
       }
       this.updateStatus('Searching for opponents...');
     } catch (err) {
@@ -2068,17 +1994,13 @@ export class MultiplayerLobby extends EventEmitter {
    */
   private async createCustomLobby(mode: string, isPrivate: boolean = false): Promise<void> {
     this.updateStatus('Creating lobby...');
-    console.log('[MultiplayerLobby] createCustomLobby called, mode=', mode);
 
     try {
       const lobbyId = await this.adapter.createLobby(mode, isPrivate);
-      console.log('[MultiplayerLobby] createLobby returned:', lobbyId);
       this.setAsHost(true);
-      console.log('[MultiplayerLobby] setAsHost(true) called, isHost=', this.isHost);
       this.updateStatus(`Lobby created. Code: ${lobbyId}`);
       this.updateSettings(mode, lobbyId);
     } catch (err) {
-      console.log('[MultiplayerLobby] createCustomLobby error:', err);
       this.updateStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
@@ -2106,7 +2028,6 @@ export class MultiplayerLobby extends EventEmitter {
    * Set host status
    */
   private setAsHost(isHost: boolean): void {
-    console.log('[MultiplayerLobby] setAsHost called with:', isHost);
     this.isHost = isHost;
 
     const hasReadyFlow = this.features.readyFlow !== false;
@@ -2179,7 +2100,6 @@ export class MultiplayerLobby extends EventEmitter {
    * Start match (host only)
    */
   private async startMatch(): Promise<void> {
-    console.log('[MultiplayerLobby] startMatch called, isHost=', this.isHost);
     const hasReadyFlow = this.features.readyFlow !== false;
 
     // ── readyFlow: false path ──────────────────────────────────────────────
@@ -2235,19 +2155,16 @@ export class MultiplayerLobby extends EventEmitter {
     // ── original readyFlow: true path ─────────────────────────────────────
     if (!this.isHost) {
       this.updateStatus('Only the host can start the match');
-      console.log('[MultiplayerLobby] Not host, returning');
       return;
     }
 
     const state = this.adapter.getState();
-    console.log('[MultiplayerLobby] startMatch state=', state ? { playerCount: state.players.length, players: state.players.map(p => ({ id: p.id, ready: p.ready })) } : null);
     if (!state) {
       this.updateStatus('No active lobby');
       return;
     }
 
     const allReady = state.players.every(p => p.ready || p.id === this.localPlayerId);
-    console.log('[MultiplayerLobby] allReady=', allReady, 'localPlayerId=', this.localPlayerId);
     if (!allReady) {
       this.updateStatus('Not all players are ready');
       this.playSound('error');
@@ -2535,16 +2452,12 @@ export class MultiplayerLobby extends EventEmitter {
    * Update player list display
    */
   private updatePlayerList(): void {
-    console.log('[MultiplayerLobby] updatePlayerList called');
     const state = this.adapter.getState();
-    console.log('[MultiplayerLobby] state for updatePlayerList:', state);
     if (!state) {
-      console.log('[MultiplayerLobby] No state, clearing player list');
       this.playerList.setItems([]);
       this.parent.render();
       return;
     }
-    console.log('[MultiplayerLobby] players in state:', state.players);
 
     const modeConfig = this.modes[state.mode];
 
@@ -2896,16 +2809,10 @@ export class MultiplayerLobby extends EventEmitter {
 
   private widgetHasFocus(): boolean {
     const focused = this.focusedElement();
-    console.log('[MultiplayerLobby] widgetHasFocus check - focused:', focused ? {
-      type: (focused as any).type,
-      name: (focused as any).name,
-      constructor: (focused as any).constructor?.name
-    } : null);
     if (!focused || typeof focused !== 'object') return false;
     const type = (focused as any).type;
     const hasWidgetFocus = type === 'list' || type === 'listbar' || type === 'textbox' ||
            type === 'textarea' || type === 'input';
-    console.log('[MultiplayerLobby] widgetHasFocus result:', hasWidgetFocus, 'type:', type);
     return hasWidgetFocus;
   }
 
