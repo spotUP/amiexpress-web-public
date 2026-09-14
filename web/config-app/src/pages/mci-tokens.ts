@@ -63,3 +63,46 @@ export function findMciTokens(canvas: Cell[][], known: MciReferenceShape[]): Mci
 
   return tokens;
 }
+
+/**
+ * The code the cursor is sitting on, or null.
+ *
+ * "on" means anywhere in the token, tilde to terminator - an artist pointing
+ * at the middle of `~SS_BBS:Bulletins/bull6.txt` is pointing at that code, not
+ * at nothing.
+ */
+export function tokenAt(tokens: MciToken[], line: number, column: number): MciToken | null {
+  return tokens.find(
+    t => t.line === line && column >= t.column && column < t.column + t.length,
+  ) ?? null;
+}
+
+/**
+ * What to tell the artist about the code under the cursor.
+ *
+ * "it would be nice if the editor explained what the mci codes in the screen
+ * does as well" (the sysop, 2026-09-14). The editor already FOUND the codes
+ * and outlined them - it drew a box round something without saying what it
+ * was, which is the least useful half of knowing.
+ *
+ * Three facts, in the order they matter: what the code does, what this
+ * particular one points at, and whether the board can actually follow it. The
+ * third is the one a broken screen turns on, and it is the one the artist
+ * cannot get any other way - `resolves` comes from the board's own index, so
+ * "Nothing on this board answers to that" is a fact rather than a guess.
+ *
+ * A code the catalog does not describe still gets the other two: an unknown
+ * code is exactly when somebody needs to be told it is unknown.
+ */
+export function explainToken(
+  token: MciToken,
+  catalog: { code: string; summary: string }[],
+): { title: string; summary: string; target: string | null; broken: boolean } {
+  const entry = catalog.find(c => c.code.toUpperCase() === token.code.toUpperCase());
+  return {
+    title: `~${token.code}`,
+    summary: entry?.summary ?? 'Not a code this board knows.',
+    target: token.target || null,
+    broken: !token.resolves,
+  };
+}

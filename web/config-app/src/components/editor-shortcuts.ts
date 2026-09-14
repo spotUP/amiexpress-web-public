@@ -57,6 +57,10 @@ export type EditorShortcut =
   | { action: 'insert-mode' }
   /** Alt+Shift+C: centre the ink on the cursor's row between the edges. */
   | { action: 'centre-line' }
+  /** Ctrl+K: take the cursor's line out, pulling the rest up. */
+  | { action: 'remove-line' }
+  /** Ctrl+Shift+K: push a blank line in, moving the rest down. */
+  | { action: 'insert-line' }
   | { action: 'none' };
 
 const DIGIT_INDEX: Record<string, number> = {
@@ -80,6 +84,23 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
     // Mac hands: Cmd+C/X/V cut and paste like every native program. Ctrl
     // does the same on Linux/Windows, where the browser cannot spare Cmd.
     // (Cmd+letter tools stay Alt-only: Cmd+S/T/D/F/P belong to the browser.)
+    /*
+     * LINES. `Ctrl+K` is the sysop's own choice ("ctrl+k to remove but i dont
+     * remember which one is used to add", 2026-09-14), and it is free here.
+     *
+     * Worth knowing it is NOT free everywhere: the board's own door-side ANSI
+     * editor binds Ctrl+K to "delete to end of line" and Ctrl+D to "delete
+     * line" (sdk/engines/ui/ansi-editor/input/keyboard-handler.ts:260-268), so
+     * the two editors now disagree about Ctrl+K. That is the sysop's call and
+     * it is recorded here rather than silently resolved.
+     *
+     * Ctrl+Shift+K for the opposite, rather than the DOS-era pairing: TheDraw
+     * and its descendants used Ctrl+N to insert, and a browser keeps Ctrl+N
+     * for a new window - a shortcut the page never receives is worse than an
+     * unfamiliar one. Shift on the same key cannot be taken away and cannot be
+     * mistaken for something else.
+     */
+    if (k === 'k') return ev.shiftKey ? { action: 'insert-line' } : { action: 'remove-line' };
     if (k === 'c') return { action: 'copy' };
     if (k === 'x') return { action: 'cut' };
     if (k === 'v') return { action: 'paste' };

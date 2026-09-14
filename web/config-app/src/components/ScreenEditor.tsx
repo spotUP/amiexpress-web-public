@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
 import { AnsiCanvas } from './AnsiCanvas';
 import { CELL_HEIGHT } from './ansi-canvas-paint';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
@@ -14,7 +16,7 @@ import {
 } from '../pages/screen-editor-state';
 import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
-import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
+import { findMciTokens, tokenAt, explainToken, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
 import { editorShortcut } from './editor-shortcuts';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
@@ -150,6 +152,27 @@ export function ScreenEditor({
   // Re-found on every change rather than tracked: a code is edited character by
   // character, and half of one is not a code.
   const tokens = useMemo(() => findMciTokens(surface.canvas, mci), [surface.canvas, mci]);
+
+  /*
+   * WHAT THE CODE UNDER THE CURSOR DOES.
+   *
+   * The editor already found these and drew a box round them, which is the
+   * least useful half of knowing: an artist could see that `~SS_` was special
+   * and not what it was for. The sysop, 2026-09-14: "it would be nice if the
+   * editor explained what the mci codes in the screen does as well".
+   *
+   * The catalog is the board's own (`/api/screens/mci/catalog`, the same
+   * source MciPicker offers codes from), so the description here and the
+   * description when inserting one cannot drift apart.
+   */
+  const catalogQuery = useQuery({
+    queryKey: ['mci-catalog'],
+    queryFn: () => apiClient.getMciCatalog(),
+    staleTime: Infinity,
+  });
+  const catalog: { code: string; summary: string }[] = catalogQuery.data?.data?.codes ?? [];
+  const hovered = tokenAt(tokens, cursor.y, cursor.x);
+  const explained = hovered ? explainToken(hovered, catalog) : null;
   // The select tool tracked its marquee internally and never showed it:
   // dragging selected invisibly (sysop, 2026-09-10: "can't select anything
   // with the mouse"). Live points first, committed bounds after mouse-up.
@@ -216,6 +239,12 @@ export function ScreenEditor({
             return;
           case 'centre-line':
             onChange?.(centreLine(surface, cursor.y));
+            return;
+          case 'remove-line':
+            onChange?.(removeLine(surface, cursor.y));
+            return;
+          case 'insert-line':
+            onChange?.(insertLine(surface, cursor.y));
             return;
           case 'copy': {
             // Both clipboards: the system one carries plain text out to the
@@ -383,10 +412,39 @@ export function ScreenEditor({
             {label}
           </button>
         ))}
+
+        {/*
+          THE LINE TOOLS BELONG WITH THE TOOLS, which is where the sysop looked
+          for them: "why are those buttons not among the other buttons at the
+          top?". They were below the canvas because that is where the markup
+          was easiest to add them, which is not a reason.
+
+          The row number is part of the label rather than a separate readout -
+          the button says what it will act on, so there is nothing to look up
+          before pressing it.
+        */}
+        <span className="mx-1 w-px self-stretch bg-border" aria-hidden="true" />
+        <button
+          type="button"
+          title="Push a blank line in at the cursor; everything below moves down"
+          className="px-2 py-1 text-sm border border-border text-content-secondary"
+          onClick={() => onChange?.(insertLine(surface, cursor.y))}
+        >
+          Add line {cursor.y + 1}
+        </button>
+        <button
+          type="button"
+          title="Take the cursor's line out; everything below moves up"
+          className="px-2 py-1 text-sm border border-border text-content-secondary"
+          onClick={() => onChange?.(removeLine(surface, cursor.y))}
+        >
+          Remove line {cursor.y + 1}
+        </button>
       </div>
       <p className="text-xs text-content-secondary">
         Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
         Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
+        Ctrl+K removes the cursor's line and Ctrl+Shift+K pushes a blank one in.
         Alt+S then drag selects; Alt+C/X copies/cuts to the system clipboard as text (and colours internally),
         Alt+V pastes it back at the cursor - click where you want it first. On a Mac, Cmd+C/X/V does the
         same, and the Delete-labelled key erases the cell.
@@ -532,37 +590,30 @@ export function ScreenEditor({
         />
       </div>
 
-      {!readOnly && (
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        {/*
-          Add and remove a LINE, which until now meant selecting the art below
-          the cursor and pasting it a row lower - a redraw rather than an edit
-          (sysop, 2026-09-14).
-
-          The screen keeps its height either way: 80x25 is what the board sends
-          and what a caller's terminal shows, so a line pushed in drops the
-          bottom row and a line taken out pulls a blank up. Undo puts the lost
-          row back, which is what makes that bargain fair rather than
-          destructive.
-        */}
-        <span className="text-content-secondary">Line {cursor.y + 1}:</span>
-        <button
-          type="button"
-          className="px-2 py-1 border border-border text-content-secondary"
-          title="Push a blank line in here; everything below moves down"
-          onClick={() => onChange?.(insertLine(surface, cursor.y))}
-        >
-          Add line
-        </button>
-        <button
-          type="button"
-          className="px-2 py-1 border border-border text-content-secondary"
-          title="Take this line out; everything below moves up"
-          onClick={() => onChange?.(removeLine(surface, cursor.y))}
-        >
-          Remove line
-        </button>
-      </div>
+      {/*
+        Under the art, where the cursor is, rather than in a panel the artist
+        has to look away to read. Shown in both modes: a read-only viewer
+        asking "what does this screen do" is exactly who needs it.
+      */}
+      {explained && (
+        <div data-testid="mci-explanation" className="text-sm border border-border p-2">
+          <span className="font-mono text-content-primary">{explained.title}</span>
+          {explained.target && (
+            <span className="font-mono text-content-secondary"> {explained.target}</span>
+          )}
+          <span className="text-content-secondary"> - {explained.summary}</span>
+          {explained.broken && (
+            /*
+              The fact the artist cannot get any other way. `resolves` is the
+              board's own index answering whether this target exists, so a
+              screen that will quietly do nothing says so while it is being
+              drawn rather than after it ships.
+            */
+            <span className="block text-xs text-content-secondary mt-1">
+              Nothing on this board answers to that yet.
+            </span>
+          )}
+        </div>
       )}
 
       {!readOnly && (

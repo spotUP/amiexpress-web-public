@@ -260,6 +260,32 @@ export function PetsciiScreenEditor({
                     {entry.label}
                   </button>
                 ))}
+
+                {/*
+                  WITH THE TOOLS, which is where they were looked for: "why are
+                  those buttons not among the other buttons at the top?" (the
+                  sysop, 2026-09-14). Below the canvas was where the markup was
+                  easiest, which is not a reason.
+
+                  The row number is in the label, so the button says what it
+                  will act on rather than making the artist find a readout.
+                */}
+                <button
+                  type="button"
+                  title="Push a blank line in at the cursor; everything below moves down"
+                  className="px-2 py-1 text-sm border border-border text-content-secondary"
+                  onClick={() => commit(insertLine(surface, cursor.y, brush.color))}
+                >
+                  Add line {cursor.y + 1}
+                </button>
+                <button
+                  type="button"
+                  title="Take the cursor's line out; everything below moves up"
+                  className="px-2 py-1 text-sm border border-border text-content-secondary"
+                  onClick={() => commit(removeLine(surface, cursor.y, brush.color))}
+                >
+                  Remove line {cursor.y + 1}
+                </button>
               </div>
               {tool === 'brush' && (
                 <div className="flex items-center gap-2 text-xs text-content-secondary">
@@ -314,49 +340,6 @@ export function PetsciiScreenEditor({
           </div>
         </div>
       </div>
-
-      {!readOnly && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {/*
-            ADD AND REMOVE A LINE, the same pair the ANSI editor has.
-
-            40x25 is the VIC's text screen, not a preference, so a line pushed
-            in drops the bottom row and a line taken out pulls a blank up.
-            Undo here is a stack of whole surfaces, so one step puts the lost
-            row back.
-
-            The blank takes the BRUSH's colour rather than 0: a row of black
-            spaces on a black screen is invisible, and an artist who adds a
-            line then types on it expects to see what they type.
-
-            NO NUMBERED GUTTER, deliberately. `PetsciiCanvas` owns the border,
-            the integer scale and the cell size, and says so - an editor that
-            recomputed a row's pixel height from the DOM would be the second
-            source of truth it warns about, and it would drift the first time
-            the fit policy changed. The row the cursor is on is named here
-            instead, which is the part "add a line here" actually needs.
-          */}
-          <span className="text-content-secondary">
-            Line {cursor.y + 1} of {surface.rows}:
-          </span>
-          <button
-            type="button"
-            className="px-2 py-1 border border-border text-content-secondary"
-            title="Push a blank line in here; everything below moves down"
-            onClick={() => commit(insertLine(surface, cursor.y, brush.color))}
-          >
-            Add line
-          </button>
-          <button
-            type="button"
-            className="px-2 py-1 border border-border text-content-secondary"
-            title="Take this line out; everything below moves up"
-            onClick={() => commit(removeLine(surface, cursor.y, brush.color))}
-          >
-            Remove line
-          </button>
-        </div>
-      )}
 
       {!readOnly && (
         <div className="flex flex-col gap-2">
