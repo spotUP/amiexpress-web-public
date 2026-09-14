@@ -760,6 +760,34 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
  */
 function rememberTheDebtIfSegmentsRemain(session: BBSSession, site: string): void {
   const segments = session.screenSegments?.segments;
+  /*
+   * A SCREEN SOMEBODY ELSE IS WAITING ON PAUSES ITSELF.
+   *
+   * The debt exists for a screen the flow shows and then moves past - five
+   * MultiTops in NODE_BULL, where a `~SP` mid-file would otherwise spend the
+   * pause owed AFTER the file and let ACHIEVETOP's clear take the last one
+   * away unread.
+   *
+   * A screen with an `onComplete` is not that. Something is holding the end
+   * of it - for a conference join, `joinConference` itself, which does
+   * express.e:5059's doPause there and then prints "Joining Conference"
+   * (5079) - so booking a debt here adds a SECOND pause to a screen that
+   * already has one. That is the prompt the sysop kept meeting under
+   * "Joining Conference" (2026-09-15: "a hidden prompt?"), and the live trace
+   * named this as the borrower:
+   *
+   *   [PAUSE-DEBT] booked site=segments-pending subState=display_menu
+   *                segments=1 menuPause=Y
+   *
+   * `menuPause` is untouched, so the menu still gets its own pause when the
+   * flow reaches it - after the join's output, where express.e:28579 puts it.
+   */
+  if (typeof (session.screenSegments as any)?.onComplete === 'function') {
+    console.log(
+      `[PAUSE-DEBT] not booked at site=${site}: the screen has an owner that pauses it`
+    );
+    return;
+  }
   if (segments && segments.length > 0) {
     session.flowPauseAfterSegments = true;
     /*
