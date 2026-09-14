@@ -15,6 +15,13 @@ const DAILY_COUNT = 8;
 const DAILY_ENTRY_BYTES = 74;
 const RECORD_BYTES = 118;
 const USER_COUNT = 20;
+
+/**
+ * Callers the height fit may never trim below - see OutputOptions.minCallers.
+ * A bulletin that has been squeezed down to one caller has stopped being a
+ * Last Callers list, so the fit gives up and lets the screen run long instead.
+ */
+const DEFAULT_MIN_CALLERS = 8;
 const USER_ENTRY_BYTES = 144;
 const STORE_SIZE_BYTES = 3638;
 const LEGACY_SAMPLE_PATH = path.join(DATA_DIR, 'Utils', 'samilog', 'SAmiLog.Store');
@@ -76,6 +83,41 @@ export interface OutputOptions {
   showFiles?: boolean;
   noTexts?: boolean;
   noRecords?: boolean;
+  /**
+   * Make the whole bulletin fit this many rows, by listing fewer callers.
+   *
+   * The bulletin is a PICTURE with a table in it - the header art, the credits
+   * bar, the column rule, the daily and record bars and the tailer are all
+   * fixed furniture, and the only part that can give is how many callers are
+   * listed. At 20 callers it came to 38 lines against a 25-row screen, so the
+   * board paginated it and put `(Pause)...More(y/n/ns)?` through the middle of
+   * the table (the sysop, 2026-09-14).
+   *
+   * The furniture is not a constant: the header and tailer are files a sysop
+   * edits, so a taller logo has to cost caller rows rather than overflow. That
+   * is why this is measured from the assembled output instead of subtracting a
+   * hard-coded chrome height.
+   *
+   * The OLDEST callers go first, which costs nothing: the store is newest-first
+   * and the limit already takes from the front.
+   */
+  fitRows?: number;
+  /**
+   * Callers the fit may never trim below. Default 8.
+   *
+   * Fitting has a floor because the furniture does not shrink. Measured on
+   * this board: about ELEVEN rows go to the credits bar, the column header and
+   * its rule, the daily and record bars and the tailer, whatever the art does.
+   * A 24-row budget therefore has thirteen rows to share between the logo and
+   * the list - a 4-row logo leaves nine callers, a 6-row logo seven, and the
+   * 12-row logo this board ships leaves ONE.
+   *
+   * A Last Callers screen showing one caller is not a Last Callers screen, so
+   * the floor wins and the bulletin stays tall (and still paginates) rather
+   * than degrading into a logo with a single row under it. Shortening the logo
+   * is what buys the fit, which is why the sysop asked for it to be editable.
+   */
+  minCallers?: number;
 }
 
 function stripAnsi(text: string): string {
@@ -1063,6 +1105,29 @@ console.warn('[SamiLog] Failed to read templates:', e);
 
     // 8. Tailer
     output += tailer;
+
+    /*
+     * Too tall for the glass? List fewer callers and assemble it again.
+     *
+     * Measured, not calculated: the header and the tailer are files the sysop
+     * edits, so their height is only known once they have been read. Every
+     * caller is exactly one line, so the overflow IS the number of callers to
+     * drop and the second pass lands exactly on the budget - no loop, and
+     * `fitRows` is cleared on the way in so it cannot recur.
+     *
+     * A bulletin that is all furniture still shows one caller; trimming to
+     * nothing would leave a Last Callers screen with no callers on it.
+     */
+    if (options.fitRows && options.fitRows > 0 && entries.length > 1) {
+      const floor = Math.max(1, options.minCallers ?? DEFAULT_MIN_CALLERS);
+      const overflow = output.split('\n').length - options.fitRows;
+      if (overflow > 0 && entries.length > floor) {
+        const fewer = Math.max(floor, entries.length - overflow);
+        if (fewer < entries.length) {
+          return generateBulletin(fewer, { ...options, fitRows: undefined });
+        }
+      }
+    }
 
     return output;
   } catch (err) {

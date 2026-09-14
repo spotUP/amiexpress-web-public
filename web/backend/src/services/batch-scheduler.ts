@@ -4,6 +4,15 @@ import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
 
 import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
+
+/**
+ * How tall a generated bulletin may be.
+ *
+ * 24 rows: it fits a 24-row terminal whole and leaves a spare line on a
+ * 25-row one, so `needsPaging` (screen.handler.ts) never fires for it and no
+ * page break lands inside the art. See the `fitRows` option.
+ */
+const BULLETIN_FIT_ROWS = 24;
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { InfoFileParser } from './info-file-parser';
 import { getSystemTime } from '../utils/date-time.util';
@@ -563,7 +572,26 @@ console.log('[BatchScheduler] Running TypeScript SAmiLog');
           fullNodes: flags.includes('F'),
           showFiles: flags.includes('S'),
           noTexts: flags.includes('T'),
-          noRecords: flags.includes('R')
+          noRecords: flags.includes('R'),
+          /*
+           * The bulletin is written to fit an ordinary screen.
+           *
+           * `count` is how many callers the batch command ASKS for - 20 on
+           * this board - and at that length the file came to 38 lines, so the
+           * board paginated it and put `(Pause)...More(y/n/ns)?` through the
+           * middle of the callers table (the sysop, 2026-09-14). A bulletin is
+           * one composed screen; it should not need a page break at all.
+           *
+           * So `count` becomes a MAXIMUM and the height decides the rest. The
+           * header art and the tailer are files the sysop edits, so a taller
+           * logo simply costs caller rows - the fit is measured from the
+           * assembled text, never from a hard-coded chrome height.
+           *
+           * Generated once at logoff for every caller, so the budget is the
+           * standard screen rather than any one terminal: 24 rows, which fits
+           * a 24-row terminal and leaves a line on a 25-row one.
+           */
+          fitRows: BULLETIN_FIT_ROWS
         };
 
         let fullPath;
