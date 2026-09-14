@@ -91,6 +91,33 @@ const MESSAGE_STRING_CAPACITY = 198;
  * so that 68K doors see exactly what they expect.
  * ============================================================================
  */
+/**
+ * How long `waitForReply` may wait, by what it is waiting FOR.
+ *
+ * A command the BBS answers itself is quick, and a long stall is a bug worth
+ * stopping. A command that waits for the CALLER is only as quick as they are,
+ * and stopping it invents input they never gave.
+ */
+export function waitBudgetMs(command: number): number {
+  return WAITS_FOR_A_PERSON.has(command) ? HUMAN_WAIT_MS : MACHINE_WAIT_MS;
+}
+
+/** The BBS answers this itself; a long stall means something is wedged. */
+const MACHINE_WAIT_MS = 5000;
+
+/**
+ * A caller is at the other end. Long enough that only a wedged door reaches
+ * it - reading a menu, thinking, and typing all happen well inside it - and
+ * still bounded, so a node is never held for ever.
+ */
+const HUMAN_WAIT_MS = 10 * 60 * 1000;
+
+/**
+ * The two commands whose reply is a keystroke: `JH_LI` (line input, 0) and
+ * `JH_HK` (hotkey, 6). Everything else is the board answering the door.
+ */
+const WAITS_FOR_A_PERSON = new Set<number>([XIMCommand.JH_LI, XIMCommand.JH_HK]);
+
 export class AEDoorLibrary {
   private socket: Socket;
   private emulator: MoiraEmulator;
@@ -1806,7 +1833,26 @@ console.warn(
         // 5 s wall-clock deadline mirrors the old 10000-iteration budget in
         // practical terms — neither is a correctness timeout, just a safety
         // stop.
-        const deadline = Date.now() + 5000;
+        //
+        // EXCEPT WHEN THE THING BEING WAITED FOR IS A PERSON. `JH_HK` and
+        // `JH_LI` do not wait for the BBS to compute something; they wait for
+        // the caller to press a key. Five seconds is a plausible budget for
+        // the first and an absurd one for the second - and when it expired,
+        // `hotKey()` read the still-empty buffer and handed the door a
+        // character 0 it never typed.
+        //
+        // GWall showed it: its colour menu ("[W]HITE - [R]ED - [Y]ELLOW ...")
+        // takes a person longer than five seconds to read, so every caller
+        // got a phantom keypress, the door rejected it as an invalid colour,
+        // and drew the whole menu a second time (sysop, 2026-09-14: "double
+        // color prompt now"). A `[y/N]` prompt hid the same fault, because a
+        // character 0 there simply reads as "not y".
+        //
+        // The safety stop stays - a door that is genuinely wedged must not
+        // hold a node for ever - but at a length that only a wedged door
+        // reaches. The board's own inactivity timer is what disconnects an
+        // idle caller, and it owns that decision, not this loop.
+        const deadline = Date.now() + waitBudgetMs(command);
         // This loop OWNS the pump while it runs. The XIM processor it calls
         // below drains its own handler promises with deasync too, and two
         // pumps must not nest - see api/pump-owner.ts. Registered here, read
