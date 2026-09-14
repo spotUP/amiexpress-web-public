@@ -14,12 +14,12 @@
  * stale mirror is caught as a mismatch rather than as a silent divergence in
  * what a caller reads about a door.
  */
-export const DESCRIBE_CONTRACT_VERSION = '1';
+export const DESCRIBE_CONTRACT_VERSION = '6';
 
-/** Frame punctuation: decoration at either end of a cell. */
-const FRAME = " :-*()[]|_=+~<>.,'\"`^¦¬·°#!?/\\";
+/** Frame punctuation: decoration at either end of a cell. Isolated high-bit art like Ü/Û/ß/±²³ also counts as frame. */
+const FRAME = " :-*()[]|_=+~<>.,'\"`^¦¬·°#!?/\\ÜÛßÝÞ±²³";
 
-const ART_RE = /^[\s_\-=*#~/\\|:.,+()[\]<>'"`^¦°·;!?%$&@]*$/;
+const ART_RE = /^[\s_\-=*#~/\\|:.,+()[\]<>'"`^¦°·;!?%$&@ÜÛßÝÞ±²³]*$/;
 const BANNER_RE = /\b(presents?|brings?|proudly|releases?|bringing|presenting)\b/i;
 
 /** Credits, distribution notes and dates: never a description. */
@@ -172,8 +172,16 @@ export function dropMetaBrackets(s: string): string {
 export function finalise(s: string, cap = 60): string {
   let out = stripFrameKeepingPairs(dropMetaBrackets(collapse(s ?? '')));
   if (out.length > cap) {
+    // Prefer to cut at a sentence boundary only when it keeps most of the cap.
+    // Cutting at the first sentence (e.g. 65/120) would discard a whole wrapped
+    // paragraph that follows; word-boundary keeps more content for multiline DIZs.
     const cut = out.slice(0, cap);
-    out = cut.includes(' ') ? cut.slice(0, cut.lastIndexOf(' ')) : cut;
+    const sentenceEnd = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if (sentenceEnd > cap * 0.65) {
+      out = cut.slice(0, sentenceEnd + 1);
+    } else {
+      out = cut.includes(' ') ? cut.slice(0, cut.lastIndexOf(' ')) : cut;
+    }
   }
   // A bracket opened and never closed is either a truncation scar or a
   // credit tag whose closer the frame-strip already ate ("[-5th Dynasty-]"
@@ -201,25 +209,43 @@ interface Scored {
   text: string;
 }
 
+function plainForScoring(s: string): string {
+  return toPlain(s);
+}
+
 function score(line: string): Scored {
   const c = clean(line);
   if (!c || ART_RE.test(c)) return { score: -99, text: c };
-  if (!WORD_RE.test(c)) return { score: -99, text: c };
+  const p = plainForScoring(c);
+  if (!p || ART_RE.test(p)) return { score: -99, text: c };
+  if (!WORD_RE.test(p)) return { score: -99, text: c };
   if (highBitShare(c) > 0.3) return { score: -99, text: c };
   if (alnumShare(c) < 0.5) return { score: -99, text: c };
+  // Frame-density early reject: a line that is >40% frame punctuation + high-bit art
+  // with very few real words is a border, even if one word slipped through.
+  const frameChars = (p.match(/[_\-=*#~\/\\|:.,+()[\]<>'"`^¦°·;!?%$&@]/g) ?? []).length;
+  if (p.length > 10 && frameChars / p.length > 0.4) {
+    const w = p.match(/[A-Za-zÀ-ÿ]{3,}/g) ?? [];
+    if (w.length <= 1) return { score: -99, text: c };
+  }
   if (c.length < 6) return { score: -50, text: c };
   let s = 0;
-  if (JUNK_RE.test(c)) s -= 40;
+  // JUNK/COPYRIGHT/COMPAT are tested on the cleaned form `c` so "©" and "courier"
+  // are not missed after plain conversion. Courier as a BBS name is not junk in
+  // the sense of a distribution note — penalise it less so a wrapped sentence
+  // like "S!X and Courier clones. Since I was..." does not split the paragraph.
+  const isCourierOnly = /\bcourier\b/i.test(c) && !/passed\s+thr|released?\s+(on|at|by)|\bthanx|greets?\b|\bdate\b|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b|^\s*(by|coded\s+by|written\s+by)\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*,?\s*\d/i.test(c);
+  if (isCourierOnly) s -= 8;
+  else if (JUNK_RE.test(c)) s -= 40;
   if (COPYRIGHT_RE.test(c)) s -= 40;
-  if (COMPAT_RE.test(c)) s -= 20;
+  if (COMPAT_RE.test(c)) s -= 8;
   if (HANDLE_RE.test(c)) s -= 40;
-  if (VERSIONISH_RE.test(c)) s += 12;
-  if (DOORISH_RE.test(c)) s += 8;
-  const words = c.match(/[A-Za-zÀ-ÿ]{3,}/g) ?? [];
+  if (VERSIONISH_RE.test(p)) s += 12;
+  if (DOORISH_RE.test(p)) s += 8;
+  const words = p.match(/[A-Za-zÀ-ÿ]{3,}/g) ?? [];
   s += Math.min(words.length, 6) * 3;
-  if (c.length > 55) s -= 4;
-  // "Added Features:" heads a list, it does not describe the door. The colon
-  // is tested on the RAW line because clean() strips it off.
+  if (p.length > 55) s -= 4;
+  if (p.split(/\s+/).length <= 2 && p.length < 20) s -= 2;
   if (/:[\s|¦:.]*$/.test(line)) s -= 6;
   return { score: s, text: c };
 }
@@ -292,11 +318,10 @@ export function describeBlock(diz: string | null, cap = 70, prog?: string | null
   const starts: number[] = [];
   lines.forEach((line, i) => {
     const s = bestCell(line);
-    const prose = s.score > 0 && !JUNK_RE.test(s.text) && !HANDLE_RE.test(s.text);
+    const p = plainForScoring(s.text);
+    const isHandle = HANDLE_RE.test(p.trim());
+    const prose = s.score > 0 && !isHandle;
     if (prose) {
-      // The block's own line number, not lines.indexOf(line): two identical
-      // lines in one DIZ would otherwise score every later block as if it
-      // started at the first copy.
       if (!cur.length) starts.push(i);
       cur.push(s);
     } else if (cur.length) {
@@ -305,7 +330,6 @@ export function describeBlock(diz: string | null, cap = 70, prog?: string | null
     }
   });
   if (cur.length) blocks.push(cur);
-  // No paragraph qualified - fall back to the best single line.
   if (!blocks.length) return describeLine(diz);
 
   const blockScore = (b: Scored[], firstLine: number): number =>
@@ -325,20 +349,78 @@ export function describeBlock(diz: string | null, cap = 70, prog?: string | null
   }
 
   let parts = chosen.map((x) => x.text);
+  // DEBUG
+  // console.log("chosen block", chosen.map(x=>x.text), "cap", cap);
   parts[0] = parts[0].replace(/^(presents?|brings?|proudly|releases?|presenting|bringing)\b[\s:.-]*/i, '');
   parts[0] = stripFrameBoth(parts[0].replace(/^\d{1,2}[.)]\s+/, '')).trim();
   // DIZ feature lists are bulleted ("o Totally NEW Lay-Out"); the bullet is
   // decoration, and joining two bulleted lines must not read "Lay-Out o
   // Manages up to 256 Cnfs".
   parts = parts.map((p) => finalise(p.replace(/^[o*·+]\s+/, ''), cap)).filter((p) => p.length > 0);
+  // console.log("parts after finalise", parts);
   if (!parts.length) return '';
 
   // A first line that already stands on its own IS the description - only
   // keep appending while it is too short to mean anything by itself.
+  // Improved: allow wrapping when the next line is clearly a continuation:
+  // next starts lowercase (wrapped mid-sentence, e.g. KCL's "all the other
+  // utils..."), or the *original* DIZ line ended with comma/hyphen (so the
+  // cleaned text lost it, e.g. "for /X," -> "for /X"), even if already >=30.
+  const chosenIdx = blocks.indexOf(chosen);
+  const chosenStart = starts[chosenIdx] ?? 0;
   let text = parts[0];
-  for (const next of parts.slice(1)) {
-    if (text.length >= 30) break;
-    text = `${text} ${next}`;
+  for (let idx = 1; idx < parts.length; idx++) {
+    const next = parts[idx];
+    const rawPrevLine = (lines[chosenStart + idx - 1] ?? '').trim();
+    const rawPrevEndsCommaHyphen = /[,\-]\s*$/.test(rawPrevLine);
+    const nextStartsLower = /^[a-zà-ÿ]/.test(next.trim());
+    const textEndsCommaHyphen = /[,\-]$/.test(text.trim());
+    const shouldJoin = text.length < 30 || textEndsCommaHyphen || rawPrevEndsCommaHyphen || nextStartsLower;
+    if (!shouldJoin) break;
+    if (text.endsWith('-') && /^[A-Za-zÀ-ÿ]/.test(next)) {
+      text = text + next;
+    } else {
+      // Fix broken words split across lines without hyphen: "requester" + "s," -> "requesters,"
+      const broken = next.match(/^([a-zA-Z]{1,3})([.,]?)(\s+.*)?$/);
+      const prevLastWord = text.split(/\s+/).pop() || '';
+      // Debug for BBSG203
+      // if (prevLastWord === 'requester' && broken) console.log("broken", broken, "prev", prevLastWord, "next", JSON.stringify(next.slice(0,20)));
+      if (
+        broken &&
+        prevLastWord.length >= 4 &&
+        /^[a-z]{1,3}$/i.test(broken[1]) &&
+        /^(s|es|ed|ing|ers|est|ly|en|ion|ions|er|or|ment)$/i.test(broken[1]) &&
+        !/^[.!?]$/.test(text.trim().slice(-1))
+      ) {
+        const frag = broken[1];
+        const punct = broken[2] || '';
+        const rest = (broken[3] || '').trim();
+        const combined = prevLastWord + frag;
+        if (combined.length >= 5 && !prevLastWord.toLowerCase().endsWith('s') && frag.toLowerCase() === 's') {
+          const words = text.split(/\s+/);
+          words[words.length - 1] = combined + punct;
+          text = words.join(' ') + (rest ? ' ' + rest : '');
+        } else if (frag.length <= 3) {
+          if (broken[1].length <= 2 && rest.length > 0) {
+            const w2 = text.split(/\s+/);
+            w2[w2.length - 1] = combined + punct;
+            const candidate = w2.join(' ') + (rest ? ' ' + rest : '');
+            if (/^[a-z]/.test(rest) || rest === '') {
+              text = candidate;
+            } else {
+              text = `${text} ${next}`;
+            }
+          } else {
+            text = `${text} ${next}`;
+          }
+        } else {
+          text = `${text} ${next}`;
+        }
+      } else {
+        text = `${text} ${next}`;
+      }
+    }
+    if (text.length >= cap) break;
   }
   return finalise(text.replace(/\s+[o*·]\s+/g, ' '), cap);
 }
@@ -489,8 +571,10 @@ export function bbsRequirementFromDiz(diz: string | null): string {
 // ─── author ────────────────────────────────────────────────────────────
 
 const AUTHOR_RE = /\s*[-,]?\s*\b(?:coded|written|programmed|created|made|done)?\s*by\s+(.+)$/i;
-/** Trailing clauses that are not part of a handle: "for /X", "v1.0", "1996". */
-const AUTHOR_TAIL_RE = /\s+(?:for|fuer|fur)\b.*$|\s+v?\d+[.,]\d+.*$|\s+(?:19|20)\d{2}.*$/i;
+/** Trailing clauses that are not part of a handle: "for /X", "v1.0", "1996",
+ *  and "On 30/11/95" (a DD/MM/YY date after On gloms onto the author). */
+const AUTHOR_TAIL_RE =
+  /\s+(?:for|fuer|fur)\b.*$|\s+v?\d+[.,]\d+.*$|\s+(?:19|20)\d{2}.*$|\s+[Oo]n\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b.*$/i;
 const AUTHOR_JUNK_RE = /^[^A-Za-zÀ-ÿ0-9]*(?:\/?X[\\/])?\s*/i;
 
 export function splitAuthor(desc: string, catalogAuthor?: string | null): { text: string; author: string } {
@@ -607,10 +691,46 @@ const ALLOWED_PUNCT = new Set(" .,:;!?'\"()[]/\\-_+&%#@*".split(''));
  * word); Latin-1 SYMBOLS go, and that includes everything below 0xC0 ('³',
  * 'µ', '·') - the range scene art draws its pillars and shades from.
  */
+/**
+ * Split art-joined words where a high-bit pillar sits between two letter runs.
+ * e.g. "LightúBar" -> "Light Bar" but "Grüße" stays. Heuristic: the join is art
+ * when the high-bit char is between an upper+lower boundary or between two
+ * distinct capitalised words; legitimate German ü/ä/ö sits inside a single
+ * lowercase-run word. We normalise the narrow case that leaks into descriptions:
+ * a high-bit char flanked by a word-char on both sides where either side
+ * triggers a case transition (upper↔lower) is treated as a separator.
+ */
+function splitArtJoinedWords(s: string): string {
+  // Isolated high-bit art pillars like "Ü", "ß", "Û", "±²" that are not part of a word:
+  // "Ü ß User-Setting Door" -> "  User-Setting Door", "full.lightbar.driven Û Û ctl" -> "full lightbar driven   ctl"
+  // Keep legitimate German "Grüße" where ü/ß are inside a word, not isolated.
+  let out = s.replace(/\b[ÜÛßÝÞ±²³]{1,3}\b/g, ' ');
+  // Dots and ",." used as word separators in DIZ art: "full.lightbar.driven" -> "full lightbar driven",
+  // "driven,.x/y" -> "driven, x/y", "color.configuration-file" already handled, but ",." -> ", "
+  out = out.replace(/,\s*\.\s*/g, ', ');
+  out = out.replace(/\.\s*,\s*/g, ', ');
+  // Dots used as word separators in DIZ art: "full.lightbar.driven" -> "full lightbar driven"
+  // Keep version dots like "v0.63" (digit dot digit) and "v1.01".
+  out = out.replace(/(?<=[A-Za-zÀ-ÿ])\.(?=[A-Za-zÀ-ÿ])/g, ' ');
+  return out.replace(/(?<=[A-Za-zÀ-ÿ])[\u0080-\u00ff](?=[A-Za-zÀ-ÿ])/g, (m, _off, full) => {
+    const before = full[_off - 1] ?? '';
+    const after = full[_off + m.length] ?? '';
+    const beforeIsUpper = before === before.toUpperCase() && before !== before.toLowerCase();
+    const afterIsUpper = after === after.toUpperCase() && after !== after.toLowerCase();
+    // "LightúBar" : T (upper/lower mix) -> B upper => split
+    // "Grüße" : r lower -> ß (non-ASCII) lower => keep
+    if (beforeIsUpper !== afterIsUpper) return ' ';
+    // Between two capitals is always a separator in this corpus
+    if (beforeIsUpper && afterIsUpper) return ' ';
+    return m;
+  });
+}
+
 export function toPlain(s: string): string {
   if (!s) return s;
+  let src = splitArtJoinedWords(s);
   const out: string[] = [];
-  for (const ch of s.replace(ANSI_RE, '')) {
+  for (const ch of src.replace(ANSI_RE, '')) {
     const code = ch.charCodeAt(0);
     if ((code < 0x80 && /[A-Za-z0-9]/.test(ch)) || ALLOWED_PUNCT.has(ch)) {
       out.push(ch);
@@ -640,6 +760,7 @@ export function toPlain(s: string): string {
 
 /** Acronyms that must survive case normalisation. */
 const ACRONYMS = new Set([
+  '5TH', 'PWS',
   // Amiga door/BBS
   'XIM', 'AIM', 'SIM', 'TIM', 'IIM', 'FIM', 'BBS', 'QWK', 'LZX', 'LHA', 'DMS', 'CRC', 'ZIP',
   'ANSI', 'ASCII', 'MSG', 'OLM', 'ID', 'FAME', 'DIZ', 'NFO', 'DOC', 'TXT', 'CFG',
@@ -670,13 +791,38 @@ const ACRONYMS = new Set([
   'ALSA', 'JCL', 'TCL', 'PERL', 'AWK', 'SED',
   'NMI', 'CLI', 'GUI', 'TUI', 'CUI', 'NUI',
 ]);
-const MESSY_RE = /[a-zà-ÿ].*[A-ZÀ-Þ]/;
+const MESSY_RE = /[a-zà-ÿ][A-ZÀ-Þ]|[A-ZÀ-Þ].*[a-zà-ÿ]|[a-z0-9].*[A-Z]|[A-Z].*[a-z0-9]/;
 /**
- * CamelCase / PascalCase: capital + lowercase, then one or more internal
- * capital+lowercase subwords. These are intentional product names like
- * SmokeySmallStats, SplitChat, FileThing - NOT messy caps, do not rewrite.
+ * CamelCase / PascalCase: capital + lowercase (at least 3 letters), then one or more
+ * internal capital+lowercase subwords of at least 3 letters. These are intentional
+ * product names like SmokeySmallStats, SplitChat, FileThing - NOT messy caps like
+ * "FiNe" (2+2) or "Thiz" which are elite, not CamelCase. Requiring 3+ letters per
+ * hump keeps "FiNe" from being preserved as-is.
  */
-const CAMEL_RE = /^[A-ZÀ-Þ](?:[a-zà-ÿ]+|[0-9]+)(?:[A-ZÀ-Þ][a-zà-ÿ]+)+$/;
+const CAMEL_RE = /^[A-ZÀ-Þ][a-zà-ÿ]{2,}(?:[A-ZÀ-Þ][a-zà-ÿ]{2,})+$/;
+
+const LEET_MAP: Record<string, string> = { '0': 'o', '1': 'l', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b' };
+function deLeet(word: string): string {
+  // Handle "Thiz" -> "This" (z for s) – common elite for "This", "is", "as", etc. where z replaces s at end
+  if (/^Thiz$/i.test(word)) return word[0] === 'T' ? 'This' : word.replace(/z$/i, 's');
+  // Never translate a leading digit: "1oo", "5TH", "3D" are names/ordinals, not leet
+  if (/^[0-9]/.test(word)) return word;
+  // Don't translate trailing version-like digits: "beta3", "Bu1", "C120" is a version, not leet
+  const trailingDigits = word.match(/[0-9]+$/);
+  const hasTrailingVersionDigits = trailingDigits && word.replace(/[0-9]+$/, '').length >= 1;
+  if (hasTrailingVersionDigits && trailingDigits[0].length <= 4 && !/[A-Za-z].*[0-9].*[A-Za-z]/.test(word)) {
+    if (/^[A-Za-z]+[0-9]+$/i.test(word)) return word;
+  }
+  if (!/[A-Za-z]/.test(word) || !/[0-9]/.test(word)) {
+    if (/^[A-Za-z]+z$/i.test(word) && word.length <= 5) {
+      const lower = word.toLowerCase();
+      if (['thiz', 'l0z', 'coz', 'cuz', 'plz'].includes(lower)) return lower === 'thiz' ? 'This' : word.slice(0, -1) + (word.endsWith('z') ? 's' : 'S');
+    }
+    return word;
+  }
+  if (/^v?\d+(\.\d+)?$/i.test(word)) return word;
+  return word.replace(/[0134578]/g, (c) => LEET_MAP[c] ?? c);
+}
 
 function capitalise(w: string): string {
   if (!w) return w;
@@ -685,9 +831,23 @@ function capitalise(w: string): string {
 }
 
 function tidyWord(w: string, handles: boolean): string {
-  const core = w.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  // Keep "5TH" (5th) and "PWs" (passwords) canonical – don't de-leet or re-case them
+  if (/^5TH$/i.test(w)) return '5TH';
+  if (/^PWS$/i.test(w)) return 'PWs';
+  // Ordinals/group tags like "5D", "4DOS", "3D" are names, not leet – leave exactly as is
+  if (/^[0-9]+[A-Za-z]+$/.test(w)) return w;
+  // De-leet common elite digits inside words like d00R -> door, Sh0W -> Show, but keep version-like tokens
+  const deLeeted = deLeet(w);
+  const effective = deLeeted !== w && /[A-Za-z]/.test(deLeeted) ? deLeeted : w;
+  const core = effective.replace(/[^A-Za-zÀ-ÿ]/g, '');
   if (!core) return w;
   if (ACRONYMS.has(core.toUpperCase())) {
+    // If we de-leeted, return the de-leeted and cased form, not the original digits
+    if (effective !== w) {
+      const cap = core === core.toUpperCase() || core.length < 2 ? effective : effective.replace(/[A-Za-zÀ-ÿ]/g, (c) => c.toUpperCase());
+      // For de-leeted words, just capitalise the de-leeted form
+      if (core !== core.toUpperCase() && effective !== w) return capitalise(effective);
+    }
     // An acronym survives normalisation in its canonical form: "BBS" stays
     // "BBS", and scene-cased "bBS" is rewritten "BBS" - never left half-shouted.
     // Single letters are exempt: lowercase "x" in "v4.x" is a placeholder, not
@@ -718,11 +878,21 @@ function tidyWord(w: string, handles: boolean): string {
   // caps, so shouted words used to hide in mixed-case strings. Single
   // letters are exempt ("4 U"); known acronyms never reach here.
   if (core.length >= 2 && core === core.toUpperCase() && core !== core.toLowerCase()) {
+    return capitalise(effective);
+  }
+  if (MESSY_RE.test(effective) || (effective[0] === effective[0].toLowerCase() && /[A-ZÀ-Þ]/.test(effective))) {
+    if (CAMEL_RE.test(effective)) return w; // SmokeySmallStats, SplitChat - keep as-is (on effective, not w, so de-leeted still checked)
+    // For de-leeted words like d00R->dooR, capitalise the de-leeted form to get Door, not D00r
+    if (effective !== w) return capitalise(effective);
     return capitalise(w);
   }
-  if (MESSY_RE.test(w) || (w[0] === w[0].toLowerCase() && /[A-ZÀ-Þ]/.test(w))) {
-    if (CAMEL_RE.test(w)) return w; // SmokeySmallStats, SplitChat - keep as-is
-    return capitalise(w);
+  // If we de-leeted (d00R -> door) but it wasn't considered messy, still return the de-leeted lowercased form
+  // e.g. "d00R" de-leeted to "door" should become "door" lower, then later sentence-cased to "Door"
+  if (effective !== w) {
+    // Preserve the de-leeted letters but keep original casing for now; the outer tidyCase will handle sentence case
+    // For "d00R" -> "dooR" -> we want "door" lower, which capitalise will later make "Door" via sentence case
+    // So return effective lowercased
+    return effective.toLowerCase();
   }
   return w;
 }
@@ -730,12 +900,13 @@ function tidyWord(w: string, handles: boolean): string {
 /** Normalise elite/messy casing and de-shout ALL-CAPS prose. */
 export function tidyCase(text: string, handles = false): string {
   if (!text) return text;
-  let out = text.replace(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']*/g, (w) => tidyWord(w, handles));
+  // Include digits inside words so leet like "d00R" and "Sh0W" is treated as one token, not "d" + "R"
+  let out = text.replace(/[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9']*/g, (w) => tidyWord(w, handles));
   const letters = out.match(/[A-Za-zÀ-ÿ]/g) ?? [];
   const upper = letters.filter((c) => c === c.toUpperCase() && c !== c.toLowerCase()).length;
   if (letters.length && upper / letters.length > 0.7) {
-    out = out.replace(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']*/g, (w) =>
-      ACRONYMS.has(w.replace(/[^A-Za-zÀ-ÿ]/g, '').toUpperCase()) ? w : capitalise(w)
+    out = out.replace(/[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9']*/g, (w) =>
+      ACRONYMS.has(w.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').toUpperCase()) ? w : capitalise(w)
     );
   }
   return out;
@@ -796,15 +967,16 @@ export function fixCasing(text: string): string {
   }
 
   // Fix individual words: canonicalise acronyms, lowercase everything else
-  out = out.replace(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']*/g, (w) => {
-    const core = w.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  // Include digits so leet "d00R" is one token, not "d" + "R"
+  out = out.replace(/[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9']*/g, (w) => {
+    const core = w.replace(/[^A-Za-zÀ-ÿ0-9]/g, '');
     if (!core) return w;
     if (core.length < 2) return w;
-    if (ACRONYMS.has(core.toUpperCase())) {
+    if (ACRONYMS.has(core.toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I'))) {
       return core === core.toUpperCase() ? w : core.toUpperCase();
     }
     for (const acr of ACRONYMS) {
-      if (acr.length >= 3 && core.toUpperCase().endsWith(acr) && core.length > acr.length) return w;
+      if (acr.length >= 3 && core.toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I').endsWith(acr) && core.length > acr.length) return w;
     }
     return w.toLowerCase();
   });
@@ -837,11 +1009,11 @@ export function fixTitleCasing(text: string): string {
   let out = fixCasing(text);
 
   // Apply title case: capitalise every word, then lowercase the small words
-  out = out.replace(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']*/g, (w) => {
-    const core = w.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  out = out.replace(/[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9']*/g, (w) => {
+    const core = w.replace(/[^A-Za-zÀ-ÿ0-9]/g, '');
     if (!core) return w;
     // Always capitalise acronyms
-    if (ACRONYMS.has(core.toUpperCase())) {
+    if (ACRONYMS.has(core.toUpperCase().replace(/0/g, 'O'))) {
       return core.toUpperCase();
     }
     return capitalise(w);
@@ -849,8 +1021,8 @@ export function fixTitleCasing(text: string): string {
 
   // Now lowercase the small words, but not the first word
   let first = true;
-  out = out.replace(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']*/g, (w) => {
-    const core = w.replace(/[^A-Za-zÀ-ÿ]/g, '').toLowerCase();
+  out = out.replace(/[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9']*/g, (w) => {
+    const core = w.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').toLowerCase();
     if (first) { first = false; return w; }
     if (TITLE_CASE_LOWERCASE.has(core)) {
       return core;
@@ -931,6 +1103,111 @@ export function compose(prog: string, body: string): string {
   if (prog && bodyStartsWithProg(prog, body)) return body;
   if (prog && body) return `${prog} - ${body}`;
   return prog || body;
+}
+
+/** Door-type tokens that are metadata, not description. PPe/PPE is the
+ *  PCBoard door type and appears as "PPe v1.o" in many DIZs; it should not
+ *  stay in the description after the version is stripped. */
+const DOOR_TYPE_TOKENS = new Set(['ppe', 'xim', 'aim', 'fim', 'tim', 'iim', 'rexx', 'exe', 'lha', 'lzh', 'lzx', 'dms', 'zip']);
+export function stripDoorTypeTokens(desc: string): string {
+  if (!desc) return desc;
+  // Remove standalone PPe/PPE etc. when they appear as a separate word,
+  // especially trailing or before end. Keep it when it's part of a larger
+  // phrase like "LHA tester" – but "PPe" alone at end is junk.
+  // For now, strip any standalone token that is exactly a door type and
+  // is at the end or followed only by punctuation, and also strip "PPe"
+  // anywhere it appears as a separate word that looks like a type tag
+  // (e.g. "Enhancer PPe" -> "Enhancer").
+  let out = desc;
+  // First, handle "PPe" specifically: remove " PPe" (case-insensitive) as a whole word
+  out = out.replace(/\s+PPe\b/gi, (m) => {
+    // Keep it if it's clearly part of description like "PPe door" – but
+    // "PPe" is almost never descriptive, it's the door kind.
+    // The user's report: file_ids have PPe from release group, not description.
+    return '';
+  });
+  // General door types at end: " ... XIM" or " ... PPE"
+  out = out.replace(new RegExp(`\\s+(${Array.from(DOOR_TYPE_TOKENS).join('|')})\\s*$`, 'i'), '');
+  return collapse(out);
+}
+
+export function ensureEndsWithPunctuation(s: string): string {
+  if (!s) return s;
+  const t = s.trim();
+  if (!t) return t;
+  if (/[.!?]$/.test(t)) return t;
+  if (/\.\.\.$/.test(t)) return t;
+  return t + '.';
+}
+
+export function ensureCapitalized(s: string): string {
+  if (!s) return s;
+  const t = s.trim();
+  if (!t) return t;
+  // Preserve elite/mixed-case openers like "fUCKLHA" or "eBay": only capitalize
+  // a plain lowercase start, never re-case a word that already carries capitals
+  const firstWord = t.split(/\s+/)[0] ?? '';
+  if (/[A-ZÀ-Þ]/.test(firstWord.slice(1))) return t;
+  return t[0].toUpperCase() + t.slice(1);
+}
+
+/** Strip a leading prog name that duplicated the separate `name` column.
+ *  e.g. "Bbsguard . One of the best..." -> "One of the best...",
+ *  "Bbsguard - One of..." -> "One of...",  "Kclhaad LHA tester..." -> "LHA tester..."
+ *  Uses squash (alphanumeric only, lowercased) so "BBS Guard" matches "Bbsguard"
+ *  and "Adi Menu" matches "AdiMenu". Handles " - ", " . ", ".", ":", etc. */
+export function stripLeadingProg(desc: string, prog: string): string {
+  if (!desc || !prog) return desc;
+  const progTrim = prog.trim();
+  if (!progTrim) return desc;
+  const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const progSquash = squash(progTrim);
+  if (!progSquash) return desc;
+  const descSquash = squash(desc);
+  // Exact prog alone – don't strip (bodyAddsNothing case)
+  if (descSquash === progSquash) return desc;
+  if (!descSquash.startsWith(progSquash)) return desc;
+  // Also require word-boundary: the prog prefix must be followed by a word break in desc,
+  // otherwise "BBS" would strip from "BBSize" incorrectly. Check that the character after
+  // prog in desc is not a letter/digit (or desc is longer).
+  // Find where prog ends in desc by counting words that squash to prog.
+  const progWords = progTrim.split(/\s+/).filter(Boolean);
+  const descWords = desc.split(/\s+/);
+  // Try word-wise first (handles "Adi Menu" -> "Adi Menu Handles...")
+  let wordMatch = true;
+  for (let i = 0; i < progWords.length; i++) {
+    if (squash(descWords[i] || '') !== squash(progWords[i])) {
+      wordMatch = false;
+      break;
+    }
+  }
+  if (wordMatch) {
+    if (descWords.length === progWords.length) return desc;
+    return descWords.slice(progWords.length).join(' ').trim().replace(/^[.\-:\s]+/, '').trim();
+  }
+  // Fallback: squash prefix match (handles "BBS Guard" vs "Bbsguard")
+  // Find the split point in desc where squash reaches prog length
+  let acc = '';
+  let splitIdx = -1;
+  for (let i = 0; i < descWords.length; i++) {
+    acc += squash(descWords[i]);
+    if (acc === progSquash) {
+      splitIdx = i;
+      break;
+    }
+    if (acc.length > progSquash.length) break;
+  }
+  if (splitIdx !== -1) {
+    return descWords.slice(splitIdx + 1).join(' ').trim().replace(/^[.\-:\s]+/, '').trim();
+  }
+  // Last resort: regex with optional space/punctuation (handles "Bbsguard . One...")
+  const esc = progTrim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const prefixed = new RegExp(`^${esc}\\s*[\\-\\.:]*\\s*`, 'i');
+  if (prefixed.test(desc)) {
+    const stripped = desc.replace(prefixed, '').trim();
+    if (stripped) return stripped;
+  }
+  return desc;
 }
 
 /**
@@ -1124,18 +1401,65 @@ export interface DoorInput {
 }
 
 /**
+ * Scan the whole DIZ for a version, preferring one near the program name/title.
+ * Falls back to splitVersion on the description body when the DIZ scan finds nothing.
+ */
+export function versionFromDizWhole(diz: string | null, prog?: string | null): string {
+  if (!diz) return '';
+  const lines = diz.replace(/\r/g, '').split('\n').map((l) => l.replace(ANSI_RE, '').replace(/[\x00-\x1f\x7f]/g, ' '));
+  let best: { ver: string; score: number } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Try version regexes on this line
+    for (const re of [VER_RE, BARE_VER_RE]) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(line)) !== null) {
+        if (BBS_CONTEXT_RE.test(line.slice(0, m.index))) continue;
+        const ver = normaliseVersion(m[1] ?? m[2]);
+        let sc = 10;
+        // Bonus if near program name or title on same line or adjacent
+        if (prog && line.toLowerCase().includes(prog.toLowerCase().slice(0, 4))) sc += 8;
+        if (i < 3) sc += 3; // title area
+        if (best === null || sc > best.score) best = { ver, score: sc };
+        break; // one per line is enough
+      }
+      if (best && best.score >= 18) break;
+    }
+  }
+  return best?.ver ?? '';
+}
+
+export function authorFromDizWhole(diz: string | null): string {
+  if (!diz) return '';
+  const lines = diz.replace(/\r/g, '').split('\n').map((l) => l.replace(ANSI_RE, '').replace(/[\x00-\x1f\x7f]/g, ' '));
+  for (const line of lines) {
+    const p = toPlain(clean(line));
+    const m = AUTHOR_RE.exec(p);
+    if (m) {
+      const raw = stripFrameBoth(m[1] ?? '').trim();
+      const cand = collapse(stripFrameBoth(raw.replace(AUTHOR_TAIL_RE, '')).trim());
+      if (cand && cand.length <= 40 && (cand.match(/[A-Za-z0-9]/g) ?? []).length >= 2) {
+        return cand;
+      }
+    }
+  }
+  return '';
+}
+
+/**
  * Read a door's four facts out of its DIZ, its catalog row and its archive
  * name, in that order of trust.
  */
 export function analyseDoor(input: DoorInput, groupTags: ReadonlySet<string>): DoorFacts {
   const prettyProg = prettifyProgram(toPlain(input.binaryName ?? ''), groupTags);
-  // binary_name is sometimes a stray token like "8" or "."; a program name
-  // must look like a name.
   const progOk =
     prettyProg.length >= 3 && (prettyProg.match(/[A-Za-zÀ-ÿ]/g) ?? []).length >= 3 && alnumShare(prettyProg) > 0.5;
   let prog = progOk ? prettyProg : '';
 
-  let body = describeBlock(input.dizText, 70, prog || null);
+  // Use a 250-char cap for the body reconstruction so wrapped paragraphs are not truncated.
+  // The manifest's list.txt slice (src/manifest.ts:438) still caps at 120 for Amiga clients.
+  let body = describeBlock(input.dizText, 250, prog || null);
   if (!body && input.name) {
     const named = clean(input.name);
     body = score(named).score > 0 ? named : '';
@@ -1156,16 +1480,48 @@ export function analyseDoor(input: DoorInput, groupTags: ReadonlySet<string>): D
   body = req.text;
   const requiresBbs = req.requires || bbsRequirementFromDiz(input.dizText);
 
-  const ver = splitVersion(body, input.catalogVersion);
+  // Whole-DIZ scans for version/author — these see lines outside the chosen paragraph.
+  const dizVer = versionFromDizWhole(input.dizText, prog || input.name);
+  const dizAuthor = authorFromDizWhole(input.dizText);
+
+  const ver = splitVersion(body, dizVer || input.catalogVersion);
   body = ver.text;
 
-  const auth = splitAuthor(body, input.catalogAuthor ?? banner.credit);
+  const auth = splitAuthor(body, dizAuthor || (input.catalogAuthor ?? banner.credit));
   body = auth.text;
 
+  const originalProgForStrip = prog;
   prog = capitaliseName(stripVersionTail(prog, ver.version));
   if (prog && progCoveredByBody(prog, body)) prog = '';
 
-  let description: string | null = finalise(toPlain(compose(tidyCase(prog), tidyCase(body))));
+  // 250-char cap: a wrapped DIZ paragraph is often 120-200 chars; 60/120 truncated mid-sentence
+  // (e.g. "Additional", "so", "Walls" at 119, KCL's "and I really" at 119). 250 keeps the full
+  // paragraph for the JSON manifest and web UI; list.txt still does its own 120-char slice.
+  let composed = finalise(toPlain(compose(tidyCase(prog), tidyCase(body))), 250);
+  // Strip leading prog name – the name is already a separate column, so
+  // "Bbsguard . One of the best..." should be just "One of the best...".
+  // Use original prog (before progCoveredByBody cleared it) so "Adi Menu
+  // Handles..." where body already starts with prog is also stripped.
+  const progForStrip = tidyCase(originalProgForStrip || prog);
+  let description: string | null = composed ? stripLeadingProg(composed, progForStrip) : null;
+  // Also try stripping the catalog name when prog was empty (e.g. KCL where
+  // binaryName is null but DIZ starts with "Kclhaad")
+  if (description && input.name) {
+    const nameForStrip = tidyCase(toPlain(input.name));
+    const alt = stripLeadingProg(description, nameForStrip);
+    if (alt !== description && alt) description = alt;
+  }
+  if (description && input.archiveName) {
+    const baseForStrip = tidyCase(toPlain(archiveBase(input.archiveName)));
+    const alt2 = stripLeadingProg(description, baseForStrip);
+    if (alt2 !== description && alt2 && alt2.length >= 20) description = alt2;
+  }
+  // Strip door-type tokens like PPe/PPE that are metadata, not description.
+  // e.g. "Light Bar Enhancer PPe" -> "Light Bar Enhancer"
+  if (description) description = stripDoorTypeTokens(description);
+  // Ensure description starts with capital and ends with punctuation.
+  if (description) description = ensureCapitalized(description);
+  if (description) description = ensureEndsWithPunctuation(description);
   if (!description) {
     // Everything the DIZ offered was a credit (KDZ!LUDB.LHA's only
     // prose line is "dONE bY sERAPH - !BUGFIXED VERSION", which moves
