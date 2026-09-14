@@ -71,11 +71,35 @@ describe('command-scoped settings', () => {
     expect(() => writeDoorSettings(dir, { dual_listing: 'NO' }, undefined, 'B')).not.toThrow();
   });
 
-  test('the shipped emp_tools manifest scopes cleanly: 41 for B, 8 for J', () => {
+  test('the shipped emp_tools manifest scopes cleanly - every setting in exactly one command', () => {
+    /*
+     * THE PARTITION, NOT THE COUNTS.
+     *
+     * This asserted 41 for B and 8 for J, and went red the moment emp_tools
+     * gained `conf_9_mask` - a correct change (d9f0ee128) that had to be
+     * argued with a test. Worse, the pair of numbers never said the thing
+     * that matters: 41 and 8 are consistent with a setting being in BOTH
+     * scopes, or in neither, as long as the totals happen to land.
+     *
+     * Covering and disjoint is the property, it is stronger than the numbers
+     * were, and it survives the next setting somebody adds.
+     */
+    const all = readDoorSettingsView(repoEmp)!;
     const b = readDoorSettingsView(repoEmp, 'B')!;
     const j = readDoorSettingsView(repoEmp, 'J')!;
-    expect(b.manifest.settings).toHaveLength(41);
-    expect(j.manifest.settings).toHaveLength(8);
+
+    const keys = (view: typeof all) => view.manifest.settings.map(s => s.key).sort();
+    const bKeys = keys(b);
+    const jKeys = keys(j);
+
+    // Neither scope is empty - an empty one would satisfy every rule below.
+    expect(bKeys.length).toBeGreaterThan(0);
+    expect(jKeys.length).toBeGreaterThan(0);
+    // Disjoint: nothing is offered under both commands.
+    expect(bKeys.filter(k => jKeys.includes(k))).toEqual([]);
+    // Covering: between them they are the whole manifest.
+    expect([...bKeys, ...jKeys].sort()).toEqual(keys(all));
+    // And the split is the one the door means: J owns the join_ settings.
     expect(b.manifest.settings.every(s => !s.key.startsWith('join_'))).toBe(true);
     expect(j.manifest.settings.every(s => s.key.startsWith('join_'))).toBe(true);
     expect(b.values.dual_listing).toBe('YES');

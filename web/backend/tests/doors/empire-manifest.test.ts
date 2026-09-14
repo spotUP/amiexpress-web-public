@@ -34,7 +34,19 @@ describe('emp_tools door.settings.json', () => {
       const view = readDoorSettingsView(dir)!;
       expect(view).not.toBeNull();
       expect(view.manifest.command).toBe('B');
-      expect(view.manifest.settings.length).toBe(49);
+      /*
+       * NOT a count. This said `toBe(49)` and went red the moment emp_tools
+       * gained `conf_9_mask` (d9f0ee128, "a conference's mask edits that
+       * conference's row") - a correct change that had to be argued with a
+       * test. A number here only ever asks "has anyone edited this file", and
+       * the answer is yes, often; what the suite is for is whether the
+       * manifest still READS.
+       *
+       * A floor keeps the case that mattered: a manifest that parsed to
+       * nothing used to pass every assertion below it, because `[].some(...)`
+       * is false and `[].every(...)` is true.
+       */
+      expect(view.manifest.settings.length).toBeGreaterThan(40);
       expect(view.values.dual_listing).toBe('YES');
       expect(view.values.cursor_keys).toBe('YES');
       expect(view.values.conf_1_mask).toBe('XXXXXX--------------');
@@ -43,8 +55,33 @@ describe('emp_tools door.settings.json', () => {
       expect(view.values.join_nrconflines).toBe(11);
       // Bulletin titles live on the Bulls Menu page, not here.
       expect(view.manifest.settings.some((s) => s.key.startsWith('bull_'))).toBe(false);
-      // No Conference 9 in the file, none in the form.
-      expect(view.manifest.settings.some((s) => s.key === 'conf_9_mask')).toBe(false);
+      /*
+       * THE MASK ROWS ARE CONTIGUOUS - no conference is skipped.
+       *
+       * This used to assert `conf_9_mask` was ABSENT, with the note "No
+       * Conference 9 in the file, none in the form". The file has forty mask
+       * rows and always did; what was missing was the ninth SETTING, because
+       * the manifest mapped a conference to the wrong cfg row and lost one in
+       * the middle - conference 10 was offered while 9 was not, which is
+       * exactly the shape of an off-by-one rather than of a deliberate
+       * omission.
+       *
+       * d9f0ee128 ("a conference's mask edits that conference's row") fixed
+       * the mapping and restored the ninth, and this assertion - written
+       * around the bug - started failing for the right reason. Contiguity is
+       * what the fix established and what a gap would break again; a named
+       * conference is the thing that was only ever a symptom.
+       */
+      const masked = view.manifest.settings
+        .map((s) => /^conf_(\d+)_mask$/.exec(s.key)?.[1])
+        .filter((n): n is string => n !== undefined)
+        .map(Number)
+        .sort((a, b) => a - b);
+
+      expect(masked.length).toBeGreaterThan(0);
+      expect(masked).toEqual(Array.from({ length: masked.length }, (_, i) => i + 1));
+      // The one the mapping bug dropped, named so the regression is legible.
+      expect(masked).toContain(9);
       // Art rides to the Studio, not the form. Two of them now: emp_tools is
       // two doors in one directory, and each has a logo in its own file -
       // Bulls.CFG's title and joincnf.cfg's conference banner. Asked as one
