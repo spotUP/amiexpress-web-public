@@ -36,10 +36,9 @@ import { config } from '../config';
 import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
-import { findTheme } from '../screens/theme-registry';
+import { findTheme, readThemeRegistry } from '../screens/theme-registry';
 import { svgToRip } from '../screens/svg-to-rip';
 import { resolveCallerTheme } from '../screens/caller-theme';
-import { readThemeRegistry } from '../screens/theme-registry';
 import { themeOfPath, validateThemeFile, type ThemeFinding } from '../screens/theme-validation';
 import { checkShare } from '../screens/share-preconditions';
 import { applyTooltypes } from '../utils/info-file.util';
@@ -365,15 +364,28 @@ screensRouter.get('/file', (req: Request, res: Response) => {
 
 
 /**
- * Which file this screen resolves to for that node and conference.
+ * Which file this screen resolves to for that node, conference AND THEME.
  *
- * The index already knows the theme/node/conference shadowing, and it is the
- * part that bites: `Themes/<id>/Node/BULL.TXT` shadows `Node<N>/BULL.TXT`
- * shadows `Screens/BULL.TXT`, so an editor that writes the wrong rung changes
- * nothing on screen and reads as a broken feature.
+ * The index knows the theme/node/conference shadowing, and it is the part
+ * that bites: `Themes/<id>/Node/BULL.TXT` shadows `Node<N>/BULL.TXT` shadows
+ * `Screens/BULL.TXT`, so an editor that writes the wrong rung changes nothing
+ * on screen and reads as a broken feature.
+ *
+ * THE THEME HAS TO BE PASSED. `getScreenIndex(baseDir)` with no slug indexes
+ * the board's own screens and never sees the overlay, so this answered
+ * `Node1/logon20.txt` for a board that reads
+ * `Themes/607080/Node/logon20.txt`. The sysop removed a logo from his logon
+ * screen in the editor and the board went on drawing it (2026-09-14): the
+ * edit landed in the shadowed copy, which nothing reads.
  */
-function resolutionFor(baseDir: string, screen: string, nodeId: number, confId?: number) {
-  const index = getScreenIndex(baseDir);
+function resolutionFor(
+  baseDir: string,
+  screen: string,
+  nodeId: number,
+  confId?: number,
+  themeSlug?: string,
+) {
+  const index = getScreenIndex(baseDir, themeSlug);
   const entry = index.screens.find(s => s.screen === screen);
   return entry?.resolutions.find(r =>
     r.scope === 'conf' ? r.id === confId : r.scope === 'node' ? r.id === nodeId : true);
@@ -405,6 +417,23 @@ screensRouter.get('/resolve', (req: Request, res: Response) => {
   });
 });
 
+
+/**
+ * The theme a caller is actually wearing, which is the board this edits.
+ *
+ * An explicit `theme` wins (and `default` means the board's own screens, the
+ * ABSENCE of a theme, so it is honoured rather than looked up); otherwise the
+ * board's own default is what a caller gets, and therefore what the editor
+ * must show and save into.
+ */
+function themeInPlay(baseDir: string, requested: unknown): string | undefined {
+  const wanted = String(requested ?? '').trim().toLowerCase();
+  if (wanted === 'default') return undefined;
+  if (wanted) return findTheme(baseDir, wanted) ? wanted : undefined;
+  const slug = resolveCallerTheme(baseDir, { secLevel: 255 });
+  return slug && slug !== 'default' ? slug : undefined;
+}
+
 /**
  * GET /api/screens/login-sequence?node=&conf=
  *
@@ -424,9 +453,10 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const nodeId = parseInt(String(req.query.node ?? '1'), 10);
   const confId = req.query.conf ? parseInt(String(req.query.conf), 10) : undefined;
+  const themeSlug = themeInPlay(baseDir, req.query.theme);
 
   const steps = LOGIN_SEQUENCE.map(step => {
-    const resolution = resolutionFor(baseDir, step.screen, nodeId, confId);
+    const resolution = resolutionFor(baseDir, step.screen, nodeId, confId, themeSlug);
     const file = resolution?.file ?? null;
     const full = file ? path.join(baseDir, file) : null;
 
@@ -458,7 +488,32 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
     };
   });
 
-  sendOk(res, { node: nodeId, conf: confId ?? null, steps, available: availableIncludes(baseDir) });
+  /*
+   * WHICH BOARD THIS IS, because there is more than one.
+   *
+   * A theme shadows the board's own screens, and a caller wearing one is
+   * served ITS copy - so "the logon screen" is a different file for different
+   * callers. The sysop wears `607080`, a DRAFT theme only he and other sysops
+   * can see, while everyone else gets the board default; an editor that did
+   * not say so let him remove a logo from a file nothing reads.
+   */
+  const registry = readThemeRegistry(baseDir);
+  sendOk(res, {
+    node: nodeId,
+    conf: confId ?? null,
+    theme: themeSlug ?? 'default',
+    themes: [
+      { slug: 'default', title: 'Board default screens', status: 'live', isDefault: !registry.defaultSlug },
+      ...registry.themes.map(t => ({
+        slug: t.slug,
+        title: t.title || t.slug,
+        status: t.status,
+        isDefault: t.slug === registry.defaultSlug,
+      })),
+    ],
+    steps,
+    available: availableIncludes(baseDir),
+  });
 });
 
 /**
@@ -518,7 +573,7 @@ screensRouter.put('/login-sequence', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'No path - send the file the step resolves to' });
   }
 
-  const resolved = resolutionFor(baseDir, screen, nodeId, confId)?.file ?? null;
+  const resolved = resolutionFor(baseDir, screen, nodeId, confId, themeInPlay(baseDir, req.body?.theme))?.file ?? null;
   /*
    * A STEP THAT RESOLVES TO NOTHING IS NOT A PLACE TO PUT A FILE.
    *

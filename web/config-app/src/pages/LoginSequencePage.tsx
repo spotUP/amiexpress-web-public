@@ -48,6 +48,13 @@ interface Available {
   bytes: number;
 }
 
+interface ThemeChoice {
+  slug: string;
+  title: string;
+  status: string;
+  isDefault: boolean;
+}
+
 /** What the board calls each MultiTop design, so a sysop picks by meaning. */
 const KNOWN: Record<string, string> = {
   'bull1.txt': 'MultiTop - uploaded bytes',
@@ -76,6 +83,14 @@ export function LoginSequencePage() {
   const [available, setAvailable] = useState<Available[]>([]);
   const [drafts, setDrafts] = useState<Record<string, LoginItem[]>>({});
   const [node, setNode] = useState(1);
+  /*
+   * WHICH BOARD IS BEING EDITED. A theme shadows the board's own screens, so
+   * "the logon screen" is a different file for a caller wearing one - and a
+   * sysop typically wears a DRAFT nobody else can see. Editing the wrong one
+   * changes nothing on screen, which is how a removed logo kept appearing.
+   */
+  const [theme, setTheme] = useState('');
+  const [themes, setThemes] = useState<ThemeChoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -95,8 +110,13 @@ export function LoginSequencePage() {
        * TypeScript could not see it. Every other caller in this admin types
        * the envelope; this one did not.
        */
-      const { data: envelope } = await apiClient.get<ApiResponse<{ steps: LoginStep[]; available: Available[] }>>(
-        `/api/screens/login-sequence?node=${node}`,
+      const { data: envelope } = await apiClient.get<ApiResponse<{
+        steps: LoginStep[];
+        available: Available[];
+        theme: string;
+        themes: ThemeChoice[];
+      }>>(
+        `/api/screens/login-sequence?node=${node}${theme ? `&theme=${encodeURIComponent(theme)}` : ''}`,
       );
       const payload = envelope?.data;
       // A response that does not carry what this page needs is an ERROR, not
@@ -108,13 +128,17 @@ export function LoginSequencePage() {
       setSteps(loaded);
       stepsRef.current = loaded;
       setAvailable(Array.isArray(payload.available) ? payload.available : []);
+      setThemes(Array.isArray(payload.themes) ? payload.themes : []);
+      // The board answers with the theme it RESOLVED, so a first load shows
+      // the truth rather than a guess.
+      if (!theme && payload.theme) setTheme(payload.theme);
       setDrafts(Object.fromEntries(loaded.map(s => [s.screen, (s.items ?? []).map(i => ({ ...i }))])));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [node]);
+  }, [node, theme]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -166,7 +190,10 @@ export function LoginSequencePage() {
     setError(null);
     try {
       await apiClient.put(`/api/screens/login-sequence`, {
-        screen: step.screen, path: step.file, node, items,
+        // The THEME travels with the save. Without it the board resolves the
+        // step against its own default and refuses the path - or worse, writes
+        // the copy nothing reads, which is how a removed logo kept appearing.
+        screen: step.screen, path: step.file, node, theme, items,
       });
       setStatus(`${step.label} saved to ${step.file}`);
       // The sysop removed an include and asked where his toast was. An edit
@@ -222,6 +249,25 @@ export function LoginSequencePage() {
           className="w-16 bg-surface-2 border border-border rounded px-2 py-1 text-content-primary"
         />
         <span className="text-content-muted">- nodes can serve different screens</span>
+
+        <label htmlFor="theme" className="ml-4">Theme</label>
+        <select
+          id="theme"
+          value={theme}
+          onChange={e => setTheme(e.target.value)}
+          className="bg-surface-2 border border-border rounded px-2 py-1 text-content-primary"
+        >
+          {themes.map(t => (
+            <option key={t.slug} value={t.slug}>
+              {t.title}
+              {t.isDefault ? ' - board default' : ''}
+              {t.status !== 'live' ? ` [${t.status}]` : ''}
+            </option>
+          ))}
+        </select>
+        <span className="text-content-muted">
+          - a theme's copy shadows the board's, and a draft is seen only by sysops
+        </span>
       </div>
 
       {status && <p className="text-sm text-status-ok">{status}</p>}
