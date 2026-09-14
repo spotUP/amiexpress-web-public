@@ -15,6 +15,37 @@ import { screenIsProgram, SCREEN_EXTENSIONS, SERVED_PATH } from '../../src/scree
 
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 
+import { screenProgramSignature } from '../../src/screens/screen-blankness';
+
+describe('what a screen RUNS, with the art removed', () => {
+  it('stops a target at an escape, because a filename cannot contain one', () => {
+    // h7's conference bulletins butt a colour code straight onto the include
+    // with no space. Swallowing it made five themed bulletins read as running
+    // something different from the board's identical one, and their art was
+    // refused for it.
+    expect(screenProgramSignature('~SS_BBS:bulletins/bull9.txt\x1b[37m more art'))
+      .toBe(screenProgramSignature('~SS_BBS:bulletins/bull9.txt other art'));
+  });
+
+  it('says two screens run the same thing when they do', () => {
+    expect(screenProgramSignature('~f|ART A\r\n~SS_BBS:x.txt\r\n'))
+      .toBe(screenProgramSignature('~f|ART B\r\n~SS_BBS:x.txt\r\n'));
+  });
+
+  it('says they differ when one runs a door the other does not', () => {
+    expect(screenProgramSignature('~SS_BBS:x.txt\r\n~XISUBSCAN\r\n'))
+      .not.toBe(screenProgramSignature('~SS_BBS:x.txt\r\n'));
+  });
+
+  it('ignores the TARGET\'s case, because an Amiga volume does', () => {
+    // The CODE is uppercase or it is not a code - `locateMciReferences` and
+    // the loader both match `~CC_` case-sensitively, so `~cc_gl` is text. The
+    // name after it is a filename on a case-insensitive volume.
+    expect(screenProgramSignature('~CC_GL')).toBe(screenProgramSignature('~CC_gl'));
+    expect(screenProgramSignature('~cc_gl')).toBe('');
+  });
+});
+
 describe('a screen that does something', () => {
   it('reads the sysop\'s own logon screen as a program', () => {
     // His, byte for byte - 149 bytes and not one of them is art.

@@ -161,6 +161,19 @@ export function screenIsProgram(content: string | Buffer): boolean {
 export function screenProgramSignature(content: string | Buffer): string {
   const raw = typeof content === 'string' ? content : content.toString('latin1');
   const text = raw.replace(/~~/g, '  ');
-  const codes = text.match(/~(?:SS_|2S|\d*SR_|SX_|CC_|XI)[^\s|~\r\n]*/g) ?? [];
+  /*
+   * THE TARGET STOPS AT AN ESCAPE, not only at whitespace.
+   *
+   * `h7`'s conference bulletins write `~SS_BBS:bulletins/bull9.txt` with a
+   * colour code butted straight onto it and no space between, so a charset of
+   * "anything but whitespace" swallowed `\x1b[37m` into the filename. Five of
+   * the sysop's theme files then read as RUNNING something different from the
+   * board's identical include, and their art was refused for it (found
+   * 2026-09-14 by listing what the migration had left behind - the signature
+   * printed the escape).
+   *
+   * An Amiga filename cannot contain an escape, so the code ends there.
+   */
+  const codes = text.match(/~(?:SS_|2S|\d*SR_|SX_|CC_|XI)[^\s|~\r\n\x1b]*/g) ?? [];
   return codes.map(code => code.toLowerCase()).join('\n');
 }
