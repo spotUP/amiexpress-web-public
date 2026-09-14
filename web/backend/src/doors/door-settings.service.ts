@@ -655,9 +655,78 @@ export function renderDoorCfg(
 
   const target = path.join(doorDir, manifest.cfgFile);
   const temp = `${target}.tmp`;
-  fs.writeFileSync(temp, lines.join('\n') + '\n', { mode: 0o600 });
+  fs.writeFileSync(temp, mergeIntoCfg(target, lines), { mode: 0o600 });
   fs.renameSync(temp, target);
   return target;
+}
+
+/**
+ * The rendered lines folded INTO the file that is already there, rather than
+ * over it.
+ *
+ * This used to write `lines.join('\n')` and nothing else, which made the
+ * manifest the whole truth of the file: every comment went, and so did every
+ * key the manifest did not happen to model. That is a silent, delayed
+ * failure - it happens at the next boot, to a door nobody touched, because
+ * `renderAllDoorCfgs` runs for every manifest with a `cfgFile`.
+ *
+ * It bit `Doors/DoorRepo/DoorRepo.cfg` on 2026-09-14, the first time that
+ * door was given a manifest: the seven-line header explaining why its paths
+ * must be AmigaDOS assigns, and a `KeepFailedDownloads` flag left over from
+ * an open checksum investigation, were both deleted from a TRACKED file. The
+ * flag's own comment said a deploy rewrites this file from the repo - and
+ * this is the code that does the rewriting.
+ *
+ * So: a key the manifest owns is REPLACED where it stands, keeping the file's
+ * order and the comments around it; a key it does not own is left exactly as
+ * it was; anything that is not a key - comments, blank lines - is untouched.
+ * Keys the file does not have yet are appended. A file that does not exist is
+ * created from the rendered lines alone, which is the old behaviour and the
+ * right one for a door being configured for the first time.
+ */
+function mergeIntoCfg(target: string, lines: string[]): string {
+  let existing: string;
+  try {
+    existing = fs.readFileSync(target, 'utf8');
+  } catch {
+    return lines.join('\n') + '\n';
+  }
+
+  /** `KEY=value` -> KEY, for a line that is a setting rather than prose. */
+  const keyOf = (line: string): string | null => {
+    const trimmed = line.trim();
+    // `;` and `#` both start a comment in the cfgs these doors read, and a
+    // line with no `=` is not a setting however it looks.
+    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) return null;
+    const at = trimmed.indexOf('=');
+    return at > 0 ? trimmed.slice(0, at).trim().toLowerCase() : null;
+  };
+
+  const rendered = new Map<string, string>();
+  for (const line of lines) {
+    const key = keyOf(line);
+    if (key) rendered.set(key, line);
+  }
+
+  const eol = existing.includes('\r\n') ? '\r\n' : '\n';
+  const endsWithBreak = /\r?\n$/.test(existing);
+  const body = existing.split(/\r?\n/);
+  if (endsWithBreak) body.pop();   // the empty string after a trailing break
+
+  const written = new Set<string>();
+  const merged = body.map(line => {
+    const key = keyOf(line);
+    if (!key || !rendered.has(key)) return line;   // prose, or not ours
+    written.add(key);
+    return rendered.get(key)!;
+  });
+
+  // A setting the file has never carried goes on the end, in manifest order.
+  for (const [key, line] of rendered) {
+    if (!written.has(key)) merged.push(line);
+  }
+
+  return merged.join(eol) + eol;
 }
 
 /**
