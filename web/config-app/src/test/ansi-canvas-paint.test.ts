@@ -147,7 +147,9 @@ describe('painting a screen', () => {
 describe('the Amiga preview', () => {
   function screenWith(fg: number, bg: number) {
     const canvas = createCanvas(1, 1);
-    setCell(canvas, 0, 0, { char: 'A', fg, bg, bold: false, blink: false });
+    // The SDK's Cell is char/fg/bg; every other setCell in this file says
+    // so, and the two extra properties refused the admin's type gate.
+    setCell(canvas, 0, 0, { char: 'A', fg, bg });
     return canvas;
   }
 
