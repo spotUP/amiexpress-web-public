@@ -45,19 +45,52 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
     queryKey: ['door-settings', 'B'],
     queryFn: () => apiClient.getDoorSettings('B'),
   });
+
+  /*
+   * THE CONFERENCES THE BOARD HAS, not the forty the file has room for.
+   *
+   * "the live bbs only have 5 conferences" (sysop, 2026-09-14). Bulls.CFG
+   * carries forty mask rows because that is the door's format, and the
+   * manifest declares forty settings to match - but a sysop with five
+   * conferences was being shown thirty-five rows for conferences that do not
+   * exist, every one of them a row he could tick to no effect.
+   *
+   * Asked of the same endpoint the rest of the admin uses, so a conference
+   * added or removed anywhere shows up here without a second list to keep in
+   * step.
+   */
+  const conferencesQuery = useQuery({
+    queryKey: ['conference-configs'],
+    queryFn: () => apiClient.getConferenceConfigs(),
+  });
   const view = settingsQuery.data?.data as
     | { manifest: { settings: Array<{ key: string; label: string }> }; values: Record<string, string> }
     | undefined;
 
   // Memoised on the fetched view: DataTable builds its row model from this
   // array, and a fresh array on every render rebuilds the model for nothing.
+  /**
+   * The conference numbers this board actually has.
+   *
+   * `null` when the board has not said - a request still in flight, or one
+   * that FAILED. Filtering on a failed request would hide every row and read
+   * as "this door has no conference access", which is the lie the door list
+   * once told about doors it could not fetch.
+   */
+  const boardConferences: Set<number> | null = useMemo(() => {
+    const rows = (conferencesQuery.data?.data ?? null) as Array<{ conference_id?: number }> | null;
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return new Set(rows.map(r => r.conference_id).filter((n): n is number => typeof n === 'number'));
+  }, [conferencesQuery.data]);
+
   const maskSettings: MaskSetting[] = useMemo(
     () =>
       (view?.manifest.settings ?? [])
         .map(s => ({ key: s.key, label: s.label, conf: confOf(s.key) }))
         .filter((s): s is MaskSetting => s.conf !== null)
+        .filter(s => boardConferences === null || boardConferences.has(s.conf))
         .sort((a, b) => a.conf - b.conf),
-    [view],
+    [view, boardConferences],
   );
 
   useEffect(() => {
@@ -221,6 +254,7 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
         <p className="text-xs text-content-secondary mt-1">
           Which bulletins each conference sees. A tick means shown — the 20-character masks in Bulls.CFG, without typing them.
           Click a conference number to set its whole row, or a bulletin number to set that column everywhere; either one flips back on a second click.
+          Only the conferences this board has are listed — Bulls.CFG keeps all forty rows, because that is the door's own format.
         </p>
       </div>
       <DataTable

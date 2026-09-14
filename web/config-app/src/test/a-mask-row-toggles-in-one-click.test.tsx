@@ -18,10 +18,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const getDoorSettings = vi.fn();
 const saveDoorSettings = vi.fn();
+const getConferenceConfigs = vi.fn();
 vi.mock('../api/client', () => ({
   apiClient: {
     getDoorSettings: (...a: unknown[]) => getDoorSettings(...a),
     saveDoorSettings: (...a: unknown[]) => saveDoorSettings(...a),
+    getConferenceConfigs: (...a: unknown[]) => getConferenceConfigs(...a),
   },
 }));
 vi.mock('../contexts/NotificationContext', () => ({
@@ -57,9 +59,13 @@ function renderMatrix() {
   );
 }
 
+/** A board with three conferences, like the sysop's has five. */
+const CONFERENCES = { data: [{ conference_id: 1 }, { conference_id: 2 }, { conference_id: 3 }] };
+
 beforeEach(() => {
   getDoorSettings.mockReset().mockResolvedValue(VIEW);
   saveDoorSettings.mockReset().mockResolvedValue({});
+  getConferenceConfigs.mockReset().mockResolvedValue(CONFERENCES);
 });
 
 describe('editing the matrix in bulk', () => {
@@ -128,5 +134,43 @@ describe('editing the matrix in bulk', () => {
 
     await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
     expect(Object.keys(saveDoorSettings.mock.calls[0][1])).toEqual(['conf_3_mask']);
+  });
+});
+
+describe('the conferences the board actually has', () => {
+  it('lists only those, not every row the file has space for', async () => {
+    // Bulls.CFG carries forty mask rows because that is the door's format.
+    // A sysop with five conferences was shown thirty-five he could tick to no
+    // effect: "the live bbs only have 5 conferences".
+    getDoorSettings.mockResolvedValue({
+      data: {
+        manifest: {
+          settings: Array.from({ length: 40 }, (_, i) => ({
+            key: `conf_${i + 1}_mask`,
+            label: `Conference ${i + 1} bulletin mask`,
+            cfgRow: { field: 'mask' },
+          })),
+        },
+        values: Object.fromEntries(
+          Array.from({ length: 40 }, (_, i) => [`conf_${i + 1}_mask`, '----']),
+        ),
+      },
+    });
+
+    renderMatrix();
+
+    expect(await screen.findByLabelText('Toggle every bulletin in conference 3')).toBeTruthy();
+    expect(screen.queryByLabelText('Toggle every bulletin in conference 4')).toBeNull();
+    expect(screen.queryByLabelText('Toggle every bulletin in conference 40')).toBeNull();
+  });
+
+  it('shows every row rather than none when the board cannot be asked', async () => {
+    // A FAILED request is not "this board has no conferences". Hiding them all
+    // would read as a door with no conference access at all.
+    getConferenceConfigs.mockRejectedValue(new Error('nope'));
+
+    renderMatrix();
+
+    expect(await screen.findByLabelText('Toggle every bulletin in conference 3')).toBeTruthy();
   });
 });
