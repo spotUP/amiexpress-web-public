@@ -37,6 +37,8 @@ const RVS_OFF = 0x92;
 const CHARSET_UPPER = 0x8e;   // uppercase/graphics, the power-on bank
 const CHARSET_LOWER = 0x0e;   // lowercase/uppercase
 const RETURN = 0x0d;
+/** CCGMS's background prefix: `$02 <colour>` sets background AND border. */
+const BACKGROUND_PREFIX = 0x02;
 
 export interface SeqWriteOptions {
   /**
@@ -45,6 +47,21 @@ export interface SeqWriteOptions {
    * the board's screens are mixed.
    */
   declareCharset?: boolean;
+  /**
+   * Emit the CCGMS background prefix `$02 <colour>`, which sets background
+   * AND border - a C64 ties them, which is why the model does too.
+   *
+   * Defaults to ON for a non-black screen and OFF for a black one: a board
+   * whose screens are all black gains no bytes, and a screen an artist
+   * authored blue stays blue.
+   *
+   * ORDER IS LOAD-BEARING, and it is the reason this is emitted here rather
+   * than at the top. `$0E` - the lowercase charset bank - BLACKS background
+   * and border on a CCGMS reader (`petscii-machine.ts:198`). A background
+   * written BEFORE the charset byte is erased by the byte that follows it,
+   * and the screen comes back black with every other assertion still green.
+   */
+  declareBackground?: boolean;
 }
 
 /**
@@ -59,6 +76,12 @@ export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = 
   const out: number[] = [];
 
   if (declareCharset) out.push(state.charsetBank === 1 ? CHARSET_LOWER : CHARSET_UPPER);
+
+  // AFTER the charset byte, never before it - see `declareBackground`.
+  const declareBackground = options.declareBackground ?? state.background !== 0;
+  if (declareBackground) {
+    out.push(BACKGROUND_PREFIX, VIC_TO_PETSCII[state.background & 0x0f]);
+  }
 
   /*
    * What the reader starts from, and it is not white.

@@ -168,3 +168,49 @@ describe('the bytes a tilde and a bar are written as', () => {
     }
   });
 });
+
+/**
+ * THE BACKGROUND A SCREEN WAS AUTHORED WITH.
+ *
+ * A C64 ties background and border: CCGMS's `$02 <colour>` sets both, which
+ * is what `PetsciiMachine` reads (petscii-machine.ts:197). Nothing wrote one,
+ * so every screen this writer produced came back black however it was drawn.
+ *
+ * ORDER IS LOAD-BEARING, and it is the whole of the second test. `$0E` - the
+ * lowercase charset bank - BLACKS background and border on a CCGMS reader
+ * (petscii-machine.ts:198). A background written before the charset byte is
+ * erased by it, and the screen comes back black with every other assertion
+ * still green.
+ */
+describe('the background a screen was authored with', () => {
+  function screenWithBackground(bank: 0 | 1, background: number): PetsciiMachineState {
+    const machine = new PetsciiMachine();
+    machine.state.charsetBank = bank;
+    machine.state.background = background;
+    machine.state.border = background;
+    machine.state.screen[0] = 0x01; // 'A', so the screen is not empty
+    machine.state.colorRam[0] = 1;
+    return machine.state;
+  }
+
+  it('round-trips a blue background, and the border with it', () => {
+    const back = render(writeSeq(screenWithBackground(0, 6)));
+    expect(back.background).toBe(6);
+    expect(back.border).toBe(6);
+  });
+
+  it('round-trips a background on a LOWERCASE-bank screen', () => {
+    const back = render(writeSeq(screenWithBackground(1, 6)));
+    expect(back.charsetBank).toBe(1);
+    expect(back.background).toBe(6);
+  });
+
+  it('writes no background byte for a black screen', () => {
+    expect([...writeSeq(screenWithBackground(0, 0))]).not.toContain(0x02);
+  });
+
+  it('can be told to stay quiet about a coloured background', () => {
+    const written = writeSeq(screenWithBackground(0, 6), { declareBackground: false });
+    expect([...written]).not.toContain(0x02);
+  });
+});
