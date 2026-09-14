@@ -60,6 +60,18 @@ export async function flagPause(
       return session.tempData.flagPausePromise;
     }
 
+    /*
+     * The prompt owns its row, and the row it owns is the one to erase.
+     *
+     * express.e:28034/5193 print this prompt with no leading newline and then
+     * read a LINE, so the caller's RETURN puts the cursor at column 0 of the
+     * row below and `[1A[K` lands back on the prompt's row and clears it.
+     * This port's accumulator submits with `echo: null` (terminal-input.ts) -
+     * no RETURN is echoed - so the cursor is still at the END of the prompt,
+     * and `[1A`, which preserves the column, erased the tail of the line
+     * ABOVE instead. Same fault the sysop reported against the paginated
+     * bull6 on 2026-09-14; see handlePaginatedScreenInput.
+     */
     // Display pause prompt
     // express.e:28034
     const prompt = '\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32m(\x1b[33mf\x1b[32m)\x1b[36mlags, More\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m/\x1b[33mns\x1b[32m)\x1b[0m? ';
@@ -88,7 +100,7 @@ export async function flagPause(
         const response = input.trim().toUpperCase();
 
         if (response === '' || response === 'Y') {
-          socket.emit('ansi-output', '\x1b[1A\x1b[K');
+          socket.emit('ansi-output', '\r\x1b[K');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(true);
           return;
@@ -109,7 +121,7 @@ export async function flagPause(
 
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
-          socket.emit('ansi-output', '\x1b[1A\x1b[K');
+          socket.emit('ansi-output', '\r\x1b[K');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(true);
           return;

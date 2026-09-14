@@ -3207,8 +3207,32 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   // express.e:5199 aePuts('[1A[K') — only for checkForPause (More prompt)
   // express.e:5149 doPause(): aePuts('\b\n') — just newline, no cursor-up erase
   if (paged.kind !== 'doPause') {
-    // More prompt (checkForPause): cursor up + erase to clear the '(Pause)...More(y/n/ns)?' line
-    socket.emit(paged.eventName, '\x1b[1A\x1b[K');
+    /*
+     * CARRIAGE RETURN, NOT CURSOR-UP. `[1A[K` here ate the last line of the
+     * page and started the next one in the middle of it.
+     *
+     * express.e:5193-5199 prints the prompt with NO leading newline and then
+     * calls `lineInput`, so the caller's RETURN is what ends the line: by the
+     * time `[1A[K` runs the cursor is at COLUMN 0 of the row below, and the
+     * cursor-up lands on the prompt's own row and erases it.
+     *
+     * This port diverges twice - the prompt is emitted after its own `\r\n`
+     * (below, and in startPagination), and a single keypress answers it with
+     * no RETURN echoed. So the cursor was still at the END of the prompt text,
+     * about column 27. `[1A` preserves the column, so it landed one row up -
+     * the last CONTENT line - and `[K` erased everything from column 27 to the
+     * end of it, after which page two began writing from that column.
+     *
+     * Reported by the sysop against Bulletins/bull6.txt, the Super-AmiLog
+     * last-callers screen: 37 lines, so it is the first screen on this board
+     * tall enough to page since screens began paginating today.
+     *
+     * The prompt sits on its own row here, so the row to erase is the one the
+     * cursor is already on: `\r` to its start, `[K` to clear it. Same net
+     * effect as express.e's sequence, reached from where this port's cursor
+     * actually is.
+     */
+    socket.emit(paged.eventName, '\r\x1b[K');
   }
   // doPause: the lines[0] = '\r\n' will be emitted by emitPage below, matching express.e:5149
 
