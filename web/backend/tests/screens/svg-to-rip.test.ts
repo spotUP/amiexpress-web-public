@@ -69,9 +69,21 @@ describe('the sysop\'s own logo', () => {
     expect(colours).not.toContain(6);
   });
 
-  it('sets the colour once, not before every shape', () => {
-    const colours = instructions(svgToRip(svg).text).filter((one) => one.opcode === 'c');
-    expect(colours).toHaveLength(1);
+  it('sets the colour only when it changes, not before every shape', () => {
+    /*
+     * Was `toHaveLength(1)`, which was true while every shape in this logo
+     * was the same colour. Counters made it false for a good reason: a hole
+     * is punched in the background colour and the next solid puts the ink
+     * back, so the scene legitimately changes colour. The property worth
+     * holding is that it never says the same thing twice in a row - that is
+     * what "not before every shape" was really asserting.
+     */
+    const colours = instructions(svgToRip(svg).text)
+      .filter((one) => one.opcode === 'c')
+      .map((one) => one.args[0]);
+
+    expect(colours.length).toBeGreaterThan(0);
+    expect(colours.filter((c, at) => at > 0 && c === colours[at - 1])).toEqual([]);
   });
 
   it('stays inside the RIP canvas', () => {
@@ -244,5 +256,74 @@ describe('the scene a RIP reader can actually draw', () => {
     expect(polygon.args[0] as number).toBeLessThanOrEqual(RIP_MAX_POLYGON_POINTS);
     // Two straight runs and their corners - not 512 points spread along them.
     expect(polygon.args[0] as number).toBeLessThan(12);
+  });
+});
+
+/**
+ * A COUNTER IS A HOLE, and RIP has no rule that makes one.
+ *
+ * SVG fills a path by the even-odd rule, so the bowl of a `P` is a second
+ * subpath inside the first and the renderer leaves it empty. `p` fills each
+ * polygon solid on its own, so the inner one drawn in the same colour simply
+ * fills the hole in: "the P is missing the hole in the P" (sysop,
+ * 2026-09-14), the last defect in his logo after the fill colour and the
+ * point limit.
+ */
+describe('a subpath inside another', () => {
+  /** A square with a square hole in it, as one path - a letter counter. */
+  const donut = [
+    '<svg viewBox="0 0 640 350">',
+    '  <path fill="#ff0000" d="M100,100 L300,100 L300,300 L100,300 Z',
+    '                          M150,150 L250,150 L250,250 L150,250 Z"/>',
+    '</svg>',
+  ].join('\n');
+
+  it('is drawn in the background colour, so the hole is a hole', () => {
+    const scene = instructions(svgToRip(donut).text);
+
+    const fills = scene.filter(one => one.opcode === 'S').map(one => one.args[1]);
+    // The shape's own colour, and black for the counter over it.
+    expect(fills).toContain(0);
+    expect(fills.filter(c => c !== 0).length).toBeGreaterThan(0);
+  });
+
+  it('is drawn AFTER the shape that would swallow it', () => {
+    const scene = instructions(svgToRip(donut).text);
+
+    const polygons = scene
+      .map((one, at) => ({ one, at }))
+      .filter(({ one }) => one.opcode === 'p');
+    expect(polygons).toHaveLength(2);
+
+    // Whatever fill was last set before each polygon is what it is drawn in.
+    const fillBefore = (at: number) => {
+      let colour: number | undefined;
+      for (let i = 0; i < at; i++) if (scene[i].opcode === 'S') colour = scene[i].args[1] as number;
+      return colour;
+    };
+    expect(fillBefore(polygons[0].at)).not.toBe(0);
+    expect(fillBefore(polygons[1].at)).toBe(0);
+  });
+
+  it('leaves a path with one subpath alone', () => {
+    const solid = '<svg viewBox="0 0 640 350"><path fill="#ff0000" d="M10,10 L200,10 L200,120 L10,120 Z"/></svg>';
+
+    const fills = instructions(svgToRip(solid).text)
+      .filter(one => one.opcode === 'S')
+      .map(one => one.args[1]);
+
+    // Nothing to punch out, so nothing is drawn in the background colour.
+    expect(fills).not.toContain(0);
+  });
+
+  it('keeps the counter in the sysop s own logo', () => {
+    const svg = fs.readFileSync(UPTOWN, 'utf8');
+
+    const fills = instructions(svgToRip(svg).text)
+      .filter(one => one.opcode === 'S')
+      .map(one => one.args[1]);
+
+    // The P's bowl: one subpath of six paths is nested, so exactly one hole.
+    expect(fills).toContain(0);
   });
 });
