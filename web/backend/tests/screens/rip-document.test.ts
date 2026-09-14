@@ -25,6 +25,7 @@ import {
   readRipHotspots,
   writeRipHotspot,
   removeRipHotspot,
+  addRipButton,
   addRipMouseField,
   decodeRipArgs,
   encodeRipArgs,
@@ -216,6 +217,69 @@ describe('the interactive parts of a RIP screen are addressable', () => {
     );
     const spots = readRipHotspots(parseRipDocument(grown));
     expect(spots.filter(s => s.kind === 'mouse').map(s => s.num)).toEqual([1, 2]);
+  });
+
+  /*
+   * A BUTTON, as opposed to an invisible region over the art.
+   *
+   * The sysop draws in Illustrator and brings the art in as SVG, so the
+   * navigation is regions over a picture. A button is for where there is no
+   * picture behind it: RIP draws the bevel and the label itself, from the
+   * current button style. "drawing is not a gap it will be done in
+   * illustrator can we add buttons etc?" (sysop, 2026-09-14).
+   */
+  it('adds a button ahead of the end-of-scene marker, like a mouse field', () => {
+    const doc = parseRipDocument(screen);
+
+    const out = serializeRipDocument(addRipButton(doc, {
+      x0: 10, y0: 20, x1: 100, y1: 40, label: 'Files', command: 'F',
+    }));
+
+    const lines = out.split('\r\n');
+    expect(lines[4].startsWith('!|1U')).toBe(true);
+    expect(lines[5]).toBe('!|#');
+  });
+
+  it('packs the icon, label and command the way RIP reads them back', () => {
+    const doc = parseRipDocument(screen);
+
+    const grown = parseRipDocument(serializeRipDocument(addRipButton(doc, {
+      x0: 10, y0: 20, x1: 100, y1: 40,
+      icon: 'DOOR.ICN', label: 'Doors', command: 'O',
+    })));
+
+    const added = readRipHotspots(grown).filter(s => s.kind === 'button').pop()!;
+    expect(added.icon).toBe('DOOR.ICN');
+    expect(added.label).toBe('Doors');
+    expect(added.command).toBe('O');
+    expect([added.x0, added.y0, added.x1, added.y1]).toEqual([10, 20, 100, 40]);
+  });
+
+  it('defaults to a plain enabled button with no hotkey', () => {
+    const doc = parseRipDocument(screen);
+
+    const grown = parseRipDocument(serializeRipDocument(
+      addRipButton(doc, { x0: 1, y0: 2, x1: 3, y1: 4, label: 'X', command: 'X' }),
+    ));
+
+    const added = readRipHotspots(grown).filter(s => s.kind === 'button').pop()!;
+    // Bit 0 marks a button already pressed - a state the board sets, never
+    // something to author.
+    expect(added.flags).toBe(0);
+    expect(added.hotkey).toBe(0);
+  });
+
+  it('leaves the mouse fields numbered as they were', () => {
+    // Buttons are told apart by position, not by an index, so adding one
+    // must not disturb the fields that ARE numbered.
+    const doc = parseRipDocument(screen);
+    const before = readRipHotspots(doc).filter(s => s.kind === 'mouse').map(s => s.num);
+
+    const grown = parseRipDocument(serializeRipDocument(
+      addRipButton(doc, { x0: 1, y0: 2, x1: 3, y1: 4, label: 'X', command: 'X' }),
+    ));
+
+    expect(readRipHotspots(grown).filter(s => s.kind === 'mouse').map(s => s.num)).toEqual(before);
   });
 
   it('escapes a host command that contains a pipe', () => {

@@ -640,6 +640,67 @@ export function addRipMouseField(doc: RipDocument, field: NewRipMouseField): Rip
     command: field.command,
   });
 
+  return withHotspotLine(doc, body);
+}
+
+export interface NewRipButton {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** What the board receives when the caller clicks it. */
+  command: string;
+  /** The face of the button. RIP draws this itself, from the button style. */
+  label?: string;
+  /** An icon file the terminal loads, if the style asks for one. */
+  icon?: string;
+  /** The key that works the button from the keyboard, as a byte. */
+  hotkey?: number;
+  /**
+   * Per-button flags. 0 is a plain, enabled button; bit 0 marks one already
+   * pressed, which is a state the board sets rather than something to author.
+   */
+  flags?: number;
+}
+
+/**
+ * Add a BUTTON to a scene - a region RIP draws itself, with a label.
+ *
+ * The sibling of `addRipMouseField`, and the difference is what the caller
+ * sees. A mouse field is invisible: the art carries the look and the field
+ * only says where the clicking happens, which is what a screen drawn in
+ * Illustrator wants. A button is drawn BY RIP, from the current button style
+ * (`1B`) - bevel, colours, the label placed for you - which is what a dialog
+ * wants when there is no art behind it.
+ *
+ * RIP packs a button's text as `icon<>label<>command`; `hotspotBody` already
+ * does that, so this only has to place the instruction.
+ *
+ * Unlike a mouse field there is no number to allocate: buttons are told apart
+ * by position, not by an index.
+ */
+export function addRipButton(doc: RipDocument, button: NewRipButton): RipDocument {
+  const body = hotspotBody({
+    kind: 'button', line: 0, index: 0,
+    x0: button.x0, y0: button.y0, x1: button.x1, y1: button.y1,
+    hotkey: button.hotkey ?? 0,
+    flags: button.flags ?? 0,
+    icon: button.icon ?? '',
+    label: button.label ?? '',
+    command: button.command,
+  });
+
+  return withHotspotLine(doc, body);
+}
+
+/**
+ * The instruction, on a line of its own, in the one place it will run.
+ *
+ * Before RIP_NO_MORE (`#`) when the file has one: `#` ends the scene, and
+ * anything written after it never runs. Shared by both kinds because putting
+ * it in the wrong place is the same mistake either way.
+ */
+function withHotspotLine(doc: RipDocument, body: string): RipDocument {
   const raw = '!|' + body;
   const eol = documentEol(doc);
   const lines = doc.lines.slice();

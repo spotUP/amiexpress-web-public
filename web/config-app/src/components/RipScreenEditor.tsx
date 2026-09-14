@@ -7,6 +7,7 @@ import {
   readRipHotspots,
   writeRipHotspot,
   removeRipHotspot,
+  addRipButton,
   addRipMouseField,
   type RipDocument,
   type RipHotspot,
@@ -137,6 +138,8 @@ export function RipScreenEditor({
   // shut mid-word. Set when a region is selected and when a picker choice is
   // made; never on a keystroke.
   const [showCustom, setShowCustom] = useState(false);
+  /** What the next dragged rectangle becomes. See `commitRegion`. */
+  const [newKind, setNewKind] = useState<'mouse' | 'button'>('mouse');
   const [resizing, setResizing] = useState<ResizeCorner | null>(null);
 
   // The board's doors, for the "Run a door" group. A failure here is not fatal:
@@ -218,13 +221,26 @@ export function RipScreenEditor({
   const commitRegion = (region: PendingRegion) => {
     const wide = Math.abs(region.x1 - region.x0) > 4 && Math.abs(region.y1 - region.y0) > 4;
     if (!wide) return;
-    const next = addRipMouseField(doc, {
+    const box = {
       x0: Math.min(region.x0, region.x1),
       y0: Math.min(region.y0, region.y1),
       x1: Math.max(region.x0, region.x1),
       y1: Math.max(region.y0, region.y1),
-      command: '',
-    });
+    };
+    /*
+     * TWO THINGS TO DRAW HERE, and the difference is who owns the look.
+     *
+     * A region is invisible: the art carries the picture and the region only
+     * says where the clicking happens. That is what a screen drawn in
+     * Illustrator wants, and it is the default for that reason - "drawing is
+     * not a gap it will be done in illustrator" (sysop, 2026-09-14).
+     *
+     * A button is drawn BY RIP from the current button style, label and all,
+     * which is what you want where there is no art behind it.
+     */
+    const next = newKind === 'button'
+      ? addRipButton(doc, { ...box, command: '', label: '' })
+      : addRipMouseField(doc, { ...box, command: '' });
     setDoc(next);
     setSelected(readRipHotspots(next).length - 1);
     setShowCustom(true); // a fresh region has no command yet
@@ -465,6 +481,23 @@ export function RipScreenEditor({
             </div>
             );
           })()}
+
+          {!readOnly && (
+            <label className="block">
+              <span className="label">Dragging on the picture makes</span>
+              <select
+                className="input-field w-full"
+                aria-label="Dragging on the picture makes"
+                value={newKind}
+                onChange={event => setNewKind(event.target.value as 'mouse' | 'button')}
+              >
+                {/* The art is authoritative by default: a region leaves the
+                    picture to say what it looks like. */}
+                <option value="mouse">A clickable region, over your own art</option>
+                <option value="button">A button RIP draws, with a label</option>
+              </select>
+            </label>
+          )}
 
           {!chosen && !readOnly && spots.length > 0 && (
             <p className="text-sm text-content-secondary">
