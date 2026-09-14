@@ -60,11 +60,112 @@ async function fetchTextTvPage(page: string): Promise<string | null> {
       // The header is OURS, not SVT's, and at 56 characters it was the widest
       // line in the bulletin. Two short lines instead of one long one, so it
       // survives a forty-column screen without being folded mid-title.
-      .map((r) => `--- page ${r.num} ---\n${r.title}\n${cleanPlain(r.content_plain)}`)
+      //
+      // The BODY is SVT's own page where the markup allows - colour and the
+      // real 40-column grid - and the plain text when it does not, so a change
+      // at texttv.nu costs the board its colour rather than its news.
+      .map((r) => {
+        const markup = Array.isArray(r.content) ? r.content[0] : r.content;
+        const coloured = typeof markup === 'string' ? teletextToAnsi(markup) : null;
+        return `--- page ${r.num} ---\n${r.title}\n${coloured ?? cleanPlain(r.content_plain)}`;
+      })
       .join('\n');
   } catch {
     return null;
   }
+}
+
+
+/**
+ * SVT Text's own colours, as ANSI.
+ *
+ * "some text-tv coloring would be nice" and "the centering is a bit weird"
+ * (sysop, 2026-09-14) - and both come from the same place. The API's
+ * `content_plain` throws away the colour AND the spacing; its `content` field
+ * is the page as teletext draws it, 40 columns wide, with a span per run and
+ * a class per colour:
+ *
+ *   <span class="line"><span class="bgBl Y">100 </span>...</span>
+ *
+ * Reading that instead gives authentic colour and the REAL teletext grid, so
+ * the centring stops being our approximation of SVT's and becomes SVT's.
+ *
+ * Teletext has eight full-saturation colours and no dim ones, so each maps to
+ * the bright ANSI pen (`1;3x`) rather than the dim one - the same choice the
+ * board's own teletext mode makes (`XTERM_CONFIG.teletextTheme`).
+ */
+const TELETEXT_FG: Record<string, string> = {
+  Bl: '30', R: '1;31', G: '1;32', Y: '1;33', B: '1;34', M: '1;35', C: '1;36', W: '1;37',
+};
+
+const TELETEXT_BG: Record<string, string> = {
+  bgBl: '40', bgR: '41', bgG: '42', bgY: '43', bgB: '44', bgM: '45', bgC: '46', bgW: '47',
+};
+
+/** `&amp;` and friends, which the API sends and a terminal does not read. */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * One teletext page as coloured, 40-column ANSI.
+ *
+ * Returns null when the markup is not what this expects - a page with no
+ * `line` spans is a shape nobody has seen, and guessing at it would put
+ * garbage on the board. The caller keeps the plain text in that case.
+ */
+export function teletextToAnsi(html: string): string | null {
+  /*
+   * SPLIT on the row boundary rather than matching across it. A row's content
+   * is nested spans, so a regex that tried to find each row's own closing tag
+   * merged rows together.
+   *
+   * And the boundary is "a span whose CLASS LIST contains `line`", not the
+   * literal `<span class="line`: SVT writes a double-height headline as
+   * `<span style="...scaleY(2)..." class="line DH">`, with the style first.
+   * Matching the literal missed every one of those and folded each into the
+   * row above it - three 80-column lines in a 40-column page, which is
+   * exactly the "centering is a bit weird" the sysop reported.
+   */
+  const chunks = html.split(/<span (?=[^>]*class="[^"]*\bline\b)/).slice(1);
+  if (chunks.length === 0) return null;
+
+  const rows = chunks.map(chunk => {
+    // Past this row's own opening tag, whatever attributes it carries.
+    const inner = chunk.replace(/^[^>]*>/, '');
+    let row = '';
+    let pen = '';
+    for (const m of inner.matchAll(/<span class="([^"]*)"[^>]*>([\s\S]*?)<\/span>/g)) {
+      const classes = m[1].split(/\s+/);
+      const fg = classes.map(c => TELETEXT_FG[c]).find(Boolean);
+      const bg = classes.map(c => TELETEXT_BG[c]).find(Boolean);
+      /*
+       * A `bgImg` span is a teletext MOSAIC - a 2x3 block served as a gif.
+       * The shape is in the image and cannot be recovered from the markup, so
+       * it becomes a space wearing the background colour: the banner keeps
+       * its colour and its width, which is what survives of it on a terminal.
+       */
+      const text = classes.includes('bgImg')
+        ? ' '.repeat(Math.max(1, decodeEntities(m[2].replace(/<[^>]*>/g, '')).length))
+        : decodeEntities(m[2].replace(/<[^>]*>/g, ''));
+      if (text.length === 0) continue;
+
+      const want = `${bg ? `\x1b[${bg}m` : ''}${fg ? `\x1b[${fg}m` : ''}`;
+      if (want !== pen) { row += want; pen = want; }
+      row += text;
+    }
+    // Every row closes its own colours: a bulletin is included INTO another
+    // screen, and a pen left on would paint whatever the board draws next.
+    return row.length > 0 ? `${row}\x1b[0m` : '';
+  });
+
+  return rows.join('\n');
 }
 
 function cleanPlain(raw: unknown): string {
@@ -113,8 +214,19 @@ export const BULLETIN_COLUMNS = 40;
  * teletext centres its headlines with spaces, and repeating that indent on
  * every continuation row would centre nothing and waste the width.
  */
+/** What a caller SEES: the line with its colour codes taken out. */
+function visibleLength(line: string): number {
+  return line.replace(/\x1b\[[0-9;]*m/g, '').length;
+}
+
 export function foldLine(line: string, width = BULLETIN_COLUMNS): string[] {
-  if (line.length <= width) return [line];
+  /*
+   * A COLOUR CODE IS NOT A COLUMN. `ESC[1;33m` is five invisible characters,
+   * and counting them folded SVT's coloured rows - which are exactly forty
+   * columns wide - as though they were sixty. A teletext row that already
+   * fits is left alone whatever it carries.
+   */
+  if (visibleLength(line) <= width) return [line];
   const indent = line.slice(0, line.length - line.trimStart().length);
   const words = line.trimStart().split(/ +/);
   const rows: string[] = [];

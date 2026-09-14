@@ -88,3 +88,81 @@ describe('the bulletin as a whole', () => {
     expect(blanks(foldBulletin(bulletin))).toBe(blanks(bulletin));
   });
 });
+
+/**
+ * SVT Text in its own colours, on the board's own grid.
+ *
+ * "some text-tv coloring would be nice" and "the centering is a bit weird"
+ * (sysop, 2026-09-14) - one cause, one fix. `content_plain` threw away both
+ * the colour and the spacing; the API's `content` field is the page as
+ * teletext draws it, 40 columns, a span per run and a class per colour.
+ */
+import { teletextToAnsi } from '../../src/services/news-bulletins';
+
+const ESC = '\x1b';
+
+describe('a teletext page as ANSI', () => {
+  it('carries SVT\'s colours over', () => {
+    const html = '<span class="line"><span class="bgBl W">100 </span>'
+      + '<span class="bgBl Y">SVT Text</span></span>';
+
+    const out = teletextToAnsi(html);
+
+    expect(out).toContain(`${ESC}[40m${ESC}[1;37m100 `);
+    expect(out).toContain(`${ESC}[1;33mSVT Text`);
+  });
+
+  it('closes its colours at the end of every row', () => {
+    // A bulletin is included INTO another screen. A pen left on would paint
+    // whatever the board draws next.
+    const out = teletextToAnsi('<span class="line"><span class="Y">news</span></span>');
+
+    expect(out!.endsWith(`${ESC}[0m`)).toBe(true);
+  });
+
+  it('keeps a mosaic\'s width and colour, having no way to keep its shape', () => {
+    // A `bgImg` span is a 2x3 block served as a gif; the shape is in the
+    // image. What survives on a terminal is the colour and the width.
+    const out = teletextToAnsi(
+      '<span class="line"><span class="bgB W bgImg" style="background: url(x.gif)"> </span></span>',
+    );
+
+    expect(out).toContain(`${ESC}[44m`);
+    expect(out!.replace(/\x1b\[[0-9;]*m/g, '')).toBe(' ');
+  });
+
+  it('finds a double-height headline, which writes its class AFTER its style', () => {
+    /*
+     * SVT writes a double-height row as
+     *   <span style="...scaleY(2)..." class="line DH">
+     * so a split on the literal `<span class="line` missed every one and
+     * folded it into the row above - three 80-column lines in a 40-column
+     * page, which is what "the centering is a bit weird" looked like.
+     */
+    const html =
+      '<span class="line"><span class="bgBl">one</span></span>'
+      + '<span style="transform:scaleY(2);" class="line DH"><span class="bgBl Y">two</span></span>';
+
+    const rows = teletextToAnsi(html)!.split('\n');
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].replace(/\x1b\[[0-9;]*m/g, '')).toBe('one');
+    expect(rows[1].replace(/\x1b\[[0-9;]*m/g, '')).toBe('two');
+  });
+
+  it('gives back nothing for markup it does not recognise, so the caller can fall back', () => {
+    expect(teletextToAnsi('<p>something else entirely</p>')).toBeNull();
+  });
+
+  it('is forty columns of VISIBLE text, whatever the codes cost', () => {
+    const row = '<span class="line">'
+      + '<span class="Y">' + 'x'.repeat(20) + '</span>'
+      + '<span class="W">' + 'y'.repeat(20) + '</span></span>';
+
+    const out = teletextToAnsi(row)!;
+
+    expect(out.replace(/\x1b\[[0-9;]*m/g, '')).toHaveLength(40);
+    // ...and the fold leaves it alone, because it measures what is SEEN.
+    expect(foldLine(out)).toEqual([out]);
+  });
+});
