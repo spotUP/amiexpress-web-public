@@ -1079,6 +1079,48 @@ describe('a marked list keeps one left edge', () => {
     expect(out[3]).toContain('Top Upload CPS');
   });
 
+  it('holds the left edge when the marker is not on screen, so the column never moves', () => {
+    // "the column with the numbers moves one char to the right when the >
+    // appears" (sysop, 2026-09-14). The left edge was computed from the rows
+    // of THIS frame, so a list with no marker on it sat one column left of
+    // the same list with one - and the numbers stepped sideways the moment
+    // the caller pressed a key.
+    //
+    // The gutter belongs to the LIST, not to the frame that happens to show
+    // it. Once a door has marked a row, the room stays reserved.
+    const plain = textToFrame(
+      [
+        row80(18, '[01] .......... Top Uploaders'),
+        row80(18, '[02] ........ Top Downloaders'),
+        row80(18, '[03] .. Top Message Writers'),
+      ],
+      80,
+      3,
+    );
+    const withMarker = textToFrame(
+      [
+        row80(18, '[01] .......... Top Uploaders'),
+        row80(17, '>[02]<...... Top Downloaders'),
+        row80(18, '[03] .. Top Message Writers'),
+      ],
+      80,
+      3,
+    );
+
+    const memo = {};
+    const columnsOf = (f: Frame) =>
+      adaptRows(f, { cols: 40, align: memo }).rows.map((r) => textOf(r.cells).indexOf('['));
+
+    // The marked frame sets the gutter...
+    const marked = columnsOf(withMarker);
+    expect({ marked }).toEqual({ marked: [marked[0], marked[0], marked[0]] });
+    // ...and a frame with no marker on it keeps the same column.
+    expect({ plain: columnsOf(plain) }).toEqual({ plain: marked });
+    // The marker itself still hangs to the LEFT of that column.
+    const out = adaptRows(withMarker, { cols: 40, align: memo }).rows.map((r) => textOf(r.cells));
+    expect(out[1].indexOf('>')).toBe(marked[0] - 1);
+  });
+
   it('leaves a block alone when padding it would push a row off the screen', () => {
     // Alignment is never worth a character. These two would need the first
     // row moved two columns right, and it has no two columns to give.

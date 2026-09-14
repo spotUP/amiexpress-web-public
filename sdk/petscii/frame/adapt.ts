@@ -103,6 +103,13 @@ export interface RegionPin {
 }
 
 export interface AdaptOptions {
+  /**
+   * What this door has shown about its lists, carried between frames so a
+   * marked list's left edge does not move when the marker is off screen.
+   * The adapter owns one per door session; omitted, every frame is judged
+   * on its own and the edge can shift. See `AlignMemo`.
+   */
+  align?: AlignMemo;
   cols?: number;
   rows?: number;
   regions?: RegionPin[];
@@ -1623,6 +1630,24 @@ function ruleFor(y: number, cells: Row, cols: number, regions: RegionPin[] | und
 const MAX_MARKER_WIDTH = 4;
 
 /**
+ * What a door has shown about its lists, carried between frames.
+ *
+ * A LIST'S LEFT EDGE IS THE LIST'S, NOT THE FRAME'S. The alignment measures
+ * the rows in front of it, so a list with no marker showing sat one column
+ * left of the same list with one - and the numbers stepped sideways the
+ * moment the caller pressed a key ("the column with the numbers moves one
+ * char to the right when the > appears", sysop, 2026-09-14).
+ *
+ * Once a door has marked a row, the room for the marker stays reserved for
+ * as long as the caller is in that door. The adapter owns one of these per
+ * door session; a caller who never sees a marker never pays a column.
+ */
+export interface AlignMemo {
+  /** Columns reserved to the left of a marked list, widest seen so far. */
+  markerColumns?: number;
+}
+
+/**
  * Where a row's CONTENT starts, looking past a box rail.
  *
  * Not `columnSpans`, which was the first answer and a wrong one: it reports
@@ -1644,7 +1669,13 @@ function contentStart(cells: Row): number {
   return x;
 }
 
-export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, cursor: Cursor): Cursor {
+export function alignMarkedLists(
+  rows: AdaptedRow[],
+  src: Frame,
+  cols: number,
+  cursor: Cursor,
+  memo: AlignMemo = {},
+): Cursor {
   let out = cursor;
   let i = 0;
   while (i < rows.length) {
@@ -1686,7 +1717,23 @@ export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, c
       starts.length === 2 &&
       marked * 2 < members.length &&
       Math.max(...starts) - min <= MAX_MARKER_WIDTH;
+
+    // A LIST THAT COULD BE MARKED KEEPS THE ROOM.
+    //
+    // The same list with no marker showing has ONE start, so the block above
+    // declines and its rows sit flush - one column left of where they sit
+    // when the marker is there. The caller watched the numbers step sideways
+    // under him. Once a door has shown a marker, the gutter it needs is
+    // remembered and every later frame of a list like this keeps it.
+    const reserved = memo.markerColumns ?? 0;
+    const unmarkedList =
+      !isMarkedList && reserved > 0 && members.length >= 3 && starts.length === 1;
+
     if (isMarkedList) {
+      memo.markerColumns = Math.max(reserved, Math.max(...starts) - min);
+    }
+
+    if (isMarkedList || unmarkedList) {
       // THE PAD COMES OUT OF THE ROW'S OWN WIDTH, not on top of it.
       //
       // A rung that fills the screen leaves nothing to shift with: `leader`
@@ -1701,7 +1748,9 @@ export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, c
       // still yields ONE row is taken: a rung that answers a narrower screen
       // with an extra row would cost what the alignment was buying.
       const shifted = members.map((m) => {
-        const pad = m.start - min;
+        // A marked frame pays each row its own distance from the block's
+        // left edge; an unmarked one pays every row the remembered gutter.
+        const pad = isMarkedList ? m.start - min : reserved;
         if (pad <= 0) return { m, pad, cells: rows[m.k].cells };
         if (contentWidth(rows[m.k].cells) + pad <= cols) return { m, pad, cells: rows[m.k].cells };
         if (rows[m.k].rule === 'stack') return null;
@@ -1758,7 +1807,7 @@ export function adaptRows(src: Frame, opts: AdaptOptions = {}): AdaptResult {
       cursor = { x: m.x, y: first + m.row };
     }
   }
-  return { rows, cursor: alignMarkedLists(rows, src, cols, cursor) };
+  return { rows, cursor: alignMarkedLists(rows, src, cols, cursor, opts.align ?? {}) };
 }
 
 export function adaptFrame(src: Frame, opts: AdaptOptions = {}): Frame {

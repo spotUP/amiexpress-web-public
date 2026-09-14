@@ -262,6 +262,39 @@ export function resolveDoorAdaptColumns(door: MinColumnsDoorShape): number | nul
  * every table whose first row is simply its first - which is why nothing here
  * infers it from the shape of the screen.
  */
+/**
+ * How many columns this door's list needs to the LEFT of its entries, for a
+ * marker it draws on the selected row.
+ *
+ * `REDACTED=1`, read exactly where `C64_ADAPT` and the two drop
+ * flags are.
+ *
+ * WHY A DOOR HAS TO SAY. The ladder gives a marked list one left edge by
+ * measuring the rows in front of it, and a door does not mark anything until
+ * the caller moves: `Bulls` paints twelve unmarked rows on entry and draws
+ * `>[02]<` only on the first cursor key. So the first frame cannot know the
+ * room is needed, and the numbers stepped a column right the moment the
+ * marker arrived - "move them one char to the right from the start instead"
+ * (sysop, 2026-09-14).
+ *
+ * Declared, the room is reserved from the first frame and nothing ever
+ * moves. Undeclared, the ladder still settles the edge the first time it
+ * sees a marker; this only buys the frames before that.
+ *
+ * Zero for every door that does not say, which is every door that has no
+ * marker to draw.
+ */
+export function doorMarkerColumns(door: MinColumnsDoorShape | null | undefined): number {
+  if (!door) return 0;
+  const raw =
+    (door as any).c64MarkerColumns ??
+    door.toolTypes?.['REDACTED'] ??
+    (door.doorInfo as any)?.c64MarkerColumns ??
+    door.doorInfo?.toolTypes?.['REDACTED'];
+  const n = Number.parseInt(String(raw ?? '').trim(), 10);
+  return Number.isFinite(n) && n > 0 && n <= 4 ? n : 0;
+}
+
 export function doorDropsOldestAt40(door: MinColumnsDoorShape | null | undefined): boolean {
   if (!door) return false;
   const raw =

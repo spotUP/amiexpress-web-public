@@ -96,6 +96,7 @@ import {
   makeFrame,
   renderDiff,
   type AdaptedRow,
+  type AlignMemo,
   type Cell,
   type Cursor,
   type Frame,
@@ -149,6 +150,8 @@ export interface AdapterSession {
 }
 
 export interface C64AdapterOptions {
+  /** REDACTED: room reserved for a list's selection marker. */
+  markerColumns?: number;
   tickMs?: number;
   maxFrameMs?: number;
   /** The door declared C64_DROP_OLDEST: its list may lose its oldest entries to fit. */
@@ -254,6 +257,13 @@ export class C64DoorFrameAdapter {
    */
   private pageTop = 0;
   private paging = false;
+  /**
+   * What this door has shown about its lists; see AlignMemo in the ladder.
+   * Seeded from `REDACTED` so a door that marks a row reserves the
+   * room from its FIRST frame, before any marker has been drawn.
+   */
+  private readonly align: AlignMemo = {};
+
   /** Bumped by every write, so the adapted view can be memoised between calls in the same frame. */
   private writeSeq = 0;
   private adaptedCache: AdaptedView | null = null;
@@ -278,7 +288,15 @@ export class C64DoorFrameAdapter {
     private readonly dropOldest: boolean = false,
     /** C64_DROP_LAST: this door's ranked list may lose its lowest ranks to fit. */
     private readonly dropLast: boolean = false,
-  ) {}
+    /**
+     * REDACTED: room this door's list needs to the LEFT of its
+     * entries for the marker it draws on the selected row. Reserved from the
+     * FIRST frame, because a door draws no marker until the caller moves.
+     */
+    markerColumns: number = 0,
+  ) {
+    if (markerColumns > 0) this.align.markerColumns = markerColumns;
+  }
 
   isDisposed(): boolean {
     return this.disposed;
@@ -503,6 +521,12 @@ export class C64DoorFrameAdapter {
     const layout = getFileViewLayout(config.get('dataDir'));
     const { rows, cursor } = adaptRows(this.prePassed(), {
       cols: this.cols,
+      // WHAT THIS DOOR HAS SHOWN ABOUT ITS LISTS, kept for the door's
+      // lifetime. A marked list's left edge is the LIST's, not one frame's:
+      // without this the numbers stepped a column sideways the moment the
+      // caller's marker appeared, and back again when it left (sysop,
+      // 2026-09-14). One memo per adapter, so it dies with the door.
+      align: this.align,
       blockRenderer: fileRecordRung({
         layout,
         cols: this.cols,
@@ -647,6 +671,7 @@ export function installC64DoorAdapter(
     opts.maxFrameMs ?? C64_ADAPT_MAX_FRAME_MS,
     opts.dropOldest === true,
     opts.dropLast === true,
+    opts.markerColumns ?? 0,
   );
   adapter.target = socket;
   adapter.original = hadOwnEmit ? socket.emit : null;
