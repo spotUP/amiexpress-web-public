@@ -293,6 +293,15 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const [drawingBlankSeq, setDrawingBlankSeq] = useState(false);
   const isSeqPath = !!path && path.toLowerCase().endsWith('.seq');
 
+  /*
+   * The same rule ScreenFilesPage now keeps: a drawing surface belongs to the
+   * path it was opened for. This flag hides the whole rest of the dialog -
+   * format strip included - so one left set by a previous screen put a blank
+   * 40x25 C64 grid over the next screen with no way out but Close. The sysop
+   * met the ScreenFilesPage twin of this on samilog.header.txt.gr, 2026-09-14.
+   */
+  useEffect(() => { setDrawingBlankSeq(false); }, [path]);
+
   /**
    * WHAT THIS SLOT IS, computed once.
    *

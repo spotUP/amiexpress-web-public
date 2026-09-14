@@ -16,13 +16,13 @@ import type { PetsciiBrush } from '@amiexpress/bbs-door-sdk/petscii';
  */
 export interface PetsciiCharsetBrowserProps {
   brush: PetsciiBrush;
+  /** Which ROM bank the glyphs are drawn from. The board authors in 1; see conformToBoard. */
   bank: 0 | 1;
   /** The screen's background, so a swatch sits on the ground it will land on. */
   background: string;
   /** The 16 VIC colours, as CSS colours, indexed by colour number. */
   palette: readonly string[];
   onBrush: (brush: PetsciiBrush) => void;
-  onBank: (bank: 0 | 1) => void;
   disabled?: boolean;
 }
 
@@ -30,36 +30,23 @@ export interface PetsciiCharsetBrowserProps {
 const CODES = Array.from({ length: 128 }, (_, code) => code);
 
 export function PetsciiCharsetBrowser({
-  brush, bank, background, palette, onBrush, onBank, disabled = false,
+  brush, bank, background, palette, onBrush, disabled = false,
 }: PetsciiCharsetBrowserProps) {
   const ink = palette[brush.color & 0x0f] ?? '#ffffff';
 
   return (
     <div data-testid="petscii-charset-browser" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3 text-xs text-content-secondary">
-        <div className="flex items-center gap-1">
-          <span>Character set</span>
-          {/* Full English, because "RVS" and "UC/GFX" are the C64's own
-              abbreviations and the label rule has no exemption for them. */}
-          <button
-            type="button"
-            disabled={disabled}
-            aria-pressed={bank === 0}
-            className={`px-2 py-1 border ${bank === 0 ? 'border-border-strong text-content-primary' : 'border-border'}`}
-            onClick={() => onBank(0)}
-          >
-            Uppercase and graphics
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            aria-pressed={bank === 1}
-            className={`px-2 py-1 border ${bank === 1 ? 'border-border-strong text-content-primary' : 'border-border'}`}
-            onClick={() => onBank(1)}
-          >
-            Lowercase and uppercase
-          </button>
-        </div>
+        {/*
+          One bank, not two. A C64 BBS sits in the lowercase set, so the
+          uppercase/graphics shapes are characters a caller would never see -
+          "remove the characters not allowed" (sysop, 2026-09-14). Removing the
+          switch removes them: what is on this grid is what the board can draw.
+          Full English on the label, no "UC/GFX".
+        */}
+        <span data-testid="petscii-charset-fixed">
+          Character set: lowercase and uppercase, the one a C64 BBS runs.
+        </span>
         <label className="flex items-center gap-1">
           <input
             type="checkbox"

@@ -7,7 +7,7 @@ import {
 import {
   blankSurface, surfaceFromBytes, stamp, stampChar, colorize, floodFill,
   insertLine, removeLine,
-  typeChar, liftRegion, stampRegion, setBackground, setCharsetBank,
+  typeChar, liftRegion, stampRegion, conformToBoard, BOARD_BACKGROUND,
   clearSurface, writeSeq,
   type PetsciiBrush, type PetsciiRegion, type PetsciiSurface,
 } from '@amiexpress/bbs-door-sdk/petscii';
@@ -92,7 +92,7 @@ export function PetsciiScreenEditor({
   saving = false, readOnly = false,
 }: PetsciiScreenEditorProps) {
   const [surface, setSurface] = useState<PetsciiSurface>(() =>
-    content ? surfaceFromBytes(base64ToBytes(content)) : blankSurface());
+    conformToBoard(content ? surfaceFromBytes(base64ToBytes(content)) : blankSurface()));
   const [past, setPast] = useState<PetsciiSurface[]>([]);
   const [future, setFuture] = useState<PetsciiSurface[]>([]);
   const [brush, setBrush] = useState<PetsciiBrush>({ screenCode: 0x51, color: 1, reverse: false });
@@ -251,7 +251,6 @@ export function PetsciiScreenEditor({
               background={background}
               palette={palette}
               onBrush={setBrush}
-              onBank={bank => commit(setCharsetBank(surface, bank))}
             />
 
             <div className="flex flex-col gap-1">
@@ -308,28 +307,26 @@ export function PetsciiScreenEditor({
               )}
             </div>
 
+            {/*
+              No background picker. A C64 BBS runs on black and ties the border
+              to it, so a colour chosen here would be a colour no caller sees -
+              "dont let the user pick bg color" (sysop, 2026-09-14). The board's
+              ground is stated instead, because a missing control with no
+              explanation reads as a missing feature.
+            */}
             <div className="flex flex-col gap-1">
               <span className="text-xs text-content-secondary">
                 Background and border
               </span>
-              <div className="flex flex-wrap gap-1" role="group" aria-label="Background and border">
-                {palette.map((colour, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    aria-label={`Background ${index}`}
-                    aria-pressed={(surface.background & 0x0f) === index}
-                    className={`h-5 w-5 border ${(surface.background & 0x0f) === index ? 'border-border-strong' : 'border-border'}`}
-                    style={{ background: colour }}
-                    onClick={() => commit(setBackground(surface, index))}
-                  />
-                ))}
+              <div className="flex items-center gap-2" data-testid="petscii-background-fixed">
+                <span
+                  className="h-5 w-5 border border-border"
+                  style={{ background: palette[BOARD_BACKGROUND] }}
+                />
+                <span className="text-xs text-content-secondary">
+                  Black, as every caller sees it.
+                </span>
               </div>
-              {/* A C64 ties them, so the editor says so rather than offering a
-                  border no file could carry. */}
-              <span className="text-xs text-content-secondary">
-                A C64 sets the border with the background, so this moves both.
-              </span>
             </div>
           </div>
         )}
@@ -467,7 +464,7 @@ export function PetsciiScreenEditor({
                 // bridge, nothing the page has to own.
                 if (onLoadFile) { onLoadFile(chosen); return; }
                 const bytes = new Uint8Array(await chosen.arrayBuffer());
-                commit(surfaceFromBytes(bytes));
+                commit(conformToBoard(surfaceFromBytes(bytes)));
               }}
             />
           </>

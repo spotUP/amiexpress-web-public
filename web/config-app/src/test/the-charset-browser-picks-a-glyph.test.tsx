@@ -18,19 +18,17 @@ const BRUSH: PetsciiBrush = { screenCode: 0x20, color: 1, reverse: false };
 
 function renderBrowser(overrides: Partial<Parameters<typeof PetsciiCharsetBrowser>[0]> = {}) {
   const onBrush = vi.fn();
-  const onBank = vi.fn();
   render(
     <PetsciiCharsetBrowser
       brush={BRUSH}
-      bank={0}
+      bank={1}
       background="#000000"
       palette={PALETTE}
       onBrush={onBrush}
-      onBank={onBank}
       {...overrides}
     />,
   );
-  return { onBrush, onBank };
+  return { onBrush };
 }
 
 describe('the charset browser picks a glyph', () => {
@@ -53,11 +51,13 @@ describe('the charset browser picks a glyph', () => {
     expect(screen.queryByRole('button', { name: 'Character 128' })).toBeNull();
   });
 
-  it('switches bank without touching the brush', async () => {
-    const { onBank, onBrush } = renderBrowser();
-    await userEvent.click(screen.getByRole('button', { name: 'Lowercase and uppercase' }));
-    expect(onBank).toHaveBeenCalledWith(1);
-    expect(onBrush).not.toHaveBeenCalled();
+  it('offers no way to reach the characters a C64 BBS cannot draw', () => {
+    // "remove the characters not allowed" (sysop, 2026-09-14). The board runs
+    // the lowercase set; the uppercase/graphics bank is not a choice any more,
+    // so the switch that reached it is gone rather than merely disabled.
+    renderBrowser();
+    expect(screen.queryByRole('button', { name: 'Uppercase and graphics' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lowercase and uppercase' })).toBeNull();
   });
 
   it('says Reverse in full, not RVS', () => {

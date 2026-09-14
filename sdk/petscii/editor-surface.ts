@@ -301,3 +301,46 @@ export function clearSurface(surface: PetsciiSurface): PetsciiSurface {
   next.colorRam.fill(surface.pen & 0x0f);
   return next;
 }
+
+/**
+ * WHAT A C64 BBS ACTUALLY RUNS - and what this board therefore authors.
+ *
+ * "petscii used in c64 bbs:es have limitations that our petscii editor doesnt
+ * enforce, only lowercase characters are allowed and only black background"
+ * and "this should apply bbs wide" (sysop, 2026-09-14), then, deciding it:
+ * "the lowercase and bg petscii rules should be enforced" / "dont let the user
+ * pick bg color and remove the characters not allowed".
+ *
+ * So these are not advisories. A caller sits in the lowercase set on a black
+ * screen, and art authored anywhere else is art the caller never sees. The
+ * editor holds the surface to that rather than letting an artist spend an
+ * evening on a screen the board cannot show.
+ *
+ * This is the AUTHORING rule. `PetsciiMachine` still honours whatever bytes
+ * arrive on the wire, because a door or an old file may flip the bank and the
+ * emulation's job is to show what really happened, not what should have.
+ */
+export const BOARD_CHARSET_BANK = 1 as const;
+export const BOARD_BACKGROUND = 0 as const;
+
+/**
+ * The surface as the board will show it: lowercase set, black ground.
+ *
+ * Applied when a screen is created and when one is loaded, so an imported
+ * `.seq` authored on the uppercase set is redrawn here in the glyphs a caller
+ * gets - the art does not silently mean something different on the wire.
+ */
+export function conformToBoard(surface: PetsciiSurface): PetsciiSurface {
+  if (
+    surface.charsetBank === BOARD_CHARSET_BANK &&
+    surface.background === BOARD_BACKGROUND &&
+    surface.border === BOARD_BACKGROUND
+  ) {
+    return surface;
+  }
+  const next = cloneSurface(surface);
+  next.charsetBank = BOARD_CHARSET_BANK;
+  next.background = BOARD_BACKGROUND;
+  next.border = BOARD_BACKGROUND;
+  return next;
+}

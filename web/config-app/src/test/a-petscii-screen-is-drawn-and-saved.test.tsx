@@ -88,16 +88,19 @@ describe('a PETSCII screen is drawn and saved', () => {
     expect(savedScreen(onSave).state.screen[0]).toBe(0x20);
   });
 
-  it('saves the background the artist chose, and the border with it', async () => {
+  it('saves black as the ground, and the border with it', async () => {
+    // The artist used to pick the background here. A C64 BBS runs on black,
+    // so "dont let the user pick bg color" (sysop, 2026-09-14) took the
+    // control away and the file says black whatever was opened.
     const onSave = vi.fn();
     render(<PetsciiScreenEditor content={BLANK_SEQ} onSave={onSave} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Background 6' }));
+    expect(screen.queryByRole('button', { name: 'Background 6' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /Save/ }));
 
     const back = savedScreen(onSave);
-    expect(back.state.background).toBe(6);
-    expect(back.state.border).toBe(6);
+    expect(back.state.background).toBe(0);
+    expect(back.state.border).toBe(0);
   });
 
   it('the MCI checkbox puts the gate in the file', async () => {

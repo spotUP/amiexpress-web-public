@@ -293,6 +293,27 @@ export function ScreenFilesPage() {
     setEditingPetscii(false);
     setEditorWrite(false);
   };
+
+  /**
+   * AN EDITOR BELONGS TO THE FILE IT WAS OPENED FOR.
+   *
+   * Clearing them by hand at each place the open file changes is the shape
+   * that failed: there are ten such places, `closeEditors` was called from
+   * one, and the modal's own onClose cleared two of the three booleans -
+   * PETSCII was added last and that list never grew. So an artist who edited
+   * a `.seq`, closed the dialog and opened anything else got the PETSCII
+   * editor over the new file's bytes, with no format strip to leave by, and a
+   * Save would have written C64 screen codes over their ANSI.
+   *
+   * Reported by the sysop on `Utils/samilog/samilog.header.txt.gr`
+   * (2026-09-14): "samilog opened as petscii and there are no buttons to
+   * switch after i had nother petscii screen loaded before".
+   *
+   * Binding it to the open file makes the stale case unreachable rather than
+   * merely handled: the editor that opens next is the one the routing effect
+   * below chooses for THIS file.
+   */
+  useEffect(() => { closeEditors(); }, [openFile]);
   const detailRef = useRef<HTMLElement>(null);
   const [showRevisions, setShowRevisions] = useState(false);
 
@@ -1630,10 +1651,9 @@ export function ScreenFilesPage() {
         title={openFile ?? 'A screen file'}
         maxWidth="max-w-5xl"
         onClose={() => {
+          // Closing clears the open file; the effect above puts the editors
+          // away. This used to list them itself and miss PETSCII.
           setOpenFile(null);
-          setEditing(null);
-          setEditingRip(false);
-          setEditorWrite(false);
           setPendingUpload(null);
         }}
       >
