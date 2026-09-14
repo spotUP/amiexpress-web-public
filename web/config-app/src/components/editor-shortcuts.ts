@@ -13,7 +13,9 @@
  *   has no tool letters (tools are toolbar/mouse there); letters alone
  *   would eat typing, so Alt it is.
  * - Cursor: arrows (existing behaviour, now in every mode), Home/End row
- *   ends, PageUp/PageDown ten rows, Delete erases the cell.
+ *   ends, PageUp/PageDown ten rows, Delete erases the cell. AND Alt+arrow
+ *   for all four, because an M1 laptop has none of those keys - see the
+ *   Alt+arrow block below.
  * - Clipboard: Alt+C/X/V everywhere; Cmd+C/X/V too on the Mac, where
  *   Option+letter types special characters and every program cuts with
  *   Command. The component lets a real page-text selection through first,
@@ -110,6 +112,26 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
 
   if (ev.altKey && !ev.ctrlKey && !ev.metaKey && ev.code) {
     if (ev.code in DIGIT_INDEX) return { action: 'bg', index: DIGIT_INDEX[ev.code] };
+
+    /*
+     * THE KEYS A LAPTOP DOES NOT HAVE.
+     *
+     * "i dont even have all the buttons on my mac m1 laptop keyboard" (sysop,
+     * 2026-09-14). An M1 laptop has no Insert, no Home, no End, no PageUp and
+     * no PageDown - Apple dropped them, and the Fn+arrow substitutes are two
+     * hands and undiscoverable. A shortcut nobody can press is not a
+     * shortcut.
+     *
+     * Alt+arrow is free here and reads as "the big version of this arrow":
+     * Alt+Left/Right to the row's ends, Alt+Up/Down ten rows. Alt+I for
+     * insert mode, the letter the key was named after. The original keys keep
+     * working for anyone on a full keyboard - this adds, it takes nothing.
+     */
+    if (ev.code === 'ArrowLeft') return { action: 'row', edge: 'start' };
+    if (ev.code === 'ArrowRight') return { action: 'row', edge: 'end' };
+    if (ev.code === 'ArrowUp') return { action: 'page', dy: -10 };
+    if (ev.code === 'ArrowDown') return { action: 'page', dy: 10 };
+    if (ev.code === 'KeyI') return { action: 'insert-mode' };
     // Shift first: Alt+C copies, and Alt+Shift+C centres the row - the
     // artists asked for centring beside the thing they already reach for.
     if (ev.code === 'KeyC') return ev.shiftKey ? { action: 'centre-line' } : { action: 'copy' };

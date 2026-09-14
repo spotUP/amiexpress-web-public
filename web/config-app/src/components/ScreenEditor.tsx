@@ -18,6 +18,7 @@ import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, tokenAt, explainToken, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
 import { editorShortcut } from './editor-shortcuts';
+import { editorHelp, onAMac } from './editor-help';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
@@ -441,14 +442,33 @@ export function ScreenEditor({
           Remove line {cursor.y + 1}
         </button>
       </div>
-      <p className="text-xs text-content-secondary">
-        Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
-        Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
-        Ctrl+K removes the cursor's line and Ctrl+Shift+K pushes a blank one in.
-        Alt+S then drag selects; Alt+C/X copies/cuts to the system clipboard as text (and colours internally),
-        Alt+V pastes it back at the cursor - click where you want it first. On a Mac, Cmd+C/X/V does the
-        same, and the Delete-labelled key erases the cell.
-      </p>
+      {/*
+        * The shortcuts, grouped by what an artist is trying to do.
+        *
+        * "this help text is chaotic and hard to read ... i dont even have all
+        * the buttons on my mac m1 laptop keyboard" (sysop, 2026-09-14). It was
+        * one paragraph listing twenty-odd keys in implementation order, and
+        * five of them - Insert, Home, End, PageUp, PageDown - are not on the
+        * keyboard he draws with. `editor-help.ts` spells them for THIS
+        * platform, and folded away by default so the editor is not fronted by
+        * a wall of text.
+        */}
+      <details className="text-xs">
+        <summary className="cursor-pointer text-content-secondary">Keyboard shortcuts</summary>
+        <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {editorHelp(onAMac()).map(group => (
+            <div key={group.title} className="space-y-1">
+              <h4 className="font-semibold text-content-primary">{group.title}</h4>
+              {group.rows.map(row => (
+                <div key={row.what} className="flex justify-between gap-3">
+                  <span className="text-content-secondary">{row.what}</span>
+                  <span className="whitespace-nowrap text-content-primary">{row.keys}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </details>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
         <label className="space-y-1">
