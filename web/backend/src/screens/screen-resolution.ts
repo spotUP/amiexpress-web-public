@@ -19,6 +19,7 @@ import * as path from 'path';
 import { DEFAULT_SLUG, THEME_FILES_DIR, findTheme, isValidSlug, themeDirectory } from './theme-registry';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
+import * as amigafs from '../utils/amigafs';
 import { conferenceDir } from '../conferences/conference-paths';
 
 export {
@@ -47,21 +48,49 @@ export { getScreenFileName };
  * and parse an .info file every time, and a sysop who edits the tooltype
  * gets the new directory on the next load without a restart.
  */
-const nodeScreenDirCache = new Map<string, { stamp: number; dir: string }>();
+const nodeScreenDirCache = new Map<string, { stamp: number; dir: string; seenIn: number }>();
 
 export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
   const defaultDir = path.join(baseDir, `Node${nodeId}`);
   const infoPath = path.join(baseDir, `Node${nodeId}.info`);
 
+  /*
+   * Inside one snapshot the icon is checked ONCE.
+   *
+   * The cache below validates itself with a statSync on every call, which is
+   * right for a long-lived process and wasteful inside a screen-index build:
+   * this is asked once per screen per node, and it came to 1,058 stats of one
+   * build on this board (measured 2026-09-14). `withStableListings` already
+   * means "one pass, one view of the disk", and this is the same promise
+   * applied to the same question - re-checked in the next snapshot, so a
+   * sysop who edits the tooltype still gets it without a restart.
+   */
+  const snap = amigafs.currentSnapshot();
+  const held = nodeScreenDirCache.get(infoPath);
+  if (snap !== 0 && held && held.seenIn === snap) return held.dir;
+
   let stamp: number;
   try {
     stamp = fs.statSync(infoPath).mtimeMs;
   } catch {
+    /*
+     * NO ICON IS AN ANSWER, and it has to be remembered like any other.
+     *
+     * Most nodes on this board have no `Node<N>.info` at all, so this branch
+     * is the common one - and caching only the POSITIVE answer meant every
+     * one of them stat'd a file that was not there, once per screen, for 898
+     * stats of a single index build (measured 2026-09-14). Within a snapshot
+     * "there is no icon" is as stable as "here is the icon".
+     */
+    nodeScreenDirCache.set(infoPath, { stamp: -1, dir: defaultDir, seenIn: snap });
     return defaultDir; // no icon, so no tooltype - express.e's ELSE branch
   }
 
   const cached = nodeScreenDirCache.get(infoPath);
-  if (cached && cached.stamp === stamp) return cached.dir;
+  if (cached && cached.stamp === stamp) {
+    cached.seenIn = snap;
+    return cached.dir;
+  }
 
   let dir = defaultDir;
   try {
@@ -81,7 +110,7 @@ console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(erro
     dir = defaultDir;
   }
 
-  nodeScreenDirCache.set(infoPath, { stamp, dir });
+  nodeScreenDirCache.set(infoPath, { stamp, dir, seenIn: snap });
   return dir;
 }
 

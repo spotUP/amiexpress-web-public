@@ -873,8 +873,23 @@ function resolveRefs(baseDir: string, refs: MciReference[]): MciReference[] {
 const factsCache = new Map<string, { mtimeMs: number; size: number; facts: ScreenFileFacts }>();
 
 export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFacts {
+  /*
+   * ONE stat, reused as the cache key below.
+   *
+   * This used to stat once here to check the cache and again after reading to
+   * store it - two syscalls per file, 1,861 of one build on this board.
+   *
+   * Reusing the FIRST is also the safer of the two. A file changed while it
+   * was being read would, with a post-read stat, be stored as "new mtime,
+   * old bytes", and the next caller would match that key and be served the
+   * stale content for ever. Stored against the pre-read stat it comes out as
+   * "old mtime, new bytes": the next caller sees the mtime move and reads
+   * again, which is the failure worth having.
+   */
+  let seen: { mtimeMs: number; size: number } | null = null;
   try {
     const stat = fs.statSync(absPath);
+    seen = { mtimeMs: stat.mtimeMs, size: stat.size };
     const cached = factsCache.get(absPath);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
       // A copy: callers fill in readBy, which belongs to a build and not to
@@ -933,10 +948,8 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     mci,
   };
 
-  try {
-    const stat = fs.statSync(absPath);
-    factsCache.set(absPath, { mtimeMs: stat.mtimeMs, size: stat.size, facts });
-  } catch { /* unreadable now; the next call reads it again */ }
+  // The stat taken before the read - see the note at the top of this function.
+  if (seen) factsCache.set(absPath, { mtimeMs: seen.mtimeMs, size: seen.size, facts });
 
   return facts;
 }
@@ -1309,7 +1322,20 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
     for (const suffix of ['.Header', '.Tailer']) {
       const artRel = path.join(dir, `${stem}${suffix}`);
       if (readers.has(artRel)) continue;
-      if (!fs.existsSync(path.join(baseDir, artRel))) continue;
+      /*
+       * Through the LISTING, not a raw `fs.existsSync`.
+       *
+       * This ran once per reader per suffix - 1,442 syscalls of one build,
+       * the single biggest source in it (measured 2026-09-14) - and every one
+       * asked the disk about a directory the snapshot had already listed.
+       * `findCaseInsensitive` answers from that listing.
+       *
+       * It is also the more correct question. A raw existsSync is
+       * case-SENSITIVE on the live board's Linux volume, so a sysop whose
+       * file is `BBSTITLE.header` had it missed; an Amiga volume does not
+       * distinguish them, and nothing else in this index does either.
+       */
+      if (!amigafs.findCaseInsensitive(path.join(baseDir, dir), `${stem}${suffix}`)) continue;
       readers.set(artRel, itsReaders.map(r => ({ ...r, via: 'include' as const })));
     }
   }

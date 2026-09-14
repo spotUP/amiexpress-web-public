@@ -94,6 +94,19 @@ export function withStableListings<T>(work: () => T): T {
   }
 }
 
+/**
+ * Which snapshot is running, or 0 outside one.
+ *
+ * For caches ELSEWHERE that validate themselves with a `statSync` on every
+ * call - right for a long-lived process, wasteful inside a single pass that
+ * asks thousands of times. Recording the snapshot that validated an entry
+ * lets them skip the check for the rest of that pass and re-check in the
+ * next one, which is the same rule `listingOf` follows, for the same reason.
+ */
+export function currentSnapshot(): number {
+  return snapshot;
+}
+
 function listingOf(directory: string): DirectoryListing | null {
   const held = listings.get(directory);
   if (snapshot !== 0 && held?.seenIn === snapshot) return held;
@@ -218,8 +231,25 @@ export function findCaseInsensitive(directory: string, filename: string): string
  * Resolve a full path with case-insensitive component matching
  */
 export function resolvePath(targetPath: string): string | null {
-  // If path doesn't exist as-is, try case-insensitive resolution
-  if (fs.existsSync(targetPath)) {
+  /*
+   * The exact-path shortcut costs a syscall, and inside a snapshot it buys
+   * nothing: the walk below answers from listings this pass has ALREADY read,
+   * so it is map lookups the whole way down. This was the single largest
+   * source of filesystem calls in a screen-index rebuild - 994 of 6,995
+   * (measured 2026-09-14) - and every one of them asked the disk a question
+   * the snapshot could already answer.
+   *
+   * The shortcut stays outside a snapshot, where a cached listing may be
+   * stale and the disk is the only honest answer.
+   *
+   * One deliberate consequence: inside a snapshot this returns the name's
+   * REAL spelling rather than the caller's. That is already what the live
+   * board gets - its volume is case-sensitive, so the shortcut never fires
+   * there and the walk always runs - and it is the answer a write must use,
+   * since an Amiga volume cannot hold two files whose names differ only in
+   * case.
+   */
+  if (snapshot === 0 && fs.existsSync(targetPath)) {
     return targetPath;
   }
 
