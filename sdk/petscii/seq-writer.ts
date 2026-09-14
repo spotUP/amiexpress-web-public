@@ -39,6 +39,18 @@ const CHARSET_LOWER = 0x0e;   // lowercase/uppercase
 const RETURN = 0x0d;
 /** CCGMS's background prefix: `$02 <colour>` sets background AND border. */
 const BACKGROUND_PREFIX = 0x02;
+/**
+ * express.e's MCI opt-in, and the only bytes that may precede the charset one.
+ *
+ * The gate is the file's FIRST byte being `~` (express.e:6800-6806,
+ * implemented at `petscii-screen.render.ts:252`), evaluated once per file. A
+ * bare `~` will not do: the tokenizer PRINTS an unrecognised command's text,
+ * which is why `~WX` reaches a C64 as the letters `WX`. `~D|` is a
+ * `~D<char>` terminator change - `applyMciPrePasses` STRIPS it from the text
+ * and renders nothing (`mci-pre-passes.ts:106-161`) - and it sets the
+ * terminator to the `|` that was already the default.
+ */
+const MCI_GATE: readonly number[] = [0x7e, 0x44, 0x7c];
 
 export interface SeqWriteOptions {
   /**
@@ -62,6 +74,16 @@ export interface SeqWriteOptions {
    * and the screen comes back black with every other assertion still green.
    */
   declareBackground?: boolean;
+  /**
+   * Open the file with express.e's MCI gate, so its `~` codes are rendered
+   * rather than drawn as letters.
+   *
+   * OFF by default, and that default is the sysop's rule rather than
+   * caution: once a `.seq` is gated in, EVERY `0x7E` in it is a token
+   * candidate, so a screen becomes MCI because its author said so and never
+   * because a writer guessed.
+   */
+  mciGate?: boolean;
 }
 
 /**
@@ -72,8 +94,38 @@ export interface SeqWriteOptions {
  * and the board's titles are mostly long runs.
  */
 export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = {}): Uint8Array {
-  const { declareCharset = true } = options;
+  return writeSeqWithOffsets(state, options).bytes;
+}
+
+/** The bytes, and the byte each cell was written at. */
+export interface SeqWriteResult {
+  bytes: Uint8Array;
+  /**
+   * `offsetOfCell[y * cols + x]` is the index in `bytes` of the byte that
+   * draws that cell, or `-1` for a cell the writer elided - a trailing blank
+   * a RETURN stands in for.
+   *
+   * The editor needs it to turn an MCI token's BYTE offsets back into cells
+   * to highlight. Tokens are found in the bytes, never on the grid, because
+   * the bytes are what `preparePetsciiSeq` gates and tokenizes; a second idea
+   * of what a token is would be a second source of truth.
+   */
+  offsetOfCell: Int32Array;
+}
+
+/**
+ * `writeSeq`, plus where each cell landed. See `SeqWriteResult.offsetOfCell`.
+ */
+export function writeSeqWithOffsets(
+  state: PetsciiMachineState,
+  options: SeqWriteOptions = {},
+): SeqWriteResult {
+  const { declareCharset = true, mciGate = false } = options;
   const out: number[] = [];
+  const offsetOfCell = new Int32Array(state.cols * state.rows).fill(-1);
+
+  // FIRST, before the charset byte: the gate is tested on byte zero.
+  if (mciGate) out.push(...MCI_GATE);
 
   if (declareCharset) out.push(state.charsetBank === 1 ? CHARSET_LOWER : CHARSET_UPPER);
 
@@ -123,6 +175,7 @@ export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = 
       }
       if (wantReverse !== reverse) { out.push(wantReverse ? RVS_ON : RVS_OFF); reverse = wantReverse; }
 
+      offsetOfCell[index] = out.length;
       out.push(seqByteFor(code & 0x7f));
     }
 
@@ -144,7 +197,7 @@ export function writeSeq(state: PetsciiMachineState, options: SeqWriteOptions = 
     if (y < state.rows - 1 && !wrapped) out.push(RETURN);
   }
 
-  return Uint8Array.from(out);
+  return { bytes: Uint8Array.from(out), offsetOfCell };
 }
 
 /**

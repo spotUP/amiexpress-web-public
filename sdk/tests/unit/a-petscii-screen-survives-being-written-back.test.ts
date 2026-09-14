@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { PetsciiMachine } from '../../petscii/petscii-machine';
-import { writeSeq } from '../../petscii/seq-writer';
+import { writeSeq, writeSeqWithOffsets } from '../../petscii/seq-writer';
 import type { PetsciiMachineState } from '../../petscii/petscii-machine';
 
 const BOARD = path.resolve(__dirname, '../../..');
@@ -212,5 +212,67 @@ describe('the background a screen was authored with', () => {
   it('can be told to stay quiet about a coloured background', () => {
     const written = writeSeq(screenWithBackground(0, 6), { declareBackground: false });
     expect([...written]).not.toContain(0x02);
+  });
+});
+
+/**
+ * THE MCI GATE, and where each cell landed.
+ *
+ * express.e opts a `.seq` into MCI on its FIRST byte being `~`
+ * (express.e:6800-6806, implemented at petscii-screen.render.ts:252),
+ * evaluated once per file and never re-opened per segment. A file this writer
+ * produces starts with the charset byte, so a gated screen was IMPOSSIBLE to
+ * author until now.
+ *
+ * A bare `~` will not do either: the tokenizer PRINTS an unrecognised
+ * command's text, which is why `~WX` reaches a C64 as the letters `WX`. The
+ * gate is `~D|` - a `~D<char>` terminator change that `applyMciPrePasses`
+ * strips from the text and renders as nothing (mci-pre-passes.ts:106-161),
+ * setting the terminator to the `|` it already was.
+ */
+describe('the MCI gate, and where each cell landed', () => {
+  function oneLetter(): PetsciiMachineState {
+    const machine = new PetsciiMachine();
+    machine.state.screen[0] = 0x01;
+    machine.state.colorRam[0] = 1;
+    return machine.state;
+  }
+
+  it('opens with ~D| when the gate is on', () => {
+    const written = writeSeq(oneLetter(), { mciGate: true });
+    expect([...written.slice(0, 3)]).toEqual([0x7e, 0x44, 0x7c]); // ~ D |
+  });
+
+  it('does not open with a tilde when the gate is off', () => {
+    expect(writeSeq(oneLetter(), { mciGate: false })[0]).not.toBe(0x7e);
+    expect(writeSeq(oneLetter())[0]).not.toBe(0x7e);
+  });
+
+  it('keeps the art either way', () => {
+    // The three gate bytes are bytes a bare CCGMS reader would DRAW; what
+    // makes them invisible is the server's pre-pass. This asserts only that
+    // the art survives them - the render path is pinned separately, against
+    // preparePetsciiSeq itself.
+    const gated = render(writeSeq(oneLetter(), { mciGate: true }));
+    expect([...gated.screen]).toContain(0x01);
+  });
+
+  it('says which byte every drawn cell was written at', () => {
+    const machine = new PetsciiMachine();
+    machine.state.screen[0] = 0x01;   // 0,0
+    machine.state.screen[41] = 0x02;  // 1,1
+    const { bytes, offsetOfCell } = writeSeqWithOffsets(machine.state);
+
+    expect(bytes[offsetOfCell[0]]).toBe(0x41);   // screen code 0x01 -> 'A'
+    expect(bytes[offsetOfCell[41]]).toBe(0x42);  // screen code 0x02 -> 'B'
+    expect(offsetOfCell[39]).toBe(-1);           // a trailing blank has no byte
+  });
+
+  it('counts the gate bytes in the offsets it reports', () => {
+    const machine = new PetsciiMachine();
+    machine.state.screen[0] = 0x01;
+    const plain = writeSeqWithOffsets(machine.state);
+    const gated = writeSeqWithOffsets(machine.state, { mciGate: true });
+    expect(gated.offsetOfCell[0]).toBe(plain.offsetOfCell[0] + 3);
   });
 });
