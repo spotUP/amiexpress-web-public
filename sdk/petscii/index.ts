@@ -22,6 +22,7 @@ export {
 } from './c64-palette';
 export { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 export { writeSeq, writeSeqWithOffsets, type SeqWriteOptions, type SeqWriteResult } from './seq-writer';
+export * from './editor-surface';
 export {
   AnsiToPetsciiTransducer,
   type AnsiToPetsciiOptions,
