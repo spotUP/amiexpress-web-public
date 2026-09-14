@@ -251,82 +251,19 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     }
   }
 
-  // express.e:5119-5128 - Mail scan logic
-  // Runs when: auto=FALSE AND forceMailScan != FORCE_MAILSCAN_SKIP
-  // Then scans if: FORCE_MAILSCAN_ALL OR checkMailConfScan() returns true
-  // After scan: saveMsgPointers() persists updated read pointers to disk
-  //
-  // WEB_: when called from confScan (advanceConferenceScan), skip the
-  // per-conf mail scan here. advanceConferenceScan iterates the same
-  // conferences and runs the scan + "Would you like to read it now" prompt
-  // itself (express.e:11737-11765 — the prompt lives in searchNewMail). If
-  // we ran it here too, performSingleConfMailScan would advance the read
-  // pointer first and the outer loop's getMessagesForConfScan would find
-  // nothing, suppressing the prompt.
-  if (!auto && !confScan && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
-    let shouldScan = forceMailScan === FORCE_MAILSCAN_ALL;
-    if (!shouldScan) {
-      // express.e:5120 - checkMailConfScan(conf, msgBaseNum)
-      try {
-        shouldScan = await checkMailConfScan(confId, msgBaseId, session.user.id);
-      } catch (err) {
-console.warn('[joinConference] checkMailConfScan error:', err);
-      }
-    }
-    let scannedByDoor = false;
-    if (shouldScan) {
-      // express.e:5121-5125 — IF checkToolTypeExists CUSTOM=FALSE THEN
-      //   callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
-      // ELSE
-      //   customMsgbaseCmd(MAIL_SCAN, conf, 0)
-      // ENDIF
-      if (isCustom) {
-        /*
-         * The conference's own message base is a door, and THIS is the call
-         * that runs at every join: MAIL_SCAN, with `passCmdLine` 0 because
-         * nobody typed anything. A door answering it prints what is new and
-         * exits - it must not hold the caller, who is mid-join and did not ask
-         * for a door.
-         *
-         * `false` means the conference claims CUSTOM but ships no usable
-         * MSGBASE.DEF, and then the board's own scan is better than silence.
-         */
-        try {
-          const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
-          const ran = await runCustomMsgbaseCommand(
-            socket, session, MailFunction.SCAN, confId, '',
-          );
-          // express.e:5126 - saveMsgPointers(conf, msgBaseNum) is NOT skipped
-          // by the CUSTOM branch, but a custom base owns its own pointers and
-          // the board holds none for it, so there is nothing to write.
-          scannedByDoor = ran;
-        } catch (err) {
-console.warn('[joinConference] custom message base scan failed:', err);
-        }
-      }
-      if (!scannedByDoor) {
-        try {
-          // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
-          // In our implementation this is the per-conference mail scan (display new message list)
-          const { performSingleConfMailScan } = require('../message/message-scan.handler');
-          if (performSingleConfMailScan) {
-            await performSingleConfMailScan(socket, session, confId, msgBaseId);
-          }
-        } catch (err) {
-console.warn('[joinConference] Mail scan error:', err);
-        }
-        // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
-        try {
-          const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
-          confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
-          confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
-          await saveMsgPointers(confBase);
-        } catch (err) {
-console.warn('[joinConference] saveMsgPointers error:', err);
-        }
-      }
-    }
-  }
+  /*
+   * THE MAIL SCAN USED TO RUN HERE, and here is before the conference
+   * bulletin is drawn. express.e runs it at 5119-5128, AFTER CONF_BULL
+   * (5058), after its doPause (5059) and after the "Joining Conference"
+   * line (5079-5088). Ours ran it first, and this board's bulletins open
+   * with `~f` - so on a CUSTOM conference the door printed the new-topic
+   * listing and the bulletin's clear wiped it a moment later. The sysop,
+   * 2026-09-14, joining conference 2: "i see no subs though".
+   *
+   * It lives in `runJoinMailScan` now and is called from
+   * `continueJoinAfterBull`, which is the code that runs after the bulletin
+   * and its pause. See express.e:5119.
+   */
 
   // Log conference join — SQL (web activity widget) + disk (express.e
   // parity, express.e:9493 callersLog). Was SQL-only per audit
@@ -361,7 +298,7 @@ console.warn('[joinConference] saveMsgPointers error:', err);
         // way, schedule continueJoinAfterBull as the dismissal
         // continuation so the rest of the join runs on user input.
         const continuation = () =>
-          continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom).catch((err) =>
+          continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom, msgBaseId, confScan, forceMailScan).catch((err) =>
             console.error('[joinConference] continueJoinAfterBull failed:', err),
           );
         if (session.paginatedScreen) {
@@ -388,10 +325,110 @@ console.warn('[joinConference] saveMsgPointers error:', err);
     }
 
     // No CONF_BULL to show (or confScan=TRUE) — run the tail inline.
-    await continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom);
+    await continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom, msgBaseId, confScan, forceMailScan);
   }
 
   return true;
+}
+
+/**
+ * The join's mail scan, at the point in the join where express.e runs it.
+ *
+ * express.e:5119-5128 - after CONF_BULL and its pause, after the "Joining
+ * Conference" line, after the message stats. NOT before the bulletin: this
+ * board's bulletins begin with `~f`, so anything printed earlier is erased
+ * by the clear before the caller can read it.
+ *
+ * For a CUSTOM conference that scan IS a door - the conference's message
+ * base is `MSGBASE.DEF` - and its whole output is the new-topic listing, so
+ * running it a moment too early lost the entire thing.
+ */
+async function runJoinMailScan(
+  socket: any,
+  session: BBSSession,
+  confId: number,
+  msgBaseId: number,
+  auto: boolean,
+  confScan: boolean,
+  forceMailScan: number,
+  isCustom: boolean,
+): Promise<void> {
+    // express.e:5119-5128 - Mail scan logic
+    // Runs when: auto=FALSE AND forceMailScan != FORCE_MAILSCAN_SKIP
+    // Then scans if: FORCE_MAILSCAN_ALL OR checkMailConfScan() returns true
+    // After scan: saveMsgPointers() persists updated read pointers to disk
+    //
+    // WEB_: when called from confScan (advanceConferenceScan), skip the
+    // per-conf mail scan here. advanceConferenceScan iterates the same
+    // conferences and runs the scan + "Would you like to read it now" prompt
+    // itself (express.e:11737-11765 — the prompt lives in searchNewMail). If
+    // we ran it here too, performSingleConfMailScan would advance the read
+    // pointer first and the outer loop's getMessagesForConfScan would find
+    // nothing, suppressing the prompt.
+    if (!auto && !confScan && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
+      let shouldScan = forceMailScan === FORCE_MAILSCAN_ALL;
+      if (!shouldScan) {
+        // express.e:5120 - checkMailConfScan(conf, msgBaseNum)
+        try {
+          shouldScan = await checkMailConfScan(confId, msgBaseId, session.user.id);
+        } catch (err) {
+  console.warn('[joinConference] checkMailConfScan error:', err);
+        }
+      }
+      let scannedByDoor = false;
+      if (shouldScan) {
+        // express.e:5121-5125 — IF checkToolTypeExists CUSTOM=FALSE THEN
+        //   callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
+        // ELSE
+        //   customMsgbaseCmd(MAIL_SCAN, conf, 0)
+        // ENDIF
+        if (isCustom) {
+          /*
+           * The conference's own message base is a door, and THIS is the call
+           * that runs at every join: MAIL_SCAN, with `passCmdLine` 0 because
+           * nobody typed anything. A door answering it prints what is new and
+           * exits - it must not hold the caller, who is mid-join and did not ask
+           * for a door.
+           *
+           * `false` means the conference claims CUSTOM but ships no usable
+           * MSGBASE.DEF, and then the board's own scan is better than silence.
+           */
+          try {
+            const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
+            const ran = await runCustomMsgbaseCommand(
+              socket, session, MailFunction.SCAN, confId, '',
+            );
+            // express.e:5126 - saveMsgPointers(conf, msgBaseNum) is NOT skipped
+            // by the CUSTOM branch, but a custom base owns its own pointers and
+            // the board holds none for it, so there is nothing to write.
+            scannedByDoor = ran;
+          } catch (err) {
+  console.warn('[joinConference] custom message base scan failed:', err);
+          }
+        }
+        if (!scannedByDoor) {
+          try {
+            // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
+            // In our implementation this is the per-conference mail scan (display new message list)
+            const { performSingleConfMailScan } = require('../message/message-scan.handler');
+            if (performSingleConfMailScan) {
+              await performSingleConfMailScan(socket, session, confId, msgBaseId);
+            }
+          } catch (err) {
+  console.warn('[joinConference] Mail scan error:', err);
+          }
+          // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
+          try {
+            const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+            confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
+            confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
+            await saveMsgPointers(confBase);
+          } catch (err) {
+  console.warn('[joinConference] saveMsgPointers error:', err);
+          }
+        }
+      }
+    }
 }
 
 /**
@@ -412,6 +449,9 @@ async function continueJoinAfterBull(
   auto: boolean,
   mailStat: any,
   isCustom: boolean,
+  msgBaseId: number,
+  confScan: boolean,
+  forceMailScan: number,
 ): Promise<void> {
     // express.e:5008 - QUIET_JOIN suppresses join output (bbsConfig tooltype).
     // When set, the leading \r\n, "Joining Conference:" / "Auto-ReJoined"
@@ -488,6 +528,17 @@ console.warn('[joinConference] custom message base stats failed:', err);
         socket.emit('ansi-output', `${joinMsg}\r\n`);
       }
     }
+
+    /*
+     * THE MAIL SCAN, express.e:5119-5128 - here, and not before the bulletin.
+     *
+     * Everything above this point is what express.e prints first: CONF_BULL
+     * and its pause, the "Joining Conference" line, the message stats. Only
+     * then does it scan. On a CUSTOM conference the scan is a door and its
+     * output IS the new-topic listing, so running it any earlier meant the
+     * bulletin's `~f` erased the whole thing.
+     */
+    await runJoinMailScan(socket, session, confId, msgBaseId, auto, confScan, forceMailScan, isCustom);
 
     console.log(`[JOIN] Loading flagged files and history`);
     // Like express.e:28576-28577 - load flagged files and command history
