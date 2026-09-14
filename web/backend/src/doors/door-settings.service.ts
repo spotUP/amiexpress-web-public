@@ -19,6 +19,7 @@
 import * as fs from 'fs';
 import { boardListeners, boardListenerFor } from '../server/board-listeners';
 import * as path from 'path';
+import { isNativeError } from 'util/types';
 import { z } from 'zod';
 // The narrow subpath, not the package root: the root pulls in the server
 // bundle and its audio engine, and a settings read has no business loading
@@ -655,7 +656,10 @@ export function renderDoorCfg(
 
   const target = path.join(doorDir, manifest.cfgFile);
   const temp = `${target}.tmp`;
-  fs.writeFileSync(temp, mergeIntoCfg(target, lines), { mode: 0o600 });
+  const merged = mergeIntoCfg(target, lines);
+  // The file could not be read and was not absent: it keeps what it has.
+  if (merged === null) return target;
+  fs.writeFileSync(temp, merged, { mode: 0o600 });
   fs.renameSync(temp, target);
   return target;
 }
@@ -684,11 +688,45 @@ export function renderDoorCfg(
  * created from the rendered lines alone, which is the old behaviour and the
  * right one for a door being configured for the first time.
  */
-function mergeIntoCfg(target: string, lines: string[]): string {
+function mergeIntoCfg(target: string, lines: string[]): string | null {
+  /*
+   * A READ THAT FAILS IS NOT A READ THAT FOUND NOTHING.
+   *
+   * Rendering the settings alone is right for a door being configured for the
+   * FIRST time and wrong for every other reason a read can fail, because it
+   * throws away the comments and the keys the manifest does not model.
+   *
+   * The write below is `writeFileSync(temp)` then `renameSync(temp, target)`,
+   * so when several boots run against one tree - jest workers each starting a
+   * server, which is how `renderAllDoorCfgs` reaches the real `Doors/` - one
+   * render's read lands in the window where another's rename has the path
+   * swapped out. `readFileSync` throws ENOENT for a file that plainly exists
+   * and is about to exist again. Taking that as "no file yet" is what emptied
+   * the prose out of `Doors/GWall/GWALL.cfg` and `Doors/glc/GLCViewer.cfg` on
+   * 2026-09-14: settings intact, comments gone, not one line added. Diagnosed
+   * by session_014HgB.
+   *
+   * So the question asked first is whether the file was THERE, and a read
+   * that fails on a file that was there means this render does not get to
+   * rewrite it. Returning null tells the caller to leave it alone: a cfg that
+   * keeps yesterday's comments beats one that loses them.
+   */
+  const wasThere = fs.existsSync(target);
   let existing: string;
   try {
     existing = fs.readFileSync(target, 'utf8');
-  } catch {
+  } catch (error) {
+    // `instanceof Error` is false for a native errno error raised in another
+    // realm, which is every fs error under jest - see the errno-classifying
+    // note in the repo's test notes. `isNativeError` is realm-safe.
+    const code = isNativeError(error) ? (error as NodeJS.ErrnoException).code : undefined;
+    if (wasThere || code !== 'ENOENT') {
+      console.warn(
+        `[DoorSettings] ${path.basename(target)}: could not be read (${code ?? 'unknown'}) - ` +
+        `leaving it as it is rather than rewriting it from the manifest.`
+      );
+      return null;
+    }
     return lines.join('\n') + '\n';
   }
 
