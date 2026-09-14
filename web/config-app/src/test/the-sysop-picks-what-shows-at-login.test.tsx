@@ -19,6 +19,12 @@ import userEvent from '@testing-library/user-event';
 const get = vi.fn();
 const put = vi.fn();
 vi.mock('../api/client', () => ({ apiClient: { get: (...a: unknown[]) => get(...a), put: (...a: unknown[]) => put(...a) } }));
+// The page raises a toast when an edit reaches the board; this suite renders
+// it without the provider, so the hook is mocked the way every other suite
+// here mocks it.
+vi.mock('../contexts/NotificationContext', () => ({
+  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
+}));
 
 import { LoginSequencePage } from '../pages/LoginSequencePage';
 

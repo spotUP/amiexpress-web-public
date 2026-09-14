@@ -15,11 +15,15 @@
  * than a DataTable: sorting a login sequence would be a corruption of it, and
  * row identity here IS the order.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { ApiResponse } from '../types';
 import { SkeletonRows } from '../components/ui/states';
+import { useNotification } from '../contexts/NotificationContext';
+
+/** How long a click storm is allowed to settle before the board is written. */
+const AUTOSAVE_MS = 700;
 
 interface LoginItem {
   code: 'SS' | 'CC' | 'SR';
@@ -62,7 +66,11 @@ function describe(target: string): string | null {
 }
 
 export function LoginSequencePage() {
+  const { showSuccess } = useNotification();
   const [steps, setSteps] = useState<LoginStep[]>([]);
+  // A debounced save fires AFTER a render, so it reads the steps through a ref
+  // rather than closing over the array it was scheduled with.
+  const stepsRef = useRef<LoginStep[]>([]);
   const [available, setAvailable] = useState<Available[]>([]);
   const [drafts, setDrafts] = useState<Record<string, LoginItem[]>>({});
   const [node, setNode] = useState(1);
@@ -96,6 +104,7 @@ export function LoginSequencePage() {
       }
       const loaded = payload.steps;
       setSteps(loaded);
+      stepsRef.current = loaded;
       setAvailable(Array.isArray(payload.available) ? payload.available : []);
       setDrafts(Object.fromEntries(loaded.map(s => [s.screen, (s.items ?? []).map(i => ({ ...i }))])));
     } catch (err) {
@@ -107,8 +116,21 @@ export function LoginSequencePage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const edit = (screen: string, next: LoginItem[]) =>
+  /**
+   * Every edit SAVES. The sysop removed an include, got no confirmation and
+   * asked why - because nothing had happened: the trash button edited a draft
+   * and the board was only written when Save was pressed. "the admin ui should
+   * auto save when possible" (2026-09-14).
+   *
+   * DEBOUNCED, and not only for politeness: every write to a screen file
+   * invalidates the board's screen index, whose rebuild is ~2s of synchronous
+   * filesystem work on the backend's single event loop. Saving on each of four
+   * clicks while reordering a list would freeze the board four times.
+   */
+  const edit = (screen: string, next: LoginItem[]) => {
     setDrafts(prev => ({ ...prev, [screen]: next }));
+    scheduleSave(screen, next);
+  };
 
   const move = (screen: string, index: number, by: number) => {
     const items = [...(drafts[screen] ?? [])];
@@ -118,18 +140,37 @@ export function LoginSequencePage() {
     edit(screen, items);
   };
 
-  const save = async (step: LoginStep) => {
-    setSaving(step.screen);
+  /** Pending debounce timers, one per step, so two steps do not cancel each other. */
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const scheduleSave = (screen: string, next: LoginItem[]) => {
+    clearTimeout(saveTimers.current[screen]);
+    saveTimers.current[screen] = setTimeout(() => { void persist(screen, next); }, AUTOSAVE_MS);
+  };
+
+  // Nothing half-written on the way out: a pending edit is flushed when the
+  // page unmounts, so leaving the tab does not quietly discard it.
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => { for (const id of Object.values(timers)) clearTimeout(id); };
+  }, []);
+
+  /** Write one step's list. The only place this page writes. */
+  const persist = async (screen: string, items: LoginItem[]) => {
+    const step = stepsRef.current.find(s => s.screen === screen);
+    if (!step) return;
+    setSaving(screen);
     setStatus(null);
     setError(null);
     try {
       await apiClient.put(`/api/screens/login-sequence`, {
-        screen: step.screen,
-        path: step.file,
-        node,
-        items: drafts[step.screen] ?? [],
+        screen: step.screen, path: step.file, node, items,
       });
       setStatus(`${step.label} saved to ${step.file}`);
+      // The sysop removed an include and asked where his toast was. An edit
+      // that reaches the board says so out loud, not only in a line of text
+      // at the top of a long page.
+      showSuccess(`${step.label} saved`);
       await load();
     } catch (err) {
       // The two refusals worth reading in full: emptying a screen (which would
@@ -139,6 +180,11 @@ export function LoginSequencePage() {
     } finally {
       setSaving(null);
     }
+  };
+
+  const save = async (step: LoginStep) => {
+    clearTimeout(saveTimers.current[step.screen]);
+    await persist(step.screen, drafts[step.screen] ?? []);
   };
 
   const dirty = (step: LoginStep) =>
