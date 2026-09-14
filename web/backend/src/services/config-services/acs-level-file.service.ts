@@ -16,7 +16,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseInfoFile, writeInfoFile } from '../../utils/info-file.util';
 import type { Tooltype } from '../../utils/info-file.util';
+import { invalidateAcsIfAccessFile } from '../../utils/acs-access-loader';
 
 /** `ACS.<level>.info`, and nothing else in the Access directory. */
 const ACS_FILE_RE = /^ACS\.(\d+)\.info$/i;
@@ -158,4 +160,37 @@ export function flagsToTooltypes(
   }
 
   return out;
+}
+
+/**
+ * Save a level's flags: back the file up, merge the changes in, write it, and
+ * tell the running board to forget what it had cached.
+ *
+ * ALL FOUR, or the save only looks like one. `acs-access-loader` reads
+ * Access/ once and keeps the answer, so a route that wrote the file and
+ * stopped there reported success over a board that went on enforcing the old
+ * permissions until the next restart - which is how ACS.OVERRIDE_TIMELIMIT
+ * could be ticked, saved, and still disconnect people at sixty minutes.
+ *
+ * It lives here rather than in the route so that the invalidation is part of
+ * saving rather than something a caller has to remember.
+ *
+ * @param flags only the permissions being changed; the rest of the file is
+ *   left exactly as it was (see flagsToTooltypes).
+ */
+export function saveAcsLevelFlags(
+  bbsRoot: string,
+  level: number,
+  flags: Record<string, boolean>
+): { file: string; backupPath: string } {
+  const file = acsLevelFilePath(bbsRoot, level);
+  const backupPath = file + '.backup';
+  fs.copyFileSync(file, backupPath);
+
+  const info = parseInfoFile(file);
+  info.tooltypes = flagsToTooltypes(info.tooltypes as Tooltype[], flags) as typeof info.tooltypes;
+  writeInfoFile(info);
+  invalidateAcsIfAccessFile(file);
+
+  return { file, backupPath };
 }

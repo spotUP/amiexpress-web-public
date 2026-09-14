@@ -245,3 +245,27 @@ export function resetAcsLoader(): void {
   availableAcsLevels = [];
   loaded = false;
 }
+
+/**
+ * Forget the parsed files after one of them has been rewritten.
+ *
+ * The map above is a CACHE of Access/*.info, filled once by `ensureAcsLoaded`
+ * and never looked at again - so the admin's Security page could write
+ * `ACS.OVERRIDE_TIMELIMIT` into ACS.30.info, report success, and the running
+ * board would go on denying it until the next restart. The sysop ticked the
+ * box, watched nothing change, and reasonably concluded the box was broken.
+ *
+ * Anything that WRITES one of these files calls this; the next permission
+ * check re-reads the directory. A restart is no longer part of saving.
+ *
+ * @param filePath a file that has just been written
+ * @returns whether it was a file this cache is made of
+ */
+export function invalidateAcsIfAccessFile(filePath: string): boolean {
+  const name = path.basename(filePath);
+  const dir = path.basename(path.dirname(filePath));
+  if (dir.toLowerCase() !== 'access') return false;
+  if (!/^(ACS\.\d+|Default)\.info$/i.test(name)) return false;
+  resetAcsLoader();
+  return true;
+}

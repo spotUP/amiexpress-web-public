@@ -10,6 +10,10 @@ import * as amigafs from '../utils/amigafs';
 import { execSync } from 'child_process';
 import { config } from '../config';
 import { parseInfoFile, writeInfoFile, updateTooltype, toggleTooltypeComment as toggleComment, Tooltype as InfoTooltype } from '../utils/info-file.util';
+// A generic .info editor can be pointed at Access/ACS.<level>.info, and the
+// board's permission map is a cache of those files. Writing one without
+// saying so leaves the running board on the old permissions until a restart.
+import { invalidateAcsIfAccessFile } from '../utils/acs-access-loader';
 import { getSystemTime } from '../utils/date-time.util';
 import { isRealInfoFile } from '../utils/info-file.util';
 
@@ -275,6 +279,7 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
 
       // Write back to file
       writeInfoFile(info);
+      invalidateAcsIfAccessFile(fullPath);
 
       sendOk(res, { backupPath }, 'Tooltypes saved successfully');
     } catch (parseError) {
@@ -342,6 +347,7 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
 
       // Write back to file
       writeInfoFile(info);
+      invalidateAcsIfAccessFile(fullPath);
 
       // Get updated tooltype
       const updatedTooltype = info.tooltypes.find(tt => tt.key.toUpperCase() === key.toUpperCase());

@@ -13,8 +13,9 @@ import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
 import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
-import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
+import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing, saveAcsLevelFlags } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
+import { invalidateAcsIfAccessFile } from '../utils/acs-access-loader';
 // bcryptJS, not bcrypt. The rest of the backend uses bcryptjs and that is
 // what package.json declares; this file alone required the NATIVE bcrypt,
 // which is not a dependency - so every password written through the admin
@@ -1265,9 +1266,36 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         console.error('[Config API] could not read user levels:', readError);
       }
 
+      /*
+       * WHAT EVERY LEVEL GRANTS, not just the one being edited.
+       *
+       * Permissions DO NOT INHERIT UPWARD. express.e:3025-3035 rounds the
+       * caller's level down to a multiple of five and walks down until a file
+       * exists, then reads THAT FILE AND NO OTHER - a higher level exists
+       * precisely so it can take things away. So a sysop who grants
+       * ACS.OVERRIDE_TIMELIMIT on level 30 has given unlimited time to callers
+       * at 30-49 and to nobody above them, which is the exact inverse of what
+       * "unlimited above level 30" sounds like, and the page had no way to show
+       * it: it renders one level at a time.
+       *
+       * Six files of eighty-seven booleans is small enough to send whole, and
+       * with it the page can say which levels are missing a flag and offer to
+       * add it there too.
+       */
+      const grants: Record<number, Record<string, boolean>> = {};
+      for (const level of levels) {
+        try {
+          const info = parseInfoFile(acsLevelFilePath(bbsRoot, level));
+          grants[level] = tooltypesToFlags(info.tooltypes as any);
+        } catch (parseError) {
+          console.error(`[Config API] could not read ACS.${level}.info:`, parseError);
+        }
+      }
+
       sendResponse(res, {
         levels,
         inUse,
+        grants,
         permissions: ACS_PERMISSION_NAMES,
       });
     } catch (error) {
@@ -1322,12 +1350,14 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         return handleError(res, new Error(`No ACS file for level ${level} - create it first`));
       }
 
-      const backupPath = file + '.backup';
-      fsSync.copyFileSync(file, backupPath);
-
-      const info = parseInfoFile(file);
-      info.tooltypes = flagsToTooltypes(info.tooltypes as any, flags) as any;
-      writeInfoFile(info);
+      /*
+       * Backup, merge, write, AND tell the board to forget its cached copy -
+       * all of that is `saveAcsLevelFlags`, because `acs-access-loader` reads
+       * Access/ once and keeps the answer. Writing the file and stopping there
+       * reported success over a board that went on enforcing the old
+       * permissions until something restarted it.
+       */
+      const { backupPath } = saveAcsLevelFlags(bbsRoot, level, flags);
 
       sendResponse(res, { level, file, backupPath }, `Security level ${level} saved`);
     } catch (error) {
@@ -1376,6 +1406,9 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       }
 
       fsSync.copyFileSync(acsLevelFilePath(bbsRoot, source), target);
+      // A new level file changes which file serves which caller, and that
+      // answer is cached too - see the note on the save route above.
+      invalidateAcsIfAccessFile(target);
       sendResponse(res, { level, file: target, copiedFrom: source }, `Security level ${level} created from ${source}`);
     } catch (error) {
       handleError(res, error);

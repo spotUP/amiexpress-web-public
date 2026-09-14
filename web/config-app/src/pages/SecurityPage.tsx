@@ -19,6 +19,7 @@ import { Shield, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { acsLabel, groupPermissions, ACS_NOT_FROM_THIS_FILE } from './acs-permission-groups';
+import { flagCoverage } from './acs-flag-coverage';
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
@@ -67,6 +68,19 @@ export function SecurityPage() {
   const servedLevels = useMemo(
     () => inUse.filter(row => row.servedBy === selectedLevel && row.level !== selectedLevel),
     [inUse, selectedLevel]
+  );
+  /**
+   * What every level grants, so one permission can be read ACROSS the levels.
+   *
+   * express.e:3025-3035 serves a caller from ONE file - the nearest at or
+   * below their level - so a permission granted on level 30 reaches nobody
+   * above 49. Rendering one level at a time hid that completely, and the sysop
+   * granted unlimited time on level 30 and reported that users above 30 did
+   * not have it. They did not, and the page had said nothing.
+   */
+  const grants: Record<number, Record<string, boolean>> = useMemo(
+    () => levelsQuery.data?.data?.grants ?? {},
+    [levelsQuery.data]
   );
   // Memoised for the same reason as `levels`: a fresh [] each render would
   // re-run the filter below on every render.
@@ -135,6 +149,29 @@ export function SecurityPage() {
       setViewingLevel(level);
     },
     onError: (error: Error) => showError(`Failed to create level: ${error.message}`),
+  });
+
+  /**
+   * Grant one permission on the levels ABOVE this one that lack it.
+   *
+   * Without this the sysop's only route is: open level 50, find the flag in
+   * eighty-seven, tick, save; then level 60; then level 255 - for a change
+   * they have already decided on. The save route merges, leaving every flag it
+   * is not told about exactly as it was, so each level is written one flag at
+   * a time and nothing else in the file moves.
+   */
+  const grantHigherMutation = useMutation({
+    mutationFn: async ({ name, levels: targets }: { name: string; levels: number[] }) => {
+      for (const level of targets) {
+        await apiClient.saveAcsLevelFlags(level, { [name]: true });
+      }
+      return targets;
+    },
+    onSuccess: (targets: number[], { name }) => {
+      showSuccess(`${acsLabel(name)} granted on level ${targets.join(', ')}`);
+      queryClient.invalidateQueries({ queryKey: ['acs-levels'] });
+    },
+    onError: (error: Error) => showError(`Failed to grant on the higher levels: ${error.message}`),
   });
 
   const toggle = (name: string) => {
@@ -365,37 +402,80 @@ export function SecurityPage() {
                   <div className="grid gap-1 md:grid-cols-2">
                     {group.permissions.map(name => {
                       const granted = !!flags[name];
+                      /*
+                        WHO ELSE GRANTS THIS. A caller is served by exactly one
+                        ACS file (express.e:3025-3035), so a permission ticked
+                        here reaches nobody at a higher level that has a file of
+                        its own. That is invisible on a page that shows one
+                        level, and it is what made "unlimited time above level
+                        30" untrue for every level above 30.
+                      */
+                      const coverage = flagCoverage(name, levels, grants, selectedLevel, granted);
+                      const elsewhere = coverage.granted.filter(l => l !== selectedLevel);
+                      const gap = granted && coverage.missingAbove.length > 0;
                       return (
-                        <button
+                        <div
                           key={name}
-                          onClick={() => toggle(name)}
-                          aria-pressed={granted}
-                          className="flex items-start gap-2 px-3 py-2 rounded border border-content-secondary/20 hover:border-accent/50 text-left"
+                          className="rounded border border-content-secondary/20 hover:border-accent/50"
                         >
-                          {granted ? (
-                            <ToggleRight className="mt-0.5 text-status-ok shrink-0" size={20} />
-                          ) : (
-                            <ToggleLeft className="mt-0.5 text-content-secondary shrink-0" size={20} />
-                          )}
-                          <span className="min-w-0">
-                            <span className={`block ${granted ? 'text-content-primary' : 'text-content-secondary'}`}>
-                              {acsLabel(name)}
-                            </span>
-                            {/* The raw flag is what is written in the .info
-                                file and what the AmiExpress documentation
-                                calls it, so it stays on screen. */}
-                            <span className="block font-mono text-xs text-content-muted">{name}</span>
-                            {/* express.e:8466-8485 resolves eighteen of these
-                                before it ever opens this file. A switch that
-                                cannot do anything must not read as a live
-                                control. */}
-                            {ACS_NOT_FROM_THIS_FILE[name] && (
-                              <span className="block text-xs text-status-warn">
-                                {ACS_NOT_FROM_THIS_FILE[name]}
-                              </span>
+                          <button
+                            onClick={() => toggle(name)}
+                            aria-pressed={granted}
+                            className="flex w-full items-start gap-2 px-3 py-2 text-left"
+                          >
+                            {granted ? (
+                              <ToggleRight className="mt-0.5 text-status-ok shrink-0" size={20} />
+                            ) : (
+                              <ToggleLeft className="mt-0.5 text-content-secondary shrink-0" size={20} />
                             )}
-                          </span>
-                        </button>
+                            <span className="min-w-0">
+                              <span className={`block ${granted ? 'text-content-primary' : 'text-content-secondary'}`}>
+                                {acsLabel(name)}
+                              </span>
+                              {/* The raw flag is what is written in the .info
+                                  file and what the AmiExpress documentation
+                                  calls it, so it stays on screen. */}
+                              <span className="block font-mono text-xs text-content-muted">{name}</span>
+                              {/* express.e:8466-8485 resolves eighteen of these
+                                  before it ever opens this file. A switch that
+                                  cannot do anything must not read as a live
+                                  control. */}
+                              {ACS_NOT_FROM_THIS_FILE[name] && (
+                                <span className="block text-xs text-status-warn">
+                                  {ACS_NOT_FROM_THIS_FILE[name]}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+
+                          {(gap || elsewhere.length > 0) && (
+                            <p className="px-3 pb-2 pl-10 text-xs">
+                              {gap ? (
+                                <>
+                                  <span className="text-status-warn">
+                                    Not granted on level{' '}
+                                    {coverage.missingAbove.join(', ')} - permissions
+                                    do not inherit upward, so callers there do not
+                                    get this.
+                                  </span>{' '}
+                                  <button
+                                    onClick={() =>
+                                      grantHigherMutation.mutate({ name, levels: coverage.missingAbove })
+                                    }
+                                    disabled={grantHigherMutation.isPending}
+                                    className="underline text-accent"
+                                  >
+                                    Grant on level {coverage.missingAbove.join(', ')} too
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-content-muted">
+                                  Also granted on level {elsewhere.join(', ')}
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
