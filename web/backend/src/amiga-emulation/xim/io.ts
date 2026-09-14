@@ -1034,6 +1034,30 @@ debugLog(`[XIMIOHandler] JH_HK completeHotkey: Skipping ignored key sequence, wa
       return;
     }
 
+    /*
+     * A NUL IS NOT A KEYPRESS - express.e:5164.
+     *
+     * `readChar` loops `UNTIL (((wasControl=FALSE) OR (raw)) AND (ch<>0)) OR
+     * ...`: character 0 never satisfies a read, it keeps waiting. This port
+     * accepted it, replied to the door and cleared the wait - so a stray NUL
+     * answered the door's question, and every key the caller pressed
+     * afterwards arrived with nothing waiting for it and was dropped.
+     *
+     * The sysop hit it in GWall on 2026-09-14 and again on 2026-09-15 - "i am
+     * stuck in the global wall prompt now". The board's own log shows the
+     * shape exactly: `pUSH tHE bUTTON ?! [y/N]`, `HotKey()`, then
+     * `doorInputHandler received: "" (len=1)` with no key pressed, the door
+     * resumed, and the n/m he then typed were all received and discarded.
+     *
+     * `a-door-waits-for-a-person.test.ts` fixed one source of character 0 (a
+     * five-second timeout expiring under a reading caller). This refuses the
+     * character itself, so no other source of it can answer for the caller.
+     */
+    if (keyData.charCodeAt(0) === 0) {
+debugLog(`[XIMIOHandler] JH_HK completeHotkey: NUL is not a keypress (express.e:5164) - still waiting`);
+      return;
+    }
+
     // TEST 2026-01-23: Try CR instead of LF - maybe door expects CR?
     // Amiga uses LF for Enter/newline, not CR. Web terminals send CR when Enter is pressed.
     // But some doors might expect CR - testing this hypothesis.
