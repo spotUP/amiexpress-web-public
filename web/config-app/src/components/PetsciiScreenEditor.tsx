@@ -6,6 +6,7 @@ import {
 } from '@amiexpress/terminal';
 import {
   blankSurface, surfaceFromBytes, stamp, stampChar, colorize, floodFill,
+  insertLine, removeLine,
   typeChar, liftRegion, stampRegion, setBackground, setCharsetBank,
   clearSurface, writeSeq,
   type PetsciiBrush, type PetsciiRegion, type PetsciiSurface,
@@ -313,6 +314,49 @@ export function PetsciiScreenEditor({
           </div>
         </div>
       </div>
+
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {/*
+            ADD AND REMOVE A LINE, the same pair the ANSI editor has.
+
+            40x25 is the VIC's text screen, not a preference, so a line pushed
+            in drops the bottom row and a line taken out pulls a blank up.
+            Undo here is a stack of whole surfaces, so one step puts the lost
+            row back.
+
+            The blank takes the BRUSH's colour rather than 0: a row of black
+            spaces on a black screen is invisible, and an artist who adds a
+            line then types on it expects to see what they type.
+
+            NO NUMBERED GUTTER, deliberately. `PetsciiCanvas` owns the border,
+            the integer scale and the cell size, and says so - an editor that
+            recomputed a row's pixel height from the DOM would be the second
+            source of truth it warns about, and it would drift the first time
+            the fit policy changed. The row the cursor is on is named here
+            instead, which is the part "add a line here" actually needs.
+          */}
+          <span className="text-content-secondary">
+            Line {cursor.y + 1} of {surface.rows}:
+          </span>
+          <button
+            type="button"
+            className="px-2 py-1 border border-border text-content-secondary"
+            title="Push a blank line in here; everything below moves down"
+            onClick={() => commit(insertLine(surface, cursor.y, brush.color))}
+          >
+            Add line
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 border border-border text-content-secondary"
+            title="Take this line out; everything below moves up"
+            onClick={() => commit(removeLine(surface, cursor.y, brush.color))}
+          >
+            Remove line
+          </button>
+        </div>
+      )}
 
       {!readOnly && (
         <div className="flex flex-col gap-2">

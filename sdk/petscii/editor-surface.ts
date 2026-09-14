@@ -107,6 +107,53 @@ export function colorize(surface: PetsciiSurface, x: number, y: number, color: n
 }
 
 /**
+ * Push a blank line in at row `y`, moving the rest down.
+ *
+ * A PETSCII screen is a FIXED 40x25 - that is the VIC's text screen, not a
+ * preference - so this cannot make the picture taller. The bottom row falls
+ * off, which is the row furthest from where the artist is working, and the
+ * editor's undo is a stack of whole surfaces so one step puts it back.
+ *
+ * The blank is a space in the CURRENT colour rather than colour 0: a row
+ * filled with black on a black screen is invisible, and an artist who adds a
+ * line then types on it expects to see what they type.
+ */
+export function insertLine(surface: PetsciiSurface, y: number, color = 1): PetsciiSurface {
+  if (y < 0 || y >= surface.rows) return surface;
+  const next = cloneSurface(surface);
+  const { cols, rows } = surface;
+
+  for (let row = rows - 1; row > y; row--) {
+    next.screen.set(surface.screen.subarray((row - 1) * cols, row * cols), row * cols);
+    next.colorRam.set(surface.colorRam.subarray((row - 1) * cols, row * cols), row * cols);
+  }
+  next.screen.fill(0x20, y * cols, (y + 1) * cols);
+  next.colorRam.fill(color & 0x0f, y * cols, (y + 1) * cols);
+  return next;
+}
+
+/**
+ * Take row `y` out, pulling the rest up and blanking the last row.
+ *
+ * The screen keeps its height for the same reason `insertLine` does not grow
+ * it: 40x25 is the hardware, and a picture 24 rows tall is a 25-row screen
+ * with a blank one at the bottom.
+ */
+export function removeLine(surface: PetsciiSurface, y: number, color = 1): PetsciiSurface {
+  if (y < 0 || y >= surface.rows) return surface;
+  const next = cloneSurface(surface);
+  const { cols, rows } = surface;
+
+  for (let row = y; row < rows - 1; row++) {
+    next.screen.set(surface.screen.subarray((row + 1) * cols, (row + 2) * cols), row * cols);
+    next.colorRam.set(surface.colorRam.subarray((row + 1) * cols, (row + 2) * cols), row * cols);
+  }
+  next.screen.fill(0x20, (rows - 1) * cols, rows * cols);
+  next.colorRam.fill(color & 0x0f, (rows - 1) * cols, rows * cols);
+  return next;
+}
+
+/**
  * Flood fill from a cell.
  *
  * "The same cell" is the PAIR - the screen code INCLUDING its reverse bit,
