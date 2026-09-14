@@ -75,6 +75,27 @@ async function show(file: string): Promise<Shown> {
   return { text, lines: (text.match(/line \d+/g) || []).length };
 }
 
+/** The same, but asking the loader for a screen by NAME - what the board does. */
+async function showByName(name: string): Promise<Shown> {
+  const out: string[] = [];
+  const session: any = {
+    nodeId: 0,
+    currentConf: 1,
+    screenHeight: CALLER_LINES,
+    user: { username: 'Spot', secLevel: 255 },
+  };
+  const socket: any = {
+    id: `by-name-${Math.random().toString(36).slice(2)}`,
+    session,
+    emit: (_event: string, data: unknown) => { if (typeof data === 'string') out.push(data); },
+    on: () => {},
+  };
+  expect(await displayScreen(socket, session, name)).toBe(true);
+  flushOutput(socket);
+  const text = out.join('');
+  return { text, lines: (text.match(/line \d+/g) || []).length };
+}
+
 describe('a screen with more lines than the caller has', () => {
   it('stops at a page instead of streaming the lot', async () => {
     const shown = await show(aScreenOf(40));
@@ -133,5 +154,63 @@ describe('what keeps the inline path, however long it is', () => {
     // All forty, inline, exactly as before - no page break imposed on it.
     expect(shown.lines).toBe(40);
     expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+  });
+});
+
+/**
+ * ...AND THREE SCREENS THAT ARE MEANT TO RUN PAST THE BOTTOM.
+ *
+ * The connect splash, the title and the logon screen are one piece of art
+ * each. The first version of this fix paginated them, and the sysop met
+ * `(Pause)...More(y/n/ns)?` through the middle of the title logo - twice -
+ * before saying what the art is for: "we already format it so it looks nice
+ * at 80 columns, its supposed to be tall".
+ *
+ * Asserted as a PROPERTY of a 68-line screen, not as a claim that this
+ * board's title happens to be short - it is not, and a claim like that rots
+ * the first time an artist redraws it. And read off the WIRE: no prompt
+ * reaches the caller, rather than a flag being false somewhere.
+ */
+describe('a screen that is one piece of art', () => {
+  /** BBSTITLE's real height on this board, and far over any caller's. */
+  const TITLE_LINES = 68;
+
+  const asScreen = (name: string, lines: number): void => {
+    const body = Array.from({ length: lines }, (_, i) => `line ${i + 1}`).join('\r\n');
+    /*
+     * Every directory the loader walks for a bare screen NAME - the node's
+     * own, the node's Screens, and the board's - because which one wins is
+     * express.e's business (screen-resolution.ts) and not what this is about.
+     */
+    for (const dir of [
+      path.join(root, 'Screens'),
+      path.join(root, 'Node0'),
+      path.join(root, 'Node0', 'Screens'),
+    ]) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${name}.TXT`), `~f\r\n${body}\r\n`, 'latin1');
+    }
+  };
+
+  for (const name of ['BBSTITLE', 'AWAITSCREEN', 'LOGON']) {
+    it(`${name} is not paginated at ${TITLE_LINES} lines`, async () => {
+      asScreen(name, TITLE_LINES);
+      const shown = await showByName(name);
+
+      expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+      // And all of it went out: the art is meant to run past the bottom.
+      expect(shown.lines).toBe(TITLE_LINES);
+    });
+  }
+
+  it('still paginates a screen that is text to be read', async () => {
+    // BULL: in the board's catalogue like the three above, and deliberately
+    // NOT exempt - it is text to be read. By name, so what is under test is
+    // the exemption list and not the fixture.
+    asScreen('BULL', 40);
+    const shown = await showByName('BULL');
+
+    expect(shown.text).toMatch(/More\(y\/n\/ns\)/);
+    expect(shown.lines).toBeLessThanOrEqual(CALLER_LINES);
   });
 });

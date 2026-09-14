@@ -162,6 +162,12 @@ export const screenDebug = (...args: any[]) => {
 console.log('[SCREEN]', ...args);
   }
 };
+/**
+ * Screens that are never paginated, however long they are: one piece of art
+ * each, meant to run past the bottom of the glass. See needsPaging.
+ */
+const SCREENS_NEVER_PAGINATE = new Set(['AWAITSCREEN', 'BBSTITLE', 'LOGON']);
+
 const SCREEN_FLOW_SCREENS = new Set([
   'AWAITSCREEN',
   'BBSTITLE',
@@ -2250,7 +2256,26 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     const inlineOnlyCodes = /~(?:CC_|SS_|SR_|SX_|XI|SP)/.test(contentForMci);
     const artLines = contentForMci.split('\n').length;
     const callerLines = session?.screenHeight || 25;
-    const needsPaging = !inlineOnlyCodes && artLines > callerLines;
+    /*
+     * THREE SCREENS ARE MEANT TO BE TALLER THAN THE GLASS.
+     *
+     * The connect splash, the title and the logon screen are each ONE PIECE
+     * OF ART, drawn to run past the bottom - "we already format it so it
+     * looks nice at 80 columns, its supposed to be tall" (the sysop,
+     * 2026-09-14, about BBSTITLE, which is 68 lines on this board).
+     * Paginating those puts `(Pause)...More(y/n/ns)?` through the middle of a
+     * logo, which is what the first version of this did and what he reported
+     * twice.
+     *
+     * A BULLETIN is the opposite case and the one this exists for: it is text
+     * to be READ, and `Bulletins/bull6.txt` is 38 lines against a 25-row
+     * phone. It still paginates - an included file is displayed under its own
+     * path and never under the name of the screen that included it, so the
+     * `~SS_BBS:bulletins/bull6.txt` inside LOGON is untouched by LOGON's
+     * exemption.
+     */
+    const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenName.toUpperCase());
+    const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {
       screenDebug(`[displayScreen] ${screenName}: ${artLines} lines over ${callerLines} - paginating instead of streaming inline`);
