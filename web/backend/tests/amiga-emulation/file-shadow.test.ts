@@ -8,10 +8,12 @@
  */
 
 import {
+  artDeclsFor,
   createEmpireNarrowShadow,
   narrowDeclsFor,
   sessionIsNarrow,
 } from '../../src/amiga-emulation/api/file-shadow';
+import { getSectionBody, parseEmpireFile } from '../../src/doors/text-cfg/empire';
 
 const CFG = [
   'DUAL_LISTING       YES                 ; Use 2 Listings [YES/NO]',
@@ -192,5 +194,129 @@ describe('FileManager shadow branch', () => {
     expect(bptr).toBeGreaterThan(0);
     expect(readAll(fm, bptr)).toContain('DUAL_LISTING       YES');
     fm.close(bptr);
+  });
+});
+
+/**
+ * Narrow ART, not just narrow VALUES.
+ *
+ * An 80-column logo has no seams to fold on, so the frame adapter can only
+ * crop it and the caller reads half a drawing (sysop, 2026-09-14). The
+ * sysop draws a 40-column one and the shadow serves it in the door's own
+ * file, where the door will print it itself.
+ */
+const ART_CFG = [
+  'DUAL_LISTING       YES                 ; Use 2 Listings [YES/NO]',
+  'CURSOR_KEYS        YES                 ; Use cursor keys',
+  '[Init_END] ====================================================================',
+  '\x1b[36m     ________  WIDE LOGO ROW ONE',
+  '     \\______/  WIDE LOGO ROW TWO',
+  '[Title_END] ==================================================================',
+].join('\n');
+
+const ART_MANIFEST = {
+  ...MANIFEST,
+  artSections: [
+    { file: 'Bulls.CFG', section: 'title', label: 'Title logo', maxLines: 20, maxLineLength: 200, commands: ['B'] },
+  ],
+};
+
+const NARROW_ART = ['\x1b[36m  NARROW LOGO', '  -----------'];
+
+function artProvider(session: any, variants: Record<string, string[]> = {}) {
+  return createEmpireNarrowShadow({
+    session,
+    doorDir: '/doors/emp_tools',
+    readManifest: () => ART_MANIFEST,
+    readFile: () => Buffer.from(ART_CFG, 'latin1'),
+    readVariantLines: (command: string, section: string, alphabet: string) =>
+      variants[`${command}:${section}:${alphabet}`] ?? null,
+  });
+}
+
+/** The body of one section of a served file, as lines. */
+function servedSection(bytes: Buffer | null, section: string): string[] | undefined {
+  if (!bytes) return undefined;
+  return getSectionBody(parseEmpireFile(bytes.toString('latin1')), section);
+}
+
+const DISK_TITLE = servedSection(Buffer.from(ART_CFG, 'latin1'), 'title');
+
+describe('artDeclsFor', () => {
+  test('collects the manifest art sections, and nothing from a malformed one', () => {
+    expect(artDeclsFor(ART_MANIFEST)).toEqual([
+      { file: 'Bulls.CFG', section: 'title', commands: ['B'] },
+    ]);
+    expect(artDeclsFor(null)).toEqual([]);
+    expect(artDeclsFor({})).toEqual([]);
+    expect(artDeclsFor({ artSections: 'nope' })).toEqual([]);
+    expect(artDeclsFor({ artSections: [{ file: 'x' }] })).toEqual([]);
+  });
+  test('art with no commands belongs to every command', () => {
+    expect(artDeclsFor({ artSections: [{ file: 'a.cfg', section: 'title' }] }))
+      .toEqual([{ file: 'a.cfg', section: 'title', commands: null }]);
+  });
+});
+
+describe('narrow art variants', () => {
+  const C64_SESSION = { ...C64, doorCommand: 'B' };
+  const TTX_SESSION = { ...TELETEXT, doorCommand: 'B' };
+
+  test('a 40-column PETSCII caller is served the c64 drawing', () => {
+    const p = artProvider(C64_SESSION, { 'B:title:c64': NARROW_ART });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(NARROW_ART);
+  });
+
+  test('a teletext caller is served the teletext drawing, not the c64 one', () => {
+    const p = artProvider(TTX_SESSION, { 'B:title:c64': NARROW_ART, 'B:title:ttx': ['TTX ART'] });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(['TTX ART']);
+  });
+
+  test('an 80-column caller reads the file on disk: the provider declines', () => {
+    const p = artProvider({ ...ANSI80, doorCommand: 'B' }, { 'B:title:c64': NARROW_ART });
+    expect(p('', '/doors/emp_tools/Bulls.CFG', 1005)).toBeNull();
+  });
+
+  test('no drawing for this alphabet leaves the wide art in place', () => {
+    const p = artProvider(C64_SESSION, { 'B:title:ttx': ['TTX ART'] });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(DISK_TITLE);
+  });
+
+  test('art for ANOTHER door is not served for this one', () => {
+    const p = artProvider({ ...C64, doorCommand: 'J' }, { 'B:title:c64': NARROW_ART });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(DISK_TITLE);
+  });
+
+  test('EVERY OTHER BYTE of the file is what it was: only the title body moves', () => {
+    const p = artProvider(C64_SESSION, { 'B:title:c64': NARROW_ART });
+    const served = p('', '/doors/emp_tools/Bulls.CFG', 1005)!.toString('latin1');
+    // `setKv` keeps the column the comment sits in, so a shorter value is
+    // padded - that alignment is part of "every other byte".
+    const expected = ART_CFG
+      .replace('DUAL_LISTING       YES', 'DUAL_LISTING       NO ')
+      .replace(
+        '\x1b[36m     ________  WIDE LOGO ROW ONE\n     \\______/  WIDE LOGO ROW TWO',
+        NARROW_ART.join('\n'),
+      );
+    expect(served).toBe(expected);
+  });
+
+  test('a drawing is served even when no narrow VALUE changed', () => {
+    const p = createEmpireNarrowShadow({
+      session: C64_SESSION,
+      doorDir: '/doors/emp_tools',
+      readManifest: () => ({ ...ART_MANIFEST, settings: [] }),
+      readFile: () => Buffer.from(ART_CFG, 'latin1'),
+      readVariantLines: () => NARROW_ART,
+    });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(NARROW_ART);
+  });
+
+  test('an empty drawing is not a drawing: the wide art stands', () => {
+    // The file is still served - DUAL_LISTING changed - but the logo it
+    // carries is the door's own. A variant saved and then emptied must
+    // restore the wide art, never blank the screen.
+    const p = artProvider(C64_SESSION, { 'B:title:c64': [] });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(DISK_TITLE);
   });
 });

@@ -29,8 +29,11 @@ import {
   parseEmpireFile,
   getKv,
   setKv,
+  setSectionBody,
   serializeEmpireFile,
 } from '../../doors/text-cfg/empire';
+import { alphabetFor, readVariant, type ArtAlphabet } from '../../doors/door-art-variants';
+import { config } from '../../config';
 
 /** Shadow bytes for this open, or null for the normal disk path. */
 export type FileShadowProvider = (
@@ -50,6 +53,16 @@ interface NarrowDecl {
   value: string;
 }
 
+/** An art section the manifest declares, and the doors it belongs to. */
+interface ArtDecl {
+  /** Bare filename as bound, e.g. "Bulls.CFG". */
+  file: string;
+  /** Section name without the marker suffix ("title" for `[Title_END]`). */
+  section: string;
+  /** Commands this art belongs to, or null for every command. */
+  commands: string[] | null;
+}
+
 export interface EmpireNarrowShadowOptions {
   /** The live BBS session, by reference - width is read per open. */
   session: any;
@@ -57,6 +70,14 @@ export interface EmpireNarrowShadowOptions {
   doorDir: string;
   readManifest?: (doorDir: string) => any | null;
   readFile?: (sysPath: string) => Buffer | null;
+  /** Where the board keeps its screens; the art store lives under it. */
+  artRoot?: string;
+  /** Injectable for tests; defaults to the store in doors/door-art-variants. */
+  readVariantLines?: (
+    command: string,
+    section: string,
+    alphabet: ArtAlphabet,
+  ) => string[] | null;
 }
 
 /**
@@ -113,6 +134,29 @@ export function narrowDeclsFor(manifest: any): NarrowDecl[] {
   return out;
 }
 
+/**
+ * The art sections a manifest declares.
+ *
+ * Same shape and the same tolerance as `narrowDeclsFor`: a door that cannot
+ * describe its art runs unshadowed, never broken.
+ */
+export function artDeclsFor(manifest: any): ArtDecl[] {
+  const out: ArtDecl[] = [];
+  try {
+    for (const a of manifest?.artSections ?? []) {
+      if (typeof a?.file !== 'string' || typeof a?.section !== 'string') continue;
+      out.push({
+        file: a.file,
+        section: a.section,
+        commands: Array.isArray(a.commands) ? a.commands.map(String) : null,
+      });
+    }
+  } catch {
+    return [];
+  }
+  return out;
+}
+
 /** True when this session reads narrow configs: under eighty columns. */
 export function sessionIsNarrow(session: any): boolean {
   try {
@@ -142,15 +186,40 @@ export function createEmpireNarrowShadow(opts: EmpireNarrowShadowOptions): FileS
     return decls;
   };
 
+  let arts: ArtDecl[] | null = null;
+  const artDeclarations = (): ArtDecl[] => {
+    if (arts === null) arts = artDeclsFor(readManifest(doorDir));
+    return arts;
+  };
+
+  // Resolved on the first open that needs it, never at construction: a
+  // harness or a unit test builds this provider with no board configured,
+  // and asking `config` for a dataDir it does not have would refuse every
+  // door rather than the one drawing nobody made.
+  const readVariantLines =
+    opts.readVariantLines ??
+    ((command: string, section: string, alphabet: ArtAlphabet) =>
+      readVariant(opts.artRoot ?? path.join(config.get('dataDir'), 'Screens'), command, section, alphabet));
+
   return (amiPath: string, sysPath: string, _mode: number): Buffer | null => {
     try {
       void amiPath;
       if (!sessionIsNarrow(session)) return null;
-      const all = declarations();
-      if (all.length === 0) return null;
       const base = path.basename(sysPath).toLowerCase();
-      const forFile = all.filter((d) => d.file.toLowerCase() === base);
-      if (forFile.length === 0) return null;
+      const forFile = declarations().filter((d) => d.file.toLowerCase() === base);
+      // The caller's alphabet decides WHICH drawing. A narrow session with
+      // none - there is no third narrow alphabet today - reads values
+      // rewritten and the door's own art, exactly as before this existed.
+      const alphabet = alphabetFor(session);
+      const command = String(session?.doorCommand ?? '').toUpperCase();
+      const artForFile = alphabet && command
+        ? artDeclarations().filter(
+            (a) =>
+              a.file.toLowerCase() === base &&
+              (!a.commands || a.commands.some((c) => c.toUpperCase() === command)),
+          )
+        : [];
+      if (forFile.length === 0 && artForFile.length === 0) return null;
       const real = readFile(sysPath);
       if (!real) return null;
       const file = parseEmpireFile(real.toString('latin1'));
@@ -159,6 +228,17 @@ export function createEmpireNarrowShadow(opts: EmpireNarrowShadowOptions): FileS
         const current = getKv(file, decl.section, decl.key);
         if (current === undefined || current === decl.value) continue;
         if (!setKv(file, decl.section, decl.key, decl.value)) continue;
+        changed = true;
+      }
+      for (const art of artForFile) {
+        const lines = readVariantLines(command, art.section, alphabet as ArtAlphabet);
+        // An empty drawing is not a drawing: a saved-then-emptied variant
+        // would otherwise blank the door's logo rather than restore it.
+        if (!lines || lines.length === 0) continue;
+        if (!setSectionBody(file, art.section, lines)) continue;
+        console.log(
+          `[FileShadow] Serving ${alphabet} art for ${command} [${art.section}] (${lines.length} rows)`,
+        );
         changed = true;
       }
       if (!changed) return null;
