@@ -95,6 +95,26 @@ interface DataTableProps<T extends RowData> {
   selectedRowId?: string;
   /** Rendered at the end of each row, revealed on hover and on focus. */
   rowActions?: (row: T) => ReactNode;
+  /**
+   * TICKED ROWS, for doing one thing to several of them.
+   *
+   * Absent means no checkbox column at all, which is every table that has
+   * never needed one. Present means the CALLER owns the set - the table draws
+   * the boxes and reports clicks, and the page decides what a batch does with
+   * them and how it is confirmed.
+   *
+   * The header box ticks and unticks what is CURRENTLY SHOWN, not the whole
+   * dataset: these tables sit under a search box, and "select all" that
+   * quietly included rows filtered out of sight is how somebody deletes an
+   * account they never saw.
+   */
+  selectedIds?: ReadonlySet<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+}
+
+/** The ids of the rows handed to this table, in the order given. */
+function modelRowIds<T extends RowData>(rows: T[], getRowId: (row: T) => string): string[] {
+  return rows.map(getRowId);
 }
 
 function alignClass(align: DataTableColumn<Record<string, unknown>>['align']): string {
@@ -115,7 +135,27 @@ export function DataTable<T extends RowData>({
   onRowClick,
   selectedRowId,
   rowActions,
+  selectedIds,
+  onSelectionChange,
 }: DataTableProps<T>) {
+  const selectable = selectedIds !== undefined && onSelectionChange !== undefined;
+  /** The rows a "select all" may touch: what is on screen, after filtering. */
+  const shownIds = modelRowIds(rows, getRowId);
+  const shownTicked = selectable && shownIds.length > 0 && shownIds.every(id => selectedIds!.has(id));
+
+  const toggleRow = (id: string) => {
+    const next = new Set(selectedIds!);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange!(next);
+  };
+
+  const toggleShown = () => {
+    const next = new Set(selectedIds!);
+    // Unticking leaves anything selected off-screen alone, for the same
+    // reason ticking never reaches it.
+    for (const id of shownIds) { if (shownTicked) next.delete(id); else next.add(id); }
+    onSelectionChange!(next);
+  };
   // NOT memoised on a cheaper key.
   //
   // Every caller builds its `columns` array inline, so a new array arrives on
@@ -167,6 +207,17 @@ export function DataTable<T extends RowData>({
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-surface-2">
           <tr>
+            {selectable && (
+              <th scope="col" className="w-px border-b border-border px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={shownTicked}
+                  onChange={toggleShown}
+                  aria-label={shownTicked ? 'Clear selection' : 'Select all shown'}
+                  className="h-4 w-4 accent-current text-accent"
+                />
+              </th>
+            )}
             {columns.map((column) => {
               const tableColumn = table.getColumn(column.id);
               const canSort = tableColumn?.getCanSort() ?? false;
@@ -218,6 +269,21 @@ export function DataTable<T extends RowData>({
                   onRowClick ? 'cursor-pointer' : ''
                 } ${isSelected ? 'bg-surface-3' : 'hover:bg-surface-3'}`}
               >
+                {selectable && (
+                  <td
+                    className="h-row w-px px-3"
+                    // Ticking a row is not opening it.
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedIds!.has(rowId)}
+                      onChange={() => toggleRow(rowId)}
+                      aria-label={`Select ${rowId}`}
+                      className="h-4 w-4 accent-current text-accent"
+                    />
+                  </td>
+                )}
                 {columns.map((column, columnIndex) => {
                   const content = column.cell ? column.cell(row) : String(column.value?.(row) ?? '');
 

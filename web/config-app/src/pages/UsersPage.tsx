@@ -83,6 +83,12 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [search, setSearch] = useState('');
+  /**
+   * The accounts ticked for a batch. Ids, not rows: the list refetches after
+   * every mutation and a held row object would go stale.
+   */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchLevel, setBatchLevel] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<BbsUser | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
@@ -282,6 +288,86 @@ export function UsersPage() {
     }
   };
 
+  /*
+   * ONE THING TO SEVERAL ACCOUNTS.
+   *
+   * "batch operations on users would be nice as well" (the sysop,
+   * 2026-09-15), and he asked for three: delete, set the access level, and
+   * block or unblock.
+   *
+   * Each runs the SAME per-account endpoint the single-row actions run, in a
+   * loop, rather than a new batch API. There are 46 accounts on this board -
+   * the round trips cost nothing - and a batch endpoint would be a second
+   * place where deleting a user has to remember to take the disk slot with
+   * the database row (config-routes DELETE /users/:id), which is exactly the
+   * kind of second copy this board keeps getting caught by.
+   *
+   * Confirmed ONCE, naming the count, and the selection is cleared
+   * afterwards so a second press cannot repeat it on rows that are already
+   * gone.
+   */
+  const chosen = () => users.filter((u) => selected.has(u.id));
+
+  const runBatch = async (
+    what: string,
+    verb: string,
+    apply: (user: BbsUser) => Promise<unknown>,
+    danger = false,
+  ) => {
+    const targets = chosen();
+    if (targets.length === 0) return;
+    const confirmed = await confirm({
+      title: what,
+      message: `${verb} ${targets.length} account${targets.length === 1 ? '' : 's'}: ${targets
+        .map((u) => u.username)
+        .join(', ')}.`,
+      confirmText: what,
+      cancelText: 'Cancel',
+      ...(danger ? { type: 'danger' as const, requireTypedConfirmation: String(targets.length) } : {}),
+    });
+    if (!confirmed) return;
+
+    const failed: string[] = [];
+    for (const target of targets) {
+      try {
+        await apply(target);
+      } catch (error) {
+        failed.push(target.username);
+      }
+    }
+    setSelected(new Set());
+    queryClient.invalidateQueries({ queryKey: ['users'] });
+    if (failed.length) {
+      showError(`${failed.length} of ${targets.length} failed: ${failed.join(', ')}`);
+    } else {
+      showSuccess(`${what}: ${targets.length} account${targets.length === 1 ? '' : 's'}`);
+    }
+  };
+
+  const handleBatchDelete = () =>
+    runBatch('Delete users', 'Permanently delete', (u) => apiClient.deleteUser(u.id), true);
+
+  const handleBatchLevel = () => {
+    const level = Number(batchLevel);
+    if (!Number.isFinite(level) || level < 0 || level > 255) {
+      showError('Access level must be a number from 0 to 255.');
+      return;
+    }
+    return runBatch(`Set level ${level}`, `Set the access level to ${level} on`, (u) =>
+      apiClient.updateUser(u.id, { secLevel: level } as never),
+    );
+  };
+
+  const handleBatchLock = (locked: boolean) =>
+    runBatch(
+      locked ? 'Block users' : 'Unblock users',
+      locked ? 'Block' : 'Unblock',
+      (u) =>
+        apiClient.updateUser(u.id, (locked
+          ? { accountLocked: 1 }
+          : { accountLocked: 0, invalidAttempts: 0 }) as never),
+    );
+
   const getSecurityLevelColor = (level: number) => {
     if (level >= 255) return 'text-status-danger';
     if (level >= 200) return 'text-status-warn';
@@ -422,6 +508,58 @@ export function UsersPage() {
         </div>
       </div>
 
+      {/*
+        The batch bar appears only when something is ticked, and says what it
+        will act on. It sits ABOVE the table, where the selection is - not in
+        a toolbar at the top of the page, which is where the sysop would have
+        to look away from the rows he just chose.
+      */}
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-accent/40 bg-surface-2 p-3">
+          <span className="text-sm text-content-primary">
+            {selected.size} account{selected.size === 1 ? '' : 's'} selected
+          </span>
+
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm text-content-secondary">
+              Level
+              <input
+                type="number"
+                min={0}
+                max={255}
+                value={batchLevel}
+                onChange={(event) => setBatchLevel(event.target.value)}
+                aria-label="Access level to set on the selected accounts"
+                className="input-field h-control w-20"
+              />
+            </label>
+            <button type="button" onClick={handleBatchLevel} className="btn-secondary h-control">
+              Set level
+            </button>
+            <button type="button" onClick={() => handleBatchLock(true)} className="btn-secondary h-control">
+              Block
+            </button>
+            <button type="button" onClick={() => handleBatchLock(false)} className="btn-secondary h-control">
+              Unblock
+            </button>
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              className="h-control rounded border border-status-danger/40 px-3 text-sm text-status-danger transition-colors hover:bg-status-danger/10"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="h-control px-2 text-sm text-content-muted underline"
+            >
+              Clear
+            </button>
+          </span>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         rows={filtered}
@@ -447,6 +585,8 @@ export function UsersPage() {
          * should open the edit dialog" (2026-09-15).
          */
         onRowClick={handleEdit}
+        selectedIds={selected}
+        onSelectionChange={setSelected}
         rowActions={(user) => (
           <>
             {(user.accountLocked || (user.invalidAttempts ?? 0) > 0) && (
