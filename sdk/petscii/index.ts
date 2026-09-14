@@ -21,6 +21,7 @@ export {
   vicToSgrBackground,
 } from './c64-palette';
 export { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
+export { writeSeq, type SeqWriteOptions } from './seq-writer';
 export {
   AnsiToPetsciiTransducer,
   type AnsiToPetsciiOptions,
