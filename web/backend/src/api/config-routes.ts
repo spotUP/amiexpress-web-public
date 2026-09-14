@@ -6,6 +6,8 @@
  * Base URL: /api/config
  */
 
+import { checkSecurity } from '../utils/acs.util';
+import { ACSPermission } from '../constants/acs-permissions';
 import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
@@ -1868,10 +1870,29 @@ console.log(`[API] Loaded ${users.length} users from disk files`);
 console.log(`[API] Deduplicated to ${users.length} unique users`);
       }
 
-      // Remove password hashes from response
+      /*
+       * WHETHER THE BOARD WILL ACTUALLY LET THEM STAY.
+       *
+       * `timeLimit` is not the answer and never was. express.e:556-562 runs
+       * the countdown for everybody and disconnects on `timeLimit<0` UNLESS
+       * `ACS_OVERRIDE_TIMELIMIT` is set - so unlimited time is a PERMISSION on
+       * the access level, not a number on the user. The admin was reading
+       * `timeLimit < 0` as "Unlimited", which is a value the runtime coerces
+       * straight back to 3600 (time-tracking.util.ts), so the one row the
+       * sysop trusted to mean unlimited meant sixty minutes.
+       *
+       * Computed here because only the server can answer it: it needs
+       * `Access/ACS.<level>.info`, and the level resolves to the highest file
+       * at or below the user's (a level-100 account on this board is served
+       * out of ACS.60).
+       */
       const sanitizedUsers = users.map((u: any) => {
         const { passwordHash, passwordhash, ...userWithoutPassword } = u;
-        return userWithoutPassword;
+        let unlimitedTime = false;
+        try {
+          unlimitedTime = checkSecurity(u, ACSPermission.OVERRIDE_TIMELIMIT);
+        } catch { /* an unreadable Access/ is not a reason to lose the user list */ }
+        return { ...userWithoutPassword, unlimitedTime };
       });
       sendResponse(res, sanitizedUsers);
     } catch (error) {

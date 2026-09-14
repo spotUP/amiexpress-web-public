@@ -16,6 +16,14 @@ interface BbsUser {
   email?: string;
   secLevel: number;
   timeLimit: number;
+  /**
+   * Whether the board will actually let them stay - the
+   * `ACS.OVERRIDE_TIMELIMIT` permission on their access level, answered by
+   * the server because only it can read `Access/ACS.<level>.info`. Absent
+   * on an older backend, which reads as "not unlimited" and shows the
+   * number instead of claiming something untrue.
+   */
+  unlimitedTime?: boolean;
   ratio: number;
   uploads: number;
   downloads: number;
@@ -323,9 +331,27 @@ export function UsersPage() {
       align: 'right',
       mono: true,
       width: '8rem',
-      // -1 is this project's "unlimited" (see database/types.ts), and showing
-      // it raw reads as a bug rather than as a setting.
-      cell: (user) => (user.timeLimit < 0 ? 'Unlimited' : `${user.timeLimit} min`),
+      /*
+       * TWO THINGS THIS GOT WRONG, and the sysop acted on both.
+       *
+       * "UNLIMITED" IS NOT A NUMBER. express.e:556-562 runs the countdown for
+       * everybody and disconnects on `timeLimit<0` unless the access level
+       * grants `ACS_OVERRIDE_TIMELIMIT`. A negative `timeLimit` is not
+       * unlimited - `time-tracking.util.ts` coerces anything <= 0 straight
+       * back to 3600 - so this row said Unlimited over a caller who had sixty
+       * minutes. On this board NO level granted the permission, so the answer
+       * was wrong for every account it was shown for. `unlimitedTime` is
+       * computed server-side, where Access/ACS.<level>.info can be read.
+       *
+       * AND THE UNITS ARE SECONDS. `timeLimit` is seconds (express.e:7684
+       * defaults it to 3600, and express.e:5345 divides by 60 to print it),
+       * so `3600 min` was an hour shown as two and a half days.
+       */
+      cell: (user) => {
+        if (user.unlimitedTime) return 'Unlimited';
+        const seconds = user.timeLimit > 0 ? user.timeLimit : 3600;
+        return `${Math.round(seconds / 60)} min`;
+      },
     },
     {
       id: 'lockout',
@@ -576,14 +602,15 @@ export function UsersPage() {
 
                 <div>
                   <label htmlFor="timeLimit" className="label">
-                    Time Limit (min) *
+                    Daily time limit (seconds) *
                   </label>
                   <input
                     id="timeLimit"
                     type="number"
-                    // -1 is unlimited, so the field must accept it; min="0"
-                    // made the browser reject the value the BBS itself uses.
-                    min="-1"
+                    // 0 is allowed and means "use the 3600 default"; there is
+                    // no magic negative any more, because unlimited lives on
+                    // the access level rather than in this field.
+                    min="0"
                     value={formData.timeLimit}
                     onChange={(e) => {
                       const parsed = parseInt(e.target.value, 10);
@@ -593,7 +620,11 @@ export function UsersPage() {
                     required
                   />
                   <p className="text-xs text-content-secondary mt-1">
-                    -1 for unlimited time.
+                    Seconds, as the BBS stores it - 3600 is one hour. Unlimited
+                    time is not set here: it is the ACS.OVERRIDE_TIMELIMIT
+                    permission on the access level (Security), because
+                    express.e checks that, not this number. A value of 0 or
+                    less is treated as 3600 when the caller logs on.
                   </p>
                 </div>
 
