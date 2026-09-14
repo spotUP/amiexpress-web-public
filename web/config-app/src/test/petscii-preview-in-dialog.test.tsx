@@ -7,6 +7,12 @@
  * renders .seq correctly now, and PetsciiScreenPreview (the same component the
  * theme page uses) draws it. This pins that a petscii file gets the preview
  * and not the placeholder.
+ *
+ * 2026-09-14: the component is now PetsciiScreenEditor in its readOnly mode -
+ * the same thing the artist studio opens - for the reason the RIP branch
+ * beside it already gave: a viewer and an editor that draw a file differently
+ * is the bug class this page keeps hitting. The PROPERTY under test has not
+ * changed: a .seq gets the board's own PETSCII surface and never an apology.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -57,8 +63,8 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 // The canvas cannot draw in jsdom; a marker proves the branch chose it.
-vi.mock('../components/PetsciiScreenPreview', () => ({
-  PetsciiScreenPreview: ({ content }: { content: string }) => (
+vi.mock('../components/PetsciiScreenEditor', () => ({
+  PetsciiScreenEditor: ({ content }: { content: string }) => (
     <div data-testid="petscii-preview">{content.slice(0, 6)}</div>
   ),
 }));
@@ -77,7 +83,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('a .seq screen opens to a PETSCII preview', () => {
   beforeEach(() => { fetchMock.mockClear(); });
 
-  it('draws PetsciiScreenPreview, not the old placeholder', async () => {
+  it('draws the PETSCII surface, not the old placeholder', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
