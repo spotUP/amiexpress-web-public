@@ -4976,6 +4976,15 @@ async function dispatchInternalCommand(
   command: string,
   params: string = ''
 ): Promise<InternalCommandResult> {
+  /*
+   * express.e's `commandText` - the line the caller actually typed - which
+   * `customMsgbaseCmd(..., passCmdLine=1)` hands to a conference's message-base
+   * door (express.e:12427-12428). `R 42` must reach the door as `R 42`, or it
+   * opens on the wrong message.
+   */
+  const commandLine = params ? `${command} ${params}` : command;
+
+  const { tryCustomMsgbase, MailFunction } = require('../services/custom-msgbase');
   // Real AmiExpress prints command responses inline (no clear-between-commands).
   // We previously emitted a 30-line "soft clear" here so prior content scrolled
   // into xterm.js scrollback before the next response — but that left a column
@@ -5136,6 +5145,9 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
+      // express.e:25525-25530 - a CUSTOM conference's message base is a door,
+      // and reading it is that door's job (MAIL_READ).
+      if (await tryCustomMsgbase(socket, session, MailFunction.READ, commandLine)) return;
       await handleReadMessagesFullCommand(socket, session, params);
       return;
 
@@ -5144,10 +5156,13 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return await handleAlterFlagsCommand(socket, session, params);
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
+      // express.e:24864-24869 - MAIL_CREATE, for the same reason.
+      if (await tryCustomMsgbase(socket, session, MailFunction.CREATE, commandLine)) return;
       handleEnterMessageFullCommand(socket, session, params);
       return;
 
     case 'EALL': // Enter Message to EALL — equivalent to 'E EALL' (express.e:10800-10816)
+      if (await tryCustomMsgbase(socket, session, MailFunction.CREATE, 'E EALL')) return;
       handleEnterMessageFullCommand(socket, session, 'EALL');
       return;
 
@@ -5253,6 +5268,9 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'C': // Comment to Sysop (internalCommandC) - express.e:24658-24670
+      // express.e:24664-24668 - MAIL_SYSOP_COMMENT. The door writes the
+      // private message; the board's commentToSYSOP is for everybody else.
+      if (await tryCustomMsgbase(socket, session, MailFunction.SYSOP_COMMENT, commandLine)) return;
       handleCommentToSysopCommand(socket, session, params);
       return;
 

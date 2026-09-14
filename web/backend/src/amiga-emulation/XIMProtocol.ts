@@ -776,11 +776,49 @@ debugLog(`[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE`);
   private handleCommandInfoRequest(msg: XIMMessage): void {
     const command = msg.command;
 
+    if (command === XIMCommand.GET_CUSTOM_MSGBASE_PARAM1
+        || command === XIMCommand.GET_CUSTOM_MSGBASE_PARAM2) {
+      /*
+       * express.e:3959-3962 - the two numbers a CUSTOM message base is called
+       * with: WHICH message function (MAIL_READ, MAIL_CREATE, MAIL_SCAN, ...)
+       * and WHICH conference. `customMsgbaseCmd` sets them immediately before
+       * the launch (express.e:12433-12434) and `services/custom-msgbase.ts`
+       * does the same here, on the session.
+       *
+       * ZERO when no custom invocation is in flight, which is what express.e's
+       * globals hold at that point too (:273-274). A door reading 0 is being
+       * told "you were not launched as a message base" - which is the answer
+       * on every board that has no CUSTOM conference, and the reason SUBS
+       * draws its full screen for an unrecognised launch.
+       */
+      const isParam1 = command === XIMCommand.GET_CUSTOM_MSGBASE_PARAM1;
+      const value = Number(
+        (isParam1
+          ? (this.bbsSession as any)?.customMsgParam1
+          : (this.bbsSession as any)?.customMsgParam2) || 0,
+      );
+debugLog(`[XIMProtocol] ${isParam1 ? 'GET_CUSTOM_MSGBASE_PARAM1' : 'GET_CUSTOM_MSGBASE_PARAM2'}: ${value}`);
+      this.sendReply(msg, value);
+      return;
+    }
+
     if (command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD) {
-      // GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command that launched this door
-      // e.g., if user typed "FR" which launched AquaScan, return "FR"
-      // Doors use this to look up DOORUSE.FR in their .info tooltypes
-      const cmdName = this.doorCommand || '';
+      /*
+       * express.e:3974-3975 answers this with `customMsgCmd` - the command
+       * LINE a CUSTOM message base was invoked with, empty for a scan or a
+       * stats call that nobody typed.
+       *
+       * This port has always answered it with the name of the command that
+       * launched the door instead ("FR", "SUBSCAN"), which doors here use for
+       * their DOORUSE.<cmd> lookups and which SUBS uses to tell its two
+       * registrations apart. That extension stays - removing it would break
+       * every door on this board - but a real custom invocation WINS, because
+       * inside one the express.e answer is the correct one and a door written
+       * for a real Amiga expects it.
+       */
+      const customCmd = (this.bbsSession as any)?.customMsgCmd;
+      const inCustomInvocation = (this.bbsSession as any)?.customMsgParam1 !== undefined;
+      const cmdName = inCustomInvocation ? String(customCmd ?? '') : (this.doorCommand || '');
 debugLog(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
 
       // Always populate embedded buffer for doors without StringPtr.

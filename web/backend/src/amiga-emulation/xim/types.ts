@@ -575,6 +575,8 @@ export const FieldLengths = {
 export function isCommandInfoRequestCommand(command: number): boolean {
   return (
     command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD ||
+    command === XIMCommand.GET_CUSTOM_MSGBASE_PARAM1 ||
+    command === XIMCommand.GET_CUSTOM_MSGBASE_PARAM2 ||
     command === XIMCommand.GET_CMD_TOOLTYPE
   );
 }

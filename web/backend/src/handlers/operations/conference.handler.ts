@@ -273,16 +273,38 @@ console.warn('[joinConference] Failed to sync node user file:', err);
 console.warn('[joinConference] checkMailConfScan error:', err);
       }
     }
+    let scannedByDoor = false;
     if (shouldScan) {
       // express.e:5121-5125 — IF checkToolTypeExists CUSTOM=FALSE THEN
       //   callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
       // ELSE
       //   customMsgbaseCmd(MAIL_SCAN, conf, 0)
       // ENDIF
-      // We don't have customMsgbaseCmd (no in-tree CUSTOM message base
-      // implementation), so the CUSTOM branch is a no-op — the standard
-      // scan would dump zeroes / scan empty data and confuse the user.
-      if (!isCustom) {
+      if (isCustom) {
+        /*
+         * The conference's own message base is a door, and THIS is the call
+         * that runs at every join: MAIL_SCAN, with `passCmdLine` 0 because
+         * nobody typed anything. A door answering it prints what is new and
+         * exits - it must not hold the caller, who is mid-join and did not ask
+         * for a door.
+         *
+         * `false` means the conference claims CUSTOM but ships no usable
+         * MSGBASE.DEF, and then the board's own scan is better than silence.
+         */
+        try {
+          const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
+          const ran = await runCustomMsgbaseCommand(
+            socket, session, MailFunction.SCAN, confId, '',
+          );
+          // express.e:5126 - saveMsgPointers(conf, msgBaseNum) is NOT skipped
+          // by the CUSTOM branch, but a custom base owns its own pointers and
+          // the board holds none for it, so there is nothing to write.
+          scannedByDoor = ran;
+        } catch (err) {
+console.warn('[joinConference] custom message base scan failed:', err);
+        }
+      }
+      if (!scannedByDoor) {
         try {
           // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
           // In our implementation this is the per-conference mail scan (display new message list)
@@ -427,9 +449,20 @@ async function continueJoinAfterBull(
         //     IF checkToolTypeExists CUSTOM=FALSE → standard range/total
         //     ELSE → customMsgbaseCmd(MAIL_STATS, conf, 0)
         //   ENDIF
-        // We don't have customMsgbaseCmd, so the CUSTOM branch is silent
-        // here too. (Audit F-2.)
-        if (!isCustom) {
+        let statsByDoor = false;
+        if (isCustom) {
+          // The door says what its own base holds; the board's range and
+          // totals are about a HeaderFile a custom base may not even have.
+          try {
+            const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
+            statsByDoor = await runCustomMsgbaseCommand(
+              socket, session, MailFunction.STATS, confId, '',
+            );
+          } catch (err) {
+console.warn('[joinConference] custom message base stats failed:', err);
+          }
+        }
+        if (!isCustom || !statsByDoor) {
           // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
           const lowestKey = mailStat?.lowestKey || 0;
           const highMsgNum = mailStat?.highMsgNum || 1;
