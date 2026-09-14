@@ -8,6 +8,7 @@
 import { normaliseDoorType, DOOR_TYPE_CODES } from '@amiexpress/bbs-door-sdk/catalog';
 import { spawn, fork } from 'child_process';
 import * as path from 'path';
+import { amigaDosScriptPath } from '../doors/amigados-script';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
@@ -2039,6 +2040,29 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
         // instead of LoadSeg-as-68K, which would fail on a text file.
         if (/\.(rexx|rx)$/i.test(door.path || '')) {
           await executeARexxDoor(socket, session, door, doorSession);
+        } else if (amigaDosScriptPath(door.path)) {
+          /*
+           * A SIM whose LOCATION is an AmigaDOS SCRIPT, not a 68K binary.
+           *
+           * The same shape as the AREXX case above and caught the same way:
+           * LoadSeg-as-68K cannot run a text file. On this board every
+           * `Commands/SysCmd/LOGOFF<n>.info` is `TYPE=SIM` with
+           * `LOCATION=BBS:Batch<n>` - the logoff batch, an AmigaDOS script
+           * that AmigaDOS runs BECAUSE OF WHAT THE FILE IS, not because of
+           * the tooltype.
+           *
+           * This port ran it through the emulator instead: no manifest, a
+           * door that started and exited, and not one batch line executed.
+           * So MultiTop never rebuilt bull1-5 and SAmiLog never rebuilt
+           * bull6 - and the `G` logoff then sets `logoffBatchesRan` on the
+           * strength of having "run" LOGOFF<n>, which suppresses the
+           * fallback runner that would have done it properly. Two failures
+           * that hide each other, and no error anywhere. "this is a bug we
+           * have had for ages, bulls not generating when they should" (the
+           * sysop, 2026-09-14).
+           */
+          const { runBatchFile } = require('../services/batch-scheduler');
+          await runBatchFile(amigaDosScriptPath(door.path), session.nodeId || 1);
         } else {
           await executeAmigaDoor(socket, session, door, doorSession);
         }
