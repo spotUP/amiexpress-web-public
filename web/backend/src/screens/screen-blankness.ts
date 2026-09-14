@@ -100,3 +100,37 @@ export function screenFileDrawsNothing(filePath: string): boolean {
     return false;
   }
 }
+
+/**
+ * Does this screen DO something, as opposed to merely showing something?
+ *
+ * A screen file on this board is a program: `Node/logon20.txt` is 149 bytes
+ * with no art in it at all, only which bulletins a caller sees, which doors
+ * run at login and where the pauses fall. The distinction matters because a
+ * THEME may own how the board looks and must not own what it does - a theme
+ * carrying its own `logon20.txt` does not restyle the login, it forks it.
+ * Six of this board's seven themes had done exactly that, byte-identically,
+ * buying nothing and costing six copies that the first edit would fork
+ * (`thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md`).
+ *
+ * The codes that DO something are the ones that put someone else's bytes on
+ * the screen or run something: `~SS_` and `~2S` include, `~nSR_` recurses,
+ * `~SX_` includes conditionally, `~CC_` runs a command, `~XI` runs a door.
+ * Colour, `~f`, `~SP` and the bare `~` gate are decoration and do not count -
+ * the same split `screenDrawsNothing` above makes for the opposite question,
+ * which is why the two live together.
+ *
+ * A file that is BOTH - art with an include at the end - counts as a program.
+ * The conservative direction: mistaking art for a program costs a theme one
+ * override it could get another way, while mistaking a program for art lets a
+ * theme change the board's behaviour silently.
+ */
+export function screenIsProgram(content: string | Buffer): boolean {
+  const raw = typeof content === 'string' ? content : content.toString('latin1');
+  // `~~` is a literal tilde, not the start of a code - so `~~SS_` is the TEXT
+  // "~SS_" and does nothing. Blanked before matching, exactly as
+  // `locateMciReferences` does it, because two readers of one syntax that
+  // disagree about an escape is how this board collects its bugs.
+  const text = raw.replace(/~~/g, '  ');
+  return /~(?:SS_|2S|\d*SR_|SX_|CC_|XI)/.test(text);
+}

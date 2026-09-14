@@ -128,15 +128,29 @@ test('~SS_ from a themed screen finds the theme Files mirror', async () => {
 });
 
 test('~SS_ falls through to the board when the theme carries no mirror', async () => {
-  // The theme's OWN bull runs - it includes a different board file - and the
-  // include lands on the board's copy, because the theme has no mirror of it.
-  theme('neon', { 'Board/BULL.TXT': '~SS_BBS:Screens/neonhead.txt|\r\n' });
+  /*
+   * REWRITTEN 2026-09-14, and the rewrite is the point.
+   *
+   * This used to give the theme its own `Board/BULL.TXT` - a themed PROGRAM -
+   * and assert that the theme's program ran. A theme no longer owns
+   * behaviour: `Node/logon20.txt` and `BULL.TXT` say which bulletins show and
+   * which doors run, and six of this board's themes had forked the login
+   * byte-identically for no visual gain
+   * (thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md).
+   *
+   * The INTENT survives untouched, and it is the mirror's fallthrough: the
+   * board's own program includes a file, the theme carries a mirror of a
+   * DIFFERENT file, and the include lands on the board's copy. That is what
+   * this always meant to say; the themed program was only the vehicle.
+   */
+  theme('neon', { 'Files/Screens/neonhead.txt': 'the neon neonhead\r\n' });
 
   const emits: Array<{ event: string; data: unknown }> = [];
   await displayScreen(socket(emits), caller({ screenTheme: 'neon' }), 'BULL');
 
-  expect(painted(emits)).toContain('the board neonhead');
-  expect(painted(emits)).not.toContain('the board subhead');
+  // The board's BULL includes subhead, and the theme mirrors only neonhead.
+  expect(painted(emits)).toContain('the board subhead');
+  expect(painted(emits)).not.toContain('the neon neonhead');
 });
 
 test('a ~SR_ pool member the theme carries is the theme file; the rest stay the board pool', async () => {

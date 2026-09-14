@@ -32,11 +32,11 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
-import { screenFileDrawsNothing } from '../screens/screen-blankness';
+import { screenFileDrawsNothing, screenIsProgram } from '../screens/screen-blankness';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
-  resolveNodeScreenDir, screenSearchLocations, themedPath,
+  resolveNodeScreenDir, screenSearchLocations, themedPath, type SearchLocation,
 } from '../screens/screen-resolution';
 
 // Kept on this module's surface: callers and tests reached the resolver
@@ -1279,7 +1279,9 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
 
   // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
   // We try multiple filename variations: FILENAME.TXT, filename.txt, Filename.txt, etc.
-  const searchLocations: Array<{ dir: string; desc: string }> = [];
+  // `themed` comes from screenSearchLocations and is what tells a theme's
+  // directory from the board's - the distinction the program rule rests on.
+  const searchLocations: SearchLocation[] = [];
   const hasSlash = !isAbsolutePath && effectiveName.includes('/');
 
   // Only populate default search locations when no explicit path/assign is given.
@@ -1440,7 +1442,68 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
   screenDebug(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
   let attemptNum = 0;
 
+  /*
+   * A THEME OWNS ART, NOT BEHAVIOUR.
+   *
+   * A screen file here is a PROGRAM: `Node/logon20.txt` is 149 bytes and none
+   * of them are art - it says which bulletins a caller sees, which doors run
+   * at login and where the pauses fall. A theme carrying its own copy does not
+   * restyle the login, it FORKS it, and the caller wearing that theme runs a
+   * different board.
+   *
+   * Six of this board's seven themes had done exactly that, byte-identically
+   * (every `logon20.txt` md5 e71dbab7), buying nothing and costing six copies
+   * that the first edit would fork. The sysop found it by removing a logo in
+   * the admin and watching the board go on drawing it: "the login sequence
+   * should not be theme dependant this explains a lot of our issues in the
+   * bbs" (2026-09-14).
+   *
+   * A theme loses nothing by this. The art a program NAMES is still themeable
+   * through `Themes/<slug>/Files/`, which mirrors the board root verbatim -
+   * `themedPath`, measured - so an artist ships his own logo and leaves the
+   * login alone.
+   *
+   * Only when the BOARD has a copy. A screen that exists solely in a theme is
+   * still drawn from it: refusing would take away a screen the board is
+   * already serving, which is a regression, not a fix.
+   *
+   * See thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md
+   */
+  const boardCopyIsProgram = (() => {
+    if (!searchLocations.some(l => l.themed)) return false;
+    for (const location of searchLocations) {
+      if (location.themed) continue;
+      const candidates = isAssignPath ? [] : [
+        findSecurityScreen(
+          path.join(location.dir, screenBaseNoExt), userSecLevel, null,
+          session?.ripMode ?? false, false, servesPetsciiArt(session),
+          session?.texttvMode ?? false, { hollow },
+        ),
+      ];
+      for (const filename of filenameVariations) {
+        candidates.push(findCaseInsensitive(location.dir, filename));
+      }
+      for (const found of candidates) {
+        if (!found) continue;
+        try {
+          // Latin-1: a screen carries Amiga high-bit bytes.
+          if (screenIsProgram(fs.readFileSync(found))) return true;
+        } catch { /* unreadable is not a program */ }
+        // The board HAS a copy and it is art - the theme may override it.
+        return false;
+      }
+    }
+    return false;
+  })();
+
   for (const location of searchLocations) {
+    if (location.themed && boardCopyIsProgram) {
+      screenDebug(
+        `[loadScreenFile]  skipping ${location.desc}: ${screenName} is a PROGRAM on the board,`
+        + ' and a theme owns art, not behaviour',
+      );
+      continue;
+    }
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
