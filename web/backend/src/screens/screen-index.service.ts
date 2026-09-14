@@ -1418,8 +1418,41 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
 const cachedByTheme = new Map<string, { key: string; index: ScreenIndex }>();
 
 /** The index, rebuilt when any screen directory's mtime moves. */
+/**
+ * The directories a SLOT's answer actually depends on.
+ *
+ * The key used to be every screen directory on the board, so one save
+ * invalidated every slot: writing into one artist's theme threw away the
+ * board's index and every other theme's with it, and each then rebuilt
+ * separately - ~340ms apiece, synchronously, on the thread that also answers
+ * telnet. That is what the sysop met as "it seems stuck" while saving.
+ *
+ * A theme's index reads the board and its OWN directory - the board's
+ * fallback is what a theme not covering a screen falls through to. It never
+ * reads another theme. And the BOARD's own walk never enters a theme
+ * directory at all, which is why a theme's file shows as read by nothing in
+ * the board index.
+ *
+ * So: the board slot watches the board, and a theme slot watches the board
+ * plus itself. Neither watches a stranger.
+ */
+function keyDirectories(baseDir: string, themeSlug?: string): string[] {
+  const all = listScreenDirectories(baseDir);
+  const themes = readThemeRegistry(baseDir).themes;
+
+  const mine = themeSlug
+    ? themes.filter(t => t.slug === themeSlug).map(t => themeDirectory(baseDir, t))[0] ?? null
+    : null;
+
+  const otherThemeRoots = themes
+    .map(theme => themeDirectory(baseDir, theme))
+    .filter((root): root is string => !!root && root !== mine);
+
+  return all.filter(dir => !otherThemeRoots.some(root => dir === root || dir.startsWith(`${root}${path.sep}`)));
+}
+
 export function getScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex {
-  const key = listScreenDirectories(baseDir)
+  const key = keyDirectories(baseDir, themeSlug)
     .map(d => {
       try { return `${d}:${fs.statSync(d).mtimeMs}`; } catch { return `${d}:gone`; }
     })
