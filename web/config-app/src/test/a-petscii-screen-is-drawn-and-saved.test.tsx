@@ -165,4 +165,26 @@ describe('a PETSCII screen is drawn and saved', () => {
      */
     expect(back.state.screen[24 * 40 + 39]).toBe(0x20);
   });
+
+  it('takes a .seq file in, without the page having to hand it over', async () => {
+    // "i dont see a way to upload a petscii screen in the petscii editor"
+    // (sysop, 2026-09-14): the control rendered only when the page passed a
+    // handler, and neither mount site did. A `.seq` is bytes this editor
+    // already reads, so it loads one itself.
+    const onSave = vi.fn();
+    render(<PetsciiScreenEditor content={BLANK_SEQ} onSave={onSave} />);
+
+    const drawn = stamp(blankSurface(), 3, 3, { screenCode: 0x05, color: 1, reverse: false });
+    // `.slice().buffer` gives a plain ArrayBuffer: writeSeq answers
+    // Uint8Array<ArrayBufferLike>, and BlobPart will not take one because the
+    // buffer could in principle be shared.
+    const bytes = writeSeq(drawn);
+    const file = new File([bytes.slice().buffer], 'BBSTITLE.SEQ', { type: 'application/octet-stream' });
+
+    const input = screen.getByLabelText('Load a drawing') as HTMLInputElement;
+    await userEvent.upload(input, file);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Save/ }));
+    expect(savedScreen(onSave).state.screen[3 * 40 + 3]).toBe(0x05);
+  });
 });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Edit2, Trash2, Save, X, Plus } from 'lucide-react';
+import { Edit2, Trash2, X, Plus } from 'lucide-react';
+import { useAutosave } from '../hooks/useAutosave';
 import { apiClient } from '../api/client';
 import type { NodeConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -27,21 +28,6 @@ export function NodesPage() {
   const { data: systemConfig } = useQuery({
     queryKey: ['systemConfig'],
     queryFn: () => apiClient.getSystemConfig(),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ nodeNumber, updates }: { nodeNumber: number; updates: Partial<NodeConfig> }) =>
-      apiClient.updateNodeConfig(nodeNumber, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['nodes'] });
-      setEditingNode(null);
-      showSuccess('Node configuration updated successfully');
-    },
-    // This page was the only one in the admin with no onError on any
-    // mutation, so a save that failed said nothing at all.
-    onError: (error: Error) => {
-      showError(`Failed to update node: ${error.message}`);
-    },
   });
 
   const deleteMutation = useMutation({
@@ -71,13 +57,36 @@ export function NodesPage() {
     setFormData(node);
   };
 
-  const handleSave = () => {
-    if (editingNode !== null) {
-      updateMutation.mutate({ nodeNumber: editingNode, updates: formData });
-    }
+  /**
+   * A row writes itself. No Save button - "i want no save buttons at all in
+   * the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * Keyed on the NODE NUMBER, so editing two rows in quick succession cannot
+   * land one node's settings on another: a pending write belongs to the row
+   * it was typed into.
+   *
+   * It deliberately does NOT close the row on success - that is what the
+   * update mutation does, and doing it per keystroke would snatch the row
+   * shut under the sysop mid-edit.
+   */
+  const autosave = useAutosave<Partial<NodeConfig>>({
+    save: async (updates, node) => {
+      if (!node) return;
+      await apiClient.updateNodeConfig(Number(node), updates);
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+    },
+    label: (_u, node) => `Node ${node} saved`,
+  });
+
+  /** The one way a field changes: set it AND schedule the write. */
+  const editField = (next: Partial<NodeConfig>) => {
+    setFormData(next);
+    if (editingNode !== null) autosave.schedule(next, String(editingNode));
   };
 
-  const handleCancel = () => {
+  /** Leave the row, writing anything still pending rather than dropping it. */
+  const handleDone = async () => {
+    if (editingNode !== null) await autosave.flush(String(editingNode));
     setEditingNode(null);
     setFormData({});
   };
@@ -135,7 +144,7 @@ export function NodesPage() {
           <input
             type="text"
             value={formData.node_start || ''}
-            onChange={(e) => setFormData({ ...formData, node_start: e.target.value })}
+            onChange={(e) => editField({ ...formData, node_start: e.target.value })}
             className="input-field w-full"
           />
         ) : (
@@ -152,7 +161,7 @@ export function NodesPage() {
           <input
             type="number"
             value={formData.priority ?? row.config?.priority ?? 0}
-            onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value, 10) || 0 })}
+            onChange={(e) => editField({ ...formData, priority: parseInt(e.target.value, 10) || 0 })}
             min="-1"
             max="20"
             className="input-field w-full"
@@ -169,7 +178,7 @@ export function NodesPage() {
           <input
             type="text"
             value={formData.screens ?? row.config?.screens ?? ''}
-            onChange={(e) => setFormData({ ...formData, screens: e.target.value })}
+            onChange={(e) => editField({ ...formData, screens: e.target.value })}
             placeholder={`Node${row.nodeNumber}/`}
             className="input-field w-full font-mono"
           />
@@ -188,7 +197,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.telnet ?? row.config?.telnet ?? false}
-              onChange={(e) => setFormData({ ...formData, telnet: e.target.checked })}
+              onChange={(e) => editField({ ...formData, telnet: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Enabled</span>
@@ -206,7 +215,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.ftp ?? row.config?.ftp ?? false}
-              onChange={(e) => setFormData({ ...formData, ftp: e.target.checked })}
+              onChange={(e) => editField({ ...formData, ftp: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Enabled</span>
@@ -225,7 +234,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.log_host ?? row.config?.log_host ?? false}
-              onChange={(e) => setFormData({ ...formData, log_host: e.target.checked })}
+              onChange={(e) => editField({ ...formData, log_host: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Logged</span>
@@ -244,7 +253,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.show_password_fails ?? row.config?.show_password_fails ?? false}
-              onChange={(e) => setFormData({ ...formData, show_password_fails: e.target.checked })}
+              onChange={(e) => editField({ ...formData, show_password_fails: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Shown</span>
@@ -263,7 +272,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.usernumber_login ?? row.config?.usernumber_login ?? false}
-              onChange={(e) => setFormData({ ...formData, usernumber_login: e.target.checked })}
+              onChange={(e) => editField({ ...formData, usernumber_login: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Allowed</span>
@@ -281,7 +290,7 @@ export function NodesPage() {
             <input
               type="checkbox"
               checked={formData.capitol_files ?? row.config?.capitol_files ?? false}
-              onChange={(e) => setFormData({ ...formData, capitol_files: e.target.checked })}
+              onChange={(e) => editField({ ...formData, capitol_files: e.target.checked })}
               className="w-4 h-4"
             />
             <span className="text-sm text-content-primary">Enabled</span>
@@ -302,7 +311,7 @@ export function NodesPage() {
               max="37"
               value={formData.sysop_chat_color ?? row.config?.sysop_chat_color ?? 32}
               onChange={(e) =>
-                setFormData({ ...formData, sysop_chat_color: parseInt(e.target.value, 10) || 0 })
+                editField({ ...formData, sysop_chat_color: parseInt(e.target.value, 10) || 0 })
               }
               className="input-field w-20"
             />
@@ -313,7 +322,7 @@ export function NodesPage() {
               max="37"
               value={formData.user_chat_color ?? row.config?.user_chat_color ?? 36}
               onChange={(e) =>
-                setFormData({ ...formData, user_chat_color: parseInt(e.target.value, 10) || 0 })
+                editField({ ...formData, user_chat_color: parseInt(e.target.value, 10) || 0 })
               }
               className="input-field w-20"
             />
@@ -355,14 +364,14 @@ export function NodesPage() {
 
         if (editingNode === row.nodeNumber) {
           return (
-            <div className="flex space-x-2">
-              <button onClick={handleSave} className="btn-primary flex items-center space-x-2">
-                <Save size={16} />
-                <span>Save</span>
-              </button>
-              <button onClick={handleCancel} className="btn-secondary flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
+              {/* No Save button: a field is written once the typing stops. */}
+              <span className="text-xs text-content-secondary">
+                {autosave.saving ? 'Saving...' : 'Saves itself'}
+              </span>
+              <button onClick={() => { void handleDone(); }} className="btn-secondary flex items-center space-x-2">
                 <X size={16} />
-                <span>Cancel</span>
+                <span>Done</span>
               </button>
             </div>
           );

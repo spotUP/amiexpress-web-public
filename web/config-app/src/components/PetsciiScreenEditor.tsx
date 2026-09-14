@@ -65,7 +65,16 @@ export interface PetsciiScreenEditorProps {
   onCancel?: () => void;
   /** Hand the sysop this file. The PAGE downloads, because the endpoint needs auth. */
   onDownload?: () => void;
-  /** Replace the screen from a local `.seq` the artist picked. */
+  /**
+   * Replace the screen from a local `.seq` the artist picked.
+   *
+   * OPTIONAL, and when it is absent the editor loads the file ITSELF - a
+   * `.seq` is bytes this component already knows how to read, unlike an ANSI
+   * drawing where the page owns the CP437 bridge. The sysop opened the editor
+   * and found no way in ("i dont see a way to upload a petscii screen in the
+   * petscii editor", 2026-09-14) because both mount sites left this out and
+   * the control rendered only when a handler was passed.
+   */
   onLoadFile?: (file: File) => void;
   saving?: boolean;
   /**
@@ -433,7 +442,7 @@ export function PetsciiScreenEditor({
             <Download size={14} /> Download
           </button>
         )}
-        {!readOnly && onLoadFile && (
+        {!readOnly && (
           <>
             <button
               type="button"
@@ -448,10 +457,17 @@ export function PetsciiScreenEditor({
               accept=".seq"
               aria-label="Load a drawing"
               className="hidden"
-              onChange={event => {
+              onChange={async event => {
                 const chosen = event.target.files?.[0];
                 event.target.value = '';
-                if (chosen) onLoadFile(chosen);
+                if (!chosen) return;
+                // The page's handler wins when it has one; otherwise read the
+                // bytes here. A `.seq` is screen codes, so it goes through
+                // PetsciiMachine exactly as a saved file does - no CP437
+                // bridge, nothing the page has to own.
+                if (onLoadFile) { onLoadFile(chosen); return; }
+                const bytes = new Uint8Array(await chosen.arrayBuffer());
+                commit(surfaceFromBytes(bytes));
               }}
             />
           </>

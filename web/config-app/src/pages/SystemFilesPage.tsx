@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Modal } from '../components/ui/Modal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileCode, Edit2, Save, X, RefreshCw, FolderOpen } from 'lucide-react';
+import { FileCode, Edit2, X, RefreshCw, FolderOpen } from 'lucide-react';
+import { useAutosave } from '../hooks/useAutosave';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { infoFileNote } from './info-file-notes';
@@ -22,13 +23,12 @@ interface Tooltype {
 
 export function SystemFilesPage() {
   const queryClient = useQueryClient();
-  const { showSuccess, showError } = useNotification();
+  const { showError } = useNotification();
 
   // Info editor modal state
   const [isInfoEditorOpen, setIsInfoEditorOpen] = useState(false);
   const [editingFile, setEditingFile] = useState<InfoFileItem | null>(null);
   const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
-  const [infoDirty, setInfoDirty] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -60,50 +60,60 @@ export function SystemFilesPage() {
       const response = await apiClient.getInfoFile(file.path);
       setTooltypes(response.data?.tooltypes || []);
       setEditingFile(file);
-      setInfoDirty(false);
       setIsInfoEditorOpen(true);
     } catch (error) {
       showError(`Failed to load .info file: ${(error as Error).message}`);
     }
   };
 
-  const handleInfoSave = async () => {
-    if (!editingFile) return;
-
-    try {
-      await apiClient.updateInfoFile(editingFile.path, tooltypes);
-      showSuccess('.info file saved successfully');
-      setInfoDirty(false);
-      setIsInfoEditorOpen(false);
-      setEditingFile(null);
+  /**
+   * The editor writes itself. No Save button - "i want no save buttons at all
+   * in the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * An `.info` file is tooltypes an Amiga reads, so a half-typed value must
+   * not go out on every keystroke: `useAutosave` waits for the typing to stop.
+   * Closing the editor flushes whatever is still pending rather than
+   * discarding it, which is what Cancel used to do silently.
+   */
+  const autosave = useAutosave<Tooltype[]>({
+    save: async next => {
+      if (!editingFile) return;
+      await apiClient.updateInfoFile(editingFile.path, next);
       queryClient.invalidateQueries({ queryKey: ['system-info-files'] });
-    } catch (error) {
-      showError(`Failed to save .info file: ${(error as Error).message}`);
-    }
+    },
+    label: () => `${editingFile?.name ?? 'The .info file'} saved`,
+  });
+
+  /** The one way tooltypes change: set them AND schedule the write. */
+  const editTooltypes = (next: Tooltype[]) => {
+    setTooltypes(next);
+    autosave.schedule(next);
+  };
+
+  const closeInfoEditor = async () => {
+    await autosave.flush();
+    setIsInfoEditorOpen(false);
+    setEditingFile(null);
   };
 
   const handleTooltypeToggle = (index: number) => {
     const updated = [...tooltypes];
     updated[index] = { ...updated[index], commented: !updated[index].commented };
-    setTooltypes(updated);
-    setInfoDirty(true);
+    editTooltypes(updated);
   };
 
   const handleTooltypeUpdate = (index: number, field: 'key' | 'value', newValue: string) => {
     const updated = [...tooltypes];
     updated[index] = { ...updated[index], [field]: newValue };
-    setTooltypes(updated);
-    setInfoDirty(true);
+    editTooltypes(updated);
   };
 
   const handleTooltypeAdd = () => {
-    setTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
-    setInfoDirty(true);
+    editTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
   };
 
   const handleTooltypeRemove = (index: number) => {
-    setTooltypes(tooltypes.filter((_, i) => i !== index));
-    setInfoDirty(true);
+    editTooltypes(tooltypes.filter((_, i) => i !== index));
   };
 
   if (isLoading) {
@@ -300,27 +310,17 @@ export function SystemFilesPage() {
             {/* Modal Footer */}
             <div className="p-6 border-t border-border flex items-center justify-between">
               <div>
-                {infoDirty && (
-                  <span className="text-status-warn text-sm">* Unsaved changes</span>
+                <span className="text-sm text-content-secondary">
+                  {autosave.saving ? 'Saving...' : 'Changes save themselves'}
+                </span>
+                {autosave.error && (
+                  <span className="text-status-danger text-sm ml-3">{autosave.error}</span>
                 )}
               </div>
               <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setIsInfoEditorOpen(false);
-                    setEditingFile(null);
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleInfoSave}
-                  disabled={!infoDirty}
-                  className="btn-primary flex items-center space-x-2"
-                >
-                  <Save size={16} />
-                  <span>Save Changes</span>
+                {/* No Save button. Close flushes what is still pending. */}
+                <button onClick={() => { void closeInfoEditor(); }} className="btn-primary">
+                  Close
                 </button>
               </div>
             </div>

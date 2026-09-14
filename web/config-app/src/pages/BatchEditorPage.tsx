@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Save, RefreshCw, Download, Filter, ShieldAlert } from 'lucide-react';
+import { RefreshCw, Download, Filter, ShieldAlert } from 'lucide-react';
+import { useAutosave } from '../hooks/useAutosave';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -66,15 +67,27 @@ export function BatchEditorPage() {
     loadBatch();
   }, [loadBatch]);
 
-  const handleSave = async () => {
-    if (!selectedBatch) return;
-    try {
-      await apiClient.saveBatch(selectedBatch, content);
-      showSuccess(`Saved ${selectedBatch}`);
+  /**
+   * The batch writes itself. No Save button - "i want no save buttons at all
+   * in the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * Keyed on the batch NAME so switching batches cannot land one file's lines
+   * in another: a pending write belongs to the file it was typed into.
+   */
+  const autosave = useAutosave<string>({
+    save: async (next, batch) => {
+      if (!batch) return;
+      await apiClient.saveBatch(batch, next);
       setDirty(false);
-    } catch (err: any) {
-      showError(`Failed to save ${selectedBatch}: ${err.message}`);
-    }
+    },
+    label: (_next, batch) => `Saved ${batch}`,
+  });
+
+  /** The one way the batch text changes: set it AND schedule the write. */
+  const editContent = (next: string) => {
+    setContent(next);
+    setDirty(true);
+    if (selectedBatch) autosave.schedule(next, selectedBatch);
   };
 
   const handleExportTxt = () => {
@@ -127,8 +140,7 @@ export function BatchEditorPage() {
   };
 
   const handleInsertHelper = (line: string) => {
-    setContent((prev) => (prev.endsWith('\n') || prev.length === 0 ? prev + line : `${prev}\n${line}`));
-    setDirty(true);
+    editContent(content.endsWith('\n') || content.length === 0 ? content + line : `${content}\n${line}`);
   };
 
   const lines = useMemo(() => content.split('\n').map((line, idx) => {
@@ -166,14 +178,10 @@ export function BatchEditorPage() {
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
-          <button
-            onClick={handleSave}
-            disabled={!dirty}
-            className="btn-primary flex items-center space-x-2 disabled:opacity-50"
-          >
-            <Save size={16} />
-            <span>Save</span>
-          </button>
+          {/* No Save button: a line is written once the typing stops. */}
+          <span className="text-sm text-content-secondary">
+            {autosave.saving ? 'Saving...' : dirty ? 'Saving shortly' : 'Changes save themselves'}
+          </span>
           <button
             onClick={handleExportTxt}
             className="btn-secondary flex items-center space-x-2"
@@ -265,8 +273,7 @@ export function BatchEditorPage() {
                     onChange={(e) => {
                       const next = [...content.split('\n')];
                       next[idx] = e.target.value;
-                      setContent(next.join('\n'));
-                      setDirty(true);
+                      editContent(next.join('\n'));
                     }}
                     className={`input-field w-full font-mono text-xs ${isComment ? 'text-content-secondary' : 'text-content-primary'}`}
                   />

@@ -107,7 +107,7 @@ export function CoSysopPersonasPage() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['operator-chat-personas'] });
-      showSuccess('Persona saved');
+      showSuccess('Persona created');
     },
     onError: (error: unknown) => showError(failure(error, 'Could not save the persona')),
   });
@@ -231,7 +231,18 @@ export function CoSysopPersonasPage() {
           <textarea placeholder="Opening lines (one per line, blank=generated)" aria-label="Opening lines" value={form.openingLines} onChange={e=>setForm({...form, openingLines:e.target.value})} className={textareaCls} rows={2} />
           <textarea placeholder="Fallback lines (one per line)" aria-label="Fallback lines" value={form.fallbackLines} onChange={e=>setForm({...form, fallbackLines:e.target.value})} className={textareaCls} rows={2} />
           <div className="flex gap-2">
-            <button type="button" onClick={()=>save.mutate()} disabled={save.isPending} className="px-3 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded text-sm flex items-center gap-1 disabled:opacity-50"><Send className="w-3 h-3" />Save</button>
+            {/*
+            CREATE, NOT SAVE - and the one control on this page that stays.
+            "i want no save buttons at all in the admin ui everything should
+            auto save" (sysop, 2026-09-14) is about edits to something that
+            already exists. This form makes a NEW persona, and its identity is
+            the handle: the slug is derived from it
+            (persona-composer.ts:149). Autosaving while the handle is typed
+            would write a persona per prefix - S, SP, SPO - and leave the
+            board's list full of them. Making one is deliberate; changing one
+            afterwards is not, and that path can autosave the day it exists.
+          */}
+          <button type="button" onClick={()=>save.mutate()} disabled={save.isPending} className="px-3 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded text-sm flex items-center gap-1 disabled:opacity-50"><Send className="w-3 h-3" />{save.isPending ? 'Creating...' : 'Create persona'}</button>
             <button type="button" onClick={()=>compose.mutate()} disabled={compose.isPending} className="px-3 py-2 bg-surface-0 border border-border text-content-primary hover:border-accent rounded text-sm flex items-center gap-1 disabled:opacity-50"><Eye className="w-3 h-3" />Preview prompt</button>
           </div>
           {composedPrompt !== null ? (

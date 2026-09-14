@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAutosave } from '../hooks/useAutosave';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
 import { Modal } from '../components/ui/Modal';
@@ -34,7 +35,6 @@ export function BullsInfoPage() {
   const [draft, setDraft] = useState<Array<{ title: string; file: string }>>([]);
   const [problems, setProblems] = useState<BullsProblem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [modalFile, setModalFile] = useState<string | null>(null);
   const [browserKey, setBrowserKey] = useState(0);
@@ -71,31 +71,40 @@ export function BullsInfoPage() {
   const problemsFor = (line: number) => problems.filter((p) => p.line === line);
   const globalProblems = problems.filter((p) => p.line === 0);
 
+  /**
+   * The menu writes itself. No Save button - "i want no save buttons at all
+   * in the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * The board answers a save with the entries AND the problems it found, and
+   * that answer is worth keeping: it is how a bad file name surfaces. So the
+   * write applies the response exactly as the button did.
+   */
+  const autosave = useAutosave<Array<{ title: string; file: string }>>({
+    save: async next => {
+      const res: any = await apiClient.saveBullsEntries(next);
+      const data = res?.data ?? res;
+      if (!data || !Array.isArray(data.entries)) {
+        throw new Error(res?.message ?? 'unexpected response');
+      }
+      applyData(data);
+      const left = (Array.isArray(data.problems) ? data.problems : []).length;
+      setStatus(left ? `Saved with ${left} problem${left === 1 ? '' : 's'} flagged.` : 'Saved, no problems.');
+    },
+    label: () => 'Bulletin menu saved',
+  });
+
+  /** The one way the menu changes: set it AND schedule the write. */
+  const edit = (next: Array<{ title: string; file: string }>) => {
+    setDraft(next);
+    autosave.schedule(next);
+  };
+
   const setRow = (i: number, patch: Partial<{ title: string; file: string }>) => {
     const next = draft.slice();
     next[i] = { title: next[i]?.title ?? '', file: next[i]?.file ?? '', ...patch };
-    setDraft(next);
+    edit(next);
   };
 
-  const handleSaveEntries = async () => {
-    setSaving(true);
-    setStatus(null);
-    try {
-      const res: any = await apiClient.saveBullsEntries(draft);
-      const data = res?.data ?? res;
-      if (data && Array.isArray(data.entries)) {
-        applyData(data);
-        const left = (Array.isArray(data.problems) ? data.problems : []).length;
-        setStatus(left ? `Saved with ${left} problem${left === 1 ? '' : 's'} flagged.` : 'Saved, no problems.');
-      } else {
-        setStatus(`Error: ${res?.message ?? 'unexpected response'}`);
-      }
-    } catch (e: unknown) {
-      setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -156,7 +165,7 @@ export function BullsInfoPage() {
                     <button onClick={() => setModalFile(row.file.trim())} disabled={!row.file.trim()} className="px-2 py-1 text-accent hover:underline text-sm disabled:opacity-50">
                       Open
                     </button>
-                    <button onClick={() => setDraft(draft.filter((_, j) => j !== i))} className="px-2 py-1 text-status-danger hover:underline text-sm">
+                    <button onClick={() => edit(draft.filter((_, j) => j !== i))} className="px-2 py-1 text-status-danger hover:underline text-sm">
                       Remove
                     </button>
                   </td>
@@ -168,12 +177,13 @@ export function BullsInfoPage() {
       )}
 
       <div className="flex gap-2">
-        <button onClick={() => setDraft([...draft, { title: '', file: '' }])} className="px-4 py-2 bg-surface-0 border border-border text-content-primary rounded disabled:opacity-50">
+        <button onClick={() => edit([...draft, { title: '', file: '' }])} className="px-4 py-2 bg-surface-0 border border-border text-content-primary rounded disabled:opacity-50">
           Add row
         </button>
-        <button onClick={handleSaveEntries} disabled={saving} className="px-4 py-2 bg-accent text-white rounded disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save menu entries'}
-        </button>
+        {/* No Save button: a row is written once the typing stops. */}
+        <span className="px-2 py-2 text-sm text-content-secondary">
+          {autosave.saving ? 'Saving...' : 'Changes save themselves'}
+        </span>
         <button onClick={load} disabled={loading} className="px-4 py-2 bg-surface-0 border border-border text-content-primary rounded disabled:opacity-50">
           Reload
         </button>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAutosave } from '../hooks/useAutosave';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
 
@@ -12,7 +13,6 @@ export function AdminRolesPage() {
   const [perms, setPerms] = useState<Record<string, number> | null>(null);
   const [sections, setSections] = useState<SectionInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -36,24 +36,32 @@ export function AdminRolesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setStatus(null);
-    try {
-      const result = await apiClient.setAdminPermissions(draft);
+  /**
+   * Every change writes itself. No Save button - "i want no save buttons at
+   * all in the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * A level typed into a row is the edit; `useAutosave` debounces the burst
+   * and writes once it stops, which also keeps a run of arrow-key nudges from
+   * becoming a run of requests.
+   */
+  const autosave = useAutosave<Record<string, number>>({
+    save: async next => {
+      const result = await apiClient.setAdminPermissions(next);
       if (result) setPerms(result.perms);
-      setStatus('Saved');
-    } catch (e: unknown) {
-      setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
-    } finally {
-      setSaving(false);
-    }
+    },
+    label: () => 'Access levels saved',
+  });
+
+  /** The one way a level changes: edit the draft AND schedule the write. */
+  const edit = (next: Record<string, number>) => {
+    setDraft(next);
+    autosave.schedule(next);
   };
 
   const handleReset = () => {
     const defaults: Record<string, number> = {};
     for (const s of sections) defaults[s.key] = s.defaultMinLevel;
-    setDraft(defaults);
+    edit(defaults);
   };
 
   const startEdit = (key: string, val: number) => {
@@ -64,7 +72,7 @@ export function AdminRolesPage() {
   const commitEdit = (key: string) => {
     const n = parseInt(editValue, 10);
     if (!isNaN(n) && n >= 0 && n <= 255) {
-      setDraft(d => ({ ...d, [key]: n }));
+      edit({ ...draft, [key]: n });
     }
     setEditingKey(null);
   };
@@ -139,12 +147,14 @@ export function AdminRolesPage() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button onClick={handleSave} disabled={!dirty || saving} className="btn-primary">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        {/* No Save button: a change is written as soon as the typing stops. */}
+        <span className="text-sm text-content-secondary">
+          {autosave.saving ? 'Saving...' : 'Changes save themselves'}
+        </span>
         <button onClick={handleReset} disabled={!dirty} className="btn-secondary">
           Reset to Defaults
         </button>
+        {autosave.error && <span className="text-sm text-alert">{autosave.error}</span>}
         {status && (
           <span className={`text-sm ${status.startsWith('Error') ? 'text-alert' : 'text-ok'}`}>{status}</span>
         )}
