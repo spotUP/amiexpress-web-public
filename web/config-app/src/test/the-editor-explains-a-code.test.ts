@@ -15,13 +15,21 @@ import { describe, it, expect } from 'vitest';
 import { tokenAt, explainToken, type MciToken } from '../pages/mci-tokens';
 
 const token = (over: Partial<MciToken> = {}): MciToken => ({
-  code: 'SS_', target: 'BBS:Bulletins/bull6.txt',
+  code: 'SS', target: 'BBS:Bulletins/bull6.txt',
   line: 3, column: 10, length: 30, resolves: true, ...over,
 });
 
+/*
+ * The catalog's own spelling, which is NOT the token's: a reference is
+ * reported as `SS` and catalogued as `SS_`, because the underscore belongs to
+ * the syntax of the codes that take a target. `CL` takes none and is bare in
+ * both. Getting this wrong is silent - three of the four codes simply never
+ * match - so the fixture uses the real spellings.
+ */
 const CATALOG = [
   { code: 'SS_', summary: 'Show another screen inside this one' },
-  { code: 'XI', summary: 'Start a door without announcing it' },
+  { code: 'CC_', summary: 'Run a BBS command' },
+  { code: 'CL', summary: 'Every conference the caller may join' },
 ];
 
 describe('the code under the cursor', () => {
@@ -45,6 +53,7 @@ describe('the code under the cursor', () => {
   it('says what the code does and what it points at', () => {
     const explained = explainToken(token(), CATALOG);
 
+    // Titled as it appears on screen: the artist is looking at `~SS_...`.
     expect(explained.title).toBe('~SS_');
     expect(explained.summary).toBe('Show another screen inside this one');
     expect(explained.target).toBe('BBS:Bulletins/bull6.txt');
@@ -57,21 +66,33 @@ describe('the code under the cursor', () => {
     expect(explainToken(token({ resolves: true }), CATALOG).broken).toBe(false);
   });
 
+  it('finds a code the catalog spells with an underscore', () => {
+    // The bug the type checker caught: a reference is reported as `SS` and
+    // catalogued as `SS_`, so matching on equality explained nothing for
+    // every include and every command on the board - silently.
+    expect(explainToken(token({ code: 'SS' }), CATALOG).summary)
+      .toBe('Show another screen inside this one');
+    expect(explainToken(token({ code: 'CC', target: 'ctop' }), CATALOG).summary)
+      .toBe('Run a BBS command');
+  });
+
+  it('finds the one that is bare in both', () => {
+    // `CL` takes no target, so it carries no underscore anywhere.
+    expect(explainToken(token({ code: 'CL', target: '' }), CATALOG).summary)
+      .toBe('Every conference the caller may join');
+  });
+
   it('still explains a code the catalog does not know', () => {
     // An unknown code is exactly when somebody needs to be told it is
     // unknown - staying silent there is the case that matters most.
-    const explained = explainToken(token({ code: 'ZZ' }), CATALOG);
+    const explained = explainToken(token({ code: 'SR' }), CATALOG);
 
-    expect(explained.title).toBe('~ZZ');
+    // No catalog entry, so the token's own spelling is all there is.
+    expect(explained.title).toBe('~SR');
     expect(explained.summary).toMatch(/does not know|Not a code/i);
   });
 
-  it('matches the catalog without regard to case', () => {
-    expect(explainToken(token({ code: 'ss_' }), CATALOG).summary)
-      .toBe('Show another screen inside this one');
-  });
-
   it('has no target to show for a code that takes none', () => {
-    expect(explainToken(token({ code: 'XI', target: '' }), CATALOG).target).toBeNull();
+    expect(explainToken(token({ code: 'CL', target: '' }), CATALOG).target).toBeNull();
   });
 });

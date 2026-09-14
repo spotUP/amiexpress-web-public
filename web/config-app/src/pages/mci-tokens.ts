@@ -98,9 +98,32 @@ export function explainToken(
   token: MciToken,
   catalog: { code: string; summary: string }[],
 ): { title: string; summary: string; target: string | null; broken: boolean } {
-  const entry = catalog.find(c => c.code.toUpperCase() === token.code.toUpperCase());
+  /*
+   * THE TOKEN'S CODE IS NOT SPELLED LIKE THE CATALOG'S.
+   *
+   * `locateMciReferences` reports the four codes that POINT at something as
+   * `CC`/`SS`/`SR`/`CL`, and the catalog carries them as `CC_`, `SS_`, `SR_`
+   * and - alone among them - a bare `CL`, because the underscore is part of
+   * the code's syntax for the ones that take a target. Matching on equality
+   * found nothing for three of the four, silently: every include and every
+   * command would have been reported as a code this board does not know.
+   *
+   * The type checker caught it. `MciToken['code']` is a four-way union, so a
+   * test written with the catalog's spelling would not compile - which is the
+   * only reason this was found before it shipped.
+   */
+  const want = token.code.toUpperCase();
+  const entry = catalog.find(c => {
+    const code = c.code.toUpperCase();
+    return code === want || code === `${want}_`;
+  });
+  /*
+   * Titled as it appears ON THE SCREEN, which is the catalog's spelling when
+   * there is one: the artist is looking at `~SS_BBS:Bulletins/bull6.txt`, and
+   * a panel that called it `~SS` would be naming something they cannot see.
+   */
   return {
-    title: `~${token.code}`,
+    title: `~${entry?.code ?? token.code}`,
     summary: entry?.summary ?? 'Not a code this board knows.',
     target: token.target || null,
     broken: !token.resolves,
