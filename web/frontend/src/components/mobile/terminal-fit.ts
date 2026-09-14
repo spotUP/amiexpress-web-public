@@ -228,3 +228,53 @@ export function keptFontSize(
 ): number {
   return handheld ? zoomed : snap(zoomed, family);
 }
+
+/**
+ * How big the grid IS at a given font size. Computed, never measured.
+ *
+ * THE MEASUREMENT WAS THE BUG. The fit used to set `term.options.fontSize` and
+ * read `.xterm-screen`'s box straight back, once per probe. xterm's DOM
+ * renderer relays its rows asynchronously, so the read answered for the
+ * PREVIOUS candidate and the search settled somewhere different every run: the
+ * same 390px phone got a 358px grid, then 338, then 298 - reported three times
+ * as "not full width on mobile". Measuring once at mount is no better: nothing
+ * has been laid out yet, and the ratios come back as nonsense.
+ *
+ * There is nothing to measure. A cell is the font size times two constants the
+ * caller already knows, and the only subtlety is the rounding, which was read
+ * off the live board at two sizes:
+ *
+ *     font-size 8.45 -> a 200px-tall screen, 25 rows of 8   (round, not ceil)
+ *     font-size 9.75 -> a 250px-tall screen, 25 rows of 10
+ *     font-size 9.75 -> a 390px-wide screen, 80 columns of 4.875
+ *
+ * So the ROW is rounded to a whole pixel and the COLUMN keeps its fraction -
+ * on a device with three physical pixels per CSS pixel, which is also how we
+ * know xterm is not snapping columns to device pixels. A model that floored
+ * the column would throw away a pixel a column, and there are eighty of them.
+ */
+export interface CellRatios {
+  /** Cell width per point of font size. Half an em for every Amiga face. */
+  width: number;
+  /**
+   * Row height per point of font size: the terminal's `lineHeight` option when
+   * it has one (the board sets 1.0 for every Amiga face, which are designed to
+   * meet across rows), and xterm's own ~1.2 for a face without one.
+   */
+  height: number;
+}
+
+export function gridSizeFor(
+  fontSize: number,
+  cols: number,
+  rows: number,
+  ratios: CellRatios,
+): Size {
+  return {
+    width: cols * fontSize * ratios.width,
+    height: rows * Math.round(fontSize * ratios.height),
+  };
+}
+
+/** xterm's cell height for a face that does not ask for a line-height. */
+export const DEFAULT_LINE_HEIGHT_RATIO = 1.2;

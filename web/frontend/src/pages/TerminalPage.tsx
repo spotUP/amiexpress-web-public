@@ -1,7 +1,13 @@
 import { useRef, useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
-import { visibleHeight, visibleTop, keptFontSize } from '../components/mobile/terminal-fit';
+import {
+  visibleHeight,
+  visibleTop,
+  keptFontSize,
+  gridSizeFor,
+  DEFAULT_LINE_HEIGHT_RATIO,
+} from '../components/mobile/terminal-fit';
 import { refusePageZoom } from '../components/mobile/page-zoom';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
 import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
@@ -13,7 +19,7 @@ import {
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
 import { findGameControlLayout, trackpadColumn, trackpadStep } from '../components/mobile/game-controls';
 import { fitFontSize, TELETEXT_FIT_LIMITS } from '../components/mobile/terminal-fit';
-import { seamlessSize, seamlessTeletextSize } from '@amiexpress/terminal';
+import { seamlessSize, seamlessTeletextSize, advanceRatioFor } from '@amiexpress/terminal';
 import {
   FIT_TO_WINDOW,
   TERMINAL_BEZEL_PX,
@@ -27,6 +33,8 @@ import './TerminalPage.css';
 // search finishes in a couple of probes.
 const CHAR_ASPECT = 0.5;
 const BBS_COLS = 80;
+/** ...and its rows, the other half of the board's grid. */
+const BBS_ROWS = 25;
 const DESKTOP_FONT_SIZE = 16;
 /** Must match --bbs-onscreen-input-height in TerminalPage.css. */
 const ONSCREEN_INPUT_HEIGHT = 260;
@@ -185,9 +193,33 @@ export function TerminalPage(): JSX.Element {
     const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
     if (!screen) return;
 
+    /*
+     * COMPUTED, NOT MEASURED - and it applies the size as it goes, because the
+     * search leaves the terminal at the size it returns.
+     *
+     * Reading `.xterm-screen` back after setting a font size is what made this
+     * fit unreliable: the DOM renderer relays its rows asynchronously, so the
+     * read answered for the PREVIOUS candidate and the search converged
+     * somewhere different every run - 358px, 338px, 298px of a 390px screen on
+     * the same phone, reported three times as "not full width". gridSizeFor
+     * has the model instead: a fixed advance per column, a whole-pixel row.
+     */
+    const family = String(term.options.fontFamily ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
+    const cols = term.cols || BBS_COLS;
+    const rows = term.rows || BBS_ROWS;
+
+    /*
+     * The cell, from what the terminal already knows - not from reading the
+     * DOM back after every probe, which is what made this fit unreliable.
+     * See gridSizeFor.
+     */
+    const ratios = {
+      width: advanceRatioFor(family),
+      height: Number(term.options.lineHeight) || DEFAULT_LINE_HEIGHT_RATIO,
+    };
     const measure = (candidate: number) => {
       term.options.fontSize = candidate;
-      return { width: screen.offsetWidth, height: screen.offsetHeight };
+      return gridSizeFor(candidate, cols, rows, ratios);
     };
 
     let available: { width: number; height: number };
@@ -197,20 +229,25 @@ export function TerminalPage(): JSX.Element {
       // viewport, not the layout one: on iOS the layout viewport runs
       // underneath Safari's floating address bar, so sizing against it hid
       // the top rows behind the bar.
-      const host = element.parentElement;
-      if (!host) return;
       /*
-       * THE HOST'S OWN BOX, when it has one. With the BBS keyboard showing,
-       * the page is a flex column and the host is the row that takes what is
-       * left - so its height IS the band, measured rather than computed, and
-       * it cannot drift from the strip's real height the way a constant does.
+       * THE PAGE'S OWN BAND, never the terminal's parent.
        *
-       * The fallback is for the game pads, which are still fixed overlays and
-       * leave the host at `display: contents` (no box at all, clientHeight 0).
+       * `element.parentElement` is the terminal's BOX, and that box is sized
+       * by the grid inside it - so measuring it hands the fit its own previous
+       * output and the grid can never grow. That is why the same phone kept
+       * settling at whatever it had last time: 358, 338, 298.
+       *
+       * `.terminal-page__host` is the row the page's flex column gives the
+       * terminal, and the page is sized from the visible viewport, so this is
+       * the band and nothing else. The fallbacks are for the game pads, which
+       * are fixed overlays and leave the host at `display: contents` with no
+       * box at all.
        */
+      const page = pageRef.current;
+      const band = page?.querySelector('.terminal-page__host') as HTMLElement | null;
       available = {
-        width: host.clientWidth || window.innerWidth,
-        height: host.clientHeight
+        width: band?.clientWidth || page?.clientWidth || window.innerWidth,
+        height: band?.clientHeight
           // Minus the band the browser's own chrome sits over, where a
           // browser overlays rather than insets - see visibleTop.
           || (visibleHeight(window)
@@ -273,7 +310,6 @@ export function TerminalPage(): JSX.Element {
     // fractional cell lands: "det ar liksom inte tillrackligt med plats, dom
     // overlappar" (an artist, via the sysop, 2026-09-14). seamlessSize is
     // the one owner of that rule; the face's advance decides the step.
-    const family = String(term.options.fontFamily ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
     /*
      * THE SEAM SNAP IS A DESKTOP RULE, and on a phone it costs the screen.
      *

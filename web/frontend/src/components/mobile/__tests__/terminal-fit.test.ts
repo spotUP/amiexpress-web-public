@@ -17,6 +17,7 @@ import {
   visibleTop,
   visibleWidth,
   keptFontSize,
+  gridSizeFor,
   BBS_COLS,
   BBS_ROWS,
   DEFAULT_FIT_LIMITS,
@@ -251,5 +252,75 @@ describe('the size the terminal keeps', () => {
     // A size that is already whole-celled is untouched by both.
     expect(keptFontSize(14, 'mosoul', false, snap)).toBe(14);
     expect(keptFontSize(14, 'mosoul', true, snap)).toBe(14);
+  });
+});
+
+/**
+ * How big the grid is at a given font size, and where the numbers come from.
+ *
+ * The fit used to set `term.options.fontSize` and read `.xterm-screen`'s box
+ * straight back, once per probe. xterm's DOM renderer relays asynchronously,
+ * so that read answered for the PREVIOUS candidate and the search settled
+ * somewhere different every run: the same 390px phone got a 358px grid, then
+ * 338, then 298, reported three times as "not full width on mobile".
+ *
+ * A cell is linear in the font size. One settled measurement gives its ratios;
+ * every candidate after that is arithmetic.
+ */
+describe('the size of the grid at a font size', () => {
+  /** The Amiga faces: half an em wide, and a row exactly the font size tall. */
+  const AMIGA = { width: 0.5, height: 1 };
+
+  it('is the cell times the columns, exactly', () => {
+    // 80 columns at 9.75px is 390 - the whole width of the phone that
+    // reported this, which is the answer the fit must land on.
+    expect(gridSizeFor(9.75, 80, 25, AMIGA).width).toBe(390);
+  });
+
+  it('keeps the column fractional and ROUNDS the row, as the board measures', () => {
+    // Live: 8.45 gave 80 columns of 4.225 and 25 rows of 8 - the row rounded,
+    // not ceiled, and the column not snapped to anything.
+    const grid = gridSizeFor(8.45, 80, 25, AMIGA);
+    expect(grid.width).toBeCloseTo(80 * 4.225, 5);
+    expect(grid.height).toBe(25 * 8);
+  });
+
+  it('takes the ratios it is given, because a face without a line-height is taller', () => {
+    // ~1.2 is what a face with no explicit line-height measures at.
+    const loose = gridSizeFor(20, 80, 25, { width: 0.5, height: 1.2 });
+    expect(loose.height).toBe(25 * 24);
+  });
+
+  it('drives the fit to the exact size that fills a phone', () => {
+    // The whole point: feed the search arithmetic and it lands on 9.75 for a
+    // 390x584 band, every time, with no terminal attached at all.
+    const fitted = fitFontSize(
+      8,
+      { width: 390, height: 584 },
+      (size) => gridSizeFor(size, 80, 25, AMIGA),
+    );
+    expect(fitted).toBe(9.75);
+    expect(gridSizeFor(fitted, 80, 25, AMIGA).width).toBe(390);
+  });
+});
+
+/**
+ * The rounding, which is the only part of the model that is not obvious - and
+ * it was read off the live board rather than assumed.
+ */
+describe('the rounding the model uses', () => {
+  const AMIGA = { width: 0.5, height: 1 };
+
+  it('ROUNDS the row, which is what the board measures', () => {
+    // 8.45 gave 25 rows of 8 and 9.75 gave 25 rows of 10. Ceiling would have
+    // made the first one 9, flooring would have made the second one 9.
+    expect(gridSizeFor(8.45, 80, 25, AMIGA).height).toBe(200);
+    expect(gridSizeFor(9.75, 80, 25, AMIGA).height).toBe(250);
+  });
+
+  it('leaves the column alone, fraction and all', () => {
+    // 80 columns of 4.875 is 390 - measured on a phone with three device
+    // pixels per CSS pixel, so xterm is not snapping columns to those either.
+    expect(gridSizeFor(9.75, 80, 25, AMIGA).width).toBe(390);
   });
 });

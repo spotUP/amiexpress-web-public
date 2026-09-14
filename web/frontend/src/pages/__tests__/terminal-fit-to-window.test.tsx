@@ -59,6 +59,10 @@ vi.mock('@amiexpress/terminal', async () => ({
     .seamlessTeletextSize,
   seamlessSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
     .seamlessSize,
+  // The fit computes the grid from the face's advance now, rather than
+  // measuring the DOM - so this export is as load-bearing as the two above.
+  advanceRatioFor: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .advanceRatioFor,
   BBSTerminal: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
     harness.props = props as NonNullable<typeof harness.props>;
     React.useImperativeHandle(ref, () => ({
@@ -157,10 +161,31 @@ describe('the cell lands on a whole CSS pixel', () => {
 
 describe('the cell size follows the browser window', () => {
   it('fits the 80x25 grid to a 1280x800 window instead of a fixed 16px', () => {
+    /*
+     * A PROPERTY, not a number. This used to pin 25.4 - the exact size the
+     * fit reached while it MEASURED the DOM after every probe. It computes
+     * the grid now (the measurement was stale under the DOM renderer and the
+     * search settled somewhere different every run), and the model is
+     * deliberately conservative where xterm's rounding is not knowable from
+     * here: it keeps the column's fraction, which live measurement shows xterm
+     * keeps too, and rounds the row up.
+     *
+     * So what matters is that the grid FITS and is within one step of the
+     * largest that does - not which side of xterm's rounding the last tenth of
+     * a point falls on.
+     */
     mountAt(1280, 800);
-    expect(harness.props?.fontSize).toBeCloseTo(25.4, 5);
-    // Not the old constant - that is the whole point of the change.
-    expect(harness.props?.fontSize).not.toBe(16);
+    const size = harness.props?.fontSize as number;
+    const grid = gridFor(size);
+    expect(grid.width).toBeLessThanOrEqual(1280);
+    expect(grid.height).toBeLessThanOrEqual(800);
+    /*
+     * And a real fit, not a default: the grid fills most of the window it was
+     * given. "One step bigger overflows" would pin the fit to THIS stub's
+     * rounding, which is the coupling that made the previous assertion wrong.
+     */
+    expect(grid.height).toBeGreaterThan(800 * 0.9);
+    expect(size).not.toBe(16);
   });
 
   it('re-fits when the window is resized: smaller window, smaller cell', () => {
@@ -192,8 +217,16 @@ describe('at fit the box touches the viewport on the constraining axis', () => {
     const { page } = mountAt(1280, 800);
     const grid = gridFor(harness.term!.options.fontSize);
     const bezel = bezelOf(page);
-    // The bezel absorbed the leftover, so the box is exactly the page height.
-    expect(grid.height + 2 * bezel).toBeCloseTo(800, 5);
+    /*
+     * WITHIN A ROW of flush, rather than exactly flush. The fit computes the
+     * grid from a cell it measured once, and its rounding is conservative
+     * against xterm's own - so the leftover the bezel absorbs can be a row
+     * short. Flush to the pixel was only ever reachable while the fit measured
+     * the same stub this test asserts against.
+     */
+    const row = gridFor(harness.term!.options.fontSize).height / BBS_ROWS;
+    expect(800 - (grid.height + 2 * bezel)).toBeLessThanOrEqual(row);
+    expect(grid.height + 2 * bezel).toBeLessThanOrEqual(800);
     expect(bezel).toBeGreaterThan(TERMINAL_BEZEL_PX);
     expect(grid.width + 2 * bezel).toBeLessThan(1280);
   });

@@ -35,6 +35,10 @@ vi.mock('@amiexpress/terminal', async () => ({
     .seamlessTeletextSize,
   seamlessSize: (await import('../../../../../packages/terminal/src/utils/session-font'))
     .seamlessSize,
+  // The fit computes the grid from the face's advance now, rather than
+  // measuring the DOM - so this export is as load-bearing as the two above.
+  advanceRatioFor: (await import('../../../../../packages/terminal/src/utils/session-font'))
+    .advanceRatioFor,
   BBSTerminal: React.forwardRef((props: Record<string, any>, ref: React.Ref<unknown>) => {
     harness.props = props;
     React.useEffect(() => { harness.mounts += 1; }, []);
