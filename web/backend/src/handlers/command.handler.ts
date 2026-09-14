@@ -792,6 +792,39 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
         `queued=${session.queuedScreenCommands?.length || 0}`,
         `pending=${!!session.pendingScreenCommand}`
       );
+      /*
+       * A SCREEN SPLIT BY ~SP IS NOT FINISHED, AND MUST NOT BE ADVANCED PAST.
+       *
+       * displayScreen renders the FIRST segment, parks the rest on
+       * session.screenSegments, and deliberately sets lastScreenHadPause=false
+       * because "pauseDisplayFlow will handle the pause"
+       * (screen.handler.ts:2322). Nothing did. The flow advanced to the menu
+       * and every segment after the first was dropped on the floor.
+       *
+       * On this board that silently killed the `~CC_ctop` at the end of every
+       * conference bulletin - the sysop's own Conftop hook, which lives after
+       * the ~SP - with no symptom to point at: the art draws, the caller
+       * reaches the menu, and a door quietly never runs.
+       *
+       * THE CHECK BELONGS HERE, not in the DISPLAY_CONF_BULL branch where I
+       * first put it. A caller reaches a conference two ways - the login flow
+       * and the `J` command - and only the first passes through that state.
+       * The live log showed the second failing identically with my fix in
+       * place (2026-09-14, subState=process_command). This loop is the one
+       * place both routes meet.
+       *
+       * Arming the pause is the whole fix: the keypress path completes the
+       * pagination and then drains the remaining segments
+       * (screen.handler.ts:3160-3170), the route a paginated screen already
+       * takes. doPause always installs one, so this cannot spin.
+       */
+      if (session.screenSegments && session.screenSegments.segments.length > 0
+          && !session.paginatedScreen) {
+        if (pauseDisplayFlow(socket, session)) {
+          return;      // waiting on a key; the segments run when it arrives
+        }
+      }
+
       // Clear any pending pause once a key arrives
       // If a previous screen queued commands, execute them before advancing
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
@@ -931,31 +964,6 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // CONF_BULL is shown inside joinConference (express.e:5058, when confScan=FALSE).
         // There is no separate displayConferenceBulletins call — that was showing the wrong
         // (global) CONF_BULL before joinConference showed the correct per-conference one.
-        //
-        // BUT A BULLETIN SPLIT BY ~SP IS NOT FINISHED WHEN joinConference RETURNS.
-        //
-        // displayScreen renders the FIRST segment and parks the rest on
-        // session.screenSegments, deliberately setting lastScreenHadPause=false
-        // so that "pauseDisplayFlow will handle the pause"
-        // (screen.handler.ts:2322). Nothing here handled it: this branch
-        // advanced straight to AUTO_REJOIN, so the pause was never armed and
-        // every segment after the first was dropped on the floor.
-        //
-        // On this board that silently killed the `~CC_ctop` on every
-        // conference join - the sysop's own Conftop hook, which lives after
-        // the ~SP - and the log says so plainly: "SETUP: 2 segments", then
-        // "Processing segment 0/2", then straight to display_menu with
-        // queued=0 and the second segment never touched (2026-09-14).
-        //
-        // Arming the pause is enough to fix it: the keypress path completes
-        // the pagination and then drains the remaining segments
-        // (screen.handler.ts:3160-3170), which is the same route a paginated
-        // screen already takes.
-        if (session.screenSegments && session.screenSegments.segments.length > 0) {
-          if (pauseDisplayFlow(socket, session)) {
-            return;      // waiting on a key; the segments run when it arrives
-          }
-        }
         session.subState = LoggedOnSubState.AUTO_REJOIN;
         continue;
       }
