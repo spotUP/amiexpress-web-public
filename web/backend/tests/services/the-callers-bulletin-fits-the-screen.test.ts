@@ -40,6 +40,20 @@ function boardWith(headerRows: number): string {
   // guess at the binary layout.
   fs.copyFileSync(path.join(REPO, 'S', 'SAmiLog.Store'), path.join(utils, 'SAmiLog.Store'));
   fs.writeFileSync(path.join(utils, 'samilog.header.txt'), logo(headerRows), 'latin1');
+  /*
+   * AND THE TAILER, because the board has one and it is two more rows.
+   *
+   * The first version of this fixture left it out, so every measurement here
+   * was two rows short of the real screen - the fit "passed" while the live
+   * bulletin came out at 26 rows against a 25-row terminal. The sysop saw
+   * what the test could not: "last callers is one or two lines too tall still
+   * i think" (2026-09-15). A fixture that is smaller than the thing it stands
+   * for cannot fail the way the real one does.
+   */
+  fs.copyFileSync(
+    path.join(REPO, 'Utils', 'samilog', 'samilog.tailer.txt'),
+    path.join(utils, 'samilog.tailer.txt'),
+  );
   return dir;
 }
 
@@ -51,7 +65,17 @@ function serviceFor(dir: string) {
   return require('../../src/services/SamiLogService');
 }
 
-const rowsOf = (text: string) => text.split('\n').length;
+/**
+ * The rows a caller sees - NOT split length.
+ *
+ * The loader paginates on `content.split('\n').length > screenHeight`, and a
+ * file ending in a newline yields one phantom element. A bulletin escapes the
+ * page break when its real rows are at most one under the caller's height, so
+ * that is what these assert on.
+ */
+const rowsOf = (text: string) => (text.endsWith('\n') ? text.split('\n').length - 1 : text.split('\n').length);
+/** What screen.handler's needsPaging will actually compare. */
+const loaderLineCount = (text: string) => text.split('\n').length;
 /** The caller rows: every line carrying the table's time column. */
 const callerRows = (text: string) => text.split('\n').filter(l => /\d\d:\d\d:\d\d/.test(l)).length;
 
@@ -76,7 +100,11 @@ describe('the last callers bulletin', () => {
   });
 
   test('with a budget it fits, and still lists callers', () => {
-    const dir = board(12);
+    // A SIX-row logo, which is what the board wears. Twelve cannot fit inside
+    // 24 at any caller count once the tailer is counted - that is the
+    // "too tall for the budget" case, covered by the floor test below, and
+    // asserting a fit here was asserting something impossible.
+    const dir = board(6);
     const text = serviceFor(dir).generateBulletin(20, { fitRows: 24, minCallers: 1 });
 
     expect(rowsOf(text)).toBeLessThanOrEqual(24);
@@ -98,6 +126,16 @@ describe('the last callers bulletin', () => {
     expect(callerRows(tall)).toBeLessThan(callerRows(short));
   });
 
+  test('a fitted bulletin does not paginate on the screen it was fitted for', () => {
+    // The whole point, asserted the way the LOADER decides it:
+    // screen.handler's needsPaging is `content.split('\n').length > height`.
+    const dir = board(6);
+    const text = serviceFor(dir).generateBulletin(20, { fitRows: 24 });
+
+    expect(loaderLineCount(text)).toBeLessThanOrEqual(25);
+    expect(callerRows(text)).toBeGreaterThanOrEqual(5);
+  });
+
   test('the list has a floor - the screen runs long rather than gutting it', () => {
     // The furniture is about eleven rows whatever the art does, so this board's
     // 12-row logo leaves ONE row for callers inside 24. A Last Callers screen
@@ -105,7 +143,7 @@ describe('the last callers bulletin', () => {
     // bulletin stays tall, and shortening the logo is what buys the fit.
     const text = serviceFor(board(12)).generateBulletin(20, { fitRows: 24 });
 
-    expect(callerRows(text)).toBeGreaterThanOrEqual(8);
+    expect(callerRows(text)).toBeGreaterThanOrEqual(5);
     expect(rowsOf(text)).toBeGreaterThan(24);
   });
 
@@ -127,7 +165,7 @@ describe('the last callers bulletin', () => {
     const text = serviceFor(dir).generateBulletin(20, { fitRows: 24 });
 
     // A Last Callers screen with no callers on it is not a bulletin.
-    expect(callerRows(text)).toBeGreaterThanOrEqual(8);
+    expect(callerRows(text)).toBeGreaterThanOrEqual(5);
   });
 });
 

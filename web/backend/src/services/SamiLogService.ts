@@ -21,7 +21,26 @@ const USER_COUNT = 20;
  * A bulletin that has been squeezed down to one caller has stopped being a
  * Last Callers list, so the fit gives up and lets the screen run long instead.
  */
-const DEFAULT_MIN_CALLERS = 8;
+/**
+ * The rows a bulletin really has.
+ *
+ * NOT `split('\n').length`: a file that ends in a newline - every one of
+ * these does - yields a final empty element that is not a row. The first
+ * version of the fit compared that number against the budget, so a bulletin
+ * it believed was 24 rows was 25, and `needsPaging` (screen.handler:
+ * `artLines > callerLines`, where artLines IS the split length) then put a
+ * page break through a screen built specifically to avoid one.
+ *
+ * The loader's own count is the split length, so a bulletin escapes
+ * pagination when its REAL rows are at most one less than the caller's
+ * height - which is what a budget of 24 against a 25-row screen means.
+ */
+function renderedRows(text: string): number {
+  const parts = text.split('\n');
+  return text.endsWith('\n') ? parts.length - 1 : parts.length;
+}
+
+const DEFAULT_MIN_CALLERS = 5;
 const USER_ENTRY_BYTES = 144;
 const STORE_SIZE_BYTES = 3638;
 const LEGACY_SAMPLE_PATH = path.join(DATA_DIR, 'Utils', 'samilog', 'SAmiLog.Store');
@@ -1120,12 +1139,29 @@ console.warn('[SamiLog] Failed to read templates:', e);
      */
     if (options.fitRows && options.fitRows > 0 && entries.length > 1) {
       const floor = Math.max(1, options.minCallers ?? DEFAULT_MIN_CALLERS);
-      const overflow = output.split('\n').length - options.fitRows;
+      const overflow = renderedRows(output) - options.fitRows;
       if (overflow > 0 && entries.length > floor) {
-        const fewer = Math.max(floor, entries.length - overflow);
-        if (fewer < entries.length) {
-          return generateBulletin(fewer, { ...options, fitRows: undefined });
+        /*
+         * One fewer at a time, until it fits or the floor stops it.
+         *
+         * The first version subtracted the overflow in a single step, on the
+         * reasoning that a caller is exactly one row. It is - but the rest of
+         * the screen is not fixed: the tailer does not end in a newline, so
+         * the row count does not fall by exactly the number of rows removed,
+         * and the second pass landed one row over the budget. A screen built
+         * to avoid a page break, one row too tall to avoid it.
+         *
+         * Stepping avoids reasoning about that at all: the loop asks the
+         * question the loader asks, and stops when the answer is yes. It runs
+         * at most once per caller, at logoff, on a file of twenty entries.
+         */
+        let count = entries.length;
+        while (count > floor) {
+          count--;
+          const shorter = generateBulletin(count, { ...options, fitRows: undefined });
+          if (renderedRows(shorter) <= options.fitRows) return shorter;
         }
+        return generateBulletin(floor, { ...options, fitRows: undefined });
       }
     }
 
