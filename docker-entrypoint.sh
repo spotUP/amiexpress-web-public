@@ -649,10 +649,24 @@ if [ "$CASE_TWINS_REMOVED" -gt 0 ] || [ "$CASE_TWINS_CONFLICTING" -gt 0 ]; then
     echo "[Entrypoint]   Case duplicates: $CASE_TWINS_REMOVED identical copies removed, $CASE_TWINS_CONFLICTING left for the sysop to settle"
 fi
 
-# Also mirror the entire Access/ directory (ACS.*.info, AREA.*.info,
-# PRESET.*.info) — these are pure permission tables, never edited by the
-# sysop, and stale copies break login access checks. Treat each file as
-# IMAGE-OWNED with the same hash-drift logic.
+# Access/ (ACS.*.info, AREA.*.info, PRESET.*.info) is VOLUME-OWNED: seeded on
+# a board that has none, and never overwritten afterwards.
+#
+# It used to be IMAGE-OWNED, on the premise that these are "pure permission
+# tables, never edited by the sysop". That premise died when the admin's
+# Security page started writing them - it is the supported way to grant a
+# permission now, and it edits exactly these files
+# (api/config-routes.ts, PUT /config/security/levels/:level).
+#
+# So every deploy silently threw the sysop's security configuration away and
+# put the repository's copy back. Caught on 2026-09-14: ACS.OVERRIDE_TIMELIMIT
+# was granted on levels 50, 60 and 255 to fix "users above level 30 do not have
+# unlimited time", the deploy that shipped the fix reverted all three, and the
+# only reason level 30 survived is that ACS.30.info does not exist in the
+# repository at all - a file the image has never held cannot be restored over.
+#
+# A board that needs the image's tables back can still ask, with
+# FORCE_REINIT_CONFIG=1.
 if [ -d "$DEFAULT_DATA_DIR/Access" ]; then
     mkdir -p "$BBS_DATA_DIR/Access"
     for src in "$DEFAULT_DATA_DIR/Access"/*.info; do
@@ -661,10 +675,10 @@ if [ -d "$DEFAULT_DATA_DIR/Access" ]; then
         dst="$BBS_DATA_DIR/Access/$bn"
         if [ ! -f "$dst" ]; then
             cp "$src" "$dst"
-            echo "[Entrypoint]   [IMAGE-OWNED] Access/$bn: initialized"
-        elif [ "$FORCE_REINIT_CONFIG" = "1" ] || [ "$(md5sum "$src" | awk '{print $1}')" != "$(md5sum "$dst" | awk '{print $1}')" ]; then
+            echo "[Entrypoint]   [VOLUME-OWNED] Access/$bn: seeded from image (first run)"
+        elif [ "$FORCE_REINIT_CONFIG" = "1" ]; then
             cp "$src" "$dst"
-            echo "[Entrypoint]   [IMAGE-OWNED] Access/$bn: updated from image"
+            echo "[Entrypoint]   [VOLUME-OWNED] Access/$bn: restored from image (FORCE_REINIT_CONFIG)"
         fi
     done
 fi
