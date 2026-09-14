@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
+import { CELL_HEIGHT } from './ansi-canvas-paint';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
 import { useBoardPalette } from '../hooks/useBoardPalette';
 import { canvasToScreen } from '../pages/screen-bytes';
@@ -9,7 +10,7 @@ import {
   pointerToCanvas, typeCharacter, typeText, insertCharacter, centreLine,
   undo, redo, type EditorSurface, selectionHighlightRuns,
   copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
-  type ClipboardRegion,
+  type ClipboardRegion, insertLine, removeLine,
 } from '../pages/screen-editor-state';
 import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
@@ -303,9 +304,29 @@ export function ScreenEditor({
   // "not clear enough which brushes and colors are selected").
   const selectedRing = (on: boolean) =>
     on ? 'border-border-strong ring-2 ring-accent' : 'border-border';
+  /*
+   * EIGHT SWATCHES ON AN EIGHT-PEN BOARD.
+   *
+   * AmiExpress ran console.device, which has eight pens; sixteen needed
+   * `ibmcon` and almost nobody ran it, and the Amiga had no iCE colours - so a
+   * board with `TERMINAL_COLOURS=8` folds every bright code on the way out
+   * (eight-colour-session.util.ts). Offering an artist sixteen there is
+   * offering eight choices that do nothing: they pick bright red, the caller
+   * is sent red, and nothing in the editor said so.
+   *
+   * The preview already followed the board (`useBoardPalette`). The PICKER did
+   * not, which is the half the artist actually touches. The sysop,
+   * 2026-09-14: "the color palettes in the editors needs to respect the mode
+   * the bbs is in as well 8/16 color mode".
+   *
+   * The art is not restricted - a screen already drawn in sixteen keeps every
+   * byte, and a web or telnet caller still sees them. This is about what the
+   * editor OFFERS.
+   */
+  const pens = palette === 'amiga' ? 8 : 16;
   const swatches = (which: 'fg' | 'bg') => (
     <div className="flex flex-wrap gap-1">
-      {ANSI_PALETTE.map((color, index) => (
+      {ANSI_PALETTE.slice(0, pens).map((color, index) => (
         <button
           key={`${which}-${index}`}
           type="button"
@@ -317,6 +338,16 @@ export function ScreenEditor({
           onClick={() => onChange?.({ ...surface, [which]: index })}
         />
       ))}
+      {pens === 8 && (
+        /*
+         * Said, not silently missing. An artist who knows there are sixteen
+         * and counts eight needs to know whether the editor is broken or the
+         * board is eight-pen - and the toggle beside this switches back.
+         */
+        <span className="self-center text-xs text-content-secondary ml-1">
+          8 pens (Amiga)
+        </span>
+      )}
     </div>
   );
 
@@ -453,8 +484,33 @@ export function ScreenEditor({
       */}
       <div
         data-testid="canvas-viewport"
-        className="max-h-[55vh] overflow-auto bg-black p-2"
+        className="max-h-[55vh] overflow-auto bg-black p-2 flex items-start"
       >
+        {/*
+          THE LINE NUMBERS, beside the art rather than over it.
+          The board counts rows from 1 and so does a sysop describing a screen
+          ("line 4 is the flt"), so this counts from 1 - it is a row number to
+          talk about, not an array index. Aligned by sharing the canvas's own
+          CELL_HEIGHT, which is the only thing that keeps a gutter honest when
+          the art scrolls. The row the cursor is on is marked, because "add a
+          line here" needs a visible here.
+        */}
+        <div
+          data-testid="line-numbers"
+          aria-hidden="true"
+          className="select-none pr-2 text-right text-content-secondary"
+          style={{ fontFamily: "'TopazPlus_a1200', 'Topaz_a1200', monospace", fontSize: 12 }}
+        >
+          {surface.canvas.map((_row, index) => (
+            <div
+              key={index}
+              style={{ height: CELL_HEIGHT, lineHeight: `${CELL_HEIGHT}px` }}
+              className={index === cursor.y ? 'text-content' : undefined}
+            >
+              {index + 1}
+            </div>
+          ))}
+        </div>
         <AnsiCanvas
           canvas={surface.canvas}
           palette={palette}
@@ -475,6 +531,39 @@ export function ScreenEditor({
           }}
         />
       </div>
+
+      {!readOnly && (
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {/*
+          Add and remove a LINE, which until now meant selecting the art below
+          the cursor and pasting it a row lower - a redraw rather than an edit
+          (sysop, 2026-09-14).
+
+          The screen keeps its height either way: 80x25 is what the board sends
+          and what a caller's terminal shows, so a line pushed in drops the
+          bottom row and a line taken out pulls a blank up. Undo puts the lost
+          row back, which is what makes that bargain fair rather than
+          destructive.
+        */}
+        <span className="text-content-secondary">Line {cursor.y + 1}:</span>
+        <button
+          type="button"
+          className="px-2 py-1 border border-border text-content-secondary"
+          title="Push a blank line in here; everything below moves down"
+          onClick={() => onChange?.(insertLine(surface, cursor.y))}
+        >
+          Add line
+        </button>
+        <button
+          type="button"
+          className="px-2 py-1 border border-border text-content-secondary"
+          title="Take this line out; everything below moves up"
+          onClick={() => onChange?.(removeLine(surface, cursor.y))}
+        >
+          Remove line
+        </button>
+      </div>
+      )}
 
       {!readOnly && (
       <div className="space-y-1 text-sm">

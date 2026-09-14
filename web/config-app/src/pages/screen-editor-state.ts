@@ -246,6 +246,66 @@ export function centreLine(surface: EditorSurface, y: number): EditorSurface {
 }
 
 /**
+ * Push a blank line in at `y`, and drop whatever fell off the bottom.
+ *
+ * A screen is a FIXED grid - 80x25 is what the board sends and what the
+ * caller's terminal shows - so inserting a line cannot make the canvas taller.
+ * The last row goes, which is the same bargain every text editor with a fixed
+ * page makes, and it is the row furthest from where the artist is working.
+ *
+ * Undo covers it: the snapshot is taken before the shift, so one Ctrl+Z puts
+ * the lost row back.
+ */
+export function insertLine(surface: EditorSurface, y: number): EditorSurface {
+  const state = apply(surface);
+  const canvas = state.getCanvas();
+  if (!canvas || y < 0 || y >= canvas.length) return surface;
+
+  const width = canvas[0]?.length ?? 0;
+  const rows = canvas.map(row => row.map(cell => ({ ...cell })));
+
+  snapshotUndoState(state);
+  for (let row = canvas.length - 1; row > y; row--) {
+    for (let column = 0; column < width; column++) {
+      state.setCanvasCell(column, row, { ...rows[row - 1][column] });
+    }
+  }
+  for (let column = 0; column < width; column++) {
+    state.setCanvasCell(column, y, { char: ' ', fg: 7, bg: 0 });
+  }
+
+  return settle(surface, surface.pending);
+}
+
+/**
+ * Take the line at `y` out, pulling the rest up and blanking the bottom row.
+ *
+ * The grid keeps its height for the same reason `insertLine` does not grow it:
+ * the board sends a fixed number of rows, and a screen that is 24 lines long
+ * is a 25-line screen with a blank one at the end.
+ */
+export function removeLine(surface: EditorSurface, y: number): EditorSurface {
+  const state = apply(surface);
+  const canvas = state.getCanvas();
+  if (!canvas || y < 0 || y >= canvas.length) return surface;
+
+  const width = canvas[0]?.length ?? 0;
+  const rows = canvas.map(row => row.map(cell => ({ ...cell })));
+
+  snapshotUndoState(state);
+  for (let row = y; row < canvas.length - 1; row++) {
+    for (let column = 0; column < width; column++) {
+      state.setCanvasCell(column, row, { ...rows[row + 1][column] });
+    }
+  }
+  for (let column = 0; column < width; column++) {
+    state.setCanvasCell(column, canvas.length - 1, { char: ' ', fg: 7, bg: 0 });
+  }
+
+  return settle(surface, surface.pending);
+}
+
+/**
  * An empty 80x25 screen, for a slot the theme has not drawn yet.
  *
  * The board's own size: 80 columns is what every screen here is, and 25 rows

@@ -49,7 +49,14 @@ export function paintScreen(
   // is per-glyph fallback, which is how a CP437 block character that Topaz has
   // no glyph for still lands - the browser falls back for that character alone,
   // not for the line.
-  ctx.font = `${CELL_HEIGHT}px "Topaz_a1200", "IBM VGA", "Consolas", "Courier New", monospace`;
+  /*
+   * The face the caller sees, not a PC one. TopazPlus_a1200 is the board's
+   * default (DEFAULT_BBS_FONT, packages/terminal/src/utils/session-font.ts:34)
+   * and plain Topaz is the same-metrics fallback behind it; `IBM VGA` was
+   * ahead of both and is not shipped here at all, so the canvas drew Amiga art
+   * in whatever the browser reached for.
+   */
+  ctx.font = `${CELL_HEIGHT}px "TopazPlus_a1200", "Topaz_a1200", "Courier New", monospace`;
   ctx.textBaseline = 'top';
 
   for (let y = 0; y < rows; y++) {
