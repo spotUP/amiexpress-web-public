@@ -808,10 +808,26 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`);
   }
 
-  async saveDoorArt(command: string, file: string, section: string, contentBase64: string) {
+  /**
+   * One narrow drawing: the art a 40-column caller reads instead of the
+   * door's own. Absent, the answer is empty content - an undrawn variant is
+   * a blank canvas, not an error.
+   */
+  async getDoorArtVariant(command: string, file: string, section: string, variant: 'c64' | 'ttx') {
+    const q = new URLSearchParams({ file, section, variant }).toString();
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art?${q}`);
+  }
+
+  async saveDoorArt(
+    command: string,
+    file: string,
+    section: string,
+    contentBase64: string,
+    variant?: 'c64' | 'ttx',
+  ) {
     return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`, {
       method: 'PUT',
-      body: JSON.stringify({ file, section, content: contentBase64 }),
+      body: JSON.stringify({ file, section, content: contentBase64, ...(variant ? { variant } : {}) }),
     });
   }
 
