@@ -13,6 +13,7 @@ import { GameEngine } from '../core/game';
 import { GameScreen } from '../ui/game-screen';
 import { createBoard } from '../core/board';
 import { SHADOW_TIMER_FRAMES, shadowDecayRate, isCellHidden } from '../core/hidden';
+import { filledCells } from './painted';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const settings: any = {
@@ -110,7 +111,7 @@ export async function theBoardStopsDrawingAHiddenBlock(): Promise<void> {
     const faded = gameScreen.boardBox.getContent();
 
     assert.notStrictEqual(painted, faded, 'the board must repaint without the block');
-    const blocks = (s: string) => (s.match(/█/g) ?? []).length;
+    const blocks = filledCells;
     assert.ok(blocks(faded) < blocks(painted),
       `hidden board still draws ${blocks(faded)} blocks against ${blocks(painted)} before`);
   } finally { screen.destroy(); }

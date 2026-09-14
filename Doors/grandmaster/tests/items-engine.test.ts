@@ -15,6 +15,7 @@ import { AttackManager } from '../network/attack-system';
 import { VersusAI } from '../ai/versus-ai';
 import { VersusScreen } from '../ui/versus-screen';
 import { HARD_BLOCK_ITEM } from '../core/items';
+import { filledCells } from './painted';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
 const settings: any = {
@@ -500,7 +501,7 @@ export async function hideNextBlanksThePreview(): Promise<void> {
     const hidden = gameScreen.nextBox.getContent();
 
     assert.notStrictEqual(withPreview, hidden, 'the preview must repaint');
-    const blocks = (s: string) => (s.match(/█/g) ?? []).length;
+    const blocks = filledCells;
     assert.strictEqual(blocks(hidden), 0, 'and show nothing at all');
     assert.ok(blocks(withPreview) > 0, 'where it showed pieces before');
   } finally { screen.destroy(); }

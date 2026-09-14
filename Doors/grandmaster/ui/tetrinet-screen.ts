@@ -1263,7 +1263,9 @@ const holdEnabled = this.engine.isHoldEnabled();
           char = trailCharAt(this.hardDropTrails, x, y, now) ?? char;
         }
 
-        content += fitCell(char, blockCols(this.screen.width));
+        content += fitCell(
+          char, blockCols(this.screen.width), cellsCanCarryBackground(this.screen),
+        );
       }
     }
 
@@ -1316,7 +1318,10 @@ const holdEnabled = this.engine.isHoldEnabled();
         // The preview follows the BOARD's block width; it used to be two
         // characters whatever the board did, so a C64 preview was twice the
         // size of the piece it previewed.
-        content += fitCell(cell ? block : '  ', blockCols(this.screen.width));
+        content += fitCell(
+          cell ? block : '  ', blockCols(this.screen.width),
+          cellsCanCarryBackground(this.screen),
+        );
       }
       content += '\n';
     }
@@ -1341,6 +1346,7 @@ const holdEnabled = this.engine.isHoldEnabled();
         content += fitCell(
           cell ? this.getBlockChar(pieceType) : '  ',
           blockCols(this.screen.width),
+          cellsCanCarryBackground(this.screen),
         );
       }
       content += '\n';

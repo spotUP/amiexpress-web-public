@@ -1825,7 +1825,9 @@ export class VersusScreen {
           }
         }
 
-        content += fitCell(char, blockCols(this.screen.width));
+        content += fitCell(
+          char, blockCols(this.screen.width), cellsCanCarryBackground(this.screen),
+        );
       }
     }
 
@@ -1915,13 +1917,16 @@ export class VersusScreen {
       for (let x = 0; x < board.width; x++) {
         const fallingType = falling.get(`${x},${y}`);
         if (fallingType) {
-          content += fitCell(blockChar(fallingType), cols);
+          content += fitCell(
+            blockChar(fallingType), cols, cellsCanCarryBackground(this.screen),
+          );
           continue;
         }
         const cell = board.grid[y]?.[x];
         content += fitCell(cell?.item
           ? itemCellChar(cell.item, cell.color, this.screen)
-          : (cell?.filled ? blockChar(cell.color ?? '') : '  '), cols);
+          : (cell?.filled ? blockChar(cell.color ?? '') : '  '), cols,
+        cellsCanCarryBackground(this.screen));
       }
     }
     box.setContent(content);

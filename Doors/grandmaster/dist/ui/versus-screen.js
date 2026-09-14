@@ -1646,7 +1646,7 @@ class VersusScreen {
                         }
                     }
                 }
-                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width));
+                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width), (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
         }
         this.boardBox.setContent(content);
@@ -1729,13 +1729,13 @@ class VersusScreen {
             for (let x = 0; x < board.width; x++) {
                 const fallingType = falling.get(`${x},${y}`);
                 if (fallingType) {
-                    content += (0, block_width_1.fitCell)((0, versus_cells_1.blockChar)(fallingType), cols);
+                    content += (0, block_width_1.fitCell)((0, versus_cells_1.blockChar)(fallingType), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
                     continue;
                 }
                 const cell = board.grid[y]?.[x];
                 content += (0, block_width_1.fitCell)(cell?.item
                     ? (0, versus_cells_1.itemCellChar)(cell.item, cell.color, this.screen)
-                    : (cell?.filled ? (0, versus_cells_1.blockChar)(cell.color ?? '') : '  '), cols);
+                    : (cell?.filled ? (0, versus_cells_1.blockChar)(cell.color ?? '') : '  '), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
         }
         box.setContent(content);

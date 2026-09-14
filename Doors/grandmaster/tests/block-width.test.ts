@@ -146,13 +146,19 @@ export async function fitCellKeepsTheColourAndHalvesTheGlyphs(): Promise<void> {
   assert.strictEqual(blockCols(80), 2);
   assert.strictEqual(blockCols(40), 1);
 
-  assert.strictEqual(fitCell('{red-fg}██{/red-fg}', 2), '{red-fg}██{/red-fg}');
-  assert.strictEqual(fitCell('{red-fg}██{/red-fg}', 1), '{red-fg}█{/red-fg}');
+  // A solid run is a background colour before it is a width (2026-09-14:
+  // `█` is not an Amiga character and the telnet wire sends it as `?` - see
+  // solidToBackground). The WIDTH rule is what this test is about, and it
+  // still halves whatever the fill left behind.
+  assert.strictEqual(fitCell('{red-fg}██{/red-fg}', 2), '{red-bg}  {/red-bg}');
+  assert.strictEqual(fitCell('{red-fg}██{/red-fg}', 1), '{red-bg} {/red-bg}');
   assert.strictEqual(fitCell('  ', 1), ' ');
   assert.strictEqual(
     fitCell('{white-bg}{white-fg}██{/white-fg}{/white-bg}', 1),
-    '{white-bg}{white-fg}█{/white-fg}{/white-bg}',
+    '{white-bg}{white-bg} {/white-bg}{/white-bg}',
   );
+  // And a screen with no per-cell background keeps the ink it always had.
+  assert.strictEqual(fitCell('{red-fg}██{/red-fg}', 1, false), '{red-fg}█{/red-fg}');
   // A pair whose glyphs differ keeps its first half, not a mangled mix.
   assert.strictEqual(fitCell('{white-fg}[]{/white-fg}', 1), '{white-fg}[{/white-fg}');
 }

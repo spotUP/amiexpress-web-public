@@ -1478,7 +1478,7 @@ class GameScreen {
                         }
                     }
                 }
-                content += (0, block_width_1.fitCell)(char, cols);
+                content += (0, block_width_1.fitCell)(char, cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
         }
         this.boardBox.setContent(content);
@@ -1566,7 +1566,7 @@ class GameScreen {
      */
     getMiniPiece(type, rotationSystem) {
         const cols = (0, block_width_1.blockCols)(this.screen.width);
-        const block = (0, block_width_1.fitCell)(this.getBlockChar(type, rotationSystem), cols);
+        const block = (0, block_width_1.fitCell)(this.getBlockChar(type, rotationSystem), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
         // Indents are counted in CELLS, not characters, so a preview keeps its
         // shape on a screen where a block is one character wide.
         const p = (cells) => ' '.repeat(cells * cols);

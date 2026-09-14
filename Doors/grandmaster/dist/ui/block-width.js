@@ -21,6 +21,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PIECE_CELLS = void 0;
 exports.blockCols = blockCols;
+exports.solidToBackground = solidToBackground;
 exports.fitCell = fitCell;
 exports.pieceArt = pieceArt;
 exports.cellsCanCarryBackground = cellsCanCarryBackground;
@@ -29,15 +30,62 @@ function blockCols(screenWidth) {
     return screenWidth < 80 ? 1 : 2;
 }
 /**
- * A block cell, in `cols` characters.
+ * A solid cell drawn as a BACKGROUND colour instead of a block glyph.
  *
- * Tags are kept exactly as they are - they carry no width - and the visible
- * run is halved, so `{red-fg}██{/red-fg}` becomes `{red-fg}█{/red-fg}` and the
- * two blanks of an empty cell become one. A run whose glyphs DIFFER keeps its
- * first half, which is what the bone block (`[]`) and any future two-glyph
- * pattern needs: half of it, not a mangled pair.
+ * `█` is not an Amiga character. A real Amiga terminal has Topaz and nothing
+ * else - "the amiga/telnet had no companion font" (sysop, 2026-09-14) -
+ * RULES.md:492 says the board's own output is "Amiga ASCII only: `_/\|-`. No
+ * PC box-drawing characters", and the telnet and SSH wires are Latin-1, where
+ * `iconv` turns `██` into `??`. Every byte-transport caller has been reading
+ * this door's pieces as question marks; the web only looked right because
+ * xterm's canvas renderer draws U+2580-259F itself, out of its own table
+ * rather than out of the face.
+ *
+ * A space with a background colour is the Amiga way to fill a cell, and it
+ * fills it EXACTLY - no glyph, no font coverage, nothing for a renderer to
+ * round. So `{red-fg}██{/red-fg}` becomes `{red-bg}  {/red-bg}`: same colour,
+ * same two cells, and it survives the wire.
+ *
+ * Only a run that is ENTIRELY solid converts. The bone block (`[]`), the
+ * ghost and anything else with shape in it keeps its glyphs - those are a
+ * separate question, and half of a shape is not a fill.
  */
-function fitCell(cell, cols) {
+function solidToBackground(cell) {
+    let visible = '';
+    for (let i = 0; i < cell.length; i++) {
+        if (cell[i] === '{') {
+            const end = cell.indexOf('}', i);
+            if (end !== -1) {
+                i = end;
+                continue;
+            }
+        }
+        visible += cell[i];
+    }
+    if (!visible || [...visible].some((c) => c !== '\u2588'))
+        return cell;
+    // The ink tags become background tags, opening and closing alike, and the
+    // glyphs become the spaces that colour now fills.
+    return cell
+        .replace(/\{([a-z-]+)-fg\}/gi, '{$1-bg}')
+        .replace(/\{\/([a-z-]+)-fg\}/gi, '{/$1-bg}')
+        .replace(/\u2588/g, ' ');
+}
+/**
+ * A block cell, in `cols` characters, drawn the way this screen can draw it.
+ *
+ * Two projections, in this order. FIRST the fill: a solid run becomes a
+ * background colour where the screen can carry one (see solidToBackground and
+ * cellsCanCarryBackground - PETSCII cannot, and keeps its ink). THEN the
+ * width: tags are kept exactly as they are - they carry no width - and the
+ * visible run is halved, so `{red-fg}██{/red-fg}` becomes `{red-fg}█{/red-fg}`
+ * and the two blanks of an empty cell become one. A run whose glyphs DIFFER
+ * keeps its first half, which is what the bone block (`[]`) and any future
+ * two-glyph pattern needs: half of it, not a mangled pair.
+ */
+function fitCell(cell, cols, canCarryBackground = true) {
+    if (canCarryBackground)
+        cell = solidToBackground(cell);
     if (cols >= 2)
         return cell;
     let out = '';

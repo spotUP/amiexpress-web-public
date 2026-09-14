@@ -1060,7 +1060,7 @@ class TetriNetScreen {
                 if (char === '  ' && !cell?.filled) {
                     char = (0, board_effects_1.trailCharAt)(this.hardDropTrails, x, y, now) ?? char;
                 }
-                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width));
+                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width), (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
         }
         this.boardBox.setContent(content);
@@ -1101,7 +1101,7 @@ class TetriNetScreen {
                 // The preview follows the BOARD's block width; it used to be two
                 // characters whatever the board did, so a C64 preview was twice the
                 // size of the piece it previewed.
-                content += (0, block_width_1.fitCell)(cell ? block : '  ', (0, block_width_1.blockCols)(this.screen.width));
+                content += (0, block_width_1.fitCell)(cell ? block : '  ', (0, block_width_1.blockCols)(this.screen.width), (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
             content += '\n';
         }
@@ -1121,7 +1121,7 @@ class TetriNetScreen {
         let content = '';
         for (const row of shape) {
             for (const cell of row) {
-                content += (0, block_width_1.fitCell)(cell ? this.getBlockChar(pieceType) : '  ', (0, block_width_1.blockCols)(this.screen.width));
+                content += (0, block_width_1.fitCell)(cell ? this.getBlockChar(pieceType) : '  ', (0, block_width_1.blockCols)(this.screen.width), (0, block_width_1.cellsCanCarryBackground)(this.screen));
             }
             content += '\n';
         }

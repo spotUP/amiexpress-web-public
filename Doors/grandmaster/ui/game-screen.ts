@@ -20,7 +20,7 @@ import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction, Piece, PieceType } from '../core/types';
 import { PIECE_COLORS, ARS_COLORS } from '../core/pieces';
 import { getGhostY } from '../core/board';
-import { blockCols, fitCell } from './block-width';
+import { blockCols, fitCell, cellsCanCarryBackground } from './block-width';
 
 /** Playfield columns, in BLOCKS. The characters they take is the screen's answer. */
 const BOARD_COLUMNS = 10;
@@ -1636,7 +1636,7 @@ export class GameScreen {
           }
         }
 
-        content += fitCell(char, cols);
+        content += fitCell(char, cols, cellsCanCarryBackground(this.screen));
       }
     }
 
@@ -1743,7 +1743,10 @@ export class GameScreen {
    */
   private getMiniPiece(type: PieceType, rotationSystem: string): string {
     const cols = blockCols(this.screen.width);
-    const block = fitCell(this.getBlockChar(type, rotationSystem), cols);
+    const block = fitCell(
+      this.getBlockChar(type, rotationSystem), cols,
+      cellsCanCarryBackground(this.screen),
+    );
     // Indents are counted in CELLS, not characters, so a preview keeps its
     // shape on a screen where a block is one character wide.
     const p = (cells: number) => ' '.repeat(cells * cols);
