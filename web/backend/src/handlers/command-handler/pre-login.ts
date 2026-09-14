@@ -122,6 +122,23 @@ console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
     session.state = BBSState.LOGON;
     session.subState = undefined;
     const outputEvent = getOutputEvent(session);
+    /*
+     * CLEAR FIRST. The title is the tallest thing this board draws: 69 lines
+     * of art, eleven of them far wider than any terminal - one is 1,427
+     * characters - so an 80-column caller gets each of those folded into a
+     * dozen rows or more and the screen scrolls several times over. Printing
+     * the welcome underneath what was left simply continues that scroll, and
+     * the tail of the title stays above it for the rest of the login: "the
+     * bbstitle is very tall and the upper part is not cleared on my mobile so
+     * its always visible above the bbs content" (sysop, 2026-09-14).
+     *
+     * Every other screen transition on this board clears; this one never did,
+     * and it is the one following the only screen big enough for it to show.
+     * `2J` erases what is on screen, `3J` drops what scrolled off, and `H`
+     * puts the welcome at the top where it belongs - the same three the
+     * terminal uses when it changes grid.
+     */
+    socket.emit(outputEvent, '\x1b[2J\x1b[3J\x1b[H');
     socket.emit(outputEvent, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
     socket.emit(outputEvent, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
     socket.emit('prompt-login'); // Tell frontend to show login form

@@ -1883,6 +1883,22 @@ console.log(' BBSTITLE viewed, transitioning to login');
       session.subState = undefined;
       session.tempData = session.tempData || {};
       session.tempData.loginPhase = 'username';
+      /*
+       * CLEAR FIRST. BBSTITLE is the tallest thing this board draws: 69 lines
+       * of art, eleven of them wider than any terminal - one is 1,427
+       * characters - so an 80-column caller gets each of those folded into a
+       * dozen rows or more and the screen scrolls several times over. Printing
+       * the welcome underneath continues that scroll, and the tail of the
+       * title stays above the login for the rest of the session: "the bbstitle
+       * is very tall and the upper part is not cleared on my mobile so its
+       * always visible above the bbs content" (sysop, 2026-09-14, on a phone,
+       * where 25 rows make it unmissable).
+       *
+       * `2J` erases what is on screen, `3J` drops what scrolled off - a swipe
+       * on a touch screen brings that straight back otherwise - and `H` puts
+       * the welcome at the top.
+       */
+      emitText(socket, '\x1b[2J\x1b[3J\x1b[H');
       emitText(socket, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
       emitText(socket, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
       emitPrompt(socket, 'Username: ');

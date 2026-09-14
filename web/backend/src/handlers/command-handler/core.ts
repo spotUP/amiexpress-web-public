@@ -414,6 +414,10 @@ console.log(
 console.log("📋 BBSTITLE viewed, transitioning to login");
       session.state = BBSState.LOGON;
       session.subState = undefined;
+      // The same clear as command.handler's copy of this transition: the title
+      // is several screens tall once folded, and the welcome must not be
+      // printed underneath what is left of it.
+      socket.emit("ansi-output", "\x1b[2J\x1b[3J\x1b[H");
       socket.emit(
         "ansi-output",
         "\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n"
