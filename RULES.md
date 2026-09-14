@@ -232,6 +232,12 @@ cropped at 40, exactly as before. The drawings live under `Screens/` and not
 beside the door because they are the BOARD'S - they survive a door
 re-install.
 
+Door art is on the ARTIST lane: `/api/door-art`, mounted at
+`requireLevel(100)` beside `/api/screens`, because level 100 IS this board's
+ANSI artists and they are the people who draw. Every call is scoped to the
+sections a door's manifest DECLARES as art - no setting, bulletin row or
+conference mask is reachable through it.
+
 Art the door keeps inside its BINARY cannot be reached this way. Art a door
 opens as a file of its own already has the `_C64` redirect
 (`io-file-display.ts` for `JH_SF`, `DosLibrary.ts` for `dos Open`).

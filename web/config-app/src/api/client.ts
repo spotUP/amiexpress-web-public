@@ -801,11 +801,11 @@ class ApiClient {
   // Door art sections - art living inside a door's config file (Bulls' Title
   // logo in Bulls.CFG), edited in the ANSI Studio, never in a settings form.
   async listDoorArt() {
-    return this.request<ApiResponse>(`${API_BASE}/config/doors-art`);
+    return this.request<ApiResponse>(`${API_BASE}/door-art`);
   }
 
   async getDoorArt(command: string) {
-    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`);
+    return this.request<ApiResponse>(`${API_BASE}/door-art/${encodeURIComponent(command)}`);
   }
 
   /**
@@ -815,7 +815,7 @@ class ApiClient {
    */
   async getDoorArtVariant(command: string, file: string, section: string, variant: 'c64' | 'ttx') {
     const q = new URLSearchParams({ file, section, variant }).toString();
-    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art?${q}`);
+    return this.request<ApiResponse>(`${API_BASE}/door-art/${encodeURIComponent(command)}?${q}`);
   }
 
   async saveDoorArt(
@@ -825,7 +825,7 @@ class ApiClient {
     contentBase64: string,
     variant?: 'c64' | 'ttx',
   ) {
-    return this.request<ApiResponse>(`${API_BASE}/config/doors/${encodeURIComponent(command)}/art`, {
+    return this.request<ApiResponse>(`${API_BASE}/door-art/${encodeURIComponent(command)}`, {
       method: 'PUT',
       body: JSON.stringify({ file, section, content: contentBase64, ...(variant ? { variant } : {}) }),
     });

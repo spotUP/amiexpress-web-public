@@ -17,7 +17,6 @@ import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
-import { boardRoot } from '../utils/board-root.util';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
@@ -25,6 +24,7 @@ import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, requireLevel, AuthRequest } from '../middleware/auth.middleware';
 import { createConfigRouter } from '../api/config-routes';
+import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
@@ -192,10 +192,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // declaration, so resolve the same way. Mounted bare of JWT: the bot
   // token is the auth.
   app.use('/api/bot/v1', authenticateBotToken, createBotDataRouter(db, {
-    // boardRoot(), not a fourth copy of this: BBS_DATA_DIR is what the
-    // container sets, and checking only BBS_ROOT resolved to /app - a tree
-    // with its own Conf1, so the bot answered about the repo, not the board.
-    bbsRoot: boardRoot(),
+    bbsRoot: process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
   }));
 
   // ===== Bot plugin admin API - sysop JWT like every other /api/config route
@@ -213,6 +210,14 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Screen Files API - Screen-editor level required =====
   const { screensRouter } = require('../api/screens-routes');
   app.use('/api/screens', authenticateToken(db), requireLevel(100), screensRouter);
+
+  // ===== Door art - the ARTIST lane =====
+  // Level 100 is this board's ANSI artists, and the Studio lists a door's
+  // art beside the screen files they already edit. These were under
+  // /api/config behind requireSysop(), so an artist saw the card and got a
+  // 403 on the canvas. Every call is scoped to the sections a door's
+  // manifest declares as ART - no setting is reachable through them.
+  app.use('/api/door-art', authenticateToken(db), requireLevel(100), createDoorArtRouter());
 
   // ===== Screen Themes API - the same gate, because a theme IS a set of
   // screens: this decides which sets exist and who owns them, the screen
@@ -252,7 +257,9 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
   const { createBullsRouter } = require('../api/bulls-routes');
   app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(
-    boardRoot(),
+    process.env.BBS_DATA_DIR ? path.resolve(process.env.BBS_DATA_DIR)
+      : process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT)
+      : path.resolve(__dirname, '../../../..'),
   ));
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
