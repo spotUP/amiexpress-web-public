@@ -129,20 +129,34 @@ function mount() {
 const DEFAULT_BRIGHT_RED = XTERM_CONFIG.theme.brightRed; // #ff8080
 const TELETEXT_BRIGHT_RED = XTERM_CONFIG.teletextTheme.brightRed; // #ff0000
 
-describe('the terminal never loads the canvas atlas', () => {
+describe('each session takes the renderer that draws its alphabet', () => {
   /*
-   * Its atlas blits every glyph that comes from the FACE at `cellWidth - 1`
-   * device pixels - measured by screenshot, 44 lit of a 45px cell - so a
-   * teletext rule drew as dashes and eighty Topaz underscores had a gap
-   * between every one (sysop and the artists, 2026-09-14). No font and no
-   * size changes it, and WebGL shares the atlas. The DOM renderer keeps the
-   * cells touching at a whole CSS cell.
+   * Neither renderer is right for both. Canvas blits a FACE glyph at
+   * `cellWidth - 1` device pixels, so teletext mosaics - sextants, which
+   * only the face has - seam at every cell. DOM draws only what the font
+   * has, and the Amiga faces carry zero of 128 box-drawing codepoints and
+   * zero of 32 block elements; xterm draws those itself under canvas, and
+   * under DOM they fell to Courier New and stopped tiling, which dashed
+   * every door's borders (sysop, 2026-09-14).
    */
-  it('constructs no CanvasAddon, in any mode', async () => {
+  it('keeps the canvas renderer for eighty columns of CP437', () => {
+    mount();
+    expect(rec.canvasAddons).toHaveLength(1);
+    expect(rec.canvasAddons[0].disposed).toBe(false);
+  });
+
+  it('puts it down for teletext, whose face carries its own mosaics', async () => {
+    mount();
+    await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
+    expect(rec.canvasAddons[0].disposed).toBe(true);
+  });
+
+  it('takes it back up for the eighty-column session', async () => {
     mount();
     await act(async () => { socket.fire('texttv-mode', { enabled: true }); });
     await act(async () => { socket.fire('texttv-mode', { enabled: false }); });
-    expect(rec.canvasAddons).toHaveLength(0);
+    expect(rec.canvasAddons).toHaveLength(2);
+    expect(rec.canvasAddons[1].disposed).toBe(false);
   });
 });
 
