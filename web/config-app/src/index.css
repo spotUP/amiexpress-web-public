@@ -50,8 +50,61 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * THE DOCUMENT IS DARK, AND THE BROWSER HAS TO BE TOLD.
+   *
+   * Everything the browser paints ITSELF - scrollbars, the spinner on a
+   * number input, a date picker, the resize grip on a textarea - is drawn
+   * from the document's colour scheme, not from our tokens. Nothing declared
+   * one, so every one of them came out of the light palette: "the scrollbars
+   * in the admin ui dont have a dark theme they are light" (sysop,
+   * 2026-09-14). This admin has one palette and it is dark; there is no
+   * toggle for this to disagree with.
+   */
+  :root {
+    color-scheme: dark;
+    /* Firefox, and the standard property: thumb then track, from the ramp
+       rather than from the browser's generic dark, so a scrollbar sits in
+       the surface it scrolls instead of floating on top of it. */
+    scrollbar-color: rgb(var(--border-strong)) rgb(var(--surface-1));
+    scrollbar-width: thin;
+  }
+
   body {
     @apply bg-surface-0 text-content-primary font-sans text-sm antialiased;
+  }
+
+  /*
+   * WebKit draws its own, and ignores `scrollbar-color`. Same two tokens, so
+   * Chrome and Safari land where Firefox does rather than a shade apart.
+   */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--surface-1));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--border-strong));
+    border-radius: var(--radius-sm);
+    /* Inset by a track-coloured border: a thumb that touches the edges reads
+       as a second scrollbar rather than a handle in one. */
+    border: 2px solid rgb(var(--surface-1));
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--text-muted));
+    background-clip: padding-box;
+    border: 2px solid rgb(var(--surface-1));
+  }
+
+  /* Where two scrollbars meet. Unstyled, this is a light square. */
+  ::-webkit-scrollbar-corner {
+    background: rgb(var(--surface-1));
   }
 
   /* Values read off disk stay monospace, and their digits line up. */
