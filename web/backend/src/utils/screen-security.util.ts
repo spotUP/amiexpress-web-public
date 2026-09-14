@@ -8,10 +8,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { findCaseInsensitive } from './amigafs';
+import { isHollowScreenFile } from '../screens/hollow-screen';
 
 // Default extensions if ScreenTypes.info not available
 const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
 const TEXT_EXTENSIONS = ['.TXT', '.txt'];
+
+/**
+ * A caller that wants hollow screen files kept out of the answer.
+ *
+ * `hollow` collects, in search order, every candidate that was present but
+ * had nothing in it. The first entry is the one a caller should fall back to
+ * when the whole walk came up empty.
+ */
+export interface HollowAware {
+  hollow?: string[];
+}
 
 function resolveCaseInsensitivePath(targetPath: string): string | null {
   /*
@@ -87,9 +99,34 @@ export function findSecurityScreen(
   ripMode: boolean = false,
   defScreens: boolean = false,
   petsciiMode: boolean = false,
-  texttvMode: boolean = false
+  texttvMode: boolean = false,
+  options?: HollowAware
 ): string | null {
   const minLevel = 5;
+
+  /*
+   * A file with nothing in it does not answer the name - IF the caller has
+   * somewhere else to look.
+   *
+   * This walk takes the first name that is present, down the security levels
+   * and then across the scopes the loader hands it, so a hollow
+   * `Logon100.txt` used to beat a perfectly good `Logon.txt` beside it.
+   * express.e:6773 shows any file that OPENS, so the caller got a cleared
+   * screen and a pause, and the fault read as a missing theme.
+   *
+   * Callers that pass a sink get hollow candidates collected there instead of
+   * returned, and decide for themselves what to do when every scope was
+   * hollow (the loader keeps the first one, so a screen the sysop blanked on
+   * purpose still resolves and is simply not drawn - it must never be
+   * reported as a screen that is MISSING). Callers that pass nothing behave
+   * exactly as they always did.
+   */
+  const takeHollow = (resolved: string | null): string | null => {
+    if (!resolved || !options?.hollow) return resolved;
+    if (!isHollowScreenFile(resolved)) return resolved;
+    options.hollow.push(resolved);
+    return null;
+  };
 
   /**
    * Check for a screen file with given security level
@@ -111,7 +148,7 @@ export function findSecurityScreen(
     // still wins here (matches resolvePetsciiPath()'s priority elsewhere).
     if (petsciiMode) {
       const seqPath = `${basePath}.SEQ`;
-      const resolved = resolveCaseInsensitivePath(seqPath);
+      const resolved = takeHollow(resolveCaseInsensitivePath(seqPath));
       if (resolved) {
 console.log(`[SCREEN] Found PETSCII screen: ${resolved}`);
         return resolved;
@@ -121,7 +158,7 @@ console.log(`[SCREEN] Found PETSCII screen: ${resolved}`);
     // express.e:6258-6260 - IF ripMode check .RIP first
     if (ripMode) {
       const ripPath = `${basePath}.RIP`;
-      const resolved = resolveCaseInsensitivePath(ripPath);
+      const resolved = takeHollow(resolveCaseInsensitivePath(ripPath));
       if (resolved) {
 console.log(`[SCREEN] Found RIP screen: ${resolved}`);
         return resolved;
@@ -137,13 +174,13 @@ console.log(`[SCREEN] Found RIP screen: ${resolved}`);
     // neither of theirs did.
     if (texttvMode) {
       const ttiPath = `${basePath}.TTI`;
-      const resolvedTti = resolveCaseInsensitivePath(ttiPath);
+      const resolvedTti = takeHollow(resolveCaseInsensitivePath(ttiPath));
       if (resolvedTti) {
 console.log(`[SCREEN] Found native teletext screen: ${resolvedTti}`);
         return resolvedTti;
       }
       const ttxPath = `${basePath}.TTX`;
-      const resolved = resolveCaseInsensitivePath(ttxPath);
+      const resolved = takeHollow(resolveCaseInsensitivePath(ttxPath));
       if (resolved) {
 console.log(`[SCREEN] Found teletext screen: ${resolved}`);
         return resolved;
@@ -154,7 +191,7 @@ console.log(`[SCREEN] Found teletext screen: ${resolved}`);
     if (userScreenTypeExt) {
       const normalized = normalizeScreenTypeExtension(userScreenTypeExt);
       const userTypePath = `${basePath}${normalized}`;
-      const resolved = resolveCaseInsensitivePath(userTypePath);
+      const resolved = takeHollow(resolveCaseInsensitivePath(userTypePath));
       if (resolved) {
 console.log(`[SCREEN] Found user screen type: ${resolved}`);
         return resolved;
@@ -164,7 +201,7 @@ console.log(`[SCREEN] Found user screen type: ${resolved}`);
     // express.e:6269-6270 - Fallback to .TXT
     for (const txtExt of TEXT_EXTENSIONS) {
       const txtPath = `${basePath}${txtExt}`;
-      const resolved = resolveCaseInsensitivePath(txtPath);
+      const resolved = takeHollow(resolveCaseInsensitivePath(txtPath));
       if (resolved) {
 console.log(`[SCREEN] Found text screen: ${resolved}`);
         return resolved;

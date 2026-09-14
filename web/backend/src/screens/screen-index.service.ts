@@ -1059,9 +1059,21 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
        * flagged as not used but it's used when a user runs out of time".
        */
       let foundIn = locations[0].dir;
+      /*
+       * Screen files that exist but have nothing in them, in search order.
+       *
+       * The loader skips them while it has anywhere else to look and keeps
+       * the first as a last resort (screens/hollow-screen.ts). This walk has
+       * to do the same or the manager credits a screen to a placeholder the
+       * board never serves.
+       */
+      const hollow: string[] = [];
+      const hollowIn = new Map<string, string>();
       for (const location of locations) {
         // The same call the loader makes, so the answer is the loader's answer.
-        const hit = findSecurityScreen(path.join(location.dir, fileName), 255, '.TXT', false, false);
+        const before = hollow.length;
+        const hit = findSecurityScreen(path.join(location.dir, fileName), 255, '.TXT', false, false, false, false, { hollow });
+        for (let i = before; i < hollow.length; i++) hollowIn.set(hollow[i], location.dir);
         if (!hit) continue;
         // findSecurityScreen answers with the extension it BUILT (`.TXT`),
         // which on a case-insensitive filesystem is not the name on disk. The
@@ -1069,6 +1081,12 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
         found = amigafs.findCaseInsensitive(path.dirname(hit), path.basename(hit)) || hit;
         foundIn = location.dir;
         break;
+      }
+      if (!found && hollow.length > 0) {
+        // Every location was hollow: the loader serves the first one, so this
+        // credits the same file.
+        found = amigafs.findCaseInsensitive(path.dirname(hollow[0]), path.basename(hollow[0])) || hollow[0];
+        foundIn = hollowIn.get(hollow[0]) ?? foundIn;
       }
 
       const dir = foundIn;

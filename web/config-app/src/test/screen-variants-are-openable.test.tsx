@@ -42,13 +42,8 @@ describe('the page source', () => {
     expect(column).not.toMatch(/cell: res => <span className="font-mono">\{res\.variants\.join/);
   });
 
-  it('routes a petscii file to the PETSCII surface, read-only', () => {
-    // Repointed 2026-09-14: the component is PetsciiScreenEditor in its
-    // readOnly mode now, which is what the artist studio opens. The property
-    // is unchanged - a .seq reaches the board's own PETSCII renderer - and
-    // `readOnly` is asserted because this page SHOWS files and the studio is
-    // where they are drawn.
+  it('routes a petscii file to the PETSCII preview', () => {
     const source = readFileSync(join(__dirname, '..', 'pages', 'ScreenFilesPage.tsx'), 'utf8');
-    expect(source).toMatch(/file\.format === 'petscii'[\s\S]{0,600}PetsciiScreenEditor[\s\S]{0,200}readOnly/);
+    expect(source).toMatch(/file\.format === 'petscii'[\s\S]{0,400}PetsciiScreenPreview/);
   });
 });

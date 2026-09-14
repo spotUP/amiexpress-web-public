@@ -21,7 +21,7 @@ import { apiClient, type ApiError } from '../api/client';
 import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
-import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
+import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
 import { fanOutOptions } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
@@ -549,15 +549,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               saving={save.isPending || writeBytes.isPending}
             />
           ) : file?.format === 'petscii' ? (
-            <PetsciiScreenEditor
-              content={file.content}
-              filePath={path ?? undefined}
-              mci={file?.mci ?? []}
-              readOnly={!mine}
-              onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
-              onCancel={onClose}
-              saving={save.isPending || writeBytes.isPending}
-            />
+            <PetsciiScreenPreview content={file.content} />
           ) : undrawable ? (
             <p className="text-sm text-status-warn">{undrawable}</p>
           ) : editing ? (

@@ -36,6 +36,7 @@ import * as path from 'path';
 import { isScreenFile, resolveNodeScreenDir } from '../screens/screen-resolution';
 import { applyTooltypes, parseInfoFile } from '../utils/info-file.util';
 import { planScreenCollapse, type CollapsePlan, type CollapsibleScreen } from './screen-collapse';
+import { isHollowScreenContent } from '../screens/hollow-screen';
 
 export interface SeedCollapseReport {
   /** Screens that now exist once, and how many nodes read that one copy. */
@@ -269,9 +270,31 @@ export function collapseSeedNodeScreens(
     const target = path.join(templateDir, file.relPath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     if (existingSharedWins && fs.existsSync(target)) {
+      const existing = fs.readFileSync(target);
+      /*
+       * A shared copy with NOTHING IN IT is not the current generation of
+       * anything, and it must not beat content.
+       *
+       * `existingSharedWins` reasons that the shared directory was refreshed
+       * by the deploy and the nodes' copies are older - true for a real
+       * screen. It was never true for a placeholder: on 2026-09-08 a 2-byte
+       * `Screens/Node/Logon.txt` won against six nodes' 160-byte welcome
+       * screens, which went to `.pre-collapse` and left every caller looking
+       * at a cleared screen and a pause. The board had no way to say the
+       * winner was empty, because nothing here looked.
+       *
+       * The node's bytes win instead, and the hollow file is kept beside them
+       * the same way a losing copy always is - this never deletes anything.
+       */
+      if (isHollowScreenContent(existing) && !isHollowScreenContent(file.content)) {
+        fs.writeFileSync(`${target}.hollow-replaced`, existing);
+        fs.writeFileSync(target, file.content);
+        report.refreshed.push(path.basename(file.relPath));
+        continue;
+      }
       // The deploy already put the current generation here; the nodes'
       // bytes are the older one. Kept beside it, never written over it.
-      if (!fs.readFileSync(target).equals(file.content)) {
+      if (!existing.equals(file.content)) {
         fs.writeFileSync(`${target}.pre-collapse`, file.content);
       }
       report.sharedKept.push(path.basename(file.relPath));
@@ -413,6 +436,14 @@ function refreshKeptNodes(
     if (!shared) continue;
     const mine = fs.readFileSync(source);
     if (mine.equals(shared.content)) continue;
+    /*
+     * The same rule as the write loop: an EMPTY shared copy is not a newer
+     * generation of this screen, so a node that still has content keeps it.
+     * Without this a kept node follows the majority straight into a
+     * placeholder and serves a cleared screen and a pause
+     * (screens/hollow-screen.ts).
+     */
+    if (isHollowScreenContent(shared.content) && !isHollowScreenContent(mine)) continue;
     const agreed = unanimous.get(key);
     const stale = previous.has(key)
       ? previous.get(key) === sha256(mine)

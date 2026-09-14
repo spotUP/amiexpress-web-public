@@ -349,3 +349,81 @@ describe('a running board collapses its node screens without undoing the deploy'
     expect(read('Screens/Node/BBSTITLE.txt').equals(OLD_TITLE)).toBe(true);
   });
 });
+
+/**
+ * An EMPTY shared copy is not a newer generation of anything.
+ *
+ * `existingSharedWins` reasons that the deploy refreshed `Screens/Node/` and
+ * the nodes hold the older bytes. That is true for a real screen. It was
+ * never true for a placeholder: on 2026-09-08 a two-byte `Logon.txt` sitting
+ * in the shared directory beat six nodes' 160-byte welcome screens, which
+ * went to `.pre-collapse`, and every caller met a cleared screen and a pause
+ * at login. Nothing looked at whether the winner had anything in it.
+ *
+ * Both arms are pinned: the nodes that shed their directory, and the node
+ * that keeps one and follows the shared copy for screens it agrees about.
+ */
+describe('a shared copy with nothing in it never beats a node that has content', () => {
+  const REAL_LOGON = Buffer.concat([LOGON, Buffer.from('welcome to the board\n')]);
+  const NODES = [0, 1, 2, 3, 4, 5];
+  const DISSENTER = 1;
+  let board: string;
+
+  /** The 2026-09-08 shape: a placeholder in the shared directory, art in the nodes. */
+  function boardWithHollowShared(stub: Buffer): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hollow-shared-'));
+    fs.writeFileSync(path.join(dir, '.initialized'), 'seeded\n');
+    for (const n of NODES) {
+      const nodeDir = path.join(dir, `Node${n}`);
+      fs.mkdirSync(nodeDir, { recursive: true });
+      fs.writeFileSync(path.join(nodeDir, 'Logon.txt'), REAL_LOGON);
+      // One screen the dissenter differs about, so it keeps its directory and
+      // the second arm - the refresh of a kept node - is exercised too.
+      fs.writeFileSync(path.join(nodeDir, 'joined.txt'), n === DISSENTER ? Buffer.from('mine\n') : JOINED);
+      fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+    }
+    fs.mkdirSync(path.join(dir, 'Screens', 'Node'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Screens', 'Node', 'Logon.txt'), stub);
+    return dir;
+  }
+
+  const read = (rel: string) => fs.readFileSync(path.join(board, rel));
+
+  afterEach(() => {
+    if (board) fs.rmSync(board, { recursive: true, force: true });
+  });
+
+  test.each([
+    ['zero bytes', Buffer.alloc(0)],
+    ['the `~\\n` stub the seeder writes', Buffer.from('~\n')],
+  ])('%s loses to the nodes\' art, and is kept beside it', (_name, stub) => {
+    board = boardWithHollowShared(stub as Buffer);
+
+    const report = collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    expect(read('Screens/Node/Logon.txt').equals(REAL_LOGON)).toBe(true);
+    // Nothing is ever deleted - the placeholder is kept the way a losing copy
+    // always is.
+    expect(read('Screens/Node/Logon.txt.hollow-replaced').equals(stub as Buffer)).toBe(true);
+    expect(report.sharedKept).not.toContain('Logon.txt');
+  });
+
+  test('a node that keeps its own directory is not emptied either', () => {
+    board = boardWithHollowShared(Buffer.alloc(0));
+
+    collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    expect(read(`Node${DISSENTER}/Logon.txt`).equals(REAL_LOGON)).toBe(true);
+  });
+
+  test('a shared copy WITH content still wins, which is what the flag is for', () => {
+    const NEWER = Buffer.concat([LOGON, Buffer.from('deployed today\n')]);
+    board = boardWithHollowShared(NEWER);
+
+    const report = collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    expect(read('Screens/Node/Logon.txt').equals(NEWER)).toBe(true);
+    expect(read('Screens/Node/Logon.txt.pre-collapse').equals(REAL_LOGON)).toBe(true);
+    expect(report.sharedKept).toContain('Logon.txt');
+  });
+});

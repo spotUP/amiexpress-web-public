@@ -21,7 +21,7 @@ import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
-import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
+import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
 import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
@@ -2081,12 +2081,7 @@ export function ScreenFilesPage() {
               // The same PetsciiMachine + PetsciiCanvas a C64 caller's terminal
               // draws with. The apology that stood here predated both: the
               // renderer exists, so showing nothing was the misleading part.
-              //
-              // And it is now the EDITOR, read-only, for the reason the RIP
-              // branch above gives: the component the artist studio opens is
-              // the component that shows the file here, so a viewer and an
-              // editor cannot drift apart.
-              <PetsciiScreenEditor content={file.content} filePath={openFile ?? undefined} readOnly />
+              <PetsciiScreenPreview content={file.content} />
             ) : (
               <p className="text-sm text-content-secondary">
                 No preview for this format.

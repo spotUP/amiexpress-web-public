@@ -32,6 +32,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
+import { isHollowScreenFile } from '../screens/hollow-screen';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
@@ -1123,6 +1124,27 @@ export function loadScreenFile(
   const paths = [];
 
   /*
+   * Screen files that are present but have NOTHING IN THEM, in search order.
+   *
+   * They do not answer the name while there is anywhere else to look - that
+   * is the whole point, a hollow `Logon100.txt` must not beat a real
+   * `Logon.txt` beside it - but if the entire walk comes up empty the first
+   * one is served anyway, at the bottom of this function. A screen the sysop
+   * blanked on purpose is a screen that exists and draws nothing; it is not a
+   * screen that is MISSING, and reporting it as missing would put a
+   * CRITICAL in the log and a notification in front of the sysop on every
+   * login. See screens/hollow-screen.ts.
+   */
+  const hollow: string[] = [];
+  const takeHollow = (resolved: string | null | undefined): string | null => {
+    if (!resolved) return null;
+    if (!isHollowScreenFile(resolved)) return resolved;
+    screenDebug(`[loadScreenFile]  Skipping hollow screen file ${resolved}`);
+    hollow.push(resolved);
+    return null;
+  };
+
+  /*
    * The caller's SCREEN theme, resolved once for every arm of this function.
    *
    * `resolveCallerTheme` is the only judge of what a caller may wear - the
@@ -1394,7 +1416,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
       const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
-        session?.texttvMode ?? false);
+        session?.texttvMode ?? false, { hollow });
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
@@ -1435,7 +1457,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       screenDebug(`[loadScreenFile]   [${attemptNum}/${searchLocations.length * filenameVariations.length}] ${expectedPath}`);
 
       // Try case-insensitive match
-      const foundPath = findCaseInsensitive(location.dir, filename);
+      const foundPath = takeHollow(findCaseInsensitive(location.dir, filename));
       if (foundPath) {
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
         let fileToUse: string = foundPath;
@@ -1515,7 +1537,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
       const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
-        session?.texttvMode ?? false);
+        session?.texttvMode ?? false, { hollow });
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
@@ -1571,6 +1593,9 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
 
       for (const tryPath of pathsToTry) {
         if (amigafs.existsSync(tryPath)) {
+          // Same rule as the search loop above: hollow does not answer the
+          // name while there is anywhere else to look.
+          if (!takeHollow(tryPath)) continue;
           screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${tryPath}`);
           if (isPetsciiSeqFile(tryPath)) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
@@ -1634,7 +1659,10 @@ try {
     const nodeFallbackDir = path.join(baseDir, 'Node1');
 
     // Prefer ANSI text fallback for the await screen
-    const ansiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.txt') || findCaseInsensitive(nodeFallbackDir, 'bbstitle.TXT');
+    // A hollow fallback is no fallback (screens/hollow-screen.ts).
+    const ansiFallback = takeHollow(
+      findCaseInsensitive(nodeFallbackDir, 'bbstitle.txt') || findCaseInsensitive(nodeFallbackDir, 'bbstitle.TXT')
+    );
     if (ansiFallback) {
       try {
         const content = readScreenText(ansiFallback);
@@ -1653,7 +1681,7 @@ console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(erro
       }
     }
 
-    const petsciiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.seq');
+    const petsciiFallback = takeHollow(findCaseInsensitive(nodeFallbackDir, 'bbstitle.seq'));
     if (petsciiFallback) {
       try {
         const buffer = readScreenBuffer(petsciiFallback);
@@ -1672,6 +1700,17 @@ console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as 
         );
       }
     }
+  }
+
+  /*
+   * Nothing anywhere had content. If the walk passed a file that exists and
+   * is empty, that is the answer: the sysop blanked this screen, and the
+   * caller must be told it EXISTS so it draws nothing quietly instead of
+   * logging a missing screen and notifying the sysop on every login.
+   */
+  if (hollow.length > 0) {
+    screenDebug(`[loadScreenFile]  Every candidate was hollow; serving ${hollow[0]} as an empty screen`);
+    return { content: '', isPetscii: false, isRip: false, filePath: hollow[0] };
   }
 
   return null;
@@ -2043,6 +2082,23 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
   if (screenData) {
     const { content, isPetscii, isRip, filePath, petsciiBuffer, sourceEncoding } = screenData;
+
+    /*
+     * A screen the sysop blanked draws NOTHING - not even the clear.
+     *
+     * express.e:6773 answers TRUE for any file that opens, and this port
+     * inherited that, so an empty screen wiped the terminal and printed
+     * nothing. That is the "blank screen" half of the sysop's 2026-09-14
+     * report; the pause that followed it belonged to the caller, which had
+     * been told the screen was shown. Telling it the truth - shown, and it
+     * was empty - is what the loader's hollow last resort is for: the screen
+     * EXISTS (so nothing reports it missing) and there is nothing to draw.
+     */
+    if (isHollowScreenFile(filePath)) {
+      screenFlowLog(screenName, `Hollow screen ${filePath}: nothing drawn`);
+      session.lastScreenFilePath = filePath;
+      return true;
+    }
     /**
      * TP-5: the charset THIS screen's characters came off disk in, carried on
      * every emit that puts this screen's content on the wire. A byte-transport
