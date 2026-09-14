@@ -50,7 +50,48 @@ export interface PetsciiCanvasProps {
    * any non-undefined value switches the blink off.
    */
   cursorVisible?: boolean;
+  /**
+   * The cell under the pointer, for an editor drawing on this canvas.
+   *
+   * It lives HERE because the canvas owns the border width, the integer
+   * scale and the cell size, and it is the only place that can answer
+   * honestly. An editor that recomputed a cell from the DOM would be a second
+   * source of truth that drifts the first time the fit policy changes.
+   *
+   * Never fires for the border: a C64's frame is not part of the 40x25
+   * screen, and a click there is not a cell.
+   */
+  onCellPointer?: (event: PetsciiCellPointer) => void;
+  /** A one-pixel cell grid, as Petmate draws it. Off by default. */
+  gridVisible?: boolean;
+  /** Cells to outline: the MCI tokens the editor found, and a lifted brush. */
+  highlight?: readonly PetsciiHighlight[];
 }
+
+/** A pointer over a cell of the 40x25 screen. Never over the border. */
+export interface PetsciiCellPointer {
+  type: 'down' | 'move' | 'up';
+  x: number;
+  y: number;
+  /** The buttons held, as the DOM reports them - so a move can tell a drag from a hover. */
+  buttons: number;
+}
+
+/** A rectangle of cells to outline, and what it means. */
+export interface PetsciiHighlight {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  tone?: 'mci' | 'mci-unresolved' | 'brush';
+}
+
+/** What each highlight tone is drawn in. Fixed, because they mean fixed things. */
+const HIGHLIGHT_TONES: Record<NonNullable<PetsciiHighlight['tone']>, string> = {
+  mci: '#4ad24a',
+  'mci-unresolved': '#d2b34a',
+  brush: '#ffffff',
+};
 
 export interface PetsciiCanvasHandle {
   focus(): void;
@@ -128,6 +169,9 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   focusable = false,
   swedish = false,
   focusOnMount = false,
+  onCellPointer,
+  gridVisible = false,
+  highlight,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -278,11 +322,44 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       ctx.fillStyle = colours[s.colorRam[cursorIdx] & 0x0F];
       ctx.fillRect(border + s.cursorX * destW, border + s.cursorY * destH, destW, destH);
     }
+    // THE EDITOR'S TWO OVERLAYS, and they are drawn last so nothing paints
+    // over them. Both are off unless an editor asked for them, so a live
+    // PETSCII session draws exactly what it always drew.
+    if (gridVisible) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // Offset by half a pixel: a 1px line on an integer coordinate straddles
+      // two device pixels and comes out two pixels wide and grey.
+      for (let x = 0; x <= cols; x++) {
+        ctx.moveTo(border + x * destW + 0.5, border);
+        ctx.lineTo(border + x * destW + 0.5, border + rows * destH);
+      }
+      for (let y = 0; y <= rows; y++) {
+        ctx.moveTo(border, border + y * destH + 0.5);
+        ctx.lineTo(border + cols * destW, border + y * destH + 0.5);
+      }
+      ctx.stroke();
+    }
+
+    if (highlight) {
+      ctx.lineWidth = 1;
+      for (const box of highlight) {
+        ctx.strokeStyle = HIGHLIGHT_TONES[box.tone ?? 'mci'];
+        ctx.strokeRect(
+          border + box.x * destW + 0.5,
+          border + box.y * destH + 0.5,
+          box.w * destW - 1,
+          box.h * destH - 1,
+        );
+      }
+    }
     // `cursorVisible` belongs in this list: without it a change to the
     // override kept the STALE closure - the repaint effects below re-run on
     // `draw`'s identity, so a prop the memo does not watch cannot reach the
-    // glass until something else happens to change.
-  }, [machine, colours, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows]);
+    // glass until something else happens to change. `gridVisible` and
+    // `highlight` are here for exactly the same reason.
+  }, [machine, colours, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows, gridVisible, highlight]);
 
   // Keep a ref to the latest draw() so the onUpdate subscription below
   // doesn't need to be torn down and rebuilt every cursor blink.
@@ -373,6 +450,37 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     return () => document.removeEventListener('paste', onPaste);
   }, [onData, swedish]);
 
+  /**
+   * The cell under a client coordinate, or null for the border.
+   *
+   * The canvas's backing store is `width` x `height` device-ish pixels and
+   * CSS scales it to whatever fits, so a client coordinate is converted
+   * through the element's own rect before the border is stripped. Doing this
+   * anywhere else means duplicating `border`, `cellW`, `cellH` and the fit
+   * policy - four numbers that already live here and have moved before.
+   */
+  const cellAt = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    const el = canvasRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const px = (clientX - rect.left) * (width / rect.width) - border;
+    const py = (clientY - rect.top) * (height / rect.height) - border;
+    if (px < 0 || py < 0) return null;
+    const x = Math.floor(px / cellW);
+    const y = Math.floor(py / cellH);
+    return x >= 0 && y >= 0 && x < cols && y < rows ? { x, y } : null;
+  }, [width, height, border, cellW, cellH, cols, rows]);
+
+  const reportCell = useCallback((
+    type: PetsciiCellPointer['type'],
+  ) => (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!onCellPointer) return;
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell) return;
+    onCellPointer({ type, x: cell.x, y: cell.y, buttons: e.buttons });
+  }, [onCellPointer, cellAt]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     // CTRL+C IS THE BOARD'S ABORT KEY, and it could not be pressed here at
     // all: the guard below hands every Ctrl chord to the browser, which is
@@ -419,6 +527,9 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
         height={height}
         tabIndex={focusable ? 0 : -1}
         onKeyDown={handleKeyDown}
+        onPointerDown={onCellPointer ? reportCell('down') : undefined}
+        onPointerMove={onCellPointer ? reportCell('move') : undefined}
+        onPointerUp={onCellPointer ? reportCell('up') : undefined}
         style={{
           imageRendering: 'pixelated',
           // `width`/`height` set the backing-store resolution via the
@@ -439,6 +550,8 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
           // as a blue border the C64 never had. The blinking cursor is the
           // focus indicator.
           outline: 'none',
+          // An editor's canvas is a drawing surface; a session's is not.
+          cursor: onCellPointer ? 'crosshair' : undefined,
         }}
       />
     </div>
