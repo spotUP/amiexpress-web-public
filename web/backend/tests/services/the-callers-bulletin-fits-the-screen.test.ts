@@ -130,3 +130,74 @@ describe('the last callers bulletin', () => {
     expect(callerRows(text)).toBeGreaterThanOrEqual(8);
   });
 });
+
+/**
+ * And the logo itself is editable, which is the other half of the fit.
+ *
+ * "the logo from this door should be editable as well" - the sysop,
+ * 2026-09-14. Its height is what decides how many callers fit, so a fit the
+ * sysop cannot influence is only half a feature. The file already passed the
+ * screen routes' containment check - `resolveScreenPath` allows anything under
+ * the board root - it simply never appeared in the manager's LIST, because the
+ * art scan only walked `Doors/` and SAmiLog keeps its templates in `Utils/`.
+ */
+describe('the samilog logo', () => {
+  const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
+
+  function boardWithUtilArt(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'util-art-'));
+    const utils = path.join(dir, 'Utils', 'samilog');
+    fs.mkdirSync(utils, { recursive: true });
+    fs.writeFileSync(path.join(utils, 'samilog.header.txt'), logo(6), 'latin1');
+    fs.writeFileSync(path.join(utils, 'samilog.tailer.txt'), 'tail\n', 'latin1');
+    // A door with art, so the Doors/ half is proven not to have been lost.
+    const door = path.join(dir, 'Doors', 'somedoor');
+    fs.mkdirSync(door, { recursive: true });
+    fs.writeFileSync(path.join(door, 'title.txt'), 'art\n', 'latin1');
+    // Nothing to find here - a Utils entry with no art must not be listed.
+    fs.mkdirSync(path.join(dir, 'Utils', 'aecrypt'), { recursive: true });
+    return dir;
+  }
+
+  test('is listed as editable art, and the doors are still listed too', () => {
+    const dir = boardWithUtilArt();
+    try {
+      process.env.BBS_DATA_DIR = dir;
+      jest.resetModules();
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { listDoorScreenDirectories } = require('../../src/screens/screen-index.service');
+
+      const found = listDoorScreenDirectories(dir);
+      const names = found.map((f: { door: string }) => f.door);
+
+      expect(names).toContain('samilog');
+      expect(names).toContain('somedoor');
+      // A utility with no art of its own stays out of the manager.
+      expect(names).not.toContain('aecrypt');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('the screen routes already accept its path - only the listing was missing', () => {
+    const dir = boardWithUtilArt();
+    try {
+      process.env.BBS_DATA_DIR = dir;
+      jest.resetModules();
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { resolveScreenPath } = require('../../src/api/screens-routes');
+
+      expect(resolveScreenPath('Utils/samilog/samilog.header.txt')).toBeTruthy();
+      // Containment is untouched by the widening.
+      expect(resolveScreenPath('../../../etc/passwd')).toBeNull();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Keeps REPO_ROOT meaningful if the fixture above is ever swapped for the
+  // board's own files.
+  test('the board really does keep the logo in Utils/samilog', () => {
+    expect(fs.existsSync(path.join(REPO_ROOT, 'Utils', 'samilog', 'samilog.header.txt'))).toBe(true);
+  });
+});

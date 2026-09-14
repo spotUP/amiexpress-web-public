@@ -279,16 +279,30 @@ function confIds(baseDir: string): number[] {
  *
  * `node_modules` and `dist` are skipped: a door's dependencies are megabytes of
  * files that are not art, and one of them will always end in .txt.
+ *
+ * `Utils/` IS SCANNED TOO, for the same reason and with the same rules. The
+ * classic Amiga utilities keep their templates there rather than under
+ * `Doors/` - SAmiLog's `samilog.header.txt` is the logo at the top of the Last
+ * Callers bulletin, and the sysop could not reach it from the screen manager
+ * because of where it happens to live. Its height decides how many callers fit
+ * on that screen (SamiLogService's `fitRows`), so editing it is how the sysop
+ * buys the fit; a file that changes what a caller sees and cannot be edited is
+ * the wrong half of a feature. Measured before widening: `Utils/` holds four
+ * art files in total, all four SAmiLog's.
  */
+const SCREEN_ART_ROOTS = ['Doors', 'Utils'];
+
 export function listDoorScreenDirectories(baseDir: string): { door: string; dir: string }[] {
-  const doorsRoot = path.join(baseDir, 'Doors');
   const out: { door: string; dir: string }[] = [];
+
+  for (const root of SCREEN_ART_ROOTS) {
+  const doorsRoot = path.join(baseDir, root);
 
   let doors: fs.Dirent[];
   try {
     doors = fs.readdirSync(doorsRoot, { withFileTypes: true });
   } catch {
-    return out;
+    continue;
   }
 
   for (const entry of doors) {
@@ -313,6 +327,7 @@ export function listDoorScreenDirectories(baseDir: string): { door: string; dir:
       }
     };
     walk(path.join(doorsRoot, door), 0);
+  }
   }
 
   return out;
