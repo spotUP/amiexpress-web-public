@@ -385,14 +385,21 @@ export function ScreenEditor({
             eight pens and no iCE colours - while there is still time to
             change the drawing.
           */}
+          {/*
+            The label says WHICH palette is on the glass, the way the
+            Overwrite/Insert button says which typing mode is on. A button
+            that reads the same in both states leaves the ring as the only
+            clue, and a ring is not a word: "the button itself needs to
+            toggle as well it always says amiga colors" (sysop, 2026-09-14).
+          */}
           <button
             type="button"
             aria-pressed={palette === 'amiga'}
-            title="Show the eight pens an Amiga caller has"
+            title="Switch between all sixteen colours and the eight pens an Amiga caller has"
             className={`px-2 h-6 border ${selectedRing(palette === 'amiga')}`}
             onClick={() => setPalette(mode => (mode === 'amiga' ? 'full' : 'amiga'))}
           >
-            Amiga colours
+            {palette === 'amiga' ? 'Amiga 8 colours' : 'All 16 colours'}
           </button>
         </div>
         <div className="space-y-1">
