@@ -758,14 +758,28 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
  * not happened yet, and without it the LAST piece is drawn and taken away by
  * whatever the flow draws next.
  */
-function rememberTheDebtIfSegmentsRemain(session: BBSSession): void {
+function rememberTheDebtIfSegmentsRemain(session: BBSSession, site: string): void {
   const segments = session.screenSegments?.segments;
   if (segments && segments.length > 0) {
     session.flowPauseAfterSegments = true;
+    /*
+     * TEMPORARY INSTRUMENTATION - 2026-09-15, remove with the other
+     * PAUSE-TRACE block in screen.handler.
+     *
+     * The debt is booked HERE and spent a long way away, at "pause after the
+     * last segment". Neither end said which of `pauseDisplayFlow`'s four call
+     * sites booked it, so the second `(Pause)...Space To Resume:` a caller
+     * meets under "Joining Conference" could be traced to the settle and no
+     * further. This names the borrower.
+     */
+    console.log(
+      `[PAUSE-DEBT] booked site=${site} subState=${session.subState}`
+      + ` segments=${segments.length} menuPause=${session.menuPause ? 'Y' : 'N'}`
+    );
   }
 }
 
-function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false): boolean {
+function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false, site: string = '?'): boolean {
   // If a screen already installed a pause (e.g., ~SP or pagination), honor it
   if (session.paginatedScreen) {
     /*
@@ -789,7 +803,7 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
      * segments actually remain: a screen that paginated into a single page has
      * already had its pause and must not get a second.
      */
-    rememberTheDebtIfSegmentsRemain(session);
+    rememberTheDebtIfSegmentsRemain(session, site);
     return true;
   }
 
@@ -813,7 +827,7 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
        * screen has finished - which is exactly how the last MultiTop came to
        * be wiped by ACHIEVETOP with nothing in between.
        */
-      rememberTheDebtIfSegmentsRemain(session);
+      rememberTheDebtIfSegmentsRemain(session, site);
       return true;
     }
   } catch (error) {
@@ -901,7 +915,7 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
        */
       if (session.screenSegments && session.screenSegments.segments.length > 0
           && !session.paginatedScreen) {
-        if (pauseDisplayFlow(socket, session)) {
+        if (pauseDisplayFlow(socket, session, false, 'segments-pending')) {
           return;      // waiting on a key; the segments run when it arrives
         }
       }
@@ -942,7 +956,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // Note: quickFlag does NOT skip BULL — it only skips LOGON (express.e:29853)
         displayFlowLog('showing BULL');
         const shown = await displayScreen(socket, session, 'BULL', true, /* silent */ true);
-        if (shown && pauseDisplayFlow(socket, session)) {
+        if (shown && pauseDisplayFlow(socket, session, false, 'bull')) {
           session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
           displayFlowLog('pause after BULL');
           return;
@@ -965,7 +979,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // Optional — a missing file is normal, silence the sysop alert.
         displayFlowLog('showing NODE_BULL');
         const shown = await displayScreen(socket, session, 'NODE_BULL', true, /* silent */ true);
-        if (shown && pauseDisplayFlow(socket, session)) {
+        if (shown && pauseDisplayFlow(socket, session, false, 'node_bull')) {
           session.subState = LoggedOnSubState.DISPLAY_ACHIEVE_BULL;
           displayFlowLog('pause after NODE_BULL');
           return;
@@ -981,7 +995,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // achievements server configured - same contract as NODE_BULL.
         displayFlowLog('showing ACHIEVETOP');
         const shown = await displayScreen(socket, session, 'ACHIEVETOP', true, /* silent */ true);
-        if (shown && pauseDisplayFlow(socket, session)) {
+        if (shown && pauseDisplayFlow(socket, session, false, 'achievetop')) {
           session.subState = LoggedOnSubState.CONF_SCAN;
           displayFlowLog('pause after ACHIEVETOP');
           return;
