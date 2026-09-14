@@ -254,6 +254,22 @@ export class DocModal extends Box {
     }
   }
 
+  /**
+   * The [X] closes it the same way every other route does.
+   *
+   * Element.close() - what the closable button's click handler calls - hides
+   * the widget and emits 'close', and nothing else. This widget deliberately
+   * does NOT listen to its own 'close' (that is what made closing recurse
+   * until the stack died), so the button hid the modal and ran NONE of the
+   * close routine: no focus-trap release, and no `onClose`. CARD LOBBY sets
+   * its `modalActive` in that callback, so one click on the [X] left the
+   * door refusing every later window - "theme is dead", "leaders is dead"
+   * (sysop, 2026-09-14), for a door whose menu looked perfectly alive.
+   */
+  close(): void {
+    this._close();
+  }
+
   private _setupKeyHandlers(): void {
     const closeModal = () => this._close();
 

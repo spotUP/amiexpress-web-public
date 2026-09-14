@@ -332,3 +332,65 @@ export async function aViewWindowLeavesTheMenuBarShowing(): Promise<void> {
     await h.finished;
   }
 }
+
+/**
+ * Closing a window with the [X] must leave the door able to open another.
+ *
+ * The door gates every window on `modalActive` and clears it in DocModal's
+ * onClose. The [X] ran Element.close() - hide, emit 'close' - and DocModal
+ * does not listen to its own 'close', so onClose never fired and the flag
+ * stayed set: "theme is dead", "leaders is dead" (sysop, 2026-09-14), on a
+ * door whose menu bar still drew and still highlighted.
+ *
+ * Driven through the real button with a real click, because both halves of
+ * the bug were between the mouse and the callback.
+ */
+export async function theCloseButtonLetsTheNextWindowOpen(): Promise<void> {
+  const h = await openDoor();
+  try {
+    const screen = h.app.screen;
+    const click = (x: number, y: number): void => {
+      screen.program.emit('mouse', { x, y, action: 'mousedown', button: 'left', shift: false, ctrl: false, meta: false });
+      screen.program.emit('mouse', { x, y, action: 'mouseup', button: 'left', shift: false, ctrl: false, meta: false });
+    };
+    const painted = (): string => {
+      let all = '';
+      for (let y = 0; y < screen.height; y++) {
+        const row = screen.buffer[y];
+        all += (row ? row.map((cell: any) => cell[1]).join('') : '') + '\n';
+      }
+      return all;
+    };
+    const entry = (label: string): any =>
+      h.app.uiManager.menus[0].items.find((item: any) => item.label === label);
+
+    void entry('Profile').action();
+    await h.settle();
+    screen.render();
+    assert.strictEqual(h.app.dialogManager.isModalActive(), true, 'the profile window is up');
+
+    const everything = (node: any): any[] => [node, ...((node.children ?? []).flatMap(everything))];
+    const button = everything(screen).find(
+      (el: any) => !el.hidden && el.getContent?.() === '[X]',
+    );
+    assert.ok(button, 'the window has a close button');
+    const coords = button._getCoords();
+    click(coords.xi + 1, coords.yi);
+    await h.settle();
+
+    assert.strictEqual(h.app.dialogManager.isModalActive(), false,
+      'clicking [X] closed it as far as the DOOR is concerned, not just visually');
+
+    // And the next window opens, which is the thing the sysop could not do.
+    void entry('Leaders').action();
+    await h.settle();
+    screen.render();
+    assert.ok(painted().includes('Leaderboard'), 'the next window opens:\n' + painted());
+
+    h.escape();
+    await h.settle();
+  } finally {
+    await h.app.shutdown();
+    await h.finished;
+  }
+}

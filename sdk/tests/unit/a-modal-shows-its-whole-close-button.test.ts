@@ -189,3 +189,123 @@ describe('the category picker shows its close button', () => {
     picker.destroy?.();
   });
 });
+
+/**
+ * ...and it has to CLOSE the thing when it is clicked.
+ *
+ * Two faults stood between the button and the close, and the door looked
+ * alive through both: the menu bar still drew, the entries still highlighted,
+ * and every window after the first one refused to open. "theme is dead",
+ * "leaders is dead" (sysop, 2026-09-14).
+ *
+ *   1. Mouse hit-testing reads Screen's spatial index, which is built from
+ *      walkVisible - so a hidden element and its whole subtree are absent
+ *      from it. show() said nothing about the element having appeared, so a
+ *      modal opened over a board painted perfectly and took no clicks at
+ *      all: those cells still belonged to the panels underneath.
+ *
+ *   2. The button calls Element.close(), which hides and emits 'close'.
+ *      DocModal deliberately does not listen to its own 'close' - that is
+ *      what made closing recurse until the stack died - so the caller's
+ *      onClose never ran. CARD LOBBY clears its `modalActive` there, and a
+ *      door that thinks a modal is still up refuses to open another.
+ */
+describe('the close button actually closes the modal', () => {
+  let screen: any;
+  afterEach(() => screen?.destroy());
+
+  /** A click, the way Program delivers one. */
+  function click(s: any, x: number, y: number): void {
+    s.program.emit('mouse', { x, y, action: 'mousedown', button: 'left', shift: false, ctrl: false, meta: false });
+    s.program.emit('mouse', { x, y, action: 'mouseup', button: 'left', shift: false, ctrl: false, meta: false });
+  }
+
+  it('runs the caller onClose when the [X] is clicked', () => {
+    screen = screenOf();
+    // Something under the modal, so the stale index has an owner for those
+    // cells - which is exactly the board the modal opens over.
+    new Box({ parent: screen, top: 0, left: 0, width: '100%', height: '100%', ch: ' ', mouse: true, clickable: true } as any);
+    // Build the index while the modal is still hidden, the way a door does:
+    // the caller has been moving the mouse over the board all along.
+    screen.render();
+    click(screen, 5, 5);
+
+    let closed = 0;
+    const modal = new DocModal({
+      parent: screen,
+      title: 'Player Profile',
+      content: 'Player: sysop',
+      onClose: () => { closed += 1; },
+    } as any);
+    modal.display();
+    screen.render();
+
+    const button = closeButtonOf(modal);
+    const coords = button._getCoords();
+    click(screen, coords.xi + 1, coords.yi);
+
+    expect(closed).toBe(1);
+    expect((modal as any).hidden).toBe(true);
+  });
+
+  it('closes once, however many times the button is clicked', () => {
+    screen = screenOf();
+    let closed = 0;
+    const modal = new DocModal({
+      parent: screen, title: 'Bulletins', content: 'nothing yet',
+      onClose: () => { closed += 1; },
+    } as any);
+    modal.display();
+    screen.render();
+
+    const coords = closeButtonOf(modal)._getCoords();
+    click(screen, coords.xi + 1, coords.yi);
+    click(screen, coords.xi + 1, coords.yi);
+    expect(closed).toBe(1);
+  });
+});
+
+/**
+ * The hit-test index has to learn that an element appeared.
+ *
+ * This is the half that reaches every dialog on the board, not just this
+ * one: anything shown after the index was built was invisible to the mouse.
+ */
+describe('an element shown after the index was built still takes clicks', () => {
+  let screen: any;
+  afterEach(() => screen?.destroy());
+
+  it('gets the click instead of what was under it', () => {
+    screen = screenOf();
+    const board: any = new Box({
+      parent: screen, top: 0, left: 0, width: '100%', height: '100%',
+      ch: ' ', mouse: true, clickable: true,
+    } as any);
+    let boardClicks = 0;
+    board.on('click', () => { boardClicks += 1; });
+
+    screen.render();
+    // First mouse event of the session builds the index over the board.
+    screen.program.emit('mouse', { x: 10, y: 10, action: 'mousedown', button: 'left' });
+    expect(boardClicks).toBe(1);
+
+    const dialog: any = new Box({
+      parent: screen, top: 8, left: 8, width: 20, height: 5,
+      ch: ' ', mouse: true, clickable: true, hidden: true,
+    } as any);
+    let dialogClicks = 0;
+    dialog.on('click', () => { dialogClicks += 1; });
+
+    // Rebuild the index with the dialog still hidden - a render invalidates,
+    // a mouse query rebuilds - and then show it WITHOUT rendering, which is
+    // what a door does when it opens something from inside a mouse handler.
+    screen.render();
+    screen.program.emit('mouse', { x: 1, y: 1, action: 'mousemove' });
+    dialog.show();
+
+    screen.program.emit('mouse', { x: 10, y: 10, action: 'mousedown', button: 'left' });
+    expect(dialogClicks).toBe(1);
+    // And the board no longer hears a click that landed on the dialog.
+    expect(boardClicks).toBe(1);
+  });
+});

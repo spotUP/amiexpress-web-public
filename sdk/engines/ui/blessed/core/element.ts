@@ -1629,6 +1629,14 @@ export class Element extends EventEmitter {
       this._hidden = false;  // backing field: assigning `hidden` re-enters here
       this.visible = true;
       this._invalidateCoords();  // Ensure fresh coords when shown
+      // And the SPATIAL index, which is what mouse hit-testing reads. It is
+      // built from walkVisible, so a hidden element and its whole subtree
+      // are absent from it - and nothing here used to say the element had
+      // appeared. A modal opened on top of a board therefore painted
+      // perfectly and took no clicks at all: the cells still belonged to
+      // whatever was under it. That is the [X] that did nothing, and the
+      // buttons inside every dialog with it (sysop, 2026-09-14).
+      this.screen?.invalidateMouseIndex?.();
       // Mark dirty for optimized rendering
       if (this.screen && (this.screen as any).markDirtyElement) {
         (this.screen as any).markDirtyElement(this);
@@ -1659,6 +1667,9 @@ export class Element extends EventEmitter {
 
       this._hidden = true;  // backing field: assigning `hidden` re-enters here
       this.visible = false;
+      // The mirror of show(): a hidden element must stop taking clicks at
+      // the cells it used to own.
+      this.screen?.invalidateMouseIndex?.();
       this.blur();
       this.emit('hide');
       // Emit overlay event for elements with opacity
