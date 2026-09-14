@@ -145,3 +145,53 @@ describe('the route that owns both stores', () => {
     expect(source).toContain('applyUserEditsToDisk(beforeUpdate?.username');
   });
 });
+
+describe('the conference access a sysop picks', () => {
+  beforeEach(() => {
+    readAllUsers.mockReset();
+    readUserBySlot.mockReset();
+    updateUserDataFile.mockReset();
+  });
+
+  /**
+   * Which conferences a caller may join is `confAccess`, read by
+   * express.e:8499-8512 either as an AREA NAME or as the `X`/`_` flag string.
+   * The admin could not set it at all - the field was not in `UserEdits`, so
+   * the one thing that moves a user between areas fell on the floor and the
+   * form reported success.
+   */
+  it('reaches the disk record', () => {
+    readAllUsers.mockReturnValue([{ username: 'Phantasm', slotNumber: 7 }]);
+    readUserBySlot.mockReturnValue(diskRecord({ confAccess: 'XXXXX_____' }));
+
+    const outcome = applyUserEditsToDisk('Phantasm', { confAccess: 'Internal' });
+
+    expect(outcome.applied).toContain('confAccess');
+    const [written] = updateUserDataFile.mock.calls[0] as [Record<string, unknown>, number];
+    expect(written.confAccess).toBe('Internal');
+  });
+
+  it('is carried verbatim, flags included', () => {
+    // The SHAPE of the value is what express.e:458-465 reads to decide which
+    // mode this account is in, so normalising it here would change the
+    // meaning - `XX` is conferences 1 and 2, not an area called XX.
+    readAllUsers.mockReturnValue([{ username: 'Phantasm', slotNumber: 7 }]);
+    readUserBySlot.mockReturnValue(diskRecord({ confAccess: 'Internal' }));
+
+    applyUserEditsToDisk('Phantasm', { confAccess: 'XXXX______' });
+
+    const [written] = updateUserDataFile.mock.calls[0] as [Record<string, unknown>, number];
+    expect(written.confAccess).toBe('XXXX______');
+  });
+
+  it('is left alone when the form did not touch it', () => {
+    // An edit to the location must not rewrite who they can talk to.
+    readAllUsers.mockReturnValue([{ username: 'Phantasm', slotNumber: 7 }]);
+    readUserBySlot.mockReturnValue(diskRecord({ confAccess: 'Internal' }));
+
+    applyUserEditsToDisk('Phantasm', { location: 'Stockholm' });
+
+    const [written] = updateUserDataFile.mock.calls[0] as [Record<string, unknown>, number];
+    expect(written.confAccess).toBe('Internal');
+  });
+});

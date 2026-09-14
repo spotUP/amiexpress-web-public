@@ -568,6 +568,29 @@ class ApiClient {
     );
   }
 
+  /*
+   * Conference access AREAS - the named grants a user's access field points
+   * at (express.e:8499-8512). Until now neither these nor the `X`/`_` flag
+   * string could be edited from the admin at all.
+   */
+  async getAccessAreas() {
+    return this.request<ApiResponse>(`${API_BASE}/config/access-areas`);
+  }
+
+  async saveAccessArea(name: string, conferences: number[]) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/config/access-areas/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ conferences }) },
+    );
+  }
+
+  async deleteAccessArea(name: string) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/config/access-areas/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    );
+  }
+
   async deleteConferenceConfig(confNumber: number, removeFiles = false) {
     const query = removeFiles ? '?removeFiles=true' : '';
     return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}${query}`, {

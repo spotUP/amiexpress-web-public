@@ -24,6 +24,8 @@ interface BbsUser {
    * number instead of claiming something untrue.
    */
   unlimitedTime?: boolean;
+  /** Their conference access: an area name, or the `X`/`_` flag string. */
+  confAccess?: string;
   ratio: number;
   uploads: number;
   downloads: number;
@@ -68,6 +70,13 @@ interface UserFormData {
    * you wanted to know. A sysop editing an account expects to find it there.
    */
   accountLocked: boolean;
+  /**
+   * Which conferences they may join, exactly as express.e:8499-8512 reads it:
+   * an AREA NAME, or the `X`/`_` flag string. The SHAPE of the value decides
+   * which (express.e:458-465), so it is carried verbatim and never normalised
+   * here - and the two can never be mixed on one account.
+   */
+  confAccess: string;
 }
 
 export function UsersPage() {
@@ -85,10 +94,25 @@ export function UsersPage() {
     phone: '',
     email: '',
     secLevel: 10,
-    timeLimit: 60,
+    timeLimit: 3600,
     expert: false,
     accountLocked: false,
+    confAccess: '',
   });
+
+  /*
+   * The areas a user can be put IN. Read here rather than typed by hand: an
+   * access field naming an area that does not exist grants NO conference at
+   * all (checkToolTypeExists on a missing file is false for every one), so a
+   * free-text box would be a way to lock somebody out with a typo.
+   */
+  const areasQuery = useQuery({
+    queryKey: ['access-areas'],
+    queryFn: () => apiClient.getAccessAreas(),
+  });
+  const areaNames: string[] = (areasQuery.data?.data?.areas ?? []).map(
+    (a: { name: string }) => a.name,
+  );
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['users'],
@@ -149,9 +173,10 @@ export function UsersPage() {
       phone: '',
       email: '',
       secLevel: 10,
-      timeLimit: 60,
+      timeLimit: 3600,
       expert: false,
-    accountLocked: false,
+      accountLocked: false,
+      confAccess: '',
     });
   };
 
@@ -181,6 +206,7 @@ export function UsersPage() {
       timeLimit: user.timeLimit,
       expert: user.expert,
       accountLocked: Boolean(user.accountLocked),
+      confAccess: user.confAccess ?? '',
     });
     setEditingUser(user);
     setIsModalOpen(true);
@@ -625,6 +651,44 @@ export function UsersPage() {
                     permission on the access level (Security), because
                     express.e checks that, not this number. A value of 0 or
                     less is treated as 3600 when the caller logs on.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label htmlFor="confAccess" className="label">
+                    Conference access
+                  </label>
+                  <select
+                    id="confAccess"
+                    className="input-field w-full"
+                    value={areaNames.includes(formData.confAccess) ? formData.confAccess : '__other__'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v !== '__other__') setFormData({ ...formData, confAccess: v });
+                    }}
+                  >
+                    {areaNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    {/*
+                      An account on a flag string, or on an area that no longer
+                      exists, must not be silently rewritten by opening its
+                      form. It shows what it actually holds and stays there
+                      until the sysop picks an area on purpose.
+                    */}
+                    <option value="__other__">
+                      {formData.confAccess
+                        ? `Leave as "${formData.confAccess}"`
+                        : 'Not set'}
+                    </option>
+                  </select>
+                  <p className="text-xs text-content-secondary mt-1">
+                    Which conferences they may join. Areas are defined under
+                    Conferences → Access areas. An account whose value is an
+                    X/_ string uses the old per-user flags instead, and keeping
+                    it here is deliberate — the two cannot be mixed.
                   </p>
                 </div>
 

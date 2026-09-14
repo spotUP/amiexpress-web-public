@@ -20,6 +20,7 @@ import type { TabDefinition } from '../components/ui/Tabs';
 import { NodeControlPage } from './NodeControlPage';
 import { NodesPage } from './NodesPage';
 import { ConferencesPage } from './ConferencesPage';
+import { AccessAreasPage } from './AccessAreasPage';
 import { DrivesPage } from './DrivesPage';
 import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
@@ -60,6 +61,9 @@ export function NodesWorkspace() {
 const CONFERENCE_TABS: TabDefinition[] = [
   { id: 'conferences', label: 'Conferences', render: () => <ConferencesPage /> },
   { id: 'file-areas', label: 'File areas', render: () => <DrivesPage /> },
+  // Who may JOIN which conference, which is a different question from what the
+  // conference is - and one nothing in the admin could answer before.
+  { id: 'access-areas', label: 'Access areas', render: () => <AccessAreasPage /> },
 ];
 
 export function ConferencesWorkspace() {
