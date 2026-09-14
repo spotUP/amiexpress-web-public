@@ -317,6 +317,11 @@ export class Element extends EventEmitter {
 
     this._closableXButton = new Box({
       parent: this,
+      // Row 0 of the CONTENT, not the border row: Screen._renderElement
+      // re-paints a parent's border AFTER its children, so a child hung on
+      // the frame (`top: -1`) is drawn and then erased by the border it sits
+      // on. The button is chrome all the same, so it is kept in front of
+      // every sibling - see the 'append' hook below.
       top: 0,
       right: 1,
       width: 3,
@@ -339,6 +344,13 @@ export class Element extends EventEmitter {
         this.close();
       });
     }
+
+    // Blessed paints in tree order, so anything the widget appends after its
+    // constructor ran - a content area, a footer, a panel a door adds later -
+    // is painted over the button. Keep it last among its siblings.
+    this.on('append', (child: Element) => {
+      if (child !== this._closableXButton) this._closableXButton?.setFront();
+    });
   }
 
   /**

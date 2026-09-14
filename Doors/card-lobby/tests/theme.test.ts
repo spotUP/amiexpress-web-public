@@ -156,3 +156,52 @@ export async function theThemeMenuRepaintsTheDoorOnTheFly(): Promise<void> {
   await app.shutdown();
   await h.finished;
 }
+
+/**
+ * The panel has to be ON THE GLASS, not merely constructed.
+ *
+ * `overlayShade` - the shade the panel is hung on - starts hidden, and a
+ * child of a hidden element paints nothing. So Views > Theme built a panel
+ * the caller could not see, and the promise it hands back only settles on a
+ * key pressed inside it: runAction held `actionInProgress` for the rest of
+ * the session and answered every later entry with "Please wait for current
+ * action to complete". That is the sysop's "many menu entries does nothing
+ * in cardlobby" (2026-09-13).
+ *
+ * The test above drives the same panel with real keys and passed throughout,
+ * because it read widget STYLE rather than the screen. This one reads the
+ * buffer.
+ */
+export async function theThemePanelIsPaintedWhereTheCallerCanSeeIt(): Promise<void> {
+  const h = await openWithTheme('classic');
+  const app = h.app;
+
+  const entry = app.uiManager.menus[0].items.find((item: any) => item.label === 'Theme');
+  void entry.action();
+  await new Promise((r) => setTimeout(r, 200));
+  app.screen.render();
+
+  const painted: string[] = [];
+  for (let y = 0; y < app.screen.height; y++) {
+    const row = app.screen.buffer[y];
+    painted.push(row ? row.map((cell: any) => cell[1]).join('') : '');
+  }
+
+  assert.ok(painted.some((row) => row.includes('- Theme -')),
+    'the theme panel frame is on the screen:\n' + painted.join('\n'));
+  assert.strictEqual(app.uiManager.overlayShade.hidden, false,
+    'and the shade it hangs on is showing');
+  assert.strictEqual(app.actionInProgress, true,
+    'the door is holding the action open while the panel is up');
+
+  // ESC puts everything back, and the door takes actions again.
+  app.screen.program.emit('keypress', '\x1b', { name: 'escape', full: 'escape' });
+  await new Promise((r) => setTimeout(r, 200));
+
+  assert.strictEqual(app.uiManager.overlayShade.hidden, true, 'the shade goes away again');
+  assert.strictEqual(app.actionInProgress, false,
+    'and the door is not left refusing every later menu entry');
+
+  await app.shutdown();
+  await h.finished;
+}

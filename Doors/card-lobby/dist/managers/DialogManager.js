@@ -43,6 +43,7 @@ const blessed_2 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const lib_1 = require("../lib");
 const CardStyleDialog_1 = require("./CardStyleDialog");
+const ThemeDialog_1 = require("./ThemeDialog");
 class DialogManager {
     constructor(screen, overlayShade) {
         this.modalActive = false;
@@ -158,6 +159,19 @@ class DialogManager {
             isModalActive: () => this.isModalActive(),
         }, profile.cards ?? {}, unicodeCapable, onChange);
     }
+    /**
+     * The theme panel. Same host, same shade sequence as the card style panel
+     * above - see managers/ThemeDialog.ts for what happens when the shade is
+     * left down.
+     */
+    async showThemeWindow(bbs, onApply) {
+        await (0, ThemeDialog_1.showThemeDialog)({
+            screen: this.screen,
+            overlayShade: this.overlayShade,
+            setModalActive: (value) => this.setModalActive(value),
+            isModalActive: () => this.isModalActive(),
+        }, bbs, onApply);
+    }
     async showBulletinsWindow(session) {
         // Only offer bulletins that are actually on the board. The list was
         // built from a hardcoded table, so a board with no bulletins - which
@@ -242,8 +256,29 @@ class DialogManager {
         if (this.modalActive)
             return;
         this.modalActive = true;
+        /**
+         * A window, not a takeover.
+         *
+         * DocModal defaults to the whole terminal - right for a door's help
+         * screen, wrong for a seven-line player profile, which swallowed the
+         * menu bar with it: "the player profile page has no menus or if its a
+         * dialog it covers it" (sysop, 2026-09-14). The box takes the room its
+         * content needs, on the SDK's dialog ladder, and leaves the bar on row
+         * 0 and the status bar on the last row where they are.
+         */
+        const screenWidth = Number(this.screen.width) || 80;
+        const screenHeight = Number(this.screen.height) || 25;
+        const lines = content.split('\n').length;
+        const room = Math.max(5, screenHeight - 3);
+        // Border top and bottom, the footer, and a line of air.
+        const height = Math.min(room, lines + 4);
+        const top = Math.max(1, Math.floor((screenHeight - height) / 2));
         const modal = new blessed_1.DocModal({
             parent: this.screen,
+            top,
+            left: 'center',
+            width: (0, blessed_2.calculateDialogWidth)(screenWidth),
+            height,
             title,
             content,
             // ESC and Q are what the SDK closes on, and nobody guesses that: the

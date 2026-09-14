@@ -287,3 +287,48 @@ export async function theWeeklyBulletinIsWrittenOnceThereIsPlay(): Promise<void>
     await h.finished;
   }
 }
+
+/**
+ * A view window is a WINDOW: the menu bar stays where it is.
+ *
+ * DocModal defaults to the whole terminal - right for a door's help screen,
+ * wrong for a seven-line player profile, which took the lot and swallowed
+ * row 0 with it: "the player profile page has no menus or if its a dialog it
+ * covers it" (sysop, 2026-09-14). Read off the painted screen, because the
+ * complaint is about what is on the glass.
+ */
+export async function aViewWindowLeavesTheMenuBarShowing(): Promise<void> {
+  const h = await openDoor();
+  try {
+    const screen = h.app.screen;
+    const rows = (): string[] => {
+      const out: string[] = [];
+      for (let y = 0; y < screen.height; y++) {
+        const row = screen.buffer[y];
+        out.push(row ? row.map((cell: any) => cell[1]).join('') : '');
+      }
+      return out;
+    };
+
+    const entry = h.app.uiManager.menus[0].items.find((item: any) => item.label === 'Profile');
+    void entry.action();
+    await h.settle();
+    screen.render();
+
+    const painted = rows();
+    assert.ok(painted[0].includes('Views'), 'the menu bar is still on row 0:\n' + painted.slice(0, 3).join('\n'));
+    assert.ok(painted.some((row) => row.includes('Player Profile')), 'and the window is open');
+
+    // A window, not a takeover: rows of the lobby survive around it.
+    const covered = painted.filter((row) => row.trim().length > 0).length;
+    assert.ok(covered > 0);
+    const lastRow = painted[painted.length - 1];
+    assert.ok(!lastRow.includes('Player Profile'), 'it does not run to the last row of the screen');
+
+    h.escape();
+    await h.settle();
+  } finally {
+    await h.app.shutdown();
+    await h.finished;
+  }
+}

@@ -14,7 +14,6 @@ const UnoEventBus_1 = require("./managers/UnoEventBus");
 const GameViews_1 = require("./managers/GameViews");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
-const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const ChatManager_1 = require("./managers/ChatManager");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
@@ -782,15 +781,14 @@ class CardLobbyApp {
     async saySomething() {
         await this.chat.saySomething();
     }
+    /**
+     * Change the door's theme without leaving the door. The shade sequence and
+     * the reason for it live in managers/ThemeDialog.ts.
+     */
     async chooseTheme() {
-        await (0, blessed_1.openThemeMenu)({
-            screen: this.screen,
-            bbs: this.session.bbs,
-            parent: this.uiManager.overlayShade,
-            onApply: (theme) => {
-                (0, lib_1.applyTheme)(theme);
-                this.styles = (0, theme_1.themeStyles)(theme);
-            },
+        await this.dialogManager.showThemeWindow(this.session.bbs, (theme) => {
+            (0, lib_1.applyTheme)(theme);
+            this.styles = (0, theme_1.themeStyles)(theme);
         });
         this.updateAllPanels();
         this.screen.render();

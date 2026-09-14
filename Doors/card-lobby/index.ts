@@ -16,7 +16,6 @@ import {
   type TerminalModeSwitch,
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { themeById, themeStyles, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
-import { openThemeMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { ChatManager } from './managers/ChatManager';
 import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import type {
@@ -987,15 +986,14 @@ export class CardLobbyApp {
     await this.chat.saySomething();
   }
 
+  /**
+   * Change the door's theme without leaving the door. The shade sequence and
+   * the reason for it live in managers/ThemeDialog.ts.
+   */
   private async chooseTheme(): Promise<void> {
-    await openThemeMenu({
-      screen: this.screen,
-      bbs: this.session.bbs,
-      parent: this.uiManager.overlayShade,
-      onApply: (theme) => {
-        applyTheme(theme);
-        this.styles = themeStyles(theme);
-      },
+    await this.dialogManager.showThemeWindow(this.session.bbs, (theme) => {
+      applyTheme(theme);
+      this.styles = themeStyles(theme);
     });
     this.updateAllPanels();
     this.screen.render();

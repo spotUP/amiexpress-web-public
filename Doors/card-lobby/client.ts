@@ -354,12 +354,13 @@ const playSound = async (type: string): Promise<void> => {
   }
 };
 
-// Handle sound events from server
-door.onMessage('sound', async (data: { type: string }) => {
-  if (data?.type) {
-    await playSound(data.type);
-  }
-});
+// No handler for server-sent sounds, because ClientDoor has no onMessage and
+// nothing ever emitted the event it was listening for. The line THREW on the
+// bundle's first evaluation - "Uncaught TypeError: door.onMessage is not a
+// function" in the sysop's console, 2026-09-14 - so everything below it never
+// ran: no input forwarding, no connect handler, and door.start() itself.
+// Sounds reach the browser by the OSC sfx sequence the door writes
+// (index.ts emitSfx), which is the board's one sound channel.
 
 // Forward all input to server
 door.onInput((_user, key) => {

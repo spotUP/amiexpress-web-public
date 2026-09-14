@@ -20,14 +20,10 @@ export const metadata = {
   ...cardLobbyMetadata,
 };
 
-/**
- * Emit a sound event to the client
- */
-export function emitSound(session: DoorSession, soundType: string): void {
-  if (session?.socket?.emit) {
-    session.socket.emit('door-message', { type: 'sound', data: { type: soundType } });
-  }
-}
+// emitSound lived here and nothing ever called it: the client half listened
+// for its 'door-message' through an onMessage the SDK does not have, and the
+// door's real sounds go out as the OSC sfx sequence instead. Both halves are
+// gone rather than left as a channel that looks wired.
 
 /**
  * RPC handler for forwarding client input to the door

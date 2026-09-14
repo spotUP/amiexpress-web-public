@@ -77,14 +77,25 @@ export class DocModal extends Box {
   private _savedFocus?: any;
   /** Closing is idempotent: see _close(). */
   private _closed: boolean = false;
+  /**
+   * The geometry the CALLER asked for, or nothing for the full-screen
+   * default. display() and _handleResize both used to re-impose the whole
+   * terminal every time they ran, which quietly undid a caller's box.
+   */
+  private _asked: { top?: any; left?: any; width?: any; height?: any };
 
   constructor(options: DocModalOptions = {}) {
     super({
       ...options,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
+      // Full screen is the DEFAULT, not a decree. A door's help screen wants
+      // the whole terminal; a seven-line player profile does not, and one
+      // that takes the lot hides the door's own menu bar - "the player
+      // profile page has no menus or if its a dialog it covers it" (sysop,
+      // 2026-09-14). A caller that asks for a box gets a box.
+      top: options.top ?? 0,
+      left: options.left ?? 0,
+      width: options.width ?? '100%',
+      height: options.height ?? '100%',
       label: options.title ? ` ${options.title} ` : options.label,
       border: options.border || { type: 'line' },
       shadow: false,
@@ -105,6 +116,13 @@ export class DocModal extends Box {
         ...options.style,
       },
     });
+
+    this._asked = {
+      top: options.top,
+      left: options.left,
+      width: options.width,
+      height: options.height,
+    };
 
     this._onClose = options.onClose;
     this._closeKeys = ['escape', 'q', 'f1', ...(options.closeKeys || [])];
@@ -354,10 +372,11 @@ export class DocModal extends Box {
   display(focusOnClose?: Box | any): void {
     // Update dimensions to current screen size
     if (this.screen) {
-      this.position.width = this.screen.width;
-      this.position.height = this.screen.height;
-      this.position.top = 0;
-      this.position.left = 0;
+      // The caller's box wins; full screen is what it falls back to.
+      this.position.width = this._asked.width ?? this.screen.width;
+      this.position.height = this._asked.height ?? this.screen.height;
+      this.position.top = this._asked.top ?? 0;
+      this.position.left = this._asked.left ?? 0;
 
       // Check if mobile and apply layout
       const screenWidth = this.screen.width as number;
@@ -428,9 +447,11 @@ export class DocModal extends Box {
   protected _handleResize(width: number, height: number, state: ResponsiveState): void {
     super._handleResize?.(width, height, state);
 
-    // Update modal dimensions
-    this.position.width = width;
-    this.position.height = height;
+    // Update modal dimensions - again, only the ones the caller left to us.
+    this.position.width = this._asked.width ?? width;
+    this.position.height = this._asked.height ?? height;
+    if (this._asked.top !== undefined) this.position.top = this._asked.top;
+    if (this._asked.left !== undefined) this.position.left = this._asked.left;
 
     // Adjust layout based on screen width
     if (width < BREAKPOINT_SM) {

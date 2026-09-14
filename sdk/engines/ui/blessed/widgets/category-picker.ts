@@ -103,9 +103,20 @@ export class CategoryPicker extends Box {
     this._categoryWidth = categoryWidth;
 
     // Close button [X]
+    //
+    // Row 0 of the content, not the frame: Screen._renderElement re-paints a
+    // parent's border AFTER its children, so `top: -1` drew the button and
+    // then erased it with the border it was sitting on. It is kept in front
+    // of the lists built below instead (see the setFront at the end of the
+    // constructor) - the same fault that left a bare ']' where a DocModal's
+    // close button should have been (sysop, 2026-09-14).
     this._closeButton = new Button({
       parent: this,
-      top: -1,
+      // Inline: a plain Button pads one column each side and takes the
+      // touch-friendly three rows, so `[X]` in a 3x1 box had ONE cell to
+      // print in and covered three rows of the category list with black.
+      inline: true,
+      top: 0,
       right: 1,
       width: 3,
       height: 1,
@@ -196,6 +207,10 @@ export class CategoryPicker extends Box {
         },
       } as any,
     });
+
+    // Blessed paints in tree order and the lists above were appended after
+    // the button, so the chrome goes back on top.
+    this._closeButton.setFront();
 
     this._setupEventHandlers();
     this._loadCategory(this._currentCategory);
