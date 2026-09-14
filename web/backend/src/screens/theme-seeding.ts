@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { getScreenIndex } from './screen-index.service';
+import { screenIsProgram } from './screen-blankness';
 import { themeTargetFor, themeTargetForBoardFile } from './theme-target-path';
 import { variantSetFor, type ScreenScope } from './theme-variant-set';
 import { themeDirectory } from './theme-registry';
@@ -38,6 +39,14 @@ export interface ThemeCopyResult {
 export interface ThemeSeedResult {
   /** Files written into the theme. */
   copied: number;
+  /**
+   * Board files NOT copied because they are programs, not art.
+   *
+   * A theme owns how the board looks and nothing about what it does, so a
+   * screen carrying `~SS_`, `~CC_` and friends stays on the board - see
+   * thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md.
+   */
+  programsSkipped: number;
   /** Distinct screens the theme now carries. */
   screens: number;
   /**
@@ -60,7 +69,7 @@ export interface ThemeSeedResult {
  * artist the other thirty.
  */
 export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSeedResult {
-  const result: ThemeSeedResult = { copied: 0, screens: 0, conflicts: [] };
+  const result: ThemeSeedResult = { copied: 0, screens: 0, programsSkipped: 0, conflicts: [] };
   const themeRoot = themeDirectory(bbsRoot, theme);
   if (!themeRoot) return result;
 
@@ -84,6 +93,23 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
         // A leftover or a file the board rewrites for itself is not art.
         if (facts?.generated) continue;
 
+        /*
+         * A PROGRAM IS NOT ART, so a theme never receives one.
+         *
+         * `Node/logon20.txt` is 149 bytes of which bulletins show, which doors
+         * run and where the pauses fall. Copying it into a theme does not give
+         * an artist anything to draw on - the loader reads programs from the
+         * board now - it just makes a second copy that the first edit forks.
+         * Six of this board's seven themes held one, byte-identical, because
+         * this loop put it there.
+         *
+         * The artist keeps every lever: the ART a program NAMES is themeable
+         * through `Themes/<slug>/Files/`, which mirrors the board root.
+         *
+         * Counted rather than silently skipped - a sysop who wonders why his
+         * new theme has no `logon20.txt` deserves the answer in the response.
+         */
+
         // The scope the INDEX resolved this screen at, not a guess from the
         // directory name: this board's nodes share `Screens/Node/`, which the
         // name rule reads as ordinary files and mirrors under `Files/`,
@@ -92,6 +118,10 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
         if (!target) continue;
 
         const source = path.join(bbsRoot, relative);
+        if (isProgramFile(source)) {
+          result.programsSkipped++;
+          continue;
+        }
         const destination = path.join(themeRoot, target);
 
         const winner = written.get(target);
@@ -119,6 +149,23 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
 
   result.screens = screensSeeded.size;
   return result;
+}
+
+
+/**
+ * Is this board file a program rather than art?
+ *
+ * Read from disk rather than from the index, because the index does not carry
+ * the file's text - and latin1, because a screen carries Amiga high-bit bytes
+ * that a UTF-8 round trip would destroy. An unreadable file is not a program:
+ * it is skipped by the copy below anyway.
+ */
+function isProgramFile(source: string): boolean {
+  try {
+    return screenIsProgram(fs.readFileSync(source));
+  } catch {
+    return false;
+  }
 }
 
 /** The scope one resolution was measured at, as the theme tree names it. */
