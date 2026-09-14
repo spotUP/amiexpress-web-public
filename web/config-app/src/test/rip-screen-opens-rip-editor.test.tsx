@@ -17,6 +17,13 @@ import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
 vi.mock('@amiexpress/terminal/rip', () => ({
   RIP_WIDTH: 640,
   RIP_HEIGHT: 350,
+  // Sixteen entries, because the editor's swatches are INDEXES into the
+  // palette and the tests click one by index. The real one lives in
+  // packages/terminal/src/rip/RIPTypes.ts; vite cannot load it from here
+  // without dragging in the canvas-bound vendor this mock exists to avoid.
+  // `the palette the editor indexes into` (rip-ega-palette.test.ts) holds
+  // the real one at sixteen so these indexes stay meaningful.
+  EGA_PALETTE: Array.from({ length: 16 }, (_, i) => `#${i.toString(16).repeat(6)}`),
   RIPRenderer: forwardRef((_props: unknown, ref: React.Ref<unknown>) => {
     useImperativeHandle(ref, () => ({
       render: vi.fn(), clear: vi.fn(), reset: vi.fn(), getState: vi.fn(),

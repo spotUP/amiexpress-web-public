@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MousePointerClick, Plus, Save, Trash2, X } from 'lucide-react';
-import { RIPRenderer, RIP_HEIGHT, RIP_WIDTH, type RIPRendererRef } from '@amiexpress/terminal/rip';
+import { RIPRenderer, RIP_HEIGHT, RIP_WIDTH, EGA_PALETTE, type RIPRendererRef } from '@amiexpress/terminal/rip';
 import {
   parseRipDocument,
   serializeRipDocument,
@@ -8,6 +8,9 @@ import {
   writeRipHotspot,
   removeRipHotspot,
   addRipButton,
+  readRipButtonStyle,
+  writeRipButtonStyle,
+  type RipButtonStyle,
   addRipMouseField,
   type RipDocument,
   type RipHotspot,
@@ -204,6 +207,29 @@ export function RipScreenEditor({
       x: Math.max(0, Math.min(RIP_WIDTH - 1, Math.round(((event.clientX - box.left) / box.width) * RIP_WIDTH))),
       y: Math.max(0, Math.min(RIP_HEIGHT - 1, Math.round(((event.clientY - box.top) / box.height) * RIP_HEIGHT))),
     };
+  };
+
+  /**
+   * The style every button on this screen is drawn with (`1B`).
+   *
+   * It lives in the FILE, so a screen carries its own look wherever it is
+   * opened - this board's browser draws it with the design system, and a RIP
+   * terminal draws the same colours as a BGI bevel. The defaults below are
+   * only used when a screen sets no style at all.
+   */
+  const style: RipButtonStyle = readRipButtonStyle(doc) ?? {
+    width: 0, height: 0, orientation: 0, flags: 0, bevelSize: 1,
+    labelColour: 15, labelShadowColour: 0, brightColour: 15, darkColour: 8,
+    surfaceColour: 7, group: 0, flags2: 0, underlineColour: 15, cornerColour: 0,
+  };
+
+  const updateStyle = (patch: Partial<RipButtonStyle>) => {
+    try {
+      setDoc(writeRipButtonStyle(doc, { ...style, ...patch }));
+      setProblem(null);
+    } catch (error) {
+      setProblem((error as Error).message);
+    }
   };
 
   const update = (patch: Partial<RipHotspot>) => {
@@ -481,6 +507,57 @@ export function RipScreenEditor({
             </div>
             );
           })()}
+
+          {/*
+            HOW THE BUTTONS LOOK, for the whole screen.
+            `1B` is in force for every button after it, so this is a property
+            of the screen rather than of each button. It lives in the file, so
+            the look travels with the art: a RIP terminal draws these colours
+            as a bevel, and this board's browser draws them as a modern
+            button. Only shown when there is a button to style.
+          */}
+          {!readOnly && spots.some(s => s.kind === 'button') && (
+            <div className="card space-y-3">
+              <p className="label">How the buttons look</p>
+              {([
+                ['surfaceColour', 'Face'],
+                ['labelColour', 'Label'],
+                ['brightColour', 'Top edge'],
+                ['darkColour', 'Bottom edge'],
+              ] as const).map(([field, label]) => (
+                <label key={field} className="block">
+                  <span className="label">{label}</span>
+                  <div className="flex flex-wrap gap-1" role="group" aria-label={label}>
+                    {EGA_PALETTE.map((css, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        aria-label={`${label} colour ${index}`}
+                        aria-pressed={style[field] === index}
+                        onClick={() => updateStyle({ [field]: index } as Partial<RipButtonStyle>)}
+                        className={`h-6 w-6 rounded border ${
+                          style[field] === index ? 'border-accent ring-1 ring-accent' : 'border-border'
+                        }`}
+                        style={{ backgroundColor: css }}
+                      />
+                    ))}
+                  </div>
+                </label>
+              ))}
+              <label className="block">
+                <span className="label">Edge thickness</span>
+                <input
+                  type="number"
+                  className="input-field w-24"
+                  aria-label="Edge thickness"
+                  min={0}
+                  max={9}
+                  value={style.bevelSize}
+                  onChange={event => updateStyle({ bevelSize: Number(event.target.value) || 0 })}
+                />
+              </label>
+            </div>
+          )}
 
           {!readOnly && (
             <label className="block">
