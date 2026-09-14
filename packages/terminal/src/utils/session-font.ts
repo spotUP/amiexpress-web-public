@@ -50,6 +50,35 @@ export const DEFAULT_BBS_FONT = 'TopazPlus_a1200';
 export const TELETEXT_FONT = 'TeletextUPR';
 
 /**
+ * Every face the board loads on connect, and the file each one comes from.
+ *
+ * DATA, and exported, because it was a list spelled out inside the terminal
+ * component where nothing could check it against the fonts actually shipped.
+ * The teletext face was renamed TDAText -> TeletextUPR and this list kept the
+ * old spelling, so every connect fetched `/fonts/TDAText.woff2`, got a 404,
+ * and a teletext session measured and drew in the fallback face for the rest
+ * of its life (sysop's console, 2026-09-14).
+ *
+ * `preloaded-fonts-exist.test.ts` reads this and asks the filesystem, which
+ * is the check that was missing.
+ */
+export const PRELOADED_FONTS: ReadonlyArray<{ family: string; file: string }> = [
+  { family: 'TopazPlus_a1200', file: 'TopazPlus_a1200_v1.0.ttf' },
+  { family: 'TopazPlus_a500', file: 'TopazPlus_a500_v1.0.ttf' },
+  { family: 'Topaz_a1200', file: 'Topaz_a1200_v1.0.ttf' },
+  { family: 'Topaz_a500', file: 'Topaz_a500_v1.0.ttf' },
+  { family: 'mosoul', file: 'mOsOul_v1.0.ttf' },
+  { family: 'PetMe64', file: 'PetMe64.ttf' },
+  { family: TELETEXT_FONT, file: `${TELETEXT_FONT}.woff2` },
+  // BBSGraphics carries U+2500-259F - every box border and block the Amiga
+  // faces stop short of. Declared in a stylesheet only, the browser fetched it
+  // the first time a glyph needed it, by which point the screen was already
+  // laid out in the fallback's wider cell.
+  { family: 'BBSGraphics', file: 'BBSGraphics.ttf' },
+];
+
+
+/**
  * How wide each face's cell is, as a fraction of the font size: the advance
  * of its glyphs over its em. A property of the shipped files, not a guess -
  * pinned against them in session-font-advance.test.ts.

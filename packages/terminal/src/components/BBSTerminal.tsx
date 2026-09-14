@@ -11,6 +11,7 @@ import {
 } from '../utils/terminal-zoom';
 import {
   DEFAULT_BBS_FONT,
+  PRELOADED_FONTS,
   TELETEXT_FONT,
   seamlessTeletextSize,
   applyFont,
@@ -436,27 +437,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
-    const fonts = [
-      { family: 'TopazPlus_a1200', url: '/fonts/TopazPlus_a1200_v1.0.ttf' },
-      { family: 'TopazPlus_a500', url: '/fonts/TopazPlus_a500_v1.0.ttf' },
-      { family: 'Topaz_a1200', url: '/fonts/Topaz_a1200_v1.0.ttf' },
-      { family: 'Topaz_a500', url: '/fonts/Topaz_a500_v1.0.ttf' },
-      { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' },
-      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' },
-      { family: 'TDAText', url: '/fonts/TDAText.woff2' },
-      /*
-       * BBSGraphics carries U+2500-259F - every box border and block the
-       * Amiga faces stop short of - and it was declared in a stylesheet only,
-       * which means the browser fetches it the first time a glyph needs it.
-       * The screen that needs it first is already being laid out by then: its
-       * rows render in the fallback (Courier New, a 0.6em advance against the
-       * face's 0.5em), and the DOM renderer keeps those widths, so a 70-column
-       * box drew its right border ten columns adrift of its top and bottom.
-       * Seen on the ONENODE screen, which is shown once and then hung up on,
-       * so nothing ever repainted it (sysop, 2026-09-14).
-       */
-      { family: 'BBSGraphics', url: '/fonts/BBSGraphics.ttf' },
-    ];
+    const fonts = PRELOADED_FONTS.map(({ family, file }) => ({ family, url: `/fonts/${file}` }));
 
     const loadFonts = async () => {
       console.log('[Font Preload] Loading all fonts...');
