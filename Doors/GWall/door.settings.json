@@ -1,0 +1,33 @@
+{
+  "command": "GWALL",
+  "cfgFile": "GWALL.cfg",
+  "settings": [
+    {
+      "key": "serverHost",
+      "cfgKey": "SERVERHOST",
+      "label": "Wall server",
+      "type": "string",
+      "default": "scenewall.bbs.io",
+      "help": "The scene wall this door posts to and reads from. Shared with GLCViewer, which dials the same server."
+    },
+    {
+      "key": "serverPort",
+      "cfgKey": "SERVERPORT",
+      "label": "Port",
+      "type": "number",
+      "default": 1541,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "timeout",
+      "cfgKey": "TIMEOUT",
+      "label": "Connect timeout (seconds)",
+      "type": "number",
+      "default": 5,
+      "min": 1,
+      "max": 120,
+      "help": "How long to wait for the server before giving up. A caller sits through this, so keep it short."
+    }
+  ]
+}
