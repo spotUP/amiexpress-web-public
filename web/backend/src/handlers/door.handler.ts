@@ -2088,6 +2088,39 @@ console.error(`Unknown door type: ${door.type}`);
 console.log(`[executeDoor] Door ${door.name} completed during segment processing - continuing segments`);
       // Restore subState so display flow can continue (was clobbered to DOOR_RUNNING)
       session.subState = originalSubState;
+
+      /*
+       * AND ACTUALLY CONTINUE THEM. Restoring the subState was not enough:
+       * nothing downstream drained `screenSegments`, so the remaining halves
+       * of the screen were dropped and the caller went straight to the menu.
+       *
+       * That is how a conference bulletin lost everything after its `~SP` on
+       * this board. `J` is itself a door here (JoinCnf takes over the
+       * command), so a join runs a DOOR while the bulletin is mid-segment,
+       * and this branch - not the display-flow loop - is the path it comes
+       * back through. The loop guard in command.handler cannot help: the
+       * subState restored here is process_command, which is not a display
+       * flow state, so the loop never runs.
+       *
+       * The live log said exactly this (2026-09-14): "SETUP: 2 segments",
+       * segment 0 drawn, "Door J completed during segment processing -
+       * continuing segments", and then displayMenuPrompt - with segment 1,
+       * holding the board's own `~CC_ctop`, never processed.
+       *
+       * processNextScreenSegment renders the next one and arms its own pause
+       * if more remain, so this both continues the screen and keeps the
+       * pauses the caller expects.
+       */
+      if (session.screenSegments.segments.length > 0) {
+        const { processNextScreenSegment } = require('./screen.handler');
+        try {
+          await processNextScreenSegment(socket, session);
+        } catch (error) {
+          // A screen that will not finish must not take the door's exit with
+          // it - the caller is already back at the board either way.
+console.error('[executeDoor] Error continuing screen segments:', error);
+        }
+      }
     } else if (
       session.subState === LoggedOnSubState.FILES_UPLOAD ||
       session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
@@ -2644,7 +2677,18 @@ console.log(`[executeTypeScriptDoor] Sent door:status: stopped, door-active: fal
     // runs with length === 0 while screenSegments is still set.
     if (session.screenSegments) {
 console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment processing - continuing segments`);
-      // Don't change state or show menu - segment processing will continue
+      // Don't change state or show menu - and actually CONTINUE the segments,
+      // which "segment processing will continue" used to leave to nobody. Same
+      // gap as the 68K path above; a TypeScript ~CC_ door in a screen with a
+      // ~SP dropped everything after it in exactly the same way.
+      if (session.screenSegments.segments.length > 0) {
+        const { processNextScreenSegment } = require('./screen.handler');
+        try {
+          await processNextScreenSegment(socket, session);
+        } catch (error) {
+console.error('[executeTypeScriptDoor] Error continuing screen segments:', error);
+        }
+      }
       return;
     }
 

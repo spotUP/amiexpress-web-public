@@ -105,3 +105,65 @@ describe('the segment machinery it depends on', () => {
     expect(SCREEN).toMatch(/await processNextScreenSegment\(socket, session\)/);
   });
 });
+
+/**
+ * THE ROUTE THAT ACTUALLY BROKE, and the third place I had to put this.
+ *
+ * `J` is a DOOR on this board - JoinCnf takes over the command - so joining a
+ * conference runs a door while the bulletin is mid-segment, and comes back
+ * through door.handler's completion path rather than the display-flow loop.
+ * That path restored the subState and logged "continuing segments" without
+ * continuing anything, and the restored state (process_command) is not a
+ * display flow state, so the loop guard could never fire.
+ *
+ * Live log, 2026-09-14, with the loop guard already deployed:
+ *
+ *     [SEGMENT] SETUP: 2 segments for CONF_BULL
+ *     [SEGMENT]   1: "~f\n~CC_ctop\n~XISUBS..."
+ *     [SCREEN] Processing segment 0/2
+ *     [executeDoor] Door J completed during segment processing - continuing segments
+ *     [menu] displayMenuPrompt called subState=display_menu
+ *
+ * Segment 1 never processed. A log line that says it is continuing is not the
+ * same as code that continues.
+ */
+describe('a door that exits while a screen is half-shown', () => {
+  const DOORS = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'src', 'handlers', 'door.handler.ts'), 'utf8'
+  );
+
+  /** Both completion paths: the 68K one and the TypeScript one. */
+  const PATHS = [
+    ['executeDoor', '[executeDoor] Door ${door.name} completed during segment processing'],
+    ['executeTypeScriptDoor', '[executeTypeScriptDoor] Door ${door.name} completed during segment processing'],
+  ] as const;
+
+  it('has both completion paths to check', () => {
+    for (const [name, marker] of PATHS) {
+      expect([name, DOORS.includes(marker)]).toEqual([name, true]);
+    }
+  });
+
+  it('DRAINS the segments rather than only saying it will', () => {
+    for (const [name, marker] of PATHS) {
+      const from = DOORS.indexOf(marker);
+      // A generous window: each branch carries a long comment explaining the
+      // bug before the code, and the assertion is about presence anyway.
+      const branch = DOORS.slice(from, from + 3000);
+      expect([name, /processNextScreenSegment/.test(branch)]).toEqual([name, true]);
+      expect([name, /await processNextScreenSegment\(socket, session\)/.test(branch)])
+        .toEqual([name, true]);
+    }
+  });
+
+  it('does not let a broken screen swallow the door exit', () => {
+    // The caller is back at the board either way; a screen that will not
+    // finish must not take the exit path with it.
+    for (const [, marker] of PATHS) {
+      const from = DOORS.indexOf(marker);
+      const branch = DOORS.slice(from, from + 3000);
+      expect(branch).toMatch(/try \{/);
+      expect(branch).toMatch(/catch/);
+    }
+  });
+});
