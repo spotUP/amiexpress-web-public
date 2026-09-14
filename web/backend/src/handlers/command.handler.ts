@@ -1050,6 +1050,39 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // BEFORE running so a door that errors cannot loop the login;
         // a failed tip falls through to the menu, never strands it.
         if (tipDoorBeforeMenu(session, getDoors())) {
+          /*
+           * SPEND THE PAUSE BEFORE THE WIPE, NOT AFTER IT.
+           *
+           * TIP is a modal: it clears the screen, draws its frame and waits
+           * for a key. Everything the join left on screen goes with that
+           * clear - and on this board the join's LAST act is the conference
+           * bulletin's second `~SP` segment, which is `~f`, `~CC_ctop` and
+           * `~XISUBSCAN`: the conference top and the new-topic listing, drawn
+           * and wiped in the same breath. The sysop, 2026-09-14: "something
+           * draws before tip of the day without a pause prompt so its not
+           * readable".
+           *
+           * `menuPause` is the pause the board already owes him - joinConference
+           * sets it (conference.handler.ts) exactly so the join's output is
+           * read before the next screen. It was being spent AFTER this door,
+           * on the menu, by which time the thing it was protecting had been
+           * erased.
+           *
+           * NOT gated on `shouldDisplayMenu` like the menu's own pause below.
+           * That gate is expert mode, and expert mode means "do not redraw the
+           * menu at me" - the sysop runs it (`expert:="X"`, express.e:26119),
+           * which is why he saw no pause at all. It has never meant "wipe the
+           * conference bulletin before I can read it". The pause still costs
+           * nothing on a login that drew nothing: `menuPause` is only set by a
+           * join.
+           */
+          if (session.menuPause) {
+            const { doPause } = require('./screen.handler');
+            doPause(socket, session);
+            session.menuPause = false;
+            displayFlowLog('pause before TIP');
+            return;
+          }
           if (!session.tempData) session.tempData = {};
           session.tempData.tipShown = true;
           const tip = getDoors().find(
