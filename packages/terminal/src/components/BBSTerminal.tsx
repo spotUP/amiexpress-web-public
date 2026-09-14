@@ -903,6 +903,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
     });
 
+    /*
+     * XTERM'S OWN IDEA OF FOCUS, RESYNCED WHEN THE WINDOW COMES BACK.
+     *
+     * `term.focus()` focuses the helper textarea. Doing that while the WINDOW
+     * is inactive - which is what happens on a cold load if the viewer is
+     * looking at another window, or has devtools open - sets
+     * `document.activeElement` without firing a `focus` event, so xterm never
+     * learns it is focused: the `.focus` class never lands on `.xterm`.
+     *
+     * xterm only adds `xterm-cursor-blink` to the cursor cell when IT thinks
+     * it is focused, and paints the inactive cursor otherwise. So the board
+     * opened with a cursor that did not blink and did not look active until
+     * the viewer clicked the screen - "the cursor changed from red to white",
+     * "the cursor is not blinking either" (sysop, 2026-09-14), whose own
+     * console showed the textarea holding focus while `.xterm` had no `focus`
+     * class.
+     *
+     * The DOM is right and xterm is stale, so the terminal is blurred and
+     * focused again, which fires the event it missed. Guarded on the
+     * disagreement, so a terminal that is genuinely unfocused stays that way.
+     */
+    const resyncFocus = () => {
+      if (document.activeElement !== term.textarea) return;
+      if (term.element?.classList.contains('focus')) return;
+      term.blur();
+      term.focus();
+    };
+    window.addEventListener('focus', resyncFocus);
+    document.addEventListener('visibilitychange', resyncFocus);
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
 
@@ -3057,6 +3086,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Cleanup
     return () => {
+      window.removeEventListener('focus', resyncFocus);
+      document.removeEventListener('visibilitychange', resyncFocus);
       mediaHandlerRef.current?.destroy();
       if (gamepadManagerRef.current) {
         gamepadManagerRef.current.stop();
