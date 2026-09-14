@@ -839,16 +839,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "running during a door for 68K fidelity. See translateDoorActive in " +
     "server/transport-adapter.ts for the measurement.",
   },
-  "door-message": {
-    kind: "web-only",
-    note:
-    "Card Lobby's sound cue to its browser bundle: `emitSound` at " +
-    "Doors/card-lobby/server.ts:28, whose doc comment reads \"Emit a sound event " +
-    "to the client\". Note it is NOT the `door:message:<id>` family the pattern " +
-    "arm rules - a different, unprefixed name. No listener in this repo's " +
-    "frontends (measured 2026-09-03); a byte terminal has no audio path " +
-    "regardless.",
-  },
   "door:await-key": {
     kind: "dead",
     note:
@@ -1328,6 +1318,17 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "packages/terminal/src/components/BBSTerminal.tsx:2323, which recolours " +
     "its canvas). A byte caller has no canvas: a real C64 paints its own " +
     "palette and a PETSCII-over-telnet terminal has its own setting for it.",
+  },
+  "petscii-charset": {
+    kind: "web-only",
+    note:
+    "The browser's PETSCII CHARACTER SET (standard or Swedish), answered to " +
+    "`W` row 22 (handlers/commands/info-commands.handler.ts:930). The browser " +
+    "rebuilds its glyph atlas from it; the screen's machine is untouched. A " +
+    "byte caller has no atlas to rebuild - a real C64 has the set its ROM " +
+    "carries, which is the whole reason this is a per-caller CHOICE here and " +
+    "a soldered fact there. Ruled beside `petscii-palette`, for the same " +
+    "reason and by the same census that caught that one.",
   },
   "petscii-bytes": {
     kind: "render",

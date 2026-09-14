@@ -113,7 +113,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'data',
   'disconnect',
   'door-active',
-  'door-message',
   'door:await-key',
   'door:close',
   'door:error',
@@ -212,6 +211,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'petscii-bytes',
   'petscii-mode',
   'petscii-palette',
+  'petscii-charset',
   'petscii-output',
   'ping',
   'pong-test',
@@ -569,6 +569,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // fix was the ruling, not the number.
     // 246 as of 2026-09-10: `texttv-mode` ruled (web-only) - the teletext
     // session flag from the graphics prompt's T answer.
+    // Still 246 as of 2026-09-14, by two changes that cancel: `petscii-charset`
+    // ruled web-only beside `petscii-palette`, and `door-message` DROPPED -
+    // its only emit site (Doors/card-lobby/server.ts `emitSound`) went with
+    // ae11b503f and the census caught the ruling outliving the name.
     expect(ruled.length).toBe(246);
 
     // (c) every ruling's note is non-empty - the point of the table is the
@@ -684,7 +688,14 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // 154 as of 2026-09-10: `texttv-mode`
     // (handlers/command-handler/pre-login.ts, the graphics prompt's T
     // answer), ruled web-only in the same change.
-    expect(fromA.length).toBe(154);
+    //
+    // 155 as of 2026-09-14: `petscii-charset`
+    // (handlers/commands/info-commands.handler.ts:930, the Swedish set `W`
+    // row 22 chooses). It landed UNRULED with 551fe9f66 and this pin caught
+    // it a few pushes later, exactly as it caught `petscii-palette` - the
+    // fix is the ruling beside that one, web-only, not this number moving
+    // on its own.
+    expect(fromA.length).toBe(155);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.
@@ -698,7 +709,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     //   - `bbs:event` moved from `Doors/card-lobby/index.ts` down to
     //     `Doors/card-lobby/lib/live-chat.ts`, which `Doors/*/[a-z]*.ts` does
     //     not reach. The backend emits it too, so arm A still sees it.
-    expect(fromB.length).toBe(99);
+    // 98 as of 2026-09-14: one name left the sdk/Doors arm. It did NOT leave
+    // the tree - the union assertion below still finds it, because the
+    // BACKEND emits it too - so this is a door that stopped emitting a name
+    // the board also sends, not a name that went missing. Measured against
+    // HEAD's own tree before the number moved: both answer 98, so the pin
+    // had gone stale on committed code rather than on anything in flight.
+    expect(fromB.length).toBe(98);
 
     const live = [...new Set([...fromA, ...fromB])].sort();
     const pinned = [...PINNED_EVENT_NAMES].sort();

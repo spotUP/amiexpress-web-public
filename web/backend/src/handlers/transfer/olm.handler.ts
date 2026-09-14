@@ -22,6 +22,7 @@ import { emitterForSession } from '../../server/session-emitter-registry';
 
 import type { BBSSession } from '../../index';
 import { report } from '../../achievements/reporter';
+import { emitText, emitPrompt } from '../../utils/output.util';
 // Session type
 
 // Dependencies (injected)
@@ -58,7 +59,7 @@ console.log('[OLM] handleOlmCommand called with params:', params);
 
   // Guard against missing user - prevent crash
   if (!session.user) {
-    socket.emit('ansi-output', '\r\n\x1b[31mError: Not logged in.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[31mError: Not logged in.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -83,7 +84,7 @@ console.log('[OLM] handleOlmCommand called with params:', params);
 
   // Check if OLM is enabled (sopt.toggles[TOGGLES_MULTICOM])
   if (!config || !config.get('olmEnabled')) {
-    socket.emit('ansi-output', '\r\n\x1b[31mOLM system is disabled.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[31mOLM system is disabled.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -94,7 +95,7 @@ console.log('[OLM] handleOlmCommand called with params:', params);
   }
 
   // express.e:25419 - Display OLM header
-  socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM MESSAGE SYSTEM\x1b[34m*\x1b[0m\r\n');
+  emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM MESSAGE SYSTEM\x1b[34m*\x1b[0m\r\n');
 
   // express.e:25421-25425 - Parse params for node number
   const parts = params.trim().split(/\s+/);
@@ -102,7 +103,7 @@ console.log('[OLM] handleOlmCommand called with params:', params);
 
   // express.e:25427-25429 - If no params, prompt for node number
   if (!nodenumstr) {
-    socket.emit('ansi-output',
+    emitPrompt(socket,
       '\r\n\x1b[32m-\x1b[0m OLM to Which Node? \x1b[36m[\x1b[0mNode \x1b[33m#\x1b[36m]\x1b[0m \x1b[36m[\x1b[0mR\x1b[36m]\x1b[0m To Reply\x1b[0m Or \x1b[36m[\x1b[0mQ\x1b[36m]\x1b[0m To Quit\x1b[32m:\x1b[0m '
     );
 
@@ -132,7 +133,7 @@ async function processNodeSelection(socket: Socket, session: BBSSession, nodenum
   // express.e:25431-25437 - Handle R (reply) command
   if (nodenumstr.toUpperCase() === 'R') {
     if (!session.lastOlmNode || session.lastOlmNode === -1) {
-      socket.emit('ansi-output', '\r\nNo OLM has been received in this session\r\n');
+      emitText(socket, '\r\nNo OLM has been received in this session\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -146,7 +147,7 @@ async function processNodeSelection(socket: Socket, session: BBSSession, nodenum
   }
 
   // express.e:25441-25447 - If no message in params, use editor
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
 
   if (messageParts.length === 0) {
     // Start message editor
@@ -155,10 +156,10 @@ async function processNodeSelection(socket: Socket, session: BBSSession, nodenum
     session.olmNodeTarget = parseInt(nodenumstr);
     session.subState = LoggedOnSubState.OLM_COMPOSE;
 
-    socket.emit('ansi-output',
+    emitText(socket,
       '\x1b[36mEnter your message (max 10 lines, /S to send, /A to abort):\x1b[0m\r\n'
     );
-    socket.emit('ansi-output', '\x1b[33m1>\x1b[0m ');
+    emitPrompt(socket, '\x1b[33m1>\x1b[0m ');
     return;
   }
 
@@ -182,7 +183,7 @@ export async function handleOlmComposeInput(socket: Socket, session: BBSSession,
   // Check for /S (send) command
   if (trimmedInput.toUpperCase() === '/S') {
     if (!session.olmMessageLines || session.olmMessageLines.length === 0) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNo message to send. Message aborted.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[31mNo message to send. Message aborted.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       delete session.olmMessageLines;
       delete session.olmNodeTarget;
@@ -196,7 +197,7 @@ export async function handleOlmComposeInput(socket: Socket, session: BBSSession,
 
   // Check for /A (abort) command
   if (trimmedInput.toUpperCase() === '/A') {
-    socket.emit('ansi-output', '\r\n\x1b[33mMessage aborted.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[33mMessage aborted.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.olmMessageLines;
     delete session.olmNodeTarget;
@@ -212,14 +213,14 @@ export async function handleOlmComposeInput(socket: Socket, session: BBSSession,
 
   // Check if we've hit 10 line limit
   if (session.olmMessageLines.length >= 10) {
-    socket.emit('ansi-output', '\r\n\x1b[33mMaximum 10 lines reached. Auto-sending...\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[33mMaximum 10 lines reached. Auto-sending...\x1b[0m\r\n');
     await sendOlmMessage(socket, session, session.olmNodeTarget!, session.olmMessageLines);
     return;
   }
 
   // Show next line prompt
   const lineNum = session.olmMessageLines.length + 1;
-  socket.emit('ansi-output', `\x1b[33m${lineNum}>\x1b[0m `);
+  emitPrompt(socket, `\x1b[33m${lineNum}>\x1b[0m `);
 }
 
 /**
@@ -231,7 +232,7 @@ console.log('[OLM] Sending message to node', nodenum);
 
   // Guard against missing user
   if (!session.user) {
-    socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.olmMessageLines;
     delete session.olmNodeTarget;
@@ -240,7 +241,7 @@ console.log('[OLM] Sending message to node', nodenum);
 
   // express.e:25451-25459 - Check if node is valid and not blocked
   if (nodenum < 0 || nodenum >= 100) {  // MAXNODES = 100 typically
-    socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.olmMessageLines;
     delete session.olmNodeTarget;
@@ -259,14 +260,14 @@ console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, sock
 
   // express.e:25459 - Check if target is blocked
   if (targetSession && targetSession.blockOLM) {
-    socket.emit('ansi-output',
+    emitText(socket,
       `\r\n\x1b[34m*\x1b[0m--\x1b[33mNODE \x1b[0m${nodenum}\x1b[33m HAS MESSAGES SUPPRESSED\x1b[0m--\x1b[34m*\x1b[0m\r\n`
     );
   }
 
   // express.e:25470-25473 - Check if target exists and is logged in
   if (!targetSession || !targetSocketId || !targetSession.user || targetSession.blockOLM) {
-    socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.olmMessageLines;
     delete session.olmNodeTarget;
@@ -299,11 +300,11 @@ console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, sock
 
   // express.e:25497-25500 - Show status
   if (msgsent) {
-    socket.emit('ansi-output', '\x1b[34m*\x1b[0mOLM SENT\x1b[34m*\x1b[0m\r\n');
+    emitText(socket, '\x1b[34m*\x1b[0mOLM SENT\x1b[34m*\x1b[0m\r\n');
     // Achievements (SP2). Non-throwing.
     report(session as any, 'social.olm');
   } else {
-    socket.emit('ansi-output', '\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
+    emitText(socket, '\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -396,7 +397,7 @@ console.log('📬 [OLM] Processing queued messages:', session.olmQueue.length);
 
   // Display all queued messages
   for (const msg of session.olmQueue) {
-    socket.emit('ansi-output', msg);
+    emitText(socket, msg);
   }
 
   // Clear queue
@@ -467,9 +468,9 @@ console.log('🔇 [OLM] handleQuietCommand called');
 
   // express.e:25509-25513 - Display status
   if (session.blockOLM) {
-    socket.emit('ansi-output', '\r\nQuiet Mode On\r\n');
+    emitText(socket, '\r\nQuiet Mode On\r\n');
   } else {
-    socket.emit('ansi-output', '\r\nQuiet Mode Off\r\n');
+    emitText(socket, '\r\nQuiet Mode Off\r\n');
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
