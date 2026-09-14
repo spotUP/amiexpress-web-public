@@ -333,9 +333,30 @@ console.warn('[joinConference] Failed to sync node user file:', err);
           // attach our continuation so it fires on dismissal.
           (session.paginatedScreen as any).onComplete = continuation;
         } else if (session.screenSegments) {
-          // Segments will doPause between each; attach continuation
-          // to the LAST segment's dismissal via a guarded callback.
-          (session.screenSegments as any).onComplete = continuation;
+          /*
+           * THE JOIN STILL OWES A PAUSE AFTER THE WHOLE BULLETIN.
+           *
+           * express.e:5058-5061 is `IF displayScreen(SCREEN_CONF_BULL) THEN
+           * doPause()`, and displayScreen returns only once the WHOLE file has
+           * been shown - the `~SP` pauses inside it are the screen's own, not
+           * this one. So a segmented bulletin owes the same single pause at
+           * the end that an unsegmented one does, and the "Joining
+           * Conference" line (5079-5088) comes after it.
+           *
+           * Attaching the continuation straight to the last segment skipped
+           * that pause, so the join's own output ran on from the bulletin's
+           * final rows and the pause the caller did see was a later one from
+           * the display flow - arriving AFTER "Joining Conference" instead of
+           * before it (sysop, 2026-09-14, on a bulletin whose last segment is
+           * `~f` + `~CC_ctop`: the top-uploaders table and the join's lines
+           * arrived as one screenful).
+           *
+           * The pause COUNT is unchanged - it is the same one doPause would
+           * have installed had the bulletin carried no `~SP` - only its
+           * position is.
+           */
+          (session.screenSegments as any).onComplete = () =>
+            doPause(socket, session, continuation);
         } else {
           doPause(socket, session, continuation);
         }
