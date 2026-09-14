@@ -1,5 +1,5 @@
 import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, leaderRow, recordFields, statRow, proseRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
-import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
+import { textToFrame, makeFrame, frameText, Cell, Frame } from '../../../petscii/frame/types';
 import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
 
@@ -998,6 +998,78 @@ describe('repeat', () => {
  * (DUAL_LISTING=NO: one bulletin per row), captured from a live 40-column
  * session, byte for byte.
  */
+describe('a marked list keeps one left edge', () => {
+  /**
+   * "the active > arrow shifts the line" - the sysop's 40-column JoinCnf
+   * walk, 2026-09-14.
+   *
+   * JoinCnf marks the selected conference with `> ... <` and pays for the
+   * marker OUT OF THE INDENT, so at eighty columns every number sits in the
+   * same column. Every rung is a row function: `narrow` drops each row's own
+   * padding, so the marked row came out starting at `>` and the rest at `[`,
+   * and the numbers stepped two columns right on whichever row the caller
+   * was standing.
+   *
+   * A list is a BLOCK and a block has ONE left edge. The rows are
+   * de-indented by the block's COMMON indent, not each by its own.
+   */
+  const row80 = (indent: number, body: string) =>
+    '|' + ' '.repeat(indent) + body + ' '.repeat(Math.max(0, 78 - indent - body.length)) + '|';
+
+  function list(): Frame {
+    return textToFrame(
+      [
+        row80(21, '[01] .................. Lamer Zone'),
+        row80(19, '> [02] ................ Amiga Warez! <'),
+        row80(21, '[03] .............. Abandoned Apps'),
+      ],
+      80,
+      3,
+    );
+  }
+
+  const textOf = (cells: ReadonlyArray<Cell>) => cells.map((c) => c.ch).join('').replace(/ +$/, '');
+
+  it('puts every number in the same column, marker or not', () => {
+    const out = adaptRows(list(), { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out).toHaveLength(3);
+    const at = out.map((t) => t.indexOf('['));
+    expect({ columns: at }).toEqual({ columns: [at[0], at[0], at[0]] });
+  });
+
+  it('keeps the marker, and loses no character to the alignment', () => {
+    const out = adaptRows(list(), { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out[1]).toContain('>');
+    expect(out[1]).toContain('<');
+    expect(out[0]).toContain('Lamer Zone');
+    expect(out[1]).toContain('Amiga Warez!');
+    expect(out[2]).toContain('Abandoned Apps');
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+  });
+
+  it('leaves a block alone when padding it would push a row off the screen', () => {
+    // Alignment is never worth a character. These two would need the first
+    // row moved two columns right, and it has no two columns to give.
+    const tight = textToFrame(
+      [
+        row80(21, '[01] ....................... A Very Long Name Ind'),
+        row80(19, '> [02] ................ Amiga Warez! <'),
+      ],
+      80,
+      2,
+    );
+    const out = adaptRows(tight, { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out).toHaveLength(2);
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+    // Unpadded, so the numbers still step. What `narrow` did to the first
+    // row's own width it did before this pass ran and is not its business;
+    // what matters is that alignment took nothing further.
+    expect(out[1]).toContain('Amiga Warez!');
+    expect(out[1].startsWith('>')).toBe(true);
+    expect(out[0].indexOf('[')).not.toBe(out[1].indexOf('['));
+  });
+});
+
 describe('a rule that ends in a corner', () => {
   /**
    * JoinCnf's current-conference row: a label, its value, and then the box's

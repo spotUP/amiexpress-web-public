@@ -1594,6 +1594,93 @@ function ruleFor(y: number, cells: Row, cols: number, regions: RegionPin[] | und
   return pin.rule;
 }
 
+/**
+ * A LIST IS A BLOCK, AND A BLOCK HAS ONE LEFT EDGE.
+ *
+ * Every rung is a row function, and most of them drop the row's own leading
+ * padding. That is right for one row and wrong for a list: `JoinCnf` marks
+ * the selected conference `> [02] ... <` and pays for the marker OUT OF THE
+ * INDENT, so at eighty columns every number sits in the same column and at
+ * forty the marked row came out two columns left of its neighbours - the
+ * numbers stepped sideways under whichever row the caller was standing
+ * ("the active > arrow shifts the line", sysop, 2026-09-14).
+ *
+ * So the de-indent is taken from the BLOCK: consecutive source rows that
+ * took the SAME rung, produced ONE row each, and had their indent dropped
+ * (their output starts on ink). Each is padded back out by how far its own
+ * first column sat to the right of the block's leftmost.
+ *
+ * NEVER AT THE COST OF A CHARACTER. If padding would push any row of the
+ * block past the screen, the whole block is left as it was: a list that
+ * steps two columns is readable, and one that loses the end of a title is
+ * not.
+ *
+ * The rungs that KEEP their indent (`crop` slices columns 0..cols and the
+ * blanks come with it) exclude themselves: their output starts on a blank,
+ * so they are never a member.
+ */
+/** How far a marker may stick out before the block is somebody's layout, not a list. */
+const MAX_MARKER_WIDTH = 4;
+
+export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, cursor: Cursor): Cursor {
+  let out = cursor;
+  let i = 0;
+  while (i < rows.length) {
+    // One row per source, same rule, consecutive sources, de-indented.
+    let end = i;
+    const eligible = (k: number): boolean =>
+      k < rows.length &&
+      rows[k].rule === rows[i].rule &&
+      (k === i || rows[k].source === rows[k - 1].source + 1) &&
+      (k === rows.length - 1 || rows[k + 1].source !== rows[k].source) &&
+      (k === 0 || rows[k - 1].source !== rows[k].source) &&
+      rows[k].cells.length > 0 && !isBlank(rows[k].cells[0]);
+    while (eligible(end)) end += 1;
+
+    const members = [];
+    for (let k = i; k < end; k++) {
+      const spans = columnSpans(src.cells[rows[k].source]);
+      if (spans.length === 0) { members.length = 0; break; }
+      members.push({ k, start: spans[0][0] });
+    }
+    // A MARKED LIST, and nothing else.
+    //
+    // The first cut of this padded any block of same-rung rows whose indents
+    // differed, and the corpus said what that means: 218 rows across 36
+    // fixtures, `record` and `split` rows shifted all over six_status,
+    // ratiorep and super_stats, where differing indents are the door's own
+    // layout and not a list at all. The shape this exists for is narrower
+    // and measurable - a LIST of three or more rows at ONE indent, with a
+    // MINORITY sticking out to the left by a couple of columns. That is a
+    // marker; a door's ragged body block is not.
+    const starts = [...new Set(members.map((m) => m.start))];
+    const min = Math.min(...starts);
+    const marked = members.filter((m) => m.start === min).length;
+    const isMarkedList =
+      members.length >= 3 &&
+      starts.length === 2 &&
+      marked * 2 < members.length &&
+      Math.max(...starts) - min <= MAX_MARKER_WIDTH;
+    if (isMarkedList) {
+      const fits = members.every((m) => {
+        const width = contentWidth(rows[m.k].cells) + (m.start - min);
+        return width <= cols;
+      });
+      if (fits) {
+        for (const m of members) {
+          const pad = m.start - min;
+          if (pad <= 0) continue;
+          const padded = [...Array.from({ length: pad }, () => blankCell()), ...rows[m.k].cells];
+          rows[m.k] = { ...rows[m.k], cells: padRow(padded, cols) };
+          if (out.y === m.k) out = { ...out, x: clampCol(cols, out.x + pad) };
+        }
+      }
+    }
+    i = Math.max(end, i + 1);
+  }
+  return out;
+}
+
 export function adaptRows(src: Frame, opts: AdaptOptions = {}): AdaptResult {
   const cols = opts.cols ?? 40;
   const rows: AdaptedRow[] = [];
@@ -1630,7 +1717,7 @@ export function adaptRows(src: Frame, opts: AdaptOptions = {}): AdaptResult {
       cursor = { x: m.x, y: first + m.row };
     }
   }
-  return { rows, cursor };
+  return { rows, cursor: alignMarkedLists(rows, src, cols, cursor) };
 }
 
 export function adaptFrame(src: Frame, opts: AdaptOptions = {}): Frame {

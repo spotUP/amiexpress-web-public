@@ -14,7 +14,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FrameReconstructor } from '../../../petscii/frame/ansi-screen';
-import { adaptRows, adaptFrame, applyRule, chooseRule, recordFields, TRUNCATION_MARK, type AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptRows, adaptFrame, alignMarkedLists, applyRule, chooseRule, recordFields, TRUNCATION_MARK, type AdaptRule } from '../../../petscii/frame/adapt';
 import { renderDiff } from '../../../petscii/frame/frame-render';
 import { Cell, Cursor, Frame, isBlank } from '../../../petscii/frame/types';
 import { columnParts, contentWidth, isRuleRow } from '../../../petscii/frame/classify';
@@ -137,6 +137,12 @@ function framesOf(ansi: string): Frame[] {
 function cursorFromRules(f: Frame): Cursor {
   let base = 0;
   let at: Cursor = { x: 0, y: 0 };
+  // The rows are built here as well as the position, because the block
+  // alignment that runs after the rungs needs them. The RULE CHOICE is still
+  // re-derived independently, which is what this exists to check; the
+  // alignment is applied from the module rather than re-implemented, because
+  // a second copy of it would only ever agree with itself.
+  const rows: Array<{ cells: Cell[]; source: number; rule: AdaptRule }> = [];
   for (let y = 0; y < f.rows; y++) {
     const src = f.cells[y];
     const res = applyRule(chooseRule(src, COLS), src, COLS);
@@ -144,8 +150,10 @@ function cursorFromRules(f: Frame): Cursor {
       const m = res.map(f.cursor.x);
       at = { x: m.x, y: base + m.row };
     }
+    for (const r of res.rows) rows.push({ cells: r, source: y, rule: res.applied });
     base += res.rows.length;
   }
+  at = alignMarkedLists(rows as never, f, COLS, at);
   const scrolledOff = Math.max(0, base - ROWS);
   return {
     x: Math.max(0, Math.min(COLS - 1, at.x)),
@@ -523,7 +531,12 @@ for (const [id, entry] of Object.entries(manifest)) {
             expect({ ...where, rows: out.length }).toEqual({ ...where, rows: 1 });
             const parts = columnParts(src).map((p) => text(p as ReadonlyArray<Cell>));
             expect({ ...where, columns: parts.length > 0 }).toEqual({ ...where, columns: true });
-            expect({ ...where, kept: narrowKeepsColumns(parts, text(joined).trimEnd()) })
+            // `trim`, not `trimEnd`: a row of a MARKED LIST carries a
+            // leading pad that `adaptRows` adds after the rung, so the list
+            // keeps one left edge under the marker (adapt.ts `alignBlocks`).
+            // The pad is alignment, not content, and narrow's own contract -
+            // which is what this asserts - is about the columns it kept.
+            expect({ ...where, kept: narrowKeepsColumns(parts, text(joined).trim()) })
               .toEqual({ ...where, kept: true });
             // DECORATION FIRST (2026-09-06): no column carrying an
             // alphanumeric gives up a cell while a column carrying none can
@@ -541,7 +554,9 @@ for (const [id, entry] of Object.entries(manifest)) {
             // give - they are all down to the two cells a narrowed column
             // cannot go below.
             const alnum = (t: string) => /[A-Za-z0-9]/.test(t);
-            const cut = narrowParse(parts, text(joined).trimEnd()) as boolean[];
+            // `trim`, for the same reason as the parse above: a marked
+            // list's row carries a leading alignment pad, not content.
+            const cut = narrowParse(parts, text(joined).trim()) as boolean[];
             const contentCut = parts.filter((p, i) => cut[i] && alnum(p));
             if (contentCut.length > 0) {
               const unspent = parts.filter((p, i) => !alnum(p) && !cut[i] && p.length > MIN_COLUMN);

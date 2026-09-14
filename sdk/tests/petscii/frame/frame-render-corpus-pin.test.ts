@@ -203,6 +203,29 @@ interface Pin {
  * per row. The row this rung was written for is the narrow shadow's
  * single-column row, measured against a live capture in
  * `web/backend/tests/petscii-frame/bulls-menu-row-survives-at-forty.test.ts`.
+ *
+ * THREE were RE-MEASURED later on 2026-09-14 for `alignMarkedLists`, the pass
+ * that gives a MARKED LIST one left edge - "the active > arrow shifts the
+ * line" (sysop, on JoinCnf at 40 columns). Every rung is a row function and
+ * most drop the row's own indent, so a door that pays for its `>` marker out
+ * of the indent came out with its numbers stepping two columns under
+ * whichever row the caller stood on.
+ *
+ * Named by measurement before a hash moved, and the first cut of the rule was
+ * thrown away BECAUSE of it: padding any block of same-rung rows whose indents
+ * differed changed 218 rows across 36 fixtures - `record` and `split` rows all
+ * over `six_status`, `ratiorep` and `super_stats`, where a differing indent is
+ * the door's own layout. Tightened to a LIST - three or more rows, two
+ * indents, a minority sticking out by at most four columns - it changes 63
+ * rows in exactly three fixtures, and the pin agrees:
+ *
+ * - `j` (7195 -> 7502): JoinCnf's conference list, the report itself.
+ * - `ulist` (8597 -> 8813): the space that right-aligns a single-digit slot
+ *   number against a double-digit one, which `narrow` had dropped.
+ * - `olm` (9782 -> 10598): the same, on WarOLM's node list.
+ *
+ * All three GROW, because a pad is bytes and no character is lost: alignment
+ * is declined outright when it would push any row of the block off the screen.
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
@@ -217,10 +240,10 @@ const PINS: Record<string, Pin> = {
   ustats: { renders: 217, bytes: 288890, sha256: '2c62434fd8ac573ca240eba25e7bcdc008742acfe36b29ca357b19ac9f6888b5' },
   what: { renders: 13, bytes: 3705, sha256: '584a221ff8cc779495319ba7ece4e97a814bc540f3f416af5720cfb21ae5edb1' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
-  j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },
+  j: { renders: 39, bytes: 7502, sha256: '49ec5f373000c2f79178fe6d215a1a04ea637c0ead6b418a6a9a244c34eac8c7' },
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
   size: { renders: 9, bytes: 2743, sha256: '5ffebb7e61299e0d9fb9f4a393ffd1265ea3f5ccd5c377f6ede9600cd47f91a0' },
-  ulist: { renders: 22, bytes: 8597, sha256: '62bfa960fce306ad3efa3ec54350c7646594ceb0bfdcddecc4ef73b0dbfb0e44' },
+  ulist: { renders: 22, bytes: 8813, sha256: '045a7469f4586e150fbdfc65518090843f5a5247f62c6dbfddfa2fab1f998fe4' },
   wall: { renders: 3, bytes: 4782, sha256: '9d880fb46142bd6d40283592e90836b25ef3caa679174c54fcf12cd36a0f0624' },
   chat: { renders: 49, bytes: 37701, sha256: '94ce198cd0f6fc7edf28d9e78610e631b9583e4620a5220a3ee932ddd7892bea' },
   mrcstat1: { renders: 7, bytes: 951, sha256: '014fe8e6fed2a87b056ae76ee41457ec10fbfcd195261959d3b266738ebd0271' },
@@ -234,7 +257,7 @@ const PINS: Record<string, Pin> = {
   conftop: { renders: 22, bytes: 8699, sha256: '98cd16bbc6e0ed085d303838fba5605b470cfdc3202daf24ea36688a44d93c7d' },
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
-  olm: { renders: 32, bytes: 9782, sha256: 'c2c4df72eee434d44a16df1144235f50594811384a3e952e58e5a29f7dacccf0' },
+  olm: { renders: 32, bytes: 10598, sha256: '29bc2b1a9f937503c800cc33d54cd28b7c60e6deb8f9b68f7e3384b284472d42' },
   // First measurement of a new input, frozen from here on under the rule above.
   aquascan_f: { renders: 66, bytes: 158936, sha256: 'd317b8997312750b725d94b807a9e24e12a97364903ac2072f852a4c812eab67' },
   aquascan_fr: { renders: 75, bytes: 230998, sha256: '36abf84dc5b801fd52523f403bd91ebd9a29a7969ef5f8fd3fe9087482762aa4' },

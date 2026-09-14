@@ -462,7 +462,11 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
       if (out.length !== 1) bad.push({ ...where, why: 'narrow produced more than one row' });
       const parts = columnParts(src).map((p) => cellText(p as ReadonlyArray<Cell>));
       if (parts.length === 0) bad.push({ ...where, why: 'narrow on a row with no columns' });
-      if (!narrowKeepsColumns(parts, cellText(joined).trimEnd())) bad.push({ ...where, why: 'narrow dropped more than a tail', parts });
+      // `trim`, not `trimEnd`: a row of a MARKED LIST carries a leading pad
+      // that `adaptRows` adds after the rung, so the block keeps one left
+      // edge under the marker (adapt.ts `alignMarkedLists`). The pad is
+      // alignment, not content, and this asserts narrow's own contract.
+      if (!narrowKeepsColumns(parts, cellText(joined).trim())) bad.push({ ...where, why: 'narrow dropped more than a tail', parts });
     } else {
       // `record` drops ONE thing besides the blanks, and only since 2026-09-06:
       // the pair of '|' cells enclosing a BOXED record (`|message -handle|`),
