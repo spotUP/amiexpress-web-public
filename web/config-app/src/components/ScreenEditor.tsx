@@ -22,6 +22,7 @@ import { editorHelp, onAMac } from './editor-help';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
+import { describeFold, foldRows, screenfulRows } from '../pages/screen-fold';
 
 /** The code exactly as it is written on the canvas, tilde to terminator. */
 function tokenText(canvas: { char?: string }[][], token: MciToken): string {
@@ -180,6 +181,8 @@ export function ScreenEditor({
   const selectionHighlights = selectionHighlightRuns(getSelection(surface.state));
 
   const rows = surface.canvas.length;
+  /** Where the caller meets a More prompt, and the sentence that says so. */
+  const folds = foldRows(rows);
   const cols = rows > 0 ? surface.canvas[0].length : 0;
 
   useEffect(() => {
@@ -241,9 +244,14 @@ export function ScreenEditor({
           case 'centre-line':
             onChange?.(centreLine(surface, cursor.y));
             return;
-          case 'remove-line':
-            onChange?.(removeLine(surface, cursor.y));
+          case 'remove-line': {
+            // Ctrl+K takes the row out FOR REAL, so the screen is one shorter
+            // and a cursor resting on the last row would be left past the end.
+            const shorter = removeLine(surface, cursor.y);
+            onChange?.(shorter);
+            setCursor(c => ({ ...c, y: Math.min(c.y, shorter.canvas.length - 1) }));
             return;
+          }
           case 'insert-line':
             onChange?.(insertLine(surface, cursor.y));
             return;
@@ -529,7 +537,10 @@ export function ScreenEditor({
         </div>
         <div className="space-y-1">
           <span className="block text-content-secondary">Character</span>
-          <div className="flex flex-wrap gap-1">
+          <p className="text-xs text-content-secondary" data-testid="screen-fold-note">
+        {describeFold(rows)}
+      </p>
+      <div className="flex flex-wrap gap-1">
             {BRUSHES.map(char => (
               <button
                 key={char}
@@ -579,19 +590,40 @@ export function ScreenEditor({
           className="select-none pr-2 text-right text-content-secondary"
           style={{ fontFamily: "'TopazPlus_a1200', 'Topaz_a1200', monospace", fontSize: 12 }}
         >
-          {surface.canvas.map((_row, index) => (
-            <div
-              key={index}
-              style={{ height: CELL_HEIGHT, lineHeight: `${CELL_HEIGHT}px` }}
-              className={index === cursor.y ? 'text-content' : undefined}
-            >
-              {index + 1}
-            </div>
-          ))}
+          {surface.canvas.map((_row, index) => {
+            /*
+             * The gutter says which screenful a line is on. A line the caller
+             * reaches only by pressing a key is dimmed, and the boundary
+             * carries the rule - "what is outside the screen", in the place
+             * the artist is already looking when counting lines.
+             */
+            const pastFirst = index >= screenfulRows();
+            const atFold = folds.includes(index);
+            return (
+              <div
+                key={index}
+                style={{
+                  height: CELL_HEIGHT,
+                  lineHeight: `${CELL_HEIGHT}px`,
+                  borderTop: atFold ? '1px dashed currentColor' : undefined,
+                }}
+                className={
+                  index === cursor.y ? 'text-content'
+                    : pastFirst ? 'text-content-muted opacity-60'
+                      : undefined
+                }
+                title={pastFirst ? `Screenful ${Math.floor(index / screenfulRows()) + 1}` : 'First screenful'}
+              >
+                {index + 1}
+              </div>
+            );
+          })}
         </div>
         <AnsiCanvas
           canvas={surface.canvas}
           palette={palette}
+          /* Where the caller's screen ends - see screen-fold.ts. */
+          folds={folds}
           cursor={!readOnly && surface.tool === 'text' ? cursor : null}
           highlights={[...tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,

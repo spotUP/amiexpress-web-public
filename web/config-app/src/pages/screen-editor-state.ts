@@ -256,6 +256,9 @@ export function centreLine(surface: EditorSurface, y: number): EditorSurface {
  * Undo covers it: the snapshot is taken before the shift, so one Ctrl+Z puts
  * the lost row back.
  */
+/** A screen is never taller than the board sends. */
+const MAX_SCREEN_ROWS = 25;
+
 export function insertLine(surface: EditorSurface, y: number): EditorSurface {
   const state = apply(surface);
   const canvas = state.getCanvas();
@@ -265,42 +268,45 @@ export function insertLine(surface: EditorSurface, y: number): EditorSurface {
   const rows = canvas.map(row => row.map(cell => ({ ...cell })));
 
   snapshotUndoState(state);
-  for (let row = canvas.length - 1; row > y; row--) {
-    for (let column = 0; column < width; column++) {
-      state.setCanvasCell(column, row, { ...rows[row - 1][column] });
-    }
-  }
-  for (let column = 0; column < width; column++) {
-    state.setCanvasCell(column, y, { char: ' ', fg: 7, bg: 0 });
-  }
+  rows.splice(y, 0, Array.from({ length: width }, () => ({ char: ' ', fg: 7, bg: 0 })));
+  // Never taller than the board sends. Past the cap the bottom row falls off,
+  // which is what this always did.
+  if (rows.length > MAX_SCREEN_ROWS) rows.length = MAX_SCREEN_ROWS;
+  state.setCanvas(rows);
 
   return settle(surface, surface.pending);
 }
 
 /**
- * Take the line at `y` out, pulling the rest up and blanking the bottom row.
+ * Take the line at `y` out FOR REAL - the screen gets shorter.
  *
- * The grid keeps its height for the same reason `insertLine` does not grow it:
- * the board sends a fixed number of rows, and a screen that is 24 lines long
- * is a 25-line screen with a blank one at the end.
+ * It used to pull the rest up and slide a blank row in at the bottom, keeping
+ * the grid at 25. That looks identical on screen and is wrong in the file: the
+ * editor saves `canvas.length` rows, so a six-row logo was written out as
+ * twenty-four rows, six of art and eighteen of spaces. The sysop shortened the
+ * SAmiLog logo to six lines and the bulletin did not get one line shorter -
+ * "ctrl+k in the editor should remove lines for real though" (2026-09-14).
+ *
+ * The earlier rule here - the grid does not change height - was written
+ * against GROWING, because a screen taller than 25 is one the board cannot
+ * send. Shrinking has no such problem: a six-line screen sends fine, and the
+ * height of a screen is the artist's to decide. So the cap stays on
+ * `insertLine` and comes off this.
+ *
+ * One row is the floor; a screen with no rows is not a screen. Undo still
+ * covers the removal - the snapshot is taken before the splice.
  */
 export function removeLine(surface: EditorSurface, y: number): EditorSurface {
   const state = apply(surface);
   const canvas = state.getCanvas();
   if (!canvas || y < 0 || y >= canvas.length) return surface;
+  if (canvas.length <= 1) return surface;
 
-  const width = canvas[0]?.length ?? 0;
   const rows = canvas.map(row => row.map(cell => ({ ...cell })));
 
   snapshotUndoState(state);
-  for (let row = y; row < canvas.length - 1; row++) {
-    for (let column = 0; column < width; column++) {
-      state.setCanvasCell(column, row, { ...rows[row + 1][column] });
-    }
-  }
-  for (let column = 0; column < width; column++) {
-    state.setCanvasCell(column, canvas.length - 1, { char: ' ', fg: 7, bg: 0 });
-  }
+  rows.splice(y, 1);
+  state.setCanvas(rows);
 
   return settle(surface, surface.pending);
 }

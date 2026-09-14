@@ -2,18 +2,28 @@
  * Adding and removing a line in the screen editor.
  *
  * "we need buttons in all screen editors to add and remove lines" (the sysop,
- * 2026-09-14). Until now the only way to move art down a row was to select it
- * and paste it a line lower, which is a redraw rather than an edit.
+ * 2026-09-14), and then, the same evening: "ctrl+k in the editor should remove
+ * lines for real though".
  *
- * THE GRID DOES NOT CHANGE HEIGHT, and that is the decision worth pinning. A
- * screen is a fixed 80x25 - that is what the board sends and what the caller's
- * terminal shows without scrolling - so inserting a line pushes the bottom row
- * off and removing one pulls a blank in at the end. Growing the canvas would
- * produce a screen the board cannot send.
+ * REMOVING MAKES THE SCREEN SHORTER, and that is the decision worth pinning.
+ * It used to pull the rest up and slide a blank row in at the bottom so the
+ * grid stayed 25 tall. On screen that looks the same; in the FILE it is not,
+ * because the editor saves `canvas.length` rows - so a six-row logo was
+ * written out as twenty-four rows, six of art and eighteen of spaces. The
+ * sysop cut the SAmiLog logo to six lines and the bulletin did not get one
+ * line shorter, because the height it costs is the height of the file.
  *
- * Undo covers the lost row: the snapshot is taken before the shift, so one
- * Ctrl+Z puts it back. That is what makes dropping it acceptable rather than
- * destructive.
+ * The original rule was written against GROWING - a screen taller than 25 is
+ * one the board cannot send - and that half still holds, so `insertLine` keeps
+ * the cap and `removeLine` does not. Below the cap, inserting grows the screen
+ * back; at the cap the bottom row falls off as it always did.
+ *
+ * The alternative was to trim trailing blank rows when the bulletin is built.
+ * The sysop rejected it and was right to: "automatically trimming is not nice
+ * sometimes we need blank lines". Trailing blanks can be deliberate, so the
+ * artist says how tall the screen is and nothing guesses it for them.
+ *
+ * Undo covers a removal: the snapshot is taken before the splice.
  */
 import { describe, it, expect } from 'vitest';
 import { createSurface, insertLine, removeLine, undo, blankCanvas } from '../pages/screen-editor-state';
@@ -35,15 +45,33 @@ describe('a line in the screen editor', () => {
 
     const after = insertLine(surface, 2);
 
-    // Rows 2,3 move down; the blank lands at 2; row 4 falls off the bottom.
-    expect(spine(after.canvas)).toBe('01 23');
+    // Rows 2,3,4 move down and the blank lands at 2. Nothing falls off: the
+    // screen is under the cap, so it grows by one instead.
+    expect(spine(after.canvas)).toBe('01 234');
   });
 
-  it('does not make the screen taller than the board can send', () => {
+  it('removes for real - the screen gets shorter, and the file with it', () => {
     const surface = numbered();
 
-    expect(insertLine(surface, 0).canvas).toHaveLength(5);
-    expect(removeLine(surface, 0).canvas).toHaveLength(5);
+    expect(removeLine(surface, 0).canvas).toHaveLength(4);
+  });
+
+  it('grows back when a line is added, up to what the board can send', () => {
+    const surface = numbered();
+
+    expect(insertLine(surface, 0).canvas).toHaveLength(6);
+  });
+
+  it('never grows past the 25 rows the board sends', () => {
+    const full = numbered(25);
+
+    expect(insertLine(full, 0).canvas).toHaveLength(25);
+  });
+
+  it('keeps at least one row - a screen with no rows is not a screen', () => {
+    const single = numbered(1);
+
+    expect(removeLine(single, 0)).toBe(single);
   });
 
   it('is taken out, pulling the rest up', () => {
@@ -52,7 +80,7 @@ describe('a line in the screen editor', () => {
     const after = removeLine(surface, 1);
 
     // 1 goes, 2,3,4 come up, and the bottom row is blank.
-    expect(spine(after.canvas)).toBe('0234 ');
+    expect(spine(after.canvas)).toBe('0234');
   });
 
   it('gives the pushed-off row back on undo', () => {
@@ -75,7 +103,7 @@ describe('a line in the screen editor', () => {
   it('inserting at the last row only blanks it', () => {
     const surface = numbered();
 
-    expect(spine(insertLine(surface, 4).canvas)).toBe('0123 ');
+    expect(spine(insertLine(surface, 4).canvas)).toBe('0123 4');
   });
 
   it('refuses a row that is not on the canvas', () => {
