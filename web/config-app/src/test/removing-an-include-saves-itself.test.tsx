@@ -84,4 +84,38 @@ describe('removing an include from the login sequence', () => {
     await waitFor(() => expect(put).toHaveBeenCalled(), { timeout: 3000 });
     expect(put).toHaveBeenCalledTimes(1);
   });
+
+  it('adds anything the sysop types, not only what the picker found', async () => {
+    // The picker lists files the board already has. A screen about to exist, a
+    // door, or a path only the live volume carries were all unreachable -
+    // "it must be possible to add custom strings as well".
+    const user = userEvent.setup();
+    render(<LoginSequencePage />);
+
+    await user.type(
+      await screen.findByLabelText(/Anything to add to Node bulletins/),
+      'BBS:Bulletins/bull6.txt',
+    );
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(put).toHaveBeenCalled(), { timeout: 3000 });
+    const [, body] = put.mock.calls[0];
+    expect(body.items.map((i: { target: string }) => i.target)).toContain('BBS:Bulletins/bull6.txt');
+  });
+
+  it('adds it as the KIND the sysop chose, not always a screen include', async () => {
+    const user = userEvent.setup();
+    render(<LoginSequencePage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText(/What to add to Node bulletins/),
+      'CC',
+    );
+    await user.type(screen.getByLabelText(/Anything to add to Node bulletins/), 'gl');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(put).toHaveBeenCalled(), { timeout: 3000 });
+    const [, body] = put.mock.calls[0];
+    expect(body.items.at(-1)).toMatchObject({ code: 'CC', target: 'gl' });
+  });
 });

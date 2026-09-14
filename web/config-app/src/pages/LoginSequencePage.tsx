@@ -67,6 +67,8 @@ function describe(target: string): string | null {
 
 export function LoginSequencePage() {
   const { showSuccess } = useNotification();
+  /** What the sysop is typing into each step's own "anything you like" field. */
+  const [typed, setTyped] = useState<Record<string, { code: LoginItem['code']; target: string }>>({});
   const [steps, setSteps] = useState<LoginStep[]>([]);
   // A debounced save fires AFTER a render, so it reads the steps through a ref
   // rather than closing over the array it was scheduled with.
@@ -346,6 +348,64 @@ export function LoginSequencePage() {
                 </select>
                 <Plus size={14} className="text-content-muted" />
               </div>
+            )}
+
+            {step.exists && (
+              /*
+                ANYTHING THE SYSOP LIKES, not only what the board already has.
+                The picker lists files it found; a screen that is about to
+                exist, a door, or a path only the live volume has were all
+                unreachable from here - "it must be possible to add custom
+                strings as well" (sysop, 2026-09-14).
+              */
+              <form
+                className="flex flex-wrap items-center gap-2"
+                onSubmit={event => {
+                  event.preventDefault();
+                  const entry = typed[step.screen];
+                  const target = entry?.target.trim();
+                  if (!target) return;
+                  edit(step.screen, [...items, { code: entry.code, target, pause: true }]);
+                  setTyped(prev => ({ ...prev, [step.screen]: { code: entry.code, target: '' } }));
+                }}
+              >
+                <label className="text-xs text-content-secondary" htmlFor={`code-${step.screen}`}>
+                  or add your own
+                </label>
+                <select
+                  id={`code-${step.screen}`}
+                  className="bg-surface-2 border border-border rounded px-2 py-1 text-sm text-content-primary"
+                  aria-label={`What to add to ${step.label}`}
+                  value={typed[step.screen]?.code ?? 'SS'}
+                  onChange={event => setTyped(prev => ({
+                    ...prev,
+                    [step.screen]: {
+                      code: event.target.value as LoginItem['code'],
+                      target: prev[step.screen]?.target ?? '',
+                    },
+                  }))}
+                >
+                  {/* Full English, because SS/CC/SR mean nothing until you
+                      have read express.e. */}
+                  <option value="SS">Show a screen</option>
+                  <option value="CC">Run a command</option>
+                  <option value="SR">Show a random screen</option>
+                </select>
+                <input
+                  className="bg-surface-2 border border-border rounded px-2 py-1 text-sm text-content-primary flex-1 min-w-48"
+                  aria-label={`Anything to add to ${step.label}`}
+                  placeholder="BBS:Bulletins/bull6.txt"
+                  value={typed[step.screen]?.target ?? ''}
+                  onChange={event => setTyped(prev => ({
+                    ...prev,
+                    [step.screen]: {
+                      code: prev[step.screen]?.code ?? 'SS',
+                      target: event.target.value,
+                    },
+                  }))}
+                />
+                <button type="submit" className="btn-secondary text-sm">Add</button>
+              </form>
             )}
           </section>
         );
