@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface AccessArea {
@@ -75,7 +76,46 @@ export function AccessAreasPage() {
     save.mutate({ name: area.name, conferences: next });
   };
 
-  if (areasQuery.isLoading) return <div className="p-4">Loading access areas…</div>;
+  /*
+   * One column per conference, so the grid is the question the sysop is
+   * actually asking: which of these may this group join. Built from the
+   * board's conference list rather than a fixed five, because a board that
+   * adds a conference must not need this file changed.
+   */
+  const columns: DataTableColumn<AccessArea>[] = [
+    { id: 'name', header: 'Area', value: (a) => a.name, mono: true },
+    { id: 'users', header: 'Users', value: (a) => a.users, align: 'right' },
+    ...conferences.map((c) => ({
+      id: `conf-${c.id}`,
+      header: `${c.id}. ${c.name}`,
+      // No `value`: a checkbox is not something to sort a table by.
+      cell: (a: AccessArea) => (
+        <input
+          type="checkbox"
+          aria-label={`${a.name} may join ${c.name}`}
+          checked={a.conferences.includes(c.id)}
+          onChange={() => toggle(a, c.id)}
+        />
+      ),
+    })),
+    {
+      id: 'actions',
+      header: '',
+      align: 'right',
+      cell: (a: AccessArea) => (
+        <button
+          className="btn-secondary"
+          // Refused by the server while anyone uses it, because its members
+          // would lose every conference - so say so before the click.
+          disabled={a.users > 0 || remove.isPending}
+          title={a.users > 0 ? `${a.users} user(s) still use this area` : 'Remove'}
+          onClick={() => remove.mutate(a.name)}
+        >
+          Remove
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -105,53 +145,13 @@ export function AccessAreasPage() {
         </div>
       )}
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr>
-              <th className="text-left p-2">Area</th>
-              <th className="text-right p-2">Users</th>
-              {conferences.map((c) => (
-                <th key={c.id} className="p-2 text-left whitespace-nowrap">
-                  {c.id}. {c.name}
-                </th>
-              ))}
-              <th className="p-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {areas.map((area) => (
-              <tr key={area.name} data-testid={`area-${area.name}`}>
-                <td className="p-2 font-mono">{area.name}</td>
-                <td className="p-2 text-right">{area.users}</td>
-                {conferences.map((c) => (
-                  <td key={c.id} className="p-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`${area.name} may join ${c.name}`}
-                      checked={area.conferences.includes(c.id)}
-                      onChange={() => toggle(area, c.id)}
-                    />
-                  </td>
-                ))}
-                <td className="p-2 text-right">
-                  <button
-                    className="btn-secondary"
-                    // An area in use cannot be deleted - the server refuses,
-                    // because its members would lose every conference - so the
-                    // button says so before it is pressed.
-                    disabled={area.users > 0 || remove.isPending}
-                    title={area.users > 0 ? `${area.users} user(s) still use this area` : 'Remove'}
-                    onClick={() => remove.mutate(area.name)}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={areas}
+        getRowId={(area) => area.name}
+        isLoading={areasQuery.isLoading}
+        emptyMessage="No access areas yet. Create one below."
+      />
 
       <div className="card p-4">
         <h3 className="font-semibold">New area</h3>
