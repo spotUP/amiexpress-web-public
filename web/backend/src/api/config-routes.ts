@@ -2209,6 +2209,22 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         if (updates.timeLimit !== undefined) updatedUser.timeLimit = updates.timeLimit;
         if (updates.expert !== undefined) updatedUser.expert = updates.expert;
         if (updates.ansi !== undefined) updatedUser.ansi = updates.ansi;
+        /*
+         * Conference access, which the form has offered since 19dd8acf6 and
+         * this route has never written.
+         *
+         * Creating an account sets it (the POST below, from
+         * `new_user_conf_access`), and UserFileManager persists it as the
+         * struct's `conferenceAccess` - so the field is real everywhere
+         * except the one place a sysop changes it. Editing it did nothing,
+         * silently, and the form showed the old value back because that is
+         * what the record still said.
+         *
+         * Caught by tests/services/users-acs-write-contract, which compares
+         * what the form can send against what this route copies - the whole
+         * reason that test exists.
+         */
+        if (updates.confAccess !== undefined) updatedUser.confAccess = updates.confAccess;
         // Lockout state (express.e eduser page 1, B/C/D). updateUserDataFile
         // preserves the on-disk values when these are absent, so naming them
         // here is what makes an admin unlock stick instead of being kept.
