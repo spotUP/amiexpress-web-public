@@ -47,6 +47,7 @@ export {
   waitForFontFace,
   forceRemeasure,
   applyFont,
+  seamlessTeletextSize,
   type BbsFont,
   type FontTarget,
 } from './utils/session-font';
