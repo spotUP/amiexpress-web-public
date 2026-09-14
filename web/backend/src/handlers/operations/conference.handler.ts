@@ -291,6 +291,33 @@ console.warn('[joinConference] Failed to sync node user file:', err);
       // stale value (express.e:5057 StrCopy(currentMenuName,'')).
       (session as any).currentMenuName = '';
       const shown = await displayScreen(socket, session, getConfScreenName(), true, /* silent */ true);
+      /*
+       * A DOOR THE BULLETIN LAUNCHED IS STILL RUNNING.
+       *
+       * `displayScreen` does not wait for the commands it found in the art:
+       * `executeScreenCommands` schedules them on `setImmediate` and hands
+       * back `session.pendingScreenCommand` for whoever needs them finished.
+       * Nothing on the join path ever did, so the pause below was emitted
+       * while a `~XI` door was mid-flight - and the prompt landed inside the
+       * art, above rows the screen had not finished putting on the wire.
+       *
+       * This board's conference bulletins end with `~XISUBSCAN`, so it is
+       * every conference except 2. The sysop, 2026-09-14, with a screenshot
+       * of `(Pause)...Space To Resume:` sitting between the logo and its
+       * bottom rule: "issue, prompt in the ascii". Conference 2 - the one
+       * whose art carries no door - rendered correctly, which is what
+       * identified the door as the difference.
+       *
+       * door.handler.ts:2551 already waits on this promise before starting a
+       * door of its own, for the same reason.
+       */
+      if (session.pendingScreenCommand) {
+        try {
+          await session.pendingScreenCommand;
+        } catch (err) {
+          console.warn('[joinConference] screen command failed before pause:', err);
+        }
+      }
       if (shown) {
         const { doPause } = require('../screen.handler');
         // If displayScreen installed its own pagination/segment pause
