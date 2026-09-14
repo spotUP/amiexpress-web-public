@@ -181,6 +181,38 @@ describe('importing an SVG as RIP', () => {
     expect(written).toHaveLength(0);
   });
 
+  it('converts through the empty-slot upload, which is the one the sysop hit', async () => {
+    /*
+     * `Node0/BBSTITLE.rip` had no file, so the dialog was in its "nothing is
+     * drawn here" branch - a THIRD file picker, which the SVG rule did not
+     * reach: "Node0/BBSTITLE.rip: The target is a .rip but these bytes are
+     * not RIP" (sysop, 2026-09-14).
+     */
+    const user = userEvent.setup();
+    render(
+      <ArtistScreenDialog
+        path={PATH}
+        theme={THEME as never}
+        index={{ ...index(), files: {} } as never}
+        onClose={() => {}}
+        onOpenPath={() => {}}
+        isNew
+      />,
+      { wrapper },
+    );
+
+    const upload = await screen.findByLabelText('Upload ANSI drawing');
+    await user.upload(
+      upload as HTMLInputElement,
+      new File(['<svg viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"/></svg>'],
+        'uptown.svg', { type: 'image/svg+xml' }),
+    );
+
+    await waitFor(() => expect(converted).toHaveLength(1));
+    expect(await screen.findByTestId('svg-import')).toBeTruthy();
+    expect(written).toHaveLength(0);
+  });
+
   it('still uploads anything that is not an SVG unchanged', async () => {
     const user = userEvent.setup();
     openDialog();

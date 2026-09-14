@@ -150,6 +150,25 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const isSvg = (chosen: File): boolean =>
     chosen.type === 'image/svg+xml' || /\.svg$/i.test(chosen.name);
 
+  /**
+   * Every file picker in this dialog, answered once.
+   *
+   * There are three - add a format, upload into an empty slot, replace a
+   * drawing - and the SVG rule was written into one of them. The sysop met
+   * the refusal through another: "Node0/BBSTITLE.rip: The target is a .rip
+   * but these bytes are not RIP", uploading an export into a slot that had
+   * no file yet (2026-09-14). A rule that lives in one of three doors is not
+   * a rule.
+   *
+   * Answers true when it took the file, so a caller that has its own
+   * bookkeeping - the format picker closes itself - can tell.
+   */
+  const convertIfSvg = (chosen: File, target: string): boolean => {
+    if (!isSvg(chosen)) return false;
+    importSvg.mutate({ chosen, target });
+    return true;
+  };
+
   const redraw = useMutation({
     mutationFn: () => apiClient.copyScreenIntoTheme(theme.slug, path as string),
     onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
@@ -318,16 +337,20 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
    * as much as what it could - and both are shown before anything lands.
    */
   const [pendingSvg, setPendingSvg] = useState<
-    { name: string; bytes: string; commands: number; losses: Array<{ element: string; reason: string }> } | null
+    {
+      name: string; target: string; bytes: string; commands: number;
+      losses: Array<{ element: string; reason: string }>;
+    } | null
   >(null);
 
   const importSvg = useMutation({
-    mutationFn: async (chosen: File) => {
+    mutationFn: async ({ chosen, target }: { chosen: File; target: string }) => {
       const svg = await chosen.text();
       const answer = await apiClient.convertSvgToRip(svg);
       const data = (answer as { data?: { content?: string; commands?: number; losses?: Array<{ element: string; reason: string }> } }).data;
       return {
         name: chosen.name,
+        target,
         bytes: String(data?.content ?? ''),
         commands: Number(data?.commands ?? 0),
         losses: data?.losses ?? [],
@@ -391,6 +414,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         const chosen = event.target.files?.[0];
         event.target.value = '';
         if (!chosen || !addingFormat) return;
+        if (convertIfSvg(chosen, addingFormat.path)) { setAddingFormat(null); return; }
         if (!(await confirmAuditWrite(chosen.name))) return;
         writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
         setAddingFormat(null);
@@ -501,6 +525,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               const chosen = event.target.files?.[0];
               event.target.value = '';
               if (!chosen || !path) return;
+              if (convertIfSvg(chosen, path)) return;
               if (!(await confirmAuditWrite(chosen.name))) return;
               // Fresh file: nothing to carry over. The write invalidates
               // the index, the slot flips to drawn, and the dialog shows
@@ -577,7 +602,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
                    * which is true and useless. The conversion is right here;
                    * offering it is better than explaining the refusal.
                    */
-                  if (isSvg(chosen)) { importSvg.mutate(chosen); return; }
+                  if (convertIfSvg(chosen, path)) return;
                   const bytes = await readAsBase64(chosen);
                   setPendingUpload({ bytes, name: chosen.name });
                   // A dry run: the board answers what it would carry and
@@ -611,7 +636,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
                 onChange={event => {
                   const chosen = event.target.files?.[0];
                   event.target.value = '';
-                  if (chosen) importSvg.mutate(chosen);
+                  if (chosen && path) importSvg.mutate({ chosen, target: path });
                 }}
               />
             </>
@@ -711,13 +736,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
               className="btn-primary"
               disabled={writeBytes.isPending || pendingSvg.commands === 0}
               onClick={async () => {
-                if (!path || !pendingSvg) return;
+                if (!pendingSvg) return;
                 if (!(await confirmAuditWrite(pendingSvg.name))) return;
-                writeBytes.mutate({ target: path, bytes: pendingSvg.bytes, carry: 'above' });
+                writeBytes.mutate({ target: pendingSvg.target, bytes: pendingSvg.bytes, carry: 'above' });
                 setPendingSvg(null);
               }}
             >
-              Write it to {path?.split('/').pop()}
+              Write it to {pendingSvg.target.split('/').pop()}
             </button>
             <button type="button" className="underline" onClick={() => setPendingSvg(null)}>
               Cancel
