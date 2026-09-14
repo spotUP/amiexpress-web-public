@@ -943,6 +943,17 @@ export function repeatRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/**
+ * The leader GLYPH, and only this one.
+ *
+ * A dot leader is a typographic convention - it exists to carry the eye from a
+ * label to its value and means nothing itself. A run of dashes or underscores
+ * is usually a RULE or a piece of ASCII art, and the corpus says so: admitting
+ * them let this rung shorten `doorrepo`'s box header, AquaScan's
+ * `+---\/---\/REBEL MC!\/---+` and the `)_____  Y '   Y___  Y` of its logo,
+ * none of which is a leader and all of which a caller reads as drawing.
+ */
+const LEADER_GLYPH = '.';
 /** A leader run is decoration only while it is long enough to read as one. */
 const MIN_LEADER_RUN = 4;
 /** What is left of a shortened leader: enough that it still reads as a leader. */
@@ -963,18 +974,23 @@ function leaderRun(cells: Row, from: number, width: number): [number, number] | 
   let x = from;
   while (x < width) {
     const cell = cells[x];
-    if (isBlank(cell) || cell.rvs || /[A-Za-z0-9]/.test(cell.ch)) { x++; continue; }
+    if (cell.ch !== LEADER_GLYPH || cell.rvs) { x++; continue; }
     let end = x;
     while (end < width && cells[end].ch === cell.ch && !cells[end].rvs) end++;
     const length = end - x;
-    // WORDS on both sides, not merely ink. A leader connects two things a
-    // reader reads; a box's interior rule has a '|' on its left and a column
-    // junction inside it, and shortening THAT moves the junction away from the
-    // column it belongs to on every other row of the box (`kd_confstats` row
-    // 19, measured). Alphanumeric on both sides is what tells the two apart.
-    const isWord = (c: Readonly<Cell>) => /[A-Za-z0-9]/.test(c.ch);
-    const before = cells.slice(from, x).some(isWord);
-    const after = cells.slice(end, width).some(isWord);
+    // A WORD before it, and anything at all after it.
+    //
+    // The word before is what a leader leads FROM. It also keeps the rung off
+    // a row that opens with a rail and a rule.
+    //
+    // After it, ink is enough, and it has to be: `Bulls` names an unused
+    // bulletin '-', so slots 10-12 of a twelve-bulletin conference paint
+    // `[10] ..................................... -`. Asking for a word there
+    // too left exactly those rows to `split`, which is what the sysop
+    // photographed the second time (2026-09-14) - nine rows right and three
+    // still broken.
+    const before = cells.slice(from, x).some((c) => /[A-Za-z0-9]/.test(c.ch));
+    const after = cells.slice(end, width).some((c) => !isBlank(c));
     if (length >= MIN_LEADER_RUN && before && after && (!best || length > best[1] - best[0])) {
       best = [x, end];
     }

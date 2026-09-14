@@ -182,21 +182,27 @@ interface Pin {
  * right-aligned one column short of the edge it was aligned to, and `what`'s
  * `Total bytes: [ 0 ]` the same. The other 27 hashes are untouched.
  *
- * ONE was RE-MEASURED on 2026-09-14 for the `leader` rung (adapt.ts), which
+ * TWO were RE-MEASURED on 2026-09-14 for the `leader` rung (adapt.ts), which
  * the sysop's Bulls-at-40-columns report asked for: a row that reaches across
  * a run of dots now spends the dots instead of being cut in two. Named by the
- * rule census before the hash was touched - every frame of all 36 fixtures
- * through `chooseRule`, which finds exactly TWO source rows taking the new
- * rung and both of them in `ustats`. The pin agreed exactly: `ustats` moved
- * and the other 35 did not. Both rows GAIN - `LaST cAll.....: Thu 21-May-2026
- * 08:27:48` and `CuRRenT tIMe..: Thu 21-May-2026 08:27:54` are now one row
- * each, where the reflow put the TIME alone on a row of its own
- * (`... 21-May-2026` / `08:27:48`) - so the fixture grows 1189 bytes carrying
- * the same characters on fewer rows. Bulls itself is not in this count: the
- * `b` capture is its DUAL_LISTING=YES screen, whose bulletin rows are two
- * bulletins wide and rightly split one per row; the row this rung was written
- * for is the narrow shadow's single-column row, measured in
- * `c64-door-adapter.test.ts` against a live capture.
+ * rule census before a hash was touched - every frame of all 36 fixtures
+ * through `chooseRule` - which finds exactly THREE source rows taking the new
+ * rung, in two fixtures. The pin agreed exactly: `ustats` and `aquascan_fr`
+ * moved and the other 34 did not.
+ *
+ * - `ustats` (287701 -> 288890): `LaST cAll.....: Thu 21-May-2026 08:27:48`
+ *   and `CuRRenT tIMe..: Thu 21-May-2026 08:27:54` are one row each, where
+ *   the reflow put the TIME alone on a row of its own (`... 21-May-2026` /
+ *   `08:27:48`). It GROWS carrying the same characters on fewer rows.
+ * - `aquascan_fr` (231444 -> 230998): the `.:.........[  f  u  t  u  r  e
+ *   ]........:.` banner keeps the door's own letter-spacing, where `narrow`
+ *   squeezed it to `[ f u t u r e ]` to buy the width. The dots pay instead.
+ *
+ * Bulls itself is not in this count: the `b` capture is its DUAL_LISTING=YES
+ * screen, whose bulletin rows are two bulletins wide and rightly split one
+ * per row. The row this rung was written for is the narrow shadow's
+ * single-column row, measured against a live capture in
+ * `web/backend/tests/petscii-frame/bulls-menu-row-survives-at-forty.test.ts`.
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
@@ -231,7 +237,7 @@ const PINS: Record<string, Pin> = {
   olm: { renders: 32, bytes: 9782, sha256: 'c2c4df72eee434d44a16df1144235f50594811384a3e952e58e5a29f7dacccf0' },
   // First measurement of a new input, frozen from here on under the rule above.
   aquascan_f: { renders: 66, bytes: 158936, sha256: 'd317b8997312750b725d94b807a9e24e12a97364903ac2072f852a4c812eab67' },
-  aquascan_fr: { renders: 75, bytes: 231444, sha256: '0e004049a01eec075b36f1f073b842e825492e0628d4d5e8d9dc57d8c36e2b4d' },
+  aquascan_fr: { renders: 75, bytes: 230998, sha256: '36abf84dc5b801fd52523f403bd91ebd9a29a7969ef5f8fd3fe9087482762aa4' },
   aquascan_n: { renders: 44, bytes: 73928, sha256: '7698eaf9fece00b3f7b4ee6c0c7ed16b027f0f64e4169d3da8e83d485425c755' },
   aquascan_scan: { renders: 61, bytes: 141049, sha256: 'e01e6aa27252848f4d32e4f0562b8cd5f7cec630108b4abe6548e88870958754' },
   aquascan_nsu: { renders: 61, bytes: 141015, sha256: '32c9d2c449dc1d5401624d1a42d0c3f10932d9cbe4170ba31ccfd6b4126a1a8c' },

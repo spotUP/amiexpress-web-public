@@ -1,6 +1,6 @@
 /**
  * "the bulletin list is broken up" - the sysop's 40-column Bulls walk,
- * 2026-09-13.
+ * 2026-09-13, and his second walk on 2026-09-14.
  *
  * Bulls paints its menu at an indent of 18 with a dot leader between the
  * number and the label: `[01] ......................... Top Uploaders`, 62
@@ -27,7 +27,12 @@ const capture: { chunks: string[] } = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'fixtures', 'bulls-narrow-shadow.json'), 'utf8'),
 );
 
-/** The six bulletin labels, in the order Bulls lists them. */
+/**
+ * The twelve bulletins conference 2 lists, in order. The last three are named
+ * `-` in Bulls.CFG - unused slots - and they are the reason the rung asks only
+ * for INK after the leader run: a first cut of it asked for a word, and the
+ * sysop's second screenshot had nine rows right and these three still split.
+ */
 const BULLETINS = [
   'Top Uploaders',
   'Top Downloaders',
@@ -35,6 +40,12 @@ const BULLETINS = [
   'Top Upload CPS',
   'Top Download CPS',
   'Last Callers',
+  'SVT Text News',
+  'SVT Text Sport',
+  'Requests',
+  '-',
+  '-',
+  '-',
 ];
 
 /**
@@ -96,11 +107,11 @@ describe('Bulls at 40 columns', () => {
   it('gives each bulletin ONE row, its number and its label on the same row', () => {
     const screen = bullsAtForty();
     BULLETINS.forEach((label, i) => {
-      const n = `[0${i + 1}]`;
-      const rows = screen.filter((r) => r.includes(n));
+      const n = `[${String(i + 1).padStart(2, '0')}]`;
+      const rows = screen.filter((r) => r.startsWith(n));
       expect({ n, rows: rows.length }).toEqual({ n, rows: 1 });
       // The number, the leader and the label, in that order, on that row.
-      expect(rows[0]).toMatch(new RegExp(`^\\[0${i + 1}\\] \\.+ ${label}$`));
+      expect(rows[0]).toMatch(new RegExp(`^\\${'['}${String(i + 1).padStart(2, '0')}\\] \\.+ ${label.replace('-', '\\-')}$`));
     });
   });
 

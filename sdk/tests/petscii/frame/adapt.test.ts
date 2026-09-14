@@ -1013,6 +1013,23 @@ describe('leader', () => {
       .toEqual(['[01]', '.....................', 'Top', 'Uploaders'].filter((w) => !/^\.+$/.test(w)));
   });
 
+  it("keeps a row whose label is a bare '-', which is how Bulls names an unused slot", () => {
+    // Conference 2 lists twelve bulletins and the last three are named '-'.
+    // Asking for a WORD after the leader left exactly these three to `split`.
+    const UNUSED = ' '.repeat(18) + '[10] ..................................... -';
+    expect(chooseRule(row(UNUSED), 40)).toBe('leader');
+    expect(str(applyRule('leader', row(UNUSED), 40).rows[0])).toBe('[10] ................................. -');
+  });
+
+  it('is a DOT leader: a run of dashes or underscores is a rule or art, and stays one', () => {
+    // AquaScan's logo and DoorRepo's box header, both of which this rung ate
+    // while it accepted any repeated glyph.
+    const ART = ' '.repeat(33) + ')_____  Y \'   Y___  Y  |__|  _  Y   ____(';
+    const BOX = '+- REPO (4096) ' + '-'.repeat(12) + '++' + '-'.repeat(50) + '+';
+    expect(leaderRow(row(ART), 40)).toBeNull();
+    expect(leaderRow(row(BOX), 40)).toBeNull();
+  });
+
   it('declines on a box rule, whose junction belongs to the column below it', () => {
     // `kd_confstats` row 19: the dashes are the box's own rule and the '+' is a
     // column junction. Shortening them would move the junction off its column.
