@@ -44,12 +44,20 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     }
     focus() {
       this.focusCalls.push('focus');
+      // The browser's own behaviour, and the whole trap: focusing an element
+      // that is ALREADY document.activeElement fires no focus event, so
+      // xterm never learns. Only a real transition sets the class.
+      const already = document.activeElement === this.textarea;
       this.textarea?.focus();
-      // A REAL focus event is what puts the class on, and that is exactly
-      // what does not happen while the window is inactive.
-      if (document.hasFocus()) this.element?.classList.add('focus');
+      if (!already && document.hasFocus()) this.element?.classList.add('focus');
     }
-    blur() { this.focusCalls.push('blur'); this.element?.classList.remove('focus'); }
+    blur() {
+      this.focusCalls.push('blur');
+      // Really leaves the element, which is what makes the following focus()
+      // a real transition rather than another no-op.
+      this.textarea?.blur();
+      this.element?.classList.remove('focus');
+    }
     loadAddon() {} onData() { return { dispose() {} }; } onKey() { return { dispose() {} }; }
     attachCustomKeyEventHandler() {} write() {} writeln() {} input() {} refresh() {}
     reset() {} resize() {} clearSelection() {} selectAll() {} getSelection() { return ''; }
@@ -137,5 +145,37 @@ describe('a terminal focused while the window was inactive', () => {
 
     expect(term.focusCalls.length).toBe(before);
     expect(document.activeElement).toBe(elsewhere);
+  });
+});
+
+describe('a plain load into a window that is already focused', () => {
+  /*
+   * The case the first fix missed, and the sysop caught: "cursor is white
+   * when i dont click on localhost". No `window.focus` event ever fires -
+   * the window was focused all along - so a resync that only listens for one
+   * never runs. And the second startup focus() is a no-op because the
+   * textarea is already activeElement, so it fires no event either.
+   */
+  it('ends up with xterm knowing it is focused, without a click', async () => {
+    windowActive();
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    // Let both startup focus attempts and their rAF checks run.
+    await act(async () => { await new Promise(r => setTimeout(r, 200)); });
+    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
+
+    const term = rec.terminals[0];
+    expect(document.activeElement).toBe(term.textarea);
+    expect(term.element.classList.contains('focus')).toBe(true);
+  });
+
+  it('does not need a window focus event to get there', async () => {
+    windowActive();
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    await act(async () => { await new Promise(r => setTimeout(r, 200)); });
+    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
+    const term = rec.terminals[0];
+
+    // Nothing dispatched `window.focus` here - the class is already on.
+    expect(term.element.classList.contains('focus')).toBe(true);
   });
 });

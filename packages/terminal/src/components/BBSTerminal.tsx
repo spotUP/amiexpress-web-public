@@ -932,6 +932,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
     window.addEventListener('focus', resyncFocus);
     document.addEventListener('visibilitychange', resyncFocus);
+
+    /**
+     * Focus the terminal, and make sure xterm NOTICED.
+     *
+     * Every `term.focus()` here is really `textarea.focus()`, and that is a
+     * no-op when the textarea is already `document.activeElement` - no focus
+     * event, so xterm's `.focus` class never lands. The board focuses itself
+     * twice on the way up, so the second call is always the no-op, and if the
+     * first one happened while the window was inactive the class is never set
+     * at all. The cursor then neither blinks nor renders as active until the
+     * viewer clicks the screen.
+     *
+     * Listening for `window.focus` alone did not cover it: a plain load into
+     * an ALREADY-focused window fires no such event, so nothing ever went
+     * back to check. The check belongs next to the attempt.
+     */
+    const focusTerminal = () => {
+      term.focus();
+      requestAnimationFrame(resyncFocus);
+    };
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
 
@@ -1308,7 +1328,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         style.MozOsxFontSmoothing = 'none';
       }
       term.refresh(0, term.rows - 1);
-      term.focus();
+      focusTerminal();
     }, 100);
 
     // Determine backend URL
@@ -1796,7 +1816,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       onConnect?.();
-      term.focus();
+      focusTerminal();
     });
 
     socket.on('connect_error', (error: any) => {
