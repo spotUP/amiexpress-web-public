@@ -20,6 +20,12 @@ import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from '../screens/screen
 
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
+import {
+  LOGIN_SEQUENCE,
+  readScreenProgram,
+  applyLoginSelection,
+  type LoginItem,
+} from '../screens/login-sequence';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import * as fs from 'fs';
@@ -356,6 +362,22 @@ screensRouter.get('/file', (req: Request, res: Response) => {
   });
 });
 
+
+/**
+ * Which file this screen resolves to for that node and conference.
+ *
+ * The index already knows the theme/node/conference shadowing, and it is the
+ * part that bites: `Themes/<id>/Node/BULL.TXT` shadows `Node<N>/BULL.TXT`
+ * shadows `Screens/BULL.TXT`, so an editor that writes the wrong rung changes
+ * nothing on screen and reads as a broken feature.
+ */
+function resolutionFor(baseDir: string, screen: string, nodeId: number, confId?: number) {
+  const index = getScreenIndex(baseDir);
+  const entry = index.screens.find(s => s.screen === screen);
+  return entry?.resolutions.find(r =>
+    r.scope === 'conf' ? r.id === confId : r.scope === 'node' ? r.id === nodeId : true);
+}
+
 /**
  * GET /api/screens/resolve?screen=&node=&conf=
  * Which directories express.e would search, in order, and which file won.
@@ -372,10 +394,7 @@ screensRouter.get('/resolve', (req: Request, res: Response) => {
   const searched = screenSearchLocations(baseDir, screen, { nodeId, confId })
     .map(l => ({ dir: path.relative(baseDir, l.dir) || '.', desc: l.desc }));
 
-  const index = getScreenIndex(baseDir);
-  const entry = index.screens.find(s => s.screen === screen);
-  const resolution = entry?.resolutions.find(r =>
-    r.scope === 'conf' ? r.id === confId : r.scope === 'node' ? r.id === nodeId : true);
+  const resolution = resolutionFor(baseDir, screen, nodeId, confId);
 
   sendOk(res, {
     screen,
@@ -384,6 +403,193 @@ screensRouter.get('/resolve', (req: Request, res: Response) => {
     variants: resolution?.variants ?? [],
   });
 });
+
+/**
+ * GET /api/screens/login-sequence?node=&conf=
+ *
+ * THE WALK A CALLER MAKES ON THE WAY IN, and what each step is made of.
+ *
+ * "can we build an editor for all bulls etc that shows during login so i can
+ * pick what i want and dont want in the admin ui?" (sysop, 2026-09-14). His
+ * board shows five MultiTop-II bulletins because `Themes/607080/Node/BULL.TXT`
+ * lists them; until now the only way to see that, let alone change it, was to
+ * read a file on a volume he cannot reach.
+ *
+ * Each step reports the file it ACTUALLY resolves to - see `resolutionFor` -
+ * and the items that file carries. `available` is what else is on the board to
+ * add, so the picker can offer a bulletin the file has never mentioned.
+ */
+screensRouter.get('/login-sequence', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const nodeId = parseInt(String(req.query.node ?? '1'), 10);
+  const confId = req.query.conf ? parseInt(String(req.query.conf), 10) : undefined;
+
+  const steps = LOGIN_SEQUENCE.map(step => {
+    const resolution = resolutionFor(baseDir, step.screen, nodeId, confId);
+    const file = resolution?.file ?? null;
+    const full = file ? path.join(baseDir, file) : null;
+
+    let items: LoginItem[] = [];
+    let bytes = 0;
+    if (full && fs.existsSync(full)) {
+      // Latin1: a screen carries Amiga high-bit bytes and a UTF-8 round trip
+      // turns one into U+FFFD.
+      const content = fs.readFileSync(full).toString('latin1');
+      bytes = Buffer.byteLength(content, 'latin1');
+      items = readScreenProgram(content).items;
+    }
+
+    return {
+      screen: step.screen,
+      label: step.label,
+      note: step.note,
+      skippedByQuickFlag: step.skippedByQuickFlag,
+      file,
+      exists: Boolean(full && fs.existsSync(full)),
+      bytes,
+      items,
+      /*
+       * A file that OPENS earns its pause, even with nothing in it
+       * (express.e:6773) - so an empty step costs the caller a keypress on a
+       * blank screen. The picker says so rather than leaving him to find out.
+       */
+      blankPause: Boolean(full && fs.existsSync(full)) && items.length === 0 && bytes < 8,
+    };
+  });
+
+  sendOk(res, { node: nodeId, conf: confId ?? null, steps, available: availableIncludes(baseDir) });
+});
+
+/**
+ * The screens on this board a login step could include.
+ *
+ * Bulletins first, because that is what the picker is for; each with its size,
+ * so a sysop can tell a real bulletin from an empty placeholder before he
+ * ticks it.
+ */
+function availableIncludes(baseDir: string): Array<{ target: string; bytes: number }> {
+  const out: Array<{ target: string; bytes: number }> = [];
+  for (const dir of ['Bulletins', 'Screens']) {
+    const full = path.join(baseDir, dir);
+    let names: string[];
+    try { names = fs.readdirSync(full); } catch { continue; }
+    for (const name of names.sort()) {
+      if (!/\.(txt|ttx)$/i.test(name)) continue;
+      let bytes = 0;
+      try { bytes = fs.statSync(path.join(full, name)).size; } catch { continue; }
+      out.push({ target: `BBS:${dir}/${name}`, bytes });
+    }
+  }
+  return out;
+}
+
+/**
+ * PUT /api/screens/login-sequence
+ * Body: { screen, path, items: [{ code, target, pause }] }
+ *
+ * The items the sysop ticked, in the order he left them.
+ *
+ * `path` is REQUIRED and is the file the GET said this step resolves to. It is
+ * not a convenience: the sandbox middleware above reads `path` out of the body
+ * to decide whether an artist may write there, and a route that took its
+ * target from somewhere the sandbox does not look would be a hole in it. It is
+ * checked against the step's own resolution as well, so this cannot be used as
+ * a general-purpose writer for any file on the board.
+ *
+ * The bytes go out through `writeToTargets` - backup, revision, rollback,
+ * index invalidation - like every other screen edit. There is one writer.
+ */
+screensRouter.put('/login-sequence', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const screen = String(req.body?.screen || '').toUpperCase();
+  const rel = String(req.body?.path || '');
+  const nodeId = parseInt(String(req.body?.node ?? '1'), 10);
+  const confId = req.body?.conf ? parseInt(String(req.body.conf), 10) : undefined;
+
+  const step = LOGIN_SEQUENCE.find(s => s.screen === screen);
+  if (!step) {
+    return res.status(400).json({
+      success: false,
+      error: `Not a step of the login sequence: ${screen || '(none given)'}`,
+    });
+  }
+  if (!rel) {
+    return res.status(400).json({ success: false, error: 'No path - send the file the step resolves to' });
+  }
+
+  const resolved = resolutionFor(baseDir, screen, nodeId, confId)?.file ?? null;
+  if (resolved && path.normalize(resolved) !== path.normalize(rel)) {
+    return res.status(409).json({
+      success: false,
+      error: `${screen} resolves to ${resolved}, not ${rel} - reload the sequence before saving`,
+    });
+  }
+
+  const items = Array.isArray(req.body?.items) ? req.body.items : null;
+  if (!items) {
+    return res.status(400).json({ success: false, error: 'items must be an array' });
+  }
+  const bad = items.find((i: LoginItem) =>
+    !i || !['SS', 'CC', 'SR'].includes(i.code) || typeof i.target !== 'string' || !i.target);
+  if (bad) {
+    return res.status(400).json({ success: false, error: 'Each item needs a code of SS, CC or SR and a target' });
+  }
+
+  const full = path.join(baseDir, rel);
+  const before = fs.existsSync(full) ? fs.readFileSync(full).toString('latin1') : '';
+  const after = applyLoginSelection(before, items as LoginItem[]);
+
+  /*
+   * A SCREEN THAT DRAWS NOTHING IS NOT SOMETHING THIS ROUTE MAY CREATE.
+   *
+   * `displayScreen` answers true for any file that OPENS (express.e:6773), so
+   * an empty screen costs the caller a keypress on a blank screen - the exact
+   * defect 93e12958a removed 161 tracked instances of. Unticking the last item
+   * is therefore a request to REMOVE the step, not to empty it, and removing a
+   * file is a destructive decision that belongs to the caller who asked for
+   * it: `DELETE /api/screens/file`.
+   *
+   * An include or a door counts as drawing (a `BULL.TXT` of nothing but `~SS_`
+   * lines is a real screen), which is why this asks about ITEMS and not about
+   * the byte count.
+   */
+  if (drawsNothing(after)) {
+    return res.status(409).json({
+      success: false,
+      error: `Nothing would be left to draw. An empty ${screen} still opens, and a screen that opens costs the caller a keypress on a blank screen - remove ${rel} instead of emptying it.`,
+      remove: rel,
+    });
+  }
+
+  try {
+    writeToTargets([rel], Buffer.from(after, 'latin1'));
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  sendOk(res, { screen, file: rel, items: readScreenProgram(after).items });
+});
+
+/**
+ * Would a caller shown this file see anything at all?
+ *
+ * The board's own rule, shared with `the-board-ships-no-blank-screen.test.ts`:
+ * an include, a recursion or a command PUTS INK ON THE SCREEN, so a file of
+ * nothing but `~SS_` lines draws. What does not draw is a file with no items
+ * left and nothing but bare control codes and whitespace around them - `~f|`
+ * on its own being the case this picker can produce.
+ */
+export function drawsNothing(content: string): boolean {
+  const program = readScreenProgram(content);
+  if (program.items.length > 0) return false;
+  return program.lines.every(line => {
+    const text = line.text.trim();
+    return text === '' || /^~[^\s]*$/.test(text);
+  });
+}
 
 /**
  * GET /api/screens/preview?screen=&theme=&node=&conf=&sec=&term=ansi|c64|rip
