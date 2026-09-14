@@ -470,8 +470,21 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
   // bytes and shifting every column after it.
   const contentData = encodeCP437(ansiContent);
 
-  // Add SAUCE record if provided
-  if (sauce) {
+  /**
+   * A file that USES iCE colours has to SAY it uses them.
+   *
+   * The iCE flag lives in SAUCE's tFlags, and this only wrote a SAUCE record
+   * when the caller handed one in. So `saveANSFile(canvas, true)` with no
+   * SAUCE wrote ESC[100m..107m for the bright backgrounds and then shipped a
+   * file with nothing to declare them - and loadANSFile, which reads the flag
+   * before honouring those codes, dropped every one of them. A bright
+   * background saved and reloaded came back BLACK, in the editor that had
+   * just drawn it.
+   *
+   * So iCE implies a SAUCE record. Without iCE the behaviour is unchanged: no
+   * SAUCE unless a caller asked for one.
+   */
+  if (sauce || iceColors) {
     const sauceData = createSAUCE({
       ...sauce,
       fileSize: contentData.length,

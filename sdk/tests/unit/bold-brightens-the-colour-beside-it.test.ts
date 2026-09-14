@@ -88,3 +88,53 @@ describe('the canvas reader agrees with the file reader', () => {
     expect(canvas[0][1].fg).toBe(14);
   });
 });
+
+/**
+ * What a screen keeps when it is saved and opened again.
+ *
+ * "if an artist uploads a 16 color ansi to a bbs that is set to 8, do we
+ * preserve the 16 color version if the sysop switches the bbs to 16 colors?"
+ * (sysop, 2026-09-14). Yes - the eight-pen fold lives at the board's OUTPUT,
+ * so the file on disk is never rewritten - and these pin the half that could
+ * still lose a colour: the editor's own save.
+ */
+describe('a saved screen keeps the colours it was drawn in', () => {
+  const Canvas = require('../../engines/ui/ansi-editor/core/canvas');
+  const { saveANSFile, loadANSFile } = require('../../engines/ui/ansi-editor/core/file-ops');
+
+  /** Save a one-row canvas and read it straight back. */
+  async function roundTrip(cells: { char: string; fg: number; bg: number }[], ice: boolean) {
+    const canvas = Canvas.createCanvas(cells.length + 1, 1);
+    cells.forEach((cell, index) => Canvas.setCell(canvas, index, 0, cell));
+    const { canvas: back } = await loadANSFile(saveANSFile(canvas, ice));
+    return cells.map((_, index) => back[0][index]);
+  }
+
+  it('keeps a bright foreground', async () => {
+    const [cell] = await roundTrip([{ char: 'A', fg: 11, bg: 0 }], false);
+    expect(cell.fg).toBe(11);
+  });
+
+  it('keeps a bright background when the file says it uses iCE', async () => {
+    // The iCE flag lives in SAUCE, and saving only wrote a SAUCE record when
+    // the caller handed one in - so the bright background went out as
+    // ESC[104m with nothing to declare it, and came back BLACK in the editor
+    // that had just drawn it.
+    const [cell] = await roundTrip([{ char: 'A', fg: 7, bg: 12 }], true);
+    expect(cell.bg).toBe(12);
+  });
+
+  it('folds a bright background onto its pen when the file does not', async () => {
+    // Without iCE there is no way to express it, and the Amiga had no iCE
+    // either - so bright blue becomes blue rather than becoming nothing.
+    const [cell] = await roundTrip([{ char: 'A', fg: 7, bg: 12 }], false);
+    expect(cell.bg).toBe(4);
+  });
+
+  it('leaves the ordinary eight exactly as they were', async () => {
+    const cells = await roundTrip(
+      [{ char: 'A', fg: 2, bg: 0 }, { char: 'B', fg: 6, bg: 1 }], false,
+    );
+    expect(cells.map((c: any) => `${c.fg}/${c.bg}`)).toEqual(['2/0', '6/1']);
+  });
+});
