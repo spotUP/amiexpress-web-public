@@ -269,6 +269,7 @@ export function ScreenFilesPage() {
    * the ANSI editor would show a blank 80x25 and save that over the artwork.
    */
   const [editingRip, setEditingRip] = useState(false);
+  const [editingPetscii, setEditingPetscii] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
   const [showRevisions, setShowRevisions] = useState(false);
 
@@ -388,6 +389,13 @@ export function ScreenFilesPage() {
     // PETSCII bytes, ANSI and plain text are cells.
     if (file.format === 'rip') {
       setEditingRip(true);
+      setPendingEdit(null);
+      return;
+    }
+    if (file.format === 'petscii') {
+      // A .seq is screen codes and colour RAM, not cells - so it does not go
+      // through screenToCanvas below, the same way a .rip does not.
+      setEditingPetscii(true);
       setPendingEdit(null);
       return;
     }
@@ -1510,7 +1518,13 @@ export function ScreenFilesPage() {
               setFileError(null);
               setOpenFile(res.file);
               const format = data?.files[res.file]?.format;
-              if (format === 'ansi' || format === 'text' || format === 'rip') setPendingEdit(res.file);
+              // `petscii` joined this list on 2026-09-14, when a PETSCII
+              // editor first existed to route to. Without it a .seq row
+              // opened the read-only view and there was no way onward, which
+              // reads as "no editor, just a preview" (sysop, same day).
+              if (format === 'ansi' || format === 'text' || format === 'rip' || format === 'petscii') {
+                setPendingEdit(res.file);
+              }
             }}
           />
 
@@ -1661,6 +1675,22 @@ export function ScreenFilesPage() {
           />
         )}
 
+        {editingPetscii && !pendingUpload && file && (
+          <PetsciiScreenEditor
+            content={file.content}
+            filePath={openFile ?? undefined}
+            mci={file.mci ?? []}
+            // The same exit every other edit takes: bytes into the fan-out,
+            // with the same backup, the same targets and the same refusals.
+            // A PETSCII screen is not a second write path.
+            onSave={bytes => {
+              setPendingUpload({ bytes, name: 'the edited screen' });
+              setEditorWrite(true);
+            }}
+            onCancel={() => { setEditingPetscii(false); setEditorWrite(false); }}
+          />
+        )}
+
         {editing && !pendingUpload && (
           <ScreenEditor
             surface={editing}
@@ -1736,7 +1766,7 @@ export function ScreenFilesPage() {
           </div>
         )}
 
-        {openFile && file && !editing && !editingRip && !editorWrite && (
+        {openFile && file && !editing && !editingRip && !editingPetscii && !editorWrite && (
           <div className="space-y-3 p-4">
             {/*
               One tab per FORMAT of this screen. Before this the other formats
