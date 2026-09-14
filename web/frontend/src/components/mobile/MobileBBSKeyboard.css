@@ -15,7 +15,23 @@
  */
 .mobile-bbs-keyboard {
   flex: 0 0 auto;
-  height: var(--bbs-onscreen-input-height, 260px);
+  /*
+   * THE KEYS ARE 260px AND THE INSET IS EXTRA.
+   *
+   * `box-sizing: border-box` below means padding is INSIDE the height, so
+   * `height: 260px` with `padding-bottom: env(safe-area-inset-bottom)` gave
+   * the keys 260 minus the inset and ended the box at the very bottom of the
+   * viewport - underneath Safari's floating toolbar, which is what the inset
+   * exists to report. The bottom row of keys was behind it ("now the osd
+   * keyboard is behind browser ui", sysop 2026-09-14).
+   *
+   * Adding the inset to the height instead gives the keys their full 260 and
+   * puts the inset's worth of strip below them, where the browser's own UI
+   * is. Because the strip is a row of the page's flex column, the terminal's
+   * band shrinks by the same amount on its own - there is nothing else to
+   * keep in sync.
+   */
+  height: calc(var(--bbs-onscreen-input-height, 260px) + env(safe-area-inset-bottom));
   background: #1a1a1a;
   border-top: 2px solid #444;
   display: flex;

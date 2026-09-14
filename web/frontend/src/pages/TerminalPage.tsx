@@ -330,11 +330,29 @@ export function TerminalPage(): JSX.Element {
    */
   const [viewportTop, setViewportTop] = useState<number>(() => visibleTop(window));
 
+  /*
+   * THE HEIGHT OF WHAT THE CALLER CAN ACTUALLY SEE.
+   *
+   * `100svh` in the stylesheet is the CSS floor and it is honest about
+   * retractable chrome, but it is not honest about chrome that OVERLAYS - iOS
+   * draws its floating toolbar on top of the small viewport, and the bottom of
+   * a page sized to svh goes under it. The visual viewport is measured, not
+   * assumed: `window.visualViewport.height` is the band that is genuinely
+   * visible, whatever the browser is doing with its bars.
+   *
+   * Applied to the page's own box, so the flex column below - terminal, then
+   * keyboard - divides the visible band rather than a taller one. Every
+   * mismatch in this layout has come from a box that was taller than the
+   * screen; this is the one place that decides.
+   */
+  const [viewportHeight, setViewportHeight] = useState<number>(() => visibleHeight(window));
+
   useEffect(() => {
     const handleViewportChange = () => {
       setIsMobile(isPortraitMobile());
       setIsHandheldMode(isHandheld());
       setViewportTop(visibleTop(window));
+      setViewportHeight(visibleHeight(window));
       refit();
     };
     window.addEventListener('resize', handleViewportChange);
@@ -683,6 +701,8 @@ export function TerminalPage(): JSX.Element {
         ...(viewportTop > 0
           ? { paddingTop: `calc(env(safe-area-inset-top) + ${viewportTop}px)` }
           : {}),
+        // The visible band, measured. See viewportHeight.
+        ...(viewportHeight > 0 ? { height: `${viewportHeight}px` } : {}),
       } as CSSProperties}
     >
       {/* ONE host element for the life of the page. The frame is a class,
