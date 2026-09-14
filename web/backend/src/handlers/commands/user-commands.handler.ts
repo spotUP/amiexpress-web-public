@@ -1107,7 +1107,31 @@ console.log('[ENV] Join Conference');
   const msgBaseId = confMessageBases[newMsgBase - 1].id;
   await _joinConference(socket, session, newConf, msgBaseId);
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  /*
+   * ONLY IF THE JOIN ACTUALLY FINISHED.
+   *
+   * express.e:25181 is `joinConf(newConf,newMsgBase,FALSE,FALSE)` and it
+   * BLOCKS: its doPause (5059) holds the caller, and everything after it -
+   * "Joining Conference" (5079), the message stats (5093), the mail scan
+   * (5119) - has run by the time it returns. The menu is genuinely next.
+   *
+   * Ours cannot block. When there is a bulletin to pause on, `joinConference`
+   * installs the pause, parks `READ_COMMAND` and returns, and
+   * `continueJoinAfterBull` runs the rest on dismissal - restoring
+   * DISPLAY_MENU itself when it is done.
+   *
+   * Setting DISPLAY_MENU here unconditionally overwrote that park, so the
+   * flow walked to the menu while the join was still waiting on its pause:
+   * the menu prompt printed BEFORE the conference's mail scan, and the scan's
+   * door then drew underneath it. The sysop, 2026-09-15: "a bbs prompt leaks
+   * and there is a pause after the subs mail list that should not be there".
+   *
+   * A join with no bulletin never yields, leaves no pause, and still needs
+   * the menu set here.
+   */
+  if (!session.paginatedScreen && !session.screenSegments) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 }
 
 /**
