@@ -101,6 +101,40 @@ function buildSubstitutions(): ReadonlyMap<number, string> {
   map.set(0x2592, ":"); // medium shade
   // 0x2593 (dark shade) keeps the default "#".
 
+  /*
+   * The rest of what this board's doors actually emit.
+   *
+   * Box drawing and blocks were folded from the start; fourteen characters
+   * were not, and reached iconv as `?` - the arrows in a leaderboard, the
+   * diamonds marking a TGM item cell, the stars in a particle effect, an em
+   * dash in a manual (measured across the doors, 2026-09-14). A question
+   * mark is the one answer that tells the caller nothing, and an Amiga
+   * terminal has a perfectly good character for every one of these.
+   *
+   * Shape, not meaning: a filled circle and a hollow one are both `o`,
+   * because what the caller needs is the mark, and inventing a distinction
+   * ASCII does not draw would be worse than losing one it never had.
+   */
+  // Arrows.
+  map.set(0x2190, "<");
+  map.set(0x2191, "^");
+  map.set(0x2192, ">");
+  map.set(0x2193, "v");
+  // Geometric shapes: diamonds, circles, stars, the bullet.
+  for (const cp of [0x25c6, 0x25c7, 0x2605, 0x2606, 0x25a0, 0x25a1]) map.set(cp, "*");
+  for (const cp of [0x25cf, 0x25cb, 0x25cf, 0x2022, 0x25e6]) map.set(cp, "o");
+  // Punctuation a word processor leaves in a string.
+  for (const cp of [0x2013, 0x2014, 0x2015]) map.set(cp, "-");
+  for (const cp of [0x2018, 0x2019]) map.set(cp, "'");
+  for (const cp of [0x201c, 0x201d]) map.set(cp, '"');
+  map.set(0x2026, "...");
+  // Marks and comparisons.
+  map.set(0x2713, "+");   // check
+  map.set(0x2717, "x");   // cross
+  map.set(0x2264, "<");
+  map.set(0x2265, ">");
+  map.set(0x00d7, "x");   // multiplication sign - Latin-1 has it, cp437 does not
+
   return map;
 }
 

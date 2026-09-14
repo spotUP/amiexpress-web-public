@@ -369,6 +369,27 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
     for (const b of socket.since(preamble)) expect(b).toBeLessThan(0x80);
   });
 
+  it('an Amiga caller gets a mark for every symbol, never a question mark', () => {
+    /*
+     * Box drawing and blocks were folded from the start; the symbols the
+     * doors also emit were not, and fourteen of them reached iconv as `?` -
+     * the arrows in a leaderboard, the diamonds marking a TGM item cell, the
+     * stars in a particle effect, an em dash in a manual (measured across
+     * the doors, 2026-09-14). A question mark is the one answer that tells
+     * the caller nothing, and an Amiga terminal has a character for each.
+     */
+    const symbols = '\u2190\u2191\u2192\u2193 \u25c6\u25c7\u2605\u2606 \u25cf\u25cb\u2022'
+      + ' \u2013\u2014 \u2018\u2019 \u201c\u201d \u2713\u2717 \u2264\u2265 \u2026';
+    const { socket, emitter, preamble } = realTelnetCaller(70);
+    emitter.emit('ansi-output', symbols);
+
+    const bytes = socket.since(preamble);
+    const wire = bytes.toString('latin1');
+    expect(wire).toBe('<^>v **** ooo -- \'\' "" +x <> ...');
+    expect(bytes.indexOf(0x3f)).toBe(-1);
+    for (const b of bytes) expect(b).toBeLessThan(0x80);
+  });
+
   it('a UTF-8 client still gets UTF-8', () => {
     const spy = jest.spyOn(TelnetConnection.prototype, 'write');
     try {
