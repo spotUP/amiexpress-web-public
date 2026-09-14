@@ -601,6 +601,12 @@ export function parseANSIToCanvas(
   let fg = 7;  // Default white
   let bg = 0;  // Default black
   let blink = false;
+  // Bold outlives the colour beside it: `ESC[1;33m` is bright yellow, not
+  // the brown this loop used to produce by applying 1 and then 33. Same
+  // fault, same fix as importAnsiFile in core/file-ops.ts.
+  let bold = false;
+  let baseFg = 7;
+  const applyFg = (): void => { fg = bold && baseFg < 8 ? baseFg + 8 : baseFg; };
 
   let i = 0;
   while (i < ansiContent.length) {
@@ -627,12 +633,19 @@ export function parseANSIToCanvas(
             for (const param of paramList) {
               if (param === 0) {
                 // Reset
-                fg = 7;
+                baseFg = 7;
+                bold = false;
+                applyFg();
                 bg = 0;
                 blink = false;
               } else if (param === 1) {
-                // Bold/bright - make foreground bright
-                if (fg < 8) fg += 8;
+                // Bold brightens the colour named before OR after it.
+                bold = true;
+                applyFg();
+              } else if (param === 22) {
+                // Normal intensity
+                bold = false;
+                applyFg();
               } else if (param === 5) {
                 // Blink
                 blink = true;
@@ -641,13 +654,15 @@ export function parseANSIToCanvas(
                 blink = false;
               } else if (param >= 30 && param <= 37) {
                 // Standard foreground colors
-                fg = param - 30;
+                baseFg = param - 30;
+                applyFg();
               } else if (param >= 40 && param <= 47) {
                 // Standard background colors
                 bg = param - 40;
               } else if (param >= 90 && param <= 97) {
                 // Bright foreground colors
-                fg = param - 90 + 8;
+                baseFg = param - 90 + 8;
+                applyFg();
               } else if (param >= 100 && param <= 107) {
                 // Bright background colors (iCE)
                 bg = param - 100 + 8;

@@ -207,6 +207,20 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   let fg = 7; // White
   let bg = 0; // Black
   let blink = false;
+  /**
+   * Bold is an ATTRIBUTE that outlives the colour code beside it.
+   *
+   * `ESC[1;33m` is how ANSI art has always written bright yellow, and this
+   * parser applied the codes in the order they arrived: 1 brightened the
+   * colour that was current, then 33 replaced it with plain brown. Every
+   * bright colour in every imported drawing came out as its dim twin -
+   * bright green as dark green, bright yellow as brown - which is what an
+   * artist saw comparing our editor against Moebius (2026-09-14).
+   */
+  let bold = false;
+  /** The colour the file asked for, before bold is applied to it. */
+  let baseFg = 7;
+  const applyFg = (): void => { fg = bold && baseFg < 8 ? baseFg + 8 : baseFg; };
   // ESC[s / ESC[u save and restore
   let savedX = 0;
   let savedY = 0;
@@ -231,27 +245,37 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
         for (const c of codes) {
           if (c === 0) {
             // Reset
-            fg = 7;
+            baseFg = 7;
+            bold = false;
+            applyFg();
             bg = 0;
             blink = false;
           } else if (c === 1) {
-            // Bold (bright foreground)
-            if (fg < 8) fg += 8;
+            // Bold: brightens whatever colour is named, before OR after it.
+            bold = true;
+            applyFg();
+          } else if (c === 22) {
+            // Normal intensity - the way out of bold.
+            bold = false;
+            applyFg();
           } else if (c === 5) {
             // Blink
             blink = true;
           } else if (c === 7) {
             // Inverse (swap fg/bg)
             [fg, bg] = [bg, fg];
+            baseFg = fg;
           } else if (c >= 30 && c <= 37) {
-            // Foreground color
-            fg = c - 30;
+            // Foreground color - bold, if it is on, still applies to it.
+            baseFg = c - 30;
+            applyFg();
           } else if (c >= 40 && c <= 47) {
             // Background color
             bg = c - 40;
           } else if (c >= 90 && c <= 97) {
-            // Bright foreground color
-            fg = c - 90 + 8;
+            // Bright foreground color, named outright.
+            baseFg = c - 90 + 8;
+            applyFg();
           } else if (c >= 100 && c <= 107) {
             // Bright background color (iCE colors)
             if (iceColors) {
