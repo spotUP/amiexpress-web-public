@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
+import { normaliseDoorType } from '@amiexpress/bbs-door-sdk/catalog';
 import * as crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
@@ -1035,10 +1036,16 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
         return parts[1];
       };
 
-      const isTypeScriptInfo = (metadata: Partial<DoorInfo> | null): boolean => {
-        const typeValue = metadata?.type?.toString().toUpperCase();
-        return typeValue === 'TS';
-      };
+      /**
+       * TS or typescript - the registry carries both and the launcher takes
+       * either (door.handler.ts:1406), so this must too. It gates the npm
+       * install below: a door whose .info spells its type the long way was
+       * being installed WITHOUT its dependencies and left to fail at the
+       * first import. One spelling, from the SDK, shared with the door
+       * catalogue (sdk/core/door-catalog.ts).
+       */
+      const isTypeScriptInfo = (metadata: Partial<DoorInfo> | null): boolean =>
+        normaliseDoorType(metadata?.type?.toString()) === 'TS';
 
       const resolveDoorSourceDir = (doorName: string): string | undefined => {
         const doorPathMatch = extractedFiles.find(f =>

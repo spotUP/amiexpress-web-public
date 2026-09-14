@@ -15,6 +15,7 @@ export {
   joinCatalog,
   loadDoorCatalog,
   normaliseDoorType,
+  DOOR_TYPE_CODES,
   nodeCatalogIO,
   PORT_MARKERS,
 } from './core/door-catalog';

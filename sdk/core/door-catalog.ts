@@ -32,8 +32,28 @@
  */
 export function normaliseDoorType(raw: string | undefined): string {
   const upper = (raw ?? '').toUpperCase();
-  return upper === 'TYPESCRIPT' ? 'TS' : upper;
+  return DOOR_TYPE_ALIASES[upper] ?? upper;
 }
+
+/**
+ * Every spelling the registry and the board's own records are known to
+ * carry, mapped to the short code the launcher renders.
+ *
+ * Transcribed from the hand-rolled ladder this replaces
+ * (`door.handler.ts:1406`), which had been the only place that knew
+ * `archive` is `ARC` and `amiga` is `AMI`. A door row is formatted from the
+ * result, so the mapping is behaviour, not cosmetics.
+ */
+const DOOR_TYPE_ALIASES: Record<string, string> = {
+  TYPESCRIPT: 'TS',
+  PYTHON: 'PY',
+  AREXX: 'RX',
+  AMIGA: 'AMI',
+  ARCHIVE: 'ARC',
+};
+
+/** The short codes a door row can be rendered as. */
+export const DOOR_TYPE_CODES = ['TS', 'PY', 'RX', 'XIM', 'AMI', 'ARC', 'WEB'] as const;
 
 export interface CatalogEntry {
   /** Directory under Doors/, e.g. "whip". */

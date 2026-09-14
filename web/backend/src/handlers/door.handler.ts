@@ -5,6 +5,7 @@
  * Based on express.e door system.
  */
 
+import { normaliseDoorType, DOOR_TYPE_CODES } from '@amiexpress/bbs-door-sdk/catalog';
 import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -1401,15 +1402,17 @@ export function formatDoorLine(
    *  the bytes it did before. */
   browserAbsent: boolean = false,
 ): string {
-  // Get door type - handle both uppercase and lowercase variants
+  // Get door type. The spellings live in the SDK beside the door catalogue
+  // (sdk/core/door-catalog.ts), because this ladder used to be the only place
+  // that knew `archive` is ARC and `typescript` is TS - and a reader that did
+  // not know left a door off a list, or installed one without its
+  // dependencies. Anything unrecognised still renders as AMI, exactly as the
+  // ladder's final fallback did.
   const doorType = (door as any).doorType || door.type || 'AMI';
-  const type = doorType === 'TS' || doorType === 'typescript' ? 'TS' :
-              doorType === 'PYTHON' || doorType === 'python' || doorType === 'PY' ? 'PY' :
-              doorType === 'AREXX' || doorType === 'arexx' || doorType === 'RX' ? 'RX' :
-              doorType === 'XIM' || doorType === 'xim' ? 'XIM' :
-              doorType === 'AMI' || doorType === 'amiga' || doorType === 'ami' ? 'AMI' :
-              doorType === 'ARC' || doorType === 'archive' ? 'ARC' :
-              doorType === 'WEB' || doorType === 'web' ? 'WEB' : 'AMI';
+  const canonical = normaliseDoorType(String(doorType));
+  const type = (DOOR_TYPE_CODES as readonly string[]).includes(canonical)
+    ? canonical
+    : 'AMI';
 
   // Format command (pad to 10 chars; 8 on a C64).
   //
