@@ -22,6 +22,31 @@
 
 static char out[SUBS_SCAN_LINES][SUBS_SCAN_LINE];
 
+/**
+ * A caller with no theme. Most cases are about WHAT the listing says, and
+ * plain text is what it says without one - the colour has its own describe
+ * block at the bottom.
+ */
+static const subs_scan_palette PLAIN = { 0, 0, 0, 0 };
+
+/** A themed caller: four colours nothing else in this file uses. */
+static const subs_scan_palette THEMED = { 0x66CCFF, 0xE8E8E8, 0x707070, 0xFFCC33 };
+
+/** The printable text of a line, with every SGR run taken out. */
+static void plain_text(const char *line, char *dst, int cap)
+{
+    int i = 0, n = 0;
+    while (line[i] != '\0' && n < cap - 1) {
+        if (line[i] == '\033') {
+            while (line[i] != '\0' && line[i] != 'm') i++;
+            if (line[i] == 'm') i++;
+            continue;
+        }
+        dst[n++] = line[i++];
+    }
+    dst[n] = '\0';
+}
+
 /** A window of `n` messages, numbered from `first`, all new unless told. */
 static void window_of(ae_msg_row *rows, int n, long first, char flag)
 {
@@ -61,7 +86,7 @@ static void a_caller_who_is_caught_up_gets_one_line(void)
 
     window_of(rows, SUBS_SCAN_ROWS, 700, '-');
     count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80,
-                              out, SUBS_SCAN_LINES);
+                              &PLAIN, out, SUBS_SCAN_LINES);
 
     /*
      * ONE line, even though a full window of readable messages was handed in.
@@ -84,14 +109,14 @@ static void the_new_ones_are_listed_by_number_and_sender(void)
     strcpy(rows[1].from, "Spot");
     strcpy(rows[1].subject, "Re: the 060 board");
 
-    count = subs_scan_compose(&stat, rows, 3, "Amiga Chat", 80, out, SUBS_SCAN_LINES);
+    count = subs_scan_compose(&stat, rows, 3, "Amiga Chat", 80, &PLAIN, out, SUBS_SCAN_LINES);
 
     assert(mentions(count, "#738"));
     assert(mentions(count, "#739"));
     assert(mentions(count, "#740"));
     assert(mentions(count, "Spot"));
     assert(mentions(count, "Re: the 060 board"));
-    assert(mentions(count, "Type SUBS to read them."));
+    assert(mentions(count, "Type SUBS to read them"));
     printf("  [OK] three new messages, three topics, and the way in\n");
 }
 
@@ -111,7 +136,7 @@ static void a_message_already_read_is_not_in_the_list(void)
     rows[3].flag = 'N';
     strcpy(rows[3].subject, "the only new one");
 
-    count = subs_scan_compose(&stat, rows, 4, "Amiga Chat", 80, out, SUBS_SCAN_LINES);
+    count = subs_scan_compose(&stat, rows, 4, "Amiga Chat", 80, &PLAIN, out, SUBS_SCAN_LINES);
 
     assert(mentions(count, "the only new one"));
     assert(!mentions(count, "#737"));
@@ -135,13 +160,13 @@ static void a_month_away_does_not_print_a_month(void)
 
     window_of(rows, SUBS_SCAN_ROWS, 726, 'N');
     count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80,
-                              out, SUBS_SCAN_LINES);
+                              &PLAIN, out, SUBS_SCAN_LINES);
 
     for (i = 0; i < count; i++) if (out[i][0] == ' ' && out[i][2] == '#') topics++;
     assert(topics == SUBS_SCAN_ROWS);
-    assert(mentions(count, "+385 more."));
+    assert(mentions(count, "+385 more"));
     assert(count <= SUBS_SCAN_LINES);
-    printf("  [OK] 400 unread: 15 topics and \"+385 more.\"\n");
+    printf("  [OK] 400 unread: 15 topics and \"+385 more\"\n");
 }
 
 static void an_empty_conference_says_nothing_at_all(void)
@@ -149,7 +174,7 @@ static void an_empty_conference_says_nothing_at_all(void)
     /* A bulletin that says "0" at every join is worse than one that says
        nothing, and the door's caller prints exactly what it is given. */
     ae_msg_stat stat = stat_of(0, 0);
-    int count = subs_scan_compose(&stat, 0, 0, "Amiga Chat", 80, out, SUBS_SCAN_LINES);
+    int count = subs_scan_compose(&stat, 0, 0, "Amiga Chat", 80, &PLAIN, out, SUBS_SCAN_LINES);
 
     assert(count == 1);
     assert(strstr(out[0], "0 messages") != 0);
@@ -170,7 +195,7 @@ static void forty_columns_drops_the_sender_and_clips(void)
     memset(rows[0].subject, 'x', AE_MSG_SUBJECT_MAX - 1);
     rows[0].subject[AE_MSG_SUBJECT_MAX - 1] = '\0';
 
-    count = subs_scan_compose(&stat, rows, 1, "Amiga Chat", 40, out, SUBS_SCAN_LINES);
+    count = subs_scan_compose(&stat, rows, 1, "Amiga Chat", 40, &PLAIN, out, SUBS_SCAN_LINES);
 
     /* Every line fits, because a wrapped row mid-join reads as a broken
        screen rather than as a long subject. */
@@ -200,7 +225,7 @@ static void eighty_columns_fit_too(void)
     }
 
     count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80,
-                              out, SUBS_SCAN_LINES);
+                              &PLAIN, out, SUBS_SCAN_LINES);
     for (i = 0; i < count; i++) {
         assert((int)strlen(out[i]) <= 80);
     }
@@ -219,10 +244,111 @@ static void it_never_writes_past_the_caller_s_array(void)
 
     window_of(rows, SUBS_SCAN_ROWS, 726, 'N');
     memset(small, 0x7f, sizeof small);
-    count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80, small, 3);
+    count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80, &PLAIN, small, 3);
 
     assert(count == 3);
     printf("  [OK] the cap is a cap\n");
+}
+
+
+static void a_themed_caller_reads_it_in_his_own_colours(void)
+{
+    /*
+     * THE LISTING IS THE ONE SCREEN NOBODY OPTS INTO - it runs at every join -
+     * and it was plain text while every other door on this board draws in the
+     * caller's theme ("the topic list i just plain text it should be styled as
+     * our cool sdk", sysop 2026-09-14).
+     *
+     * Truecolour, like the rest of the C doors: the nearest-of-sixteen was the
+     * right hue and the wrong shade on a web terminal.
+     */
+    ae_msg_stat stat = stat_of(740, 2);
+    ae_msg_row rows[2];
+    char text[SUBS_SCAN_LINE];
+    int count;
+
+    window_of(rows, 2, 739, 'N');
+    count = subs_scan_compose(&stat, rows, 2, "Amiga Chat", 80, &THEMED,
+                              out, SUBS_SCAN_LINES);
+
+    assert(count > 2);
+    assert(mentions(count, "\033[38;2;102;204;255m"));   /* accent: the number */
+    assert(mentions(count, "\033[38;2;255;204;51m"));    /* warn: how many are new */
+    assert(mentions(count, "\033[38;2;112;112;112m"));   /* dim: the rule, the subject */
+
+    /* And the TEXT is the same text: colour is not content. */
+    plain_text(out[0], text, (int) sizeof text);
+    assert(strstr(text, "Amiga Chat") != 0);
+    assert(strstr(text, "740 messages") != 0);
+    printf("  [OK] a themed caller gets his own colours\n");
+}
+
+static void every_coloured_line_closes_its_pen(void)
+{
+    /*
+     * This prints into a screen the DOOR DOES NOT OWN: the join is mid-flight
+     * around it. A pen left in force would recolour whatever the board writes
+     * next - the "Joining conference" line, the menu, the prompt.
+     */
+    ae_msg_stat stat = stat_of(740, 3);
+    ae_msg_row rows[3];
+    int count, i;
+
+    window_of(rows, 3, 738, 'N');
+    count = subs_scan_compose(&stat, rows, 3, "Amiga Chat", 80, &THEMED,
+                              out, SUBS_SCAN_LINES);
+
+    for (i = 0; i < count; i++) {
+        if (strstr(out[i], "\033[") == 0) continue;      /* no colour, nothing to close */
+        assert(strstr(out[i], "\033[0m") != 0);
+    }
+    printf("  [OK] every coloured line ends in a reset\n");
+}
+
+static void an_unthemed_caller_gets_no_escapes_at_all(void)
+{
+    /*
+     * A board that will not say which theme he wears, or a caller on
+     * something that cannot colour: the listing is plain text, not a screen
+     * of escapes. Zero means NO pen rather than black, which on this board's
+     * ground would be invisible.
+     */
+    ae_msg_stat stat = stat_of(740, 2);
+    ae_msg_row rows[2];
+    int count, i;
+
+    window_of(rows, 2, 739, 'N');
+    count = subs_scan_compose(&stat, rows, 2, "Amiga Chat", 80, &PLAIN,
+                              out, SUBS_SCAN_LINES);
+
+    for (i = 0; i < count; i++) assert(strstr(out[i], "\033") == 0);
+    printf("  [OK] no theme, no escapes\n");
+}
+
+static void colour_does_not_cost_the_caller_a_second_message(void)
+{
+    /*
+     * RULES.md: ~198 bytes is one XIM message on 68K. A themed row carries
+     * four truecolour introducers and a reset on top of its eighty columns,
+     * and a row that crossed the boundary would arrive in two pieces a fifth
+     * of a second apart - which is what made the editor tear.
+     */
+    ae_msg_stat stat = stat_of(740, SUBS_SCAN_ROWS);
+    ae_msg_row rows[SUBS_SCAN_ROWS];
+    int count, i;
+
+    window_of(rows, SUBS_SCAN_ROWS, 726, 'N');
+    for (i = 0; i < SUBS_SCAN_ROWS; i++) {
+        memset(rows[i].from, 'W', AE_MSG_NAME_MAX - 1);
+        rows[i].from[AE_MSG_NAME_MAX - 1] = '\0';
+        memset(rows[i].subject, 'x', AE_MSG_SUBJECT_MAX - 1);
+        rows[i].subject[AE_MSG_SUBJECT_MAX - 1] = '\0';
+    }
+    count = subs_scan_compose(&stat, rows, SUBS_SCAN_ROWS, "Amiga Chat", 80, &THEMED,
+                              out, SUBS_SCAN_LINES);
+
+    for (i = 0; i < count; i++) assert((int) strlen(out[i]) <= 198);
+    printf("  [OK] a themed row still fits one XIM message\n");
 }
 
 int main(void)
@@ -236,6 +362,10 @@ int main(void)
     forty_columns_drops_the_sender_and_clips();
     eighty_columns_fit_too();
     it_never_writes_past_the_caller_s_array();
+    a_themed_caller_reads_it_in_his_own_colours();
+    every_coloured_line_closes_its_pen();
+    an_unthemed_caller_gets_no_escapes_at_all();
+    colour_does_not_cost_the_caller_a_second_message();
     printf("subs join listing: all passed\n");
     return 0;
 }

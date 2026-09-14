@@ -570,9 +570,34 @@ static void scan_listing(void)
     got = ae_msg_list(-1, window, SUBS_SCAN_ROWS);
     if (got < 0) got = 0;
 
-    count = subs_scan_compose(&stat, window, got, conf_name,
-                              ae_screen_cols(&session),
-                              lines, SUBS_SCAN_LINES);
+    /*
+     * THE CALLER'S OWN COLOURS, without opening a screen.
+     *
+     * `ui_theme_by_id` is a table lookup and `rgb` is what the theme IS, so
+     * the listing can be written in the caller's theme while the board still
+     * owns the screen around it - no palette to install, no chrome to draw,
+     * nothing to clear. A board that will not say which theme he wears
+     * answers "" and ui_theme_by_id hands back CLASSIC, so there is always a
+     * colour to write.
+     */
+    {
+        const ui_theme *scan_theme;
+        subs_scan_palette palette;
+        char wearing[32];
+
+        wearing[0] = '\0';
+        ae_user_theme(&session, wearing, (int)sizeof wearing);
+        scan_theme = ui_theme_by_id(wearing);
+        palette.accent = scan_theme->rgb[UI_T_ACCENT];
+        palette.ink    = scan_theme->rgb[UI_T_INK];
+        palette.dim    = scan_theme->rgb[UI_T_DIM];
+        palette.warn   = scan_theme->rgb[UI_T_WARN];
+
+        count = subs_scan_compose(&stat, window, got, conf_name,
+                                  ae_screen_cols(&session),
+                                  &palette,
+                                  lines, SUBS_SCAN_LINES);
+    }
 
     for (i = 0; i < count; i++) ae_put(lines[i], 1);
 }
