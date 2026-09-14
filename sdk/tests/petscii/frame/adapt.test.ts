@@ -1047,6 +1047,38 @@ describe('a marked list keeps one left edge', () => {
     for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
   });
 
+  it('aligns a list whose rows already fill the screen, by spending one more of the leader', () => {
+    // `Bulls` marks with `>[06]<` and pays for it out of the indent, and its
+    // rows land on exactly 40 columns because `leader` spends the dot run to
+    // fit. There is no column left to shift with, so the first cut of this
+    // declined the whole block and the marked row stayed one to the left.
+    const bull = (n: string, dots: number, label: string) =>
+      ' '.repeat(18) + `[${n}] ` + '.'.repeat(dots) + ' ' + label;
+    const marked = ' '.repeat(17) + '>[02]<' + '.'.repeat(27) + ' Top Downloaders';
+    const f = textToFrame(
+      [
+        bull('01', 25, 'Top Uploaders'),
+        marked,
+        bull('03', 19, 'Top Message Writers'),
+        bull('04', 24, 'Top Upload CPS'),
+      ],
+      80,
+      4,
+    );
+    const out = adaptRows(f, { cols: 40 }).rows.map((r) => str(r.cells));
+    expect(out).toHaveLength(4);
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+    // Every number in one column, the marker hanging left of it.
+    const at = out.map((t) => t.indexOf('['));
+    expect({ columns: at }).toEqual({ columns: [at[0], at[0], at[0], at[0]] });
+    expect(out[1].startsWith('>')).toBe(true);
+    // ...and the labels all survive: the row paid in DOTS, not in words.
+    expect(out[0]).toContain('Top Uploaders');
+    expect(out[1]).toContain('Top Downloaders');
+    expect(out[2]).toContain('Top Message Writers');
+    expect(out[3]).toContain('Top Upload CPS');
+  });
+
   it('leaves a block alone when padding it would push a row off the screen', () => {
     // Alignment is never worth a character. These two would need the first
     // row moved two columns right, and it has no two columns to give.

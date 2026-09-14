@@ -1622,6 +1622,28 @@ function ruleFor(y: number, cells: Row, cols: number, regions: RegionPin[] | und
 /** How far a marker may stick out before the block is somebody's layout, not a list. */
 const MAX_MARKER_WIDTH = 4;
 
+/**
+ * Where a row's CONTENT starts, looking past a box rail.
+ *
+ * Not `columnSpans`, which was the first answer and a wrong one: it reports
+ * the row's COLUMNS, and a row with no interior run of two blanks has none -
+ * `Bulls`' `[01] ..... Top Uploaders` is one continuous span, so the block
+ * never formed and the marked row stayed where it was.
+ *
+ * Not `indentOf` either, alone: `JoinCnf` draws its list inside a box, so
+ * every row's first ink is the rail at column 0 and they would all measure
+ * the same. The rail and the blanks behind it are the frame, not the entry.
+ */
+function contentStart(cells: Row): number {
+  const width = contentWidth(cells);
+  let x = indentOf(cells);
+  if (x < width && CROP_RAILS.includes(cells[x].ch)) {
+    x += 1;
+    while (x < width && isBlank(cells[x])) x += 1;
+  }
+  return x;
+}
+
 export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, cursor: Cursor): Cursor {
   let out = cursor;
   let i = 0;
@@ -1634,14 +1656,17 @@ export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, c
       (k === i || rows[k].source === rows[k - 1].source + 1) &&
       (k === rows.length - 1 || rows[k + 1].source !== rows[k].source) &&
       (k === 0 || rows[k - 1].source !== rows[k].source) &&
-      rows[k].cells.length > 0 && !isBlank(rows[k].cells[0]);
+      rows[k].cells.length > 0 && !isBlank(rows[k].cells[0]) &&
+      // A row whose RAIL survived into the output is still a boxed row, and
+      // its left edge belongs to the box. `doorrepo` keeps its `| NAME  33k |`
+      // frame through the rung, and padding it moved the whole box two
+      // columns right - measured, and the reason this test is here.
+      !CROP_RAILS.includes(rows[k].cells[0].ch);
     while (eligible(end)) end += 1;
 
     const members = [];
     for (let k = i; k < end; k++) {
-      const spans = columnSpans(src.cells[rows[k].source]);
-      if (spans.length === 0) { members.length = 0; break; }
-      members.push({ k, start: spans[0][0] });
+      members.push({ k, start: contentStart(src.cells[rows[k].source]) });
     }
     // A MARKED LIST, and nothing else.
     //
@@ -1662,17 +1687,33 @@ export function alignMarkedLists(rows: AdaptedRow[], src: Frame, cols: number, c
       marked * 2 < members.length &&
       Math.max(...starts) - min <= MAX_MARKER_WIDTH;
     if (isMarkedList) {
-      const fits = members.every((m) => {
-        const width = contentWidth(rows[m.k].cells) + (m.start - min);
-        return width <= cols;
+      // THE PAD COMES OUT OF THE ROW'S OWN WIDTH, not on top of it.
+      //
+      // A rung that fills the screen leaves nothing to shift with: `leader`
+      // spends its dot run to land on exactly `cols`, so `Bulls`' bulletin
+      // rows had no column to give and the whole block declined - the marked
+      // row stayed one to the left with its dots starting after the `<`
+      // (sysop, 2026-09-14, the second time).
+      //
+      // A row that needs a pad is simply a row with less screen, so it is
+      // re-run through ITS OWN rung at the narrower width and the rung
+      // spends whatever it spends - one dot fewer, here. Only a re-run that
+      // still yields ONE row is taken: a rung that answers a narrower screen
+      // with an extra row would cost what the alignment was buying.
+      const shifted = members.map((m) => {
+        const pad = m.start - min;
+        if (pad <= 0) return { m, pad, cells: rows[m.k].cells };
+        if (contentWidth(rows[m.k].cells) + pad <= cols) return { m, pad, cells: rows[m.k].cells };
+        if (rows[m.k].rule === 'stack') return null;
+        const again = applyRule(rows[m.k].rule, src.cells[rows[m.k].source], cols - pad);
+        return again.rows.length === 1 ? { m, pad, cells: again.rows[0] } : null;
       });
-      if (fits) {
-        for (const m of members) {
-          const pad = m.start - min;
-          if (pad <= 0) continue;
-          const padded = [...Array.from({ length: pad }, () => blankCell()), ...rows[m.k].cells];
-          rows[m.k] = { ...rows[m.k], cells: padRow(padded, cols) };
-          if (out.y === m.k) out = { ...out, x: clampCol(cols, out.x + pad) };
+      if (shifted.every((x) => x !== null)) {
+        for (const x of shifted as Array<{ m: { k: number }; pad: number; cells: Cell[] }>) {
+          if (x.pad <= 0) { rows[x.m.k] = { ...rows[x.m.k], cells: x.cells }; continue; }
+          const padded = [...Array.from({ length: x.pad }, () => blankCell()), ...x.cells];
+          rows[x.m.k] = { ...rows[x.m.k], cells: padRow(padded, cols) };
+          if (out.y === x.m.k) out = { ...out, x: clampCol(cols, out.x + x.pad) };
         }
       }
     }
