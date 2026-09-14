@@ -201,3 +201,30 @@ export function visibleWidth(view: ViewportLike): number {
   }
   return Math.min(visual, view.innerWidth);
 }
+
+/**
+ * The size the terminal KEEPS, once the fit has found the largest that fits.
+ *
+ * One rule, in one place, because it is a trade and not a calculation:
+ *
+ * `seamlessSize` floors the cell to a whole CSS pixel so that glyphs which
+ * meet edge to edge - a mosaic, an underscore, any Amiga ASCII stroke - have
+ * no one-pixel gap between them. It costs up to a pixel per column. On a
+ * desktop that is a bezel's worth of a 12- or 15-pixel cell and the art is
+ * what matters ("det ar liksom inte tillrackligt med plats, dom overlappar",
+ * an artist via the sysop, 2026-09-14).
+ *
+ * On a 390px phone the cell is 4.47px, the floor makes it 4, and eighty
+ * columns lose 38px - a tenth of the screen, as a black margin down each side.
+ * The sysop, the same day: "it doesnt zoom to the full width of my phone
+ * screen anymore". A third of a device pixel of seam is not worth a tenth of a
+ * phone, so a handheld keeps the fitted size.
+ */
+export function keptFontSize(
+  zoomed: number,
+  family: string,
+  handheld: boolean,
+  snap: (size: number, font: string) => number,
+): number {
+  return handheld ? zoomed : snap(zoomed, family);
+}

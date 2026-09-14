@@ -16,6 +16,7 @@ import {
   visibleHeight,
   visibleTop,
   visibleWidth,
+  keptFontSize,
   BBS_COLS,
   BBS_ROWS,
   DEFAULT_FIT_LIMITS,
@@ -215,5 +216,40 @@ describe('the height the terminal may use', () => {
 
     expect(visibleHeight(view)).toBe(844);
     expect(visibleWidth(view)).toBe(390);
+  });
+});
+
+/**
+ * What the terminal KEEPS after the fit, and why a phone keeps something else.
+ *
+ * The seam snap floors the cell to a whole CSS pixel so glyphs that meet edge
+ * to edge have no gap between them - an artist's report, and worth a pixel per
+ * column on a desktop cell of twelve or fifteen.
+ *
+ * On a 390px phone the cell is 4.47px and the floor makes it 4: eighty columns
+ * lose 38px, a tenth of the screen, as a black margin down each side. "it
+ * doesnt zoom to the full width of my phone screen anymore" (sysop,
+ * 2026-09-14). The trade goes the other way there.
+ */
+describe('the size the terminal keeps', () => {
+  /** The real snap: floor the cell (size x 0.5 for every Amiga face). */
+  const snap = (size: number) => Math.floor(size * 0.5) / 0.5;
+
+  it('snaps to a whole cell on a desktop', () => {
+    // 15.8px -> a 7.9px cell -> 7 -> 14px. The art is what matters there.
+    expect(keptFontSize(15.8, 'mosoul', false, snap)).toBe(14);
+  });
+
+  it('keeps every fraction on a handheld', () => {
+    // The 390px phone: 8.95px is what the fit found, and 8 is what the snap
+    // would have made of it - 38px of screen.
+    expect(keptFontSize(8.95, 'mosoul', true, snap)).toBe(8.95);
+    expect(snap(8.95)).toBe(8);
+  });
+
+  it('does not invent a size either way', () => {
+    // A size that is already whole-celled is untouched by both.
+    expect(keptFontSize(14, 'mosoul', false, snap)).toBe(14);
+    expect(keptFontSize(14, 'mosoul', true, snap)).toBe(14);
   });
 });

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
-import { visibleHeight, visibleTop } from '../components/mobile/terminal-fit';
+import { visibleHeight, visibleTop, keptFontSize } from '../components/mobile/terminal-fit';
 import { refusePageZoom } from '../components/mobile/page-zoom';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
 import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
@@ -264,7 +264,23 @@ export function TerminalPage(): JSX.Element {
     // overlappar" (an artist, via the sysop, 2026-09-14). seamlessSize is
     // the one owner of that rule; the face's advance decides the step.
     const family = String(term.options.fontFamily ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
-    const effective = seamlessSize(zoomedFontSize(fitted, zoomFractionRef.current), family);
+    /*
+     * THE SEAM SNAP IS A DESKTOP RULE, and on a phone it costs the screen.
+     *
+     * Flooring the cell to a whole CSS pixel throws away up to one pixel per
+     * column. On a desktop that is nothing - the cell is 12 or 15 pixels wide
+     * and the loss is a bezel's worth. On a 390px phone the cell is 4.47px, it
+     * snaps to 4, and eighty columns lose 38px: about a tenth of the screen,
+     * as a black margin down each side. The sysop, 2026-09-14: "it doesnt zoom
+     * to the full width of my phone screen anymore".
+     *
+     * The seam it prevents is a one-pixel gap between glyphs that meet edge to
+     * edge, reported by an artist looking closely at art on a desktop. That is
+     * the case worth a tenth of a screen; a phone is not, and at three device
+     * pixels per CSS pixel the seam is a third of what it costs to avoid.
+     */
+    const zoomed = zoomedFontSize(fitted, zoomFractionRef.current);
+    const effective = keptFontSize(zoomed, family, isHandheld(), seamlessSize);
     const grid = measure(effective);
     // A hidden xterm host (a web P session: display none) measures 0x0.
     // fitFontSize returned its seed unmeasured; the slack below must not read
