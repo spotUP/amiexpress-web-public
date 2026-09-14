@@ -48,7 +48,7 @@ process.env.SKIP_DB_INIT = '1';
 
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 
-const loadBBSConfigMock = jest.fn(() => ({ system_password: '' }));
+const mockLoadBBSConfig = jest.fn(() => ({ system_password: '' }));
 
 /**
  * A `.seq` paint, standing in for the real BBSTITLE.SEQ: `$93` (clear+home).
@@ -147,9 +147,24 @@ jest.mock('../../src/utils/conference-tooltypes.util', () => ({
     noNewFiles: false, forceMenus: false, noBulls: false, noConfBulls: false,
   })),
 }));
-// Empty system password: both flip paths fall straight through to BBSTITLE.
+/*
+ * Empty system password: both flip paths fall straight through to BBSTITLE.
+ *
+ * THE INDIRECTION IS LOAD-BEARING. `jest.mock` factories are hoisted above
+ * every const in this file, and the `bbs-config-file.service` module is
+ * pulled in by the import on line 49 - through `ansi-buffer.util` and
+ * `eight-colour-session.util` - so this factory RUNS before `mockLoadBBSConfig`
+ * is initialised. Handing over the jest.fn itself died at import with "Cannot
+ * access 'mockLoadBBSConfig' before initialization" and took the whole suite
+ * with it, which reads as a broken test file rather than as a failing test.
+ *
+ * Calling THROUGH a wrapper defers the reference to call time, by which point
+ * the const exists. The other factories in this file capture their mocks
+ * directly and are fine only because nothing requires those modules during
+ * that first import chain.
+ */
 jest.mock('../../src/services/bbs-config-file.service', () => ({
-  loadBBSConfig: loadBBSConfigMock,
+  loadBBSConfig: (...args: unknown[]) => mockLoadBBSConfig(...(args as [])),
 }));
 
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
@@ -246,8 +261,8 @@ describe('OC-5: the model is reset where a session becomes PETSCII', () => {
   beforeEach(() => {
     displayScreenMock.mockClear();
     doPauseMock.mockClear();
-    loadBBSConfigMock.mockClear();
-    loadBBSConfigMock.mockReturnValue({ system_password: '' });
+    mockLoadBBSConfig.mockClear();
+    mockLoadBBSConfig.mockReturnValue({ system_password: '' });
     // Prototype spies, never a spy on the module export: ts-jest binds
     // intra-module calls locally, so a spy on `petsciiTerminalModelFor` or on
     // `resetPetsciiModel` records ZERO whether the path runs or not (I4).

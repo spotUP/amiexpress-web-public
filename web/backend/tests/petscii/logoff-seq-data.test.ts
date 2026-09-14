@@ -168,29 +168,31 @@ describe('Node*/Logoff.txt - the file the LOGOFF command reaches (data pin 1)', 
   });
 });
 
-describe('Conf*/Screens/Logoff.seq - unreachable at logoff, still correct (data pin 2)', () => {
-  it('the count follows ConfConfig.info, not a hardcoded twelve', () => {
-    const dirs = conferenceScreensDirs();
-    const files = shippedLogoffSeqs();
-    expect(dirs.length).toBeGreaterThan(0);
-    expect(files.length).toBeGreaterThan(0);
-    expect(files.length).toBeLessThanOrEqual(dirs.length);
+/**
+ * DATA PIN 2, INVERTED 2026-09-14.
+ *
+ * This block used to require twelve `Conf<n>/Screens/Logoff.seq` copies and
+ * assert their contents. `5a3ec9bf7` DELETED them, on purpose and with the
+ * reason in its message: LOGOFF is a NODE screen, so a conference copy is
+ * "unreachable by construction" - which is what this block's own title said
+ * all along. That commit updated three tests that read the dropped files and
+ * missed this one, so it has been red ever since, asserting that data the
+ * board deliberately stopped shipping is still shipped.
+ *
+ * The property worth keeping is the DELETION. Every deploy's entrypoint
+ * copies everything under `Conf<n>/Screens/` onto the live volume, and the
+ * volume's sync only ever ADDS - so a conference Logoff screen put back here
+ * would reach the live board and stay there for good.
+ */
+describe('Conf*/Screens/Logoff.seq - dropped as unreachable (data pin 2)', () => {
+  it('the conferences are still found through ConfConfig.info', () => {
+    // Not `Conf${n}`: a conference's directory is LOCATION.n, and deleting a
+    // conference renumbers without renaming directories.
+    expect(conferenceScreensDirs().length).toBeGreaterThan(0);
   });
 
-  it('each says ~3SR_ with an extensionless target, and they are identical', () => {
-    const files = shippedLogoffSeqs();
-    for (const p of files) {
-      const bytes = fs.readFileSync(p);
-      expect(bytes[0]).toBe(MCI_GATE);
-      const text = bytes.toString('latin1');
-      expect(text).toContain('~3SR_');
-      expect(text).not.toMatch(/~SR_/);
-      expect(text).toContain(INCLUDE_TARGET);
-      expect(text).not.toContain(`${INCLUDE_TARGET}.seq`);
-      expect(text).not.toContain(`${INCLUDE_TARGET}.txt`);
-    }
-    const digests = new Set(files.map((p) => md5(fs.readFileSync(p))));
-    expect(digests.size).toBe(1);
+  it('no conference ships a Logoff screen, because none is ever read', () => {
+    expect(shippedLogoffSeqs()).toEqual([]);
   });
 });
 

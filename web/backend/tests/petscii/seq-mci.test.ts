@@ -406,10 +406,22 @@ describe('renderPetsciiScreen (Task 5)', () => {
     // The oracle still observed all 22 bank flips and the art itself.
     expect(row(machine, 0).some((c) => c !== 0x20)).toBe(true);
 
-    // The second shipped shape: 1834 bytes, first byte 0x20, zero 0x7E.
+    /*
+     * The second shipped shape: a node title with no tilde byte anywhere.
+     *
+     * Its LENGTH and first byte were pinned here (1,834 bytes, 0x20) until
+     * 2026-09-14, when the sysop saved new title art through the admin across
+     * all forty nodes and this went red at 1,253 bytes and 0x05. The numbers
+     * were never the point - this file is the sysop's to redraw, and a test
+     * that pins its size turns their next piece of art into a CI failure.
+     *
+     * What IS the point is the shape the fast path needs, so that is what is
+     * asserted: not gated, no tilde byte to be mistaken for one, and the
+     * bytes come back identical.
+     */
     const plain = fs.readFileSync(path.join(repoRoot, 'Node1/BBSTITLE.SEQ'));
-    expect(plain.length).toBe(1834);
-    expect(plain[0]).toBe(0x20);
+    expect(plain.length).toBeGreaterThan(0);
+    expect(plain[0]).not.toBe(0x7e);
     expect(plain.filter((b) => b === 0x7e).length).toBe(0);
     const plainOut = await render(plain, petsciiSession());
     expect(plainOut.out.equals(plain)).toBe(true);
