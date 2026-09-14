@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
-import { buildScreenIndex, invalidateScreenIndex } from '../screens/screen-index.service';
+import { getScreenIndex, invalidateScreenIndex } from '../screens/screen-index.service';
 import { screenDrawsNothing, SCREEN_EXTENSIONS, SERVED_PATH } from '../screens/screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { repairOneFile } from '../screens/screen-repair';
@@ -706,7 +706,32 @@ export class BBSHealthCheckService {
     let checkedCount = 0;
 
     try {
-      const index = buildScreenIndex(this.bbsRoot);
+      /*
+       * THE CACHED index, not a fresh build.
+       *
+       * This is a READ - it reports which screens are damaged or unread - and
+       * it ran `buildScreenIndex` directly, so every call to /api/config/health
+       * paid a full walk of the board no matter how recently one had been
+       * done. On the admin's Screens page that request and
+       * /api/screens/mci/catalog are fired together, and the access log during
+       * one stall reads:
+       *
+       *   GET /api/config/health        200  17212ms
+       *   GET /api/screens/mci/catalog  200  15313ms
+       *   GET /api/screens              200     41ms
+       *
+       * - the cached index answering in 41ms beside two uncached walks
+       * competing for the one thread. That is the "stuck loading a VERY long
+       * time" the sysop reported (2026-09-14).
+       *
+       * `getScreenIndex` is keyed on every relevant directory's mtime, so it
+       * is exactly as CURRENT as a fresh build; it just does not repeat one
+       * that nothing has invalidated. The two remaining direct callers in
+       * screens-routes are right to stay direct: they compare the board
+       * before and after a WRITE, and a cache would hand back the answer from
+       * before it.
+       */
+      const index = getScreenIndex(this.bbsRoot);
       const files = Object.values(index.files);
       checkedCount = files.length;
 
