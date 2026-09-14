@@ -32,7 +32,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
-import { screenFileDrawsNothing, screenIsProgram } from '../screens/screen-blankness';
+import { screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
@@ -1469,8 +1469,8 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
    *
    * See thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md
    */
-  const boardCopyIsProgram = (() => {
-    if (!searchLocations.some(l => l.themed)) return false;
+  const boardProgramSignature = (() => {
+    if (!searchLocations.some(l => l.themed)) return null;
     for (const location of searchLocations) {
       if (location.themed) continue;
       const candidates = isAssignPath ? [] : [
@@ -1487,22 +1487,43 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         if (!found) continue;
         try {
           // Latin-1: a screen carries Amiga high-bit bytes.
-          if (screenIsProgram(fs.readFileSync(found))) return true;
-        } catch { /* unreadable is not a program */ }
-        // The board HAS a copy and it is art - the theme may override it.
-        return false;
+          const bytes = fs.readFileSync(found);
+          // Art with no codes at all: the theme owns it outright.
+          return screenIsProgram(bytes) ? screenProgramSignature(bytes) : null;
+        } catch { /* unreadable tells us nothing */ }
+        return null;
       }
     }
-    return false;
+    return null;
   })();
 
   for (const location of searchLocations) {
-    if (location.themed && boardCopyIsProgram) {
-      screenDebug(
-        `[loadScreenFile]  skipping ${location.desc}: ${screenName} is a PROGRAM on the board,`
-        + ' and a theme owns art, not behaviour',
-      );
-      continue;
+    if (location.themed && boardProgramSignature !== null) {
+      /*
+       * SAME CODES, DIFFERENT PIXELS: the theme wins. That is a restyle, and
+       * restyling is what a theme is for - a conference bulletin here is 1745
+       * bytes of ANSI logo with one `~SS_` at the end, and refusing it
+       * outright took the artist's logo away with it.
+       *
+       * DIFFERENT CODES: the board wins. The theme was changing what the
+       * board DOES - `Themes/607080/Conf/4/bull20.txt` adds `~XISUBSCAN` to
+       * the board's include - and that is the thing a theme may not do.
+       */
+      const themeCopy = findCaseInsensitive(location.dir, path.basename(screenName))
+        ?? filenameVariations.map(v => findCaseInsensitive(location.dir, v)).find(Boolean);
+      let sameBehaviour = false;
+      if (themeCopy) {
+        try {
+          sameBehaviour = screenProgramSignature(fs.readFileSync(themeCopy)) === boardProgramSignature;
+        } catch { sameBehaviour = false; }
+      }
+      if (!sameBehaviour) {
+        screenDebug(
+          `[loadScreenFile]  skipping ${location.desc}: its ${screenName} RUNS something`
+          + ' different from the board\'s, and a theme owns art, not behaviour',
+        );
+        continue;
+      }
     }
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {

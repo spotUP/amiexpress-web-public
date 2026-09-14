@@ -134,3 +134,33 @@ export function screenIsProgram(content: string | Buffer): boolean {
   const text = raw.replace(/~~/g, '  ');
   return /~(?:SS_|2S|\d*SR_|SX_|CC_|XI)/.test(text);
 }
+
+/**
+ * The codes a screen RUNS, in order - its behaviour, with the art removed.
+ *
+ * `screenIsProgram` answers "does this do anything"; this answers "what does
+ * it do", and the difference is what lets a theme restyle a screen without
+ * being able to change it.
+ *
+ * A conference bulletin on this board is 1745 bytes of ANSI logo with one
+ * `~SS_` at the end. Refusing a theme's copy outright - the first version of
+ * the program rule - took the artist's LOGO away along with the behaviour he
+ * should not have had. Comparing signatures instead says exactly what was
+ * meant: same codes, different pixels, theme wins; different codes, the
+ * board's copy wins and the theme is told why.
+ *
+ * Measured on the live board 2026-09-14, which is what forced the refinement:
+ * of 53 theme copies of program screens, 32 match the board's codes exactly
+ * and 21 do not - `Themes/607080/Conf/4/bull20.txt` adds `~XISUBSCAN` to the
+ * board's `~SS_BBS:bulletins/bull9.txt`.
+ *
+ * Whitespace inside a code cannot occur (the syntax ends at one), so the
+ * signature needs no normalisation beyond case: `~CC_GL` and `~CC_gl` run the
+ * same command on a case-insensitive Amiga volume.
+ */
+export function screenProgramSignature(content: string | Buffer): string {
+  const raw = typeof content === 'string' ? content : content.toString('latin1');
+  const text = raw.replace(/~~/g, '  ');
+  const codes = text.match(/~(?:SS_|2S|\d*SR_|SX_|CC_|XI)[^\s|~\r\n]*/g) ?? [];
+  return codes.map(code => code.toLowerCase()).join('\n');
+}

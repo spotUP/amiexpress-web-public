@@ -114,6 +114,43 @@ describe('a screen that only SHOWS something', () => {
   });
 });
 
+describe('a theme may restyle a program, and not re-run it', () => {
+  it('draws the THEME\'s copy when it runs exactly what the board runs', async () => {
+    /*
+     * A conference bulletin here is 1745 bytes of ANSI logo with one `~SS_`
+     * at the end. Refusing every themed copy took the artist's LOGO away
+     * along with the behaviour he should not have had - so the question is
+     * not "does it carry codes" but "does it carry DIFFERENT codes".
+     */
+    write('Screens/BULL.TXT', '~f|BOARDLOGO\r\n~SS_BBS:Screens/tail.txt\r\n');
+    write('Themes/t1/Board/BULL.TXT', '~f|THEMELOGO\r\n~SS_BBS:Screens/tail.txt\r\n');
+    write('Screens/tail.txt', 'THETAIL\r\n');
+    invalidateScreenIndex();
+
+    const { socket, session, emits } = aCaller();
+    await displayScreen(socket, session, 'BULL', false);
+
+    expect(emits.join('')).toContain('THEMELOGO');
+    expect(emits.join('')).not.toContain('BOARDLOGO');
+    expect(emits.join('')).toContain('THETAIL');
+  });
+
+  it('draws the BOARD\'s copy when the theme adds a door to it', async () => {
+    // Themes/607080/Conf/4/bull20.txt on the live board, in miniature: the
+    // board's include plus a `~XI` the theme added.
+    write('Screens/BULL.TXT', '~f|BOARDLOGO\r\n~SS_BBS:Screens/tail.txt\r\n');
+    write('Themes/t1/Board/BULL.TXT', '~f|THEMELOGO\r\n~SS_BBS:Screens/tail.txt\r\n~XISUBSCAN\r\n');
+    write('Screens/tail.txt', 'THETAIL\r\n');
+    invalidateScreenIndex();
+
+    const { socket, session, emits } = aCaller();
+    await displayScreen(socket, session, 'BULL', false);
+
+    expect(emits.join('')).toContain('BOARDLOGO');
+    expect(emits.join('')).not.toContain('THEMELOGO');
+  });
+});
+
 describe('the lever a theme keeps', () => {
   it('overrides the ART a board program includes, through the Files mirror', async () => {
     // The program stays the board's; the logo it names is the theme's. This
