@@ -73,13 +73,63 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
     // trigger the effect always had - without the exhaustive-deps waiver.
   }, [view, maskSettings, touched.size]);
 
+  const setCells = (
+    cells: Array<{ key: string; index: number }>,
+    to: 'X' | '-',
+  ) => {
+    setMasks(prev => {
+      const next = { ...prev };
+      for (const { key, index } of cells) {
+        const current = next[key] ?? '';
+        if (index >= current.length) continue;
+        next[key] = current.slice(0, index) + to + current.slice(index + 1);
+      }
+      return next;
+    });
+    setTouched(prev => {
+      const next = new Set(prev);
+      for (const { key } of cells) next.add(key);
+      return next;
+    });
+  };
+
   const flip = (key: string, index: number) => {
     const current = masks[key] ?? '';
     if (index >= current.length) return;
-    const next = current.slice(0, index) + (current[index] === 'X' ? '-' : 'X') + current.slice(index + 1);
-    setMasks(prev => ({ ...prev, [key]: next }));
-    setTouched(prev => new Set(prev).add(key));
+    setCells([{ key, index }], current[index] === 'X' ? '-' : 'X');
   };
+
+  /*
+   * EIGHT HUNDRED CELLS, AND HE WAS CLICKING THEM ONE AT A TIME.
+   *
+   * "it's MANY clicks to edit multi select would be nice" (sysop,
+   * 2026-09-14). Forty conferences times twenty bulletins is a grid nobody
+   * should have to visit cell by cell, and the edits a sysop actually makes
+   * are shaped like rows and columns: "this conference sees everything",
+   * "nobody sees bulletin 14".
+   *
+   * A row's own toggle sets the whole conference; a column header's toggle
+   * sets that bulletin everywhere. Each one asks what the majority already
+   * is and moves the rest to match, so a second click undoes it - the
+   * behaviour a "select all" box has everywhere else.
+   */
+  const rowCells = (key: string) =>
+    Array.from({ length: (masks[key] ?? '').length }, (_, index) => ({ key, index }));
+
+  const columnCells = (index: number) =>
+    maskSettings
+      .filter(s => index < (masks[s.key] ?? '').length)
+      .map(s => ({ key: s.key, index }));
+
+  /** What a bulk toggle should set: the opposite of what most of them are. */
+  const opposite = (cells: Array<{ key: string; index: number }>): 'X' | '-' => {
+    const shown = cells.filter(c => (masks[c.key] ?? '')[c.index] === 'X').length;
+    return shown * 2 > cells.length ? '-' : 'X';
+  };
+
+  const toggleRow = (key: string) => setCells(rowCells(key), opposite(rowCells(key)));
+  const toggleColumn = (index: number) =>
+    setCells(columnCells(index), opposite(columnCells(index)));
 
   const save = async () => {
     const changed: Record<string, string> = {};
@@ -114,6 +164,17 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
       align: 'right',
       mono: true,
       width: '8rem',
+      cell: row => (
+        <button
+          type="button"
+          title={`Show or hide every bulletin in conference ${row.conf}`}
+          aria-label={`Toggle every bulletin in conference ${row.conf}`}
+          onClick={() => toggleRow(row.key)}
+          className="w-full text-right text-content-primary hover:text-accent"
+        >
+          {row.conf}
+        </button>
+      ),
     },
     // One column per mask position, not per menu entry: a mask is 20
     // characters whether or not 20 bulletins are listed, and the bits past the
@@ -122,7 +183,17 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
       const name = titles[i] || `Bulletin ${i + 1}`;
       return {
         id: `bulletin-${i}`,
-        header: <span title={name}>{i + 1}</span>,
+        header: (
+          <button
+            type="button"
+            title={`${name} - click to show or hide it in every conference`}
+            aria-label={`Toggle ${name} in every conference`}
+            onClick={() => toggleColumn(i)}
+            className="w-full text-content-primary hover:text-accent"
+          >
+            {i + 1}
+          </button>
+        ),
         align: 'center',
         width: '3rem',
         cell: row => {
@@ -149,6 +220,7 @@ export function BullsMasksMatrix({ titles }: { titles: string[] }) {
         <h3 className="text-lg font-semibold text-content-primary">Conference access</h3>
         <p className="text-xs text-content-secondary mt-1">
           Which bulletins each conference sees. A tick means shown — the 20-character masks in Bulls.CFG, without typing them.
+          Click a conference number to set its whole row, or a bulletin number to set that column everywhere; either one flips back on a second click.
         </p>
       </div>
       <DataTable
