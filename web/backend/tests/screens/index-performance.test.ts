@@ -21,7 +21,11 @@ process.env.SKIP_DB_INIT = '1';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { buildScreenIndex, isCodesOnly } from '../../src/screens/screen-index.service';
+import {
+  buildScreenIndex,
+  invalidateScreenIndex,
+  isCodesOnly,
+} from '../../src/screens/screen-index.service';
 
 let root: string;
 
@@ -168,4 +172,46 @@ describe('taking the codes out leaves exactly what lay between them', () => {
   it('is true for codes and whitespace alone, in any order', () => {
     expect(isCodesOnly('  ~SN\r\n~SN  \t ~~ ')).toBe(true);
   });
+});
+
+/**
+ * A WRITE re-reads the file that was written, not the whole board.
+ *
+ * Every write route invalidates the index, and that used to throw away each
+ * file's facts as well - so uploading one PETSCII title re-read and re-scanned
+ * all 1,423 files before the manager could answer, 1.25 seconds of it. The
+ * sysop reported it as "very slow to update the dialog" (2026-09-14).
+ *
+ * The facts were cleared for a real reason - whether an MCI reference RESOLVES
+ * is a fact about another file - but `screenFileFacts` re-resolves those on
+ * every cache hit, which `mci-references-resolve.test.ts` holds. So the bytes
+ * can stay.
+ */
+it('keeps what it knows about the other files when the index is invalidated', () => {
+  const target = path.join(root, 'Node1', 'BBSTITLE.txt');
+  const sha = buildScreenIndex(root).files['Node1/BBSTITLE.txt'].sha256;
+
+  // Same trick as the first test in this file: put the timestamps back, so
+  // only a cache that was thrown away would notice the new bytes.
+  const when = new Date(Date.now() - 60_000);
+  fs.utimesSync(target, when, when);
+  buildScreenIndex(root);
+
+  fs.writeFileSync(target, 'the TITLE\n', 'latin1');
+  fs.utimesSync(target, when, when);
+
+  // What a write route does before the manager asks again.
+  invalidateScreenIndex();
+
+  expect(buildScreenIndex(root).files['Node1/BBSTITLE.txt'].sha256).toBe(sha);
+});
+
+it('still notices a file that really did change after an invalidation', () => {
+  buildScreenIndex(root);
+
+  write('Node1/BBSTITLE.txt', 'a genuinely new title\n');
+  invalidateScreenIndex();
+
+  expect(buildScreenIndex(root).files['Node1/BBSTITLE.txt'].bytes)
+    .toBe('a genuinely new title\n'.length);
 });

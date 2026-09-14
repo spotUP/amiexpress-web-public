@@ -1430,15 +1430,26 @@ export function getScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex
 /** Called by every write route: the next read rebuilds. */
 export function invalidateScreenIndex(): void {
   cachedByTheme.clear();
-  // factsCache too, and not only because it is stale bytes.
-  //
-  // A file's facts are keyed on ITS OWN mtime and size, but `resolves` on an
-  // MCI reference is a fact about a DIFFERENT file: `~CC_confrequest` resolves
-  // when Commands/BBSCmd/CONFREQUEST.info exists. Installing that door does
-  // not touch the screen that names it, so the entry stayed valid for ever and
-  // the health check went on telling the sysop the door was missing after they
-  // had installed it. The same holds for `~SS_`/`~SR_` and their targets.
-  factsCache.clear();
+  /*
+   * The FILE facts are kept, and that is the difference between a write the
+   * sysop waits for and one they do not.
+   *
+   * This used to clear them too, for a real reason: `resolves` on an MCI
+   * reference is a fact about a DIFFERENT file - `~CC_confrequest` resolves
+   * when Commands/BBSCmd/CONFREQUEST.info exists - and installing that door
+   * does not touch the screen that names it, so a settled answer would go on
+   * telling the sysop the door was missing after they had installed it.
+   *
+   * `screenFileFacts` re-resolves the references on every cache hit, so that
+   * is already true without throwing the bytes away. Clearing as well meant
+   * uploading ONE screen re-read and re-scanned all 1,423 files on the board
+   * before the manager could answer - 1.25 seconds, and the sysop reported it
+   * as "very slow to update the dialog" (2026-09-14).
+   *
+   * What genuinely does need the bytes forgotten is a fact that changes
+   * without the file changing: the sysop's own `art` flag. That is what
+   * `invalidateScreenFacts` is for, and the flags route calls it.
+   */
 }
 
 /**

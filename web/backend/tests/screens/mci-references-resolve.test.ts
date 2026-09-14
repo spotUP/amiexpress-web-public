@@ -122,3 +122,56 @@ describe('a screen found outside the first search directory', () => {
     expect(index.unused.some(u => u.relPath === 'Screens/Logon24hrs.txt')).toBe(false);
   });
 });
+
+/**
+ * A door installed AFTER the screen was written makes its reference live.
+ *
+ * `~CC_gwall` resolves when `Commands/BBSCmd/GWALL.info` exists, and
+ * installing that door does not touch the screen that names it. The screen's
+ * own facts are cached on its size and mtime, so a cache that settled
+ * `resolves` when it first read the file would go on telling the sysop the
+ * door was missing after they had installed it.
+ *
+ * `screenFileFacts` re-resolves the references on every cache hit, which is
+ * what makes this true. The invariant is pinned here because it is the reason
+ * a write used to throw away every file's facts - 1,423 files re-read to
+ * learn one thing about one of them, which the sysop reported as "very slow
+ * to update the dialog" (2026-09-14).
+ */
+describe('a reference goes live when its target appears', () => {
+  const installDoor = (command: string) =>
+    write(`Commands/BBSCmd/${command}.info`, '');
+
+  it('reports the door as missing before it is installed', () => {
+    write('Screens/BBSTITLE.TXT', 'press ~CC_gwall for the wall\r\n');
+
+    const [ref] = refsFor('Screens/BBSTITLE.TXT');
+
+    expect(ref.code).toBe('CC');
+    expect(ref.resolves).toBe(false);
+  });
+
+  it('reports it as found once installed, without the screen being touched', () => {
+    write('Screens/BBSTITLE.TXT', 'press ~CC_gwall for the wall\r\n');
+    expect(refsFor('Screens/BBSTITLE.TXT')[0].resolves).toBe(false);
+
+    // The sysop installs the door. Nothing about the SCREEN changes - same
+    // bytes, same size, same mtime - so only a re-resolve can notice.
+    installDoor('GWALL');
+    invalidateScreenIndex();
+
+    expect(refsFor('Screens/BBSTITLE.TXT')[0].resolves).toBe(true);
+  });
+
+  it('reports it as missing again when the door is removed', () => {
+    write('Screens/BBSTITLE.TXT', 'press ~CC_gwall for the wall\r\n');
+    installDoor('GWALL');
+    invalidateScreenIndex();
+    expect(refsFor('Screens/BBSTITLE.TXT')[0].resolves).toBe(true);
+
+    fs.rmSync(path.join(root, 'Commands', 'BBSCmd', 'GWALL.info'));
+    invalidateScreenIndex();
+
+    expect(refsFor('Screens/BBSTITLE.TXT')[0].resolves).toBe(false);
+  });
+});
