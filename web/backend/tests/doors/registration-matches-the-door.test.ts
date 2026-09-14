@@ -88,6 +88,14 @@ function manifestCommand(doorDir: string): string | null {
 const DECLARED_ALIASES = new Map<string, string>([
   ['irc.info', 'LIVECHAT'],
   /*
+   * GL and gl are short forms of GLC, and all three icons carry the same
+   * LOCATION - Doors/glc/glcviewer. One binary reading one GLCViewer.cfg, so
+   * the admin drawing GLC's settings under GL is right rather than crossed:
+   * a sysop who changes STYLE under either name has changed it for both.
+   */
+  ['gl.info', 'GLC'],
+  ['GL.info', 'GLC'],
+  /*
    * SUBSCAN is the SAME BINARY as SUBS under a second name, on purpose: it is
    * how one door tells its full screen from the three-line digest a
    * conference bulletin runs, because AmigaDOS hands a door one argument and

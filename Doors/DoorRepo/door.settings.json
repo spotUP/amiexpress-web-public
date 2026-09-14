@@ -78,8 +78,14 @@
       "label": "Unpack after downloading",
       "type": "choice",
       "choices": [
-        { "value": "no", "label": "No - leave the archive" },
-        { "value": "yes", "label": "Yes - unpack it" }
+        {
+          "value": "no",
+          "label": "No - leave the archive"
+        },
+        {
+          "value": "yes",
+          "label": "Yes - unpack it"
+        }
       ],
       "default": "no",
       "group": "Installing"
@@ -90,12 +96,18 @@
       "label": "Keep downloads that fail their checksum",
       "type": "choice",
       "choices": [
-        { "value": "no", "label": "No - delete them" },
-        { "value": "yes", "label": "Yes - keep as <name>.bad" }
+        {
+          "value": "no",
+          "label": "No - delete them"
+        },
+        {
+          "value": "yes",
+          "label": "Yes - keep as <name>.bad"
+        }
       ],
       "default": "yes",
       "group": "Installing",
-      "help": "Diagnostic, for the -D-CALC.LHA / -J-LCV30.LHA checksum investigation: a download whose digest did not match is kept as <name>.bad so the bytes can be compared with what the server sent. Turn it off once that is explained. It belongs here rather than in a file on the live box - a deploy rewrites the cfg, so enabling it in the container alone means the next deploy quietly disarms it, which is how the first occurrence was lost."
+      "help": "Diagnostic for the -D-CALC.LHA / -J-LCV30.LHA checksum investigation: a download whose digest did not match is kept as <name>.bad so its bytes can be compared with what the server sent. Turn it off once that is explained."
     },
     {
       "key": "ansi",
@@ -103,8 +115,14 @@
       "label": "ANSI output",
       "type": "choice",
       "choices": [
-        { "value": "yes", "label": "Yes" },
-        { "value": "no", "label": "No - plain text" }
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No - plain text"
+        }
       ],
       "default": "yes",
       "group": "Display"

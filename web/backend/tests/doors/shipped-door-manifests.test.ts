@@ -138,6 +138,31 @@ function cfgBindingResolves(doorDir: string, manifest: any, setting: any): boole
   if (!file || (!setting.cfgKey && !setting.cfgRow)) return false;
   const full = path.join(doorDir, file);
   if (!fs.existsSync(full)) return false;
+
+  /*
+   * A PLAIN `Key=value` cfg is not an Empire file and must not be read as
+   * one. The Empire parser answers `undefined` for every key in a flat cfg,
+   * so asking it about GWALL.cfg said "this setting reaches nothing" about a
+   * setting sitting in plain sight - which is what happened to GWall,
+   * GLCViewer and DoorRepo, the first binary-only doors here whose config is
+   * flat (2026-09-14). The question this function asks is right; it was only
+   * ever asked in one dialect.
+   */
+  if (manifest.cfgFormat !== 'empire') {
+    if (!setting.cfgKey) return false;
+    const wanted = String(setting.cfgKey).toLowerCase();
+    return fs.readFileSync(full, 'utf8')
+      .split(/\r?\n/)
+      .map((line: string) => line.trim())
+      // `;` and `#` both start a comment in these files, and a commented-out
+      // key is not a key the door reads.
+      .filter((line: string) => line && !line.startsWith(';') && !line.startsWith('#'))
+      .some((line: string) => {
+        const at = line.indexOf('=');
+        return at > 0 && line.slice(0, at).trim().toLowerCase() === wanted;
+      });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const empire = require('../../src/doors/text-cfg/empire');
   const parsed = empire.parseEmpireFile(fs.readFileSync(full));
