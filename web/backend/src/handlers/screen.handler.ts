@@ -168,7 +168,32 @@ console.log('[SCREEN]', ...args);
  * Screens that are never paginated, however long they are: one piece of art
  * each, meant to run past the bottom of the glass. See needsPaging.
  */
-const SCREENS_NEVER_PAGINATE = new Set(['AWAITSCREEN', 'BBSTITLE', 'LOGON']);
+const SCREENS_NEVER_PAGINATE = new Set(['AWAITSCREEN', 'BBSTITLE', 'LOGON', 'LOGOFF']);
+
+/**
+ * The catalogue name a screen is known by, whatever it was asked for as.
+ *
+ * `LOGOFF` joined the list above on 2026-09-14 and that alone did not fix it,
+ * because the logoff screen on this board is one line - `~ ~3SR_WORK:bbs/
+ * Screens/logoff/logoff` - and the art arrives through the INCLUDE. The
+ * include is shown as a screen of its own, named by its resolved path
+ * (`/app/data/bbs/Screens/logoff/001.logoff`), which matched nothing: the
+ * board paused in the middle of the logo, the caller was already leaving, and
+ * nobody was left to answer `More(y/n/ns)?`. That is the "cut off logoff
+ * logo" the sysop reported four times.
+ *
+ * A logo included by a screen that is one piece of art is still that art, so
+ * the name is reduced to its catalogue form before the lookup: the directory
+ * goes, the extensions go, and the `NNN.` that `formatNumberedFilename` puts
+ * on a random-pool member goes with them.
+ */
+export function screenCatalogueName(screenName: string): string {
+  const base = screenName.split(/[\\/]/).pop() ?? screenName;
+  return base
+    .replace(/\.[^.]+$/, '')     // .txt / .seq / .rip
+    .replace(/^[0-9]+\./, '')    // 001.logoff -> logoff
+    .toUpperCase();
+}
 
 /**
  * TEMPORARY INSTRUMENTATION - 2026-09-14, remove once the double pause is found.
@@ -2461,7 +2486,7 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
      * `~SS_BBS:bulletins/bull6.txt` inside LOGON is untouched by LOGON's
      * exemption.
      */
-    const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenName.toUpperCase());
+    const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName));
     const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {

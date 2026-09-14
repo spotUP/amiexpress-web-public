@@ -192,7 +192,7 @@ describe('a screen that is one piece of art', () => {
     }
   };
 
-  for (const name of ['BBSTITLE', 'AWAITSCREEN', 'LOGON']) {
+  for (const name of ['BBSTITLE', 'AWAITSCREEN', 'LOGON', 'LOGOFF']) {
     it(`${name} is not paginated at ${TITLE_LINES} lines`, async () => {
       asScreen(name, TITLE_LINES);
       const shown = await showByName(name);
@@ -202,6 +202,29 @@ describe('a screen that is one piece of art', () => {
       expect(shown.lines).toBe(TITLE_LINES);
     });
   }
+
+  it('the logo the logoff screen INCLUDES is not paginated either', async () => {
+    /*
+     * The half that adding LOGOFF to the list does not fix, and the reason
+     * the sysop saw a cut logo four times.
+     *
+     * This board's logoff screen is one line - `~ ~3SR_WORK:bbs/Screens/
+     * logoff/logoff` - so the art arrives through the include, shown as a
+     * screen of its own named by its resolved PATH. `001.logoff` matched no
+     * exemption, so the board paused in the middle of the logo with nobody
+     * left to answer the prompt.
+     */
+    const dir = path.join(root, 'Screens', 'logoff');
+    fs.mkdirSync(dir, { recursive: true });
+    const body = Array.from({ length: TITLE_LINES }, (_, i) => `line ${i + 1}`).join('\r\n');
+    const file = path.join(dir, '001.logoff.txt');
+    fs.writeFileSync(file, `~f\r\n${body}\r\n`, 'latin1');
+
+    const shown = await show(file);
+
+    expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+    expect(shown.lines).toBe(TITLE_LINES);
+  });
 
   it('still paginates a screen that is text to be read', async () => {
     // BULL: in the board's catalogue like the three above, and deliberately
