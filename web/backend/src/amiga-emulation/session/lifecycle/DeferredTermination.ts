@@ -31,6 +31,9 @@ export class DeferredTermination {
     if (!state.isRunning) return;
     this.pending = true;
     state.isRunning = false;
+    // Console-level on purpose: a loop that stops without saying why is the
+    // silence that cost an evening on 2026-09-15.
+console.log(`[DeferredTermination] loop stop requested from inside the door\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
   }
 
   /**

@@ -626,8 +626,15 @@ debugLog(`[DoorLifecycleManager] Call tracking enabled`);
       let profileTrapCount = 0;
       let profileLastReport = Date.now();
 
+      let lastAliveLog = Date.now();
       while (this.executionState.isRunning) {
         if (ENABLE_PROFILING) profileStart = Date.now();
+        // A door that goes silent is indistinguishable from a door that is
+        // fine unless the loop itself says it is still turning. Every 5 s.
+        if (Date.now() - lastAliveLog >= 5000) {
+          lastAliveLog = Date.now();
+console.log(`[DoorLifecycleManager] alive: paused=${this.emulator.isPaused()} pc=0x${(this.emulator.getRegister(16) >>> 0).toString(16)} iters=${this.executionState.iterationCount}`);
+        }
         // === STEP 0: Yield to event loop if too much time has elapsed ===
         // CRITICAL: This prevents blocking other users when running CPU-intensive doors
         const now = Date.now();
@@ -1196,8 +1203,8 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         }
       }
 
-debugLog(
-        "[DoorLifecycleManager] 🏁 Execution loop completed normally"
+console.log(
+        `[DoorLifecycleManager] execution loop ended: isRunning=${this.executionState.isRunning} paused=${this.emulator.isPaused()}`
       );
     } catch (error) {
       await this.exitDetector.handleExecutionError(error);
