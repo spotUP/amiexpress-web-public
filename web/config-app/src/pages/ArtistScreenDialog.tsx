@@ -147,12 +147,26 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
 
   const redraw = useMutation({
     mutationFn: () => apiClient.copyScreenIntoTheme(theme.slug, path as string),
-    onSuccess: async (answer: { data?: { to?: string }; message?: string }) => {
-      if (answer.message) showSuccess(answer.message);
-      await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
-      await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
-      await queryClient.invalidateQueries({ queryKey: ['screen-theme-validation', theme.slug] });
+    onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
+      /*
+       * OPEN THE COPY FIRST, refresh the caches after.
+       *
+       * This awaited three invalidations before it navigated, and one of
+       * them is `screen-index` - the whole board's screens, every
+       * resolution, rebuilt server-side. On the live board that is seconds,
+       * and for those seconds the artist has a toast and the screen they
+       * were already looking at: "when i click it i only get a toast it
+       * doesnt open it for editing" (sysop, 2026-09-14).
+       *
+       * Where the artist IS must not wait on a cache. The dialog opens on
+       * the copy immediately; the index, the theme list and the publish
+       * gate catch up behind it, and the editor re-renders when they do.
+       */
       if (answer.data?.to) onOpenPath(answer.data.to);
+      if (answer.message) showSuccess(answer.message);
+      void queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-theme-validation', theme.slug] });
     },
     onError: (error: ApiError) => {
       // 409 is "you already redrew this" - the artist wanted to edit it, so
