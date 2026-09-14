@@ -43,7 +43,7 @@ describe('the banner above a screen', () => {
     const onDraw = vi.fn();
     render(
       <ScreenSlotBanner
-        state={{ kind: 'yours-undrawn', path: 'Themes/a/Node/BBSTITLE.SEQ' }}
+        state={{ kind: 'yours-undrawn', path: 'Themes/a/Node/BBSTITLE.SEQ', format: 'petscii' }}
         themeTitle="ansiguy's screens"
         onDraw={onDraw}
       />,
@@ -56,7 +56,7 @@ describe('the banner above a screen', () => {
     const onCopyBoard = vi.fn();
     render(
       <ScreenSlotBanner
-        state={{ kind: 'yours-undrawn', path: 'Themes/a/x.SEQ', boardCopy: 'Node1/BBSTITLE.SEQ' }}
+        state={{ kind: 'yours-undrawn', path: 'Themes/a/x.SEQ', format: 'petscii', boardCopy: 'Node1/BBSTITLE.SEQ' }}
         themeTitle="ansiguy's screens"
         onCopyBoard={onCopyBoard}
       />,
@@ -69,7 +69,7 @@ describe('the banner above a screen', () => {
     // The state permits draw and upload; the page passed neither handler.
     render(
       <ScreenSlotBanner
-        state={{ kind: 'yours-undrawn', path: 'Themes/a/x.SEQ' }}
+        state={{ kind: 'yours-undrawn', path: 'Themes/a/x.SEQ', format: 'petscii' }}
         themeTitle="ansiguy's screens"
       />,
     );
@@ -90,5 +90,22 @@ describe('the banner above a screen', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /Redraw this in ansiguy's screens/ }));
     expect(onRedrawIntoMine).toHaveBeenCalled();
+  });
+
+  it('an empty RIP slot says it is brought in, rather than hiding a button', () => {
+    // RIP has no drawing surface on this board - the art comes out of
+    // Illustrator and is converted - so the sentence has to carry that, or an
+    // artist hunts for a Draw button that will never be there.
+    render(
+      <ScreenSlotBanner
+        state={{ kind: 'yours-undrawn', path: 'Themes/a/bbstitle.rip', format: 'rip' }}
+        themeTitle="ansiguy's screens"
+        onDraw={vi.fn()}
+        onUpload={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /Draw one here/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Upload a drawing/ })).toBeInTheDocument();
+    expect(screen.getByTestId('screen-slot-sentence').textContent).toMatch(/brought in/);
   });
 });

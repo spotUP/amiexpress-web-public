@@ -476,7 +476,19 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
             state={slotState}
             themeTitle={theme.title}
             busy={redraw.isPending || writeBytes.isPending}
-            onDraw={isSeqPath && mine ? () => setDrawingBlankSeq(true) : undefined}
+            /*
+             * Drawing an empty slot, for the two formats that HAVE a drawing
+             * surface. PETSCII opens a blank C64 screen; ANSI opens the blank
+             * 80x25 canvas the checklist's `isNew` route already opens, which
+             * until now was reachable only by arriving from the checklist.
+             * RIP is absent on purpose - `screen-slot-state` will not offer
+             * `draw` for it, because its art is converted from SVG.
+             */
+            onDraw={mine ? () => {
+              if (isSeqPath) { setDrawingBlankSeq(true); return; }
+              setUndrawable(null);
+              setEditing(createSurface(blankCanvas()));
+            } : undefined}
             /*
              * Upload only where the toolbar below does NOT already offer it -
              * i.e. on an EMPTY slot, which has no toolbar. Two "Upload a

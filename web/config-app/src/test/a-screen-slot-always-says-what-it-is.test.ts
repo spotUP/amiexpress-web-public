@@ -114,6 +114,17 @@ describe('what a screen slot is', () => {
 });
 
 describe('what a slot lets you do', () => {
+  it('offers upload but NOT drawing on an empty RIP slot', () => {
+    // No drawing surface for RIP on this board; the art is converted from SVG.
+    const { actions } = slotAffordances(screenSlotState(input({
+      path: 'Themes/ansiguy/Node/bbstitle.rip',
+      file: undefined,
+      index: indexWith({ 'Themes/ansiguy/Node/bbstitle.rip': { theme: 'ansiguy' } }),
+    })));
+    expect(actions).toContain('upload');
+    expect(actions).not.toContain('draw');
+  });
+
   it('offers drawing and uploading on your own undrawn slot', () => {
     const { actions } = slotAffordances(screenSlotState(input({ file: undefined })));
     expect(actions).toContain('draw');

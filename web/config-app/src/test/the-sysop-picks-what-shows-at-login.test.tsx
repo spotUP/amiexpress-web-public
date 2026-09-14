@@ -22,39 +22,53 @@ vi.mock('../api/client', () => ({ apiClient: { get: (...a: unknown[]) => get(...
 
 import { LoginSequencePage } from '../pages/LoginSequencePage';
 
-const SEQUENCE = {
-  data: {
-    node: 1,
-    steps: [
-      {
-        screen: 'LOGON', label: 'Logon screen', note: 'Logon.txt', skippedByQuickFlag: true,
-        file: 'Node1/Logon.txt', exists: true, bytes: 40, blankPause: false,
-        items: [{ code: 'CC', target: 'gl', pause: true }],
-      },
-      {
-        screen: 'NODE_BULL', label: 'Node bulletins', note: 'this node\'s bulletins',
-        skippedByQuickFlag: false,
-        file: 'Themes/607080/Node/BULL.TXT', exists: true, bytes: 160, blankPause: false,
-        items: [
-          { code: 'SS', target: 'BBS:Bulletins/bull1.txt', pause: true },
-          { code: 'SS', target: 'BBS:Bulletins/bull2.txt', pause: true },
-          { code: 'SS', target: 'BBS:Bulletins/bull3.txt', pause: true },
-          { code: 'SS', target: 'BBS:Bulletins/bull4.txt', pause: true },
-          { code: 'SS', target: 'BBS:Bulletins/bull5.txt', pause: false },
-        ],
-      },
-      {
-        screen: 'MAILSCAN', label: 'Mail scan', note: 'during the conference scan',
-        skippedByQuickFlag: false,
-        file: 'Screens/MAILSCAN.TXT', exists: true, bytes: 0, blankPause: true, items: [],
-      },
-    ],
-    available: [
-      { target: 'BBS:Bulletins/bull6.txt', bytes: 3833 },
-      { target: 'BBS:Bulletins/bull1.txt', bytes: 500 },
-    ],
-  },
+/**
+ * THE SHAPE THE SERVER ACTUALLY SENDS, corrected 2026-09-14.
+ *
+ * `sendOk` wraps every screens route in `{ success, data, timestamp }`
+ * (screens-routes.ts:210) and `apiClient.request()` returns that envelope
+ * whole, so `apiClient.get` answers `{ data: ApiResponse<Payload> }` - the
+ * payload is TWO levels down, not one.
+ *
+ * This fixture used to return `{ data: payload }`, which no route on this
+ * board produces. The page read `data.steps`, the fixture provided it, every
+ * test passed - and a real caller got `undefined`, `setSteps(undefined)`, and
+ * a white page dying on `steps.map`. The mock is what made the bug invisible,
+ * so it is the mock that had to change.
+ */
+const PAYLOAD = {
+  node: 1,
+  steps: [
+    {
+      screen: 'LOGON', label: 'Logon screen', note: 'Logon.txt', skippedByQuickFlag: true,
+      file: 'Node1/Logon.txt', exists: true, bytes: 40, blankPause: false,
+      items: [{ code: 'CC', target: 'gl', pause: true }],
+    },
+    {
+      screen: 'NODE_BULL', label: 'Node bulletins', note: 'this node\'s bulletins',
+      skippedByQuickFlag: false,
+      file: 'Themes/607080/Node/BULL.TXT', exists: true, bytes: 160, blankPause: false,
+      items: [
+        { code: 'SS', target: 'BBS:Bulletins/bull1.txt', pause: true },
+        { code: 'SS', target: 'BBS:Bulletins/bull2.txt', pause: true },
+        { code: 'SS', target: 'BBS:Bulletins/bull3.txt', pause: true },
+        { code: 'SS', target: 'BBS:Bulletins/bull4.txt', pause: true },
+        { code: 'SS', target: 'BBS:Bulletins/bull5.txt', pause: false },
+      ],
+    },
+    {
+      screen: 'MAILSCAN', label: 'Mail scan', note: 'during the conference scan',
+      skippedByQuickFlag: false,
+      file: 'Screens/MAILSCAN.TXT', exists: true, bytes: 0, blankPause: true, items: [],
+    },
+  ],
+  available: [
+    { target: 'BBS:Bulletins/bull6.txt', bytes: 3833 },
+    { target: 'BBS:Bulletins/bull1.txt', bytes: 500 },
+  ],
 };
+
+const SEQUENCE = { data: { success: true, data: PAYLOAD, timestamp: '' } };
 
 beforeEach(() => {
   get.mockReset().mockResolvedValue(SEQUENCE);
