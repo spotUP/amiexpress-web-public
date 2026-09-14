@@ -76,11 +76,21 @@ describe('an eight-colour board folds what it sends', () => {
     expect(spy.sent()).toContain('\x1b[93m');
   });
 
-  it('leaves bold alone on an eight-colour board', () => {
-    // ESC[1;33m is how art has asked for bright since the 80s, and bold is a
-    // style console.device has. Folding it would take away a colour the
-    // Amiga can actually show.
+  it('drops bold too, because that is how this board writes bright', () => {
+    // The board's own art carries 1320 `ESC[1;3Xm` and no aixterm codes at
+    // all, so a fold that spared bold would leave every screen unchanged and
+    // an eight-colour board would still send sixteen colours.
     boardWith(8);
+    const spy = wireSpy();
+    emitText(spy.socket, '\x1b[1;33mBold yellow\x1b[0m', true);
+    flushAllBuffers();
+
+    expect(spy.sent()).toContain('\x1b[33mBold yellow');
+    expect(spy.sent()).not.toContain('\x1b[1;33m');
+  });
+
+  it('leaves bold alone on a sixteen-colour board', () => {
+    boardWith(16);
     const spy = wireSpy();
     emitText(spy.socket, '\x1b[1;33mBold yellow\x1b[0m', true);
     flushAllBuffers();

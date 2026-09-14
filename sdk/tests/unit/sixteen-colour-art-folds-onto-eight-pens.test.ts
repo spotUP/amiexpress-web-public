@@ -24,18 +24,33 @@ describe('sixteen-colour art folds onto eight pens', () => {
   });
 
   it('folds every parameter of a compound sequence', () => {
-    expect(foldAnsiToEightPens('\x1b[1;93;104mX')).toBe('\x1b[1;33;44mX');
+    // The bold goes with them: on eight pens it is not an attribute the
+    // board can honour, and a terminal reading it as brightness would put
+    // back the colour the fold had just taken out.
+    expect(foldAnsiToEightPens('\x1b[1;93;104mX')).toBe('\x1b[33;44mX');
   });
 
-  it('leaves bold alone - it is how art asks for bright, and the Amiga has it', () => {
-    // ESC[1;33m is bold yellow on an Amiga and bright yellow on a PC. That is
-    // the medium, not a fault, and rewriting it would take the bold away from
-    // a terminal that can show it.
-    expect(foldAnsiToEightPens('\x1b[1;33mX')).toBe('\x1b[1;33mX');
+  it('drops bold, because bold IS the sixteenth colour on this board', () => {
+    // A census of the board's own art: zero aixterm codes in 23 files, and
+    // 1320 `ESC[1;3Xm`. Sparing bold would spare every bright colour there
+    // is here, and an eight-colour board would still send sixteen.
+    expect(foldAnsiToEightPens('\x1b[1;33mX')).toBe('\x1b[33mX');
+    expect(foldAnsiToEightPens('\x1b[0;1;36mX')).toBe('\x1b[0;36mX');
   });
 
-  it('returns text with no bright codes byte-identical', () => {
-    const art = '\x1b[0;32mGreen\x1b[1;36m Cyan\x1b[0m\r\n\x1b[7mReverse\x1b[0m';
+  it('removes a bold that has nothing beside it, rather than leaving a reset', () => {
+    // `ESC[1m` with the 1 taken out is `ESC[m` - which is `ESC[0m`, a reset,
+    // and would strip the colour the art had already set.
+    expect(foldAnsiToEightPens('\x1b[1mX')).toBe('X');
+    expect(foldAnsiToEightPens('\x1b[32m\x1b[1mX')).toBe('\x1b[32mX');
+  });
+
+  it('keeps the other attributes it finds beside bold', () => {
+    expect(foldAnsiToEightPens('\x1b[1;7mX')).toBe('\x1b[7mX');
+  });
+
+  it('returns text with no bright codes and no bold byte-identical', () => {
+    const art = '\x1b[0;32mGreen\x1b[36m Cyan\x1b[0m\r\n\x1b[7mReverse\x1b[0m';
     expect(foldAnsiToEightPens(art)).toBe(art);
   });
 

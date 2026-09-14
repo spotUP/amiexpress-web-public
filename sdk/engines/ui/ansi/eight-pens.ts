@@ -9,11 +9,20 @@
  * `ESC[97m` and `ESC[100m` through `ESC[107m`, and an Amiga terminal that
  * has never heard of them either ignores the sequence or prints it.
  *
- * The fold rewrites those to the eight the Amiga has. What it does NOT touch
- * is `ESC[1m`: bold is a style console.device understands, it is how art has
- * asked for a bright colour since the 80s (`ESC[1;33m`), and an Amiga caller
- * seeing bold yellow where a PC caller sees bright yellow is the medium
- * working, not a fault.
+ * The fold rewrites those to the eight the Amiga has, and it drops BOLD with
+ * them.
+ *
+ * Bold was exempt at first, on the reasoning that console.device has bold and
+ * an Amiga caller seeing bold yellow where a PC caller sees bright yellow is
+ * the medium working. A census of this board's own art settled it the other
+ * way: ZERO aixterm codes in 23 files, and 1320 `ESC[1;3Xm`. Bright-by-bold
+ * is how every sixteenth colour on this board is written, so a fold that
+ * spares it is a fold that does nothing - the sysop would set his board to
+ * eight colours and every web and telnet caller would still see sixteen.
+ *
+ * So on an eight-colour board bold goes, and a sequence left with no
+ * parameters at all goes with it: `ESC[1m` becoming `ESC[m` would be a RESET,
+ * which is the one thing it must not turn into.
  *
  * Pure and in the SDK so the backend's output choke and the browser studio's
  * preview can agree about what "eight colours" means.
@@ -56,17 +65,25 @@ export function foldAnsiToEightPens(text: string): string {
     if (params === '') return whole;
 
     let changed = false;
-    const folded = params.split(';').map((part) => {
+    const folded: string[] = [];
+    for (const part of params.split(';')) {
       // An empty parameter is a zero by the standard, and keeping the empty
       // string keeps the sequence byte-identical.
-      if (part === '') return part;
+      if (part === '') { folded.push(part); continue; }
       const value = Number(part);
-      if (!Number.isFinite(value)) return part;
+      if (!Number.isFinite(value)) { folded.push(part); continue; }
+      // Bold is the sixteenth colour on this board; on eight pens it is not
+      // available, and a terminal that reads it as brightness would undo the
+      // whole fold.
+      if (value === 1) { changed = true; continue; }
       const next = foldSgrParameter(value);
       if (next !== value) changed = true;
-      return String(next);
-    });
+      folded.push(String(next));
+    }
 
-    return changed ? `\x1b[${folded.join(';')}m` : whole;
+    if (!changed) return whole;
+    // Nothing left to say: `ESC[m` is a reset, so the sequence goes instead.
+    if (folded.length === 0) return '';
+    return `\x1b[${folded.join(';')}m`;
   });
 }
