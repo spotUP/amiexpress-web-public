@@ -37,6 +37,15 @@ export function paintScreen(
    * them makes them hard to see for no gain.
    */
   palette: PaletteMode = 'full',
+  /**
+   * Rows after which the caller meets a More prompt - see `screen-fold.ts`.
+   *
+   * Drawn LAST so nothing paints over them, and drawn as a line across the
+   * screen rather than by dimming the art: an artist judging colour must see
+   * the art as the caller gets it, and half a drawing greyed out is a worse
+   * lie than no marker at all.
+   */
+  folds: number[] = [],
 ): void {
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
@@ -91,6 +100,27 @@ export function paintScreen(
       mark.length * CELL_WIDTH - 1,
       CELL_HEIGHT - 1,
     );
+  }
+
+  /*
+   * WHERE THE CALLER'S SCREEN ENDS. "if i remove lines i need to see how big
+   * the actual screen is, and what is outside the screen" (sysop,
+   * 2026-09-14). A dashed rule sits on the boundary and the rows past it keep
+   * their colours - what is below the line is what the caller has to press a
+   * key to reach, not something wrong.
+   */
+  for (const after of folds) {
+    if (after <= 0 || after >= rows) continue;
+    const y = after * CELL_HEIGHT + 0.5;
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = ansiColor(14);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(cols * CELL_WIDTH, y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   if (cursor && cursor.x >= 0 && cursor.y >= 0 && cursor.x < cols && cursor.y < rows) {
