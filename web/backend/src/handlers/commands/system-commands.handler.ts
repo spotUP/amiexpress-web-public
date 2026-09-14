@@ -21,6 +21,7 @@ import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import type { BBSSession } from '../../index';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { config } from '../../config';
+import { flushOutput } from '../../utils/output.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 
 // Injected dependencies
@@ -179,6 +180,22 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
   session.menuPause = true; // ensure next displayMainMenu shows if invoked during logoff edge cases
   const logoffDisplayed = await _displayScreen(socket, session, 'Logoff');
 
+  /*
+   * THE ART GOES OUT NOW, WHILE THERE IS STILL A LINE TO PUT IT ON.
+   *
+   * Screen art is written with `emitText`, which batches into the ANSI buffer
+   * and flushes on a 16 ms timer. Everything below writes with a direct
+   * `socket.emit` - which does NOT go through that buffer and therefore
+   * overtakes it - and ends by telling the client to disconnect. So the last
+   * unflushed rows of the logo were still in the buffer when the socket
+   * closed on top of them: the caller got the first rows, then
+   * "Click... NO CARRIER", and nothing in between.
+   *
+   * Reported twice by the sysop on 2026-09-14, the second time after a
+   * different cause had been ruled out: "logoff is still cut off".
+   */
+  flushOutput(socket);
+
   if (!logoffDisplayed) {
     // Fallback if Logoff.txt doesn't exist
     // express.e:25047 internalCommandG - no header, just processes logoff
@@ -282,6 +299,9 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // "NO CARRIER" when the line drops. WEB_: there's no modem in our path, so we
   // append the conventional "NO CARRIER" string ourselves so users get the same
   // retro disconnect feel.
+  // Anything written since the screen - the fallback goodbye, a relogon
+  // notice - goes out before the goodbye lines, for the same reason.
+  flushOutput(socket);
   socket.emit('ansi-output', '\r\nClick...\r\nNO CARRIER\r\n');
 
   // Emit disconnect event to close connection (give time for screen to display and door to run)
