@@ -6,6 +6,7 @@
  */
 
 import { utf8ChunkEnd } from '../utils/utf8-chunk.util';
+import { applyAuthoredWrap } from '../screens/authored-wrap';
 import { C64_COLUMNS, petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
@@ -2194,7 +2195,24 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
-    const { content, isPetscii, isRip, filePath, petsciiBuffer, sourceEncoding } = screenData;
+    const { content: loadedContent, isPetscii, isRip, filePath, petsciiBuffer, sourceEncoding } = screenData;
+
+    /*
+     * ART THAT ASKED THE TERMINAL TO FOLD IT GETS FOLDED HERE INSTEAD.
+     *
+     * A screen drawn 80 columns wide with no line terminators trusts the
+     * terminal to fold at the right margin, which a real caller's 80-column
+     * terminal always did. A browser window is whatever width it is - the
+     * sysop's was about 125 - so his logoff logo folded in the wrong places
+     * and came out a smear. He reported it twice as "cut off" (2026-09-14);
+     * the file was never damaged and every byte arrived.
+     *
+     * Inert for any screen that carries its own line breaks, which is why the
+     * 200-column BBSTITLE is safe: see `screens/authored-wrap.ts` for the
+     * trigger and what it deliberately will not touch. PETSCII is 40 columns
+     * and RIP is a vector program, so neither is folded on this rule.
+     */
+    const content = (isPetscii || isRip) ? loadedContent : applyAuthoredWrap(loadedContent);
 
     /*
      * A screen the sysop blanked draws NOTHING - not even the clear.

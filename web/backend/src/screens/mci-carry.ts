@@ -60,6 +60,10 @@ function lineEnding(text: string): string {
  * `~SS_BBS:bulletins/bull6.txt| ~SP` are both code lines, and neither matches
  * any single pattern.
  */
+export function isCodeOnlyLine(line: string): boolean {
+  return isCodeLine(line);
+}
+
 function isCodeLine(line: string): boolean {
   if (!line.trim()) return false;
 
