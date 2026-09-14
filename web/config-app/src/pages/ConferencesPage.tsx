@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal } from '../components/ui/Modal';
+import { ConftopSettings } from '../components/ConftopSettings';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -904,6 +905,26 @@ export function ConferencesPage() {
                   </label>
                 </div>
               </div>
+
+              {/*
+                ConfTop's settings, and only for a conference that already
+                exists: they live in an icon in the conference DIRECTORY, so
+                there is nothing to write until the directory is there.
+
+                Its own Save, over its own endpoint - see ConftopSettings.
+              */}
+              {editingConference && (
+                <div className="pt-6 border-t border-border">
+                  <h3 className="font-semibold text-content-primary">Top uploaders (ConfTop)</h3>
+                  <p className="text-sm text-content-secondary mt-1 mb-4">
+                    The door that prints this conference's top-uploaders bulletin.
+                    Its settings live in the conference's own
+                    <span className="mx-1 font-mono">Conftop.info</span>
+                    icon, which is the only place the door reads them from.
+                  </p>
+                  <ConftopSettings conferenceId={editingConference.conference_id} />
+                </div>
+              )}
 
               <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button

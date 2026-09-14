@@ -28,6 +28,9 @@ import { listOrphanConferenceDirs, removeOrphanConferenceDir } from '../conferen
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
+import {
+  readConftopSettings, writeConftopSettings, MAX_FITTING_ROWS, CONFTOP_CHROME_ROWS,
+} from '../conferences/conftop-settings';
 import { listAccessAreas, writeAccessArea, deleteAccessArea } from '../conferences/access-areas';
 import { applyUserEditsToDisk } from './user-edits-to-disk';
 import type { Database } from '../database';
@@ -504,6 +507,49 @@ console.error('Config API error:', error);
       const conferenceId = parseInt(req.params.conferenceId, 10);
       const healthCheck = await conferenceSetup.checkConferenceHealth(conferenceId);
       sendResponse(res, healthCheck, `Conference ${conferenceId} health check complete`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/conferences/:conferenceId/conftop
+   *
+   * ConfTop's settings for one conference. They live in an Amiga icon in the
+   * conference directory and nothing could edit them, so `ROWS=20` sat on
+   * every conference printing a 26-line bulletin at a 25-line caller.
+   */
+  router.get('/conferences/:conferenceId/conftop', async (req: Request, res: Response) => {
+    try {
+      const conferenceId = parseInt(req.params.conferenceId, 10);
+      const settings = readConftopSettings(config.get('dataDir'), conferenceId);
+      sendResponse(res, {
+        ...settings,
+        maxFittingRows: MAX_FITTING_ROWS,
+        chromeRows: CONFTOP_CHROME_ROWS,
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/conferences/:conferenceId/conftop
+   *
+   * Only the fields sent are written; every other tooltype in the icon is
+   * left alone. A `rows` that would not fit the caller's screen is refused
+   * here rather than in the form, because the icon is reachable by other
+   * routes than this one.
+   */
+  router.put('/conferences/:conferenceId/conftop', async (req: any, res: Response) => {
+    try {
+      const conferenceId = parseInt(req.params.conferenceId, 10);
+      const settings = writeConftopSettings(config.get('dataDir'), conferenceId, req.body ?? {});
+      sendResponse(res, {
+        ...settings,
+        maxFittingRows: MAX_FITTING_ROWS,
+        chromeRows: CONFTOP_CHROME_ROWS,
+      }, `Conference ${conferenceId} top-uploaders settings saved`);
     } catch (error) {
       handleError(res, error);
     }

@@ -555,6 +555,21 @@ class ApiClient {
     });
   }
 
+  /**
+   * ConfTop's per-conference settings, which live in an Amiga icon in the
+   * conference directory - the only place the 68K door reads them from.
+   */
+  async getConftopSettings(confNumber: number) {
+    return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}/conftop`);
+  }
+
+  async saveConftopSettings(confNumber: number, updates: Record<string, unknown>) {
+    return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}/conftop`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
   // Conference directories nothing points at. A delete leaves the directory
   // alone unless the sysop asks for it, so a board collects them.
   async getOrphanConferenceDirs() {
