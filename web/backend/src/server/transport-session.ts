@@ -55,6 +55,33 @@ import type { BBSSession } from "../index";
 export type { TransportEmitter } from "./transport-adapter";
 
 /**
+ * The teardowns still running.
+ *
+ * A caller's close handler finishes its work asynchronously - the logoff, the
+ * CallersLog line, the batches, the buffer release - and the socket is long
+ * gone by then. In production that is right: nothing should block a hang-up.
+ * But the work had NO handle at all, so nothing could ever know a session had
+ * finished logging off, and a test that closed a connection and returned would
+ * be torn down mid-teardown ("You are trying to `import` a file after the Jest
+ * environment has been torn down", three-transport-walk).
+ *
+ * Registering each one makes the work observable without making it blocking.
+ */
+const inFlightTeardowns = new Set<Promise<void>>();
+
+/**
+ * Resolve once every teardown started so far has finished.
+ *
+ * For callers that must not outlive a session's own cleanup - a test closing
+ * its socket, a shutdown path draining the board.
+ */
+export async function whenTeardownsSettle(): Promise<void> {
+  while (inFlightTeardowns.size > 0) {
+    await Promise.all([...inFlightTeardowns]);
+  }
+}
+
+/**
  * Everything the entry point used to close over inside index.ts.
  */
 export interface TransportSessionDeps {
@@ -417,7 +444,7 @@ console.log(
        * history, no user or node files written. `deleteSession` resolves
        * through `socketToNodeId`, which telnet and SSH both populate.
        */
-      void (async () => {
+      const teardown = (async () => {
         try {
           const { endTransportSession } = require('./socket-handlers');
           const { releaseAnsiBuffer } = require('../utils/ansi-buffer.util');
@@ -429,6 +456,8 @@ console.log(
           console.error(`[${type.toUpperCase()}] Session teardown failed:`, err);
         }
       })();
+      inFlightTeardowns.add(teardown);
+      void teardown.finally(() => inFlightTeardowns.delete(teardown));
     }
     // Release node back to available pool
     if (connection.nodeId !== undefined) {

@@ -30,8 +30,13 @@ import * as net from 'net';
 import { Client as SSHClient } from 'ssh2';
 import { TelnetServer, TelnetConnection } from '../../src/server/telnet-server';
 import { SSHServerImpl } from '../../src/server/ssh-server';
-import { setupTelnetSSHHandler, type TransportSessionDeps } from '../../src/server/transport-session';
+import {
+  setupTelnetSSHHandler,
+  whenTeardownsSettle,
+  type TransportSessionDeps,
+} from '../../src/server/transport-session';
 import { ANSI_GRAPHICS_PROMPT } from '../../src/services/login-connect.service';
+import { untilSettled } from './helpers/wire-quiet';
 
 jest.setTimeout(60000);
 
@@ -68,14 +73,24 @@ function stripTelnetNegotiation(raw: Buffer): Buffer {
   return Buffer.from(out);
 }
 
-/** Read from a stream until the sentinel arrives, or fail with what came. */
+/**
+ * Read from a stream until the sentinel arrives AND the paint has finished.
+ *
+ * Resolving on the sentinel alone snapshots whatever shared its TCP chunk.
+ * The prompt is followed by ESC 7 (DECSC, `line-input.util.ts:354`), which
+ * telnet usually delivers in the same chunk and SSH, framed by its own
+ * record layer, usually does not - so two legs painting identical bytes
+ * compared unequal, and which leg "won" depended on machine load. Waiting
+ * for the capture to stop growing is what makes the comparison about the
+ * board rather than about chunk boundaries.
+ */
 function readUntil(
   attach: (onData: (chunk: Buffer) => void) => void,
   sentinel: string,
   what: string,
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
+  const chunks: Buffer[] = [];
+  const seen = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error(
         `${what}: never reached "${sentinel}" - got ${Buffer.concat(chunks).length} bytes: ` +
@@ -86,10 +101,13 @@ function readUntil(
       chunks.push(chunk);
       if (stripTelnetNegotiation(Buffer.concat(chunks)).toString('latin1').includes(sentinel)) {
         clearTimeout(timer);
-        resolve(Buffer.concat(chunks));
+        resolve();
       }
     });
   });
+  return seen
+    .then(() => untilSettled(() => Buffer.concat(chunks).length))
+    .then(() => Buffer.concat(chunks));
 }
 
 /** An RSA host key, made here so the SSH server has something to offer. */
@@ -115,6 +133,10 @@ async function telnetStep01(): Promise<Buffer> {
   } finally {
     client.destroy();
     await (server as any).stop?.();
+    // The close handler logs the caller off asynchronously. Returning before
+    // that finishes leaves it running into jest's teardown, where its
+    // `require` throws "imported after the environment has been torn down".
+    await whenTeardownsSettle();
   }
 }
 
@@ -142,6 +164,7 @@ async function sshStep01(): Promise<Buffer> {
   } finally {
     client.end();
     await (server as any).stop?.();
+    await whenTeardownsSettle();
   }
 }
 

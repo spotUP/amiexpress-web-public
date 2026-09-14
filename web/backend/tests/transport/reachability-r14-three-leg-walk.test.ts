@@ -31,6 +31,7 @@ import { Client as SSHClient } from 'ssh2';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { bootBoard, type BootedBoard } from '../support/booted-board';
+import { untilSettled } from './helpers/wire-quiet';
 
 jest.setTimeout(300000);
 
@@ -108,6 +109,10 @@ describe('R14 - three legs, one board', () => {
 
     try {
       await until(() => text().includes(STEP_01), 25000, () => `telnet step01: ${text().slice(-120)}`);
+      // The sentinel is mid-line; the paint is not over until the capture
+      // stops growing. See helpers/wire-quiet.ts - the prompt's trailing
+      // ESC 7 arrives in a different chunk on each transport.
+      await untilSettled(() => text().length);
       const step01 = text();
       client.write('Y\r');
       await pause(4000);
@@ -149,6 +154,7 @@ describe('R14 - three legs, one board', () => {
       stream.on('data', (d: Buffer) => chunks.push(d.toString('latin1')));
 
       await until(() => text().includes(STEP_01), 25000, () => `ssh step01: ${text().slice(-120)}`);
+      await untilSettled(() => text().length);
       const step01 = text();
       stream.write('Y\r');
       await pause(4000);
@@ -206,6 +212,7 @@ describe('R14 - three legs, one board', () => {
       });
 
       await until(() => text().includes(STEP_01), 25000, () => `web step01: ${text().slice(-120)}`);
+      await untilSettled(() => text().length);
       const step01 = text();
       client.emit('command', 'Y');
       client.emit('command', '\r');

@@ -27,9 +27,14 @@
 import * as net from 'net';
 import * as iconv from 'iconv-lite';
 import { TelnetServer, TelnetConnection } from '../../src/server/telnet-server';
-import { setupTelnetSSHHandler, type TransportSessionDeps } from '../../src/server/transport-session';
+import {
+  setupTelnetSSHHandler,
+  whenTeardownsSettle,
+  type TransportSessionDeps,
+} from '../../src/server/transport-session';
 import { emitterForSession } from '../../src/server/session-emitter-registry';
 import { fromCharset } from '../../src/utils/output-pacing';
+import { openWindow, untilQuiet } from './helpers/wire-quiet';
 
 jest.setTimeout(60000);
 
@@ -80,8 +85,6 @@ describe('R2b - a CP437 .ans reaches a CP437 caller as the file s own bytes', ()
     const chunks: Buffer[] = [];
     client.on('data', (c: Buffer) => chunks.push(c));
 
-    const settle = (ms = 250) => new Promise((r) => setTimeout(r, ms));
-
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('never reached the prompt')), 20000);
@@ -102,9 +105,12 @@ describe('R2b - a CP437 .ans reaches a CP437 caller as the file s own bytes', ()
 
       // --- the caller IS a CP437 terminal: bytes reproduced exactly ---------
       session.wireCharset = 'cp437';
-      chunks.length = 0;
+      // Open on a quiet wire, and close when it is quiet again. A fixed sleep
+      // both counts bytes still draining from the banner and gives up early
+      // under load; neither is a fact about the encoder.
+      await openWindow(client, chunks);
       emitter!.emit('ansi-output', text, fromCharset('cp437'));
-      await settle();
+      await untilQuiet(client);
       const cp437Wire = stripTelnetNegotiation(Buffer.concat(chunks));
 
       expect(cp437Wire.length).toBe(CP437_ART.length);
@@ -115,9 +121,9 @@ describe('R2b - a CP437 .ans reaches a CP437 caller as the file s own bytes', ()
 
       // --- the same payload to a Latin-1 caller must NOT be those bytes -----
       session.wireCharset = undefined;
-      chunks.length = 0;
+      await openWindow(client, chunks);
       emitter!.emit('ansi-output', text, fromCharset('cp437'));
-      await settle();
+      await untilQuiet(client);
       const latinWire = stripTelnetNegotiation(Buffer.concat(chunks));
 
       expect(latinWire.length).toBeGreaterThan(0);
@@ -130,6 +136,9 @@ describe('R2b - a CP437 .ans reaches a CP437 caller as the file s own bytes', ()
     } finally {
       client.destroy();
       await (server as any).stop?.();
+      // The caller's logoff runs asynchronously past the close; let it finish
+      // inside the test rather than inside jest's teardown.
+      await whenTeardownsSettle();
       writeSpy.mockRestore();
     }
   });

@@ -31,9 +31,14 @@ import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import { TelnetServer, TelnetConnection } from '../../src/server/telnet-server';
-import { setupTelnetSSHHandler, type TransportSessionDeps } from '../../src/server/transport-session';
+import {
+  setupTelnetSSHHandler,
+  whenTeardownsSettle,
+  type TransportSessionDeps,
+} from '../../src/server/transport-session';
 import { emitterForSession } from '../../src/server/session-emitter-registry';
 import { readAmigaTextFile, stripSauceMetadata } from '../../src/utils/amiga-text-decode.util';
+import { openWindow } from './helpers/wire-quiet';
 
 jest.setTimeout(60000);
 
@@ -112,7 +117,11 @@ describe('R1 - a real telnet socket, and a screen file on the wire through it', 
       expect(decoded.encoding).toBe('iso-8859-1');
       const fileBytes = stripSauceMetadata(fs.readFileSync(SCREEN));
 
-      chunks.length = 0;
+      // The window opens on a QUIET wire. Clearing the capture while the
+      // banner is still draining counts those bytes as part of the file, and
+      // the byte-for-byte assertion below then fails by however many were in
+      // flight - a failure that tracks machine load, not code.
+      await openWindow(client, chunks);
       emitter!.emit('ansi-output', decoded.text, { sourceCharset: 'latin1' } as any);
 
       const arrived: Buffer = await new Promise((resolve, reject) => {
@@ -137,6 +146,9 @@ describe('R1 - a real telnet socket, and a screen file on the wire through it', 
     } finally {
       client.destroy();
       await (server as any).stop?.();
+      // The caller's logoff runs asynchronously past the close; let it finish
+      // inside the test rather than inside jest's teardown.
+      await whenTeardownsSettle();
       writeSpy.mockRestore();
     }
   });
