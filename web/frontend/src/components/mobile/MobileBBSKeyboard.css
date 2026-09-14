@@ -16,22 +16,20 @@
 .mobile-bbs-keyboard {
   flex: 0 0 auto;
   /*
-   * THE KEYS ARE 260px AND THE INSET IS EXTRA.
+   * 260px, with the home indicator's inset INSIDE it as padding.
    *
-   * `box-sizing: border-box` below means padding is INSIDE the height, so
-   * `height: 260px` with `padding-bottom: env(safe-area-inset-bottom)` gave
-   * the keys 260 minus the inset and ended the box at the very bottom of the
-   * viewport - underneath Safari's floating toolbar, which is what the inset
-   * exists to report. The bottom row of keys was behind it ("now the osd
-   * keyboard is behind browser ui", sysop 2026-09-14).
+   * The inset was briefly ADDED to this height, to get the bottom row of keys
+   * out from under Safari's toolbar. That was reserving the same band twice:
+   * the page is sized from `visualViewport.height` (TerminalPage), which
+   * already excludes the browser's own UI, so the extra height pushed the
+   * whole strip up off the bottom of the screen - "the osd keyboard is not at
+   * the bottom of the screen now" (sysop, 2026-09-14).
    *
-   * Adding the inset to the height instead gives the keys their full 260 and
-   * puts the inset's worth of strip below them, where the browser's own UI
-   * is. Because the strip is a row of the page's flex column, the terminal's
-   * band shrinks by the same amount on its own - there is nothing else to
-   * keep in sync.
+   * One reservation, in one place: the PAGE measures the visible band, and
+   * this strip sits at the bottom of it with its keys padded clear of the
+   * home indicator.
    */
-  height: calc(var(--bbs-onscreen-input-height, 260px) + env(safe-area-inset-bottom));
+  height: var(--bbs-onscreen-input-height, 260px);
   background: #1a1a1a;
   border-top: 2px solid #444;
   display: flex;
