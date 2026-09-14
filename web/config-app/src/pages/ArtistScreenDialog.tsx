@@ -278,6 +278,19 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
    * nowhere to put either. Now it says so, and points at the way to make one.
    */
   const missingFile = !isLoading && !file && !isNew && !!path;
+  /**
+   * Drawing a `.seq` that does not exist yet.
+   *
+   * An undrawn slot offered UPLOAD and nothing else, so an artist who wanted
+   * to draw a PETSCII title in their own theme had no way in - the sysop hit
+   * exactly this on `Themes/ansiguy/Node/BBSTITLE.SEQ`. ANSI has always had
+   * it (a slot opened from the checklist arrives with `isNew` and a blank
+   * 80x25 canvas); this is the same offer for the one format that could not
+   * take it, because a blank PETSCII screen is 40x25 screen codes and not a
+   * canvas of cells.
+   */
+  const [drawingBlankSeq, setDrawingBlankSeq] = useState(false);
+  const isSeqPath = !!path && path.toLowerCase().endsWith('.seq');
 
   const save = useMutation({
     mutationFn: (base64: string) =>
@@ -439,12 +452,23 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         </p>
       )}
 
-      {missingFile && (
-        <p className="text-sm text-content-secondary" data-testid="screen-not-there">
-          Nothing is drawn at <span className="font-mono">{path}</span> yet. Use
-          &ldquo;Upload a drawing&rdquo; on the version that does exist, or the
-          format buttons above, to make one.
-        </p>
+      {missingFile && !drawingBlankSeq && (
+        <div className="space-y-2" data-testid="screen-not-there">
+          <p className="text-sm text-content-secondary">
+            Nothing is drawn at <span className="font-mono">{path}</span> yet. Use
+            &ldquo;Upload a drawing&rdquo; on the version that does exist, or the
+            format buttons above, to make one.
+          </p>
+          {isSeqPath && mine && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-1 border border-border-strong text-sm"
+              onClick={() => setDrawingBlankSeq(true)}
+            >
+              Draw one here
+            </button>
+          )}
+        </div>
       )}
 
       {file && !mine && (
@@ -537,7 +561,28 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         </div>
       )}
 
-      {(file || isNew) && (
+      {drawingBlankSeq && path && (
+        <div className="mt-3">
+          <PetsciiScreenEditor
+            /* A blank 40x25 C64 screen. Empty content IS the blank screen -
+               the editor builds one when it is handed nothing. */
+            content=""
+            filePath={path}
+            mci={[]}
+            onSave={async bytes => {
+              if (!(await confirmAuditWrite('This drawing'))) return;
+              // The same write an upload takes, so a screen that did not exist
+              // is created exactly the way a brought-in file would be.
+              writeBytes.mutate({ target: path, bytes });
+              setDrawingBlankSeq(false);
+            }}
+            onCancel={() => setDrawingBlankSeq(false)}
+            saving={writeBytes.isPending}
+          />
+        </div>
+      )}
+
+      {(file || isNew) && !drawingBlankSeq && (
         <div className="mt-3">
           {file?.format === 'rip' ? (
             <RipScreenEditor
