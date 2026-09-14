@@ -214,7 +214,13 @@ class CardLobbyApp {
             enableGameMode: false, // Blessed UI mode, not ncurses game mode
             enableGrabKeys: true, // Enable grabKeys for browser mode screen handlers
             enableMouse: true, // Enable mouse events
-            debug: true, // Enable debug logging to diagnose input issues
+            // OFF unless someone asks for it. This writes one line per input
+            // event, and a mouse event is an input event - a caller moving the
+            // pointer across the lobby wrote hundreds of lines a second into the
+            // board's log. Finding a real fault in there afterwards is hopeless:
+            // it buried the sysop's own session on 2026-09-14. Turn it on with
+            // DOOR_LOG_INPUT=1 when diagnosing input, the way List's debug works.
+            debug: process.env.DOOR_LOG_INPUT === '1',
             debugName: 'CardLobby'
         });
         this.inputManager.enable();
