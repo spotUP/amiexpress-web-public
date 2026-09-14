@@ -21,12 +21,21 @@
  * permission error into a silently skipped door.
  *
  * `.rexx`/`.rx` is handled before this, by the AREXX route.
+ *
+ * AND THE LOOKUP IS CASE-INSENSITIVE, because AmigaDOS is. `LOGOFF2.info`
+ * says `LOCATION=BBS:Batch2` with a capital B; the file on the volume is
+ * `batch2`. On the Amiga those are the same file and on Linux they are not,
+ * so the first version of this - a plain `existsSync` - answered "not a
+ * script" for every LOGOFF<n> on the board and fell straight back to the
+ * emulator, which is the bug it was written to fix. Every other path here
+ * goes through `amigafs` for this reason; so does this one now.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { config } from '../config';
+import * as amigafs from '../utils/amigafs';
 import { resolveAssignPath } from '../utils/path-util';
 
 /** The first four bytes of every AmigaDOS executable. */
@@ -49,7 +58,9 @@ export function amigaDosScriptPath(location: string | undefined | null): string 
     path.join(config.getConfig().dataDir, location),
   ];
 
-  for (const candidate of candidates) {
+  for (const raw of candidates) {
+    // The name AmigaDOS would have opened, whatever case the tooltype used.
+    const candidate = amigafs.resolvePath(raw) ?? raw;
     let handle: number | undefined;
     try {
       if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) continue;

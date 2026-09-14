@@ -95,6 +95,28 @@ describe('a command whose LOCATION is a script', () => {
     expect(scriptPathFor(dir, 'Batch4')).toBe(path.join(dir, 'Batch4'));
   });
 
+  test('finds the file whatever case the tooltype used - AmigaDOS is case-insensitive', () => {
+    const dir = make();
+    /*
+     * The real shape on this board: LOGOFF2.info says `BBS:Batch2`, the volume
+     * holds `batch2`. A plain existsSync answered "not a script" for every
+     * LOGOFF<n> on live and fell back to the emulator - the exact bug this
+     * module exists to fix, surviving inside the fix.
+     *
+     * Asserted on WHAT THE PATH OPENS, not on how it is spelled: this test
+     * runs on macOS, whose filesystem is case-insensitive, so `Batch2` would
+     * open `batch2` there however badly the lookup behaved. The board runs on
+     * Linux, where it would not. Reading the bytes back is the one check that
+     * means the same thing on both.
+     */
+    const body = 'doors:multitop/mtop bbs:bulletins/bull1.txt\n';
+    fs.writeFileSync(path.join(dir, 'batch2'), body);
+
+    const found = scriptPathFor(dir, 'Batch2');
+    expect(found).not.toBeNull();
+    expect(fs.readFileSync(found!, 'utf8')).toBe(body);
+  });
+
   test('no LOCATION at all is not a script', () => {
     const dir = make();
 
