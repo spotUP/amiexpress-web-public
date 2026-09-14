@@ -165,6 +165,24 @@ int ae_last_scanned(ae_session *s)
     return ask_int(s, AE_FIELD_LAST_SCANNED, -1);
 }
 
+/*
+ * 0, not -1, for both of these - unlike the pointers above. Zero IS the
+ * answer here: it is what a board with no custom conference says, what
+ * express.e's globals hold between invocations (:273-274), and what a board
+ * that has never heard of the field leaves in Data. All three mean the same
+ * thing to a door - "you were not launched as a message base" - so there is
+ * nothing for a sentinel to distinguish.
+ */
+int ae_msgbase_function(ae_session *s)
+{
+    return ask_int(s, AE_FIELD_MSGBASE_FUNC, 0);
+}
+
+int ae_msgbase_conference(ae_session *s)
+{
+    return ask_int(s, AE_FIELD_MSGBASE_CONF, 0);
+}
+
 /**
  * Shared by both pointer setters: send "<VERB> <n>", then ask what the
  * pointer actually is.

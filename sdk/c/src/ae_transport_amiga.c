@@ -151,6 +151,10 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 #define LAST_READ    602
 #define LAST_SCANNED 603
 
+/* The custom message-base pair, also answered in Data (express.e:3959-3962). */
+#define MSGBASE_FUNC 600
+#define MSGBASE_CONF 601
+
 /* RETURNCOMMAND: hand a command back for the BBS to run once this door has
  * exited (express.e:3492-3493; xim/types.ts RETURNCOMMAND = 136). */
 #define RETURNCOMMAND 136
@@ -482,6 +486,9 @@ static int field_answers_in_data(int field)
          * this function landed. */
         case LAST_READ:
         case LAST_SCANNED:
+        /* express.e:3959-3962, the same shape: `msg.data:=customMsgParam1`. */
+        case MSGBASE_FUNC:
+        case MSGBASE_CONF:
             return 1;
         default:
             return 0;

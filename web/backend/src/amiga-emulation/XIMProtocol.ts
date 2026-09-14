@@ -1349,9 +1349,15 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
       // Message base location
       case XIMCommand.MSGBASE_LOC:
         {
-          // MSGBASE_LOC (604): Return message base path for current conference
-          // ctop.e uses this to access message headers for top uploaders
-          const confNum = (this.bbsSession as any)?.currentConf || 1;
+          // MSGBASE_LOC (604): the message base this door is asking about.
+          // ctop.e uses it to reach the message headers for top uploaders.
+          //
+          // Normally the caller's own conference - but a door invoked as a
+          // conference's CUSTOM message base is asking about the conference
+          // the BOARD named (param2), which during `MS` is not the one the
+          // caller is standing in (express.e:25260-25268).
+          const { doorConference } = require('../services/custom-msgbase');
+          const confNum = doorConference(this.bbsSession) || 1;
           const msgBaseLoc = conferenceAmigaPath(appConfig.get('dataDir'), confNum, 'MsgBase');
 debugLog(`[XIMProtocol] MSGBASE_LOC: "${msgBaseLoc}"`);
           this.messageParser.writeMessageString(msg.msgAddr, msgBaseLoc);

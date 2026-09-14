@@ -88,6 +88,26 @@ typedef enum {
      */
     AE_FIELD_MENU_COMMAND   = 605,  /* GET_CUSTOM_MSGBASE_MENUCMD */
     /*
+     * WHY THIS DOOR WAS LAUNCHED, when the launch was a conference handing
+     * over its message base - express.e:3959-3962, both answered in Data:
+     *
+     *     CASE GET_CUSTOM_MSGBASE_PARAM1 -> msg.data:=customMsgParam1
+     *     CASE GET_CUSTOM_MSGBASE_PARAM2 -> msg.data:=customMsgParam2
+     *
+     * A conference carrying the tooltype CUSTOM routes every message command
+     * to one door (customMsgbaseCmd, express.e:12426-12437). PARAM1 says
+     * WHICH - read, enter, scan, stats, comment, zoom - and PARAM2 says which
+     * CONFERENCE, which during `MS` is not the one the caller is standing in.
+     *
+     * ZERO means "you were not launched as a message base", which is what a
+     * board with no custom conference answers and what express.e's own globals
+     * hold (:273-274). Branch on this, not on the command NAME: 605 carries
+     * the command LINE on a real Amiga and only this port's extension makes it
+     * a registration name.
+     */
+    AE_FIELD_MSGBASE_FUNC   = 600,  /* GET_CUSTOM_MSGBASE_PARAM1 */
+    AE_FIELD_MSGBASE_CONF   = 601,  /* GET_CUSTOM_MSGBASE_PARAM2 */
+    /*
      * THE BOARD'S CLOCK, in Unix seconds - express.e:3771,
      * `StringF(tempstring,'\d',getSystemTime())`.
      *
@@ -145,6 +165,23 @@ typedef enum {
      */
     AE_FIELD_SETPOINTER     = 10300  /* AEW_SETPOINTER */
 } ae_field;
+
+/**
+ * The message functions a conference's CUSTOM message base is called with -
+ * `axenums.e:27`, read from AE_FIELD_MSGBASE_FUNC.
+ *
+ * There is no 5. The gap is AmiExpress's own, and closing it here would put
+ * every door built against this SDK half a step out from a real board.
+ */
+enum {
+    AE_MAIL_NONE          = 0,   /* not a message-base launch at all */
+    AE_MAIL_READ          = 1,
+    AE_MAIL_CREATE        = 2,
+    AE_MAIL_SCAN          = 3,
+    AE_MAIL_STATS         = 4,
+    AE_MAIL_SYSOP_COMMENT = 6,
+    AE_MAIL_ZOOM          = 7
+};
 
 /**
  * One round trip to the board.
@@ -293,6 +330,23 @@ int ae_last_read(ae_session *s);
  * that decides what counts as new; ae_last_read is where he stopped reading.
  */
 int ae_last_scanned(ae_session *s);
+
+/**
+ * The MAIL_* function this door was launched for, or 0 when it was not
+ * launched as a conference's message base (axenums.e:27):
+ *
+ *     1 READ   2 CREATE   3 SCAN   4 STATS   6 SYSOP_COMMENT   7 ZOOM
+ *
+ * There is no 5. The gap is AmiExpress's.
+ */
+int ae_msgbase_function(ae_session *s);
+
+/**
+ * The conference that function is about, or 0. NOT always the conference the
+ * caller is in: `MS` walks every conference he may read and calls the door
+ * once per conference without him leaving his own (express.e:25260-25268).
+ */
+int ae_msgbase_conference(ae_session *s);
 
 /**
  * The board's clock, in Unix seconds, or 0 where it will not say.

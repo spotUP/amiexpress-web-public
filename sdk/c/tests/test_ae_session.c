@@ -50,6 +50,9 @@ typedef struct {
     /** Mutable pointer storage, so a board that knows the command can move. */
     char read_buf[16];
     char scan_buf[16];
+    /** What a conference handing over its message base says it wants (600/601). */
+    const char *msgbase_func;
+    const char *msgbase_conf;
 } fake_board;
 
 static int fake_transport(void *context, ae_field field, char *out, int cap)
@@ -74,6 +77,8 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_MSGBASE_LOC:   value = b->msgbase; break;
         case AE_FIELD_LAST_READ:     value = b->last_read; break;
         case AE_FIELD_LAST_SCANNED:  value = b->last_scanned; break;
+        case AE_FIELD_MSGBASE_FUNC:  value = b->msgbase_func; break;
+        case AE_FIELD_MSGBASE_CONF:  value = b->msgbase_conf; break;
         case AE_FIELD_THEME:         value = b->can_write ? b->theme : 0; break;
         default: value = 0; break;
     }
@@ -490,6 +495,46 @@ static void marking_read_refuses_nonsense_without_asking_the_board(void)
     printf("  [OK] a negative pointer never reaches the board\n");
 }
 
+static void it_reads_why_a_message_base_launched_it(void)
+{
+    /*
+     * express.e:3959-3962. A conference carrying the tooltype CUSTOM hands
+     * every message command to one door and says which - MAIL_READ here - and
+     * which conference, which during `MS` is NOT the one the caller is
+     * standing in (:25260-25268).
+     */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();
+
+    b.msgbase_func = "1";          /* MAIL_READ */
+    b.msgbase_conf = "12";         /* ...of conference 12, not the caller's */
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_msgbase_function(&s) == 1);
+    assert(ae_msgbase_conference(&s) == 12);
+    printf("  [OK] it reads the message function and its conference\n");
+}
+
+static void a_door_nobody_handed_a_message_base_gets_zero(void)
+{
+    /*
+     * THE DEFAULT THAT MATTERS. A board with no CUSTOM conference, a board
+     * that has never heard of 600, and express.e between invocations
+     * (:273-274) all answer the same thing, and a door must read all three as
+     * "you were launched normally - draw yourself". Zero is that answer, which
+     * is why these two do NOT use the -1 sentinel the read pointers need.
+     */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();      /* says nothing about 600/601 at all */
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_msgbase_function(&s) == 0);
+    assert(ae_msgbase_conference(&s) == 0);
+    printf("  [OK] no custom invocation reads as zero, not as an error\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -505,6 +550,8 @@ int main(void)
     it_says_where_the_messages_are();
     it_reads_the_callers_pointers();
     a_pointer_of_zero_is_not_a_board_that_cannot_answer();
+    it_reads_why_a_message_base_launched_it();
+    a_door_nobody_handed_a_message_base_gets_zero();
     a_classic_board_leaves_the_paths_empty();
     a_door_can_mark_the_mail_read();
     a_pointer_never_goes_backwards();

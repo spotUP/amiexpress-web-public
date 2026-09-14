@@ -153,6 +153,32 @@ export async function runCustomMsgbaseCommand(
   (session as any).customMsgParam2 = conferenceNumber;
   (session as any).customMsgCmd = commandText;
 
+  /*
+   * AND THIS CONFERENCE'S READ POINTERS, for the same reason the location
+   * above is param2's: during `MS` the board walks conferences the caller is
+   * not standing in, and a door told the CURRENT conference's pointer would
+   * report the wrong "new" count for every one of them - plausibly, and
+   * without any error to notice.
+   *
+   * express.e does this too: joinConf sets lastMsgReadConf / lastNewReadConf
+   * for the conference it is about to scan (:5030-5040) before reaching the
+   * CUSTOM branch at :5124.
+   */
+  const priorRead = (session as any).lastMsgReadConf;
+  const priorScanned = (session as any).lastNewReadConf;
+  if (session.user?.id) {
+    try {
+      const { loadMsgPointers } = require('../utils/message-pointers.util');
+      const pointers = await loadMsgPointers(session.user.id, conferenceNumber, 1);
+      (session as any).lastMsgReadConf = pointers?.lastMsgReadConf || 0;
+      (session as any).lastNewReadConf = pointers?.lastNewReadConf || 0;
+    } catch (error) {
+      // A pointer that cannot be read is a door that shows everything as new,
+      // which is wrong but harmless. A door that does not run is worse.
+console.warn('[customMsgbase] could not load read pointers:', error);
+    }
+  }
+
   const { executeDoor } = require('../handlers/door.handler');
   try {
     await executeDoor(socket, session, {
@@ -176,9 +202,40 @@ export async function runCustomMsgbaseCommand(
     (session as any).customMsgParam1 = undefined;
     (session as any).customMsgParam2 = undefined;
     (session as any).customMsgCmd = undefined;
+    (session as any).lastMsgReadConf = priorRead;
+    (session as any).lastNewReadConf = priorScanned;
   }
 
   return true;
+}
+
+/**
+ * WHICH conference a door's questions are about.
+ *
+ * Ordinarily the one the caller is in. Inside a custom message-base
+ * invocation it is `param2` instead - the conference the BOARD named - and
+ * they are not always the same one: `MS` walks every conference the caller may
+ * read and calls the door once per conference (express.e:25260-25268 into
+ * 5120-5125) without the caller leaving the conference he is standing in.
+ *
+ * So every answer a message-base door depends on - where the conference is,
+ * where its MsgBase is, what it is called - has to be about `param2` while one
+ * of these is in flight, or `MS` reports the same conference eleven times.
+ */
+export function doorConference(session: any): number {
+  const named = Number(session?.customMsgParam2 || 0);
+  if (named > 0) return named;
+  return Number(
+    session?.currentConference ?? session?.currentConf ?? session?.conferenceId ?? 1,
+  );
+}
+
+/** That conference's name, off `ConfConfig.info` - `getConfName` (express.e). */
+export function doorConferenceName(bbsRoot: string, conferenceNumber: number): string {
+  const { loadConfConfig } = require('./conf-config.service');
+  const data = loadConfConfig(bbsRoot);
+  const entry = data?.entries?.[conferenceNumber - 1];
+  return entry?.name || '';
 }
 
 /**

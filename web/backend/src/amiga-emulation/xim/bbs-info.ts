@@ -202,15 +202,22 @@ debugLog(`[XIMBBSInfo] BB_STATUS: ${status}`);
 
     switch (msg.command) {
       case XIMCommand.BB_CONFNAME:
-        value = this.bbsSession?.conferenceName || 'Main';
+        {
+          // The conference the DOOR is asking about, which is param2 inside a
+          // custom message-base invocation and the caller's own otherwise.
+          const { doorConference, doorConferenceName } = require('../../services/custom-msgbase');
+          const named = doorConferenceName(appConfig.get('dataDir'), doorConference(this.bbsSession));
+          value = named || this.bbsSession?.conferenceName || 'Main';
 debugLog(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
+        }
         break;
 
       case XIMCommand.BB_CONFLOCAL:
         {
           // Return Amiga-style path like "BBS:Conf1/" (door expects this format)
           // Check both currentConference (GlobalStructures) and currentConf (legacy)
-          const confId = (this.bbsSession as any)?.currentConference ?? (this.bbsSession as any)?.currentConf ?? this.bbsSession?.conferenceId ?? 1;
+          const { doorConference } = require('../../services/custom-msgbase');
+          const confId = doorConference(this.bbsSession);
           value = conferenceAmigaPath(appConfig.get('dataDir'), confId);
 
           // DEBUG: Write to file for visibility

@@ -242,3 +242,31 @@ describe('the function numbers', () => {
     ]).toEqual([1, 2, 3, 4, 6, 7]);
   });
 });
+
+/**
+ * WHICH conference the door's questions are about.
+ *
+ * `MS` walks every conference the caller may read and calls the door once per
+ * conference (express.e:25260-25268 into 5120-5125) WITHOUT the caller leaving
+ * the conference he is standing in. So every answer a message-base door
+ * depends on has to follow `param2`, not `currentConf`, or `MS` reports the
+ * same conference eleven times and nobody can tell from the output that it
+ * did.
+ */
+describe('the conference a door is asking about', () => {
+  const { doorConference } = require('../../src/services/custom-msgbase');
+
+  it('is the caller\'s own when no custom invocation is in flight', () => {
+    expect(doorConference({ currentConf: 7 })).toBe(7);
+  });
+
+  it('is the one the BOARD named while one is', () => {
+    expect(doorConference({ currentConf: 7, customMsgParam2: 12 })).toBe(12);
+  });
+
+  it('falls back to conference 1 rather than to nothing', () => {
+    // A door asking with no conference anywhere would otherwise be handed
+    // NaN and build a path out of it.
+    expect(doorConference({})).toBe(1);
+  });
+});
