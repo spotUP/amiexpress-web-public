@@ -173,7 +173,8 @@ describe('editing a screen in the browser', () => {
     await user.click(screen.getByRole('button', { name: /^save$/i }));
     // The fan-out is the upload path's, unchanged: editing the LOGON screen has
     // to offer "all the nodes that have it" exactly as replacing it does.
-    await user.click(await screen.findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
+    // One destination, so the save writes itself - there is no "where?" to
+    // answer. See SingleDestinationWrite in ScreenFilesPage.
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
@@ -193,7 +194,8 @@ describe('editing a screen in the browser', () => {
     await user.pointer([{ target: canvas, coords: { clientX: 0, clientY: 32 }, keys: '[MouseLeft]' }]);
 
     await user.click(screen.getByRole('button', { name: /^save$/i }));
-    await user.click(await screen.findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
+    // One destination, so the save writes itself - there is no "where?" to
+    // answer. See SingleDestinationWrite in ScreenFilesPage.
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');

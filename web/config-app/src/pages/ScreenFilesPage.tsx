@@ -162,6 +162,29 @@ function baseName(filePath: string): string {
  */
 export { formatsPresent, missingFormats };
 
+/**
+ * The write that has only one destination: it happens, and says so.
+ *
+ * Rendered instead of the "where?" dialog when the fan-out offers a single
+ * target. It fires ONCE - a write is not idempotent and a re-render must not
+ * repeat it - and shows a line of text while it does, so the save is not a
+ * silent nothing between pressing Save and the panel closing.
+ */
+function SingleDestinationWrite(
+  { option, onDone }: { option: FanOutOption; onDone: (option: FanOutOption) => void | Promise<void> },
+) {
+  const fired = useRef(false);
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    void onDone(option);
+  }, [option, onDone]);
+
+  return (
+    <p className="p-4 text-sm text-content-secondary">Saving...</p>
+  );
+}
+
 export function ScreenFilesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
@@ -494,6 +517,12 @@ export function ScreenFilesPage() {
   const otherWrites = useMemo(
     () => options.filter(option => option.choice !== everyCopy?.choice),
     [options, everyCopy],
+  );
+
+  /** Every destination the save could go to, the write-everywhere one first. */
+  const writeOptions = useMemo(
+    () => [...(everyCopy ? [everyCopy] : []), ...otherWrites],
+    [everyCopy, otherWrites],
   );
 
   /** Read the chosen file as base64 - bytes, never text, all the way through. */
@@ -1786,12 +1815,38 @@ export function ScreenFilesPage() {
           />
         )}
 
-        {editorWrite && pendingUpload && (
+        {/*
+          A QUESTION WITH ONE ANSWER IS NOT A QUESTION.
+      
+          The editor saves through the upload's fan-out on purpose - same
+          backup, same refusals, no second write path - and that fan-out asks
+          WHERE because most screens on this board exist in many copies (forty
+          one nodes, a theme's mirror). A file that has exactly one copy has
+          nothing to choose: `Utils/samilog/samilog.header.txt.gr` offered a
+          single button reading "Write this file" and then a way back, which
+          the sysop met as "why does it ask this???" (2026-09-14).
+      
+          So one destination writes itself and the dialog never opens. Two or
+          more still ask, because then the answer matters.
+        */}
+        {editorWrite && pendingUpload && writeOptions.length === 1 && (
+          <SingleDestinationWrite
+            option={writeOptions[0]}
+            onDone={async option => {
+              await applyWrite(option);
+              setEditing(null);
+              setEditorWrite(false);
+              setOpenFile(null);
+            }}
+          />
+        )}
+
+        {editorWrite && pendingUpload && writeOptions.length > 1 && (
           <div className="space-y-2 p-4">
             <p className="text-sm text-content-primary">
               Write <span className="font-mono">{openFile}</span> where?
             </p>
-            {[...(everyCopy ? [everyCopy] : []), ...otherWrites].map((option, at) => (
+            {writeOptions.map((option, at) => (
               <button
                 key={option.choice}
                 className="block text-left underline"

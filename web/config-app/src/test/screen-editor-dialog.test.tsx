@@ -98,14 +98,21 @@ describe('the editor as a dialog', () => {
     expect(dialog.textContent).toContain('Node1/BBSTITLE.txt');
   });
 
-  it('asks where the bytes go without leaving the dialog', async () => {
+  it('does not ask where, when there is only one place it can go', async () => {
+    // BBSTITLE here resolves in ONE scope, so the fan-out has a single target
+    // and the old dialog offered a lone "Write this file" button plus a way
+    // back. The sysop met that on the SAmiLog logo: "why does it ask this???"
     const user = userEvent.setup();
     const dialog = await openEditor(user);
 
     await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
 
-    // The fan-out choice used to render in the page underneath.
-    expect(await within(dialog).findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i })).toBeTruthy();
+    // The write just happens, and the dialog closes behind it.
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
+      expect(put).toBeTruthy();
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('writes the bytes and closes', async () => {
@@ -113,7 +120,6 @@ describe('the editor as a dialog', () => {
     const dialog = await openEditor(user);
 
     await user.click(within(dialog).getByRole('button', { name: /^save$/i }));
-    await user.click(await within(dialog).findByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');

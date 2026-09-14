@@ -108,6 +108,26 @@ export function ScreenEditor({
   surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false, saving = false,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  /**
+   * Ctrl+K and the Remove line button, which must not disagree.
+   *
+   * The row comes OUT - the screen is one shorter - so a cursor resting on the
+   * last row would be left past the end, where nothing draws it: "the cursor
+   * gets removed when i remove a line so its hard to see what i do" (the
+   * sysop, 2026-09-14). Clamping it back onto the new last row keeps it where
+   * the artist can see it, and keeps the next Ctrl+K working - a cursor past
+   * the end is a row `removeLine` refuses.
+   *
+   * One function for both, because the keyboard and the button were separate
+   * calls and only one of them had the clamp.
+   */
+  const removeCursorLine = () => {
+    const shorter = removeLine(surface, cursor.y);
+    if (shorter === surface) return;
+    onChange?.(shorter);
+    setCursor(c => ({ ...c, y: Math.max(0, Math.min(c.y, shorter.canvas.length - 1)) }));
+  };
   const [pickingCode, setPickingCode] = useState(false);
   /**
    * Which palette the art is SHOWN in.
@@ -244,14 +264,9 @@ export function ScreenEditor({
           case 'centre-line':
             onChange?.(centreLine(surface, cursor.y));
             return;
-          case 'remove-line': {
-            // Ctrl+K takes the row out FOR REAL, so the screen is one shorter
-            // and a cursor resting on the last row would be left past the end.
-            const shorter = removeLine(surface, cursor.y);
-            onChange?.(shorter);
-            setCursor(c => ({ ...c, y: Math.min(c.y, shorter.canvas.length - 1) }));
+          case 'remove-line':
+            removeCursorLine();
             return;
-          }
           case 'insert-line':
             onChange?.(insertLine(surface, cursor.y));
             return;
@@ -445,7 +460,7 @@ export function ScreenEditor({
           type="button"
           title="Take the cursor's line out; everything below moves up"
           className="px-2 py-1 text-sm border border-border text-content-secondary"
-          onClick={() => onChange?.(removeLine(surface, cursor.y))}
+          onClick={removeCursorLine}
         >
           Remove line {cursor.y + 1}
         </button>
@@ -624,7 +639,16 @@ export function ScreenEditor({
           palette={palette}
           /* Where the caller's screen ends - see screen-fold.ts. */
           folds={folds}
-          cursor={!readOnly && surface.tool === 'text' ? cursor : null}
+          /*
+           * Shown in EVERY tool, not only Text.
+           *
+           * It used to appear for the text tool alone, which was fine while
+           * the cursor only marked where typing would land. It now says which
+           * ROW the line keys and the Add/Remove line buttons will act on, and
+           * an artist drawing in any other tool could not see what Ctrl+K was
+           * about to take - reported 2026-09-14 as "hard to see what i do".
+           */
+          cursor={readOnly ? null : cursor}
           highlights={[...tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
           })), ...selectionHighlights]}
