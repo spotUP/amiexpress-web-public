@@ -256,6 +256,31 @@ export function screenSearchLocations(
       dir: screenDir,
       desc: screenDir === nodeDir ? `Node${opts.nodeId}` : `Node${opts.nodeId} SCREENS tooltype`,
     });
+    /*
+     * THE SHARED NODE DIRECTORY, LAST, and it is not a second guess at the
+     * tooltype - it is the floor under a node that has no art of its own.
+     *
+     * The image COLLAPSES node screens: 544 files that were 16 distinct
+     * screens move into `Screens/Node/` and each `Node<n>.info` is given
+     * `SCREENS=BBS:Screens/Node/` (Dockerfile, collapse-default-screens.ts).
+     * A board built after that reads the shared directory and nothing is
+     * missing. A board built BEFORE it - this one - keeps node icons with no
+     * such tooltype, so `resolveNodeScreenDir` answers `Node<n>/`, and every
+     * screen the image now ships only in the shared directory is invisible to
+     * it. The 239 generated PETSCII screens landed there and no C64 caller
+     * could reach one until 71 node directories were mirrored BY HAND
+     * (2026-09-16), which fixes the nodes that exist and not the next one the
+     * board creates.
+     *
+     * Ordered AFTER the node's own directory, so nothing is shadowed: a node
+     * with its own `BBSTITLE.SEQ` keeps it, and only a screen the node does
+     * not have falls through to the one every node shares. Skipped when the
+     * tooltype already points here, which is the collapsed board's case.
+     */
+    const sharedNodeDir = path.join(baseDir, 'Screens', 'Node');
+    if (path.resolve(sharedNodeDir) !== path.resolve(screenDir)) {
+      locations.push({ dir: sharedNodeDir, desc: 'Screens/Node (shared)' });
+    }
   } else if (dirType === ScreenDirType.CONF && opts.confId) {
     // express.e:31849 reads LOCATION.n for a conference's directory; deriving
     // `Conf<n>` from the number breaks the moment a board is renumbered, which

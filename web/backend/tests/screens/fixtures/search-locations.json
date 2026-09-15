@@ -3,18 +3,30 @@
     {
       "dir": "<root>/Node1",
       "desc": "Node1"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "LOGON|node=7|conf=2": [
     {
       "dir": "<root>/Node7",
       "desc": "Node7"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "LOGON|node=0|conf=-": [
     {
       "dir": "<root>/Node0",
       "desc": "Node0"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "BULL|node=1|conf=1": [
@@ -96,36 +108,60 @@
     {
       "dir": "<root>/Node1",
       "desc": "Node1"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "NODE_BULL|node=7|conf=2": [
     {
       "dir": "<root>/Node7",
       "desc": "Node7"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "NODE_BULL|node=0|conf=-": [
     {
       "dir": "<root>/Node0",
       "desc": "Node0"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "AWAITSCREEN|node=1|conf=1": [
     {
       "dir": "<root>/Node1",
       "desc": "Node1"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "AWAITSCREEN|node=7|conf=2": [
     {
       "dir": "<root>/Node7",
       "desc": "Node7"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ],
   "AWAITSCREEN|node=0|conf=-": [
     {
       "dir": "<root>/Node0",
       "desc": "Node0"
+    },
+    {
+      "dir": "<root>/Screens/Node",
+      "desc": "Screens/Node (shared)"
     }
   ]
 }

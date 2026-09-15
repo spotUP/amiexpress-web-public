@@ -46,9 +46,16 @@ describe('the express.e screen directory table', () => {
 });
 
 describe('screenSearchLocations', () => {
-  test('a node screen searches the node directory and nothing else', () => {
+  test('a node screen searches the node directory, then the one every node shares', () => {
+    // `Screens/Node` joined this list on 2026-09-16: the image collapses node
+    // screens into it, and a board whose node icons predate that tooltype
+    // could not see anything the image ships only there. LAST, so the node's
+    // own art still answers first.
     const locations = screenSearchLocations(root, 'LOGON', { nodeId: 7 });
-    expect(locations.map(l => l.dir)).toEqual([path.join(root, 'Node7')]);
+    expect(locations.map(l => l.dir)).toEqual([
+      path.join(root, 'Node7'),
+      path.join(root, 'Screens', 'Node'),
+    ]);
   });
 
   test('the SCREENS tooltype replaces the node directory', () => {

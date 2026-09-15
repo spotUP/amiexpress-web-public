@@ -41,6 +41,21 @@ const dirs = (screen: string, opts: { nodeId: number; confId?: number; themeSlug
 beforeEach(board);
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
+/*
+ * THE ORACLE MOVED ONCE, ON PURPOSE, 2026-09-16.
+ *
+ * Every NODE screen's list gained one entry at the END: `Screens/Node`, the
+ * directory every node shares. The image COLLAPSES node screens into it and
+ * gives each `Node<n>.info` a `SCREENS` tooltype pointing there; a board built
+ * before that keeps icons with no tooltype, reads `Node<n>/`, and cannot see
+ * anything the image now ships only in the shared directory - which is how 239
+ * generated PETSCII screens sat on the live volume unreachable until 71 node
+ * directories were mirrored by hand.
+ *
+ * It is LAST, so nothing is shadowed: a node with its own art keeps it. The
+ * rest of this fixture is unchanged, and a node screen is still found in the
+ * node's own directory first.
+ */
 describe('a board with no theme resolves exactly as it did before themes existed', () => {
   const cases = [
     { nodeId: 1, confId: 1 },
@@ -74,7 +89,7 @@ describe('a theme shadows a scope without removing it', () => {
   it('puts its Node directory ahead of the node the caller is on', () => {
     theme('neon', ['Node']);
     expect(dirs('LOGON', { nodeId: 1, confId: 1, themeSlug: 'neon' }))
-      .toEqual(['<root>/Themes/neon/Node', '<root>/Node1']);
+      .toEqual(['<root>/Themes/neon/Node', '<root>/Node1', '<root>/Screens/Node']);
   });
 
   it('puts its Conf/<n> ahead of BOTH conference locations, in number not directory name', () => {
