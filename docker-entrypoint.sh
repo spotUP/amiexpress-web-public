@@ -632,6 +632,29 @@ list_tracked_screens() {
             \( -iname '*.txt' -o -iname '*.ans' -o -iname '*.seq' \
                -o -iname '*.rip' -o -iname '*.gr' \) -print)
     done
+
+    # A NODE DIRECTORY HOLDS SCREENS TOO, and no rule here could reach them.
+    #
+    # `Node1/guestlogon.txt`, `logon10`, `logon20`, `JoinConf`, the node's own
+    # BBSTITLE: all screens, all resolved by `resolveNodeScreenDir`, and all
+    # copied to the volume ONLY when the whole directory is missing (first run
+    # or repair). So a screen added to a node after a board's first boot never
+    # arrived - the same defect this sync was written for
+    # (`deploy-syncs-screens.test.ts`), one directory over. Found while
+    # shipping the generated PETSCII defaults: most of them are node screens,
+    # and every one would have stayed inside the image.
+    #
+    # The conference-root guards apply unchanged, for the same reason: a node
+    # directory is ALSO where CallersLog, DOOR.SYS, DoorLog, ErrorLog and the
+    # questionnaire's Answers live. Screen extensions only, depth 1 only, and
+    # a node the image does not ship is not invented here.
+    for node in "$DEFAULT_DATA_DIR"/Node*; do
+        [ -d "$node" ] || continue
+        (cd "$DEFAULT_DATA_DIR" && find "$(basename "$node")" -maxdepth 1 -type f \
+            \( -iname '*.txt' -o -iname '*.ans' -o -iname '*.seq' \
+               -o -iname '*.rip' -o -iname '*.gr' \
+               -o -iname '*.tti' -o -iname '*.ttx' \) -print)
+    done
 }
 
 # --- end of the deploy sync helpers; the tests extract everything above ---

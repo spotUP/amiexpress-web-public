@@ -370,3 +370,54 @@ onCaseSensitiveFs('case-only duplicates on the volume', () => {
     expect(fs.readdirSync(node())).toEqual(first);
   });
 });
+
+describe('a node directory is a screen directory', () => {
+  /*
+   * Node screens reached the volume on FIRST RUN ONLY - the directory is
+   * copied whole when it is missing and never looked at again - so a screen
+   * added to `Node1/` after a board's first boot stayed in the image for
+   * ever. Found while shipping the generated PETSCII defaults, most of which
+   * are node screens.
+   */
+  const imageNode = () => path.join(root, 'image', 'Node1');
+  const volumeNode = () => path.join(root, 'volume', 'Node1');
+
+  beforeEach(() => {
+    fs.mkdirSync(imageNode(), { recursive: true });
+    fs.mkdirSync(volumeNode(), { recursive: true });
+  });
+
+  it('carries a new node screen to a board that already exists', () => {
+    fs.writeFileSync(path.join(imageNode(), 'guestlogon.seq'), 'petscii');
+
+    deploy(root);
+
+    // The FILE, not the counter: the counters are incremented inside a
+    // pipeline subshell and the copy is what the board reads.
+    expect(fs.readFileSync(path.join(volumeNode(), 'guestlogon.seq'), 'utf8')).toBe('petscii');
+  });
+
+  it('keeps the screen the sysop drew over the image\'s', () => {
+    fs.writeFileSync(path.join(imageNode(), 'BBSTITLE.SEQ'), 'image title');
+    fs.writeFileSync(path.join(volumeNode(), 'BBSTITLE.SEQ'), 'the sysop\'s own title');
+
+    deploy(root);            // adopts the divergence
+    deploy(root);            // and must still not overwrite it
+
+    expect(fs.readFileSync(path.join(volumeNode(), 'BBSTITLE.SEQ'), 'utf8')).toBe('the sysop\'s own title');
+  });
+
+  it('leaves the board\'s own runtime files in the node directory alone', () => {
+    // A node directory is also where CallersLog, DOOR.SYS and the
+    // questionnaire's Answers live. None of them is a screen.
+    for (const name of ['CallersLog', 'DOOR.SYS', 'Answers', 'DoorLog']) {
+      fs.writeFileSync(path.join(imageNode(), name), 'from the image');
+    }
+
+    deploy(root);
+
+    for (const name of ['CallersLog', 'DOOR.SYS', 'Answers', 'DoorLog']) {
+      expect(fs.existsSync(path.join(volumeNode(), name))).toBe(false);
+    }
+  });
+});
