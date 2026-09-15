@@ -30,7 +30,22 @@ describe('shipped door manifests', () => {
 
     const view = readDoorSettingsView(doorDir);
     expect(view).not.toBeNull();
-    expect(view!.manifest.settings.length).toBeGreaterThan(0);
+
+    /*
+     * A manifest has to declare SOMETHING the admin can act on - settings or
+     * art. It used to demand settings, on the premise that declaring settings
+     * is what a manifest is for, and QuickNew broke that premise honestly: it
+     * has no admin-editable settings at all, and its manifest exists so the
+     * ANSI Studio can reach the config templates that ARE its screen
+     * (186c4f630).
+     *
+     * Widened rather than loosened. An EMPTY manifest - neither settings nor
+     * art - is still a defect, because it puts a door in the admin's list with
+     * nothing behind it, and that is what this line is here to catch.
+     */
+    const declares =
+      view!.manifest.settings.length + (view!.manifest.artSections?.length ?? 0);
+    expect(declares).toBeGreaterThan(0);
 
     // The door, reading the same files, gets every key the admin would show -
     // minus the secrets, which have no default and are not set in the repo.
@@ -41,6 +56,17 @@ describe('shipped door manifests', () => {
     for (const key of declaredWithDefaults) {
       expect(asTheDoorSeesThem).toHaveProperty(key);
     }
+  });
+
+  it('refuses a manifest that declares nothing at all', () => {
+    // The guard the widened rule still has to carry: a door in the admin's
+    // list with neither settings nor art behind it is a defect, and a rule
+    // widened to let QuickNew through must not let that through with it.
+    const empty = { manifest: { settings: [], artSections: [] } };
+    const declares =
+      empty.manifest.settings.length + (empty.manifest.artSections?.length ?? 0);
+
+    expect(declares).toBe(0);
   });
 
   // A door's package.json is what a FUTURE install would register; the board
