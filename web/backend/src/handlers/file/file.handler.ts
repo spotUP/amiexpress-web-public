@@ -25,6 +25,7 @@ import { poolSpaceFor } from '../../storage/remote-upload';
 import { storageFailureText } from '../../storage/remote-download';
 import { StorageUnavailableError } from '../../storage/storage-backend';
 import { getPlaypenDir } from '../../utils/bbs-paths.util';
+import { cleanItUp } from '../../utils/clean-it-up.util';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -732,7 +733,25 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // express.e:19016
   emitText(socket, `Filename lengths above 12 are not allowed.${eraseRestOfLine(socket)}\r\n${eraseRestOfLine(socket)}\r\n`);
 
-  // express.e:17656 cleanItUp() — nothing needed for web
+  /*
+   * express.e:17656 - cleanItUp(), the node WORK DIRECTORY sweep.
+   *
+   * This line used to read "nothing needed for web", and that was wrong. The
+   * playpen is where a transfer writes before the file is accepted, so every
+   * upload that died part way left its bytes there for ever - on the live
+   * board, `Node2/Playpen` still held seven files from August.
+   *
+   * Resume partials are NOT in here (they live in the conference's PARTUPLOAD
+   * directory, services/resume-stuff.service.ts), so this does not cost a
+   * caller an interrupted transfer.
+   */
+  const swept = cleanItUp(getPlaypenDir(session.nodeId || 0, config.get('dataDir')));
+  if (swept.deleted.length > 0) {
+    console.log(`[upload] cleanItUp: cleared ${swept.deleted.length} stale file(s) from the playpen`);
+  }
+  if (swept.stoppedAt) {
+    console.log(`[upload] cleanItUp: stopped at ${JSON.stringify(swept.stoppedAt)} - express.e:17845 refuses to sweep past a name it does not recognise`);
+  }
   // express.e:17657
   emitText(socket, `Batch UpLoading.....${eraseRestOfLine(socket)}\r\n`);
   // express.e:17658
