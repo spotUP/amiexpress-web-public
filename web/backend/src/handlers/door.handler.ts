@@ -12,6 +12,7 @@ import { amigaDosScriptPath } from '../doors/amigados-script';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
+import { missingDoorTargets } from '../doors/door-path.util';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { doorScreenWidth, doorSessionGeometry } from '../amiga-emulation/xim/screen-width.util';
 import { routeAmigaDoorInput } from '../amiga-emulation/door-input-router';
@@ -4754,6 +4755,17 @@ console.log(`[initializeDoors] Registered door: ${door.command}  ${door.path} (t
     if (!resolved.startsWith(doorsDir) && !resolved.startsWith(doorsDir.toLowerCase())) {
       console.warn(`[initializeDoors] WARN: door ${door.command} LOCATION="${door.path}" resolves outside Doors/ (${resolved}) — move to Doors/ and update .info`);
     }
+  }
+
+  // Validate: warn if a registration points at a door that is not there.
+  //
+  // BROADCAST sat on the live menu pointing at a Doors/ANNOUNCE/ that does
+  // not exist, and the only way anyone could find out was a caller running
+  // it and being told to contact the sysop. Same class as the check above -
+  // a LOCATION nobody can follow - so it is reported at the same moment,
+  // to the same reader, in the same pass.
+  for (const broken of missingDoorTargets(doors, bbsBaseDir)) {
+    console.warn(`[initializeDoors] WARN: door ${broken.command} LOCATION="${broken.location}" does not exist — the command is on the menu and will fail when a caller runs it; install the door or remove Commands/BBSCmd/${broken.command}.info`);
   }
 
 console.log(`[initializeDoors] Total doors registered: ${doors.length}`);
