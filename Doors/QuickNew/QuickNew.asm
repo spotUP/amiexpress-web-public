@@ -969,14 +969,24 @@ writeblockfitted
 	MOVEA.L	currBlockEnd.L,A3
 	SUBQ.L	#3,A3
 
-; NOTHING TO FIT, NOTHING TO TOUCH.
+; NOTHING TO REFLOW, NOTHING TO TOUCH.
 ;
-; When every line already fits - which is every block on every board that
-; never passes WIDTH, and most blocks on those that do - the whole block
-; goes out as the ONE Write the door has always used, from the same
-; pointer with the same length. Not "reconstructed identically": the same
-; call. That is what makes the default indistinguishable from the door as
-; it shipped, and it is worth the extra pass to be sure of it.
+; A block whose lines all fit AND hold no run of spaces goes out as the ONE
+; Write the door has always used, from the same pointer with the same
+; length - the same call, not a reconstruction of it.
+;
+; A run of spaces counts as needing work now, because of this:
+;
+;   "i think the quicknew output is messy with all the doubled spaces etc
+;    can we make it more tidy when we are recoding it anyway?"
+;        - the sysop, 2026-09-15
+;
+; Those runs are the CONFIG's. Each template carries a hand-tuned stretch of
+; spaces to push the counts into a column, and a section title of a different
+; length puts them somewhere else - which is exactly what the sysop was
+; looking at. Collapsing them here and returning the slack to the last gap
+; aligns the counts on every row without the config carrying any padding at
+; all, so it works for any board and not just this one.
 	BSR.W	blockneedsfitting
 	TST.L	D0
 	BNE.S	wbfnextline
@@ -1038,16 +1048,15 @@ wbfscanok
 wbfnoeol
 
 	MOVE.L	screenwidth.L,D6
-	CMP.L	D6,D4
-	BHI.S	wbftruncate
 
-; It fits. Hand the original bytes straight to Write.
-	MOVEA.L	dosbase(PC),A6
-	MOVE.L	stdout(PC),D1
-	MOVE.L	A2,D2
-	MOVE.L	A1,D3
-	SUB.L	A2,D3
-	JSR	_LVOWrite(A6)
+; ONE PIPELINE, AND COLLAPSING COMES FIRST.
+;
+; Tidy, then measure, then cut if it is still too wide - in that order,
+; because collapsing can bring a line under the width on its own and save the
+; whole title. "Abandoned Applications" is 94 columns in this config and 87
+; once its eight-space gap is one; cutting first threw away the counts to keep
+; padding nobody wanted.
+	BSR.W	tidyline
 	MOVEA.L	A1,A2
 	BRA.W	wbfnextline
 
@@ -1109,8 +1118,9 @@ wbfdone
 	RTS
 
 ;--------------------------------------------------------------------
-; blockneedsfitting - D0 nonzero when some line in the block is wider
-; than screenwidth. Reads only; A2/A3 are left where they were.
+; blockneedsfitting - D0 nonzero when some line is wider than screenwidth
+; OR holds a run of two or more spaces to collapse. Reads only; A2/A3 are
+; left where they were.
 ;--------------------------------------------------------------------
 blockneedsfitting
 	MOVEM.L	D4/D6/A0,-(SP)
@@ -1125,13 +1135,19 @@ bnfloop
 	BEQ.S	bnfeol
 	CMPI.B	#27,D0
 	BEQ.S	bnfesc
+	CMPI.B	#" ",D0
+	BNE.S	bnfink
+; a second space in a row is a run, and a run is work to do
+	CMPI.B	#" ",1(A0)
+	BEQ.S	bnfyes
+bnfink
 	ADDQ.L	#1,A0
 	ADDQ.L	#1,D4
 	CMP.L	D6,D4
 	BHI.S	bnfyes
 	BRA.S	bnfloop
 bnfesc
-	BSR.S	skipescape
+	BSR.W	skipescape
 	BRA.S	bnfloop
 bnfeol
 	ADDQ.L	#1,A0
@@ -1144,6 +1160,176 @@ bnfyes
 bnfend
 	MOVEQ	#0,D0
 	MOVEM.L	(SP)+,D4/D6/A0
+	RTS
+
+;--------------------------------------------------------------------
+; tidyline - write A2..A0 with every run of spaces collapsed to one and
+; the slack returned to the LAST run, so the line ends on screenwidth.
+;
+; Two passes over the same bytes. The first measures what the collapsed
+; line comes to and counts the runs; the second writes it, and at the last
+; run emits one space plus everything the line was short by. Escapes are
+; copied whole and cost no columns, so the colours stay put.
+;
+; In:  A2 line start, A0 first byte past the ink, A1 next line, D6 width.
+; Out: nothing; A2 is advanced by the caller.
+;--------------------------------------------------------------------
+tidyline
+	MOVEM.L	D0-D7/A0-A6,-(SP)
+	MOVEA.L	A0,A6		; the ink ends here; A0 is skipescape's cursor
+
+; pass one: D2 = collapsed width, D3 = number of runs
+	MOVEA.L	A2,A4
+	MOVEQ	#0,D2
+	MOVEQ	#0,D3
+	MOVEQ	#0,D5
+tl1loop
+	CMPA.L	A4,A6
+	BLS.W	tl1done
+	MOVE.B	(A4),D0
+	CMPI.B	#27,D0
+	BEQ.S	tl1esc
+	CMPI.B	#" ",D0
+	BEQ.S	tl1space
+	MOVEQ	#0,D5
+	ADDQ.L	#1,A4
+	ADDQ.L	#1,D2
+	BRA.S	tl1loop
+tl1space
+	ADDQ.L	#1,A4
+	TST.L	D5
+	BEQ.S	tl1first
+	CMPI.L	#1,D5
+	BNE.S	tl1loop
+	MOVEQ	#2,D5
+	ADDQ.L	#1,D3
+	BRA.S	tl1loop
+tl1first
+	MOVEQ	#1,D5
+	ADDQ.L	#1,D2
+	BRA.S	tl1loop
+tl1esc
+	MOVEA.L	A4,A0
+	BSR.W	skipescape
+	MOVEA.L	A0,A4
+	BRA.S	tl1loop
+tl1done
+; D2 is what the line comes to once collapsed. Three outcomes:
+;   no run at all and it fits        -> the original bytes, untouched
+;   collapsed and it fits            -> pad the last run, counts aligned
+;   collapsed and it is STILL wide   -> keep width-3 columns and "..."
+	MOVEQ	#0,D1		; cut? 0 = no
+	CMP.L	D6,D2
+	BLS.S	tl1fits
+	MOVEQ	#1,D1
+	MOVE.L	D6,D0
+	SUBQ.L	#3,D0
+	MOVE.L	D0,D6		; the ink budget for this line
+	MOVEQ	#0,D7
+	BRA.S	tl2start
+tl1fits
+	TST.L	D3
+	BEQ.W	tlplain
+	MOVE.L	D6,D7
+	SUB.L	D2,D7
+	BGT.S	tl2start
+	MOVEQ	#0,D7
+tl2start
+	MOVEQ	#0,D2		; columns emitted so far
+
+; pass two: emit
+	LEA	fitbuffer,A5
+	MOVEA.L	A2,A4
+	MOVEQ	#0,D5
+	MOVEQ	#0,D4		; runs seen
+tl2loop
+	CMPA.L	A4,A6
+	BLS.W	tl2ink
+	MOVE.B	(A4),D0
+	CMPI.B	#27,D0
+	BEQ.S	tl2esc
+	CMPI.B	#" ",D0
+	BEQ.S	tl2space
+	MOVEQ	#0,D5
+	TST.L	D1
+	BEQ.S	tl2ink1
+	CMP.L	D6,D2
+	BGE.S	tl2skipink
+tl2ink1
+	MOVE.B	(A4)+,(A5)+
+	ADDQ.L	#1,D2
+	BRA.S	tl2loop
+tl2skipink
+	ADDQ.L	#1,A4
+	BRA.S	tl2loop
+tl2space
+	ADDQ.L	#1,A4
+	TST.L	D5
+	BEQ.S	tl2firstspace
+	CMPI.L	#1,D5
+	BNE.S	tl2loop
+	MOVEQ	#2,D5
+	ADDQ.L	#1,D4
+	CMP.L	D3,D4
+	BNE.S	tl2loop
+tl2pad
+	TST.L	D7
+	BLE.S	tl2loop
+	MOVE.B	#" ",(A5)+
+	SUBQ.L	#1,D7
+	BRA.S	tl2pad
+tl2firstspace
+	MOVEQ	#1,D5
+	TST.L	D1
+	BEQ.S	tl2sp1
+	CMP.L	D6,D2
+	BGE.S	tl2loop
+tl2sp1
+	MOVE.B	#" ",(A5)+
+	ADDQ.L	#1,D2
+	BRA.S	tl2loop
+tl2esc
+	MOVEA.L	A4,A0
+	BSR.W	skipescape
+tl2esccopy
+	CMPA.L	A4,A0
+	BLS.S	tl2loop
+	MOVE.B	(A4)+,(A5)+
+	BRA.S	tl2esccopy
+tl2ink
+	TST.L	D1
+	BEQ.S	tl2noellipsis
+	MOVE.B	#".",(A5)+
+	MOVE.B	#".",(A5)+
+	MOVE.B	#".",(A5)+
+tl2noellipsis
+
+; whatever ended the original line ends this one
+	MOVEA.L	A6,A4
+tl2eol
+	CMPA.L	A4,A1
+	BLS.W	tl2emit
+	MOVE.B	(A4)+,(A5)+
+	BRA.S	tl2eol
+tl2emit
+	MOVEA.L	dosbase(PC),A6
+	MOVE.L	stdout(PC),D1
+	MOVE.L	#fitbuffer,D2
+	MOVE.L	A5,D3
+	SUB.L	#fitbuffer,D3
+	JSR	_LVOWrite(A6)
+	MOVEM.L	(SP)+,D0-D7/A0-A6
+	RTS
+
+; no run to collapse: the original bytes, untouched
+tlplain
+	MOVEA.L	dosbase(PC),A6
+	MOVE.L	stdout(PC),D1
+	MOVE.L	A2,D2
+	MOVE.L	A1,D3
+	SUB.L	A2,D3
+	JSR	_LVOWrite(A6)
+	MOVEM.L	(SP)+,D0-D7/A0-A6
 	RTS
 
 ;--------------------------------------------------------------------

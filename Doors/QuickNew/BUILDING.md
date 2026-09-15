@@ -38,6 +38,30 @@ and defaults to 80**, so a board that never passes it is not affected in any
 way - that is checked rather than assumed: at the default width the output is
 byte-for-byte what the stock binary produced, file rows and all.
 
+### Tidying
+
+"i think the quicknew output is messy with all the doubled spaces etc can we
+make it more tidy when we are recoding it anyway?" - the sysop, 2026-09-15.
+
+Those runs of spaces are the CONFIG's: each template carries a hand-tuned
+stretch to push the counts into a column, and a section title of a different
+length puts them somewhere else. The door now does the aligning instead, so a
+config needs no padding at all and any board's templates line up.
+
+One pipeline, and the order matters:
+
+  1. Collapse every run of spaces to one. Escapes cost no columns.
+  2. If the line now FITS, give the slack back to the LAST run, so the line
+     ends exactly on the width and the counts land in the same column on every
+     row whatever the section is called.
+  3. If it is STILL too wide, keep `WIDTH-3` columns and end with `...`.
+
+Collapsing before cutting is deliberate: "Abandoned Applications" is 94 columns
+in this board's config and 87 once its eight-space gap is one, and cutting first
+threw the counts away to keep padding nobody wanted.
+
+A line with no run of spaces is passed through untouched.
+
 What fitting means:
 
   * A line that already fits is passed through in the ORIGINAL single `Write`,
