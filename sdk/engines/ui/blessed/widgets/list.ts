@@ -192,9 +192,22 @@ export class List extends Element {
           // Parse tags to ANSI codes (since we're setting _lines directly)
           const oldParsed = this.options.tags !== false ? parseTags(this.items[oldIdx]) : this.items[oldIdx];
           const newParsed = this.options.tags !== false ? parseTags(this.items[newIdx]) : this.items[newIdx];
+          /*
+           * THE SAME MARKER THE FULL REBUILD USES. `>>` means selected AND
+           * focused, `> ` selected but not - a real distinction a caller reads
+           * off the screen. This path hardcoded `> `, so moving the highlight
+           * in a FOCUSED list redrew it as unfocused, and the marker flipped
+           * between `>>` and `> ` as the caller moved: "why does the cursor
+           * sometimes look like >> and sometimes > in doorman?" (sysop,
+           * 2026-09-15).
+           *
+           * A fast path that draws something the slow path would not is not a
+           * fast path, it is a second renderer.
+           */
+          const marker = this.focused ? '>>' : '> ';
           // Pad lines to full width to clear old selection background
           lines[oldIdx] = this._padLine('  ' + oldParsed, padWidth);
-          lines[newIdx] = this._padLine('> ' + newParsed, padWidth);
+          lines[newIdx] = this._padLine(marker + newParsed, padWidth);
           return;
         }
       } else {
