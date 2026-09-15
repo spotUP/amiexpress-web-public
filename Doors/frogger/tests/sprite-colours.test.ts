@@ -24,6 +24,20 @@ const BLACK = 0;
 /** The sprites that appear over the ROAD, where the background is black. */
 const ROAD_SPRITES = ['car', 'car-red', 'racecar', 'truck'];
 
+/**
+ * Everything the player has to SEE, wherever it sits.
+ *
+ * `home` is deliberately absent: an empty goal bay is three solid black cells
+ * and is supposed to be, which is why the rule below is about cells that are
+ * invisible rather than about the colour black.
+ */
+const MUST_BE_SEEN = [
+  ...ROAD_SPRITES,
+  'frog', 'frog-sit', 'lady-frog', 'fly',
+  'snake', 'crocodile', 'turtle',
+  'log-short', 'log-medium', 'log-long',
+];
+
 type Cell = [string, number, number] | null;
 
 function cellsOf(name: string): Cell[] {
@@ -76,5 +90,49 @@ export async function everyCellStillHasItsGlyph(): Promise<void> {
       assert.strictEqual(typeof cell[0], 'string', `${name} has a cell with no glyph`);
       assert.ok(cell[0].length > 0, `${name} has an empty glyph`);
     }
+  }
+}
+
+/**
+ * No visible sprite may contain a cell that draws nothing at all.
+ *
+ * A cell with black in BOTH halves is a hole: the glyph is painted black on
+ * black and the terminal's own ground shows through unchanged. The fly was
+ * exactly this - two white wings with its body missing between them - and it
+ * survived the wheel fix because the wheels were black on a COLOUR and this
+ * is black on black. Both are the same mistake seen from different sides.
+ */
+export async function nothingVisibleIsPaintedBlackOnBlack(): Promise<void> {
+  for (const name of MUST_BE_SEEN) {
+    const holes = cellsOf(name).filter(
+      (cell) => cell !== null && cell[1] === BLACK && cell[2] === BLACK,
+    );
+    assert.deepStrictEqual(
+      holes, [],
+      `${name} has ${holes.length} cell(s) painted black on black, which draw nothing`,
+    );
+  }
+}
+
+/**
+ * The frog's own pixels are not the road's near-neighbour.
+ *
+ * The sysop, after the wheels: "the frogger sprite needs to be changed as
+ * well". The frog is bright green (10) with legs in dark green (2), which is
+ * legible against its own body and nearly not there against the black road.
+ * The legs THAT SIT ON THE ROAD are bright now; a dark-green half paired with
+ * a coloured half is shading and is left alone, which is why this rule is
+ * about the pairing rather than about colour 2.
+ */
+export async function theFrogIsNotDarkGreenOnTheRoad(): Promise<void> {
+  const DARK_GREEN = 2;
+  for (const name of ['frog', 'frog-sit']) {
+    const dim = cellsOf(name).filter(
+      (cell) => cell !== null && cell[1] === DARK_GREEN && cell[2] === BLACK,
+    );
+    assert.deepStrictEqual(
+      dim, [],
+      `${name} draws ${dim.length} dark-green cell(s) straight onto the road`,
+    );
   }
 }
