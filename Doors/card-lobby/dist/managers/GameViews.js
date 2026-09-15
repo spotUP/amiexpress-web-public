@@ -320,52 +320,66 @@ class GameViews {
         const showing = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
         const top = loaded.engine.topOfPile();
         this.host.renderBoardAndHand((top ? [top] : []), showing, 'auto', 'auto', true);
+        /*
+         * TIGHT. These panels are seven rows on an 80x25 board, and the first
+         * draft spent four of them on prose - which pushed the player rows and
+         * the key legend below the fold, where the sysop could not see either
+         * (screenshot, 2026-09-15). Everything here earns its line.
+         */
         const lines = [];
         lines.push(swapping
-            ? '{cyan-fg}Swap{/} - put your strength on the table'
-            : state.phase === 'playing'
-                ? '{cyan-fg}Playing{/} - equal or higher, or take the pile'
-                : '{cyan-fg}Game over{/}');
-        lines.push(`Pile: ${state.pile.length}   Stock: ${state.stock.length}   Burned: ${state.burned.length}`);
-        lines.push('');
-        lines.push(`{${constants_1.UI_THEME.dim}-fg}       hand up down{/}`);
+            ? `{cyan-fg}SWAP{/}  Stock ${state.stock.length}`
+            : `{cyan-fg}Pile ${state.pile.length}{/}  Stock ${state.stock.length}  Burn ${state.burned.length}`);
+        lines.push(`{${constants_1.UI_THEME.dim}-fg}            hnd up dn{/}`);
         for (const player of state.players) {
             const marker = player.id === onTurn && !swapping ? '{green-fg}>{/}' : ' ';
-            const name = `${player.name}${player.isBot ? '*' : ''}`.slice(0, 10);
-            const tag = player.out ? '  OUT' : swapping && player.ready ? ' redy' : '';
-            lines.push(`${marker} ${(0, lib_1.pad)(name, 10)} ${(0, lib_1.pad)(String(player.hand.length), 4)}`
-                + `${(0, lib_1.pad)(String(player.faceUp.length), 3)}${(0, lib_1.pad)(String(player.faceDown.length), 5)}${tag}`);
+            const name = `${player.name}${player.isBot ? '*' : ''}`.slice(0, 9);
+            const tag = player.out ? ' out' : swapping && player.ready ? ' ok' : '';
+            lines.push(`${marker}${(0, lib_1.pad)(name, 10)}${(0, lib_1.pad)(String(player.hand.length), 4)}`
+                + `${(0, lib_1.pad)(String(player.faceUp.length), 3)}${(0, lib_1.pad)(String(player.faceDown.length), 3)}${tag}`);
         }
         this.host.playersContent.setContent(lines.join('\n'));
-        const activity = [state.lastAction];
+        /*
+         * WHAT TO PRESS, FIRST. The activity panel is two or three rows, so the
+         * instruction goes at the top and the running commentary underneath it -
+         * the other way round and the caller reads "Swap, then play." and has no
+         * idea which key does that.
+         */
+        const activity = [];
         if (swapping && me) {
             const picked = this.host.vandtia.selectedHandIndex;
-            activity.push('');
-            activity.push(`Hand:  ${me.hand.map((card, i) => (i === picked ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`)
-                + cardLabel(card)).join(' ')}`);
-            activity.push(`Table: ${me.faceUp.map((card, i) => `{green-fg}[${i + 4}]{/}` + cardLabel(card)).join(' ')}`);
-            activity.push(me.ready
-                ? 'Waiting for the others.'
-                : '1-3 picks a hand card, 4-6 the table card it swaps with. X when ready.');
+            if (me.ready) {
+                activity.push('{cyan-fg}Ready.{/} Waiting for the others...');
+            }
+            else {
+                activity.push('{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} ready');
+            }
+            activity.push(`Hand ${me.hand.map((card, i) => (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
+                + ':' + cardLabel(card)).join(' ')}`);
+            activity.push(`Tbl  ${me.faceUp.map((card, i) => `{green-fg}${i + 4}{/}:` + cardLabel(card)).join(' ')}`);
         }
         else if (state.phase === 'playing' && me && onTurn === meId) {
             const source = loaded.engine.sourceFor(meId);
             const legal = loaded.engine.legalPlays(meId);
             const selected = this.host.vandtia.selectedCardIndex;
-            activity.push('');
+            const keys = legal.map((i) => i === selected ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`).join(' ');
             if (source === 'faceDown') {
-                activity.push(`Face down - turn one blind: ${legal.map((i) => i === selected ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`).join(' ')}`);
+                activity.push(`{cyan-fg}Blind.{/} Pick ${keys}, {cyan-fg}X{/} turns it`);
+            }
+            else if (legal.length > 0) {
+                activity.push(`Play ${keys}  {cyan-fg}X{/} plays${state.pile.length > 0 ? '  {cyan-fg}C{/} takes pile' : ''}`);
             }
             else {
-                activity.push(source === 'faceUp' ? 'Playing from the table now.' : '');
-                activity.push(legal.length > 0
-                    ? `Playable: ${legal.map((i) => i === selected ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`).join(' ')}`
-                    : 'Nothing will go - C takes the pile.');
+                activity.push('{yellow-fg}Nothing will go{/} - {cyan-fg}C{/} takes the pile');
             }
+            if (source === 'faceUp')
+                activity.push('{cyan-fg}Table cards now{/} - hand is empty');
+            activity.push(state.lastAction);
         }
-        else if (state.phase !== 'over') {
-            activity.push('');
-            activity.push('Waiting for the other players...');
+        else {
+            activity.push(state.lastAction);
+            if (state.phase !== 'over')
+                activity.push('Waiting for the other players...');
         }
         this.host.activityContent.setContent(activity.filter((line) => line !== '').join('\n'));
     }

@@ -148,6 +148,8 @@ export class VandtiaGameModule implements TableGameModule {
         for (let attempt = 0; attempt < 6 && !player.ready; attempt += 1) {
           await this.playBotSwap(engine, player.id);
         }
+        // Whatever it thinks of its table, it is not holding the game up.
+        if (!player.ready) engine.finishSwap(player.id);
       }
       this.save(table, engine, beforeStacks);
       await this.host.persistState();
@@ -177,7 +179,11 @@ export class VandtiaGameModule implements TableGameModule {
   }
 
   private async playBotSwap(engine: VandtiaEngine, playerId: string): Promise<void> {
-    const decision = await this.decide(engine, playerId);
+    // No pause for a swap. It happens behind the other players' hands at a
+    // real table and nobody watches it; pausing here only makes the door
+    // answer "Please wait for current action to complete" to every key the
+    // caller presses while it runs (sysop's screenshot, 2026-09-15).
+    const decision = await this.decide(engine, playerId, 0);
     if (decision?.action === VandtiaActionType.SWAP
       && typeof decision.handIndex === 'number' && typeof decision.faceUpIndex === 'number') {
       engine.swap(playerId, decision.handIndex, decision.faceUpIndex);
@@ -214,13 +220,13 @@ export class VandtiaGameModule implements TableGameModule {
    */
   private static readonly BOT_PACE_MS = 350;
 
-  private async decide(engine: VandtiaEngine, playerId: string): Promise<any | null> {
+  private async decide(engine: VandtiaEngine, playerId: string, paceMs?: number): Promise<any | null> {
     if (!this.host.cardGameAI?.hasStrategy('vandtia')) return null;
     return this.host.cardGameAI.makeDecision('vandtia', {
       difficulty: Difficulty.MEDIUM,
       playerId,
       engine: engine as any,
-      thinkingDelayMs: VandtiaGameModule.BOT_PACE_MS,
+      thinkingDelayMs: paceMs ?? VandtiaGameModule.BOT_PACE_MS,
     }) as any;
   }
 
