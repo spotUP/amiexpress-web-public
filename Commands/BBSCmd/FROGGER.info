@@ -5,3 +5,4 @@ DESCRIPTION=Classic Frogger arcade game - cross the road and river
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
+GAME_REPEAT=1

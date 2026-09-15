@@ -4821,6 +4821,31 @@ console.log(`[executeClientDoor] Set mouseEventsEnabled=true for session`);
     socket.emit('game-mode', true);
 console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
 
+    /*
+     * GAME REPEAT OR APPLICATION REPEAT - the sysop's distinction, 2026-09-15.
+     *
+     * Game mode itself stays on for every client door: it is what makes the
+     * browser send real key-down/key-up EDGES, and doors that time their own
+     * input need those (grandmaster's DAS/ARR is built on them). What must NOT
+     * be shared is the synthetic KEY REPEAT the browser runs between those
+     * edges - 30ms, ~33 a second, which is right for a Sno-Bee and unusable in
+     * a menu: "it skips two ore more entries", in doorman and the card lobby.
+     *
+     * APPLICATION IS THE DEFAULT, on his call. A door that wants arcade repeat
+     * says so with `GAME_REPEAT=1` on its icon; everything else - including a
+     * card game, which is turn-based and never needed 33 moves a second - gets
+     * a rate a list can be steered with.
+     *
+     * A door-level FLAG rather than a door-level RATE, because "per door
+     * repeat rate sounds impractical" and it is: two modes is a thing a sysop
+     * can reason about, a number per door is a tuning job per door.
+     */
+    const wantsGameRepeat = /^(1|yes|true)$/i.test(
+      String((door as any)?.toolTypes?.['GAME_REPEAT'] ?? '').trim()
+    );
+    socket.emit('key-repeat-mode', wantsGameRepeat ? 'game' : 'application');
+console.log(`[executeClientDoor] key-repeat-mode=${wantsGameRepeat ? 'game' : 'application'}`);
+
     // Set a no-op input handler to prevent BBS from echoing input
     // The actual input handling is done by the client-door-bridge
     session.doorInputHandler = (data: string) => {

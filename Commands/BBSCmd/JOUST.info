@@ -5,3 +5,4 @@ DESCRIPTION=Classic Joust arcade game - joust on flying ostriches
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
+GAME_REPEAT=1

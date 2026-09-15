@@ -312,7 +312,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers, by physical key
-  const keyLastSeen = useRef<Record<string, number>>({});  // Last keydown edge per physical key (repeat heartbeat)
+  const keyLastSeen = useRef<Record<string, number>>({});
+  /**
+   * How fast a HELD key repeats, in ms. Application by default; a door that
+   * declares `GAME_REPEAT=1` gets the arcade rate. See `key-repeat-mode`.
+   */
+  const keyRepeatRateRef = useRef<number>(120);  // Last keydown edge per physical key (repeat heartbeat)
   const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1492,30 +1497,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Typing keys have initial delay before repeat for single character typing
     // Delay is long enough for comfortable typing while still responsive for games
     /*
-     * KEY REPEAT FOR A MENU, NOT FOR AN ARCADE CABINET.
+     * ARCADE RATE, deliberately. A menu that cannot be steered at this rate is
+     * fixed where the menu is: `List._onKeypress` throttles its own navigation
+     * (sdk/engines/ui/blessed/widgets/list.ts), so a list stays usable even
+     * inside a game - which is the only place the distinction can be made,
+     * since game mode is switched on for EVERY client door
+     * (door.handler.ts:4821) and not only the games.
      *
-     * Game mode is switched on for EVERY client door (`door.handler.ts:4821`),
-     * not just the games - so doorman and the card lobby drive blessed LISTS
-     * with this repeat. At 30ms that is ~33 moves a second: the sysop,
-     * 2026-09-15, "it skips two ore more entries" and "navigation is super
-     * fast". A list is not a Sno-Bee.
-     *
-     * 120ms is ~8 rows a second: a held arrow still travels, and a tap is one
-     * row. The DELAY is unchanged - 400ms is what keeps a deliberate single
-     * press from ever repeating.
-     *
-     * WHAT THIS IS NOT. It is not the right fix for a game, and it is a
-     * stopgap that trades the arcade doors' feel for usable menus, taken on
-     * the sysop's call ("pengos key handling is wack anyway and needs to be
-     * fixed"). The right model is the one GRANDMASTER already uses and
-     * documents: real key-down/key-up EDGES with the door's own DAS/ARR
-     * (`Doors/grandmaster/input/handler.ts:78-87`), which is why grandmaster
-     * is untouched by this constant and feels exactly as it was tuned. A door
-     * that wants arcade repeat should own its timing the same way rather than
-     * inherit a number from the terminal.
+     * This was briefly slowed to 120ms on 2026-09-15 to rescue doorman's and
+     * the card lobby's menus, and put back when the throttle moved to the
+     * widget that actually knows it is a list.
      */
     const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing
-    const KEY_REPEAT_RATE = 120;   // Interval between repeats (ms) - ~8/sec, a list you can steer
+    /*
+     * TWO REPEAT MODES, chosen by the door - the sysop's distinction,
+     * 2026-09-15: "game mode or application mode".
+     *
+     * Game mode (key-down/key-up edges) stays on for EVERY client door,
+     * because doors that time their own input need the edges - grandmaster's
+     * DAS/ARR is built on them. The synthetic repeat BETWEEN those edges is
+     * the part that cannot be shared: 30ms is ~33 a second, right for an
+     * arcade door and unusable in a menu. Doorman and the card lobby were
+     * skipping two or more entries per press.
+     *
+     * The server sends `key-repeat-mode`. APPLICATION IS THE DEFAULT and a
+     * door asks for the fast one with `GAME_REPEAT=1` on its icon - a card
+     * game is turn-based and wants the slow one, which is why this is not
+     * decided by category.
+     */
+    const GAME_REPEAT_RATE = 30;         // ~33/sec - arcade movement
+    const APPLICATION_REPEAT_RATE = 120; // ~8/sec - a list you can steer
 
     // Keys that should NOT auto-repeat
     // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs
@@ -1551,7 +1562,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         const canRepeat = keyState.current[id] && gameMode.current && socketRef.current?.connected;
         if (canRepeat) {
           socketRef.current!.emit('key-down', { key: keyNames.current[id] ?? key, code, repeat: true });
-          keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+          keyRepeatTimers.current[id] = setTimeout(repeatKey, keyRepeatRateRef.current);
         }
       };
 
@@ -2914,6 +2925,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('door:active-client', (data: { doorId?: string }) => {
       if (data?.doorId) setActiveClientDoor(data.doorId, 'session restored');
     });
+
+    /*
+
+     * The door says which repeat it wants. Unknown or missing keeps the
+
+     * application rate, so a door that never declares one gets a menu that
+
+     * can be steered rather than an arcade cabinet.
+
+     */
+
+    socket.on('key-repeat-mode', (mode: string) => {
+
+      keyRepeatRateRef.current = mode === 'game' ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;
+
+      console.log('[BBSTerminal] key repeat mode:', mode, keyRepeatRateRef.current + 'ms');
+
+    });
+
 
     socket.on('game-mode', (enabled: boolean) => {
       gameMode.current = enabled;
