@@ -9,7 +9,17 @@ little-endian int32 words (`tomoyo.c:1403-1440`):
               (`tomoyo.c:334-352` counts what is left)
     210..215  per-stage rules: MIRROR, ROLL ROLL, DEATH BLOCK (big), X-RAY,
               COLOR, BLIND
-    250..449  the rising field, 20 rows of 10, in the same encoding
+    216       the stage's own minimum fall speed
+    217       THUNDER
+    218       the RISE INTERVAL in PIECES - 0 is off. `tomoyo.c:1453` reads
+              it; `gamestart.c:6908-6912` spends it inside `statBlock`, the
+              per-piece status handler, so `tomoyo_rise_t % tomoyo_rise == 0`
+              means "every N pieces", not every N frames. The editor's own
+              dial runs 0..99 (`tomoyo.c:466`/`519`), which is a piece count
+              a player could live with and a frame count nobody could.
+    219       HIDE NEXT
+    250..449  the rising field, 20 rows of 10, in the same encoding - the
+              rows a rise feeds onto the floor, oldest first
 
 Sixty-four of the files are the older 250-word form and carry no rising field.
 
@@ -74,8 +84,14 @@ def main() -> None:
         if len(words) >= 216:
             names = ['mirror', 'rollRoll', 'big', 'xray', 'color', 'blind']
             rules = {name: True for name, on in zip(names, words[210:216]) if on}
+            if len(words) >= 220 and words[219]:
+                rules['hideNext'] = True
             if rules:
                 stage['rules'] = rules
+
+        # The rise INTERVAL, in pieces.
+        if len(words) >= 219 and words[218]:
+            stage['riseEveryPieces'] = words[218]
 
         if len(words) >= RISE_OFFSET + RISE_ROWS * WIDTH:
             rise = rows(words, RISE_OFFSET, RISE_ROWS, dirty)

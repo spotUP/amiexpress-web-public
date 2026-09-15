@@ -12,10 +12,15 @@
  * a door DECLARES it (C64_VIEWPORT, never inferred), the window MOVES, and
  * the keys that move it are taken from the door ONLY for such a door.
  */
+import * as fs from 'fs';
+import * as path from 'path';
+
 import {
   installC64DoorAdapter,
   uninstallC64DoorAdapter,
 } from '../../src/server/c64-door-adapter';
+import { doorOpensForC64, resolveDoorAdaptColumns } from '../../src/utils/door-min-columns.util';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { doorViewportsAt40 } from '../../src/utils/door-min-columns.util';
 import { routeDoorInput, panKeyOf } from '../../src/services/door-input-routing';
 
@@ -146,5 +151,89 @@ describe('the cursor keys move the window, and only for such a door', () => {
     });
     expect(route.pan).toBeNull();
     expect(route.toBbs).toBe(true);
+  });
+});
+
+/**
+ * GL - the global last-callers viewer - is the first door pointed at the rule,
+ * and the reason is measurable.
+ *
+ * Its screen is a 79-column fixed-width table under ANSI logo art. Folded to
+ * forty, every record splits across two rows with its leading ':' orphaned
+ * and the STATUS lines lose their numbers behind truncation markers; the
+ * capture is `sdk/tests/petscii/frame/fixtures/glc.ans`, taken from the real
+ * 68K binary. A window over it keeps whole records on one row, which is the
+ * difference the rule exists for.
+ */
+describe('GL is the worked example', () => {
+  jest.setTimeout(30000);
+
+  const FIXTURE = path.resolve(
+    __dirname, '../../../../sdk/tests/petscii/frame/fixtures/glc.ans',
+  );
+  const INFO = path.resolve(__dirname, '../../../../Commands/BBSCmd/gl.info');
+
+  test('the door declares it, and declaring it is what opens the door to a C64', () => {
+    const tools = readTooltypeMap(INFO);
+    expect(tools.get('C64_VIEWPORT')).toBe('1');
+    // No C64_ADAPT on this door: the viewport declaration IS the claim, or
+    // the tooltype would leave the door gated and the adapter uninstalled -
+    // a feature that does nothing, which is the failure this repo keeps
+    // finding.
+    expect(tools.get('C64_ADAPT')).toBeUndefined();
+
+    const door: any = { type: 'XIM', toolTypes: Object.fromEntries(tools) };
+    expect(resolveDoorAdaptColumns(door)).toBe(40);
+    expect(doorOpensForC64(door, { petsciiMode: true, screenWidth: 40 })).toBe(true);
+
+    // And a door that declares neither is still gated.
+    const plain: any = { type: 'XIM', toolTypes: { TYPE: 'XIM' } };
+    expect(doorOpensForC64(plain, { petsciiMode: true, screenWidth: 40 })).toBe(false);
+  });
+
+  test('the fold breaks its records; the window keeps them whole', async () => {
+    const capture = fs.readFileSync(FIXTURE, 'latin1');
+
+    const play = async (viewport: boolean) => {
+      const seen: string[] = [];
+      const socket: any = {
+        emit: (_event: string, payload: any) => {
+          if (typeof payload === 'string') seen.push(payload);
+          return true;
+        },
+      };
+      socket.session = { terminalType: 'c64', petsciiMode: true, screenWidth: 40, screenHeight: 25 };
+      const adapter = installC64DoorAdapter(socket, socket.session, { viewport })!;
+      socket.emit('ansi-output', capture);
+      await wait(60);
+      const out = { wire: seen.join(''), adapter, socket };
+      return out;
+    };
+
+    /*
+     * A BROKEN RECORD, on the wire: a row that BEGINS with the table's own
+     * column separator. The door never draws one - every record starts with
+     * a username - so a `:` at column 1 can only be the second half of a
+     * record the fold pushed onto its own row.
+     */
+    const brokenRecords = (wire: string) =>
+      (wire.match(/\x1b\[\d+;1H(?:\x1b\[[^m]*m)*:/g) ?? []).length;
+
+    const folded = await play(false);
+    try {
+      expect(brokenRecords(folded.wire)).toBeGreaterThan(0);
+    } finally { uninstallC64DoorAdapter(folded.socket); }
+
+    // WINDOWED: the left forty columns are one piece of the real table - the
+    // names column - and no record has been broken to get there.
+    const windowed = await play(true);
+    try {
+      expect(windowed.wire).toContain('phlym');
+      expect(brokenRecords(windowed.wire)).toBe(0);
+      expect(windowed.adapter.isViewport()).toBe(true);
+      // Pan right and the columns the fold was mangling arrive intact.
+      windowed.adapter.pan(24);
+      expect(windowed.adapter.windowOffset()).toBe(24);
+    } finally { uninstallC64DoorAdapter(windowed.socket); }
   });
 });

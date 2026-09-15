@@ -11,6 +11,7 @@ import {
   ITEM_NAMES, isSelfTargetItem, applySelfItem, applyEnemyItem,
 } from './items';
 import type { Board, GameState } from './types';
+import type { ItemEffectResult } from './items';
 
 /** How long an item's name stays on the HUD, in frames. */
 const BANNER_FRAMES = 90;
@@ -52,4 +53,33 @@ export function collectItem(
   }
 
   handlers.applyResult(applyEnemyItem(itemId, board, board));
+}
+
+/**
+ * Spend an item's effect on the run.
+ *
+ * Every field an `ItemEffectResult` can carry lands in exactly one place, and
+ * they are all state or one callback - which is why this reads as a list and
+ * belongs beside `collectItem` rather than inside the engine.
+ */
+export function applyItemEffect(
+  result: ItemEffectResult,
+  state: GameState,
+  board: Board,
+  insertHardBlockNext: () => void,
+  resetRollRollFrame: () => void,
+): void {
+  if (result.clearRows && result.clearRows.length > 0) {
+    clearLines(board, result.clearRows);
+  }
+  if (result.insertHardBlockNext) insertHardBlockNext();
+  if (result.bigPieces) state.bigPiecesRemaining = result.bigPieces;
+  if (result.rollRollPieces) {
+    state.rollRollPiecesRemaining = result.rollRollPieces;
+    resetRollRollFrame();
+  }
+  if (result.rotateLockFrames) state.rotateLockFrames = result.rotateLockFrames;
+  if (result.hideNextFrames) state.hideNextFrames = result.hideNextFrames;
+  if (result.lrReverseFrames) state.lrReverseFrames = result.lrReverseFrames;
+  if (result.boostFrames) state.boostFrames = result.boostFrames;
 }

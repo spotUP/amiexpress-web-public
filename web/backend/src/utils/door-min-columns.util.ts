@@ -244,12 +244,22 @@ export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'SI
  * about which registration object carries the truth.
  */
 export function resolveDoorAdaptColumns(door: MinColumnsDoorShape): number | null {
-  return (
+  const declared = (
     validColumns(door.c64Adapt) ??
     validColumns(door.toolTypes?.['C64_ADAPT']) ??
     validColumns(door.doorInfo?.c64Adapt) ??
     validColumns(door.doorInfo?.toolTypes?.['C64_ADAPT'])
   );
+  if (declared !== null) return declared;
+  /*
+   * `C64_VIEWPORT` IS A CLAIM OF ITS OWN. A door shown through the window
+   * opens for a 40-column caller - that is the whole point of the rule - so
+   * declaring it without `C64_ADAPT` must not leave the door gated and the
+   * adapter uninstalled, which would make the tooltype do nothing at all.
+   * The claim is forty: the window is forty columns wide whatever the frame
+   * behind it is.
+   */
+  return doorViewportsAt40(door) ? C64_COLUMNS : null;
 }
 
 /**

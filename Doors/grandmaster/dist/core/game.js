@@ -87,6 +87,10 @@ class GameEngine {
         /** TARGET: the stages this mission plays, and which one is up. */
         this.stages = [];
         this.stageIndex = 0;
+        /** How many rows of THIS stage's rising field have been spent. */
+        this.riseIndex = 0;
+        /** The mission's own modifiers, before a stage adds its rules on top. */
+        this.baseModifiers = null;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -183,27 +187,7 @@ class GameEngine {
      * spend an item the same way instead of each handling a subset.
      */
     applyItemEffectResult(result) {
-        if (result.clearRows && result.clearRows.length > 0) {
-            (0, board_1.clearLines)(this.state.board, result.clearRows);
-        }
-        if (result.insertHardBlockNext) {
-            this.insertHardBlockNext();
-        }
-        if (result.bigPieces) {
-            this.state.bigPiecesRemaining = result.bigPieces;
-        }
-        if (result.rollRollPieces) {
-            this.state.rollRollPiecesRemaining = result.rollRollPieces;
-            this.rollRollFrame = 0;
-        }
-        if (result.rotateLockFrames)
-            this.state.rotateLockFrames = result.rotateLockFrames;
-        if (result.hideNextFrames)
-            this.state.hideNextFrames = result.hideNextFrames;
-        if (result.lrReverseFrames)
-            this.state.lrReverseFrames = result.lrReverseFrames;
-        if (result.boostFrames)
-            this.state.boostFrames = result.boostFrames;
+        (0, item_effects_1.applyItemEffect)(result, this.state, this.state.board, () => this.insertHardBlockNext(), () => { this.rollRollFrame = 0; });
     }
     /**
      * Publish the grade for the mode being played.
@@ -379,8 +363,28 @@ class GameEngine {
     setStages(stages) {
         this.stages = stages;
         this.stageIndex = 0;
-        if (stages.length > 0)
+        this.riseIndex = 0;
+        if (stages.length > 0) {
             (0, stage_1.applyStage)(this.state.board, stages[0]);
+            this.applyStageRules();
+        }
+    }
+    /**
+     * A stage's OWN rules, laid over the mission's.
+     *
+     * Eleven of the reference's stages switch one on - MIRROR, X-RAY, COLOR,
+     * ROLL ROLL, BIG, BLIND, HIDE NEXT (`tomoyo.c:1420-1448`) - and they belong
+     * to the STAGE, so they go away again when the next one is laid out. The
+     * mission's own modifiers are kept underneath rather than overwritten:
+     * a TARGET mission that asked for BLIND stays blind on a stage that did
+     * not.
+     */
+    applyStageRules() {
+        const stage = this.stages[this.stageIndex];
+        const base = this.baseModifiers ?? {};
+        this.state.missionModifiers = stage?.rules
+            ? { ...base, ...stage.rules }
+            : (this.baseModifiers ?? undefined);
     }
     /** The stage on the board, for the screen and for the tests. */
     getStage() {
@@ -410,6 +414,7 @@ class GameEngine {
         };
     }
     setMissionModifiers(modifiers) {
+        this.baseModifiers = modifiers ?? null;
         this.state.missionModifiers = modifiers ?? undefined;
         // ROTATELOCK hands each spawning piece a rotation from a queue of six
         // random ones (gamestart.c:3880-3887), so the queue is filled before the
@@ -892,9 +897,6 @@ class GameEngine {
      * Soft drop (faster gravity)
      */
     softDrop() {
-        return this.doSoftDrop();
-    }
-    doSoftDrop() {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
         const piece = this.state.currentPiece;
@@ -964,9 +966,6 @@ class GameEngine {
      * both), false when it was a no-op - the same contract as softDrop().
      */
     sonicDrop() {
-        return this.doSonicDrop();
-    }
-    doSonicDrop() {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
         const piece = this.state.currentPiece;
@@ -1456,11 +1455,17 @@ class GameEngine {
             eraserRemaining: this.eraserRemaining,
             stages: this.stages,
             stageIndex: this.stageIndex,
+            riseIndex: this.riseIndex,
             squareMode: this.squareMode,
         });
         this.state.markedRows = hooks.markedRows;
         this.eraserRemaining = hooks.eraserRemaining;
-        this.stageIndex = hooks.stageIndex;
+        this.riseIndex = hooks.riseIndex;
+        if (hooks.stageIndex !== this.stageIndex) {
+            this.stageIndex = hooks.stageIndex;
+            // A new stage brings its own rules with it.
+            this.applyStageRules();
+        }
         const { markedRowsCleared, stageCleared, square } = hooks;
         // Report the lock. Everything a MISSION judges comes from here, which is
         // why it is the LAST thing lockPiece does: lines are cleared, the combo

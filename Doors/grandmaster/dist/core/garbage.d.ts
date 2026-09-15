@@ -6,12 +6,21 @@
  * live here rather than in the engine: a rise is testable without a game, and
  * a mission's seeded stack is the same operation without the shift.
  */
-import type { Board } from './types';
+import type { Board, Cell } from './types';
 /**
  * Shirase's piece-spawn rise (HeborisCE's DEVIL garbage, gamestart.c's
  * devil_rise tables): the whole stack moves up one row and a new garbage row
  * arrives at the bottom.
  */
+/**
+ * Push one GIVEN row onto the floor, everything else up.
+ *
+ * The same lift `riseGarbageRow` does, with the row supplied instead of
+ * invented: a TARGET stage carries the rows its floor rises with
+ * (`gamestart.c:8348-8360` copies them from `tomoyo_rise_fld`), and a random
+ * garbage row would be a different mode.
+ */
+export declare function riseRowOnto(board: Board, cells: Cell[]): void;
 export declare function riseGarbageRow(board: Board, rng?: () => number): void;
 /**
  * Fill the bottom `rows` rows before a run starts (HeborisCE's mission_erase,

@@ -1139,3 +1139,84 @@ export async function eachPackHoldsWhatItsNamePromises(): Promise<void> {
   assert.ok(squares!.pack.name.toUpperCase().includes('SQUARE'),
     `they are in ${squares!.pack.name}, which does not say so`);
 }
+
+/**
+ * A stage brings its OWN rules, and takes them away again.
+ *
+ * Eleven of the converted stages carry one - MIRROR, X-RAY, COLOR, ROLL ROLL,
+ * BIG, BLIND, HIDE NEXT (`tomoyo.c:1420-1448`) - and they were being STORED
+ * and never applied, which is a rule nobody plays. They belong to the stage,
+ * so the mission's own modifiers stay underneath and come back when the next
+ * stage has none.
+ */
+export async function aStageBringsItsOwnRulesAndTakesThemAway(): Promise<void> {
+  const { loadStages } = await import('../core/stage');
+  const stages = loadStages(path.join(__dirname, '..', 'assets', 'stages', 'stages.json'));
+
+  const withRules = stages.find((s: any) => s.rules?.mirror);
+  const plainStage = stages.find((s: any) => !s.rules);
+  assert.ok(withRules && plainStage, 'the shipped set has both kinds');
+
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.start();
+  // The MISSION asked for BLIND; the STAGE asks for MIRROR.
+  engine.setMissionModifiers({ blind: true });
+  engine.setStages([withRules, plainStage]);
+
+  assert.strictEqual(engine.getState().missionModifiers.mirror, true,
+    "the stage's own rule is on");
+  assert.strictEqual(engine.getState().missionModifiers.blind, true,
+    "and the mission's rule is still underneath it");
+
+  // Clear the stage: the next one has no rules, so MIRROR goes with it.
+  const board = engine.getState().board;
+  for (let y = 0; y < board.height; y++) {
+    for (let x = 0; x < board.width; x++) {
+      if (board.grid[y][x].platinum) board.grid[y][x] = { filled: false, color: null, locked: false };
+    }
+  }
+  engine.hardDrop();
+
+  assert.strictEqual(engine.getState().missionModifiers.mirror, undefined,
+    'the rule left with the stage that brought it');
+  assert.strictEqual(engine.getState().missionModifiers.blind, true,
+    "and the mission's own is untouched");
+}
+
+/**
+ * A stage's floor rises with the stage's OWN rows, in order.
+ *
+ * Four of the converted stages carry a rising field and three name an
+ * interval; the rows were stored and never raised. The reference spends them
+ * oldest-first (`gamestart.c:8348-8360`) and counts the interval in PIECES -
+ * `statBlock` is the per-piece handler (`gamestart.c:6908`), which is what
+ * makes its small numbers (3, 5, 7) mean anything at all.
+ */
+export async function aStageRisesWithItsOwnRows(): Promise<void> {
+  const { loadStages, riseRow } = await import('../core/stage');
+  const stages = loadStages(path.join(__dirname, '..', 'assets', 'stages', 'stages.json'));
+  const rising = stages.find((s: any) => s.rise && s.riseEveryPieces);
+  assert.ok(rising, 'a shipped stage rises');
+  assert.strictEqual(rising!.riseEveryPieces! > 0, true);
+
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.start();
+  engine.setStages([rising]);
+
+  const bottomRow = () => {
+    const board = engine.getState().board;
+    return board.grid[board.height - 1].map((c: any) => (c.filled ? (c.platinum ? 'P' : '#') : '.')).join('');
+  };
+  const expected = riseRow(rising!, 0)!
+    .map((c: any) => (c.filled ? (c.platinum ? 'P' : '#') : '.')).join('');
+
+  const before = bottomRow();
+  for (let piece = 0; piece < rising!.riseEveryPieces!; piece++) {
+    engine.hardDrop();
+    for (let f = 0; f < 60 && !engine.getState().currentPiece; f++) engine.update(50);
+  }
+
+  assert.notStrictEqual(bottomRow(), before, 'the floor came up');
+  assert.strictEqual(bottomRow(), expected,
+    "and what came up is the stage's own first rising row, not garbage");
+}

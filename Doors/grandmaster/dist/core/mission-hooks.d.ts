@@ -28,9 +28,10 @@ export interface MissionHookContext {
     markedRows: number[];
     eraserPattern: EraserPattern | null;
     eraserRemaining: number;
-    /** TARGET's stages and which one is up. */
+    /** TARGET's stages, which one is up, and how far its floor has risen. */
     stages: Stage[];
     stageIndex: number;
+    riseIndex: number;
     /** SQUARE scans only when the mission is judged on it. */
     squareMode: boolean;
 }
@@ -41,6 +42,8 @@ export interface MissionHookResult {
     eraserRemaining: number;
     stageCleared: boolean;
     stageIndex: number;
+    /** How many rows of the stage's rising field have been spent. */
+    riseIndex: number;
     square: SquareResult;
 }
 export declare function afterLock(ctx: MissionHookContext): MissionHookResult;

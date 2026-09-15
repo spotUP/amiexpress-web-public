@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.collectItem = collectItem;
+exports.applyItemEffect = applyItemEffect;
 /**
  * What a collected TGM item does.
  *
@@ -35,5 +36,33 @@ function collectItem(itemId, state, board, handlers) {
         return;
     }
     handlers.applyResult((0, items_1.applyEnemyItem)(itemId, board, board));
+}
+/**
+ * Spend an item's effect on the run.
+ *
+ * Every field an `ItemEffectResult` can carry lands in exactly one place, and
+ * they are all state or one callback - which is why this reads as a list and
+ * belongs beside `collectItem` rather than inside the engine.
+ */
+function applyItemEffect(result, state, board, insertHardBlockNext, resetRollRollFrame) {
+    if (result.clearRows && result.clearRows.length > 0) {
+        (0, board_1.clearLines)(board, result.clearRows);
+    }
+    if (result.insertHardBlockNext)
+        insertHardBlockNext();
+    if (result.bigPieces)
+        state.bigPiecesRemaining = result.bigPieces;
+    if (result.rollRollPieces) {
+        state.rollRollPiecesRemaining = result.rollRollPieces;
+        resetRollRollFrame();
+    }
+    if (result.rotateLockFrames)
+        state.rotateLockFrames = result.rotateLockFrames;
+    if (result.hideNextFrames)
+        state.hideNextFrames = result.hideNextFrames;
+    if (result.lrReverseFrames)
+        state.lrReverseFrames = result.lrReverseFrames;
+    if (result.boostFrames)
+        state.boostFrames = result.boostFrames;
 }
 //# sourceMappingURL=item-effects.js.map

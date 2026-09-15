@@ -90,6 +90,10 @@ export declare class GameEngine {
     /** TARGET: the stages this mission plays, and which one is up. */
     private stages;
     private stageIndex;
+    /** How many rows of THIS stage's rising field have been spent. */
+    private riseIndex;
+    /** The mission's own modifiers, before a stage adds its rules on top. */
+    private baseModifiers;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -202,6 +206,17 @@ export declare class GameEngine {
      * reference's status-25 wipe (mission.c:882-902).
      */
     setStages(stages: Stage[]): void;
+    /**
+     * A stage's OWN rules, laid over the mission's.
+     *
+     * Eleven of the reference's stages switch one on - MIRROR, X-RAY, COLOR,
+     * ROLL ROLL, BIG, BLIND, HIDE NEXT (`tomoyo.c:1420-1448`) - and they belong
+     * to the STAGE, so they go away again when the next one is laid out. The
+     * mission's own modifiers are kept underneath rather than overwritten:
+     * a TARGET mission that asked for BLIND stays blind on a stage that did
+     * not.
+     */
+    private applyStageRules;
     /** The stage on the board, for the screen and for the tests. */
     getStage(): Stage | null;
     setMissionSpeed(speed: MissionSpeed | null): void;
@@ -267,7 +282,6 @@ export declare class GameEngine {
      * Soft drop (faster gravity)
      */
     softDrop(): boolean;
-    private doSoftDrop;
     /**
      * Hard drop (instant lock)
      */
@@ -289,7 +303,6 @@ export declare class GameEngine {
      * both), false when it was a no-op - the same contract as softDrop().
      */
     sonicDrop(): boolean;
-    private doSonicDrop;
     /**
      * Hold current piece
      */

@@ -21,7 +21,10 @@ export interface Stage {
   rows: string[];
   /** The rising field, when the stage has one: 20 rows of 10. */
   rise?: string[];
-  /** Rules the stage itself switches on (MIRROR, X-RAY, BLIND and friends). */
+  /**
+   * Rules the stage itself switches on, over whatever the mission asked for
+   * (`tomoyo.c:1420-1448`). Eleven of the shipped stages carry one.
+   */
   rules?: {
     mirror?: boolean;
     rollRoll?: boolean;
@@ -29,7 +32,14 @@ export interface Stage {
     xray?: boolean;
     color?: boolean;
     blind?: boolean;
+    hideNext?: boolean;
   };
+  /**
+   * How often this stage's floor rises, in PIECES (`tomoyo.c:1453`, spent in
+   * `statBlock` at `gamestart.c:6908-6912` - the per-piece handler, which is
+   * what makes the reference's small numbers mean anything). Absent is off.
+   */
+  riseEveryPieces?: number;
 }
 
 /** A whole pack of stages, as the JSON holds it. */
@@ -91,6 +101,19 @@ export function applyStage(board: Board, stage: Stage): void {
       board.grid[y][x] = stageCell(stage.rows[row][x]);
     }
   }
+}
+
+/**
+ * The next row of a stage's rising field, as cells.
+ *
+ * The reference feeds them onto the floor in order, oldest first, tracking
+ * how far it has got with `upLineNo` (`gamestart.c:8348-8360`). A stage whose
+ * rows have all been spent stops rising rather than repeating them.
+ */
+export function riseRow(stage: Stage, index: number): Cell[] | null {
+  const rows = stage.rise;
+  if (!rows || index < 0 || index >= rows.length) return null;
+  return [...rows[index]].map(stageCell);
 }
 
 /** How many platinum blocks are left - zero means the stage is cleared. */

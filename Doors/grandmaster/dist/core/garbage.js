@@ -8,6 +8,7 @@
  * a mission's seeded stack is the same operation without the shift.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.riseRowOnto = riseRowOnto;
 exports.riseGarbageRow = riseGarbageRow;
 exports.seedGarbageRows = seedGarbageRows;
 /** One garbage row with a single hole, at a random column. */
@@ -24,6 +25,23 @@ function garbageRow(width, rng) {
  * devil_rise tables): the whole stack moves up one row and a new garbage row
  * arrives at the bottom.
  */
+/**
+ * Push one GIVEN row onto the floor, everything else up.
+ *
+ * The same lift `riseGarbageRow` does, with the row supplied instead of
+ * invented: a TARGET stage carries the rows its floor rises with
+ * (`gamestart.c:8348-8360` copies them from `tomoyo_rise_fld`), and a random
+ * garbage row would be a different mode.
+ */
+function riseRowOnto(board, cells) {
+    for (let y = 0; y < board.height - 1; y++) {
+        board.grid[y] = board.grid[y + 1];
+    }
+    const row = board.grid[board.height - 1];
+    for (let x = 0; x < board.width; x++) {
+        row[x] = cells[x] ?? { filled: false, color: null, locked: false };
+    }
+}
 function riseGarbageRow(board, rng = Math.random) {
     for (let y = 0; y < board.height - 1; y++) {
         board.grid[y] = board.grid[y + 1];

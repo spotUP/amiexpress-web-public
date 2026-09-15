@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isPlatinum = isPlatinum;
 exports.stageCell = stageCell;
 exports.applyStage = applyStage;
+exports.riseRow = riseRow;
 exports.platinumLeft = platinumLeft;
 exports.stageOrder = stageOrder;
 exports.loadStages = loadStages;
@@ -56,6 +57,19 @@ function applyStage(board, stage) {
             board.grid[y][x] = stageCell(stage.rows[row][x]);
         }
     }
+}
+/**
+ * The next row of a stage's rising field, as cells.
+ *
+ * The reference feeds them onto the floor in order, oldest first, tracking
+ * how far it has got with `upLineNo` (`gamestart.c:8348-8360`). A stage whose
+ * rows have all been spent stops rising rather than repeating them.
+ */
+function riseRow(stage, index) {
+    const rows = stage.rise;
+    if (!rows || index < 0 || index >= rows.length)
+        return null;
+    return [...rows[index]].map(stageCell);
 }
 /** How many platinum blocks are left - zero means the stage is cleared. */
 function platinumLeft(board) {

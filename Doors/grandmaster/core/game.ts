@@ -41,7 +41,7 @@ import { chooseMarkedRows, claimMarkedRows, type EraserPattern } from './eraser'
 import { buildResult } from './game-result';
 import { applyStage, type Stage } from './stage';
 import { afterLock } from './mission-hooks';
-import { collectItem } from './item-effects';
+import { collectItem, applyItemEffect } from './item-effects';
 import {
   boneBlockChance, startCreditRoll, completeCreditRoll,
 } from './credit-roll-rules';
@@ -148,6 +148,10 @@ export class GameEngine {
   /** TARGET: the stages this mission plays, and which one is up. */
   private stages: Stage[] = [];
   private stageIndex = 0;
+  /** How many rows of THIS stage's rising field have been spent. */
+  private riseIndex = 0;
+  /** The mission's own modifiers, before a stage adds its rules on top. */
+  private baseModifiers: MissionModifiers | null = null;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -265,23 +269,11 @@ export class GameEngine {
    * spend an item the same way instead of each handling a subset.
    */
   applyItemEffectResult(result: ItemEffectResult): void {
-    if (result.clearRows && result.clearRows.length > 0) {
-      clearLines(this.state.board, result.clearRows);
-    }
-    if (result.insertHardBlockNext) {
-      this.insertHardBlockNext();
-    }
-    if (result.bigPieces) {
-      this.state.bigPiecesRemaining = result.bigPieces;
-    }
-    if (result.rollRollPieces) {
-      this.state.rollRollPiecesRemaining = result.rollRollPieces;
-      this.rollRollFrame = 0;
-    }
-    if (result.rotateLockFrames) this.state.rotateLockFrames = result.rotateLockFrames;
-    if (result.hideNextFrames) this.state.hideNextFrames = result.hideNextFrames;
-    if (result.lrReverseFrames) this.state.lrReverseFrames = result.lrReverseFrames;
-    if (result.boostFrames) this.state.boostFrames = result.boostFrames;
+    applyItemEffect(
+      result, this.state, this.state.board,
+      () => this.insertHardBlockNext(),
+      () => { this.rollRollFrame = 0; },
+    );
   }
 
   /**
@@ -478,7 +470,29 @@ export class GameEngine {
   setStages(stages: Stage[]): void {
     this.stages = stages;
     this.stageIndex = 0;
-    if (stages.length > 0) applyStage(this.state.board, stages[0]);
+    this.riseIndex = 0;
+    if (stages.length > 0) {
+      applyStage(this.state.board, stages[0]);
+      this.applyStageRules();
+    }
+  }
+
+  /**
+   * A stage's OWN rules, laid over the mission's.
+   *
+   * Eleven of the reference's stages switch one on - MIRROR, X-RAY, COLOR,
+   * ROLL ROLL, BIG, BLIND, HIDE NEXT (`tomoyo.c:1420-1448`) - and they belong
+   * to the STAGE, so they go away again when the next one is laid out. The
+   * mission's own modifiers are kept underneath rather than overwritten:
+   * a TARGET mission that asked for BLIND stays blind on a stage that did
+   * not.
+   */
+  private applyStageRules(): void {
+    const stage = this.stages[this.stageIndex];
+    const base = this.baseModifiers ?? {};
+    this.state.missionModifiers = stage?.rules
+      ? { ...base, ...stage.rules }
+      : (this.baseModifiers ?? undefined);
   }
 
   /** The stage on the board, for the screen and for the tests. */
@@ -511,6 +525,7 @@ export class GameEngine {
   }
 
   setMissionModifiers(modifiers: MissionModifiers | null): void {
+    this.baseModifiers = modifiers ?? null;
     this.state.missionModifiers = modifiers ?? undefined;
     // ROTATELOCK hands each spawning piece a rotation from a queue of six
     // random ones (gamestart.c:3880-3887), so the queue is filled before the
@@ -1046,10 +1061,6 @@ export class GameEngine {
    * Soft drop (faster gravity)
    */
   softDrop(): boolean {
-    return this.doSoftDrop();
-  }
-
-  private doSoftDrop(): boolean {
     if (!this.state.currentPiece || this.state.status !== 'playing') return false;
 
     const piece = this.state.currentPiece;
@@ -1131,10 +1142,6 @@ export class GameEngine {
    * both), false when it was a no-op - the same contract as softDrop().
    */
   sonicDrop(): boolean {
-    return this.doSonicDrop();
-  }
-
-  private doSonicDrop(): boolean {
     if (!this.state.currentPiece || this.state.status !== 'playing') return false;
 
     const piece = this.state.currentPiece;
@@ -1679,11 +1686,17 @@ export class GameEngine {
       eraserRemaining: this.eraserRemaining,
       stages: this.stages,
       stageIndex: this.stageIndex,
+      riseIndex: this.riseIndex,
       squareMode: this.squareMode,
     });
     this.state.markedRows = hooks.markedRows;
     this.eraserRemaining = hooks.eraserRemaining;
-    this.stageIndex = hooks.stageIndex;
+    this.riseIndex = hooks.riseIndex;
+    if (hooks.stageIndex !== this.stageIndex) {
+      this.stageIndex = hooks.stageIndex;
+      // A new stage brings its own rules with it.
+      this.applyStageRules();
+    }
     const { markedRowsCleared, stageCleared, square } = hooks;
 
     // Report the lock. Everything a MISSION judges comes from here, which is

@@ -13,7 +13,8 @@ import { chooseMarkedRows, claimMarkedRows, type EraserPattern } from './eraser'
 import { mirrorBoard } from './board-writes';
 import { riseGarbageRow } from './garbage';
 import { makeSquares, type SquareResult } from './square';
-import { applyStage, platinumLeft, type Stage } from './stage';
+import { applyStage, platinumLeft, riseRow, type Stage } from './stage';
+import { riseRowOnto } from './garbage';
 import type { Board } from './types';
 import type { MissionModifiers } from './mission-types';
 
@@ -31,9 +32,10 @@ export interface MissionHookContext {
   markedRows: number[];
   eraserPattern: EraserPattern | null;
   eraserRemaining: number;
-  /** TARGET's stages and which one is up. */
+  /** TARGET's stages, which one is up, and how far its floor has risen. */
   stages: Stage[];
   stageIndex: number;
+  riseIndex: number;
   /** SQUARE scans only when the mission is judged on it. */
   squareMode: boolean;
 }
@@ -45,6 +47,8 @@ export interface MissionHookResult {
   eraserRemaining: number;
   stageCleared: boolean;
   stageIndex: number;
+  /** How many rows of the stage's rising field have been spent. */
+  riseIndex: number;
   square: SquareResult;
 }
 
@@ -55,6 +59,7 @@ export function afterLock(ctx: MissionHookContext): MissionHookResult {
     eraserRemaining: ctx.eraserRemaining,
     stageCleared: false,
     stageIndex: ctx.stageIndex,
+    riseIndex: ctx.riseIndex,
     square: 0,
   };
 
@@ -83,6 +88,7 @@ export function afterLock(ctx: MissionHookContext): MissionHookResult {
   if (ctx.stages.length > 0 && platinumLeft(ctx.board) === 0) {
     result.stageCleared = true;
     result.stageIndex = ctx.stageIndex + 1;
+    result.riseIndex = 0;
     const next = ctx.stages[result.stageIndex];
     if (next) applyStage(ctx.board, next);
   }
@@ -97,10 +103,34 @@ export function afterLock(ctx: MissionHookContext): MissionHookResult {
   // (gamestart.c:9055) - not on a timer, which is what makes it a mode.
   if (ctx.modifiers?.mirror) mirrorBoard(ctx.board);
 
-  // DEVIL 800's floor: one row every N pieces LOCKED, not every N seconds
-  // (mission.c:1394-1399), so a player's only clock is their own placing.
-  const rise = ctx.modifiers?.riseEveryPieces ?? 0;
-  if (rise > 0 && ctx.piecesPlaced > 0 && ctx.piecesPlaced % rise === 0) {
+  /*
+   * THE FLOOR COMES UP, and WHAT comes up depends on who asked.
+   *
+   * A TARGET stage carries the rows its own floor rises with, and spends them
+   * in order (`gamestart.c:8348-8360` copies from `tomoyo_rise_fld`, tracking
+   * how far it has got): those rows are part of the stage's design, so a
+   * random garbage row would be a different puzzle. DEVIL 800 asks for the
+   * garbage instead (mission.c:1394-1399).
+   *
+   * Both are counted in PIECES LOCKED - the reference spends the stage's
+   * interval inside `statBlock`, its per-piece handler (gamestart.c:6908) -
+   * so a player's only clock is their own placing.
+   */
+  const stage = ctx.stages[result.stageIndex];
+  const stageRise = stage?.riseEveryPieces ?? 0;
+  const modifierRise = ctx.modifiers?.riseEveryPieces ?? 0;
+  const due = (interval: number) =>
+    interval > 0 && ctx.piecesPlaced > 0 && ctx.piecesPlaced % interval === 0;
+
+  if (stage && stageRise > 0 && due(stageRise)) {
+    const row = riseRow(stage, result.riseIndex);
+    // A stage whose rows have all been spent stops rising rather than
+    // repeating them.
+    if (row) {
+      riseRowOnto(ctx.board, row);
+      result.riseIndex += 1;
+    }
+  } else if (due(modifierRise)) {
     riseGarbageRow(ctx.board);
   }
 

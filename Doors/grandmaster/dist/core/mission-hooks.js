@@ -17,6 +17,7 @@ const board_writes_1 = require("./board-writes");
 const garbage_1 = require("./garbage");
 const square_1 = require("./square");
 const stage_1 = require("./stage");
+const garbage_2 = require("./garbage");
 function afterLock(ctx) {
     const result = {
         markedRowsCleared: 0,
@@ -24,6 +25,7 @@ function afterLock(ctx) {
         eraserRemaining: ctx.eraserRemaining,
         stageCleared: false,
         stageIndex: ctx.stageIndex,
+        riseIndex: ctx.riseIndex,
         square: 0,
     };
     /*
@@ -48,6 +50,7 @@ function afterLock(ctx) {
     if (ctx.stages.length > 0 && (0, stage_1.platinumLeft)(ctx.board) === 0) {
         result.stageCleared = true;
         result.stageIndex = ctx.stageIndex + 1;
+        result.riseIndex = 0;
         const next = ctx.stages[result.stageIndex];
         if (next)
             (0, stage_1.applyStage)(ctx.board, next);
@@ -62,10 +65,33 @@ function afterLock(ctx) {
     // (gamestart.c:9055) - not on a timer, which is what makes it a mode.
     if (ctx.modifiers?.mirror)
         (0, board_writes_1.mirrorBoard)(ctx.board);
-    // DEVIL 800's floor: one row every N pieces LOCKED, not every N seconds
-    // (mission.c:1394-1399), so a player's only clock is their own placing.
-    const rise = ctx.modifiers?.riseEveryPieces ?? 0;
-    if (rise > 0 && ctx.piecesPlaced > 0 && ctx.piecesPlaced % rise === 0) {
+    /*
+     * THE FLOOR COMES UP, and WHAT comes up depends on who asked.
+     *
+     * A TARGET stage carries the rows its own floor rises with, and spends them
+     * in order (`gamestart.c:8348-8360` copies from `tomoyo_rise_fld`, tracking
+     * how far it has got): those rows are part of the stage's design, so a
+     * random garbage row would be a different puzzle. DEVIL 800 asks for the
+     * garbage instead (mission.c:1394-1399).
+     *
+     * Both are counted in PIECES LOCKED - the reference spends the stage's
+     * interval inside `statBlock`, its per-piece handler (gamestart.c:6908) -
+     * so a player's only clock is their own placing.
+     */
+    const stage = ctx.stages[result.stageIndex];
+    const stageRise = stage?.riseEveryPieces ?? 0;
+    const modifierRise = ctx.modifiers?.riseEveryPieces ?? 0;
+    const due = (interval) => interval > 0 && ctx.piecesPlaced > 0 && ctx.piecesPlaced % interval === 0;
+    if (stage && stageRise > 0 && due(stageRise)) {
+        const row = (0, stage_1.riseRow)(stage, result.riseIndex);
+        // A stage whose rows have all been spent stops rising rather than
+        // repeating them.
+        if (row) {
+            (0, garbage_2.riseRowOnto)(ctx.board, row);
+            result.riseIndex += 1;
+        }
+    }
+    else if (due(modifierRise)) {
         (0, garbage_1.riseGarbageRow)(ctx.board);
     }
     return result;
