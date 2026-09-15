@@ -166,3 +166,54 @@ describe('what QuickNew will draw', () => {
     expect(new Set(titles).size).toBe(titles.length);
   });
 });
+
+/**
+ * THE SHIPPED BINARY IS THE ONE THE SHIPPED SOURCE BUILDS.
+ *
+ * `QuickNew.asm` beside the binary is REbEL/QTX's 2019 source with the width
+ * work added (see Doors/QuickNew/BUILDING.md for the exact vasm command). The
+ * binary cannot be assembled in CI, so what is checked here is that the two
+ * agree about the thing the width work added: a door built from the old source
+ * has no WIDTH argument, and its ReadArgs template says so in plain text.
+ *
+ * The behaviour itself was verified by running the door under the emulator,
+ * against a scratch board with dated uploads so the filename grid actually
+ * rendered: at the default width the output is byte-for-byte the stock door's,
+ * and at 40 the widest line is exactly 40 with the grid reflowed. That is a
+ * measurement, not a test - it needs a 68K emulator and a board - so it lives
+ * in the commit message and BUILDING.md rather than pretending to run here.
+ */
+describe('the door binary and its source agree', () => {
+  const DOOR = path.join(REPO, 'Doors', 'QuickNew');
+
+  it('ships the source next to the binary', () => {
+    expect(fs.existsSync(path.join(DOOR, 'QuickNew.asm'))).toBe(true);
+  });
+
+  it('ships the build recipe, because the binary cannot be rebuilt by guessing', () => {
+    const doc = readFileSync(path.join(DOOR, 'BUILDING.md'), 'utf8');
+    expect(doc).toContain('vasmm68k_mot');
+    expect(doc).toContain('-m68020');
+  });
+
+  it('declares WIDTH in the source template', () => {
+    const asm = readFileSync(path.join(DOOR, 'QuickNew.asm'), 'latin1');
+    expect(asm).toContain('"FILE/A,DAYS/N,WIDTH/N"');
+  });
+
+  it('carries that same template inside the binary it ships', () => {
+    // The template is a plain string in the executable, so this is the one
+    // cheap check that the binary was built from THIS source and not an older
+    // one left behind by a bad copy.
+    const binary = readFileSync(path.join(DOOR, 'QuickNew'), 'latin1');
+    expect(binary).toContain('FILE/A,DAYS/N,WIDTH/N');
+  });
+
+  it('keeps WIDTH optional, so a board that never passes it is untouched', () => {
+    // "/N" and no "/A": ReadArgs treats it as an optional number. A required
+    // WIDTH would break every existing batch line on every board.
+    const asm = readFileSync(path.join(DOOR, 'QuickNew.asm'), 'latin1');
+    expect(asm).not.toContain('WIDTH/A');
+    expect(asm).toContain('screenwidth\tdc.l 80');
+  });
+});

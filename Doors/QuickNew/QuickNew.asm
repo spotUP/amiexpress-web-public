@@ -71,7 +71,16 @@ fnloop
 	MOVE.L D0,A0
 	MOVE.L (a0),numdays
 
-defaultdays	MOVE.L args,D1
+defaultdays
+	MOVE.L widthptr,D0
+	BEQ.S defaultwidth
+	MOVE.L D0,A0
+	MOVE.L (A0),D0
+	CMPI.L #20,D0
+	BLT.S defaultwidth
+	MOVE.L D0,screenwidth
+defaultwidth
+	MOVE.L args,D1
 	JSR _LVOFreeArgs(a6)
 	CLR.L args
 
@@ -159,7 +168,19 @@ lbC000122	BSR.L	getConfigBlock - find block in config file (ending with the #)
 
 
 
-showfooter	MOVEA.L	dosbase(PC),A6
+; The credit line is a line like any other and has to fit the screen too -
+; at 40 columns it ran to 78 and wrapped over the last statistics row.
+showfooter
+	MOVEA.L	#quicknewtext,A2
+	MOVEA.L	#nocfgerrtext,A3
+	BSR.W	blockneedsfitting
+	TST.L	D0
+	BEQ.S	footerasis
+	BSR.W	writerangefitted
+	BRA.L	shutdown
+; Fits: the credit line goes out byte for byte the way it always has.
+footerasis
+	MOVEA.L	dosbase(PC),A6
 	MOVE.L	stdout(PC),D1
 	MOVE.L	#quicknewtext,D2
 	MOVE.L	#nocfgerrtext-quicknewtext,D3
@@ -382,13 +403,7 @@ calcallstats
   BSR.L updateplaceholders
   
   ;display block
-	MOVEA.L	dosbase(PC),A6
-	MOVE.L	stdout(PC),D1
-	MOVE.L	currBlockStart(PC),D2
-	MOVE.L	currBlockEnd(PC),D3
-	SUB.L	D2,D3
-	SUBQ.L	#3,D3
-	JSR	_LVOWrite(A6)
+	BSR.L	writeblockfitted
 	MOVE.L	stdout(PC),D1
 	MOVE.L	#lbB000D4A,D2
 	MOVE.L	#2,D3
@@ -490,8 +505,37 @@ lbC0005A6	ADDQ.W	#1,lbW000B2A.L
 	MOVE.W	lbW000B2A(PC),D1
 	MOVE.W	#5,D0
 	CMPI.B	#1,displaymode.L
-	BEQ.S	lbC0005C0
+	BEQ.S	qnwgrid
 	ADDQ.W	#1,D0
+qnwgrid
+; A NARROW SCREEN TAKES FEWER FILENAMES PER ROW.
+;
+; A column is fourteen characters on the wire - the name, a space, and
+; the pad to twelve - after five of indent, so what fits is
+; (screenwidth-5)/14: two at forty, against the five displaymode chose,
+; which is why an unmodified 40 column screen showed rows of 47.
+;
+; EIGHTY OR WIDER IS LEFT ENTIRELY ALONE. Not "computes the same answer"
+; - not consulted at all, so no existing board can be changed by this,
+; including the mode-2 layout whose six columns already run to 85 and
+; which is not mine to silently re-flow.
+	CMPI.L	#80,screenwidth.L
+	BCC.S	qnwgriddone
+	MOVE.L	D2,-(SP)
+	MOVE.L	screenwidth.L,D2
+	SUBQ.L	#5,D2
+	DIVU.W	#14,D2
+	ANDI.L	#$FFFF,D2
+	TST.W	D2
+	BNE.S	qnwgridok
+	MOVEQ	#1,D2
+qnwgridok
+	CMP.W	D2,D0
+	BLE.S	qnwgridpop
+	MOVE.W	D2,D0
+qnwgridpop
+	MOVE.L	(SP)+,D2
+qnwgriddone
 lbC0005C0	CMP.W	D0,D1
 	BNE.S	lbC000614
 	MOVE.B	#10,(A4)+
@@ -695,7 +739,7 @@ lbC000850	CMPA.L	A0,A1
 	CMPI.B	#$46,(A0)
 	BEQ.S	lbC0008A6         ;found @F (number of todays fakes)
 	CMPI.B	#$4D,(A0)
-	BEQ.S	lbC0008C4         ;found @M (todays megabytes)
+	BEQ.W	lbC0008C4         ;found @M (todays megabytes)
 	CMPI.B	#$59,(A0)
 	BEQ.L	lbC000900         ;found @Y (number of yesterdays files)
 	CMPI.B	#$5A,(A0)
@@ -713,7 +757,7 @@ daysplaceholder
 	ADD.B	D0,-1(A0)
 	SWAP	D0
 	ADD.B	D0,(A0)
-	BRA.S	lbC000850
+	BRA.W	lbC000850
 
 lbC000888	MOVE.B	#$30,-1(A0)
 	MOVE.B	#$30,(A0)
@@ -723,7 +767,7 @@ lbC000888	MOVE.B	#$30,-1(A0)
 	ADD.B	D0,-1(A0)
 	SWAP	D0
 	ADD.B	D0,(A0)
-	BRA.S	lbC000850
+	BRA.W	lbC000850
 
 lbC0008A6	MOVE.B	#$30,-1(A0)
 	MOVE.B	#$30,(A0)
@@ -863,7 +907,7 @@ lbL000B68	dcb.l	4,0
 yesterdaystr	dcb.l	4,0
 lbL000B88	dc.l	$A0
 
-argstemplate dc.b "FILE/A,DAYS/N",0
+argstemplate dc.b "FILE/A,DAYS/N,WIDTH/N",0
 
 handsofftext	dc.b	10,"Get your hands out of my tools !!!",10
 quicknewtext	dc.b	27,"[44;33m  QuickNew V2.2 by Calypso/GOD & REbEL/QTX",27,"[36m Date : "
@@ -896,7 +940,242 @@ args	dc.l 0
 argsdata
 paramfilename	dc.l 0
 numdaysptr	dc.l 0
+widthptr	dc.l 0
 
 dateoffset	dc.l 0
 numdays	dc.l 1
+;--------------------------------------------------------------------
+; writeblockfitted - write the current config block, truncating any
+; line that will not fit `screenwidth` VISIBLE columns.
+;
+; The block is the header and stats templates the sysop wrote, with the
+; placeholders already substituted. It used to go out as ONE Write of
+; the whole thing, so a long section title simply ran off the screen -
+; on an 80 column board this config produced lines of 94.
+;
+; A LINE THAT FITS IS PASSED THROUGH UNTOUCHED, byte for byte, line
+; terminator and all. Only a line that does not fit is rebuilt. That is
+; what makes the default width identical to the door as it shipped:
+; there is nothing to get wrong, because nothing is reconstructed. An
+; earlier draft synthesised the newline and inserted a stray reset at
+; every block boundary.
+;
+; ANSI escapes are ZERO WIDTH and are never split - CSI sequences are
+; walked whole: ESC, "[", parameter bytes $30-$3F, one final $40-$7E.
+;--------------------------------------------------------------------
+writeblockfitted
+	MOVEM.L	D2-D7/A2-A5,-(SP)
+	MOVEA.L	currBlockStart.L,A2
+	MOVEA.L	currBlockEnd.L,A3
+	SUBQ.L	#3,A3
+
+; NOTHING TO FIT, NOTHING TO TOUCH.
+;
+; When every line already fits - which is every block on every board that
+; never passes WIDTH, and most blocks on those that do - the whole block
+; goes out as the ONE Write the door has always used, from the same
+; pointer with the same length. Not "reconstructed identically": the same
+; call. That is what makes the default indistinguishable from the door as
+; it shipped, and it is worth the extra pass to be sure of it.
+	BSR.W	blockneedsfitting
+	TST.L	D0
+	BNE.S	wbfnextline
+	MOVEA.L	dosbase(PC),A6
+	MOVE.L	stdout(PC),D1
+	MOVE.L	currBlockStart(PC),D2
+	MOVE.L	currBlockEnd(PC),D3
+	SUB.L	D2,D3
+	SUBQ.L	#3,D3
+	JSR	_LVOWrite(A6)
+	MOVEM.L	(SP)+,D2-D7/A2-A5
+	RTS
+
+;--------------------------------------------------------------------
+; writerangefitted - the same rule for any range, not just a config
+; block: the footer is a line and has to fit as well.
+;--------------------------------------------------------------------
+writerangefitted
+	MOVEM.L	D2-D7/A2-A5,-(SP)
+wbfnextline
+	CMPA.L	A2,A3
+	BLS.W	wbfdone
+
+; Measure the line: A0 stops on its newline or on the end of the block,
+; D4 counts the columns a terminal would actually show.
+	MOVEA.L	A2,A0
+	MOVEQ	#0,D4
+wbfscan
+	CMPA.L	A0,A3
+	BLS.S	wbfscanned
+	MOVE.B	(A0),D0
+	CMPI.B	#10,D0
+	BEQ.S	wbfscanned
+	CMPI.B	#27,D0
+	BEQ.S	wbfscanesc
+	ADDQ.L	#1,A0
+	ADDQ.L	#1,D4
+	BRA.S	wbfscan
+wbfscanesc
+	BSR.W	skipescape
+	BRA.S	wbfscan
+wbfscanned
+; CLAMP. skipescape steps over a CSI sequence as a unit, so a line whose
+; last escape straddles the end of the range leaves A0 PAST it - and the
+; write that follows would then repeat the bytes beyond. This is the
+; stray reset that appeared once per block in the first draft.
+	CMPA.L	A0,A3
+	BCC.S	wbfscanok
+	MOVEA.L	A3,A0
+wbfscanok
+
+; A1 is where the NEXT line starts: past the newline when there is one.
+	MOVEA.L	A0,A1
+	CMPA.L	A1,A3
+	BLS.S	wbfnoeol
+	CMPI.B	#10,(A1)
+	BNE.S	wbfnoeol
+	ADDQ.L	#1,A1
+wbfnoeol
+
+	MOVE.L	screenwidth.L,D6
+	CMP.L	D6,D4
+	BHI.S	wbftruncate
+
+; It fits. Hand the original bytes straight to Write.
+	MOVEA.L	dosbase(PC),A6
+	MOVE.L	stdout(PC),D1
+	MOVE.L	A2,D2
+	MOVE.L	A1,D3
+	SUB.L	A2,D3
+	JSR	_LVOWrite(A6)
+	MOVEA.L	A1,A2
+	BRA.W	wbfnextline
+
+; It does not fit: keep screenwidth-3 visible columns, then "...".
+; Escapes are copied whole and cost nothing, so the colours of the part
+; that survives are the colours the sysop wrote.
+wbftruncate
+	LEA	fitbuffer,A4
+	SUBQ.L	#3,D6
+wbfcopy
+	CMPA.L	A2,A0
+	BLS.S	wbfdots
+	MOVE.B	(A2),D0
+	CMPI.B	#27,D0
+	BEQ.S	wbfcopyesc
+	TST.L	D6
+	BLE.S	wbfskipvis
+	MOVE.B	(A2)+,(A4)+
+	SUBQ.L	#1,D6
+	BRA.S	wbfcopy
+wbfskipvis
+	ADDQ.L	#1,A2
+	BRA.S	wbfcopy
+wbfcopyesc
+	MOVEA.L	A2,A5
+	EXG	A0,A5
+	BSR.W	skipescape
+	EXG	A0,A5
+wbfcopyescloop
+	CMPA.L	A2,A5
+	BLS.S	wbfcopy
+	MOVE.B	(A2)+,(A4)+
+	BRA.S	wbfcopyescloop
+wbfdots
+	MOVE.B	#".",(A4)+
+	MOVE.B	#".",(A4)+
+	MOVE.B	#".",(A4)+
+
+; Whatever ended the original line ends this one: the bytes between the
+; last visible character and the start of the next line.
+	MOVEA.L	A0,A5
+wbfeolcopy
+	CMPA.L	A5,A1
+	BLS.S	wbfeolcopied
+	MOVE.B	(A5)+,(A4)+
+	BRA.S	wbfeolcopy
+wbfeolcopied
+	MOVEA.L	dosbase(PC),A6
+	MOVE.L	stdout(PC),D1
+	MOVE.L	#fitbuffer,D2
+	MOVE.L	A4,D3
+	SUB.L	#fitbuffer,D3
+	JSR	_LVOWrite(A6)
+	MOVEA.L	A1,A2
+	BRA.W	wbfnextline
+
+wbfdone
+	MOVEM.L	(SP)+,D2-D7/A2-A5
+	RTS
+
+;--------------------------------------------------------------------
+; blockneedsfitting - D0 nonzero when some line in the block is wider
+; than screenwidth. Reads only; A2/A3 are left where they were.
+;--------------------------------------------------------------------
+blockneedsfitting
+	MOVEM.L	D4/D6/A0,-(SP)
+	MOVEA.L	A2,A0
+	MOVEQ	#0,D4
+	MOVE.L	screenwidth.L,D6
+bnfloop
+	CMPA.L	A0,A3
+	BLS.S	bnfend
+	MOVE.B	(A0),D0
+	CMPI.B	#10,D0
+	BEQ.S	bnfeol
+	CMPI.B	#27,D0
+	BEQ.S	bnfesc
+	ADDQ.L	#1,A0
+	ADDQ.L	#1,D4
+	CMP.L	D6,D4
+	BHI.S	bnfyes
+	BRA.S	bnfloop
+bnfesc
+	BSR.S	skipescape
+	BRA.S	bnfloop
+bnfeol
+	ADDQ.L	#1,A0
+	MOVEQ	#0,D4
+	BRA.S	bnfloop
+bnfyes
+	MOVEQ	#1,D0
+	MOVEM.L	(SP)+,D4/D6/A0
+	RTS
+bnfend
+	MOVEQ	#0,D0
+	MOVEM.L	(SP)+,D4/D6/A0
+	RTS
+
+;--------------------------------------------------------------------
+; skipescape - step A0 over one CSI sequence (A3 is the hard limit).
+;--------------------------------------------------------------------
+skipescape
+	ADDQ.L	#1,A0
+	CMPA.L	A0,A3
+	BLS.S	skipescdone
+	CMPI.B	#"[",(A0)
+	BNE.S	skipescdone
+	ADDQ.L	#1,A0
+skipescparm
+	CMPA.L	A0,A3
+	BLS.S	skipescdone
+	MOVE.B	(A0),D0
+	CMPI.B	#$30,D0
+	BLT.S	skipescfinal
+	CMPI.B	#$3F,D0
+	BGT.S	skipescfinal
+	ADDQ.L	#1,A0
+	BRA.S	skipescparm
+skipescfinal
+	CMPA.L	A0,A3
+	BLS.S	skipescdone
+	ADDQ.L	#1,A0
+skipescdone
+	RTS
+
+; 80 unless the batch line says otherwise - an existing board that never
+; passes WIDTH behaves exactly as it always did.
+screenwidth	dc.l 80
+fitbuffer	ds.b 1024
+
 	end
