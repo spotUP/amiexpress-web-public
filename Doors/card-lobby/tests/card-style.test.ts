@@ -12,15 +12,14 @@
  */
 
 import assert from 'assert';
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
 import { resolveCardStyle, FULL_CARD_ROWS, CARD_STYLE_CHOICES } from '../lib/card-style';
 import { previewLines, showCardStyleDialog } from '../managers/CardStyleDialog';
 import { readFileSync } from 'fs';
 import { unlockAchievements, recordHandResult } from '../lib/achievements';
+import { isolatedDataDir } from './isolated-data-dir';
 
-process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-cards-'));
+isolatedDataDir('cards');
 
 export async function aTallPanelGetsFullSizeCards(): Promise<void> {
   assert.strictEqual(resolveCardStyle(undefined, FULL_CARD_ROWS).size, 'full');

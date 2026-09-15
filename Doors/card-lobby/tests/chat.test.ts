@@ -11,15 +11,14 @@
  */
 
 import assert from 'assert';
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
 import { say, messagesSince, formatChatLine, MAX_CHAT_MESSAGES, MAX_CHAT_LENGTH } from '../lib/chat';
 import { ChatManager } from '../managers/ChatManager';
 import { initLobbyState } from '../lib/utils';
 import { UI_THEME } from '../lib/constants';
+import { isolatedDataDir } from './isolated-data-dir';
 
-process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-chat-'));
+isolatedDataDir('chat');
 
 const author = { userId: '1', username: 'sysop' };
 

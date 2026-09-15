@@ -12,12 +12,11 @@
  */
 
 import assert from 'assert';
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
 import { join } from 'path';
 import { themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { isolatedDataDir } from './isolated-data-dir';
 
-process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-theme-'));
+isolatedDataDir('theme');
 
 async function openWithTheme(themeId: string): Promise<any> {
   const { CardLobbyApp } = await import('../index');

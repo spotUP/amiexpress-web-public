@@ -27,6 +27,8 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './a-patience-plays-by-its-file.test',
   './a-solitaire-is-dealt-from-the-lobby.test',
   './a-panel-is-named-for-the-game-in-it.test',
+  // LAST on purpose: it judges where every module above it wrote.
+  './a-test-file-gets-its-own-lobby.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

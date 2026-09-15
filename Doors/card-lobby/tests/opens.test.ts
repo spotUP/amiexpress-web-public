@@ -14,12 +14,10 @@
  */
 
 import assert from 'assert';
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { isolatedDataDir } from './isolated-data-dir';
 
 /** Nothing here may write to the real board. */
-process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-test-'));
+isolatedDataDir('opens');
 
 interface Harness {
   app: any;

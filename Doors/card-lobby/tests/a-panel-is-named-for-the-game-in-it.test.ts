@@ -13,11 +13,9 @@
  */
 
 import assert from 'assert';
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { isolatedDataDir } from './isolated-data-dir';
 
-process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-titles-'));
+isolatedDataDir('titles');
 
 async function openApp(): Promise<any> {
   const { CardLobbyApp } = await import('../index');
