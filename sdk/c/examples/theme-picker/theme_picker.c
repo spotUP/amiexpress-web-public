@@ -203,15 +203,14 @@ static void door_idle(void *ctx)
        identical row five times a second and the title flickers under it
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
-    if (!ui_masthead_rail_animates((*a->theme)->rail)) { ae_delay_ticks(10); return; }
+    if (!ui_masthead_rail_animates((*a->theme)->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
     (*a->tick)++;
     /* The RAIL, not the row - see ui_chrome.h. */
     ui_masthead_rail_tick(&a->screen->buf, 1, 1, a->screen->cols, "DOOR THEME",
                           (*a->theme)->rail, UI_TOKEN(UI_T_ACCENT),
                           UI_TOKEN(UI_T_GROUND), *a->tick);
     ui_screen_flush(a->screen);
-    /* Ten ticks is a fifth of a second on a PAL Amiga. */
-    ae_delay_ticks(10);
+    ae_delay_ticks(UI_RAIL_TICK_DELAY);
 }
 
 static void door_settle(void *ctx)

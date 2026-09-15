@@ -131,6 +131,33 @@ void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
                            int fg, int bg, int tick);
 
 /**
+ * How long a door waits between rail frames, in Amiga ticks (50 a second).
+ *
+ * ONE definition: the four doors with an idle hook had the same literal 10,
+ * so the board's animation speed was a thing you changed in four places and
+ * got wrong in one. The sysop, 2026-09-15: "the rails animate too slow".
+ *
+ * The rail moves one cell per frame - a terminal cannot move less than a
+ * whole cell - so smoothness is entirely frame RATE. Three ticks asks for
+ * about sixteen frames a second and MEASURES 8.4 on the board's emulator,
+ * which pays roughly 45ms per XIM message: the delay is a floor, not a
+ * promise.
+ *
+ * What pays for it is the frame being the rail's run alone, about a hundred
+ * bytes. Measured on THEMEC, `slate-slash`, over nine idle seconds:
+ *
+ *     the old full-row frame, 10 ticks   3.7 fps   ~860 bytes/s
+ *     the run alone, 5 ticks             6.2 fps    467 bytes/s
+ *     the run alone, 3 ticks             8.4 fps    633 bytes/s
+ *
+ * So this is faster than the board has ever drawn it AND cheaper than it
+ * used to cost. Below three a real Amiga starts spending its time on
+ * decoration: at ~45ms a frame the door would draw more often than it looks
+ * for a keypress.
+ */
+#define UI_RAIL_TICK_DELAY 3
+
+/**
  * The status line: left text, right text, and the gap between them filled.
  *
  * The right side is dropped rather than overlapped when both cannot fit -
