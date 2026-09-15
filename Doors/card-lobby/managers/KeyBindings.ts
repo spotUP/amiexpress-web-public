@@ -18,7 +18,12 @@ import type { TableGameModule } from '../lib/games';
 
 /** What the keyboard needs from the door. */
 export interface KeyBindingHost {
-  readonly screen: { key(keys: string[], handler: () => void): void };
+  /**
+   * `handler` returning true marks the keystroke HANDLED, which stops the
+   * screen passing it on to the focused widget and to its own arrow-key
+   * focus walk (sdk/engines/ui/blessed/core/screen.ts).
+   */
+  readonly screen: { key(keys: string[], handler: () => boolean | void): void };
   readonly modalActive: boolean;
   readonly viewMode: 'lobby' | 'table';
   readonly currentProfile: PlayerProfile | null;
@@ -139,36 +144,80 @@ export function attachKeyBindings(host: KeyBindingHost): void {
     host.gameModuleFor(table)?.toggleView?.();
   });
 
-  host.screen.key(['left', 'h'], () => {
-      if (host.modalActive || host.viewMode !== 'table') return;
-      const table = host.currentProfile?.currentTableId
-        ? host.findTableById(host.currentProfile.currentTableId)
-        : null;
-      host.gameModuleFor(table)?.moveSelection(-1);
-    });
-    host.screen.key(['right', 'l'], () => {
-      if (host.modalActive || host.viewMode !== 'table') return;
-      const table = host.currentProfile?.currentTableId
-        ? host.findTableById(host.currentProfile.currentTableId)
-        : null;
-      host.gameModuleFor(table)?.moveSelection(1);
-    });
+  /*
+   * THE CARD KEYS, and there is one set of them for every game in the lobby.
+   *
+   * The table the caller is at, and the module that serves it. Every card
+   * key goes through here, so a game added later is playable on the keyboard
+   * the day it registers - and a change to how cards are picked is made
+   * once.
+   */
+  const atTable = (): TableGameModule | undefined => {
+    if (host.modalActive || host.viewMode !== 'table') return undefined;
+    const table = host.currentProfile?.currentTableId
+      ? host.findTableById(host.currentProfile.currentTableId)
+      : null;
+    return host.gameModuleFor(table);
+  };
 
-    // Card selection keys (1-9, 0 for 10th card)
-    for (let i = 1; i <= 9; i++) {
-      host.screen.key([String(i)], () => {
-        if (host.modalActive || host.viewMode !== 'table') return;
-        const table = host.currentProfile?.currentTableId
-          ? host.findTableById(host.currentProfile.currentTableId)
-          : null;
-        host.gameModuleFor(table)?.selectCard(i - 1);  // Convert 1-based to 0-based index
-      });
-    }
-    host.screen.key(['0'], () => {
-      if (host.modalActive || host.viewMode !== 'table') return;
-      const table = host.currentProfile?.currentTableId
-        ? host.findTableById(host.currentProfile.currentTableId)
-        : null;
-      host.gameModuleFor(table)?.selectCard(9);  // 0 key = 10th card (index 9)
-    });
+  /** The table itself, for the games that answer per phase. */
+  const currentTable = (): LobbyTable | null => (host.currentProfile?.currentTableId
+    ? host.findTableById(host.currentProfile.currentTableId) ?? null
+    : null);
+
+  /**
+   * ARROWS WALK THE HAND, always, whatever its length.
+   *
+   * The number keys reach ten cards; a hand can be twenty ("how do we do
+   * when a user has picked up 20 cards?", sysop 2026-09-15), so the arrows
+   * are the only way to reach the eleventh and ENTER is the only way to play
+   * it. Returning `true` marks the key HANDLED, which stops the screen's own
+   * arrow-key focus walk from moving the focus at the same time as the
+   * selection - two things moving on one keystroke.
+   */
+  const walk = (delta: number) => (): boolean | void => {
+    const module = atTable();
+    if (!module) return;
+    module.moveSelection(delta);
+    return typeof module.selectedCard === 'function' ? true : undefined;
+  };
+  host.screen.key(['left', 'h'], walk(-1));
+  host.screen.key(['right', 'l'], walk(1));
+
+  /**
+   * A CARD KEY PICKS, AND THE SAME KEY AGAIN PLAYS.
+   *
+   * "pressing the hotkey once to select and once more to throw makes more
+   * sense" (sysop, 2026-09-15). A game that does not pick one card at a time
+   * - patience, where the second key says where the card GOES, or a
+   * Skitgubbe swap, where 1-3 then 4-6 is one move - leaves `selectedCard`
+   * out and keeps the plain behaviour.
+   */
+  const pickOrPlay = (index: number) => (): void => {
+    const module = atTable();
+    if (!module) return;
+    const table = currentTable();
+    const picked = table ? module.selectedCard?.(table) ?? null : null;
+    if (picked === index) module.primaryAction();
+    else module.selectCard(index);
+  };
+
+  for (let key = 1; key <= 9; key += 1) host.screen.key([String(key)], pickOrPlay(key - 1));
+  host.screen.key(['0'], pickOrPlay(9));           // 0 is the tenth card
+
+  /*
+   * ENTER PLAYS THE PICKED CARD. It is handled here rather than left to the
+   * focused card widget so that it works whether the caller got to the card
+   * with Tab, with the arrows or with a number - and `true` keeps the widget
+   * from playing it a second time on the way past.
+   */
+  host.screen.key(['enter'], (): boolean | void => {
+    const module = atTable();
+    const table = currentTable();
+    if (!module || !table) return;
+    const picked = module.selectedCard?.(table) ?? null;
+    if (picked === null) return;
+    module.primaryAction();
+    return true;
+  });
 }

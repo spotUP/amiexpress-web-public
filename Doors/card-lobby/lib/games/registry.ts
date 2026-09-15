@@ -17,6 +17,8 @@ import type { TableGameModule, TableGamePainter, GameHintKind } from './types';
 
 /** The app methods the two legacy adapters call straight through to. */
 export interface LegacyGameHost {
+  /** Which UNO card the caller has picked, if any. */
+  readonly selectedUnoCardIndex: number | null;
   startHoldemHand(table: LobbyTable): Promise<void>;
   startUnoGame(table: LobbyTable): Promise<void>;
   selectUnoCard(index: number): void;
@@ -74,6 +76,8 @@ export class UnoGameModule implements TableGameModule {
   start(table: LobbyTable): Promise<void> { return this.host.startUnoGame(table); }
   render(painter: TableGamePainter, table: LobbyTable): void { painter.renderUnoGameView(table); }
   selectCard(index: number): void { this.host.selectUnoCard(index); }
+  /** Press the same card key again - or ENTER - and it is played. */
+  selectedCard(): number | null { return this.host.selectedUnoCardIndex; }
   moveSelection(delta: number): void { this.host.moveUnoSelection(delta); }
   primaryAction(): void { this.host.triggerUnoPlayCard(); }
   secondaryAction(): void { this.host.triggerUnoDrawCard(); }

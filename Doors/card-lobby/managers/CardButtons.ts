@@ -174,6 +174,16 @@ export class CardButtons {
      */
     const LIFT_ROWS = 1;
 
+    /*
+     * ...and the lift is the FIRST thing given up. A hand of twenty at five
+     * rows a card needs two rows of ten, which is exactly the panel's ten
+     * rows with nothing left over: keeping a row back for the lift would
+     * drop the whole hand to the text list to preserve an effect nobody can
+     * see on a hand they cannot see. So every shape is tried with the lift
+     * and then, if none fitted, without it.
+     */
+    let lift = LIFT_ROWS;
+
     if (cards.length === 0) {
       this.clear();
       return false;
@@ -288,27 +298,42 @@ export class CardButtons {
       if (cardWidth === 0 || cardHeight === 0) return null;
       const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
       const cardRows = Math.ceil(cards.length / perRow);
-      if (cardRows * cardHeight + LIFT_ROWS > rows) return null;
+      if (cardRows * cardHeight + lift > rows) return null;
       return { perRow, size, stride: cardWidth + 1, stackY: 0, cardRows, height: cardHeight, cardWidth };
     };
 
-    /** One row, each card overlapping the one before it. */
+    /**
+     * Cards overlapping like a hand held in the fingers, in as few rows as
+     * the panel allows.
+     *
+     * One row for a hand of six; more when a hand gets long. "how do we do
+     * when a user has picked up 20 cards?" (sysop, 2026-09-15) - twenty at
+     * eleven columns each will not overlap into 57 columns without hiding
+     * the ranks, so they go into two rows of ten rather than falling back to
+     * the text list. Fewest rows first: a hand read left to right beats a
+     * hand read in a block.
+     */
     const fan = (candidate: string[][], size: 'full' | 'mini'): Layout | null => {
       const { cardWidth, cardHeight } = measure(candidate);
       if (cardWidth === 0 || cardHeight === 0) return null;
       if (cards.length < 2) return null;
-      if (cardHeight + LIFT_ROWS > rows) return null;
-      const stride = Math.floor((width - cardWidth) / (cards.length - 1));
-      if (stride < MIN_STRIDE) return null;
-      return {
-        perRow: cards.length,
-        size,
-        stackY: 0,
-        stride: Math.min(stride, cardWidth + 1),
-        cardRows: 1,
-        height: cardHeight,
-        cardWidth,
-      };
+      const maxRows = Math.floor((rows - lift) / cardHeight);
+      for (let cardRows = 1; cardRows <= maxRows; cardRows += 1) {
+        const perRow = Math.ceil(cards.length / cardRows);
+        if (perRow < 2) continue;
+        const stride = Math.floor((width - cardWidth) / (perRow - 1));
+        if (stride < MIN_STRIDE) continue;
+        return {
+          perRow,
+          size,
+          stackY: 0,
+          stride: Math.min(stride, cardWidth + 1),
+          cardRows,
+          height: cardHeight,
+          cardWidth,
+        };
+      }
+      return null;
     };
 
     /** One pile: each card a step down and right of the one below it. */
@@ -316,7 +341,7 @@ export class CardButtons {
       const { cardWidth, cardHeight } = measure(candidate);
       if (cardWidth === 0 || cardHeight === 0) return null;
       const steps = cards.length - 1;
-      if (cardHeight + steps * STACK_Y + LIFT_ROWS > rows) return null;
+      if (cardHeight + steps * STACK_Y + lift > rows) return null;
       if (cardWidth + steps * STACK_X > width) return null;
       return {
         perRow: cards.length,
@@ -339,11 +364,16 @@ export class CardButtons {
 
     let art: string[][] | null = null;
     let layout: Layout | null = null;
-    for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
-      for (const size of sizes) {
-        const candidate = artFor(size);
-        const found = shape(candidate, size);
-        if (found) { art = candidate; layout = found; break; }
+    // With the lift first; without it rather than not at all.
+    for (const tryLift of [LIFT_ROWS, 0]) {
+      lift = tryLift;
+      for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
+        for (const size of sizes) {
+          const candidate = artFor(size);
+          const found = shape(candidate, size);
+          if (found) { art = candidate; layout = found; break; }
+        }
+        if (layout) break;
       }
       if (layout) break;
     }
@@ -373,7 +403,7 @@ export class CardButtons {
      */
     const perRow = layout.perRow;
     const withLabels = layout.stackY === 0
-      && layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
+      && layout.cardRows * (cardHeight + 1) + lift <= rows;
     const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
 
     this.host.fallback.hide();
@@ -389,7 +419,7 @@ export class CardButtons {
       const number = (options.labelFrom ?? 1) + index;
       const label = number === 10 ? '0' : String(number);
 
-      const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS) + index * layout!.stackY;
+      const slotTop = row * buttonHeight + (picked ? 0 : lift) + index * layout!.stackY;
       const slotLeft = column * layout!.stride;
 
       /*
@@ -477,7 +507,7 @@ export class CardButtons {
       + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
       // The shape as well: the same cards in a resized panel are a different
       // picture, and skipping that repaint leaves a fan at the old stride.
-      + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`
+      + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}+${lift}`
       + `|${cards.map((entry) => (entry.under
         ? `${(entry.under.card as any).rank ?? (entry.under.card as any).color}${entry.under.face ?? ''}`
         : '-')).join(',')}`;

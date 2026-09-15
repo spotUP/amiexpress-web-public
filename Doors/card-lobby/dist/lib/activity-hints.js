@@ -41,18 +41,24 @@ function buildActivityHints(input) {
         }
     }
     lines.push(kind === 'uno'
-        ? `{${constants_1.UI_THEME.dim}-fg}Keys: D Draw  L Leave{/}`
+        ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  D Draw  L Leave{/}`
         : kind === 'patience'
             // Two picks make a move: the pile a card leaves, then where it goes.
             ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 Pile  X Home  C Stock  R Cancel  L Leave  D Deal{/}`
             : kind === 'vandtia'
-                // Three moves and the keys that make them.
-                ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take  V Flip  L Leave  D Deal{/}`
+                /*
+                 * A CARD KEY PICKS AND THE SAME KEY PLAYS, and so does ENTER - and
+                 * the arrows walk a hand of any length, which is the only way to
+                 * reach a card past the tenth (KeyBindings.ts). X still plays, and
+                 * is left out of the legend rather than out of the door: the line
+                 * has to fit a 40-column panel.
+                 */
+                ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  C Take  V Flip  L Leave{/}`
                 : kind === 'skitgubbe'
                     // Two moves: play the card you picked, or take the one in front of
                     // you. The keys are the door's existing ones - X is "do the main
                     // thing" at every table, C is the second action.
-                    ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take  L Leave  D Deal{/}`
+                    ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  C Take  L Leave  D Deal{/}`
                     : `{${constants_1.UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
     return lines;
 }

@@ -214,6 +214,22 @@ class VandtiaGameModule {
      * A number key. Cards 1-3 are the hand and 4-6 the table while swapping;
      * afterwards it simply picks from whatever pile is in play.
      */
+    /**
+     * The card a second press of the same key would play.
+     *
+     * Nothing during the swap - there 1-3 picks a hand card and 4-6 the table
+     * card it changes places with, so a repeat is half of somebody's move -
+     * and nothing while the panel is showing the cards in front of you, which
+     * are shown rather than played from.
+     */
+    selectedCard(table) {
+        if (this.handView === 'table')
+            return null;
+        const loaded = this.load(table);
+        if (!loaded || loaded.engine.state.phase === 'swap')
+            return null;
+        return this.selectedCardIndex;
+    }
     selectCard(index) {
         const table = this.currentTable();
         if (!table)
@@ -233,7 +249,7 @@ class VandtiaGameModule {
         if (index < 0 || index >= cards.length)
             return;
         this.selectedCardIndex = index;
-        this.host.pushNotice(`Selected ${(0, engine_1.cardId)(cards[index])}. X plays it.`);
+        this.host.pushNotice(`Selected ${(0, engine_1.cardId)(cards[index])} - press it again, or ENTER, to play.`);
         this.host.updateAllPanels();
     }
     /** 1-3 picks a hand card, 4-6 the face-up card it changes places with. */
@@ -384,7 +400,7 @@ class VandtiaGameModule {
         });
     }
     tertiaryAction() {
-        this.host.pushNotice('Skitgubbe: X plays the picked card, C takes the pile.');
+        this.host.pushNotice('Skitgubbe: pick a card and press it again - or ENTER - to play it. C takes the pile.');
     }
     render(painter, table) {
         painter.renderVandtiaGameView(table);
@@ -442,7 +458,7 @@ class VandtiaGameModule {
         const top = engine.topOfPile();
         if (source === 'faceDown') {
             return [
-                `{cyan-fg}Blind.{/} Pick ${keys} and {cyan-fg}X{/} turns it over`,
+                `{cyan-fg}Blind.{/} Pick ${keys} and {cyan-fg}ENTER{/} turns it over`,
                 top ? `On the pile: ${label(top)}` : 'The pile is empty - anything goes.',
             ];
         }
@@ -451,7 +467,7 @@ class VandtiaGameModule {
             return [`{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile`];
         }
         return [
-            `Play ${keys}  {cyan-fg}X{/} plays${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`
+            `Pick ${keys}  {cyan-fg}ENTER{/} plays${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`
                 + `  {cyan-fg}V{/} ${this.handView === 'table' ? 'hand' : 'my table'}`,
             top ? `On the pile: ${label(top)}${where}` : `Lead anything${where}`,
         ];

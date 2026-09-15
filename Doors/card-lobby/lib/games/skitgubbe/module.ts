@@ -203,6 +203,11 @@ export class SkitgubbeGameModule implements TableGameModule {
     return tableId ? this.host.findTableById(tableId) ?? null : null;
   }
 
+  /** The card a second press of the same key - or ENTER - would play. */
+  public selectedCard(): number | null {
+    return this.selectedCardIndex;
+  }
+
   public selectCard(index: number): void {
     const table = this.currentTable();
     if (!table) return;
@@ -215,7 +220,7 @@ export class SkitgubbeGameModule implements TableGameModule {
     if (index < 0 || index >= player.hand.length) return;
 
     this.selectedCardIndex = index;
-    this.host.pushNotice(`Selected ${cardId(player.hand[index])}. X plays it.`);
+    this.host.pushNotice(`Selected ${cardId(player.hand[index])} - press it again, or ENTER, to play.`);
     this.host.updateAllPanels();
   }
 
@@ -242,7 +247,7 @@ export class SkitgubbeGameModule implements TableGameModule {
       this.selectedCardIndex = ((this.selectedCardIndex + delta) % size + size) % size;
     }
 
-    this.host.pushNotice(`Selected ${cardId(player.hand[this.selectedCardIndex])}. X plays it.`);
+    this.host.pushNotice(`Selected ${cardId(player.hand[this.selectedCardIndex])} - ENTER plays it.`);
     this.host.updateAllPanels();
   }
 
@@ -323,7 +328,7 @@ export class SkitgubbeGameModule implements TableGameModule {
 
   /** Skitgubbe has two moves; there is no third. */
   public tertiaryAction(): void {
-    this.host.pushNotice('Skitgubbe: X plays the picked card, C takes it.');
+    this.host.pushNotice('Skitgubbe: pick a card and press it again - or ENTER - to play it. C takes it.');
   }
 
   public render(painter: TableGamePainter, table: LobbyTable): void {

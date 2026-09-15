@@ -78,6 +78,24 @@ export interface TableGameModule {
    */
   moveSelection(delta: number): void;
 
+  /**
+   * WHICH CARD IS PICKED, if this game picks one.
+   *
+   * The keyboard asks so that a card key can mean both things: press it once
+   * and the card is picked, press the SAME key again and it is played. "x
+   * for throwing cards is not so nice, pressing the hotkey once to select
+   * and once more to throw makes more sense" (sysop, 2026-09-15). ENTER
+   * plays the picked card too, which is the only way to play the eleventh
+   * card of a hand - there is no eleventh number key.
+   *
+   * A game whose keys mean something else says so by leaving this out:
+   * patience picks a PILE and the second key names where the card goes, and
+   * a Skitgubbe swap is 1-3 then 4-6, so neither may treat a repeat as a
+   * play. It is asked per table because the same game answers differently in
+   * different phases.
+   */
+  selectedCard?(table: LobbyTable): number | null;
+
   /** Pad A, and the key that means "do the main thing" at this table. */
   primaryAction(): void;
 

@@ -56,6 +56,8 @@ class UnoGameModule {
     start(table) { return this.host.startUnoGame(table); }
     render(painter, table) { painter.renderUnoGameView(table); }
     selectCard(index) { this.host.selectUnoCard(index); }
+    /** Press the same card key again - or ENTER - and it is played. */
+    selectedCard() { return this.host.selectedUnoCardIndex; }
     moveSelection(delta) { this.host.moveUnoSelection(delta); }
     primaryAction() { this.host.triggerUnoPlayCard(); }
     secondaryAction() { this.host.triggerUnoDrawCard(); }
