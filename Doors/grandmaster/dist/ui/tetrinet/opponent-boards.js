@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentBoards = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const block_width_1 = require("../block-width");
+const door_theme_1 = require("../../door-theme");
 /**
  * A field drawn at FULL size, as the player's own board is drawn.
  *
@@ -88,7 +89,7 @@ class OpponentBoards {
             width,
             height,
             border: options.frame === false ? undefined : { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: options.frame === false ? undefined : (options.label ?? ' Opponents '),
             content: '',
             fixed: true, // Fixed during gameplay, not dockable
@@ -211,7 +212,7 @@ class OpponentBoards {
             width: this.boardWidth,
             height: this.boardHeight,
             border: { type: 'line' },
-            style: { border: { fg: 'white' } },
+            style: { border: { fg: door_theme_1.T.ink } },
             focusable: false,
             mouse: false,
             clickable: false,

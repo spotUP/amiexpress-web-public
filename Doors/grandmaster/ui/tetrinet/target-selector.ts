@@ -11,6 +11,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
+import { T } from '../../door-theme';
 /**
  * Opponent info for targeting
  */
@@ -50,7 +51,7 @@ export class TargetSelector {
       width: options.width || 25,
       height: options.height || 8,
       border: { type: 'line' },
-      style: { border: { fg: 'yellow' } },
+      style: { border: { fg: T.accent } },
       label: ' Target ',
       content: '{gray-fg}No opponents{/gray-fg}',
       fixed: true,  // Fixed during gameplay, not dockable

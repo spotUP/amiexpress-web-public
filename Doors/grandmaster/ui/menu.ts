@@ -11,6 +11,8 @@ import type { AppState } from '../core/types';
 import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 
+import { attachDoorChrome, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { T, CURRENT } from '../door-theme';
 export type MenuSelection =
   | 'master'
   | 'death'
@@ -130,6 +132,7 @@ export class MenuScreen {
     await new Promise(resolve => setTimeout(resolve, 200));
 
     return new Promise((resolve) => {
+      let chrome: DoorChrome | null = null;
       let cleanupResize: (() => void) | null = null;
       const compact = isCompactWidth(this.screen.width);
       const menuRows = menuRowsFor(this.screen.width);
@@ -145,7 +148,7 @@ export class MenuScreen {
         border: undefined,
         parent: this.screen,
         top: 0, left: 0, width: '100%', height: '100%',
-        style: { bg: 'black' },
+        style: { bg: T.ground },
       });
 
       // Title: compact mode uses single line, wide mode uses 4-row ASCII art
@@ -158,8 +161,48 @@ export class MenuScreen {
         border: { type: 'none' },
         content: compact ? '{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}' : this.getTitleArt(),
         align: 'center',
-        style: { fg: 'yellow', bg: 'black' },
+        style: { fg: T.accent, bg: T.ground },
       });
+
+      /*
+       * THE BOARD'S CHROME, not just its colours.
+       *
+       * Sysop, 2026-09-03: "only colors makes no great theme". A door that
+       * takes the theme takes the masthead, the rail and the glitch from the
+       * one SDK entry point, so it cannot drift from the next door.
+       *
+       * It rides HERE, on the menu, because this is the only screen the door
+       * has a spare row on: the composition is 24 rows tall (title at 1, the
+       * panels at 5, the hint row at 23) and row 0 is empty. The game screen
+       * is a 22-row well plus its HUD and has no row to give - the card-lobby
+       * pattern, the rail in the run the menus leave.
+       *
+       * No `footer` is passed: the instruction row below the panels is this
+       * door's own hint line and says more than the generic one would.
+       */
+      const mastheadRow = createBox({
+        border: undefined,
+        parent: this.screen,
+        top: offsetY(),
+        left: offsetX(),
+        width: MENU_COLS,
+        height: 1,
+        content: '',
+        style: { fg: T.dim, bg: T.ground },
+      });
+      const attachChrome = () => {
+        chrome?.stop();
+        chrome = attachDoorChrome(CURRENT, {
+          // The LIVE width, never 80: the SDK gates every moving part on it,
+          // and the 40-column tier turns them all off through this number.
+          width: (this.screen.width as number) || 80,
+          title: 'GRANDMASTER',
+          masthead: mastheadRow as any,
+          mastheadWidth: MENU_COLS,
+          render: () => this.screen.render(),
+        } as never);
+      };
+      attachChrome();
 
       // At 40 columns: full-width menu panel, no description/player boxes
       const leftMargin = compact ? 0 + offsetX() : 2 + offsetX();
@@ -175,7 +218,7 @@ export class MenuScreen {
         height: panelHeight,
         border: compact ? { type: 'none' } : { type: 'line' },
         label: compact ? '' : ' SELECT MODE ',
-        style: { border: { fg: 'cyan' } },
+        style: { border: { fg: T.chrome } },
       });
 
       const menu = createList({
@@ -185,11 +228,11 @@ export class MenuScreen {
         width: compact ? panelWidth - 2 : 22,
         height: panelHeight - 2,
         scrollable: true,
-        scrollbar: compact ? undefined : { ch: ' ', style: { bg: 'cyan' } },
+        scrollbar: compact ? undefined : { ch: ' ', style: { bg: T.chrome } },
         style: {
-          border: { fg: 'cyan' },
-          selected: { bg: 'cyan', fg: 'black' },
-          item: { fg: 'white' },
+          border: { fg: T.chrome },
+          selected: { bg: T.chrome, fg: T.ground },
+          item: { fg: T.ink },
         },
         keys: true, vi: true, mouse: true,
         items: menuRows.items,
@@ -203,14 +246,14 @@ export class MenuScreen {
           parent: this.screen, top: panelTop, left: leftMargin + 26,
           width: 30, height: panelHeight,
           border: { type: 'line' }, label: ' DESCRIPTION ',
-          style: { border: { fg: 'gray' } },
+          style: { border: { fg: T.dim } },
           content: this.getModeDescription(0), fixed: true,
         });
         info = createBox({
           parent: this.screen, top: panelTop, left: leftMargin + 26 + 30,
           width: 20, height: panelHeight,
           border: { type: 'line' }, label: ' PLAYER ',
-          style: { border: { fg: 'gray' } },
+          style: { border: { fg: T.dim } },
           content: this.getPlayerInfo(),
         });
       }
@@ -232,7 +275,7 @@ export class MenuScreen {
         width: MENU_COLS,
         height: 1,
         align: 'center',
-        style: { fg: 'gray', bg: 'black' },
+        style: { fg: T.dim, bg: T.ground },
         content: 'Arrows: Navigate | Enter: Select | ESC/Q: Quit',
       });
 
@@ -255,6 +298,12 @@ export class MenuScreen {
           if (info) { info.left = 2 + x + 26 + 30; info.top = 5 + y; }
           instructions.left = x; instructions.top = 5 + y + panelHeight;
         }
+        mastheadRow.left = x;
+        mastheadRow.top = y;
+        mastheadRow.width = compactNow ? this.screen.width : MENU_COLS;
+        // A rail sized for 80 columns strands its title mid-screen in a wide
+        // terminal, so the chrome is re-attached at the new width.
+        attachChrome();
         this.screen.render();
       };
       this.screen.on('resize', recentre);
@@ -274,6 +323,11 @@ export class MenuScreen {
         // Clean up
         cleanupResize?.();
         cleanupResize = null;
+        // Stop the rail BEFORE its row goes, or the timer renders into a
+        // destroyed box on the way out.
+        chrome?.stop();
+        chrome = null;
+        mastheadRow.destroy();
         background.destroy();
         title.destroy();
         menuPanel.destroy();  // Also destroys menu as a child

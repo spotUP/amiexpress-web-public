@@ -27,6 +27,7 @@ const effect_overlay_1 = require("./tetrinet/effect-overlay");
 const specials_1 = require("../core/tetrinet/specials");
 const tetrinet_ai_1 = require("../ai/tetrinet-ai");
 const tetrinet_board_1 = require("../core/tetrinet/tetrinet-board");
+const door_theme_1 = require("../door-theme");
 const board_effects_1 = require("./board-effects");
 /**
  * TetriNET Game Screen
@@ -466,7 +467,7 @@ class TetriNetScreen {
             width: wellCols + 2,
             height: 24,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'white' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ink } },
             fixed: true,
         });
         // Next piece, and - when the house rule is on - Hold beside it.
@@ -477,7 +478,7 @@ class TetriNetScreen {
             width: compact ? sideWidth : holdWidth,
             height: 6,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ' Next ',
             fixed: true,
             focusable: false,
@@ -494,7 +495,7 @@ class TetriNetScreen {
                 width: sideWidth - holdWidth - 1,
                 height: 6,
                 border: { type: 'line' },
-                style: { border: { fg: 'cyan' } },
+                style: { border: { fg: door_theme_1.T.chrome } },
                 label: ' Hold ',
                 fixed: true,
                 focusable: false,
@@ -527,7 +528,7 @@ class TetriNetScreen {
             width: sideWidth,
             height: 4,
             border: { type: 'line' },
-            style: { border: { fg: 'green' } },
+            style: { border: { fg: door_theme_1.T.ok } },
             label: ' Stats ',
             content: '',
             fixed: true,
@@ -950,7 +951,7 @@ class TetriNetScreen {
                 clickable: false,
                 // Dialogs must be opaque. Without a background the board or menu behind
                 // them showed through and the text was hard to read (reported 2026-08-25).
-                style: { bg: 'black' },
+                style: { bg: door_theme_1.T.ground },
             });
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 1000));

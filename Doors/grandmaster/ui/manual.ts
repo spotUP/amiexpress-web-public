@@ -8,6 +8,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DocModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
+import { T } from '../door-theme';
 /**
  * Get the complete player manual content with colored illustrations
  */
@@ -561,9 +562,9 @@ export function showManual(screen: Screen, onClose?: () => void): DocModal {
     title: 'GRANDMASTER Manual',
     header: 'HELP',
     content: getManualContent(),
-    headerStyle: { fg: 'cyan', bg: 'black' },
-    contentStyle: { fg: 'white', bg: 'black' },
-    footerStyle: { fg: 'black', bg: 'cyan' },
+    headerStyle: { fg: T.chrome, bg: T.ground },
+    contentStyle: { fg: T.ink, bg: T.ground },
+    footerStyle: { fg: T.ground, bg: T.chrome },
     onClose,
   });
 

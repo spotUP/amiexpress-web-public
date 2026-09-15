@@ -12,6 +12,7 @@ exports.formatClearTime = formatClearTime;
 exports.missionRows = missionRows;
 exports.showMissionSelect = showMissionSelect;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_theme_1 = require("../door-theme");
 /** mm:ss for a clear time. */
 function formatClearTime(seconds) {
     const whole = Math.max(0, Math.floor(seconds));
@@ -45,7 +46,7 @@ canEdit = false) {
             height: Math.min(rows.length, 14) + 6,
             border: { type: 'line' },
             label: ` MISSIONS - ${pack.name} (${done}/${pack.missions.length}) `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
         });
@@ -58,7 +59,7 @@ canEdit = false) {
             width: 42,
             height: 1,
             tags: true,
-            style: { fg: 'gray' },
+            style: { fg: door_theme_1.T.dim },
             content: pack.missions[0]?.hint ?? '',
         });
         const keys = (0, blessed_helpers_1.createBox)({
@@ -69,7 +70,7 @@ canEdit = false) {
             width: 42,
             height: 1,
             tags: true,
-            style: { fg: 'gray' },
+            style: { fg: door_theme_1.T.dim },
             content: canEdit
                 ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
                 : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
@@ -87,8 +88,8 @@ canEdit = false) {
             scrollable: true,
             alwaysScroll: true,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
+                item: { fg: door_theme_1.T.ink },
             },
             items: rows,
         });

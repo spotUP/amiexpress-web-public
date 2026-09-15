@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EffectOverlay = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const door_theme_1 = require("../../door-theme");
 /**
  * Effect Overlay component
  */
@@ -37,7 +38,7 @@ class EffectOverlay {
             width: 16,
             height: 8,
             hidden: true,
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
             content: '{gray-fg}\n  DARKNESS\n\n  Preview\n  Hidden{/gray-fg}',
             tags: true
         });
@@ -61,7 +62,7 @@ class EffectOverlay {
             height: this.boardHeight + 2,
             hidden: true,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' }, transparent: true },
+            style: { border: { fg: door_theme_1.T.chrome }, transparent: true },
         });
         // Mutation indicator - shows remaining pieces
         this.mutationIndicator = new blessed_1.Box({
@@ -216,7 +217,7 @@ class EffectOverlay {
             width: 30,
             height: 3,
             border: { type: 'line' },
-            style: { border: { fg: 'red' }, bg: 'black' },
+            style: { border: { fg: door_theme_1.T.alert }, bg: door_theme_1.T.ground },
             content: '{red-fg}{bold}SUDDEN DEATH ACTIVE!{/bold}{/red-fg}',
             tags: true
         });

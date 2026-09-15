@@ -24,6 +24,7 @@ const VERSUS_WIN_LABELS = {
     lines: 'GOAL LINE',
 };
 const config_1 = require("../input/config");
+const door_theme_1 = require("../door-theme");
 /**
  * Friendly names for key bindings
  */
@@ -119,7 +120,7 @@ class SettingsScreen {
                 width: 60,
                 height: 3,
                 content: '{bold}{yellow-fg}SETTINGS{/yellow-fg}{/bold}',
-                style: { fg: 'white', bg: 'black' },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
             });
             // Settings menu
             const menu = (0, blessed_helpers_1.createList)({
@@ -134,12 +135,12 @@ class SettingsScreen {
                 alwaysScroll: true,
                 scrollbar: {
                     ch: ' ',
-                    style: { bg: 'cyan' },
+                    style: { bg: door_theme_1.T.chrome },
                 },
                 style: {
-                    border: { fg: 'cyan' },
-                    selected: { bg: 'cyan', fg: 'black' },
-                    item: { fg: 'white' },
+                    border: { fg: door_theme_1.T.chrome },
+                    selected: { bg: door_theme_1.T.chrome, fg: door_theme_1.T.ground },
+                    item: { fg: door_theme_1.T.ink },
                 },
                 keys: true,
                 vi: true,
@@ -154,7 +155,7 @@ class SettingsScreen {
                 width: 60,
                 height: 5,
                 border: { type: 'line' },
-                style: { border: { fg: 'gray' }, fg: 'gray' },
+                style: { border: { fg: door_theme_1.T.dim }, fg: door_theme_1.T.dim },
                 content: this.getDescription(0),
                 fixed: true,
             });
@@ -451,7 +452,7 @@ class SettingsScreen {
             width: 50,
             height: 8,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             content: `{bold}${key.toUpperCase()}{/bold}\n\n` +
                 `Current: {yellow-fg}${current}{/yellow-fg}\n` +
                 `Range: ${min} - ${max}\n\n` +
@@ -519,7 +520,7 @@ class SettingsScreen {
             width: 50,
             height: 7,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             content: '',
             fixed: true,
             focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -590,7 +591,7 @@ class SettingsScreen {
             width: 55,
             height: 12,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             content: '',
             fixed: true,
             focusable: true, // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -723,7 +724,7 @@ class SettingsScreen {
             width: 57,
             height: 14,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             content: '',
             fixed: true,
             focusable: true,
@@ -804,8 +805,8 @@ class SettingsScreen {
                 mouse: true,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'cyan' },
-                    selected: { bg: 'blue', fg: 'white' },
+                    border: { fg: door_theme_1.T.chrome },
+                    selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
                 },
                 items,
             });
@@ -882,8 +883,8 @@ class SettingsScreen {
                 mouse: true,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'cyan' },
-                    selected: { bg: 'blue', fg: 'white' },
+                    border: { fg: door_theme_1.T.chrome },
+                    selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
                 },
                 items,
             });
@@ -946,7 +947,7 @@ class SettingsScreen {
             width: 57,
             height: 14,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             content: '',
             fixed: true,
             focusable: true,
@@ -1063,7 +1064,7 @@ class SettingsScreen {
             width: 55,
             height: 12,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             content: '',
             fixed: true,
             focusable: true,

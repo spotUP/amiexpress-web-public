@@ -35,6 +35,7 @@ import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden'
 import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden, MissionRun } from '../core/mission-run';
 
+import { T } from '../door-theme';
 /**
  * Main game screen
  */
@@ -169,7 +170,7 @@ export class GameScreen {
       width: 22,
       height: 3,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       align: 'center',
       content: '{bold}{yellow-fg}READY{/yellow-fg}{/bold}',
       fixed: true,
@@ -521,7 +522,7 @@ export class GameScreen {
       width: '100%',
       height: '100%',
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'gray' } },
+      style: { bg: T.ground, border: { fg: T.dim } },
       focusable: false,
       mouse: false,
       clickable: false,
@@ -539,7 +540,7 @@ export class GameScreen {
       width: wellCols + 2,
       height: 22,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'white' } },
+      style: { bg: T.ground, border: { fg: T.ink } },
       fixed: true,
     });
 
@@ -561,7 +562,7 @@ export class GameScreen {
         width: hudWidth,
         height: 12,
         border: { type: 'line' },
-        style: { bg: 'black', border: { fg: 'green' } },
+        style: { bg: T.ground, border: { fg: T.ok } },
         label: ' STATS ',
         fixed: true,
         focusable: false,
@@ -576,7 +577,7 @@ export class GameScreen {
         width: hudWidth,
         height: 10,
         border: { type: 'line' },
-        style: { bg: 'black', border: { fg: 'cyan' } },
+        style: { bg: T.ground, border: { fg: T.chrome } },
         label: ' NEXT ',
         fixed: true,
         focusable: false,
@@ -599,7 +600,7 @@ export class GameScreen {
       width: 14,
       height: 12,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       label: ' NEXT ',
       fixed: true,
       focusable: false,
@@ -614,7 +615,7 @@ export class GameScreen {
       width: 14,
       height: 6,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: 'magenta' } },
       label: ' HOLD ',
       fixed: true,
       focusable: false,
@@ -629,7 +630,7 @@ export class GameScreen {
       width: 15,
       height: 7,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       label: ' GRADE ',
       fixed: true,
       focusable: false,
@@ -644,7 +645,7 @@ export class GameScreen {
       width: 15,
       height: 8,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'green' } },
+      style: { bg: T.ground, border: { fg: T.ok } },
       label: ' STATS ',
       fixed: true,
       focusable: false,
@@ -661,7 +662,7 @@ export class GameScreen {
       width: 20,
       height: 6,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       label: ' ZONE ',
       fixed: true,
       focusable: false,
@@ -678,7 +679,7 @@ export class GameScreen {
       width: 15,
       height: 6,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       label: ' SECTION ',
       fixed: true,
       focusable: false,
@@ -1308,12 +1309,12 @@ export class GameScreen {
     const isRainbowMode = state.grade === 'GM' || state.grade === 'GMM' || state.creditRollActive;
     
     if (!isRainbowMode) {
-        if (this.boardBox?.style?.border) this.boardBox.style.border.fg = 'white';
-        if (this.nextBox?.style?.border) this.nextBox.style.border.fg = 'cyan';
+        if (this.boardBox?.style?.border) this.boardBox.style.border.fg = T.ink;
+        if (this.nextBox?.style?.border) this.nextBox.style.border.fg = T.chrome;
         if (this.holdBox?.style?.border) this.holdBox.style.border.fg = 'magenta';
-        if (this.gradeBox?.style?.border) this.gradeBox.style.border.fg = 'yellow';
-        if (this.statsBox?.style?.border) this.statsBox.style.border.fg = 'green';
-        if (this.sectionBox?.style?.border) this.sectionBox.style.border.fg = 'cyan';
+        if (this.gradeBox?.style?.border) this.gradeBox.style.border.fg = T.accent;
+        if (this.statsBox?.style?.border) this.statsBox.style.border.fg = T.ok;
+        if (this.sectionBox?.style?.border) this.sectionBox.style.border.fg = T.chrome;
         return;
     }
 
@@ -1838,7 +1839,7 @@ export class GameScreen {
       width: 32,
       height: 14,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       align: 'left',
       content,
       tags: true,
@@ -1905,7 +1906,7 @@ export class GameScreen {
       left: 0,
       width: '100%',
       height: '100%',
-      style: { bg: 'black' },
+      style: { bg: T.ground },
     });
 
     const gameOverBox = createBox({
@@ -1915,7 +1916,7 @@ export class GameScreen {
       width: 40,
       height: 14,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: gameOverColor } },
+      style: { bg: T.ground, border: { fg: gameOverColor } },
       align: 'center',
       valign: 'middle',
       content: `${gameOverTitle}\n\n` +

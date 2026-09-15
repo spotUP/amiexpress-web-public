@@ -28,6 +28,7 @@ const board_view_1 = require("./panels/board-view");
 const layout_1 = require("./panels/layout");
 const input_codec_1 = require("../core/panels/input-codec");
 Object.defineProperty(exports, "INPUT_CHARS", { enumerable: true, get: function () { return input_codec_1.INPUT_CHARS; } });
+const door_theme_1 = require("../door-theme");
 /** The engine's frame rate. Not negotiable: every constant is in these frames. */
 const FRAME_TIME = 1000 / 60;
 /**
@@ -128,7 +129,7 @@ class PanelsScreen {
                     height: 1,
                     border: undefined,
                     tags: true,
-                    style: { fg: 'magenta', bg: 'black' },
+                    style: { fg: 'magenta', bg: door_theme_1.T.ground },
                     content,
                 }));
             };
@@ -158,7 +159,7 @@ class PanelsScreen {
                     // content.
                     border: undefined,
                     tags: true,
-                    style: { fg: 'magenta', bg: 'black' },
+                    style: { fg: 'magenta', bg: door_theme_1.T.ground },
                     content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
                 }));
             }
@@ -172,7 +173,7 @@ class PanelsScreen {
                 height: layout.board.height + 2,
                 label: ' TETRIS ATTACK ',
                 tags: true,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
         }
         this.boardBox = (0, bbs_door_sdk_1.createBox)({
@@ -183,7 +184,7 @@ class PanelsScreen {
             height: layout.board.height,
             border: undefined,
             tags: true,
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
         });
         // Mouse click to swap.
         //
@@ -225,7 +226,7 @@ class PanelsScreen {
             border: this.hudFramed ? { type: 'line' } : undefined,
             label: this.hudFramed ? ' STATS ' : undefined,
             tags: true,
-            style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
         });
     }
     /** The single input character for this frame. */

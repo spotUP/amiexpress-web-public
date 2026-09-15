@@ -20,6 +20,7 @@ import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 import { OpponentBoards, type OpponentBoardData } from './tetrinet/opponent-boards';
 
+import { T } from '../door-theme';
 const FIELD_EVENT = 'game:tnet_field';
 const MAX_CHAT_LINES = 3;
 
@@ -114,7 +115,7 @@ export class SpectatorScreen {
       width: 80,
       height: 1,
       border: { type: 'line' },
-      style: { border: { fg: 'gray' } },
+      style: { border: { fg: T.dim } },
       label: ' Table talk ',
       content: '',
       focusable: false,

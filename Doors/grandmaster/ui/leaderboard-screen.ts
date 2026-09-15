@@ -11,6 +11,7 @@ import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 import type { GameMode } from '../core/types';
 
+import { T } from '../door-theme';
 /**
  * Leaderboard screen
  */
@@ -159,7 +160,7 @@ export class LeaderboardScreen {
       width: panelWidth,
       height: scoresHeight,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ` Top 10 - ${this.getModeName(this.currentMode)} `,
       content: scoresContent,
       fixed: true,

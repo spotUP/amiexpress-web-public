@@ -13,6 +13,7 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetBoard } from '../../core/tetrinet/tetrinet-board';
 import { cellsCanCarryBackground } from '../block-width';
 
+import { T } from '../../door-theme';
 /**
  * Opponent board data
  */
@@ -167,7 +168,7 @@ export class OpponentBoards {
       width,
       height,
       border: options.frame === false ? undefined : { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: options.frame === false ? undefined : (options.label ?? ' Opponents '),
       content: '',
       fixed: true,  // Fixed during gameplay, not dockable
@@ -304,7 +305,7 @@ export class OpponentBoards {
       width: this.boardWidth,
       height: this.boardHeight,
       border: { type: 'line' },
-      style: { border: { fg: 'white' } },
+      style: { border: { fg: T.ink } },
       focusable: false,
       mouse: false,
       clickable: false,

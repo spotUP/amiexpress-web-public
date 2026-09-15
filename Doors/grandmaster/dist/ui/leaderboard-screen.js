@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LeaderboardScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const clear_screen_1 = require("./clear-screen");
+const door_theme_1 = require("../door-theme");
 /**
  * Leaderboard screen
  */
@@ -136,7 +137,7 @@ class LeaderboardScreen {
             width: panelWidth,
             height: scoresHeight,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ` Top 10 - ${this.getModeName(this.currentMode)} `,
             content: scoresContent,
             fixed: true,

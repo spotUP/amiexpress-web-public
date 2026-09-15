@@ -19,6 +19,7 @@ const screen_shake_1 = require("../effects/screen-shake");
 const particles_1 = require("../effects/particles");
 const transitions_1 = require("../effects/transitions");
 const animations_1 = require("../effects/animations");
+const door_theme_1 = require("../door-theme");
 /**
  * Which attract sequence to run at a given width.
  *
@@ -109,8 +110,8 @@ class AttractScreen {
             align: 'center',
             content: '',
             style: {
-                bg: 'black',
-                fg: 'white',
+                bg: door_theme_1.T.ground,
+                fg: door_theme_1.T.ink,
             },
         });
         // Demo gameplay area (left side) - hidden initially
@@ -121,7 +122,7 @@ class AttractScreen {
             width: 22,
             height: 22,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
         });
         this.demoBox.hide(); // Hidden during boot
@@ -133,7 +134,7 @@ class AttractScreen {
             width: 50,
             height: 22,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'center',
             content: '',
             fixed: true,

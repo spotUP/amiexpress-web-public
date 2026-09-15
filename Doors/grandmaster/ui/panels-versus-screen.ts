@@ -29,6 +29,7 @@ import { encodeInput, inputStateToMask } from '../core/panels/input-codec';
 import type { HeldInput } from './panels-screen';
 import type { SoundEngine } from '../audio/sounds';
 
+import { T } from '../door-theme';
 const FRAME_TIME = 1000 / 60;
 const MAX_CATCHUP_FRAMES = 8;
 const RENDER_INTERVAL = 50;
@@ -141,7 +142,7 @@ export class PanelsVersusScreen {
         height: slot.height,
         border: undefined,
         tags: true,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: T.ink, bg: T.ground },
       });
 
     this.playerBox = box(layout.player);

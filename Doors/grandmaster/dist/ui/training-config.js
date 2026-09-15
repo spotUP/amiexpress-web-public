@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showTrainingConfig = showTrainingConfig;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_theme_1 = require("../door-theme");
 const practice_goal_1 = require("../core/practice-goal");
 /**
  * The reference's five finish conditions and its own value list
@@ -43,7 +44,7 @@ function pick(screen, title, items) {
             height: items.length + 4,
             border: { type: 'line' },
             label: ` ${title} `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
         });
@@ -57,8 +58,8 @@ function pick(screen, title, items) {
             vi: true,
             mouse: true,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
-                item: { fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
+                item: { fg: door_theme_1.T.ink },
             },
             items,
         });

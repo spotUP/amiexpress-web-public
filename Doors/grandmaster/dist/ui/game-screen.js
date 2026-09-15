@@ -20,6 +20,7 @@ const connected_blocks_1 = require("../effects/connected-blocks");
 const hidden_1 = require("../core/hidden");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
+const door_theme_1 = require("../door-theme");
 /**
  * Main game screen
  */
@@ -118,7 +119,7 @@ class GameScreen {
             width: 22,
             height: 3,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'center',
             content: '{bold}{yellow-fg}READY{/yellow-fg}{/bold}',
             fixed: true,
@@ -440,7 +441,7 @@ class GameScreen {
             width: '100%',
             height: '100%',
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'gray' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
             focusable: false,
             mouse: false,
             clickable: false,
@@ -456,7 +457,7 @@ class GameScreen {
             width: wellCols + 2,
             height: 22,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'white' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ink } },
             fixed: true,
         });
         // Compact (40 columns): the well is as wide as its blocks - twelve
@@ -476,7 +477,7 @@ class GameScreen {
                 width: hudWidth,
                 height: 12,
                 border: { type: 'line' },
-                style: { bg: 'black', border: { fg: 'green' } },
+                style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ok } },
                 label: ' STATS ',
                 fixed: true,
                 focusable: false,
@@ -490,7 +491,7 @@ class GameScreen {
                 width: hudWidth,
                 height: 10,
                 border: { type: 'line' },
-                style: { bg: 'black', border: { fg: 'cyan' } },
+                style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
                 label: ' NEXT ',
                 fixed: true,
                 focusable: false,
@@ -511,7 +512,7 @@ class GameScreen {
             width: 14,
             height: 12,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             label: ' NEXT ',
             fixed: true,
             focusable: false,
@@ -525,7 +526,7 @@ class GameScreen {
             width: 14,
             height: 6,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             label: ' HOLD ',
             fixed: true,
             focusable: false,
@@ -539,7 +540,7 @@ class GameScreen {
             width: 15,
             height: 7,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             label: ' GRADE ',
             fixed: true,
             focusable: false,
@@ -553,7 +554,7 @@ class GameScreen {
             width: 15,
             height: 8,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'green' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ok } },
             label: ' STATS ',
             fixed: true,
             focusable: false,
@@ -569,7 +570,7 @@ class GameScreen {
             width: 20,
             height: 6,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             label: ' ZONE ',
             fixed: true,
             focusable: false,
@@ -585,7 +586,7 @@ class GameScreen {
             width: 15,
             height: 6,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             label: ' SECTION ',
             fixed: true,
             focusable: false,
@@ -1172,17 +1173,17 @@ class GameScreen {
         const isRainbowMode = state.grade === 'GM' || state.grade === 'GMM' || state.creditRollActive;
         if (!isRainbowMode) {
             if (this.boardBox?.style?.border)
-                this.boardBox.style.border.fg = 'white';
+                this.boardBox.style.border.fg = door_theme_1.T.ink;
             if (this.nextBox?.style?.border)
-                this.nextBox.style.border.fg = 'cyan';
+                this.nextBox.style.border.fg = door_theme_1.T.chrome;
             if (this.holdBox?.style?.border)
                 this.holdBox.style.border.fg = 'magenta';
             if (this.gradeBox?.style?.border)
-                this.gradeBox.style.border.fg = 'yellow';
+                this.gradeBox.style.border.fg = door_theme_1.T.accent;
             if (this.statsBox?.style?.border)
-                this.statsBox.style.border.fg = 'green';
+                this.statsBox.style.border.fg = door_theme_1.T.ok;
             if (this.sectionBox?.style?.border)
-                this.sectionBox.style.border.fg = 'cyan';
+                this.sectionBox.style.border.fg = door_theme_1.T.chrome;
             return;
         }
         // Each panel gets a different offset for a wave effect
@@ -1651,7 +1652,7 @@ class GameScreen {
             width: 32,
             height: 14,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'left',
             content,
             tags: true,
@@ -1715,7 +1716,7 @@ class GameScreen {
             left: 0,
             width: '100%',
             height: '100%',
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
         });
         const gameOverBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -1724,7 +1725,7 @@ class GameScreen {
             width: 40,
             height: 14,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: gameOverColor } },
+            style: { bg: door_theme_1.T.ground, border: { fg: gameOverColor } },
             align: 'center',
             valign: 'middle',
             content: `${gameOverTitle}\n\n` +

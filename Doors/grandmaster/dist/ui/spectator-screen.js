@@ -18,6 +18,7 @@ exports.SpectatorScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const clear_screen_1 = require("./clear-screen");
 const opponent_boards_1 = require("./tetrinet/opponent-boards");
+const door_theme_1 = require("../door-theme");
 const FIELD_EVENT = 'game:tnet_field';
 const MAX_CHAT_LINES = 3;
 class SpectatorScreen {
@@ -80,7 +81,7 @@ class SpectatorScreen {
             width: 80,
             height: 1,
             border: { type: 'line' },
-            style: { border: { fg: 'gray' } },
+            style: { border: { fg: door_theme_1.T.dim } },
             label: ' Table talk ',
             content: '',
             focusable: false,

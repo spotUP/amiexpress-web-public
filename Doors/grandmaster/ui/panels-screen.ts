@@ -31,6 +31,7 @@ import type { PuzzleGame, PuzzleOutcome } from '../core/panels/puzzle';
 import { encodeInput, inputStateToMask, INPUT_CHARS } from '../core/panels/input-codec';
 import type { SoundEngine } from '../audio/sounds';
 
+import { T } from '../door-theme';
 /** The engine's frame rate. Not negotiable: every constant is in these frames. */
 const FRAME_TIME = 1000 / 60;
 /**
@@ -226,7 +227,7 @@ export class PanelsScreen {
           height: 1,
           border: undefined,
           tags: true,
-          style: { fg: 'magenta', bg: 'black' },
+          style: { fg: 'magenta', bg: T.ground },
           content,
         }));
       };
@@ -256,7 +257,7 @@ export class PanelsScreen {
           // content.
           border: undefined,
           tags: true,
-          style: { fg: 'magenta', bg: 'black' },
+          style: { fg: 'magenta', bg: T.ground },
           content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
         }));
       }
@@ -271,7 +272,7 @@ export class PanelsScreen {
         height: layout.board.height + 2,
         label: ' TETRIS ATTACK ',
         tags: true,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
     }
 
@@ -283,7 +284,7 @@ export class PanelsScreen {
       height: layout.board.height,
       border: undefined,
       tags: true,
-      style: { bg: 'black' },
+      style: { bg: T.ground },
     });
 
     // Mouse click to swap.
@@ -327,7 +328,7 @@ export class PanelsScreen {
       border: this.hudFramed ? { type: 'line' } : undefined,
       label: this.hudFramed ? ' STATS ' : undefined,
       tags: true,
-      style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
     });
   }
 

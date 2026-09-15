@@ -19,6 +19,7 @@ exports.pickMission = pickMission;
 exports.showMissionBriefing = showMissionBriefing;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const mission_select_1 = require("./mission-select");
+const door_theme_1 = require("../door-theme");
 /** One sentence saying what the player has to do. */
 function missionObjectiveText(mission) {
     const { objective, norm, timeLimitSeconds } = mission;
@@ -137,7 +138,7 @@ async function showMissionBriefing(screen, mission, clear) {
             height: lines.length + 6,
             border: { type: 'line' },
             label: ' MISSION BRIEFING ',
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             fixed: true,
             tags: true,
             content: lines.join('\n')

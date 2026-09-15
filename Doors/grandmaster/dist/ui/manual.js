@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getManualContent = getManualContent;
 exports.showManual = showManual;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const door_theme_1 = require("../door-theme");
 /**
  * Get the complete player manual content with colored illustrations
  */
@@ -547,9 +548,9 @@ function showManual(screen, onClose) {
         title: 'GRANDMASTER Manual',
         header: 'HELP',
         content: getManualContent(),
-        headerStyle: { fg: 'cyan', bg: 'black' },
-        contentStyle: { fg: 'white', bg: 'black' },
-        footerStyle: { fg: 'black', bg: 'cyan' },
+        headerStyle: { fg: door_theme_1.T.chrome, bg: door_theme_1.T.ground },
+        contentStyle: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
+        footerStyle: { fg: door_theme_1.T.ground, bg: door_theme_1.T.chrome },
         onClose,
     });
     modal.display();

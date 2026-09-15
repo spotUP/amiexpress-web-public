@@ -17,6 +17,7 @@ import type { Mission, MissionPack } from '../core/mission-types';
 import type { MissionClear } from '../core/mission-progress';
 import { formatClearTime } from './mission-select';
 
+import { T } from '../door-theme';
 /** One sentence saying what the player has to do. */
 export function missionObjectiveText(mission: Mission): string {
   const { objective, norm, timeLimitSeconds } = mission;
@@ -164,7 +165,7 @@ export async function showMissionBriefing(
       height: lines.length + 6,
       border: { type: 'line' },
       label: ' MISSION BRIEFING ',
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       fixed: true,
       tags: true,
       content: lines.join('\n')

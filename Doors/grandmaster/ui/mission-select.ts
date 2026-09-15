@@ -12,6 +12,7 @@ import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-he
 import type { Mission, MissionPack } from '../core/mission-types';
 import type { MissionProgress } from '../core/mission-progress';
 
+import { T } from '../door-theme';
 /** mm:ss for a clear time. */
 export function formatClearTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
@@ -65,7 +66,7 @@ export async function showMissionSelect(
       height: Math.min(rows.length, 14) + 6,
       border: { type: 'line' },
       label: ` MISSIONS - ${pack.name} (${done}/${pack.missions.length}) `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
     } as any);
@@ -79,7 +80,7 @@ export async function showMissionSelect(
       width: 42,
       height: 1,
       tags: true,
-      style: { fg: 'gray' },
+      style: { fg: T.dim },
       content: pack.missions[0]?.hint ?? '',
     } as any);
 
@@ -91,7 +92,7 @@ export async function showMissionSelect(
       width: 42,
       height: 1,
       tags: true,
-      style: { fg: 'gray' },
+      style: { fg: T.dim },
       content: canEdit
         ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
         : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
@@ -110,8 +111,8 @@ export async function showMissionSelect(
       scrollable: true,
       alwaysScroll: true,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
-        item: { fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
+        item: { fg: T.ink },
       },
       items: rows,
     } as any);

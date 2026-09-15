@@ -20,6 +20,7 @@ import { ParticleSystem } from '../effects/particles';
 import { TransitionManager } from '../effects/transitions';
 import { AnimationManager } from '../effects/animations';
 
+import { T } from '../door-theme';
 /**
  * Which attract sequence to run at a given width.
  *
@@ -162,8 +163,8 @@ export class AttractScreen {
       align: 'center',
       content: '',
       style: {
-        bg: 'black',
-        fg: 'white',
+        bg: T.ground,
+        fg: T.ink,
       },
     });
 
@@ -175,7 +176,7 @@ export class AttractScreen {
       width: 22,
       height: 22,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
     });
     this.demoBox.hide();  // Hidden during boot
@@ -188,7 +189,7 @@ export class AttractScreen {
       width: 50,
       height: 22,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       align: 'center',
       content: '',
       fixed: true,

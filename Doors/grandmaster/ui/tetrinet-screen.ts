@@ -40,6 +40,7 @@ import { SPECIALS } from '../core/tetrinet/specials';
 import { HUMAN_TARGET_ID } from '../ai/tetrinet-ai';
 import type { TetriNetBoard } from '../core/tetrinet/tetrinet-board';
 import { cloneTetriNetBoard } from '../core/tetrinet/tetrinet-board';
+import { T } from '../door-theme';
 import {
   GHOST_CHAR,
   buildHardDropTrail,
@@ -607,7 +608,7 @@ const holdEnabled = this.engine.isHoldEnabled();
       width: wellCols + 2,
       height: 24,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'white' } },
+      style: { bg: T.ground, border: { fg: T.ink } },
       fixed: true,
     });
 
@@ -619,7 +620,7 @@ const holdEnabled = this.engine.isHoldEnabled();
       width: compact ? sideWidth : holdWidth,
       height: 6,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ' Next ',
       fixed: true,
       focusable: false,
@@ -637,7 +638,7 @@ const holdEnabled = this.engine.isHoldEnabled();
         width: sideWidth - holdWidth - 1,
         height: 6,
         border: { type: 'line' },
-        style: { border: { fg: 'cyan' } },
+        style: { border: { fg: T.chrome } },
         label: ' Hold ',
         fixed: true,
         focusable: false,
@@ -673,7 +674,7 @@ const holdEnabled = this.engine.isHoldEnabled();
       width: sideWidth,
       height: 4,
       border: { type: 'line' },
-      style: { border: { fg: 'green' } },
+      style: { border: { fg: T.ok } },
       label: ' Stats ',
       content: '',
       fixed: true,
@@ -1136,7 +1137,7 @@ const holdEnabled = this.engine.isHoldEnabled();
         clickable: false,
         // Dialogs must be opaque. Without a background the board or menu behind
         // them showed through and the text was hard to read (reported 2026-08-25).
-        style: { bg: 'black' },
+        style: { bg: T.ground },
       });
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 1000));

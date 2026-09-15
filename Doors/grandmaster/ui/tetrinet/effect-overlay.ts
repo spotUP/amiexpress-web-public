@@ -11,6 +11,7 @@
 import { Box, Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { ContinuousEffectManager } from '../../core/tetrinet/continuous-effects';
 
+import { T } from '../../door-theme';
 /**
  * Effect Overlay options
  */
@@ -62,7 +63,7 @@ export class EffectOverlay {
       width: 16,
       height: 8,
       hidden: true,
-      style: { bg: 'black' },
+      style: { bg: T.ground },
       content: '{gray-fg}\n  DARKNESS\n\n  Preview\n  Hidden{/gray-fg}',
       tags: true
     });
@@ -88,7 +89,7 @@ export class EffectOverlay {
       height: this.boardHeight + 2,
       hidden: true,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' }, transparent: true },
+      style: { border: { fg: T.chrome }, transparent: true },
     });
 
     // Mutation indicator - shows remaining pieces
@@ -261,7 +262,7 @@ export class EffectOverlay {
       width: 30,
       height: 3,
       border: { type: 'line' },
-      style: { border: { fg: 'red' }, bg: 'black' },
+      style: { border: { fg: T.alert }, bg: T.ground },
       content: '{red-fg}{bold}SUDDEN DEATH ACTIVE!{/bold}{/red-fg}',
       tags: true
     });

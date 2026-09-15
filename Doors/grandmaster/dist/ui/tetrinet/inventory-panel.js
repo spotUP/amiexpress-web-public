@@ -11,6 +11,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryPanel = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const specials_1 = require("../../core/tetrinet/specials");
+const door_theme_1 = require("../../door-theme");
 /**
  * Inventory Panel component
  */
@@ -26,7 +27,7 @@ class InventoryPanel {
             width,
             height: options.height || 3,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ' Inventory ',
             content: this.renderEmpty(),
             fixed: true, // Fixed during gameplay, not dockable

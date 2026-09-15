@@ -32,6 +32,7 @@ interface DoorSession {
   args?: string[];
 }
 
+import { T, applyTheme } from './door-theme';
 import { GameMode, AppState, GameResult } from './core/types';
 import { GameEngine } from './core/game';
 import { softDropIntervalMs } from './core/soft-drop';
@@ -385,6 +386,13 @@ export class GrandmasterApp {
 
   constructor(session: DoorSession) {
     this.session = session;
+    /*
+     * Before a single widget is built: `T` is a live binding, so every style
+     * object in this file reads the caller's theme rather than the classic
+     * default. A host with no theme leaves classic in place, which is the
+     * board exactly as it has always looked.
+     */
+    applyTheme(session.bbs);
     this.state = this.createInitialState();
     this.loadSettings();  // Load per-user settings from disk
     this.sounds = new SoundEngine(session);
@@ -685,8 +693,8 @@ export class GrandmasterApp {
       height: 15,
       content: '',
       style: {
-        fg: 'white',
-        bg: 'black',
+        fg: T.ink,
+        bg: T.ground,
       },
     });
 
@@ -1067,7 +1075,7 @@ export class GrandmasterApp {
         width: this.dialogWidth(60),
         height: 8,
         border: { type: 'line' },
-        style: { bg: 'black', border: { fg: 'red' } },
+        style: { bg: T.ground, border: { fg: T.alert } },
         // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
         align: 'center',
         valign: 'middle',
@@ -1094,7 +1102,7 @@ export class GrandmasterApp {
       height: 12,
       border: { type: 'line' },
       label: ' Select Mode ',
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
     });
 
@@ -1105,7 +1113,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: 10,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
       },
       keys: true,
       vi: true,
@@ -1166,7 +1174,7 @@ export class GrandmasterApp {
           height: 12,
           border: { type: 'line' },
           label: ' Change Mode ',
-          style: { bg: 'black', border: { fg: 'cyan' } },
+          style: { bg: T.ground, border: { fg: T.chrome } },
           fixed: true,
         });
         const reList = createList({
@@ -1175,7 +1183,7 @@ export class GrandmasterApp {
           left: 1,
           width: '100%-2',
           height: 10,
-          style: { selected: { bg: 'blue', fg: 'white' } },
+          style: { selected: { bg: T.selectionBg, fg: T.selectionInk } },
           keys: true,
           vi: true,
           mouse: true,
@@ -1856,7 +1864,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' REPLAYS ',
         tags: true,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
 
       const list = createList({
@@ -1870,7 +1878,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
       });
 
       const done = (choice: number | null) => {
@@ -1901,7 +1909,7 @@ export class GrandmasterApp {
         label: ' TETRIS ATTACK ',
         tags: true,
         content: `\n {white-fg}${message}{/white-fg}`,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
       this.screen.render();
 
@@ -1935,7 +1943,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' SPEED ',
         tags: true,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
 
       const list = createList({
@@ -1949,7 +1957,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
       });
 
       const done = (choice: ClassicDifficulty | null) => {
@@ -1995,7 +2003,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' PUZZLE ',
         tags: true,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
 
       const list = createList({
@@ -2009,7 +2017,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
       });
 
       const done = (choice: number | null) => {
@@ -2056,7 +2064,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' TETRIS ATTACK ',
         tags: true,
-        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
 
       const list = createList({
@@ -2071,9 +2079,9 @@ export class GrandmasterApp {
         tags: true,
         items: labels,
         style: {
-          fg: 'white',
-          bg: 'black',
-          selected: { fg: 'black', bg: 'magenta' },
+          fg: T.ink,
+          bg: T.ground,
+          selected: { fg: T.ground, bg: 'magenta' },
         },
       });
 
@@ -2114,7 +2122,7 @@ export class GrandmasterApp {
       left: 0,
       width: '100%',
       height: '100%',
-      style: { bg: 'black' },
+      style: { bg: T.ground },
     });
 
     // First show mode selection - compact dialog sized to content
@@ -2126,7 +2134,7 @@ export class GrandmasterApp {
       height: 12,
       border: { type: 'line' },
       label: ' TetriNET Mode ',
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
     });
 
@@ -2137,7 +2145,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: 8,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
       },
       keys: true,
       vi: true,
@@ -2655,7 +2663,7 @@ export class GrandmasterApp {
       height: 16,
       border: { type: 'line' },
       label: ' WATCH A GAME ',
-      style: { bg: 'black', border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: 'magenta' } },
       fixed: true,
     });
 
@@ -2675,7 +2683,7 @@ export class GrandmasterApp {
       keys: true,
       vi: true,
       mouse: true,
-      style: { selected: { bg: 'magenta', fg: 'black' }, item: { fg: 'white' } },
+      style: { selected: { bg: 'magenta', fg: T.ground }, item: { fg: T.ink } },
     });
     list.focus();
     this.screen.render();
@@ -2764,7 +2772,7 @@ export class GrandmasterApp {
       height: Math.min(predefinedServers.length + 10, 20),
       border: { type: 'line' },
       label: ' Select TetriNET Server ',
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
     });
 
@@ -2775,7 +2783,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: Math.min(predefinedServers.length + 8, 18),
       style: {
-        selected: { bg: 'blue', fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
       },
       items: getItems(),
       keys: true,
@@ -2851,8 +2859,8 @@ export class GrandmasterApp {
         border: { type: 'line' },
         label: ' Enter Server Address ',
         style: {
-          bg: 'black',
-          border: { fg: 'cyan' },
+          bg: T.ground,
+          border: { fg: T.chrome },
         },
         fixed: true,
       });
@@ -2877,8 +2885,8 @@ export class GrandmasterApp {
         height: 3,
         border: { type: 'line' },
         style: {
-          border: { fg: 'white' },
-          focus: { fg: 'cyan' },
+          border: { fg: T.ink },
+          focus: { fg: T.chrome },
         },
         inputOnFocus: true,
         mouse: true,
@@ -2904,8 +2912,8 @@ export class GrandmasterApp {
         height: 3,
         border: { type: 'line' },
         style: {
-          border: { fg: 'white' },
-          focus: { fg: 'cyan' },
+          border: { fg: T.ink },
+          focus: { fg: T.chrome },
         },
         inputOnFocus: true,
         mouse: true,
@@ -2997,7 +3005,7 @@ export class GrandmasterApp {
       height: 7,
       border: { type: 'line' },
       label: ' Mode ',
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
     });
 
@@ -3008,7 +3016,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: 5,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
       },
       items: ['TetriFast (Recommended)', 'Standard', 'TSpec (Spectator)'],
       keys: true,
@@ -3053,8 +3061,8 @@ export class GrandmasterApp {
       border: { type: 'line' },
       label: ` Connecting to ${selectedServer} `,
       style: {
-        bg: 'black',
-        border: { fg: 'cyan' },
+        bg: T.ground,
+        border: { fg: T.chrome },
       },
       fixed: true,
     });
@@ -3080,8 +3088,8 @@ export class GrandmasterApp {
       width: 20,
       height: 1,
       style: {
-        fg: 'cyan',
-        focus: { fg: 'white' },
+        fg: T.chrome,
+        focus: { fg: T.ink },
       },
       inputOnFocus: true,
       mouse: true,
@@ -3140,8 +3148,8 @@ export class GrandmasterApp {
         border: { type: 'line' },
         label: ' TSpec Password ',
         style: {
-          bg: 'black',
-          border: { fg: 'cyan' },
+          bg: T.ground,
+          border: { fg: T.chrome },
         },
         fixed: true,
       });
@@ -3166,8 +3174,8 @@ export class GrandmasterApp {
         height: 3,
         border: { type: 'line' },
         style: {
-          border: { fg: 'white' },
-          focus: { fg: 'cyan' },
+          border: { fg: T.ink },
+          focus: { fg: T.chrome },
         },
         inputOnFocus: true,
         mouse: true,
@@ -3233,7 +3241,7 @@ export class GrandmasterApp {
       width: this.dialogWidth(50),
       height: 7,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       // A notice, so centre it on both axes.
       align: 'center',
       valign: 'middle',
@@ -3344,7 +3352,7 @@ export class GrandmasterApp {
         height: '100%',
         label: ` TetriNET - ${client.getSlot() ? `Slot ${client.getSlot()}` : 'Connected'} `,
         border: { type: 'line' },
-        style: { border: { fg: 'yellow' }, bg: 'black' },
+        style: { border: { fg: T.accent }, bg: T.ground },
         fixed: true,
       });
 
@@ -3356,7 +3364,7 @@ export class GrandmasterApp {
         height: sidePanelHeight,
         label: client.getSlot() ? ' Partyline Chat ' : ' TSpec Chat ',
         border: { type: 'line' },
-        style: { border: { fg: 'cyan' }, bg: 'black' },
+        style: { border: { fg: T.chrome }, bg: T.ground },
         scrollable: true,
         alwaysScroll: true,
         mouse: true,
@@ -3369,7 +3377,7 @@ export class GrandmasterApp {
         right: 0,
         width: 26,
         height: sidePanelHeight,
-        style: { bg: 'black' },
+        style: { bg: T.ground },
       });
 
       const playerList = createBox({
@@ -3380,7 +3388,7 @@ export class GrandmasterApp {
         height: 11,
         label: ' Players ',
         border: { type: 'line' },
-        style: { border: { fg: 'green' }, bg: 'black' },
+        style: { border: { fg: T.ok }, bg: T.ground },
         fixed: true,
       });
 
@@ -3392,7 +3400,7 @@ export class GrandmasterApp {
         height: `100%-11`,
         label: ' Spectators ',
         border: { type: 'line' },
-        style: { border: { fg: 'magenta' }, bg: 'black' },
+        style: { border: { fg: 'magenta' }, bg: T.ground },
         fixed: true,
       });
 
@@ -3403,7 +3411,7 @@ export class GrandmasterApp {
         width: '100%',
         height: footerHeight,
         border: { type: 'line' },
-        style: { border: { fg: 'gray' }, bg: 'black' },
+        style: { border: { fg: T.dim }, bg: T.ground },
         fixed: true,
       });
 
@@ -3437,9 +3445,9 @@ export class GrandmasterApp {
         height: inputHeight,
         border: { type: 'line' },
         style: {
-          border: { fg: 'white' },
-          focus: { fg: 'cyan' },
-          bg: 'black',
+          border: { fg: T.ink },
+          focus: { fg: T.chrome },
+          bg: T.ground,
         },
         inputOnFocus: true,
         mouse: true,
@@ -3800,7 +3808,7 @@ export class GrandmasterApp {
       height: 15,
       border: { type: 'line' },
       label: ' Select Bot Difficulty ',
-      style: { bg: 'black', border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: 'magenta' } },
       fixed: true,
     });
 
@@ -3811,7 +3819,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: 13,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
       },
       items: [
         '1 - Beginner (Easy warm-up)',
@@ -3955,7 +3963,7 @@ export class GrandmasterApp {
       width: this.dialogWidth(50),
       height: 7,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       // A notice, so centre it on both axes.
       align: 'center',
       valign: 'middle',
@@ -4323,7 +4331,7 @@ export class GrandmasterApp {
       width: this.dialogWidth(50),
       height: 12,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       align: 'center',
       valign: 'middle',
       content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
@@ -4353,7 +4361,7 @@ export class GrandmasterApp {
       width: this.dialogWidth(50),
       height: 10,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       align: 'center',
       valign: 'middle',
       content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +

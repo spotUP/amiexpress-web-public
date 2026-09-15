@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TargetSelector = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const door_theme_1 = require("../../door-theme");
 /**
  * Target Selector component
  */
@@ -26,7 +27,7 @@ class TargetSelector {
             width: options.width || 25,
             height: options.height || 8,
             border: { type: 'line' },
-            style: { border: { fg: 'yellow' } },
+            style: { border: { fg: door_theme_1.T.accent } },
             label: ' Target ',
             content: '{gray-fg}No opponents{/gray-fg}',
             fixed: true, // Fixed during gameplay, not dockable

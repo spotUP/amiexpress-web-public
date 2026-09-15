@@ -25,6 +25,7 @@ const board_view_1 = require("./panels/board-view");
 const layout_1 = require("./panels/layout");
 const versus_layout_1 = require("./panels/versus-layout");
 const input_codec_1 = require("../core/panels/input-codec");
+const door_theme_1 = require("../door-theme");
 const FRAME_TIME = 1000 / 60;
 const MAX_CATCHUP_FRAMES = 8;
 const RENDER_INTERVAL = 50;
@@ -77,7 +78,7 @@ class PanelsVersusScreen {
             height: slot.height,
             border: undefined,
             tags: true,
-            style: { fg: 'white', bg: 'black' },
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
         });
         this.playerBox = box(layout.player);
         this.centreBox = box(layout.centre);

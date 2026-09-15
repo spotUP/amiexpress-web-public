@@ -27,6 +27,7 @@ const items_1 = require("../core/items");
 const versus_goal_1 = require("../core/versus-goal");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
+const door_theme_1 = require("../door-theme");
 /**
  * Versus Screen
  *
@@ -318,7 +319,7 @@ class VersusScreen {
             width: wellCols + 2,
             height: 22,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'white' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ink } },
             fixed: true,
         });
         // Player NEXT queue
@@ -329,7 +330,7 @@ class VersusScreen {
             width: sideWidth,
             height: 12,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             label: ' NEXT ',
             fixed: true,
             focusable: false,
@@ -344,7 +345,7 @@ class VersusScreen {
             width: sideWidth,
             height: 10,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             label: ' HOLD ',
             fixed: true,
             focusable: false,
@@ -359,7 +360,7 @@ class VersusScreen {
             width: garbageWidth,
             height: 22,
             border: { type: 'line' },
-            style: { border: { fg: 'red' } },
+            style: { border: { fg: door_theme_1.T.alert } },
             content: '',
             fixed: true,
             focusable: false,
@@ -378,7 +379,7 @@ class VersusScreen {
             width: versus_layout_1.VS_INFO_COLS,
             height: 22,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ' VS ',
             content: '',
             fixed: true,
@@ -395,7 +396,7 @@ class VersusScreen {
             width: this.screen.width - versus_layout_1.LEFT_PANEL_COLS,
             height: 22,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ' Opponents ',
             fixed: true,
             focusable: false,
@@ -426,7 +427,7 @@ class VersusScreen {
             width: 22,
             height: 22,
             border: { type: 'line' },
-            style: { border: { fg: 'cyan' } },
+            style: { border: { fg: door_theme_1.T.chrome } },
             label: ' Standings ',
             fixed: true,
             focusable: false,
@@ -486,7 +487,7 @@ class VersusScreen {
             width: versus_layout_1.OPPONENT_BOARD_COLS,
             height: 22,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             label: ' CPU ',
             fixed: true,
             focusable: false,
@@ -1040,7 +1041,7 @@ class VersusScreen {
                 clickable: false,
                 // Dialogs must be opaque. Without a background the board or menu behind
                 // them showed through and the text was hard to read (reported 2026-08-25).
-                style: { bg: 'black' },
+                style: { bg: door_theme_1.T.ground },
             });
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 1000));

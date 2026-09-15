@@ -13,6 +13,7 @@ import type { SpecialInventory } from '../../core/tetrinet/inventory';
 import type { SpecialType } from '../../core/tetrinet/specials';
 import { getSpecialColor, getSpecialDisplayChar } from '../../core/tetrinet/specials';
 
+import { T } from '../../door-theme';
 /**
  * Inventory Panel options
  */
@@ -45,7 +46,7 @@ export class InventoryPanel {
       width,
       height: options.height || 3,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ' Inventory ',
       content: this.renderEmpty(),
       fixed: true,  // Fixed during gameplay, not dockable

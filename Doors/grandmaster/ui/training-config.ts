@@ -3,6 +3,7 @@
  */
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { T } from '../door-theme';
 import {
   PRACTICE_GOAL_VALUES, practiceGoalTarget,
   type PracticeGoal, type PracticeGoalType,
@@ -57,7 +58,7 @@ function pick(screen: Screen, title: string, items: string[]): Promise<number> {
       height: items.length + 4,
       border: { type: 'line' },
       label: ` ${title} `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
     } as any);
@@ -72,8 +73,8 @@ function pick(screen: Screen, title: string, items: string[]): Promise<number> {
       vi: true,
       mouse: true,
       style: {
-        selected: { bg: 'blue', fg: 'white' },
-        item: { fg: 'white' },
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
+        item: { fg: T.ink },
       },
       items,
     } as any);

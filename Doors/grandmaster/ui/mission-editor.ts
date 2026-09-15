@@ -28,6 +28,7 @@ import {
 import { saveSysopPack } from '../core/mission-store';
 import type { Mission, MissionPack } from '../core/mission-types';
 
+import { T } from '../door-theme';
 /** Ask for one line of text. Resolves null when the sysop backs out. */
 function ask(screen: Screen, title: string, current: string): Promise<string | null> {
   return new Promise((resolve) => {
@@ -39,7 +40,7 @@ function ask(screen: Screen, title: string, current: string): Promise<string | n
       height: 7,
       border: { type: 'line' },
       label: ` ${title} `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
       content: `\n {white-fg}Type a value and press ENTER. ESC keeps "${current}".{/white-fg}`,
@@ -56,7 +57,7 @@ function ask(screen: Screen, title: string, current: string): Promise<string | n
       width: 46,
       height: 1,
       inputOnFocus: true,
-      style: { bg: 'blue', fg: 'white' },
+      style: { bg: T.bar, fg: T.ink },
     });
 
     const done = (value: string | null): void => {
@@ -86,7 +87,7 @@ function say(screen: Screen, title: string, message: string): Promise<void> {
       height: 8,
       border: { type: 'line' },
       label: ` ${title} `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
       keys: true,
@@ -122,7 +123,7 @@ function editMission(screen: Screen, mission: Mission): Promise<Mission | null> 
       height: MISSION_FIELDS.length + 6,
       border: { type: 'line' },
       label: ` EDIT - ${mission.name} `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
     } as any);
@@ -136,7 +137,7 @@ function editMission(screen: Screen, mission: Mission): Promise<Mission | null> 
       keys: true,
       vi: true,
       mouse: true,
-      style: { selected: { bg: 'blue', fg: 'white' }, item: { fg: 'white' } },
+      style: { selected: { bg: T.selectionBg, fg: T.selectionInk }, item: { fg: T.ink } },
       items: rows(),
     } as any);
 
@@ -147,7 +148,7 @@ function editMission(screen: Screen, mission: Mission): Promise<Mission | null> 
       width: 52,
       height: 2,
       tags: true,
-      style: { bg: 'black', fg: 'white' },
+      style: { bg: T.ground, fg: T.ink },
     } as any);
 
     const repaint = (): void => {
@@ -301,7 +302,7 @@ function pickRow(screen: Screen, pack: MissionPack): Promise<PackChoice> {
       height: Math.min(rows.length, 16) + 5,
       border: { type: 'line' },
       label: ` MISSION EDITOR - ${pack.name} `,
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
     } as any);
@@ -316,7 +317,7 @@ function pickRow(screen: Screen, pack: MissionPack): Promise<PackChoice> {
       vi: true,
       mouse: true,
       tags: true,
-      style: { selected: { bg: 'blue', fg: 'white' }, item: { fg: 'white' } },
+      style: { selected: { bg: T.selectionBg, fg: T.selectionInk }, item: { fg: T.ink } },
       items: rows,
     } as any);
 
@@ -327,7 +328,7 @@ function pickRow(screen: Screen, pack: MissionPack): Promise<PackChoice> {
       width: 52,
       height: 1,
       tags: true,
-      style: { bg: 'black', fg: 'white' },
+      style: { bg: T.ground, fg: T.ink },
       content: ' {yellow-fg}ENTER{/yellow-fg} edit  {yellow-fg}D{/yellow-fg} delete  '
         + '{yellow-fg}S{/yellow-fg} save  {yellow-fg}ESC{/yellow-fg} leave',
     } as any);

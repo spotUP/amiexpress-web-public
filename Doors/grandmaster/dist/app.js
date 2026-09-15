@@ -49,6 +49,7 @@ exports.createApp = createApp;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const door_theme_1 = require("./door-theme");
 const game_1 = require("./core/game");
 const soft_drop_1 = require("./core/soft-drop");
 const menu_1 = require("./ui/menu");
@@ -368,6 +369,13 @@ class GrandmasterApp {
         /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
         this.tetrinetWinList = new winlist_1.WinList();
         this.session = session;
+        /*
+         * Before a single widget is built: `T` is a live binding, so every style
+         * object in this file reads the caller's theme rather than the classic
+         * default. A host with no theme leaves classic in place, which is the
+         * board exactly as it has always looked.
+         */
+        (0, door_theme_1.applyTheme)(session.bbs);
         this.state = this.createInitialState();
         this.loadSettings(); // Load per-user settings from disk
         this.sounds = new sounds_1.SoundEngine(session);
@@ -631,8 +639,8 @@ class GrandmasterApp {
             height: 15,
             content: '',
             style: {
-                fg: 'white',
-                bg: 'black',
+                fg: door_theme_1.T.ink,
+                bg: door_theme_1.T.ground,
             },
         });
         const frames = [
@@ -948,7 +956,7 @@ class GrandmasterApp {
                 width: this.dialogWidth(60),
                 height: 8,
                 border: { type: 'line' },
-                style: { bg: 'black', border: { fg: 'red' } },
+                style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.alert } },
                 // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
                 align: 'center',
                 valign: 'middle',
@@ -974,7 +982,7 @@ class GrandmasterApp {
             height: 12,
             border: { type: 'line' },
             label: ' Select Mode ',
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
         });
         const modeBox = (0, blessed_helpers_1.createList)({
@@ -984,7 +992,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: 10,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
             },
             keys: true,
             vi: true,
@@ -1038,7 +1046,7 @@ class GrandmasterApp {
                     height: 12,
                     border: { type: 'line' },
                     label: ' Change Mode ',
-                    style: { bg: 'black', border: { fg: 'cyan' } },
+                    style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
                     fixed: true,
                 });
                 const reList = (0, blessed_helpers_1.createList)({
@@ -1047,7 +1055,7 @@ class GrandmasterApp {
                     left: 1,
                     width: '100%-2',
                     height: 10,
-                    style: { selected: { bg: 'blue', fg: 'white' } },
+                    style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk } },
                     keys: true,
                     vi: true,
                     mouse: true,
@@ -1632,7 +1640,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' REPLAYS ',
                 tags: true,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1645,7 +1653,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1672,7 +1680,7 @@ class GrandmasterApp {
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 content: `\n {white-fg}${message}{/white-fg}`,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             this.screen.render();
             const dismiss = () => {
@@ -1703,7 +1711,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' SPEED ',
                 tags: true,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1716,7 +1724,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1755,7 +1763,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' PUZZLE ',
                 tags: true,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1768,7 +1776,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1810,7 +1818,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' TETRIS ATTACK ',
                 tags: true,
-                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1824,9 +1832,9 @@ class GrandmasterApp {
                 tags: true,
                 items: labels,
                 style: {
-                    fg: 'white',
-                    bg: 'black',
-                    selected: { fg: 'black', bg: 'magenta' },
+                    fg: door_theme_1.T.ink,
+                    bg: door_theme_1.T.ground,
+                    selected: { fg: door_theme_1.T.ground, bg: 'magenta' },
                 },
             });
             const done = (choice) => {
@@ -1861,7 +1869,7 @@ class GrandmasterApp {
             left: 0,
             width: '100%',
             height: '100%',
-            style: { bg: 'black' },
+            style: { bg: door_theme_1.T.ground },
         });
         // First show mode selection - compact dialog sized to content
         const modePanel = (0, blessed_helpers_1.createBox)({
@@ -1872,7 +1880,7 @@ class GrandmasterApp {
             height: 12,
             border: { type: 'line' },
             label: ' TetriNET Mode ',
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
         });
         const modeBox = (0, blessed_helpers_1.createList)({
@@ -1882,7 +1890,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: 8,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
             },
             keys: true,
             vi: true,
@@ -2319,7 +2327,7 @@ class GrandmasterApp {
             height: 16,
             border: { type: 'line' },
             label: ' WATCH A GAME ',
-            style: { bg: 'black', border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             fixed: true,
         });
         const items = running.length > 0
@@ -2336,7 +2344,7 @@ class GrandmasterApp {
             keys: true,
             vi: true,
             mouse: true,
-            style: { selected: { bg: 'magenta', fg: 'black' }, item: { fg: 'white' } },
+            style: { selected: { bg: 'magenta', fg: door_theme_1.T.ground }, item: { fg: door_theme_1.T.ink } },
         });
         list.focus();
         this.screen.render();
@@ -2415,7 +2423,7 @@ class GrandmasterApp {
             height: Math.min(predefinedServers.length + 10, 20),
             border: { type: 'line' },
             label: ' Select TetriNET Server ',
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
         });
         const serverSelectBox = (0, blessed_helpers_1.createList)({
@@ -2425,7 +2433,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: Math.min(predefinedServers.length + 8, 18),
             style: {
-                selected: { bg: 'blue', fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
             },
             items: getItems(),
             keys: true,
@@ -2492,8 +2500,8 @@ class GrandmasterApp {
                 border: { type: 'line' },
                 label: ' Enter Server Address ',
                 style: {
-                    bg: 'black',
-                    border: { fg: 'cyan' },
+                    bg: door_theme_1.T.ground,
+                    border: { fg: door_theme_1.T.chrome },
                 },
                 fixed: true,
             });
@@ -2516,8 +2524,8 @@ class GrandmasterApp {
                 height: 3,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'white' },
-                    focus: { fg: 'cyan' },
+                    border: { fg: door_theme_1.T.ink },
+                    focus: { fg: door_theme_1.T.chrome },
                 },
                 inputOnFocus: true,
                 mouse: true,
@@ -2541,8 +2549,8 @@ class GrandmasterApp {
                 height: 3,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'white' },
-                    focus: { fg: 'cyan' },
+                    border: { fg: door_theme_1.T.ink },
+                    focus: { fg: door_theme_1.T.chrome },
                 },
                 inputOnFocus: true,
                 mouse: true,
@@ -2620,7 +2628,7 @@ class GrandmasterApp {
             height: 7,
             border: { type: 'line' },
             label: ' Mode ',
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
         });
         const modeSelectBox = (0, blessed_helpers_1.createList)({
@@ -2630,7 +2638,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: 5,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
             },
             items: ['TetriFast (Recommended)', 'Standard', 'TSpec (Spectator)'],
             keys: true,
@@ -2672,8 +2680,8 @@ class GrandmasterApp {
             border: { type: 'line' },
             label: ` Connecting to ${selectedServer} `,
             style: {
-                bg: 'black',
-                border: { fg: 'cyan' },
+                bg: door_theme_1.T.ground,
+                border: { fg: door_theme_1.T.chrome },
             },
             fixed: true,
         });
@@ -2697,8 +2705,8 @@ class GrandmasterApp {
             width: 20,
             height: 1,
             style: {
-                fg: 'cyan',
-                focus: { fg: 'white' },
+                fg: door_theme_1.T.chrome,
+                focus: { fg: door_theme_1.T.ink },
             },
             inputOnFocus: true,
             mouse: true,
@@ -2748,8 +2756,8 @@ class GrandmasterApp {
                 border: { type: 'line' },
                 label: ' TSpec Password ',
                 style: {
-                    bg: 'black',
-                    border: { fg: 'cyan' },
+                    bg: door_theme_1.T.ground,
+                    border: { fg: door_theme_1.T.chrome },
                 },
                 fixed: true,
             });
@@ -2772,8 +2780,8 @@ class GrandmasterApp {
                 height: 3,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'white' },
-                    focus: { fg: 'cyan' },
+                    border: { fg: door_theme_1.T.ink },
+                    focus: { fg: door_theme_1.T.chrome },
                 },
                 inputOnFocus: true,
                 mouse: true,
@@ -2829,7 +2837,7 @@ class GrandmasterApp {
             width: this.dialogWidth(50),
             height: 7,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             // A notice, so centre it on both axes.
             align: 'center',
             valign: 'middle',
@@ -2921,7 +2929,7 @@ class GrandmasterApp {
                 height: '100%',
                 label: ` TetriNET - ${client.getSlot() ? `Slot ${client.getSlot()}` : 'Connected'} `,
                 border: { type: 'line' },
-                style: { border: { fg: 'yellow' }, bg: 'black' },
+                style: { border: { fg: door_theme_1.T.accent }, bg: door_theme_1.T.ground },
                 fixed: true,
             });
             const chatArea = (0, blessed_helpers_1.createBox)({
@@ -2932,7 +2940,7 @@ class GrandmasterApp {
                 height: sidePanelHeight,
                 label: client.getSlot() ? ' Partyline Chat ' : ' TSpec Chat ',
                 border: { type: 'line' },
-                style: { border: { fg: 'cyan' }, bg: 'black' },
+                style: { border: { fg: door_theme_1.T.chrome }, bg: door_theme_1.T.ground },
                 scrollable: true,
                 alwaysScroll: true,
                 mouse: true,
@@ -2944,7 +2952,7 @@ class GrandmasterApp {
                 right: 0,
                 width: 26,
                 height: sidePanelHeight,
-                style: { bg: 'black' },
+                style: { bg: door_theme_1.T.ground },
             });
             const playerList = (0, blessed_helpers_1.createBox)({
                 parent: rightPanel,
@@ -2954,7 +2962,7 @@ class GrandmasterApp {
                 height: 11,
                 label: ' Players ',
                 border: { type: 'line' },
-                style: { border: { fg: 'green' }, bg: 'black' },
+                style: { border: { fg: door_theme_1.T.ok }, bg: door_theme_1.T.ground },
                 fixed: true,
             });
             const spectatorList = (0, blessed_helpers_1.createBox)({
@@ -2965,7 +2973,7 @@ class GrandmasterApp {
                 height: `100%-11`,
                 label: ' Spectators ',
                 border: { type: 'line' },
-                style: { border: { fg: 'magenta' }, bg: 'black' },
+                style: { border: { fg: 'magenta' }, bg: door_theme_1.T.ground },
                 fixed: true,
             });
             const footer = (0, blessed_helpers_1.createBox)({
@@ -2975,7 +2983,7 @@ class GrandmasterApp {
                 width: '100%',
                 height: footerHeight,
                 border: { type: 'line' },
-                style: { border: { fg: 'gray' }, bg: 'black' },
+                style: { border: { fg: door_theme_1.T.dim }, bg: door_theme_1.T.ground },
                 fixed: true,
             });
             (0, blessed_helpers_1.createBox)({
@@ -3006,9 +3014,9 @@ class GrandmasterApp {
                 height: inputHeight,
                 border: { type: 'line' },
                 style: {
-                    border: { fg: 'white' },
-                    focus: { fg: 'cyan' },
-                    bg: 'black',
+                    border: { fg: door_theme_1.T.ink },
+                    focus: { fg: door_theme_1.T.chrome },
+                    bg: door_theme_1.T.ground,
                 },
                 inputOnFocus: true,
                 mouse: true,
@@ -3341,7 +3349,7 @@ class GrandmasterApp {
             height: 15,
             border: { type: 'line' },
             label: ' Select Bot Difficulty ',
-            style: { bg: 'black', border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             fixed: true,
         });
         const difficultyBox = (0, blessed_helpers_1.createList)({
@@ -3351,7 +3359,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: 13,
             style: {
-                selected: { bg: 'blue', fg: 'white' },
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
             },
             items: [
                 '1 - Beginner (Easy warm-up)',
@@ -3465,7 +3473,7 @@ class GrandmasterApp {
             width: this.dialogWidth(50),
             height: 7,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             // A notice, so centre it on both axes.
             align: 'center',
             valign: 'middle',
@@ -3771,7 +3779,7 @@ class GrandmasterApp {
             width: this.dialogWidth(50),
             height: 12,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             align: 'center',
             valign: 'middle',
             content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
@@ -3801,7 +3809,7 @@ class GrandmasterApp {
             width: this.dialogWidth(50),
             height: 10,
             border: { type: 'line' },
-            style: { bg: 'black', border: { fg: 'yellow' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'center',
             valign: 'middle',
             content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +

@@ -45,6 +45,7 @@ interface SettingsRow {
 import type { SoundEngine } from '../audio/sounds';
 import { KEY_PRESETS } from '../input/config';
 
+import { T } from '../door-theme';
 /**
  * Friendly names for key bindings
  */
@@ -145,7 +146,7 @@ export class SettingsScreen {
         width: 60,
         height: 3,
         content: '{bold}{yellow-fg}SETTINGS{/yellow-fg}{/bold}',
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: T.ink, bg: T.ground },
       });
 
       // Settings menu
@@ -161,12 +162,12 @@ export class SettingsScreen {
         alwaysScroll: true,
         scrollbar: {
           ch: ' ',
-          style: { bg: 'cyan' },
+          style: { bg: T.chrome },
         },
         style: {
-          border: { fg: 'cyan' },
-          selected: { bg: 'cyan', fg: 'black' },
-          item: { fg: 'white' },
+          border: { fg: T.chrome },
+          selected: { bg: T.chrome, fg: T.ground },
+          item: { fg: T.ink },
         },
         keys: true,
         vi: true,
@@ -182,7 +183,7 @@ export class SettingsScreen {
         width: 60,
         height: 5,
         border: { type: 'line' },
-        style: { border: { fg: 'gray' }, fg: 'gray' },
+        style: { border: { fg: T.dim }, fg: T.dim },
         content: this.getDescription(0),
         fixed: true,
       });
@@ -501,7 +502,7 @@ export class SettingsScreen {
       width: 50,
       height: 8,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       content: `{bold}${key.toUpperCase()}{/bold}\n\n` +
         `Current: {yellow-fg}${current}{/yellow-fg}\n` +
         `Range: ${min} - ${max}\n\n` +
@@ -571,7 +572,7 @@ export class SettingsScreen {
       width: 50,
       height: 7,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'yellow' } },
+      style: { bg: T.ground, border: { fg: T.accent } },
       content: '',
       fixed: true,
       focusable: true,  // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -649,7 +650,7 @@ export class SettingsScreen {
       width: 55,
       height: 12,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       content: '',
       fixed: true,
       focusable: true,  // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
@@ -793,7 +794,7 @@ export class SettingsScreen {
       width: 57,
       height: 14,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       content: '',
       fixed: true,
       focusable: true,
@@ -875,8 +876,8 @@ export class SettingsScreen {
         mouse: true,
         border: { type: 'line' },
         style: {
-          border: { fg: 'cyan' },
-          selected: { bg: 'blue', fg: 'white' },
+          border: { fg: T.chrome },
+          selected: { bg: T.selectionBg, fg: T.selectionInk },
         },
         items,
       } as any);
@@ -958,8 +959,8 @@ export class SettingsScreen {
         mouse: true,
         border: { type: 'line' },
         style: {
-          border: { fg: 'cyan' },
-          selected: { bg: 'blue', fg: 'white' },
+          border: { fg: T.chrome },
+          selected: { bg: T.selectionBg, fg: T.selectionInk },
         },
         items,
       } as any);
@@ -1028,7 +1029,7 @@ export class SettingsScreen {
       width: 57,
       height: 14,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       content: '',
       fixed: true,
       focusable: true,
@@ -1154,7 +1155,7 @@ export class SettingsScreen {
       width: 55,
       height: 12,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       content: '',
       fixed: true,
       focusable: true,

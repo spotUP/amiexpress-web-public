@@ -19,6 +19,7 @@ exports.showMissionEditor = showMissionEditor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const mission_edit_1 = require("../core/mission-edit");
 const mission_store_1 = require("../core/mission-store");
+const door_theme_1 = require("../door-theme");
 /** Ask for one line of text. Resolves null when the sysop backs out. */
 function ask(screen, title, current) {
     return new Promise((resolve) => {
@@ -30,7 +31,7 @@ function ask(screen, title, current) {
             height: 7,
             border: { type: 'line' },
             label: ` ${title} `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
             content: `\n {white-fg}Type a value and press ENTER. ESC keeps "${current}".{/white-fg}`,
@@ -45,7 +46,7 @@ function ask(screen, title, current) {
             width: 46,
             height: 1,
             inputOnFocus: true,
-            style: { bg: 'blue', fg: 'white' },
+            style: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink },
         });
         const done = (value) => {
             field.destroy();
@@ -71,7 +72,7 @@ function say(screen, title, message) {
             height: 8,
             border: { type: 'line' },
             label: ` ${title} `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
             keys: true,
@@ -103,7 +104,7 @@ function editMission(screen, mission) {
             height: mission_edit_1.MISSION_FIELDS.length + 6,
             border: { type: 'line' },
             label: ` EDIT - ${mission.name} `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
         });
@@ -116,7 +117,7 @@ function editMission(screen, mission) {
             keys: true,
             vi: true,
             mouse: true,
-            style: { selected: { bg: 'blue', fg: 'white' }, item: { fg: 'white' } },
+            style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk }, item: { fg: door_theme_1.T.ink } },
             items: rows(),
         });
         const help = (0, blessed_helpers_1.createBox)({
@@ -126,7 +127,7 @@ function editMission(screen, mission) {
             width: 52,
             height: 2,
             tags: true,
-            style: { bg: 'black', fg: 'white' },
+            style: { bg: door_theme_1.T.ground, fg: door_theme_1.T.ink },
         });
         const repaint = () => {
             const at = list.selected ?? 0;
@@ -263,7 +264,7 @@ function pickRow(screen, pack) {
             height: Math.min(rows.length, 16) + 5,
             border: { type: 'line' },
             label: ` MISSION EDITOR - ${pack.name} `,
-            style: { bg: 'black', border: { fg: 'cyan' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
         });
@@ -277,7 +278,7 @@ function pickRow(screen, pack) {
             vi: true,
             mouse: true,
             tags: true,
-            style: { selected: { bg: 'blue', fg: 'white' }, item: { fg: 'white' } },
+            style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk }, item: { fg: door_theme_1.T.ink } },
             items: rows,
         });
         const help = (0, blessed_helpers_1.createBox)({
@@ -287,7 +288,7 @@ function pickRow(screen, pack) {
             width: 52,
             height: 1,
             tags: true,
-            style: { bg: 'black', fg: 'white' },
+            style: { bg: door_theme_1.T.ground, fg: door_theme_1.T.ink },
             content: ' {yellow-fg}ENTER{/yellow-fg} edit  {yellow-fg}D{/yellow-fg} delete  '
                 + '{yellow-fg}S{/yellow-fg} save  {yellow-fg}ESC{/yellow-fg} leave',
         });

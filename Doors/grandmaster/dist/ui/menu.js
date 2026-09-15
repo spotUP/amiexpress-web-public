@@ -10,6 +10,8 @@ exports.menuRowsFor = menuRowsFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const clear_screen_1 = require("./clear-screen");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
+const door_theme_1 = require("../door-theme");
 /**
  * The menu's selections, index-aligned with the `items` array that renders them
  * and with the descriptions beside it. Three parallel arrays, so a row added to
@@ -99,6 +101,7 @@ class MenuScreen {
         // Wait for screen clear to propagate (critical for modem speeds)
         await new Promise(resolve => setTimeout(resolve, 200));
         return new Promise((resolve) => {
+            let chrome = null;
             let cleanupResize = null;
             const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
             const menuRows = menuRowsFor(this.screen.width);
@@ -112,7 +115,7 @@ class MenuScreen {
                 border: undefined,
                 parent: this.screen,
                 top: 0, left: 0, width: '100%', height: '100%',
-                style: { bg: 'black' },
+                style: { bg: door_theme_1.T.ground },
             });
             // Title: compact mode uses single line, wide mode uses 4-row ASCII art
             const title = (0, blessed_helpers_1.createBox)({
@@ -124,8 +127,47 @@ class MenuScreen {
                 border: { type: 'none' },
                 content: compact ? '{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}' : this.getTitleArt(),
                 align: 'center',
-                style: { fg: 'yellow', bg: 'black' },
+                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground },
             });
+            /*
+             * THE BOARD'S CHROME, not just its colours.
+             *
+             * Sysop, 2026-09-03: "only colors makes no great theme". A door that
+             * takes the theme takes the masthead, the rail and the glitch from the
+             * one SDK entry point, so it cannot drift from the next door.
+             *
+             * It rides HERE, on the menu, because this is the only screen the door
+             * has a spare row on: the composition is 24 rows tall (title at 1, the
+             * panels at 5, the hint row at 23) and row 0 is empty. The game screen
+             * is a 22-row well plus its HUD and has no row to give - the card-lobby
+             * pattern, the rail in the run the menus leave.
+             *
+             * No `footer` is passed: the instruction row below the panels is this
+             * door's own hint line and says more than the generic one would.
+             */
+            const mastheadRow = (0, blessed_helpers_1.createBox)({
+                border: undefined,
+                parent: this.screen,
+                top: offsetY(),
+                left: offsetX(),
+                width: MENU_COLS,
+                height: 1,
+                content: '',
+                style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground },
+            });
+            const attachChrome = () => {
+                chrome?.stop();
+                chrome = (0, theme_1.attachDoorChrome)(door_theme_1.CURRENT, {
+                    // The LIVE width, never 80: the SDK gates every moving part on it,
+                    // and the 40-column tier turns them all off through this number.
+                    width: this.screen.width || 80,
+                    title: 'GRANDMASTER',
+                    masthead: mastheadRow,
+                    mastheadWidth: MENU_COLS,
+                    render: () => this.screen.render(),
+                });
+            };
+            attachChrome();
             // At 40 columns: full-width menu panel, no description/player boxes
             const leftMargin = compact ? 0 + offsetX() : 2 + offsetX();
             const panelTop = compact ? 3 + offsetY() : 5 + offsetY();
@@ -139,7 +181,7 @@ class MenuScreen {
                 height: panelHeight,
                 border: compact ? { type: 'none' } : { type: 'line' },
                 label: compact ? '' : ' SELECT MODE ',
-                style: { border: { fg: 'cyan' } },
+                style: { border: { fg: door_theme_1.T.chrome } },
             });
             const menu = (0, blessed_helpers_1.createList)({
                 parent: menuPanel,
@@ -148,11 +190,11 @@ class MenuScreen {
                 width: compact ? panelWidth - 2 : 22,
                 height: panelHeight - 2,
                 scrollable: true,
-                scrollbar: compact ? undefined : { ch: ' ', style: { bg: 'cyan' } },
+                scrollbar: compact ? undefined : { ch: ' ', style: { bg: door_theme_1.T.chrome } },
                 style: {
-                    border: { fg: 'cyan' },
-                    selected: { bg: 'cyan', fg: 'black' },
-                    item: { fg: 'white' },
+                    border: { fg: door_theme_1.T.chrome },
+                    selected: { bg: door_theme_1.T.chrome, fg: door_theme_1.T.ground },
+                    item: { fg: door_theme_1.T.ink },
                 },
                 keys: true, vi: true, mouse: true,
                 items: menuRows.items,
@@ -164,14 +206,14 @@ class MenuScreen {
                     parent: this.screen, top: panelTop, left: leftMargin + 26,
                     width: 30, height: panelHeight,
                     border: { type: 'line' }, label: ' DESCRIPTION ',
-                    style: { border: { fg: 'gray' } },
+                    style: { border: { fg: door_theme_1.T.dim } },
                     content: this.getModeDescription(0), fixed: true,
                 });
                 info = (0, blessed_helpers_1.createBox)({
                     parent: this.screen, top: panelTop, left: leftMargin + 26 + 30,
                     width: 20, height: panelHeight,
                     border: { type: 'line' }, label: ' PLAYER ',
-                    style: { border: { fg: 'gray' } },
+                    style: { border: { fg: door_theme_1.T.dim } },
                     content: this.getPlayerInfo(),
                 });
             }
@@ -191,7 +233,7 @@ class MenuScreen {
                 width: MENU_COLS,
                 height: 1,
                 align: 'center',
-                style: { fg: 'gray', bg: 'black' },
+                style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground },
                 content: 'Arrows: Navigate | Enter: Select | ESC/Q: Quit',
             });
             // Follow the terminal. Alt+Enter changes the room while the menu is
@@ -226,6 +268,12 @@ class MenuScreen {
                     instructions.left = x;
                     instructions.top = 5 + y + panelHeight;
                 }
+                mastheadRow.left = x;
+                mastheadRow.top = y;
+                mastheadRow.width = compactNow ? this.screen.width : MENU_COLS;
+                // A rail sized for 80 columns strands its title mid-screen in a wide
+                // terminal, so the chrome is re-attached at the new width.
+                attachChrome();
                 this.screen.render();
             };
             this.screen.on('resize', recentre);
@@ -241,6 +289,11 @@ class MenuScreen {
                 // Clean up
                 cleanupResize?.();
                 cleanupResize = null;
+                // Stop the rail BEFORE its row goes, or the timer renders into a
+                // destroyed box on the way out.
+                chrome?.stop();
+                chrome = null;
+                mastheadRow.destroy();
                 background.destroy();
                 title.destroy();
                 menuPanel.destroy(); // Also destroys menu as a child

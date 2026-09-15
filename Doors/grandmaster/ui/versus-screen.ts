@@ -41,6 +41,7 @@ import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden } from '../core/mission-run';
 
 
+import { T } from '../door-theme';
 /**
  * Versus Screen
  *
@@ -400,7 +401,7 @@ export class VersusScreen {
       width: wellCols + 2,
       height: 22,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'white' } },
+      style: { bg: T.ground, border: { fg: T.ink } },
       fixed: true,
     });
 
@@ -412,7 +413,7 @@ export class VersusScreen {
       width: sideWidth,
       height: 12,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       label: ' NEXT ',
       fixed: true,
       focusable: false,
@@ -428,7 +429,7 @@ export class VersusScreen {
       width: sideWidth,
       height: 10,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: 'magenta' } },
       label: ' HOLD ',
       fixed: true,
       focusable: false,
@@ -444,7 +445,7 @@ export class VersusScreen {
       width: garbageWidth,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'red' } },
+      style: { border: { fg: T.alert } },
       content: '',
       fixed: true,
       focusable: false,
@@ -465,7 +466,7 @@ export class VersusScreen {
       width: VS_INFO_COLS,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ' VS ',
       content: '',
       fixed: true,
@@ -483,7 +484,7 @@ export class VersusScreen {
       width: this.screen.width - LEFT_PANEL_COLS,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ' Opponents ',
       fixed: true,
       focusable: false,
@@ -515,7 +516,7 @@ export class VersusScreen {
       width: 22,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
+      style: { border: { fg: T.chrome } },
       label: ' Standings ',
       fixed: true,
       focusable: false,
@@ -581,7 +582,7 @@ export class VersusScreen {
       width: OPPONENT_BOARD_COLS,
       height: 22,
       border: { type: 'line' },
-      style: { bg: 'black', border: { fg: 'cyan' } },
+      style: { bg: T.ground, border: { fg: T.chrome } },
       label: ' CPU ',
       fixed: true,
       focusable: false,
@@ -1156,7 +1157,7 @@ export class VersusScreen {
         clickable: false,
         // Dialogs must be opaque. Without a background the board or menu behind
         // them showed through and the text was hard to read (reported 2026-08-25).
-        style: { bg: 'black' },
+        style: { bg: T.ground },
       });
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 1000));
