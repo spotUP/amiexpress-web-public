@@ -9,7 +9,7 @@ import { startPagination } from '../screen.handler';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { config } from '../../config';
-import { emitText, emitPrompt, emitLine, flushOutput, eraseRestOfLine, clearTheScreen } from '../../utils/output.util';
+import { emitText, emitPrompt, emitLine, flushOutput, eraseRestOfLine } from '../../utils/output.util';
 import * as path from 'path';
 import { conferenceDir } from '../../conferences/conference-paths';
 import { fileAreaManager } from '../../services/FileAreaManager';
@@ -654,13 +654,6 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // destination, surface it in the header so sysops know files won't
   // land in the default playpen/Files directory.
   const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
-  // The sysop's instruction, 2026-09-15, after two fixes that each addressed a
-  // real defect but not the mess he was looking at: "clear. the. fucking.
-  // screen. before. drawing. the. upload. stuff." express.e's cleanItUp
-  // (17656) cleans the WORK DIRECTORY, not the screen - but this board draws
-  // over full-screen art that express.e never had behind it.
-  emitText(socket, clearTheScreen(socket));
-
   const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
   if (customUlPath) {
     emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..${eraseRestOfLine(socket)}\r\n`);

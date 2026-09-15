@@ -27,6 +27,7 @@ import * as path from 'path';
 import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
+import { emitText, clearTheScreen } from '../../utils/output.util';
 
 interface Conference {
   id: number;
@@ -1125,6 +1126,22 @@ export async function handleUploadCommand(socket: any, session: BBSSession): Pro
 
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
 console.log('[ENV] Uploading');
+
+  /*
+   * CLEAR FIRST, so the conference's own upload art lands on a blank screen.
+   *
+   * The sysop, 2026-09-15: "clear. the. fucking. screen. before. drawing. the.
+   * upload. stuff." The first attempt cleared inside the upload INTERFACE,
+   * which runs after the screens below - so it wiped the very art he had
+   * asked to be able to see, and he got a clean screen with no UPLOADMSG on
+   * it. The clear belongs ahead of everything this command draws.
+   *
+   * express.e does not clear here (its uploadDesc opens with cleanItUp, the
+   * node WORK DIRECTORY, express.e:17807) and it does not need to: its output
+   * scrolls up a terminal holding nothing else. This board draws over
+   * full-screen art that stays put.
+   */
+  emitText(socket, clearTheScreen(socket));
 
   // express.e:18981 - IF displayScreen(SCREEN_NOUPLOADS) THEN RETURN.
   //

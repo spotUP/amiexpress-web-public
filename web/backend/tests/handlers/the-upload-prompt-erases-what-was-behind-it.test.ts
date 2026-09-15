@@ -74,14 +74,29 @@ describe('the upload screen starts clean', () => {
     expect(clearTheScreen(aSocket({ petsciiMode: true }))).toBe('\x93');
   });
 
-  it('is emitted before the first line of the upload block', () => {
+  it('clears BEFORE the conference art, not after it', () => {
+    // The first attempt cleared inside the upload INTERFACE, which runs after
+    // NOUPLOADS/UPLOADMSG are drawn (express.e:18981/18986) - so it wiped the
+    // conference's own upload art and the sysop got a blank screen with no
+    // ASCII on it: "it works but i saw no upload ascii" (2026-09-15).
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..',
+        'src/handlers/commands/user-commands.handler.ts'), 'utf8');
+    const clear = src.indexOf('clearTheScreen(socket)');
+    const noUploads = src.indexOf("'NOUPLOADS'");
+    const uploadMsg = src.indexOf("'UPLOADMSG'");
+    expect(clear).toBeGreaterThan(-1);
+    expect(noUploads).toBeGreaterThan(-1);
+    expect(uploadMsg).toBeGreaterThan(-1);
+    expect(clear).toBeLessThan(noUploads);
+    expect(clear).toBeLessThan(uploadMsg);
+  });
+
+  it('does not clear again inside the upload interface', () => {
+    // A second clear there would wipe the art the first one made room for.
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src/handlers/file/file.handler.ts'), 'utf8');
-    const clear = src.indexOf('clearTheScreen(socket)');
-    const firstLine = src.indexOf('UPLOADING to ${uploadArea.ulPath}');
-    expect(clear).toBeGreaterThan(-1);
-    expect(firstLine).toBeGreaterThan(-1);
-    expect(clear).toBeLessThan(firstLine);
+    expect(src).not.toContain('clearTheScreen(socket)');
   });
 });
 
