@@ -158,6 +158,21 @@ void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
 #define UI_RAIL_TICK_DELAY 3
 
 /**
+ * How far the rail travels per frame, in cells.
+ *
+ * What a caller SEES is cells per second, not frames per second, and the rail
+ * had always moved exactly one cell per frame - so at eight frames a second a
+ * slash still took ten seconds to cross eighty columns. The sysop, after the
+ * frame rate had already been doubled: "it still animates slow".
+ *
+ * Three cells a frame costs NOTHING extra - the same one frame, the same
+ * hundred bytes, the window simply starts three cells further along the same
+ * stream - and it is the difference between a mark crossing the screen in ten
+ * seconds and in three.
+ */
+#define UI_RAIL_STEP 3
+
+/**
  * The status line: left text, right text, and the gap between them filled.
  *
  * The right side is dropped rather than overlapped when both cannot fit -

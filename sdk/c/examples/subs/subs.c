@@ -220,7 +220,7 @@ static void door_idle(void *ctx)
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
     if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
-    rail_tick++;
+    rail_tick += UI_RAIL_STEP;
     /* The RAIL, not the row - see ui_chrome.h. */
     ui_masthead_rail_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
