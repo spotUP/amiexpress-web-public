@@ -629,6 +629,41 @@ console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
   }
 
   // Generic Amiga binary execution (works for any utility: SuperAmiLog, custom tools, etc.)
+  /*
+   * QuickNew is a TypeScript generator, not a door on disk.
+   *
+   * The batch line is the Amiga one - `doors:quicknew/quicknew <config> <days>
+   * >bbs:screens/quicknew.txt` - and the 68K binary it names is not shipped
+   * (its directory was removed as corpus junk in 6a6dcc475). The generator
+   * that replaced it, utils/quicknew-generator.ts, was deleted by an
+   * unrelated commit (0fd4c03e1, 2026-04-28) and with it this intercept
+   * (9b9ee9caa, then c99c1e0f3). Since then every logoff batch has logged
+   * `Skipping missing program: doors:quicknew/quicknew` and the screen has
+   * shown 00 files for months. "re-enable quicknew" (sysop, 2026-09-15).
+   *
+   * Config path and days come from the line; the output path from its
+   * stdout redirect, exactly as the Amiga door was invoked.
+   */
+  if (program.includes('quicknew/quicknew')) {
+    const args = resolvedArgs;
+    if (args.length >= 2) {
+      const configPath = resolveAssign(args[0].replace(/^"|"$/g, ''));
+      const daysBack = parseInt(args[1], 10) || 7;
+      let outputPath = resolveAssign('bbs:screens/quicknew.txt');
+      if (redirect) {
+        const resolved = resolveAssign(redirect);
+        if (resolved) outputPath = resolved;
+      }
+console.log(`[BatchScheduler] QuickNew: generating from ${configPath}, ${daysBack} days, into ${outputPath}`);
+      const { generateQuickNewFromConfig } = require('../utils/quicknew-generator');
+      await generateQuickNewFromConfig(configPath, daysBack, outputPath);
+console.log('[BatchScheduler] QuickNew: screen regenerated');
+    } else {
+console.error('[BatchScheduler] QuickNew: the batch line needs <config> <days>');
+    }
+    return;
+  }
+
   const rawProg = resolveAssign(parts[0]);
   const resolvedProg = resolveExecutable(rawProg) || (require('../utils/amigafs').resolvePath(rawProg));
   if (!resolvedProg) {
