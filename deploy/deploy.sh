@@ -400,6 +400,118 @@ echo "== docker compose build (with GIT_SHA) =="
 # shellcheck disable=SC2086 - PROFILE_ARGS is a deliberate word list
 GIT_SHA="$ACTUAL_SHA" docker compose $PROFILE_ARGS build
 
+# ===========================================================================
+# BOOT SMOKE TEST - the one check worth standing between a build and callers
+#
+# GitHub Actions is unpaid (measured 2026-09-15: 200 most recent runs, zero
+# successes, last green 09-08), and the sysop's ruling is that it stays
+# unpaid. So what CI used to do has to live somewhere local.
+#
+# It is deliberately NOT the unit suite. A failing unit test does not take the
+# board down - it needs somebody to KNOW, which is an off-path problem. What
+# takes the board down is swapping in an image that cannot boot: a bad import,
+# a missing env, anything that only production's path reaches. The old
+# container is already destroyed by then and the board is down until a human
+# notices.
+#
+# Also not the unit suite because of what this host IS: two cores and 3 GB,
+# serving the board. The backend suite spawns a worker per core and took down
+# a far larger machine on 2026-09-15. A gate that OOMs the box is the outage
+# it was meant to prevent.
+#
+# THE SMOKE CONTAINER GETS ITS OWN VOLUME, ALWAYS.
+# `docker run -v bbs-data` would start a SECOND BOARD on the live volume - it
+# steals pages, writes chat rows and corrupts node state. The throwaway volume
+# below is the whole reason this is safe to run while the board is up; the
+# entrypoint initialises a fresh board into it and it is destroyed after.
+#
+# No published ports either, so nothing collides with the live 3001/64128/31337
+# and nothing outside the host can reach it.
+if [ "${DEPLOY_SKIP_SMOKE:-0}" = "1" ]; then
+  echo "== BOOT SMOKE SKIPPED (DEPLOY_SKIP_SMOKE=1) - this deploy is unverified =="
+else
+  SMOKE_NAME="amiexpress-smoke-$$"
+  SMOKE_VOL="amiexpress-smoke-vol-$$"
+  # Ask for the BBS service by name. `config --images` with no service lists
+  # every profile's image, and `grep amiexpress` would have happily returned
+  # the Discord bot's.
+  SMOKE_IMAGE="$(GIT_SHA="$ACTUAL_SHA" docker compose $PROFILE_ARGS config --images bbs 2>/dev/null | head -1)"
+  [ -n "$SMOKE_IMAGE" ] || SMOKE_IMAGE="$(docker compose $PROFILE_ARGS images -q bbs 2>/dev/null | head -1)"
+
+  smoke_cleanup() {
+    docker rm -f "$SMOKE_NAME" >/dev/null 2>&1 || true
+    docker volume rm -f "$SMOKE_VOL" >/dev/null 2>&1 || true
+  }
+
+  if [ -z "$SMOKE_IMAGE" ]; then
+    echo "WARNING: could not resolve the built bbs image; skipping the boot smoke" >&2
+  else
+    echo "== boot smoke: starting $SMOKE_IMAGE on a throwaway volume =="
+    docker volume create "$SMOKE_VOL" >/dev/null
+    # A FRESH VOLUME BELONGS TO ROOT, AND THIS IMAGE IS NOT ROOT.
+    # It runs as bbsuser (1001), the live /app/data is 1001:1001, and without
+    # this the entrypoint dies on its first mkdir with
+    # `EACCES ... /app/data/bbs/Utils/samilog` - a gate that fails on a
+    # perfectly good image. Found by running this by hand against the image
+    # the board was already serving (2026-09-15).
+    if ! docker run --rm --user 0:0 -v "$SMOKE_VOL":/app/data \
+          --entrypoint sh "$SMOKE_IMAGE" -c "chown -R 1001:1001 /app/data" >/dev/null 2>&1; then
+      smoke_cleanup
+      echo "WARNING: could not prepare the smoke volume; skipping the boot smoke" >&2
+      SMOKE_IMAGE=""
+    fi
+  fi
+
+  if [ -n "$SMOKE_IMAGE" ]; then
+    if ! docker run -d --name "$SMOKE_NAME" --memory=768m \
+          -e NODE_ENV=production -e HOST=0.0.0.0 -e PORT=3001 \
+          -e BACKEND_PORT=3001 \
+          -e DATABASE_DIR=/app/data/db -e DATABASE_FILE=amiexpress.db \
+          -e BBS_DATA_DIR=/app/data/bbs -e ROM_DIR=/app/data/amiga-roms \
+          -v "$SMOKE_VOL":/app/data \
+          "$SMOKE_IMAGE" >/dev/null; then
+      smoke_cleanup
+      echo "ERROR: the freshly built image would not START - NOT deploying." >&2
+      echo "       The board keeps running the image it has." >&2
+      exit 1
+    fi
+
+    # The entrypoint initialises a whole board into the empty volume (Doors,
+    # Screens, Commands, the database), so this is minutes on a cold volume,
+    # not seconds. Poll rather than sleep, and use node - the runtime image
+    # has no curl, only the interpreter it runs on.
+    SMOKE_OK=0
+    for _ in $(seq 1 90); do
+      if docker exec "$SMOKE_NAME" node -e \
+          'require("http").get("http://127.0.0.1:3001/health",r=>process.exit(r.statusCode===200?0:1)).on("error",()=>process.exit(1))' \
+          >/dev/null 2>&1; then
+        SMOKE_OK=1
+        break
+      fi
+      # A container that has already exited will never answer.
+      if [ "$(docker inspect -f '{{.State.Running}}' "$SMOKE_NAME" 2>/dev/null)" != "true" ]; then
+        break
+      fi
+      sleep 2
+    done
+
+    if [ "$SMOKE_OK" != "1" ]; then
+      echo "" >&2
+      echo "ERROR: the freshly built image never answered /health - NOT deploying." >&2
+      echo "       Nobody was warned and nobody was disconnected; the board is" >&2
+      echo "       still serving the previous image. Its last words:" >&2
+      docker logs --tail 40 "$SMOKE_NAME" 2>&1 | sed 's/^/       | /' >&2 || true
+      smoke_cleanup
+      echo "       Deploy anyway, deliberately, with DEPLOY_SKIP_SMOKE=1." >&2
+      exit 1
+    fi
+
+    echo "== boot smoke: PASS (image serves /health) =="
+    smoke_cleanup
+  fi
+fi
+# ===========================================================================
+
 # Warn everybody who is connected, then wait out the countdown.
 # SIGUSR1 is handled in web/backend/src/index.ts; the backend
 # announces at 60/30/10/5s. A signal rather than an HTTP call
