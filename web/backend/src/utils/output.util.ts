@@ -35,6 +35,7 @@
  * negotiated wire charset. Pinned by `tests/transport/wire-encoding.test.ts`.
  */
 
+import { ANSI } from '../constants/ansi-codes';
 import { Socket } from 'socket.io';
 import { getAnsiBuffer, emitText as bufferEmitText, emitPrompt as bufferEmitPrompt } from './ansi-buffer.util';
 
@@ -50,6 +51,35 @@ import { getAnsiBuffer, emitText as bufferEmitText, emitPrompt as bufferEmitProm
  */
 export function emitText(socket: Socket, text: string): void {
   bufferEmitText(socket, text, false);
+}
+
+/**
+ * The rest of THIS row, erased - or nothing, for a caller who cannot.
+ *
+ * express.e never erases. `uploadDesc` (express.e:17656-17665) is plain
+ * `aePuts` and so is everything around it, and on a real terminal it never
+ * had to be anything else: output scrolled, and a line arrived on a row that
+ * was already blank.
+ *
+ * This board draws over full-screen ANSI art that does NOT scroll away, so a
+ * line shorter than what sat behind it keeps the tail. The sysop met it as
+ * an upload prompt with somebody else's text welded to it, 2026-09-15:
+ *
+ *   FileName 1: eb BBS [1:Amiga Demoscene!] Menu (9999 mins. left):
+ *
+ * `FileName 1: ` is twelve columns and so is `The Uptown W` - the menu
+ * prompt's first twelve - which is the whole of the bug: column 12 onward was
+ * never written, so it was never replaced.
+ *
+ * Returns the empty string when the caller has told us it has no ANSI, so a
+ * PETSCII terminal is not sent an escape sequence it would print as glyphs.
+ * An unset flag erases, which is what every existing site here assumes
+ * (`flag-pause.util`, `screen.handler`'s pause cleanup).
+ */
+export function eraseRestOfLine(socket: Socket): string {
+  const session = (socket as any)?.session;
+  if (session && session.ansiEnabled === false) return '';
+  return ANSI.CLEAR_LINE_END;
 }
 
 /**

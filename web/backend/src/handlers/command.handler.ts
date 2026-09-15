@@ -242,7 +242,7 @@ import { finalizeCommand } from '../utils/command-response.util';
 
 // Import utilities
 import { AnsiUtil } from '../utils/ansi.util';
-import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
+import { emitText, emitPrompt, flushOutput, eraseRestOfLine } from '../utils/output.util';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
@@ -3251,7 +3251,7 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     const validation = validateFilename(input);
     if (!validation.valid) {
       emitText(socket, `${validation.error}\r\n`);
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       return;
     }
 
@@ -3263,7 +3263,7 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     const isDuplicate = await checkForFile(input, session.currentConf, undefined, session.nodeId || 0);
     if (isDuplicate) {
       emitText(socket, 'File Exists, or has a symbol (#?*).\r\n');
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       return;
     }
 
@@ -3354,7 +3354,7 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
 
       // Move to next filename
       session.tempData.uploadCount++;
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }
@@ -3375,7 +3375,7 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
 
       // Move to next filename
       session.tempData.uploadCount++;
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }

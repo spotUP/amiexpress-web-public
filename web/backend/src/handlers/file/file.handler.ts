@@ -9,7 +9,7 @@ import { startPagination } from '../screen.handler';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { config } from '../../config';
-import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
+import { emitText, emitPrompt, emitLine, flushOutput, eraseRestOfLine } from '../../utils/output.util';
 import * as path from 'path';
 import { conferenceDir } from '../../conferences/conference-paths';
 import { fileAreaManager } from '../../services/FileAreaManager';
@@ -656,9 +656,9 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
   const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
   if (customUlPath) {
-    emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..\r\n`);
+    emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..${eraseRestOfLine(socket)}\r\n`);
   } else {
-    emitText(socket, `\r\n${protocolTitle} UPLOADING....\r\n`);
+    emitText(socket, `\r\n${protocolTitle} UPLOADING....${eraseRestOfLine(socket)}\r\n`);
   }
 
   // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
@@ -683,7 +683,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const pool = poolSpaceFor(uploadArea, getStorageContext());
   const spaceStr = formatSpaceBytes(pool ? pool.total : playpenFreeBytes);
   const atOnceStr = formatSpaceBytes(playpenFreeBytes);
-  emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.\r\n`);
+  emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.${eraseRestOfLine(socket)}\r\n`);
 
   // express.e:18989-19001 — refuse to start if there isn't room for the
   // express.e minimum-playpen budget (2 MB). Without this check the upload
@@ -730,15 +730,15 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   }
 
   // express.e:19016
-  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n\r\n');
+  emitText(socket, `Filename lengths above 12 are not allowed.${eraseRestOfLine(socket)}\r\n${eraseRestOfLine(socket)}\r\n`);
 
   // express.e:17656 cleanItUp() — nothing needed for web
   // express.e:17657
-  emitText(socket, 'Batch UpLoading.....\r\n');
+  emitText(socket, `Batch UpLoading.....${eraseRestOfLine(socket)}\r\n`);
   // express.e:17658
-  emitText(socket, '\r\nUnlimited files.  Blank Line to start transfer.\r\n');
+  emitText(socket, `\r\nUnlimited files.  Blank Line to start transfer.${eraseRestOfLine(socket)}\r\n`);
   // express.e:17664: StringF(str,'\b\nFileName \d: ',count)
-  emitText(socket, '\r\nFileName 1: ');
+  emitText(socket, `\r\nFileName 1: ${eraseRestOfLine(socket)}`);
 
   session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
   session.tempData = {
