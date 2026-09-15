@@ -5,7 +5,7 @@
  * The spec chose a top-level `Themes/` over `Screens/themes/` for two measured
  * reasons, and both are asserted here rather than trusted:
  *
- *  - the tar sync loop over `Doors Screens Libs C` overwrites any volume path
+ *  - the tar sync loop over `$CODE_SYNC_DIRS` overwrites any volume path
  *    the image also has, so an artist's theme under `Screens/` would be
  *    replaced the day the repo shipped a file at the same path
  *  - `FORCE_REINIT_SCREENS=1` does `rm -rf` on `Screens/` and on every
@@ -123,11 +123,17 @@ describe('the two directory rules the spec chose Themes/ to escape', () => {
   const entrypoint = fs.readFileSync(ENTRYPOINT, 'utf8');
 
   it('keeps Themes out of the tar sync loop, which overwrites what it finds', () => {
-    // `for sync_dir in Doors Screens Libs C` extracts the image's archive over
-    // the volume: every path the image also has is replaced.
-    const loop = /for sync_dir in ([A-Za-z ]+); do/.exec(entrypoint);
+    // `for sync_dir in $CODE_SYNC_DIRS` extracts the image's archive over the
+    // volume: every path the image also has is replaced. The loop reads the
+    // list from a variable now, so this reads the variable.
+    const loop = /for sync_dir in \$CODE_SYNC_DIRS; do/.exec(entrypoint);
     expect(loop).not.toBeNull();
-    expect(loop![1].split(/\s+/)).not.toContain('Themes');
+    const dirs = /^CODE_SYNC_DIRS="([^"]*)"/m.exec(entrypoint);
+    expect(dirs).not.toBeNull();
+    expect(dirs![1].split(/\s+/)).not.toContain('Themes');
+    // Screens left the list on 2026-09-15 for the same reason Themes never
+    // joined it: the sysop edits them, and this loop overwrites.
+    expect(dirs![1].split(/\s+/)).not.toContain('Screens');
   });
 
   it('keeps Themes out of both FORCE_REINIT_SCREENS rm -rf paths', () => {

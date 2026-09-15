@@ -32,7 +32,7 @@ function extractStatePasses(): { excludes: string; seed: string } {
   const source = fs.readFileSync(ENTRYPOINT, 'utf8');
 
   const exStart = source.indexOf('    DOOR_STATE_PATHS="');
-  const exEnd = source.indexOf('    for sync_dir in Doors Screens Libs C; do', exStart);
+  const exEnd = source.indexOf('    for sync_dir in $CODE_SYNC_DIRS; do', exStart);
   if (exStart === -1 || exEnd === -1) throw new Error('the door-state exclude pass was not found');
 
   const seedStart = source.indexOf('    DOOR_STATE_SEEDED=0');

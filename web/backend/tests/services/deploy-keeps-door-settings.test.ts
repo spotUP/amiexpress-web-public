@@ -34,6 +34,18 @@ function extractFunctions(): string {
   return source.slice(start, end);
 }
 
+/**
+ * The list the tar loop iterates. It lives above the sync helpers now, so the
+ * slice below no longer carries it - and an unset list syncs nothing at all,
+ * with every assertion here failing for a reason that is not the subject.
+ */
+function extractCodeSyncDirs(): string {
+  const source = fs.readFileSync(ENTRYPOINT, 'utf8');
+  const line = /^CODE_SYNC_DIRS="[^"]*"$/m.exec(source);
+  if (!line) throw new Error('CODE_SYNC_DIRS was not found in docker-entrypoint.sh');
+  return line[0];
+}
+
 /** The real cfg-discovery and Doors sync, lifted verbatim from the entrypoint. */
 function extractDoorsSync(): string {
   const source = fs.readFileSync(ENTRYPOINT, 'utf8');
@@ -42,7 +54,7 @@ function extractDoorsSync(): string {
   if (start === -1 || end === -1 || end < start) {
     throw new Error('the Doors sync was not found in docker-entrypoint.sh');
   }
-  return source.slice(start, end + 'rm -f "$DOOR_CFG_LIST" "$DOOR_CFG_EXCLUDES"'.length);
+  return `${extractCodeSyncDirs()}\n${source.slice(start, end + 'rm -f "$DOOR_CFG_LIST" "$DOOR_CFG_EXCLUDES"'.length)}`;
 }
 
 function stage(): string {
