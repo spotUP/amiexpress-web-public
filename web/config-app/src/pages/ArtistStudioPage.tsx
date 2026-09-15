@@ -266,6 +266,8 @@ export function ArtistStudioPage() {
         newDescription={openPath ? slotByPath.get(openPath)?.description : undefined}
         onClose={() => setOpenPath(null)}
         onOpenPath={setOpenPath}
+        onSwitchTheme={select}
+        sysop={sysop}
         auditing={auditing}
       />
     </div>

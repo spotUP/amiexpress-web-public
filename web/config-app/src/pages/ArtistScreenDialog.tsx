@@ -57,6 +57,24 @@ export interface ArtistScreenDialogProps {
   theme: ArtistTheme;
   index: ScreenIndexShape | undefined;
   onClose: () => void;
+  /**
+   * Stand in another theme. Given one, a screen the OPEN theme does not own
+   * offers a way through instead of a dead end - see the note rendered under
+   * the art. Without it the note still explains, it just cannot act.
+   */
+  onSwitchTheme?: (slug: string) => void;
+  /**
+   * A SYSOP MAY WRITE ANYTHING (sysop's ruling, 2026-09-15: "sysops should
+   * have full rights artists should only see their own themes").
+   *
+   * Ownership is how an ARTIST is kept to their own theme. It was being
+   * applied to the sysop too, which made the studio read-only over the
+   * board's own screens for the one account entitled to edit them - and the
+   * BACKEND already disagreed, granting a sysop the board root
+   * (theme-sandbox's boardScreenRoots). This is the UI catching up with the
+   * permission the server was already willing to honour.
+   */
+  sysop?: boolean;
   /** Reopen on another path - how a redraw lands the artist on their copy. */
   onOpenPath: (path: string) => void;
   /**
@@ -68,7 +86,7 @@ export interface ArtistScreenDialogProps {
   auditing?: boolean;
 }
 
-export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
+export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, onSwitchTheme, sysop = false, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -116,10 +134,35 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
    * board. Whoever may open `default` may edit its files: the sandbox decides
    * that, and it refuses the write if they may not.
    */
+  /*
+   * MAY THIS ACCOUNT WRITE THE OPEN SCREEN?
+   *
+   * Two different questions were being answered by one flag. Ownership -
+   * "does the theme I am standing in own this file" - is how an ARTIST is
+   * held to their own work, and it is right for them. A SYSOP is not held to
+   * anything: the ruling is "sysops should have full rights artists should
+   * only see their own themes", and artists are level 100 while the sysop is
+   * 255.
+   *
+   * Applying ownership to the sysop made the studio silently read-only over
+   * the board's own art, because use-my-theme.ts:177 lands him in his OWN
+   * theme and every board screen then belongs to somebody else. Reported as
+   * "it doesnt let me upload screens to replace".
+   */
   const mine = isNew
+    || sysop
     || (!!path && (theme.slug === 'default'
       ? !index?.files?.[path]?.theme
       : index?.files?.[path]?.theme === theme.slug));
+
+  /**
+   * WHICH theme owns the open screen - `default` meaning the board's own.
+   *
+   * The same lookup `mine` compares against, kept beside it: a note that says
+   * "this is not yours" without saying whose it is leaves the reader exactly
+   * where they were.
+   */
+  const ownerSlug = (path ? index?.files?.[path]?.theme : undefined) ?? 'default';
 
   useEffect(() => {
     // Cleared FIRST, before any early return. Cleared only on the decoding
@@ -655,6 +698,46 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
             />
           ) : (
             <ReadOnlyArt content={file?.content ?? ''} mci={file?.mci ?? []} filePath={path} onClose={onClose} />
+          )}
+        </div>
+      )}
+
+      {/*
+        * WHY THERE IS NOTHING TO CLICK.
+        *
+        * Sysop, 2026-09-15: "it doesnt let me upload screens to replace". He
+        * was right, and it was worse than he said - `mine` gates the SAVE
+        * callback too, so a screen the open theme does not own opened
+        * completely read-only with no upload button, no save, and not a word
+        * about why.
+        *
+        * `mine` is ownership, not permission: the studio opens on the
+        * artist's OWN theme (use-my-theme.ts:177 lands a sysop on his own
+        * theme when he has one), so every BOARD screen he opened was somebody
+        * else's as far as this dialog was concerned.
+        *
+        * The rule itself stays - an artist edits their theme's copy, and
+        * writing the board's file from inside a theme is how a theme changes
+        * what the board does. What changes is that the dead end now says
+        * whose screen it is and offers the one click that fixes it.
+        */}
+      {!isNew && file && !mine && (
+        <div className="mt-3 border border-border bg-surface-2 px-3 py-2 text-sm">
+          <p className="text-content-secondary">
+            {ownerSlug === 'default'
+              ? 'This is one of the board\u2019s own screens, and you are standing in '
+              : `This screen belongs to the theme \u201c${ownerSlug}\u201d, and you are standing in `}
+            <span className="text-content-primary">{theme.slug === 'default' ? 'Board screens' : theme.slug}</span>
+            {'. That is why there is nothing here to save or replace.'}
+          </p>
+          {onSwitchTheme && (
+            <button
+              type="button"
+              className="mt-1 underline text-content-primary"
+              onClick={() => onSwitchTheme(ownerSlug)}
+            >
+              {ownerSlug === 'default' ? 'Switch to Board screens' : `Switch to ${ownerSlug}`}
+            </button>
           )}
         </div>
       )}
