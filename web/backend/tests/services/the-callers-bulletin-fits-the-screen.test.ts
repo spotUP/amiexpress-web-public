@@ -25,6 +25,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { GENERATED_SCREEN_ROWS, paginatesAt, SHORTEST_TERMINAL_ROWS } from '../../src/screens/screen-rows';
+
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 
 /** A header of `height` rows, shaped like the real one (art, then a blank). */
@@ -105,9 +107,9 @@ describe('the last callers bulletin', () => {
     // "too tall for the budget" case, covered by the floor test below, and
     // asserting a fit here was asserting something impossible.
     const dir = board(6);
-    const text = serviceFor(dir).generateBulletin(20, { fitRows: 24, minCallers: 1 });
+    const text = serviceFor(dir).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS, minCallers: 1 });
 
-    expect(rowsOf(text)).toBeLessThanOrEqual(24);
+    expect(rowsOf(text)).toBeLessThanOrEqual(GENERATED_SCREEN_ROWS);
     expect(callerRows(text)).toBeGreaterThan(0);
   });
 
@@ -118,21 +120,31 @@ describe('the last callers bulletin', () => {
     // logo and the list.
     // minCallers 1 isolates the height rule from the list floor, which the
     // test below covers on its own.
-    const short = serviceFor(board(4)).generateBulletin(20, { fitRows: 24, minCallers: 1 });
-    const tall = serviceFor(board(9)).generateBulletin(20, { fitRows: 24, minCallers: 1 });
+    const short = serviceFor(board(4)).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS, minCallers: 1 });
+    const tall = serviceFor(board(9)).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS, minCallers: 1 });
 
     expect(rowsOf(short)).toBeLessThanOrEqual(24);
     expect(rowsOf(tall)).toBeLessThanOrEqual(24);
     expect(callerRows(tall)).toBeLessThan(callerRows(short));
   });
 
-  test('a fitted bulletin does not paginate on the screen it was fitted for', () => {
-    // The whole point, asserted the way the LOADER decides it:
-    // screen.handler's needsPaging is `content.split('\n').length > height`.
+  test('a fitted bulletin does not paginate on the shortest screen it must fit', () => {
+    /*
+     * The whole point, asserted the way the LOADER decides it:
+     * screen.handler's needsPaging is `content.split('\n').length > height`.
+     *
+     * Against 24, not 25. A bulletin is generated at logoff with nobody on
+     * the board, so it cannot ask anyone's height and must fit the shortest
+     * terminal - which is the board's own default and the sysop's actual
+     * screen. Asserting 25 here is exactly how a one-row overflow shipped
+     * while this suite was green.
+     */
     const dir = board(6);
-    const text = serviceFor(dir).generateBulletin(20, { fitRows: 24 });
+    const text = serviceFor(dir).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS });
 
-    expect(loaderLineCount(text)).toBeLessThanOrEqual(25);
+    // Asked on the SHORTEST terminal a generated screen must fit - the
+    // sysop's is 24, and asserting 25 is what let a one-row overflow ship.
+    expect(paginatesAt(text, SHORTEST_TERMINAL_ROWS)).toBe(false);
     expect(callerRows(text)).toBeGreaterThanOrEqual(5);
   });
 
@@ -141,7 +153,7 @@ describe('the last callers bulletin', () => {
     // 12-row logo leaves ONE row for callers inside 24. A Last Callers screen
     // with one caller on it is not a Last Callers screen: the floor wins, the
     // bulletin stays tall, and shortening the logo is what buys the fit.
-    const text = serviceFor(board(12)).generateBulletin(20, { fitRows: 24 });
+    const text = serviceFor(board(12)).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS });
 
     expect(callerRows(text)).toBeGreaterThanOrEqual(5);
     expect(rowsOf(text)).toBeGreaterThan(24);
@@ -151,7 +163,7 @@ describe('the last callers bulletin', () => {
     const dir = board(12);
     const svc = serviceFor(dir);
     const full = svc.generateBulletin(20, {});
-    const fitted = svc.generateBulletin(20, { fitRows: 24, minCallers: 1 });
+    const fitted = svc.generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS, minCallers: 1 });
 
     const fullRows = full.split('\n').filter((l: string) => /\d\d:\d\d:\d\d/.test(l));
     const fittedRows = fitted.split('\n').filter((l: string) => /\d\d:\d\d:\d\d/.test(l));
@@ -162,7 +174,7 @@ describe('the last callers bulletin', () => {
 
   test('a logo that eats the whole screen still lists callers', () => {
     const dir = board(30);
-    const text = serviceFor(dir).generateBulletin(20, { fitRows: 24 });
+    const text = serviceFor(dir).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS });
 
     // A Last Callers screen with no callers on it is not a bulletin.
     expect(callerRows(text)).toBeGreaterThanOrEqual(5);

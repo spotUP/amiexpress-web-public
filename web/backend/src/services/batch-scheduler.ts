@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
 
@@ -8,11 +9,12 @@ import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLog
 /**
  * How tall a generated bulletin may be.
  *
- * 24 rows: it fits a 24-row terminal whole and leaves a spare line on a
- * 25-row one, so `needsPaging` (screen.handler.ts) never fires for it and no
- * page break lands inside the art. See the `fitRows` option.
+ * The board's one budget for a generated screen. It was 24 here, chosen
+ * against a 25-row terminal - and the sysop's is 24, so the bulletin came out
+ * exactly one row too tall and paginated. screens/screen-rows carries the
+ * number and the reasoning now, so no generator picks its own again.
  */
-const BULLETIN_FIT_ROWS = 24;
+const BULLETIN_FIT_ROWS = GENERATED_SCREEN_ROWS;
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { InfoFileParser } from './info-file-parser';
 import { getSystemTime } from '../utils/date-time.util';

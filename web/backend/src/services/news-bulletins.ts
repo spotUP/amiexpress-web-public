@@ -18,7 +18,7 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import { renderedRows, rowBudgetFor } from '../screens/screen-rows';
+import { renderedRows, GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
 
 const TEXTTV = 'https://api.texttv.nu/api/get';
@@ -207,10 +207,11 @@ export function defaultNewsBulletinDeps(): NewsBulletinDeps {
 export const BULLETIN_COLUMNS = 40;
 
 /**
- * How tall a news bulletin may be: one less than a 25-row terminal, so
- * `needsPaging` never fires for it. See screens/screen-rows.
+ * How tall a news bulletin may be. The board's one budget for a generated
+ * screen - see screens/screen-rows, which explains why it is measured against
+ * a 24-row terminal rather than a 25-row one.
  */
-export const BULLETIN_ROWS = rowBudgetFor(25);
+export const BULLETIN_ROWS = GENERATED_SCREEN_ROWS;
 
 /**
  * Fold one line onto `width`, breaking between words.

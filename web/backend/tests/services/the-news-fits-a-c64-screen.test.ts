@@ -179,7 +179,7 @@ describe('a teletext page as ANSI', () => {
  * measuring the files on the board rather than trusting that they fitted.
  */
 import { fitNewsBulletin, BULLETIN_ROWS } from '../../src/services/news-bulletins';
-import { renderedRows, paginatesAt } from '../../src/screens/screen-rows';
+import { renderedRows, paginatesAt, SHORTEST_TERMINAL_ROWS } from '../../src/screens/screen-rows';
 
 const newsPage = (headlines: number) =>
   [
@@ -198,9 +198,12 @@ describe('a news bulletin taller than the screen', () => {
     expect(renderedRows(fitted)).toBeLessThanOrEqual(BULLETIN_ROWS);
   });
 
-  it('does not paginate on the 25-row screen it was fitted for', () => {
-    // Asked the way screen.handler's needsPaging asks it.
-    expect(paginatesAt(fitNewsBulletin(newsPage(40), BULLETIN_ROWS), 25)).toBe(false);
+  it('does not paginate on the shortest screen it must fit', () => {
+    // Asked the way screen.handler's needsPaging asks it, against 24 - the
+    // board's own default height and the sysop's real terminal. A bulletin is
+    // generated with nobody on the board, so it cannot ask.
+    expect(paginatesAt(fitNewsBulletin(newsPage(40), BULLETIN_ROWS), SHORTEST_TERMINAL_ROWS))
+      .toBe(false);
   });
 
   it('keeps the title, the freshness line and the attribution', () => {
