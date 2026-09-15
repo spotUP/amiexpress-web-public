@@ -45,8 +45,40 @@
 /**
  * The tallest a generated screen may be and still arrive whole on the
  * shortest terminal this board serves. 23, for the reason in the header.
+ *
+ * It is the PREFERRED height, not a ceiling - see
+ * `requests_bulletin_budget_for`.
  */
 #define REQUESTS_BULLETIN_ROW_BUDGET 23
+
+/**
+ * The fewest requests a REQUESTS bulletin is worth writing at all.
+ *
+ * A screen of art listing nothing is not a requests bulletin, whatever it
+ * looks like.
+ */
+#define REQUESTS_BULLETIN_MIN_ROWS 10
+
+/**
+ * How tall this bulletin may be, given the art it has to carry.
+ *
+ * ONE SCREEN WHERE THE ART ALLOWS, AND TALLER WHERE IT DOES NOT.
+ *
+ * The 23-row budget exists so a bulletin arrives whole on a 24-row terminal,
+ * and that is worth keeping when it can be kept. But the sysop drew a header
+ * that is itself 23 rows - "i cant resize the art fix the door" - and under
+ * a hard ceiling the only honest answer was to refuse to write anything.
+ *
+ * The board paginates a long bulletin already: screen.handler.ts pages any
+ * plain art taller than the caller's screen, with `(Pause)...More (y/n/ns)?`,
+ * which is how `Bulletins/bull6.txt` has been 38 lines all along. So a tall
+ * bulletin is not broken - it is a second page - and refusing to write one
+ * was the door being stricter than the board it writes for.
+ *
+ * Above the art, room for at least MIN_ROWS requests. A caller who pages past
+ * a full screen of art had better find the list on the other side.
+ */
+int requests_bulletin_budget_for(const char *header, const char *tail);
 
 /** One row of the table: who asked, and for what. */
 typedef struct {

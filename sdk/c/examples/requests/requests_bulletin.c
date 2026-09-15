@@ -130,6 +130,17 @@ int requests_bulletin_fits(const char *text, int budget)
     return requests_bulletin_art_rows(text) <= budget;
 }
 
+int requests_bulletin_budget_for(const char *header, const char *tail)
+{
+    int art = requests_bulletin_art_rows(header)
+            + requests_bulletin_art_rows(tail);
+    int needed = art + REQUESTS_BULLETIN_MIN_ROWS;
+
+    return needed > REQUESTS_BULLETIN_ROW_BUDGET
+         ? needed
+         : REQUESTS_BULLETIN_ROW_BUDGET;
+}
+
 int requests_bulletin_capacity(const char *header, const char *tail, int budget)
 {
     int room = budget - requests_bulletin_art_rows(header)

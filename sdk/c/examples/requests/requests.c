@@ -631,7 +631,17 @@ static int bulletin_needs_rewrite(void)
     fclose(f);
     if (n >= sizeof bulletin_text - 1) return 1;   /* far too big to be ours */
     bulletin_text[n] = '\0';
-    if (!requests_bulletin_fits(bulletin_text, REQUESTS_BULLETIN_ROW_BUDGET))
+    /*
+     * JUDGED AGAINST THE BUDGET THIS ART EARNS, not the flat 23.
+     *
+     * The budget grows when the art does (requests_bulletin_budget_for), and
+     * if this check kept the old ceiling it would call every tall bulletin
+     * oversized - rewriting it at every single logoff, for ever, always
+     * producing a file the next check hates just as much.
+     */
+    if (!requests_bulletin_fits(bulletin_text,
+                                requests_bulletin_budget_for(bulletin_header_art,
+                                                             bulletin_tail_art)))
         return 1;
     return bulletin_art_changed();
 }
@@ -646,7 +656,7 @@ static int bulletin_needs_rewrite(void)
  */
 static void bulletin_write(void)
 {
-    int capacity, i, count;
+    int capacity, budget, i, count;
     unsigned long len;
     FILE *f;
 
@@ -666,9 +676,10 @@ static void bulletin_write(void)
         return;
     split_rows();
 
+    budget = requests_bulletin_budget_for(bulletin_header_art,
+                                          bulletin_tail_art);
     capacity = requests_bulletin_capacity(bulletin_header_art,
-                                          bulletin_tail_art,
-                                          REQUESTS_BULLETIN_ROW_BUDGET);
+                                          bulletin_tail_art, budget);
     /*
      * ART THAT LEAVES NO ROOM IS NOT A HEADER, AND THIS BULLETIN IS NOT ART.
      *
@@ -686,7 +697,7 @@ static void bulletin_write(void)
      */
     if (capacity < 1) return;
     count = row_count < capacity ? row_count : capacity;
-    if (count > REQUESTS_BULLETIN_ROW_BUDGET) count = REQUESTS_BULLETIN_ROW_BUDGET;
+    if (count > budget) count = budget;
     for (i = 0; i < count; i++) {
         bulletin_rows[i].handle = field_of(i, 5);
         bulletin_rows[i].title = field_of(i, 6);
@@ -694,8 +705,7 @@ static void bulletin_write(void)
 
     len = requests_bulletin_render(bulletin_text, sizeof bulletin_text,
                                    bulletin_header_art, bulletin_tail_art,
-                                   bulletin_rows, count,
-                                   REQUESTS_BULLETIN_ROW_BUDGET);
+                                   bulletin_rows, count, budget);
     if (len == 0) return;
 
     f = fopen(config.bulletin, "wb");

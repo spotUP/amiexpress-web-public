@@ -311,16 +311,59 @@ static void a_small_buffer_renders_no_block(void)
  * ever answered a floor of 1 instead of 0, the guard would never fire and the
  * bulletin would go out empty.
  */
-static void art_that_fills_the_screen_leaves_no_capacity(void)
+/**
+ * A header as tall as the whole screen still gets its requests.
+ *
+ * Sysop, 2026-09-15: "i cant resize the art fix the door". His header is 23
+ * rows of what was a 23-row ceiling, so under the old rule the door could
+ * only refuse to write. The board pages a long bulletin already - bull6.txt
+ * has been 38 lines all along - so the ceiling was the door being stricter
+ * than the board it writes for.
+ */
+static void tall_art_earns_a_taller_bulletin(void)
 {
-    char big[4096];
-    int i;
+    char tall[4096];
+    int i, budget;
 
-    big[0] = '\0';
-    for (i = 0; i < REQUESTS_BULLETIN_ROW_BUDGET; i++) strcat(big, "X\n");
+    tall[0] = '\0';
+    for (i = 0; i < REQUESTS_BULLETIN_ROW_BUDGET; i++) strcat(tall, "X\n");
 
-    assert(requests_bulletin_art_rows(big) == REQUESTS_BULLETIN_ROW_BUDGET);
-    assert(requests_bulletin_capacity(big, TAIL, REQUESTS_BULLETIN_ROW_BUDGET) < 1);
+    budget = requests_bulletin_budget_for(tall, TAIL);
+    assert(budget > REQUESTS_BULLETIN_ROW_BUDGET);
+    /* And the point of the taller budget: room for the list. */
+    assert(requests_bulletin_capacity(tall, TAIL, budget) >= REQUESTS_BULLETIN_MIN_ROWS);
+}
+
+/** Art that fits keeps the one-screen bulletin it always had. */
+static void short_art_keeps_the_one_screen_budget(void)
+{
+    assert(requests_bulletin_budget_for(HEADER, TAIL) == REQUESTS_BULLETIN_ROW_BUDGET);
+}
+
+
+/**
+ * The trap the growing budget pairs with: whatever budget the writer used,
+ * `fits` must agree. Judged against the flat 23 a tall bulletin reads as
+ * oversized, and the door rewrites it at every logoff for ever - each time
+ * producing a file the next check hates just as much.
+ */
+static void a_tall_bulletin_is_not_judged_oversized(void)
+{
+    requests_bulletin_row rows[1];
+    char tall[4096];
+    char out[8192];
+    unsigned long n;
+    int i, budget;
+
+    tall[0] = '\0';
+    for (i = 0; i < REQUESTS_BULLETIN_ROW_BUDGET; i++) strcat(tall, "X\n");
+    rows[0].handle = "sysop";
+    rows[0].title = "still listed";
+
+    budget = requests_bulletin_budget_for(tall, TAIL);
+    n = requests_bulletin_render(out, sizeof out, tall, TAIL, rows, 1, budget);
+    assert(n > 0);
+    assert(requests_bulletin_fits(out, budget));
 }
 
 /** And ordinary art still leaves the room the door was built around. */
@@ -332,7 +375,9 @@ static void a_header_that_fits_still_leaves_rows(void)
 
 int main(void)
 {
-    art_that_fills_the_screen_leaves_no_capacity();
+    tall_art_earns_a_taller_bulletin();
+    short_art_keeps_the_one_screen_budget();
+    a_tall_bulletin_is_not_judged_oversized();
     a_header_that_fits_still_leaves_rows();
     the_blocks_match_what_render_writes();
     other_art_renders_a_different_block();
