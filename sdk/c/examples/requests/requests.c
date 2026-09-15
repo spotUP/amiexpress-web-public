@@ -669,6 +669,22 @@ static void bulletin_write(void)
     capacity = requests_bulletin_capacity(bulletin_header_art,
                                           bulletin_tail_art,
                                           REQUESTS_BULLETIN_ROW_BUDGET);
+    /*
+     * ART THAT LEAVES NO ROOM IS NOT A HEADER, AND THIS BULLETIN IS NOT ART.
+     *
+     * Measured 2026-09-15, the day the sysop drew a new one: his header was
+     * 23 rows of a 23-row budget, so capacity came out at zero and the next
+     * write would have replaced a bulletin listing eleven rows of requests
+     * with a screen listing none. Silently, and only because the art had
+     * changed - which is the very thing this door had just learned to notice.
+     *
+     * Yesterday's bulletin is a better answer than a beautiful blank one, so
+     * the write is abandoned and the file left exactly as it was. A door
+     * cannot tell a sysop anything at this point - it runs at logoff - but
+     * the studio shows the row count beside the art, which is where the
+     * answer is visible.
+     */
+    if (capacity < 1) return;
     count = row_count < capacity ? row_count : capacity;
     if (count > REQUESTS_BULLETIN_ROW_BUDGET) count = REQUESTS_BULLETIN_ROW_BUDGET;
     for (i = 0; i < count; i++) {

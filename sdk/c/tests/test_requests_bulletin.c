@@ -299,8 +299,41 @@ static void a_small_buffer_renders_no_block(void)
     assert(requests_bulletin_render_tail(tiny, sizeof tiny, TAIL) == 0);
 }
 
+/**
+ * Art can be too big to be a header.
+ *
+ * The sysop's new header was 23 rows of a 23-row budget (measured on the live
+ * board, 2026-09-15), which leaves room for no requests at all. `capacity`
+ * says so, and the door is expected to abandon the write rather than replace
+ * a working bulletin with a screen that lists nothing.
+ *
+ * Pinned here because the number is what the door branches on: if capacity
+ * ever answered a floor of 1 instead of 0, the guard would never fire and the
+ * bulletin would go out empty.
+ */
+static void art_that_fills_the_screen_leaves_no_capacity(void)
+{
+    char big[4096];
+    int i;
+
+    big[0] = '\0';
+    for (i = 0; i < REQUESTS_BULLETIN_ROW_BUDGET; i++) strcat(big, "X\n");
+
+    assert(requests_bulletin_art_rows(big) == REQUESTS_BULLETIN_ROW_BUDGET);
+    assert(requests_bulletin_capacity(big, TAIL, REQUESTS_BULLETIN_ROW_BUDGET) < 1);
+}
+
+/** And ordinary art still leaves the room the door was built around. */
+static void a_header_that_fits_still_leaves_rows(void)
+{
+    assert(requests_bulletin_capacity(HEADER, TAIL,
+                                      REQUESTS_BULLETIN_ROW_BUDGET) > 0);
+}
+
 int main(void)
 {
+    art_that_fills_the_screen_leaves_no_capacity();
+    a_header_that_fits_still_leaves_rows();
     the_blocks_match_what_render_writes();
     other_art_renders_a_different_block();
     a_small_buffer_renders_no_block();
