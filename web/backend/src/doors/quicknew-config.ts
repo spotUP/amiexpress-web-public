@@ -115,3 +115,74 @@ export function replaceQuickNewTemplate(
   lines[at] = hadCr ? `${flat}\r` : flat;
   return lines.join('\n');
 }
+
+/**
+ * Whether this file ends its lines with CRLF, judged by the lines themselves.
+ *
+ * QuickNew configs come off real Amiga boards, so CRLF is the common case -
+ * but not the only one, and a file that mixes them must not be normalised
+ * behind the sysop's back. Anything added copies whatever the file already
+ * does; anything already there is left exactly as it was.
+ */
+function usesCrLf(lines: string[]): boolean {
+  return lines.some(l => l.endsWith('\r'));
+}
+
+/**
+ * The four lines one area occupies, in file order.
+ *
+ * Kept in one place because `add` writes them and `remove` counts them, and
+ * the day those two disagree is the day an edit re-points every area below it
+ * at the wrong directory.
+ */
+const LINES_PER_BLOCK = 4;
+
+/**
+ * Add an area to the end of the list.
+ *
+ * The new block copies the LAST existing block's two templates rather than
+ * inventing any: every board words these differently (this one says
+ * `Last @D Days in`, with a two-space gap the door expands), and a new area
+ * that does not match the nine above it is a screen the sysop has to go and
+ * fix by hand. A file with no blocks at all falls back to the door's own
+ * documented shape.
+ *
+ * Inserted at the END OF THE BLOCK RUN, not the end of the file: a malformed
+ * tail is ignored by the parser and must survive the edit, because on a real
+ * board it is usually a half-written area the sysop is in the middle of.
+ */
+export function addQuickNewArea(text: string, dirPath: string): string {
+  const dir = dirPath.trim();
+  if (!dir) throw new Error('A QuickNew area needs a directory path');
+
+  const blocks = parseQuickNewBlocks(text);
+  const last = blocks[blocks.length - 1];
+  const header = last ? last.header : 'Last @D Days in  @P';
+  const stats = last ? last.stats : 'Yesterdays Statistics  @P';
+
+  const lines = text.split('\n');
+  const cr = usesCrLf(lines) ? '\r' : '';
+  const at = PREAMBLE_LINES + blocks.length * LINES_PER_BLOCK;
+
+  lines.splice(at, 0, `${header}${cr}`, `${stats}${cr}`, `#${cr}`, `${dir}${cr}`);
+  return lines.join('\n');
+}
+
+/**
+ * Remove one area, by the same index the section names use.
+ *
+ * Throws on an index that is not there rather than silently doing nothing: the
+ * caller is an admin route acting on a list it has just read, so a miss means
+ * the file changed underneath it and the sysop should be told, not left
+ * looking at a button that did nothing.
+ */
+export function removeQuickNewArea(text: string, index: number): string {
+  const blocks = parseQuickNewBlocks(text);
+  if (!blocks.some(b => b.index === index)) {
+    throw new Error(`QuickNew config has no block ${index}`);
+  }
+
+  const lines = text.split('\n');
+  lines.splice(PREAMBLE_LINES + index * LINES_PER_BLOCK, LINES_PER_BLOCK);
+  return lines.join('\n');
+}
