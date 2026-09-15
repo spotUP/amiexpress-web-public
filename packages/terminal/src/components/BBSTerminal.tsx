@@ -1496,18 +1496,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
     // Typing keys have initial delay before repeat for single character typing
     // Delay is long enough for comfortable typing while still responsive for games
-    /*
-     * ARCADE RATE, deliberately. A menu that cannot be steered at this rate is
-     * fixed where the menu is: `List._onKeypress` throttles its own navigation
-     * (sdk/engines/ui/blessed/widgets/list.ts), so a list stays usable even
-     * inside a game - which is the only place the distinction can be made,
-     * since game mode is switched on for EVERY client door
-     * (door.handler.ts:4821) and not only the games.
-     *
-     * This was briefly slowed to 120ms on 2026-09-15 to rescue doorman's and
-     * the card lobby's menus, and put back when the throttle moved to the
-     * widget that actually knows it is a list.
-     */
+    // How long a key must be HELD before the synthetic repeat starts. Shared
+    // by both modes: it is the typing guard, not the movement rate.
     const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing
     /*
      * TWO REPEAT MODES, chosen by the door - the sysop's distinction,
@@ -2927,21 +2917,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     /*
-
      * The door says which repeat it wants. Unknown or missing keeps the
-
      * application rate, so a door that never declares one gets a menu that
-
      * can be steered rather than an arcade cabinet.
-
      */
-
     socket.on('key-repeat-mode', (mode: string) => {
-
       keyRepeatRateRef.current = mode === 'game' ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;
-
       console.log('[BBSTerminal] key repeat mode:', mode, keyRepeatRateRef.current + 'ms');
-
     });
 
 
