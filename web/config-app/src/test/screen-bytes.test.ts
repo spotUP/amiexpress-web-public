@@ -68,3 +68,53 @@ describe('cells becoming a screen again', () => {
     expect(twice[0][0].bg).toBe(once[0][0].bg);
   });
 });
+
+describe('the rows the art has, not the rows the canvas is', () => {
+  /** A canvas of `rows` rows, `cols` wide, blank except where `ink` says. */
+  const canvasOf = (rows: number, cols: number, ink: Record<number, string>) =>
+    Array.from({ length: rows }, (_, y) =>
+      Array.from({ length: cols }, (_, x) => ({
+        char: (ink[y] ?? '')[x] ?? ' ', fg: 7, bg: 0,
+      })),
+    );
+
+  const rowsOf = (base64: string) =>
+    new TextDecoder('latin1').decode(base64ToBytes(base64)).split('\r\n').length;
+
+  it('does not pad a seven-row logo out to the canvas height', async () => {
+    // The sysop: "saving art in the ansi studio needs to save the amount i row
+    // it has not pad it" - and then, when told his logo was 23 rows, "my logo
+    // is not 23 rows..". It was seven; the other sixteen were canvas. The
+    // Studio gives no way to delete a row ("atm i cant delete rows so it gets
+    // less tall than 25"), so trimming on save is the only place this can go.
+    const saved = canvasToScreen(canvasOf(25, 10, { 0: 'LOGO', 6: 'HERE' }));
+
+    expect(rowsOf(saved)).toBe(7);
+  });
+
+  it('keeps a blank row BETWEEN two inked rows, because that is composition', async () => {
+    const saved = canvasToScreen(canvasOf(25, 10, { 0: 'TOP', 4: 'BOTTOM' }));
+
+    expect(rowsOf(saved)).toBe(5);
+    const text = new TextDecoder('latin1').decode(base64ToBytes(saved));
+    expect(text.split('\r\n')[2].trim()).toBe('');
+  });
+
+  it('counts a row painted in background colour as art, not as padding', async () => {
+    // `isCellEmpty` is the shared rule: a space on a non-black background is a
+    // drawn cell. A trim of its own that only looked at `char` would eat a
+    // colour bar.
+    const canvas = canvasOf(25, 10, { 0: 'TOP' });
+    for (const cell of canvas[9]) cell.bg = 4;
+
+    expect(rowsOf(canvasToScreen(canvas))).toBe(10);
+  });
+
+  it('a canvas nobody drew on saves as no rows at all', async () => {
+    // Not zero BYTES: the writer signs off with a reset either way. Zero rows
+    // is the claim - an empty screen is empty, not twenty-five blank lines.
+    const saved = base64ToBytes(canvasToScreen(canvasOf(25, 10, {})));
+
+    expect(new TextDecoder('latin1').decode(saved)).toBe('\x1b[0m');
+  });
+});

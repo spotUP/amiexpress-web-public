@@ -116,7 +116,19 @@ export function DoorArtDialog({
     return () => { live = false; };
   }, [command, doorName, file, section, label, variant]);
 
-  const save = async (base64: string) => {
+  /**
+   * Write the art, and hand back the bytes that actually landed.
+   *
+   * It used to end with `onClose()`, which is right for the editor's Save
+   * button and wrong for an upload - the sysop picked a file and the dialog
+   * vanished before showing what had been uploaded ("when i upload art for
+   * the request door the dialog closes when its done, not good"). Closing is
+   * the CALLER's decision now; the returned bytes are how the upload path
+   * repaints the canvas with what it just saved.
+   *
+   * @returns the saved bytes, or null if nothing was written.
+   */
+  const save = async (base64: string): Promise<string | null> => {
     setSaving(true);
     setStatus(null);
     try {
@@ -126,7 +138,7 @@ export function DoorArtDialog({
       while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
       if (lines.length > maxLines) {
         setStatus(`Error: ${lines.length} lines, at most ${maxLines} — trim the art first.`);
-        return;
+        return null;
       }
       // A variant is drawn for a forty-column screen; the wide art keeps the
       // door's own DOC number.
@@ -134,10 +146,11 @@ export function DoorArtDialog({
       const over = lines.findIndex(l => columnsOf(l) > limit);
       if (over !== -1) {
         setStatus(`Error: line ${over + 1} is ${columnsOf(lines[over])} columns, at most ${limit}.`);
-        return;
+        return null;
       }
+      const written = latin1ToBase64(lines.join('\n'));
       await apiClient.saveDoorArt(
-        command, file, section, latin1ToBase64(lines.join('\n')),
+        command, file, section, written,
         variant === 'wide' ? undefined : variant,
       );
       queryClient.invalidateQueries({ queryKey: ['door-art'] });
@@ -151,13 +164,29 @@ export function DoorArtDialog({
       } else {
         showSuccess(`${label} saved`);
       }
-      onClose();
+      return written;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Save failed';
       setStatus(`Error: ${msg}`);
       showError(msg);
+      return null;
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * An upload STAYS in the dialog and shows what landed - the whole point of
+   * bringing a file in is to see it on the board's canvas before trusting it.
+   */
+  const upload = async (base64: string) => {
+    const written = await save(base64);
+    if (written === null) return;
+    setSurface(createSurface(await screenToCanvas(written)));
+    setLineCount(base64ToLatin1(written).split('\n').length);
+    if (variant === 'wide') {
+      setWideContent(written);
+      setWideLines(base64ToLatin1(written).split('\n').length);
     }
   };
 
@@ -226,7 +255,7 @@ export function DoorArtDialog({
               mci={[]}
               filePath={`${file}#${section}`}
               onChange={setSurface}
-              onSave={save}
+              onSave={async (screen: string) => { if (await save(screen) !== null) onClose(); }}
               onCancel={onClose}
             />
             {/*
@@ -247,7 +276,7 @@ export function DoorArtDialog({
                 accept={ANSI_UPLOAD_ACCEPT}
                 disabled={saving}
                 testId="door-art-upload"
-                onPick={base64 => save(base64)}
+                onPick={upload}
               />
               <span className="text-content-secondary">
                 Replaces the {VARIANT_LABELS[variant].toLowerCase()} art with a drawing you bring.

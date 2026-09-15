@@ -15,6 +15,7 @@ import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types
 import {
   loadANSFile, saveANSFile,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
+import { isCellEmpty } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 
 export function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -68,8 +69,27 @@ export async function screenToCanvas(base64: string, maxRows?: number): Promise<
   return canvas;
 }
 
+/**
+ * The rows the art HAS, not the rows the canvas is.
+ *
+ * The editor's canvas is a fixed grid - the Studio gives no way to delete a
+ * row, so a seven-row logo is drawn on twenty-five rows and `saveANSFile`
+ * loops all of them ("saving art in the ansi studio needs to save the amount i
+ * row it has not pad it"). Eighteen rows of spaces are not art: the door that
+ * reads the file counts them against its own screen budget, and the sysop is
+ * told to resize a logo that was never that tall.
+ *
+ * TRAILING only. A blank row BETWEEN two inked rows is composition and stays.
+ * `isCellEmpty` is the one definition of empty, shared with the editor.
+ */
+function inkedHeight(canvas: Cell[][]): number {
+  let height = canvas.length;
+  while (height > 0 && canvas[height - 1].every(isCellEmpty)) height--;
+  return height;
+}
+
 export function canvasToScreen(canvas: Cell[][]): string {
-  return bytesToBase64(saveANSFile(canvas));
+  return bytesToBase64(saveANSFile(canvas.slice(0, inkedHeight(canvas))));
 }
 
 /**
