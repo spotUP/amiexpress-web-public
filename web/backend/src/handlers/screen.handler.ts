@@ -3932,6 +3932,37 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
     emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
   }
 
+  /*
+   * TEMPORARY INSTRUMENTATION - 2026-09-15, remove with the PAUSE-TRACE block.
+   *
+   * THE SECOND INSTANCE OF THE SHAPE 1a5291c4c FIXED, if it is reachable.
+   *
+   * doPause ASSIGNS the gate below. If one is already standing with pages the
+   * caller has not reached, those pages - and the `commands` that screen was
+   * going to run - are gone, exactly as they were when
+   * `armSegmentBoundaryPause` armed over a `bbs` gate.
+   *
+   * The display flow cannot reach it: `pauseDisplayFlow` returns early on
+   * `if (session.paginatedScreen)` BEFORE it ever calls doPause. But there are
+   * ~17 other callers (new-user.handler alone has 8), and picking one to
+   * "fix" on a hunch is the speculative patch the rules forbid.
+   *
+   * So name it instead, with the stack, and let the live board answer. If
+   * nothing ever prints this, the path is unreachable and the guard is not
+   * worth adding; if something does, the fix is the predicate 1a5291c4c uses.
+   */
+  const standing = session.paginatedScreen;
+  if (standing && standing.kind !== 'doPause'
+      && standing.nextIndex < standing.lines.length) {
+    console.log(
+      `[PAUSE-CLOBBER] doPause replacing a live ${standing.kind} gate:`
+      + ` ${standing.lines.length - standing.nextIndex} page(s) unread,`
+      + ` ${standing.commands?.length ?? 0} command(s) queued,`
+      + ` subState=${session.subState}\n`
+      + `${new Error('pause-clobber (not thrown - this is the call site)').stack}`
+    );
+  }
+
   // Install a minimal pagination gate so the next keypress is required.
   // express.e:5149 doPause() response: lineCount:=0; aePuts('\b\n') — just a newline.
   session.paginatedScreen = {
