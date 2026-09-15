@@ -136,11 +136,23 @@ describe('PETSCII text-screen fallback on the real displayScreen path', () => {
     }
   });
 
-  it('skips an ANSI-art screen with the ASCII token instead of smearing it', async () => {
-    const out = await show(artPath, { petsciiMode: true, screenWidth: 40, nodeId: 0 }, false);
+  it('ADAPTS an ANSI-art screen to forty columns instead of smearing or skipping it', async () => {
+    /*
+     * This case asserted the skip token until 2026-09-15. The token is what a
+     * caller got when the only alternative was a reflow, and the sysop's
+     * report of the result was "i still get a lot of warning during log in
+     * and bulls etc". The C64 door adapter's ladder now reduces the frame
+     * instead (screens/adapt-ansi-to-forty.ts), so an art screen arrives as
+     * art a C64 can hold: every row within forty columns, and nothing
+     * smeared.
+     */
+    const out = await show(artPath, { petsciiMode: true, screenWidth: 40, nodeId: 0 }, true);
 
-    expect(out).toBe(ANSI_ART_SKIPPED_NOTICE);
-    expect(out).not.toContain(UNICODE_BLOCKS);
+    expect(out).not.toBe(ANSI_ART_SKIPPED_NOTICE);
+    const rows = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/\r?\n/);
+    expect(rows.filter((r) => r.trimEnd().length > 40)).toEqual([]);
+    // The picture's own glyphs, not a notice about them.
+    expect(out).toContain(UNICODE_BLOCKS[0]);
   });
 
   it('leaves an ANSI (non-petscii) session byte-identical on the SAME prose file', async () => {

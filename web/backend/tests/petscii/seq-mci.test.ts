@@ -216,7 +216,7 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
    * owns the bytes.
    */
   it(
-    'a ~SR_ include that resolves to 80-column ANSI art is skipped with the ASCII token',
+    'a ~SR_ include that resolves to 80-column ANSI art is ADAPTED to forty columns',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seq-mci-artskip-'));
       const incDir = path.join(dir, 'logoff');
@@ -241,9 +241,23 @@ describe('MCI inside a PETSCII .seq screen (Task 1: shipped Logoff.seq)', () => 
       const session: any = { petsciiMode: true, nodeId: 0 };
       await displayScreen(makeSocket(emits), session, seqPath);
 
-      expect(wireText(emits)).toContain(ANSI_ART_SKIPPED_NOTICE);
-      // The picture itself never reached the caller, in either transport.
-      expect(wireText(emits)).not.toContain('MIDDLE');
+      /*
+       * WAS: the skip token, and the picture never reached the caller.
+       *
+       * The token was the honest answer while the only alternative was a
+       * reflow, which smears a picture across forty columns. It stopped being
+       * the honest answer when the C64 door adapter's rule ladder was wired
+       * into this path (screens/adapt-ansi-to-forty.ts): the sysop's words
+       * were "i still get a lot of warning during log in and bulls etc", and
+       * a warning is not a screen. What the caller gets now is the CONTENT,
+       * reduced to a C64's width.
+       */
+      const text = wireText(emits);
+      expect(text).not.toContain(ANSI_ART_SKIPPED_NOTICE);
+      expect(text).toContain('MIDDLE');
+      expect(text).toContain('TOP');
+      const rows = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/\r?\n/);
+      expect(rows.filter((r) => r.replace(/\u00b7/g, ' ').trimEnd().length > 40)).toEqual([]);
     },
   );
 });

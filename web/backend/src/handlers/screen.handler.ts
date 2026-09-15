@@ -54,6 +54,7 @@ import { PRE_PACED, fromCharset, pacedFromCharset, type OutputAttributes } from 
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
+import { adaptAnsiScreenToForty } from '../screens/adapt-ansi-to-forty';
 import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-art-detect.util';
 import { wrapForSession } from '../utils/wrap-for-session.util';
 // The ONE "is this session PETSCII" predicate and the ONE way rendered
@@ -2553,6 +2554,34 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       isMenuScreen || path.basename(filePath).toUpperCase().startsWith('MENU');
     const petsciiTextPlan = petsciiTextScreenPlan(content, session, isMenuTextScreen);
     if (petsciiTextPlan === 'art-skip') {
+      /*
+       * ADAPT IT BEFORE GIVING UP ON IT.
+       *
+       * The skip token was the honest answer while the only alternative was
+       * a reflow, which smears a picture across a C64's forty columns. It is
+       * not the honest answer now: the C64 door adapter's rule ladder has
+       * been turning 80-column frames into 40-column ones for every 68K door
+       * on this board since the adapter landed, and a BULLETIN - a table of
+       * names and numbers - is exactly the shape `narrow` was written for.
+       *
+       * The sysop, 2026-09-15: "i still get a lot of warning during log in
+       * and bulls etc". Those bulletins are written by the board itself at
+       * every logoff (MultiTop, the achievements board, the news tick), so a
+       * generated `.seq` beside them would freeze last week's numbers - the
+       * adaptation has to happen HERE, when the screen is read.
+       *
+       * What comes back is ANSI, so everything downstream is unchanged: the
+       * session's transducer turns it into Commodore glyphs on the way out.
+       */
+      const adapted = adaptAnsiScreenToForty(content);
+      if (adapted) {
+        socket.emit('ansi-output', adapted);
+        screenFlowLog(screenName, `PETSCII session: 80-col ANSI art screen adapted to 40 columns (${filePath})`);
+        session.lastScreenFilePath = filePath;
+        return true;
+      }
+      // Nothing to adapt - an empty screen is the one case where the notice
+      // serves the caller better than a blank.
       socket.emit('ansi-output', ANSI_ART_SKIPPED_NOTICE);
       screenFlowLog(screenName, `PETSCII session: 80-col ANSI art screen skipped (${filePath})`);
       session.lastScreenFilePath = filePath;
