@@ -5,6 +5,7 @@ import { DopewarsConfig } from './types';
 import { createApp } from './app';
 import { JAMAICA_THEME } from './config/jamaica';
 import { loadSettings } from './settings';
+import { applyTheme } from './door-theme';
 
 export const metadata = {
   name: 'GANJA WARS',
@@ -17,6 +18,10 @@ export const metadata = {
 const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
+  // Before the layout is built: T and S are live bindings, so every style
+  // object in ui/ reads the caller's theme rather than the classic default.
+  applyTheme((ctx as any).bbs);
+
   const doorDir = path.join(__dirname, '..');
   const settings = loadSettings();
   const cfg: DopewarsConfig = {

@@ -21,10 +21,11 @@ function overlayList(opts) {
         mouse: true,
         scrollable: false,
         alwaysScroll: false,
-        style: { selected: { bg: 'blue', fg: 'white' } },
+        style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk } },
         ...opts,
     });
 }
+const door_theme_1 = require("../door-theme");
 function renderActionBar(box, mode) {
     if (mode === 'combat') {
         box.setContent('  {bold}[F]{/}ight  {bold}[R]{/}un to...  {bold}[S]{/}urrender');
@@ -43,7 +44,7 @@ function overlay(screen, opts) {
         top: 'center', left: 'center',
         border: { type: 'line' },
         tags: true,
-        style: { border: { fg: 'yellow' }, fg: 'white', bg: 'black' },
+        style: { ...door_theme_1.S.panel.style, border: { fg: door_theme_1.T.accent } },
         ...opts,
     });
 }
@@ -64,7 +65,7 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         top: 0, left: 0,
         width: '100%-2',
         height: Math.min(market.prices.length, 12),
-        style: { selected: { bg: 'blue', fg: 'white' } },
+        style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk } },
         keys: true, mouse: true,
         items: market.prices.map(p => `${p.name.padEnd(13)} ${('$' + Math.round(p.price).toLocaleString('en-US')).padStart(9)}`),
     });
@@ -73,7 +74,7 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         bottom: 1, left: 0,
         width: '100%-2', height: 3,
         tags: true,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
     });
     let amount = 1;
     let typing = false;
@@ -92,10 +93,10 @@ function showBuyOverlay(screen, market, state, onBuy, onCancel) {
         const price = currentPrice();
         const total = Math.round(price * amount);
         const amountStr = cantAfford
-            ? `{red-fg}${amount}{/}`
-            : `{bold}{yellow-fg}${amount}{/}{/}`;
+            ? `{${door_theme_1.T.alert}-fg}${amount}{/}`
+            : `{bold}{${door_theme_1.T.accent}-fg}${amount}{/}{/}`;
         const hint = cantAfford
-            ? `  {red-fg}Can't afford this — use Up/Down to pick a cheaper drug{/}`
+            ? `  {${door_theme_1.T.alert}-fg}Can't afford this — use Up/Down to pick a cheaper drug{/}`
             : `  [<] less  [>] more  digits to type  [Enter] buy  [ESC] cancel`;
         statusBox.setContent(`  Amount: ${amountStr}  (max ${max})   Total: $${total.toLocaleString('en-US')}\n` +
             hint);
@@ -197,7 +198,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
         top: 0, left: 0,
         width: '100%-2',
         height: Math.min(carrying.length, 12),
-        style: { selected: { bg: 'blue', fg: 'white' } },
+        style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk } },
         keys: true, mouse: true,
         items: carrying.map(d => {
             const name = drugNameMap.get(d.index) ?? `Drug${d.index}`;
@@ -209,7 +210,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
         bottom: 1, left: 0,
         width: '100%-2', height: 3,
         tags: true,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
     });
     let amount = 1;
     let typing = false;
@@ -220,7 +221,7 @@ function showSellOverlay(screen, state, market, onSell, onCancel) {
     }
     function renderStatus() {
         const max = currentMax();
-        statusBox.setContent(`  Amount: {bold}{yellow-fg}${amount}{/}{/}  (max ${max})\n` +
+        statusBox.setContent(`  Amount: {bold}{${door_theme_1.T.accent}-fg}${amount}{/}{/}  (max ${max})\n` +
             `  [<] less  [>] more  digits to type  [Enter] sell  [ESC] cancel`);
         screen.render();
     }
@@ -306,7 +307,7 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         top: 0, left: 0,
         width: '100%-2',
         height: Math.min(items.length, 12),
-        style: { selected: { bg: 'blue', fg: 'white' } },
+        style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk } },
         keys: true, mouse: true,
         items,
     });
@@ -318,7 +319,7 @@ function showJetOverlay(screen, currentLocation, locationNames, onJet, onCancel)
         // As in layout.ts: a one-row hint carrying Panel's default border has no
         // interior, and this line never told anybody how to leave the overlay.
         border: undefined,
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
         content: '  [Enter] jet   [ESC] cancel',
     });
     // Pre-select first destination that isn't current location

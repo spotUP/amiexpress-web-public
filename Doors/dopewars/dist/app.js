@@ -9,6 +9,7 @@ const events_1 = require("./ui/events");
 const players_1 = require("./ui/players");
 const actions_1 = require("./ui/actions");
 const combat_1 = require("./ui/combat");
+const door_theme_1 = require("./door-theme");
 // EventNum value set by the C game engine when a player's game is over
 const E_FINISH = 100;
 async function createApp(ctx, server) {
@@ -28,11 +29,11 @@ async function createApp(ctx, server) {
     let gameOver = false; // true once E_FINISH is detected; blocks all game actions
     function updateHeader() {
         const loc = server.getLocationNames()[state.location] ?? `Loc${state.location}`;
-        header.setContent(` {bold}${server.getTitle()}{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
-            ` | {cyan-fg}${loc}{/}` +
+        header.setContent(` {bold}${server.getTitle()}{/} | Day {${door_theme_1.T.accent}-fg}${state.turn}/${state.totalTurns}{/}` +
+            ` | {${door_theme_1.T.accentAlt}-fg}${loc}{/}` +
             ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
-            ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
-            ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`);
+            ` | Cash: {${door_theme_1.T.ok}-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
+            ` | Debt: {${door_theme_1.T.alert}-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`);
     }
     function fullRender() {
         updateHeader();
@@ -47,7 +48,7 @@ async function createApp(ctx, server) {
             await fn();
         }
         catch (err) {
-            (0, events_1.pushEvent)(events, `{red-fg}Error: ${err?.message ?? String(err)}{/}`);
+            (0, events_1.pushEvent)(events, `{${door_theme_1.T.alert}-fg}Error: ${err?.message ?? String(err)}{/}`);
             fullRender();
         }
     }
@@ -66,11 +67,11 @@ async function createApp(ctx, server) {
         }
         catch { /* player may have been removed */ }
         const score = Math.round(state.cash + state.bank - state.debt);
-        (0, events_1.pushEvent)(events, `{bold}{yellow-fg}GAME OVER!{/} Final score: {green-fg}$${score.toLocaleString('en-US')}{/}`);
+        (0, events_1.pushEvent)(events, `{bold}{${door_theme_1.T.accent}-fg}GAME OVER!{/} Final score: {${door_theme_1.T.ok}-fg}$${score.toLocaleString('en-US')}{/}`);
         (0, events_1.pushEvent)(events, `{bold}[H]{/} high scores   {bold}[Q]{/} quit`);
         // Override action bar to game-over message
-        actions.setContent('  {bold}{yellow-fg}GAME OVER{/}   Final score: {green-fg}$' +
-            score.toLocaleString('en-US') + '{/}   {bold}[H]{/}iscores  {bold}[Q]{/}uit');
+        actions.setContent(`  {bold}{${door_theme_1.T.accent}-fg}GAME OVER{/}   Final score: {${door_theme_1.T.ok}-fg}$${score.toLocaleString('en-US')}{/}`
+            + '   {bold}[H]{/}iscores  {bold}[Q]{/}uit');
         screen.alloc();
         screen.render();
     }
@@ -94,7 +95,7 @@ async function createApp(ctx, server) {
         if (jetted) {
             const locName = server.getLocationNames()[state.location];
             if (locName)
-                (0, events_1.pushEvent)(events, `You are in {cyan-fg}${locName}{/}.`);
+                (0, events_1.pushEvent)(events, `You are in {${door_theme_1.T.accentAlt}-fg}${locName}{/}.`);
         }
         // Game-over detection — E_FINISH is set by FinishGame() in the C engine
         if (state.eventNum === E_FINISH) {
@@ -240,8 +241,8 @@ async function createApp(ctx, server) {
     screen.clear();
     screen.render();
     (0, events_1.pushEvent)(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
-    (0, events_1.pushEvent)(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
-    (0, events_1.pushEvent)(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
+    (0, events_1.pushEvent)(events, `You have {${door_theme_1.T.ok}-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {${door_theme_1.T.accent}-fg}${state.totalTurns}{/} turns.`);
+    (0, events_1.pushEvent)(events, `You are in {${door_theme_1.T.accentAlt}-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
     fullRender();
     await new Promise((resolve) => {
         screen.on('destroy', () => resolve());

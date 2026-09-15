@@ -33,6 +33,14 @@ const THEME_IMPORT = /bbs-door-sdk\/engines\/ui\/theme/;
  * Adding a door here without one is how this test stops meaning anything.
  */
 const EXEMPT: Record<string, string> = {
+  dopewars:
+    'Both of its bars already carry live game state and neither has a row to ' +
+    'spare. Row 0 is the status line - day, location, HP, cash, debt, updated ' +
+    'every turn - and the bottom three rows are the action prompts and the ' +
+    'game-over message. A masthead or a hint footer would overwrite one of ' +
+    'them, and taking a row from the three panels to make space would shrink ' +
+    'the play area of a game to fit its decoration. It takes the theme\'s ' +
+    'COLOURS in full (2026-09-15); the chrome is the part that does not fit.',
   'widget-shadow-demo':
     'A faithful reproduction of the upstream neo-blessed shadow example - ' +
     'lightblue ground, lorem ipsum, two floating panels, every geometry ' +

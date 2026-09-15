@@ -11,11 +11,12 @@ function overlayList(opts: any): any {
     mouse: true,
     scrollable: false,
     alwaysScroll: false,
-    style: { selected: { bg: 'blue', fg: 'white' } },
+    style: { selected: { bg: T.selectionBg, fg: T.selectionInk } },
     ...opts,
   });
 }
 import { MarketState, PlayerState, GameQuestion, HighScore } from '../types';
+import { T, S } from '../door-theme';
 
 export type ActionBarMode = 'normal' | 'combat' | 'question';
 
@@ -40,7 +41,7 @@ function overlay(screen: any, opts: any): any {
     top: 'center', left: 'center',
     border: { type: 'line' },
     tags: true,
-    style: { border: { fg: 'yellow' }, fg: 'white', bg: 'black' },
+    style: { ...S.panel.style, border: { fg: T.accent } },
     ...opts,
   });
 }
@@ -70,7 +71,7 @@ export function showBuyOverlay(
     top: 0, left: 0,
     width: '100%-2',
     height: Math.min(market.prices.length, 12),
-    style: { selected: { bg: 'blue', fg: 'white' } },
+    style: { selected: { bg: T.selectionBg, fg: T.selectionInk } },
     keys: true, mouse: true,
     items: market.prices.map(p =>
       `${p.name.padEnd(13)} ${('$' + Math.round(p.price).toLocaleString('en-US')).padStart(9)}`
@@ -82,7 +83,7 @@ export function showBuyOverlay(
     bottom: 1, left: 0,
     width: '100%-2', height: 3,
     tags: true,
-    style: { fg: 'white', bg: 'black' },
+    style: { fg: T.ink, bg: T.ground },
   });
 
   let amount = 1;
@@ -105,10 +106,10 @@ export function showBuyOverlay(
     const price = currentPrice();
     const total = Math.round(price * amount);
     const amountStr = cantAfford
-      ? `{red-fg}${amount}{/}`
-      : `{bold}{yellow-fg}${amount}{/}{/}`;
+      ? `{${T.alert}-fg}${amount}{/}`
+      : `{bold}{${T.accent}-fg}${amount}{/}{/}`;
     const hint = cantAfford
-      ? `  {red-fg}Can't afford this — use Up/Down to pick a cheaper drug{/}`
+      ? `  {${T.alert}-fg}Can't afford this — use Up/Down to pick a cheaper drug{/}`
       : `  [<] less  [>] more  digits to type  [Enter] buy  [ESC] cancel`;
     statusBox.setContent(
       `  Amount: ${amountStr}  (max ${max})   Total: $${total.toLocaleString('en-US')}\n` +
@@ -223,7 +224,7 @@ export function showSellOverlay(
     top: 0, left: 0,
     width: '100%-2',
     height: Math.min(carrying.length, 12),
-    style: { selected: { bg: 'blue', fg: 'white' } },
+    style: { selected: { bg: T.selectionBg, fg: T.selectionInk } },
     keys: true, mouse: true,
     items: carrying.map(d => {
       const name = drugNameMap.get(d.index) ?? `Drug${d.index}`;
@@ -236,7 +237,7 @@ export function showSellOverlay(
     bottom: 1, left: 0,
     width: '100%-2', height: 3,
     tags: true,
-    style: { fg: 'white', bg: 'black' },
+    style: { fg: T.ink, bg: T.ground },
   });
 
   let amount = 1;
@@ -251,7 +252,7 @@ export function showSellOverlay(
   function renderStatus(): void {
     const max = currentMax();
     statusBox.setContent(
-      `  Amount: {bold}{yellow-fg}${amount}{/}{/}  (max ${max})\n` +
+      `  Amount: {bold}{${T.accent}-fg}${amount}{/}{/}  (max ${max})\n` +
       `  [<] less  [>] more  digits to type  [Enter] sell  [ESC] cancel`
     );
     screen.render();
@@ -349,7 +350,7 @@ export function showJetOverlay(
     top: 0, left: 0,
     width: '100%-2',
     height: Math.min(items.length, 12),
-    style: { selected: { bg: 'blue', fg: 'white' } },
+    style: { selected: { bg: T.selectionBg, fg: T.selectionInk } },
     keys: true, mouse: true,
     items,
   });
@@ -362,7 +363,7 @@ export function showJetOverlay(
     // As in layout.ts: a one-row hint carrying Panel's default border has no
     // interior, and this line never told anybody how to leave the overlay.
     border: undefined,
-    style: { fg: 'white', bg: 'black' },
+    style: { fg: T.ink, bg: T.ground },
     content: '  [Enter] jet   [ESC] cancel',
   });
 

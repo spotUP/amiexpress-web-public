@@ -40,6 +40,7 @@ const server_1 = require("./server");
 const app_1 = require("./app");
 const jamaica_1 = require("./config/jamaica");
 const settings_1 = require("./settings");
+const door_theme_1 = require("./door-theme");
 exports.metadata = {
     name: 'GANJA WARS',
     version: '1.0.0',
@@ -49,6 +50,9 @@ exports.metadata = {
 };
 const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
 door.onStart(async (ctx) => {
+    // Before the layout is built: T and S are live bindings, so every style
+    // object in ui/ reads the caller's theme rather than the classic default.
+    (0, door_theme_1.applyTheme)(ctx.bbs);
     const doorDir = path.join(__dirname, '..');
     const settings = (0, settings_1.loadSettings)();
     const cfg = {

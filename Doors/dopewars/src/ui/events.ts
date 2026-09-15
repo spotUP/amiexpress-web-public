@@ -1,3 +1,5 @@
+import { T } from '../door-theme';
+
 const MAX_EVENTS = 40;
 const log: string[] = [];
 
@@ -26,7 +28,7 @@ function wordWrap(text: string, width: number): string[] {
 export function pushEvent(box: any, text: string, wrapWidth = 26): void {
   // Wrap the text to fit the panel width (38% of 80 = ~30 cols, minus 2 border = 28, minus '> ' = 26)
   const wrapped = wordWrap(text, wrapWidth);
-  const first = '{cyan-fg}>{/} ' + wrapped[0];
+  const first = `{${T.accentAlt}-fg}>{/} ` + wrapped[0];
   const rest  = wrapped.slice(1).map(l => '  ' + l);
   const entry = [first, ...rest].join('\n');
 

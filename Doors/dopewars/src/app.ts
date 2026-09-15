@@ -13,6 +13,7 @@ import {
   ActionBarMode,
 } from './ui/actions';
 import { bindCombatKeys } from './ui/combat';
+import { T } from './door-theme';
 
 // EventNum value set by the C game engine when a player's game is over
 const E_FINISH = 100;
@@ -39,11 +40,11 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   function updateHeader(): void {
     const loc = server.getLocationNames()[state.location] ?? `Loc${state.location}`;
     header.setContent(
-      ` {bold}${server.getTitle()}{/} | Day {yellow-fg}${state.turn}/${state.totalTurns}{/}` +
-      ` | {cyan-fg}${loc}{/}` +
+      ` {bold}${server.getTitle()}{/} | Day {${T.accent}-fg}${state.turn}/${state.totalTurns}{/}` +
+      ` | {${T.accentAlt}-fg}${loc}{/}` +
       ` | HP: {${state.health > 50 ? 'green' : 'red'}-fg}${state.health}{/}` +
-      ` | Cash: {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
-      ` | Debt: {red-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`
+      ` | Cash: {${T.ok}-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/}` +
+      ` | Debt: {${T.alert}-fg}$${Math.round(state.debt).toLocaleString('en-US')}{/}`
     );
   }
 
@@ -60,7 +61,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     try {
       await fn();
     } catch (err: any) {
-      pushEvent(events, `{red-fg}Error: ${err?.message ?? String(err)}{/}`);
+      pushEvent(events, `{${T.alert}-fg}Error: ${err?.message ?? String(err)}{/}`);
       fullRender();
     }
   }
@@ -75,11 +76,12 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     try { await server.endGame(id); } catch { /* player may have been removed */ }
 
     const score = Math.round(state.cash + state.bank - state.debt);
-    pushEvent(events, `{bold}{yellow-fg}GAME OVER!{/} Final score: {green-fg}$${score.toLocaleString('en-US')}{/}`);
+    pushEvent(events, `{bold}{${T.accent}-fg}GAME OVER!{/} Final score: {${T.ok}-fg}$${score.toLocaleString('en-US')}{/}`);
     pushEvent(events, `{bold}[H]{/} high scores   {bold}[Q]{/} quit`);
     // Override action bar to game-over message
-    actions.setContent('  {bold}{yellow-fg}GAME OVER{/}   Final score: {green-fg}$' +
-      score.toLocaleString('en-US') + '{/}   {bold}[H]{/}iscores  {bold}[Q]{/}uit');
+    actions.setContent(
+      `  {bold}{${T.accent}-fg}GAME OVER{/}   Final score: {${T.ok}-fg}$${score.toLocaleString('en-US')}{/}`
+      + '   {bold}[H]{/}iscores  {bold}[Q]{/}uit');
     (screen as any).alloc();
     screen.render();
   }
@@ -101,7 +103,7 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     }
     if (jetted) {
       const locName = server.getLocationNames()[state.location];
-      if (locName) pushEvent(events, `You are in {cyan-fg}${locName}{/}.`);
+      if (locName) pushEvent(events, `You are in {${T.accentAlt}-fg}${locName}{/}.`);
     }
 
     // Game-over detection — E_FINISH is set by FinishGame() in the C engine
@@ -256,8 +258,8 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
   screen.clear();
   screen.render();
   pushEvent(events, `{bold}Welcome to ${server.getTitle()}, ${user.username ?? id}!{/}`);
-  pushEvent(events, `You have {green-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {yellow-fg}${state.totalTurns}{/} turns.`);
-  pushEvent(events, `You are in {cyan-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
+  pushEvent(events, `You have {${T.ok}-fg}$${Math.round(state.cash).toLocaleString('en-US')}{/} and {${T.accent}-fg}${state.totalTurns}{/} turns.`);
+  pushEvent(events, `You are in {${T.accentAlt}-fg}${server.getLocationNames()[state.location] ?? 'Trench Town'}{/}.`);
 
   fullRender();
 

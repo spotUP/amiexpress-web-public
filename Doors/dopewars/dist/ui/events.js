@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pushEvent = pushEvent;
 exports.clearEvents = clearEvents;
+const door_theme_1 = require("../door-theme");
 const MAX_EVENTS = 40;
 const log = [];
 /* Word-wrap a string to fit within `width` visible chars per line.
@@ -31,7 +32,7 @@ function wordWrap(text, width) {
 function pushEvent(box, text, wrapWidth = 26) {
     // Wrap the text to fit the panel width (38% of 80 = ~30 cols, minus 2 border = 28, minus '> ' = 26)
     const wrapped = wordWrap(text, wrapWidth);
-    const first = '{cyan-fg}>{/} ' + wrapped[0];
+    const first = `{${door_theme_1.T.accentAlt}-fg}>{/} ` + wrapped[0];
     const rest = wrapped.slice(1).map(l => '  ' + l);
     const entry = [first, ...rest].join('\n');
     log.unshift(''); // blank line separator

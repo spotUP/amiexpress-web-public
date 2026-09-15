@@ -21,9 +21,9 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-import { themeById, themeStyles, THEMES } from '../../../../sdk/engines/ui/theme';
+import { themeById, themeStyles, THEMES, footerStyle } from '../../../../sdk/engines/ui/theme';
 
-describe('the literals Mail Composer replaced', () => {
+describe('the literals the door migration replaces', () => {
   const classic = themeById('classic');
   const T = classic.tokens;
 
@@ -74,6 +74,45 @@ describe('the literals Mail Composer replaced', () => {
       expect(theme.border).toBe('none');
       const rule = (themeStyles(theme).frame.style as any).border.fg;
       expect(`${id}:${rule}`).not.toBe(`${id}:${theme.tokens.ground}`);
+    }
+  });
+});
+
+/**
+ * A BAR's ground is the `bar` token, not the accent.
+ *
+ * Decided 2026-09-15 while migrating dopewars, whose header and action bars
+ * were white-on-blue. Two things in the SDK disagree about what a bar is:
+ *
+ *   - the `bar` STYLE role is `{fg: ground, bg: accent}` - black on yellow
+ *     under classic
+ *   - the `bar`/`barInk` TOKENS are documented "header and footer bars" /
+ *     "text on a bar", and are blue/white under classic
+ *
+ * `footerStyle()` - the SDK's own helper, used by the doors that already
+ * took the chrome - is `{fg: dim, bg: tokens.bar}`. So the token is what a
+ * bar's ground actually is, and it is also the mapping that leaves classic
+ * untouched. That is the rule the migration follows.
+ */
+describe('a bar takes the bar tokens', () => {
+  const classic = themeById('classic');
+
+  it('is white on blue under classic, which is what the doors had', () => {
+    expect(classic.tokens.bar).toBe('blue');
+    expect(classic.tokens.barInk).toBe('white');
+  });
+
+  it("agrees with the SDK's own footerStyle, which grounds a bar in the bar token", () => {
+    expect(footerStyle(classic).bg).toBe(classic.tokens.bar);
+  });
+
+  it('is NOT the accent, which the bar style role uses and would restyle the door', () => {
+    expect(classic.tokens.bar).not.toBe(classic.tokens.accent);
+  });
+
+  it('gives every theme a bar ground distinct from its text', () => {
+    for (const theme of THEMES) {
+      expect(`${theme.id}:${theme.tokens.bar}`).not.toBe(`${theme.id}:${theme.tokens.barInk}`);
     }
   });
 });
