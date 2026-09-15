@@ -34,6 +34,9 @@ const ORDER_OBJECTIVES: ReadonlyArray<MissionObjective> = [
   'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
 ];
 
+/** The timings a mission may name (core/mission-types.ts's MissionSpeed). */
+const SPEED_FIELDS: readonly string[] = ['gravity', 'are', 'lineClear', 'lockDelay', 'das'];
+
 /** What `requiredPiece` may say (mission.c:354-362). */
 const REQUIRED_PIECES: ReadonlyArray<RequiredPiece> = [
   'I', 'O', 'T', 'S', 'Z', 'J', 'L', 'LJ', 'SZ',
@@ -157,6 +160,35 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       fail(where, `objective "${objective}" does not take requireHold`);
     }
 
+    /*
+     * A mission's own timings. Frames, and a gravity in cells per frame -
+     * the units core/gravity.ts already speaks. Each is checked because a
+     * pack that asks for a lock delay of -1 is a mission nobody can play,
+     * and finding that at load is this loader's whole job.
+     */
+    const rawSpeed = (m.speed ?? undefined) as Record<string, unknown> | undefined;
+    let speed: Mission['speed'];
+    if (rawSpeed !== undefined) {
+      if (typeof rawSpeed !== 'object' || rawSpeed === null || Array.isArray(rawSpeed)) {
+        fail(where, 'speed must be an object of timings');
+      }
+      const timings: Record<string, number> = {};
+      for (const [field, value] of Object.entries(rawSpeed)) {
+        if (!SPEED_FIELDS.includes(field)) {
+          fail(where, `speed.${field} is not a timing this engine reads `
+            + `(${SPEED_FIELDS.join(', ')})`);
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+          fail(where, `speed.${field} must be a number of 0 or more, got ${JSON.stringify(value)}`);
+        }
+        timings[field] = value;
+      }
+      if (Object.keys(timings).length === 0) {
+        fail(where, 'speed names no timing at all; leave it out instead');
+      }
+      speed = timings as Mission['speed'];
+    }
+
     const rawModifiers = (m.modifiers ?? {}) as Record<string, unknown>;
     const hidden = rawModifiers.hidden as HiddenMode | undefined;
     if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -180,6 +212,7 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       ...(ignoreSingles !== undefined ? { ignoreSingles: ignoreSingles as boolean } : {}),
       ...(requiredPiece !== undefined ? { requiredPiece } : {}),
       ...(requireHold !== undefined ? { requireHold: requireHold as boolean } : {}),
+      ...(speed !== undefined ? { speed } : {}),
       id,
       name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
       objective,

@@ -997,6 +997,9 @@ export class GrandmasterApp {
     if (missionRun) {
       const mission = missionRun.getMission();
       this.gameEngine.setMissionModifiers(mission.modifiers);
+      // The mission's own timings, if it named any: 20G from the first piece,
+      // a shorter lock delay, whatever the pack asked for.
+      this.gameEngine.setMissionSpeed(mission.speed ?? null);
       this.gameEngine.onLock((event) => { missionRun.onLock(event); });
       if (mission.garbageRows > 0) this.gameEngine.seedGarbageRows(mission.garbageRows);
     }

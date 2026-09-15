@@ -246,6 +246,57 @@
         "blind": true
       },
       "hint": "Three singles with a T piece, and no stack to look at."
+    },
+    {
+      "id": "21",
+      "name": "HIGH SPEED TWO",
+      "objective": "lines",
+      "norm": 10,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "speed": {
+        "gravity": 20,
+        "are": 26,
+        "lineClear": 40,
+        "lockDelay": 30,
+        "das": 12
+      },
+      "hint": "Ten lines at 20G - every piece starts on the floor."
+    },
+    {
+      "id": "22",
+      "name": "NO TIME TO SET",
+      "objective": "tetris",
+      "norm": 2,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "speed": {
+        "gravity": 20,
+        "lockDelay": 12,
+        "are": 8
+      },
+      "hint": "Two tetrises at 20G with a lock delay of twelve frames."
+    },
+    {
+      "id": "23",
+      "name": "OOBAKA",
+      "objective": "pieces",
+      "norm": 60,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "speed": {
+        "gravity": 20,
+        "are": 0,
+        "lineClear": 0,
+        "lockDelay": 5
+      },
+      "hint": "Sixty pieces at 20G with no pause between them."
     }
   ]
 }

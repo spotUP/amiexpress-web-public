@@ -100,6 +100,25 @@ export function missionConditions(mission: Mission): string[] {
   if (mission.modifiers.hideNext) {
     conditions.push('HIDE NEXT: no preview of what is coming');
   }
+  /*
+   * The timings, in words a player can act on. 20G is the one that changes
+   * how a piece is placed rather than how fast it falls, so it is named
+   * outright; the rest are only worth saying when they are unusually tight.
+   */
+  if (mission.speed?.gravity !== undefined && mission.speed.gravity >= 20) {
+    conditions.push('20G: every piece is on the floor the moment it appears');
+  } else if (mission.speed?.gravity !== undefined) {
+    conditions.push(`Gravity: ${mission.speed.gravity} cells a frame`);
+  }
+  if (mission.speed?.lockDelay !== undefined) {
+    conditions.push(`Lock delay: ${mission.speed.lockDelay} frames`);
+  }
+  if (mission.speed?.are !== undefined) {
+    conditions.push(`${mission.speed.are} frames between pieces`);
+  }
+  if (mission.speed?.das !== undefined) {
+    conditions.push(`Delayed auto-shift: ${mission.speed.das} frames`);
+  }
   if (mission.modifiers.rotateLock) {
     conditions.push('ROTATELOCK: pieces arrive turned, and cannot be turned');
   }

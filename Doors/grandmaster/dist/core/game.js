@@ -61,6 +61,12 @@ class GameEngine {
          * other run.
          */
         this.rotationQueue = [];
+        /**
+         * A mission's own timings, which override the mode's curve for the whole
+         * run (the reference gives six of its types a speed table apiece,
+         * mission.c:1192-1308). Null in every other run.
+         */
+        this.missionSpeed = null;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -314,6 +320,35 @@ class GameEngine {
      * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
      * ROLL exist as items too; a mission simply never lets them expire.
      */
+    /**
+     * The timings a MISSION plays at, for its whole run.
+     *
+     * Applied through the same path the mode's curve takes, so a mission that
+     * names only `gravity` still gets the mode's ARE and lock delay.
+     */
+    setMissionSpeed(speed) {
+        this.missionSpeed = speed ?? null;
+        if (speed) {
+            const params = this.speedParams(this.state.level);
+            this.state.gravity = params.gravity;
+            this.state.lockDelay = (params.lockDelay / 60) * 1000;
+        }
+    }
+    /** The mode's curve, with the mission's own timings on top of it. */
+    speedParams(level) {
+        const base = (0, gravity_1.getSpeedParams)(level, this.state.mode);
+        if (!this.missionSpeed)
+            return base;
+        const mine = this.missionSpeed;
+        return {
+            ...base,
+            ...(mine.gravity !== undefined ? { gravity: mine.gravity } : {}),
+            ...(mine.are !== undefined ? { are: mine.are } : {}),
+            ...(mine.lineClear !== undefined ? { arelinelock: mine.lineClear } : {}),
+            ...(mine.lockDelay !== undefined ? { lockDelay: mine.lockDelay } : {}),
+            ...(mine.das !== undefined ? { das: mine.das } : {}),
+        };
+    }
     setMissionModifiers(modifiers) {
         this.state.missionModifiers = modifiers ?? undefined;
         // ROTATELOCK hands each spawning piece a rotation from a queue of six
@@ -1156,7 +1191,7 @@ class GameEngine {
             if (lineCount >= 2)
                 this.comboIgnoringSingles++;
             // Update speed parameters based on new level
-            const speedParams = (0, gravity_1.getSpeedParams)(this.state.level, this.state.mode);
+            const speedParams = this.speedParams(this.state.level);
             this.state.gravity = speedParams.gravity;
             this.state.lockDelay = (speedParams.lockDelay / 60) * 1000; // Convert frames to ms
             // Scoring
@@ -1314,7 +1349,7 @@ class GameEngine {
             this.attackManager.applyGarbage(this.state.board);
         }
         // Reset ARE delay for next piece
-        const speedParams = (0, gravity_1.getSpeedParams)(this.state.level, this.state.mode);
+        const speedParams = this.speedParams(this.state.level);
         this.state.areRemaining = speedParams.are;
         this.state.gravity = speedParams.gravity;
         this.state.lockDelay = (speedParams.lockDelay / 60) * 1000;

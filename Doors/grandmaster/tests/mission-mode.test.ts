@@ -379,6 +379,8 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   assert.ok(every.some((m) => m.modifiers.blind), 'BLIND is played');
   assert.ok(every.some((m) => (m.modifiers.riseEveryPieces ?? 0) > 0),
     'and the rising floor');
+  assert.ok(every.some((m) => (m.speed?.gravity ?? 0) >= 20),
+    'a mission plays at 20G, which is what a speed of its own is for');
 }
 
 /**
@@ -518,4 +520,43 @@ export async function blindHidesTheStackButNotTheBoard(): Promise<void> {
   assert.ok(blocks(seeing) > 0, 'the ordinary run draws the stack');
   assert.strictEqual(blocks(blind), 0,
     `a blind run draws none of it, got ${blocks(blind)} block glyphs`);
+}
+
+/**
+ * A mission's own timings reach the engine, and only that mission's.
+ *
+ * The reference gives six of its types a speed table apiece
+ * (`mission.c:1192-1308`); here the PACK says it, so what has to be proved is
+ * that the numbers a pack writes are the numbers the engine plays at - and
+ * that a mission naming one timing still gets the mode's curve for the rest.
+ */
+export async function aMissionPlaysAtItsOwnSpeed(): Promise<void> {
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.start();
+  const modeGravity = plain.getState().gravity;
+  const modeLockDelay = plain.getState().lockDelay;
+
+  const fast: any = new GameEngine('mission', settings, sounds);
+  fast.setMissionSpeed({ gravity: 20, lockDelay: 12, are: 8 });
+  fast.start();
+  assert.strictEqual(fast.getState().gravity, 20, '20G, from the first piece');
+  assert.strictEqual(fast.getState().lockDelay, (12 / 60) * 1000,
+    'twelve frames, in the milliseconds the engine counts');
+  assert.notStrictEqual(fast.getState().gravity, modeGravity);
+
+  // It SURVIVES a lock: the engine re-reads the curve for every piece, and a
+  // mission speed that only held until the first placement would be worse
+  // than none at all.
+  fast.hardDrop();
+  for (let f = 0; f < 60 && !fast.getState().currentPiece; f++) fast.update(50);
+  assert.strictEqual(fast.getState().gravity, 20, 'still 20G after a lock');
+  assert.strictEqual(fast.getState().lockDelay, (12 / 60) * 1000);
+
+  // And a mission that names ONE timing keeps the mode's own for the others.
+  const partial: any = new GameEngine('mission', settings, sounds);
+  partial.setMissionSpeed({ gravity: 20 });
+  partial.start();
+  assert.strictEqual(partial.getState().gravity, 20);
+  assert.strictEqual(partial.getState().lockDelay, modeLockDelay,
+    "what the mission did not ask for is the mode's own");
 }

@@ -8,7 +8,7 @@ import type { AttackManager } from '../network/attack-system';
 import { type Replay } from '../server/replay-manager';
 import { type Medal } from './medals';
 import type { LockEvent } from './mission-run';
-import type { MissionModifiers } from './mission-types';
+import type { MissionModifiers, MissionSpeed } from './mission-types';
 import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
@@ -69,6 +69,12 @@ export declare class GameEngine {
      * other run.
      */
     private rotationQueue;
+    /**
+     * A mission's own timings, which override the mode's curve for the whole
+     * run (the reference gives six of its types a speed table apiece,
+     * mission.c:1192-1308). Null in every other run.
+     */
+    private missionSpeed;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -153,6 +159,15 @@ export declare class GameEngine {
      * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
      * ROLL exist as items too; a mission simply never lets them expire.
      */
+    /**
+     * The timings a MISSION plays at, for its whole run.
+     *
+     * Applied through the same path the mode's curve takes, so a mission that
+     * names only `gravity` still gets the mode's ARE and lock delay.
+     */
+    setMissionSpeed(speed: MissionSpeed | null): void;
+    /** The mode's curve, with the mission's own timings on top of it. */
+    private speedParams;
     setMissionModifiers(modifiers: MissionModifiers | null): void;
     /**
      * Fill the bottom `rows` rows with garbage before the run starts

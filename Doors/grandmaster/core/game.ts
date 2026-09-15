@@ -4,7 +4,7 @@
  * Manages game state, piece movement, scoring, and game loop
  */
 
-import type { GameState, GameMode, PlayerSettings, Piece, PieceType, GameResult } from './types';
+import type { GameState, GameMode, PlayerSettings, Piece, PieceType, GameResult, SpeedLevel } from './types';
 import { PieceManager, getPieceCells } from './pieces';
 import { SectionManager } from './sections';
 import { GradeManager } from './grading';
@@ -32,7 +32,7 @@ import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-gr
 import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
 import { lockedByUpKey } from './up-key-lock';
 import type { LockEvent } from './mission-run';
-import type { MissionModifiers } from './mission-types';
+import type { MissionModifiers, MissionSpeed } from './mission-types';
 import { detectTSpin } from './tspin';
 import { riseGarbageRow, seedGarbageRows } from './garbage';
 import {
@@ -117,6 +117,12 @@ export class GameEngine {
    * other run.
    */
   private rotationQueue: Array<0 | 1 | 2 | 3> = [];
+  /**
+   * A mission's own timings, which override the mode's curve for the whole
+   * run (the reference gives six of its types a speed table apiece,
+   * mission.c:1192-1308). Null in every other run.
+   */
+  private missionSpeed: MissionSpeed | null = null;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -406,6 +412,36 @@ export class GameEngine {
    * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
    * ROLL exist as items too; a mission simply never lets them expire.
    */
+  /**
+   * The timings a MISSION plays at, for its whole run.
+   *
+   * Applied through the same path the mode's curve takes, so a mission that
+   * names only `gravity` still gets the mode's ARE and lock delay.
+   */
+  setMissionSpeed(speed: MissionSpeed | null): void {
+    this.missionSpeed = speed ?? null;
+    if (speed) {
+      const params = this.speedParams(this.state.level);
+      this.state.gravity = params.gravity;
+      this.state.lockDelay = (params.lockDelay / 60) * 1000;
+    }
+  }
+
+  /** The mode's curve, with the mission's own timings on top of it. */
+  private speedParams(level: number): SpeedLevel {
+    const base = getSpeedParams(level, this.state.mode);
+    if (!this.missionSpeed) return base;
+    const mine = this.missionSpeed;
+    return {
+      ...base,
+      ...(mine.gravity !== undefined ? { gravity: mine.gravity } : {}),
+      ...(mine.are !== undefined ? { are: mine.are } : {}),
+      ...(mine.lineClear !== undefined ? { arelinelock: mine.lineClear } : {}),
+      ...(mine.lockDelay !== undefined ? { lockDelay: mine.lockDelay } : {}),
+      ...(mine.das !== undefined ? { das: mine.das } : {}),
+    };
+  }
+
   setMissionModifiers(modifiers: MissionModifiers | null): void {
     this.state.missionModifiers = modifiers ?? undefined;
     // ROTATELOCK hands each spawning piece a rotation from a queue of six
@@ -1352,7 +1388,7 @@ export class GameEngine {
       if (lineCount >= 2) this.comboIgnoringSingles++;
 
       // Update speed parameters based on new level
-      const speedParams = getSpeedParams(this.state.level, this.state.mode);
+      const speedParams = this.speedParams(this.state.level);
       this.state.gravity = speedParams.gravity;
       this.state.lockDelay = (speedParams.lockDelay / 60) * 1000;  // Convert frames to ms
 
@@ -1526,7 +1562,7 @@ export class GameEngine {
     }
 
     // Reset ARE delay for next piece
-    const speedParams = getSpeedParams(this.state.level, this.state.mode);
+    const speedParams = this.speedParams(this.state.level);
     this.state.areRemaining = speedParams.are;
     this.state.gravity = speedParams.gravity;
     this.state.lockDelay = (speedParams.lockDelay / 60) * 1000;

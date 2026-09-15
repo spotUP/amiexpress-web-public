@@ -28,6 +28,22 @@ export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", 
  * 0..6 name one piece, 7 is "L or J" and 8 is "S or Z" (mission.c:354-362).
  */
 export type RequiredPiece = PieceType | 'LJ' | 'SZ';
+/**
+ * A mission's own timings. Every field optional: what is absent is whatever
+ * the mode's speed curve says (core/gravity.ts).
+ */
+export interface MissionSpeed {
+    /** Cells per frame. 20 is 20G - the piece is on the floor at spawn. */
+    gravity?: number;
+    /** Frames between a lock and the next piece (the reference's wait1). */
+    are?: number;
+    /** Frames a line clear takes (wait2). */
+    lineClear?: number;
+    /** Frames a grounded piece waits before it locks (wait3). */
+    lockDelay?: number;
+    /** Frames of delayed auto-shift (waitt). */
+    das?: number;
+}
 export type MissionObjective = typeof MISSION_OBJECTIVES[number];
 /** Rules a mission can switch on for its run. */
 export interface MissionModifiers {
@@ -104,6 +120,21 @@ export interface Mission {
     timeLimitSeconds: number;
     /** Starting speed (mission_lv). */
     startLevel: number;
+    /**
+     * Timings for the WHOLE run, in the units this door already uses: gravity
+     * in cells per frame (20 is 20G), everything else in frames at 60fps.
+     *
+     * The reference gives six of its mission types a speed table of their own -
+     * HI-SPEED 1 and 2, ANOTHER, DEVIL 800 and 1200, OOBAKA
+     * (`mission.c:1192-1308`) - by naming a table per TYPE. This door lets the
+     * PACK say it instead, which is the same expressiveness without a second
+     * level scale: HI-SPEED 2 is `{ gravity: 20, are: 26, lineClear: 40,
+     * lockDelay: 30, das: 12 }`, straight out of `speed_old.c:270-274`.
+     *
+     * Anything left out keeps the curve the mode would have used, so a mission
+     * can ask for 20G and nothing else.
+     */
+    speed?: MissionSpeed;
     /** Rows of garbage the field starts with (mission_erase, positive side). */
     garbageRows: number;
     modifiers: MissionModifiers;
