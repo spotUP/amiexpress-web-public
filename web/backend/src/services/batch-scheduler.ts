@@ -303,10 +303,25 @@ function resolveAssign(p: string): string {
   return p;
 }
 
+/**
+ * EVERY SEGMENT, NOT JUST THE LAST ONE.
+ *
+ * This resolved only the basename and passed the DIRECTORY through literally,
+ * so `doors:quicknew/quicknew` never found `Doors/QuickNew/QuickNew`: the
+ * lookup was made in `/app/data/bbs/Doors/quicknew`, a directory that does not
+ * exist, and the answer was "no such door".
+ *
+ * That is not a missing-door message on the caller's screen - it is worse. The
+ * batch quietly fell through to the TypeScript generator instead of the 68K
+ * door the line names, so the board looked like it was working while running
+ * something else entirely (2026-09-15: the restored QuickNew was on the volume,
+ * the batch line named it, and every logoff still ran the generator).
+ *
+ * `amigafs.resolvePath` walks the whole path case-insensitively, which is what
+ * AmigaDOS does and what the rest of this file now uses.
+ */
 function findInsensitiveFull(fullPath: string): string | null {
-  const dir = path.dirname(fullPath);
-  const base = path.basename(fullPath);
-  return findCaseInsensitive(dir, base);
+  return amigafs.resolvePath(fullPath);
 }
 
 function resolveExecutable(base: string): string | null {
