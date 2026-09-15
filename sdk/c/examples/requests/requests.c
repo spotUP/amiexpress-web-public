@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "aedoor.h"
+#include "requests_bulletin.h"
 #include "ae_request.h"
 #include "ae_host.h"
 #include "ae_session.h"
@@ -78,6 +79,13 @@ typedef struct {
     int port;
     char board_key[192];
     int timeout_secs;
+    /* The bulletin this door keeps, and the art it is drawn between. Empty
+       `bulletin` turns the whole thing off - a board that does not want a
+       requests screen says so by clearing the setting, and then nothing is
+       fetched and nothing is written. */
+    char bulletin[192];
+    char bulletin_header[192];
+    char bulletin_tail[192];
 } requests_config;
 
 static requests_config config;
@@ -101,6 +109,11 @@ static int config_load(requests_config *cfg, const char *path)
     memset(cfg, 0, sizeof *cfg);
     cfg->port = 80;
     cfg->timeout_secs = 10;
+    /* The screen the classic Request door used to write, and its own art,
+       which moved here with the job. The door's CWD is its own folder. */
+    strcpy(cfg->bulletin, "BBS:Bulletins/bull9.txt");
+    strcpy(cfg->bulletin_header, "Bulletin_Header.txt");
+    strcpy(cfg->bulletin_tail, "Bulletin_Tail.txt");
 
     f = fopen(path, "r");
     if (f == 0) return 0;
@@ -126,6 +139,15 @@ static int config_load(requests_config *cfg, const char *path)
         } else if (strcmp(line, "Timeout") == 0) {
             int secs = atoi(value);
             if (secs > 0 && secs < 120) cfg->timeout_secs = secs;
+        } else if (strcmp(line, "Bulletin") == 0) {
+            strncpy(cfg->bulletin, value, sizeof cfg->bulletin - 1);
+            cfg->bulletin[sizeof cfg->bulletin - 1] = '\0';
+        } else if (strcmp(line, "BulletinHeader") == 0) {
+            strncpy(cfg->bulletin_header, value, sizeof cfg->bulletin_header - 1);
+            cfg->bulletin_header[sizeof cfg->bulletin_header - 1] = '\0';
+        } else if (strcmp(line, "BulletinTail") == 0) {
+            strncpy(cfg->bulletin_tail, value, sizeof cfg->bulletin_tail - 1);
+            cfg->bulletin_tail[sizeof cfg->bulletin_tail - 1] = '\0';
         }
     }
     fclose(f);
@@ -441,6 +463,11 @@ static void draw_masthead(const char *title)
 static void door_idle(void *ctx)
 {
     (void)ctx;
+    /* Nothing to animate without a rail: the tick would repaint the
+       identical row five times a second and the title flickers under it
+       (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
+       spins hot on a 68K otherwise. */
+    if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(10); return; }
     rail_tick++;
     ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
@@ -506,9 +533,128 @@ static void draw_status(void)
 }
 
 /* Map a server refusal code to a plain sentence, the way Doors/achieve does. */
+/* -------------------------------------------------------------- bulletin
+
+   `Bulletins/bull9.txt` is the board's requests screen. The classic 68K
+   `Request v2.1` door wrote it from its own art plus one line per request,
+   and on this board that door is wired to no command any more - REQ launches
+   THIS one - so the screen froze on 2026-09-10 and nothing would ever
+   refresh it again.
+
+   The rendering, and the row budget that keeps it off the
+   `(Pause)...More(y/n/ns)?` prompt, live in requests_bulletin.c where a host
+   test can assert the bytes. What is here is the three things that need a
+   door: the art off the disk, one listing off the server, and the write.
+
+   A read-only visit writes nothing. A visit that CHANGED something rewrites
+   the screen, and so does a visit that finds no screen at all - that is what
+   puts it back the first time a board runs this version. */
+
+static int bulletin_dirty;
+
+static char bulletin_header_art[4096];
+static char bulletin_tail_art[2048];
+static char bulletin_text[16384];
+static requests_bulletin_row bulletin_rows[REQUESTS_BULLETIN_ROW_BUDGET];
+
+/** The whole file into `buf`, NUL-terminated. 0 if it will not fit or open. */
+static int slurp(const char *path, char *buf, unsigned long cap)
+{
+    FILE *f = fopen(path, "rb");
+    unsigned long n;
+
+    if (f == 0) return 0;
+    n = (unsigned long)fread(buf, 1, cap - 1, f);
+    /* A file that exactly filled the buffer was probably cut in half, and
+       half a header draws a torn screen. */
+    if (n >= cap - 1) { fclose(f); return 0; }
+    buf[n] = '\0';
+    fclose(f);
+    return n > 0;
+}
+
+/**
+ * Is the bulletin on disk already the one this door would keep?
+ *
+ * Three ways it is not: it is missing, this visit changed a request, or what
+ * is there does not fit the screen. The third is the one that matters on a
+ * board upgrading to this version - the classic door left a 26-row screen
+ * behind, and without this check it would sit there paginating until some
+ * caller happened to post.
+ */
+static int bulletin_needs_rewrite(void)
+{
+    FILE *f;
+    unsigned long n;
+
+    if (bulletin_dirty) return 1;
+
+    f = fopen(config.bulletin, "rb");
+    if (f == 0) return 1;                      /* missing */
+    n = (unsigned long)fread(bulletin_text, 1, sizeof bulletin_text - 1, f);
+    fclose(f);
+    if (n >= sizeof bulletin_text - 1) return 1;   /* far too big to be ours */
+    bulletin_text[n] = '\0';
+    return !requests_bulletin_fits(bulletin_text, REQUESTS_BULLETIN_ROW_BUDGET);
+}
+
+/**
+ * Rewrite the bulletin from the server's open list.
+ *
+ * Silent throughout: a caller leaving the door is not the person who can fix
+ * a missing header file or a server that stopped answering, and yesterday's
+ * screen is a better answer than an error on the way out. Any failure leaves
+ * the file exactly as it was.
+ */
+static void bulletin_write(void)
+{
+    int capacity, i, count;
+    unsigned long len;
+    FILE *f;
+
+    if (config.bulletin[0] == '\0') return;
+    if (!bulletin_needs_rewrite()) return;
+
+    if (!slurp(config.bulletin_header, bulletin_header_art,
+               sizeof bulletin_header_art)) return;
+    if (!slurp(config.bulletin_tail, bulletin_tail_art,
+               sizeof bulletin_tail_art)) return;
+
+    if (fetch_text(AE_REQ_BASE "/list.txt?scope=global&state=open") != 200)
+        return;
+    split_rows();
+
+    capacity = requests_bulletin_capacity(bulletin_header_art,
+                                          bulletin_tail_art,
+                                          REQUESTS_BULLETIN_ROW_BUDGET);
+    count = row_count < capacity ? row_count : capacity;
+    if (count > REQUESTS_BULLETIN_ROW_BUDGET) count = REQUESTS_BULLETIN_ROW_BUDGET;
+    for (i = 0; i < count; i++) {
+        bulletin_rows[i].handle = field_of(i, 5);
+        bulletin_rows[i].title = field_of(i, 6);
+    }
+
+    len = requests_bulletin_render(bulletin_text, sizeof bulletin_text,
+                                   bulletin_header_art, bulletin_tail_art,
+                                   bulletin_rows, count,
+                                   REQUESTS_BULLETIN_ROW_BUDGET);
+    if (len == 0) return;
+
+    f = fopen(config.bulletin, "wb");
+    if (f == 0) return;
+    fwrite(bulletin_text, 1, len, f);
+    fclose(f);
+}
+
 static void explain(const ae_req_result *r, const char *ok)
 {
     if (r->status == 200) {
+        /* The ONE place this door learns that a write landed - posting,
+           voting, claiming, releasing, marking done and withdrawing all come
+           through here. So this is where the bulletin is marked stale, and a
+           caller who only reads the list costs the board no HTTP call and no
+           file write at all. */
+        bulletin_dirty = 1;
         strncpy(status_line, ok, sizeof status_line - 1);
         status_line[sizeof status_line - 1] = '\0';
         return;
@@ -950,6 +1096,9 @@ int main(int argc, char **argv)
                 break;
         }
     }
+
+    /* Before the screen goes, while the socket library is still open. */
+    bulletin_write();
 
     ansi_clear(&screen.buf);
     ui_screen_flush(&screen);

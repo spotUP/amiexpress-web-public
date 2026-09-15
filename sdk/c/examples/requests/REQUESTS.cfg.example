@@ -11,3 +11,11 @@ Port=80
 BoardKey=
 # Seconds to wait on the connect and each read. 1..119; default 10.
 Timeout=10
+
+# The board's requests screen, rewritten when a caller adds or changes a
+# request. Clear Bulletin to turn it off. The art paths are relative to the
+# door's own folder; their height comes off the 23-row budget that keeps the
+# screen off the (Pause)...More prompt on a 24-row terminal.
+Bulletin=BBS:Bulletins/bull9.txt
+BulletinHeader=Bulletin_Header.txt
+BulletinTail=Bulletin_Tail.txt

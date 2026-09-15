@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -69,6 +69,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_texttv
 	./build/test_subs_scan
 	./build/test_achieve_rows
+	./build/test_requests_bulletin
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -105,6 +106,13 @@ build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_tex
 build/test_achieve_rows: examples/achieve/achieve_rows.c tests/test_achieve_rows.c examples/achieve/achieve_rows.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/achieve examples/achieve/achieve_rows.c tests/test_achieve_rows.c -o $@
+
+# The bulletin REQUESTS writes at exit. Pure, in its own translation unit for
+# the same reason achieve_rows.c is: the row budget that keeps bull9 off the
+# (Pause)...More prompt is testable without a server or an Amiga.
+build/test_requests_bulletin: examples/requests/requests_bulletin.c tests/test_requests_bulletin.c examples/requests/requests_bulletin.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I examples/requests examples/requests/requests_bulletin.c tests/test_requests_bulletin.c -o $@
 
 build/test_subs_scan: examples/subs/subs_scan.c tests/test_subs_scan.c examples/subs/subs_scan.h include/ae_msgbase.h
 	@mkdir -p build
@@ -271,9 +279,9 @@ build/amiga/achieve: examples/achieve/achieve.c examples/achieve/achieve_rows.c 
 # The global-requests door: reads and writes through ae_request, drawn with
 # the same widgets. Links the WHOLE library; make measure proves only what it
 # calls costs bytes.
-build/amiga/requests: examples/requests/requests.c build/amiga/libae.lib
+build/amiga/requests: examples/requests/requests.c examples/requests/requests_bulletin.c examples/requests/requests_bulletin.h build/amiga/libae.lib
 	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/requests examples/requests/requests.c examples/requests/requests_bulletin.c build/amiga/libae.lib -lauto -o $@
 
 # The public-discussion door: reads through ae_msgbase, hands EALL back to the
 # board to compose, drawn with the same widgets at all three widths.
