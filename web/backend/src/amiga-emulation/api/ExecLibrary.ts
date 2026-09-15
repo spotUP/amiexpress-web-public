@@ -109,6 +109,8 @@ export class ExecLibrary {
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
   /** Ports already reported by the GetMsg BLIND diagnostic; once each. */
+  /** Ports whose first reply-taker has been named; once each. */
+  private replyTakersReported = new Set<number>();
   private blindPortsReported = new Set<number>();
   private repliedMessages: Set<number> = new Set(); // track messages we've replied to via ReplyMsg
   private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
@@ -5579,6 +5581,17 @@ debugLog(
     if (this.repliedMessages.has(msgAddr)) {
       this.repliedMessages.delete(msgAddr);
     }
+    if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && !this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8) {
+      /*
+       * WHO TAKES A REPLY OFF THIS PORT. Live, 2026-09-15: a reply was put on
+       * a door's reply port at the keypress, the door's own wait then polled
+       * that port 109 times and found it EMPTY (queue and list alike), and
+       * the reply reappeared at the disconnect. Something consumed it in
+       * between. Once per port, name the caller.
+       */
+      this.replyTakersReported.add(portAddr);
+console.log(`[ExecLibrary] GetMsg took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}")\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
+    }
     this.protectReturnedMessage(
       msgAddr,
       `GetMsg port=0x${portAddr.toString(16)}`
@@ -5605,6 +5618,12 @@ debugLog(
 
     const index = port.messages.indexOf(msgAddr);
     if (index !== -1) {
+      if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && !this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8) {
+        // The other way a reply leaves a port - queue and list together, which
+        // is the exact emptiness the door's wait saw on 2026-09-15. Name it.
+        this.replyTakersReported.add(portAddr);
+console.log(`[ExecLibrary] removeMessageFromPort took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}")\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
+      }
       port.messages.splice(index, 1);
       debugLog(`[ExecLibrary] removeMessageFromPort: removed 0x${msgAddr.toString(16)} from port 0x${portAddr.toString(16)}, ${port.messages.length} remaining`);
 
