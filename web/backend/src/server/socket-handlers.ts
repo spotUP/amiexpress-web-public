@@ -536,7 +536,7 @@ console.log('[socket-handlers] keys:state received:', data);
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)
-  socket.on('key-down', (data: { key: string; code: string; alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
+  socket.on('key-down', (data: { key: string; code: string; alt?: boolean; ctrl?: boolean; shift?: boolean; repeat?: boolean }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -548,7 +548,16 @@ console.log('[socket-handlers] keys:state received:', data);
 
     // If door is active and has a key state handler, call it (SDK doors)
     if (session.inDoorManager && session.doorKeyStateHandler) {
-      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState });
+      // `repeat` travels with the press. The browser distinguishes a held
+      // key from a new one and always has; dropping that here left every
+      // door to infer it from a held-key set of its own, which is wrong the
+      // moment a key-up goes missing.
+      session.doorKeyStateHandler({
+        key: data.key,
+        pressed: true,
+        keyState: session.keyState,
+        repeat: data.repeat === true,
+      });
     }
 
     // Route through KeyRepeatManager for 68K doors (handles repeat timing)

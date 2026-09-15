@@ -20,6 +20,7 @@ import {
   optionText,
   visibleLength,
   moveSelection,
+  createMenuGate,
   DEFAULT_HINT,
 } from '../../engines/ui/arcade/menu';
 
@@ -131,5 +132,68 @@ describe('the menu as a whole', () => {
   it('wraps the selection at both ends', () => {
     expect(moveSelection(0, 4, -1)).toBe(3);
     expect(moveSelection(3, 4, +1)).toBe(0);
+  });
+});
+
+/**
+ * The menu step gate.
+ *
+ * The sysop, 2026-09-15: "pengo navigates super fast in the menu" - while
+ * grandmaster's and arkanoid's were fine, because those go through the List
+ * widget and the browser respectively. A hand-written `handleMenuInput` sits
+ * directly on the browser's synthetic key repeat, which is ~33 steps a second.
+ *
+ * The pin that matters is the LAST one: a gate that eats a deliberate tap is
+ * the bug that came back from the other direction when a throttle was put
+ * inside the List widget and `borrowed-list-keys` caught it.
+ */
+describe('a menu step gate', () => {
+  const gateAt = (clock: { t: number }, intervalMs?: number) =>
+    createMenuGate({ intervalMs, now: () => clock.t });
+
+  it('allows the first step immediately, however long the menu has been open', () => {
+    const clock = { t: 1_000_000 };
+    expect(gateAt(clock).allowStep()).toBe(true);
+  });
+
+  it('refuses a step that arrives at the browser repeat rate', () => {
+    const clock = { t: 0 };
+    const gate = gateAt(clock);
+    expect(gate.allowStep()).toBe(true);
+    clock.t += 30;   // one synthetic repeat
+    expect(gate.allowStep()).toBe(false);
+    clock.t += 30;
+    expect(gate.allowStep()).toBe(false);
+  });
+
+  it('lets a held key step about eight times a second', () => {
+    const clock = { t: 0 };
+    const gate = gateAt(clock);
+    let steps = 0;
+    // One second of 30ms repeats.
+    for (let i = 0; i < 1000 / 30; i++) {
+      if (gate.allowStep()) steps++;
+      clock.t += 30;
+    }
+    expect(steps).toBeGreaterThanOrEqual(7);
+    expect(steps).toBeLessThanOrEqual(9);
+  });
+
+  it('never eats a deliberate tap', () => {
+    const clock = { t: 0 };
+    const gate = gateAt(clock);
+    expect(gate.allowStep()).toBe(true);
+    clock.t += 130;  // a second press, by hand
+    expect(gate.allowStep()).toBe(true);
+  });
+
+  it('gives each menu its own limit', () => {
+    const clock = { t: 0 };
+    const one = gateAt(clock);
+    const other = gateAt(clock);
+    expect(one.allowStep()).toBe(true);
+    // A second menu opening in the same millisecond is not held back by the
+    // first one's step - the gate is per menu, not per door.
+    expect(other.allowStep()).toBe(true);
   });
 });

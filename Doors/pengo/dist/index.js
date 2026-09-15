@@ -379,13 +379,29 @@ function normalizeKey(key) {
         return "backspace";
     return key.toLowerCase();
 }
+/**
+ * How fast a HELD key may step this menu.
+ *
+ * The browser fills the gap between key-down and key-up with synthetic
+ * repeats - ~33 a second - and `handleMenuInput` below sits straight on that
+ * stream, so a held cursor key span the selection round the options. The
+ * sysop, on the door that showed it worst: "pengo navigates super fast in the
+ * menu". Grandmaster's menus never had it, because they are built from the
+ * List widget, which gates its own navigation; this is that gate, for the
+ * menus written by hand. Shared, so all nine arcade doors answer the same.
+ */
+const menuGate = (0, arcade_1.createMenuGate)();
 function handleMenuInput(key) {
     if (key === "up") {
+        if (!menuGate.allowStep())
+            return;
         gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, -1);
         sfx?.play("blip");
         renderMenu();
     }
     else if (key === "down") {
+        if (!menuGate.allowStep())
+            return;
         gameData.menuSelection = (0, arcade_1.moveSelection)(gameData.menuSelection, constants_1.MENU_OPTIONS.length, +1);
         sfx?.play("blip");
         renderMenu();

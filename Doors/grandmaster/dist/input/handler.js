@@ -137,12 +137,26 @@ class InputHandler {
         this.keyStateMode = true;
         // Register down FIRST, then up - BBSApi.onKeyUp wraps the existing
         // handler, producing one combined doorKeyStateHandler.
-        bbs.onKeyDown((key) => {
+        bbs.onKeyDown((key, _keyState, repeat) => {
             if (!this.enabled)
                 return;
             const name = InputHandler.browserKeyName(key);
-            // The client emits repeats as extra key-down events; only a genuine
-            // edge (not already held) starts DAS or fires a tap action.
+            /*
+             * Only a genuine EDGE starts DAS or fires a tap action.
+             *
+             * The client emits its auto-repeat as extra key-down events, and it
+             * marks them: `repeat` is the browser's own answer, forwarded since
+             * 2026-09-15. Ask it first.
+             *
+             * The held-key check stays behind it, and is not redundant. It covers
+             * the sessions that send no flag at all (the `keys:state` path, and
+             * anything older than the forwarding); `repeat` covers the case the
+             * held-key set cannot - a key-up lost to a blur or a dropped frame
+             * leaves the set empty under a key that is still down, and the next
+             * repeat then reads as a fresh press and restarts DAS mid-hold.
+             */
+            if (repeat === true)
+                return;
             if (this.state.heldKeys.has(name))
                 return;
             this.state.heldKeys.add(name);

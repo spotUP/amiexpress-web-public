@@ -4851,10 +4851,11 @@ console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
      * Why GAME is the default, and why a door OPTS IN to the menu rate:
      * see the note on `declaredKeyRepeatMode`.
      *
-     * STILL OPEN, and not this: a door that has BOTH a menu and a game -
-     * pengo's front end is a list and its playfield is not, and one icon
-     * cannot say both. That wants the door switching mode at its own state
-     * transitions, which is a door-side change.
+     * A door with BOTH a menu and a game - pengo's front end is a list and
+     * its playfield is not - is NOT solved here, and does not need to be: the
+     * arcade doors' menus carry their own step gate now
+     * (`sdk/engines/ui/arcade/menu.ts`, `createMenuGate`), which is where a
+     * limit on a menu belongs. One icon could never have said both.
      */
     session.doorKeyRepeatMode = declaredKeyRepeatMode(door);
     emitKeyRepeatMode(socket, session);

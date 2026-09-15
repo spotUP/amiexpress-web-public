@@ -6,7 +6,7 @@
 import { join } from "path";
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate} from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -707,14 +707,26 @@ function normalizeKey(key: string): InputKey {
 /**
  * Handle menu input
  */
+/**
+ * How fast a HELD key may step this menu.
+ *
+ * The browser fills the gap between key-down and key-up with synthetic
+ * repeats - ~33 a second - and `handleMenuInput` below sits straight on that
+ * stream, so a held cursor key runs the selection to an end and stays there.
+ * Shared with the other arcade doors, so all nine answer the same.
+ */
+const menuGate = createMenuGate();
+
 function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
+      if (!menuGate.allowStep()) break;
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
       sfx?.play("blip");
       renderMenu();
       break;
     case "down":
+      if (!menuGate.allowStep()) break;
       gameData.menuSelection = Math.min(
         MENU_OPTIONS.length - 1,
         gameData.menuSelection + 1

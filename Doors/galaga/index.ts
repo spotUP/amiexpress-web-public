@@ -5,7 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
-import { arcadeMenu, moveSelection, ArcadeSfx } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate} from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -343,14 +343,29 @@ function normalizeKey(key: string): InputKey {
   return key.toLowerCase();
 }
 
+/**
+ * How fast a HELD key may step this menu.
+ *
+ * The browser fills the gap between key-down and key-up with synthetic
+ * repeats - ~33 a second - and `handleMenuInput` below sits straight on that
+ * stream, so a held cursor key span the selection round the options. The
+ * sysop, on the door that showed it worst: "pengo navigates super fast in the
+ * menu". Grandmaster's menus never had it, because they are built from the
+ * List widget, which gates its own navigation; this is that gate, for the
+ * menus written by hand. Shared, so all nine arcade doors answer the same.
+ */
+const menuGate = createMenuGate();
+
 function handleMenuInput(key: InputKey): void {
   switch (key) {
     case "up":
+      if (!menuGate.allowStep()) break;
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
       sfx?.play("blip");
       renderMenu();
       break;
     case "down":
+      if (!menuGate.allowStep()) break;
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
       sfx?.play("blip");
       renderMenu();
@@ -682,6 +697,8 @@ door.onStart(async (ctx: any) => {
   // D-pad for menu navigation
   gamepadManager.on('dpad:up', () => {
     if (gameData.state === 'menu') {
+      // The same gate as the keyboard: a d-pad held down repeats too.
+      if (!menuGate.allowStep()) return;
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, -1);
       sfx?.play("blip");
       renderMenu();
@@ -690,6 +707,8 @@ door.onStart(async (ctx: any) => {
 
   gamepadManager.on('dpad:down', () => {
     if (gameData.state === 'menu') {
+      // The same gate as the keyboard: a d-pad held down repeats too.
+      if (!menuGate.allowStep()) return;
       gameData.menuSelection = moveSelection(gameData.menuSelection, MENU_OPTIONS.length, +1);
       sfx?.play("blip");
       renderMenu();

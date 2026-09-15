@@ -18,10 +18,19 @@ import type { BBSSession } from '../index';
  *
  * GAME IS THE DEFAULT, and it is not a preference - it is what every door
  * that ever enabled game mode has had. A first cut defaulted to the menu rate
- * and flagged the arcade doors; GRANDMASTER disproved the theory behind it
- * within the hour ("gmaster has a delay now when i hold the button"), because
- * its DAS/ARR is driven BY these repeats rather than around them. A door whose
- * screen is a LIST opts out with `KEY_REPEAT=application` on its icon.
+ * and flagged nine arcade icons; GRANDMASTER broke within the hour ("gmaster
+ * has a delay now when i hold the button") and showed why a changed default
+ * is the wrong instrument: that first cut emitted the mode only from
+ * `executeClientDoor`, so GMASTER - which reaches game mode from inside
+ * itself - was never sent one at all and simply ran at the browser's new
+ * DEFAULT rate. Every door on the two other routes was in the same position.
+ *
+ * (The commit that fixed it blamed grandmaster's DAS for riding the repeats.
+ * It does not: `input/handler.ts` drops a key-down for a key already held,
+ * and since 2026-09-15 reads the browser's own `repeat` flag as well. What
+ * reached it was the default, not the mechanism.)
+ *
+ * A door whose screen is a LIST opts out with `KEY_REPEAT=application`.
  */
 export type KeyRepeatMode = 'game' | 'application';
 

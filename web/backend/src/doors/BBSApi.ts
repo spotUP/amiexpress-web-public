@@ -643,10 +643,19 @@ console.log('[BBSApi] Mouse events disabled');
    * Register callback for keydown events (game mode only)
    * Callback receives key name and full keyState object
    */
-  onKeyDown(callback: (key: string, keyState: Record<string, boolean>) => void): void {
-    const handler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+  onKeyDown(
+    callback: (key: string, keyState: Record<string, boolean>, repeat: boolean) => void,
+  ): void {
+    const handler = (data: {
+      key: string;
+      pressed: boolean;
+      keyState: Record<string, boolean>;
+      repeat?: boolean;
+    }) => {
       if (data.pressed) {
-        callback(data.key, data.keyState);
+        // Third argument, so every existing two-argument callback is
+        // untouched: a door that does not care about repeats never sees one.
+        callback(data.key, data.keyState, data.repeat === true);
       }
     };
     this.session.doorKeyStateHandler = handler;
@@ -658,7 +667,12 @@ console.log('[BBSApi] Mouse events disabled');
    */
   onKeyUp(callback: (key: string, keyState: Record<string, boolean>) => void): void {
     const existingHandler = this.session.doorKeyStateHandler;
-    const newHandler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+    const newHandler = (data: {
+      key: string;
+      pressed: boolean;
+      keyState: Record<string, boolean>;
+      repeat?: boolean;
+    }) => {
       if (!data.pressed) {
         callback(data.key, data.keyState);
       }
@@ -674,9 +688,21 @@ console.log('[BBSApi] Mouse events disabled');
    * Register callback for all key events (both down and up)
    * More efficient than separate onKeyDown/onKeyUp calls
    */
-  onKeyEvent(callback: (key: string, pressed: boolean, keyState: Record<string, boolean>) => void): void {
-    this.session.doorKeyStateHandler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
-      callback(data.key, data.pressed, data.keyState);
+  onKeyEvent(
+    callback: (
+      key: string,
+      pressed: boolean,
+      keyState: Record<string, boolean>,
+      repeat: boolean,
+    ) => void,
+  ): void {
+    this.session.doorKeyStateHandler = (data: {
+      key: string;
+      pressed: boolean;
+      keyState: Record<string, boolean>;
+      repeat?: boolean;
+    }) => {
+      callback(data.key, data.pressed, data.keyState, data.repeat === true);
     };
   }
 

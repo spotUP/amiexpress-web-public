@@ -186,3 +186,74 @@ export function moveSelection(selection: number, count: number, delta: number): 
   if (count <= 0) return 0;
   return (selection + delta + count) % count;
 }
+
+/**
+ * How fast a held key may step a menu.
+ *
+ * WHY THIS EXISTS, 2026-09-15. The sysop, on pengo: "pengo navigates super
+ * fast in the menu", against grandmaster's and arkanoid's, which are fine.
+ * The difference was never the door - it was that grandmaster's menus are
+ * built from the SDK's `List` widget, which gates its own navigation, and
+ * arkanoid's menu runs in the browser. Every arcade door in this repo drives
+ * its menu from a hand-written `handleMenuInput`, straight off the key
+ * stream, with nothing between it and the browser's synthetic key repeat -
+ * ~33 steps a second through four options.
+ *
+ * The fix is not a slower repeat. That was tried on 2026-09-15 as a
+ * board-wide default and detuned every real-time door that had not opted out;
+ * a menu is the thing that needs a limit, so the limit belongs to the menu.
+ *
+ * 120ms, chosen to match the two gates already in this tree: the `List`
+ * widget's own navigation gate and the application repeat rate in
+ * `packages/terminal`. A HELD key steps ~8 times a second; a DELIBERATE tap
+ * is never eaten, because two taps 120ms apart are not something a hand does
+ * by accident - which is the failure mode `borrowed-list-keys` caught when a
+ * throttle was put in the wrong place.
+ */
+export const MENU_STEP_INTERVAL_MS = 120;
+
+/** What a gate needs from the clock, so a test can hold it still. */
+export interface MenuGateOptions {
+  /** Minimum gap between two accepted steps. Defaults to MENU_STEP_INTERVAL_MS. */
+  intervalMs?: number;
+  /** The clock. Defaults to Date.now. */
+  now?: () => number;
+}
+
+/** A menu's rate limit: ask before every step, act only when it says yes. */
+export interface MenuGate {
+  /**
+   * May the selection move right now?
+   *
+   * Returns true and ARMS the interval, so a caller that asks must act -
+   * asking twice for one keypress silently drops the second answer.
+   */
+  allowStep(): boolean;
+}
+
+/**
+ * Build a menu's rate limit.
+ *
+ * One per menu, not one per keypress. Directional steps only: ENTER and
+ * ESCAPE are single presses that mean something, and a gate in front of them
+ * would eat the deliberate second one.
+ *
+ * There is no reset: a fresh gate opens on its first question, and a menu
+ * re-entered later than one interval ago is indistinguishable from a fresh
+ * one. The only case a reset would serve is leaving and re-entering a menu
+ * inside 120ms, which costs one refused keypress and needs no API.
+ */
+export function createMenuGate(options: MenuGateOptions = {}): MenuGate {
+  const intervalMs = options.intervalMs ?? MENU_STEP_INTERVAL_MS;
+  const now = options.now ?? (() => Date.now());
+  let lastStep = Number.NEGATIVE_INFINITY;
+
+  return {
+    allowStep(): boolean {
+      const at = now();
+      if (at - lastStep < intervalMs) return false;
+      lastStep = at;
+      return true;
+    },
+  };
+}

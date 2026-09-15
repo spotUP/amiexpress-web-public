@@ -9,12 +9,14 @@
 export {
   arcadeMenu,
   moveSelection,
+  createMenuGate,
+  MENU_STEP_INTERVAL_MS,
   optionText,
   visibleLength,
   DEFAULT_HINT,
   MENU_COLORS,
 } from './menu';
-export type { ArcadeMenuSpec, MenuOption } from './menu';
+export type { ArcadeMenuSpec, MenuOption, MenuGate, MenuGateOptions } from './menu';
 
 export { ArcadeSfx, SfxCues, installArcadeSfx, ARCADE_SFX_EVENT } from './sfx';
 export type {

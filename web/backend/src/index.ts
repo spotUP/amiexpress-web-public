@@ -404,6 +404,17 @@ export interface BBSSession {
         key: string;
         pressed: boolean;
         keyState: Record<string, boolean>;
+        /**
+         * True when this press is the browser's synthetic REPEAT of a key
+         * that is still held, rather than a new press.
+         *
+         * The browser has always sent it (`BBSTerminal.tsx`, `key-down`
+         * with `repeat: true`) and the socket handler used to drop it, so a
+         * door could only guess a repeat by keeping its own held-key set -
+         * which goes stale the moment a key-up is lost to a blur or a
+         * dropped frame, and a repeat then reads as a fresh press.
+         */
+        repeat?: boolean;
       }) => void)
     | null; // Door key state handler for simultaneous key input
   doorReconnectHandler?: (() => void) | null; // Door reconnect handler to force redraw after socket reconnect

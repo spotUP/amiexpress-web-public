@@ -34,6 +34,9 @@ const TEST_MODULES = ['./versus-layout.test',
   './panels/board-scale.test',
   './panels/menu-wiring.test',
   './panels/menu-input-mode.test',
+  // Press EDGES: what is an edge, on both transports, and what a marked
+  // auto-repeat is not. Unregistered until 2026-09-15, so it had never run.
+  './panels/input-edges.test',
   './panels/modes.test',
   './panels/garbage-queue.test',
   './panels/garbage-board.test',

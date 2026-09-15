@@ -625,14 +625,27 @@ function normalizeKey(key) {
 /**
  * Handle menu input
  */
+/**
+ * How fast a HELD key may step this menu.
+ *
+ * The browser fills the gap between key-down and key-up with synthetic
+ * repeats - ~33 a second - and `handleMenuInput` below sits straight on that
+ * stream, so a held cursor key runs the selection to an end and stays there.
+ * Shared with the other arcade doors, so all nine answer the same.
+ */
+const menuGate = (0, arcade_1.createMenuGate)();
 function handleMenuInput(key) {
     switch (key) {
         case "up":
+            if (!menuGate.allowStep())
+                break;
             gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
             sfx?.play("blip");
             renderMenu();
             break;
         case "down":
+            if (!menuGate.allowStep())
+                break;
             gameData.menuSelection = Math.min(constants_1.MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
             sfx?.play("blip");
             renderMenu();
