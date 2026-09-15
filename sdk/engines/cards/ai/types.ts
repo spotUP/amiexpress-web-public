@@ -21,6 +21,32 @@ export interface UnoEngine {
 }
 
 /**
+ * Generic Skitgubbe engine interface
+ * (the engine lives in the card-lobby door, not the SDK - same arrangement
+ * as UNO above)
+ */
+export interface SkitgubbeEngine {
+  state: {
+    phase: 'tricks' | 'shedding' | 'over';
+    players: Array<{
+      id: string;
+      name: string;
+      hand: Array<{ rank: string; suit: string }>;
+      won: Array<{ rank: string; suit: string }>;
+      out: boolean;
+    }>;
+    table: Array<{ rank: string; suit: string }>;
+    trump?: string;
+    stock: Array<{ rank: string; suit: string }>;
+    leaderIndex: number;
+    currentIndex: number;
+  };
+  currentPlayerId(): string | null;
+  legalPlays(playerId: string): number[];
+  canTake(playerId: string): boolean;
+}
+
+/**
  * AI difficulty levels
  */
 export enum Difficulty {
@@ -33,7 +59,7 @@ export enum Difficulty {
 /**
  * Game types supported by the AI system
  */
-export type GameType = 'poker' | 'uno';
+export type GameType = 'poker' | 'uno' | 'skitgubbe';
 
 /**
  * Base decision context shared by all games
@@ -59,9 +85,16 @@ export interface UnoDecisionContext extends BaseDecisionContext {
 }
 
 /**
+ * Skitgubbe-specific decision context
+ */
+export interface SkitgubbeDecisionContext extends BaseDecisionContext {
+  engine: SkitgubbeEngine;
+}
+
+/**
  * Union type for all decision contexts
  */
-export type DecisionContext = PokerDecisionContext | UnoDecisionContext;
+export type DecisionContext = PokerDecisionContext | UnoDecisionContext | SkitgubbeDecisionContext;
 
 /**
  * Poker action types
@@ -108,9 +141,30 @@ export interface UnoAIDecision {
 }
 
 /**
+ * Skitgubbe action types
+ *
+ * Two moves and no more: play a card, or - in the shedding phase only -
+ * take the card in front of you into your hand.
+ */
+export enum SkitgubbeActionType {
+  PLAY_CARD = 'play',
+  TAKE_CARD = 'take',
+}
+
+/**
+ * Skitgubbe AI decision
+ */
+export interface SkitgubbeAIDecision {
+  type: 'skitgubbe';
+  action: SkitgubbeActionType;
+  cardIndex?: number; // For play actions - an index into the player's hand
+  reasoning?: string; // Optional debug info
+}
+
+/**
  * Union type for all AI decisions
  */
-export type AIDecision = PokerAIDecision | UnoAIDecision;
+export type AIDecision = PokerAIDecision | UnoAIDecision | SkitgubbeAIDecision;
 
 /**
  * Configuration for difficulty-based behavior

@@ -6,6 +6,7 @@
  */
 
 export { CardGameAI } from './card-game-ai';
+export { SkitgubbeAIStrategy } from './skitgubbe-ai-strategy';
 export { getDifficultyConfig, applyThinkingDelay, shouldMakeMistake } from './difficulty-config';
 
 export type {
@@ -14,8 +15,10 @@ export type {
   AIDecision,
   PokerDecisionContext,
   UnoDecisionContext,
+  SkitgubbeDecisionContext,
   PokerAIDecision,
   UnoAIDecision,
+  SkitgubbeAIDecision,
   DifficultyConfig,
   HandStrength,
   PotOdds,
@@ -27,4 +30,5 @@ export {
   GameType,
   PokerActionType,
   UnoActionType,
+  SkitgubbeActionType,
 } from './types';

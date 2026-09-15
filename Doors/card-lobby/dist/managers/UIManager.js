@@ -1017,6 +1017,58 @@ class UIManager {
         const chrome = (0, card_style_1.resolveCardStyle)(this.cardPreferences, capacity === 'mini' ? card_style_1.FULL_CARD_ROWS - 1 : card_style_1.FULL_CARD_ROWS, this.unicodeCapable);
         return { ...(0, card_style_1.toRenderOptions)(chrome), ...extra };
     }
+    /**
+     * Label the four action buttons for a poker table.
+     *
+     * The labels and their palette are presentation, and the widgets live
+     * here, so the labelling does too - index.ts only has to say which game is
+     * up and whether it has a live hand (it was over the door's 2000-line
+     * ceiling with this inline, 2026-09-15).
+     */
+    labelPokerButtons(hasLiveHand) {
+        this.actionButtons.fold.setContent('FOLD');
+        this.actionButtons.check.setContent(hasLiveHand ? 'CHECK' : 'DEAL');
+        this.actionButtons.call.setContent('CALL');
+        this.actionButtons.raise.setContent('RAISE');
+        this.actionButtons.quit.setContent('QUIT');
+        this.applyActionButtonPalette('fold');
+        this.applyActionButtonPalette('check');
+        this.applyActionButtonPalette('call');
+        this.applyActionButtonPalette('raise');
+        this.applyActionButtonPalette('quit');
+    }
+    /** The same four buttons, saying what they do in UNO. */
+    labelUnoButtons(hasGame, challengeOpen) {
+        this.actionButtons.fold.hide(); // no folding in UNO
+        this.actionButtons.check.setContent(hasGame ? 'PLAY' : 'DEAL');
+        this.actionButtons.call.setContent('DRAW');
+        this.actionButtons.raise.setContent('UNO');
+        this.actionButtons.quit.setContent(challengeOpen ? 'CHALLENGE' : 'QUIT');
+        this.applyUnoButtonPalette('check', 'play');
+        this.applyUnoButtonPalette('call', 'draw');
+        this.applyUnoButtonPalette('raise', 'uno');
+        this.applyUnoButtonPalette('quit', challengeOpen ? 'challenge' : 'quit');
+    }
+    /** And in Skitgubbe, where there are only two moves and no bluffing. */
+    labelSkitgubbeButtons(hasGame, canTake) {
+        this.actionButtons.fold.hide();
+        this.actionButtons.check.setContent(hasGame ? 'PLAY' : 'DEAL');
+        this.actionButtons.call.setContent(canTake ? 'TAKE' : '-');
+        this.actionButtons.raise.setContent('-');
+        this.actionButtons.quit.setContent('QUIT');
+        this.applyActionButtonPalette('check');
+        this.applyActionButtonPalette('call');
+        this.applyActionButtonPalette('raise');
+        this.applyActionButtonPalette('quit');
+    }
+    applyUnoButtonPalette(buttonKey, unoKey) {
+        const button = this.actionButtons[buttonKey];
+        const styleSet = constants_1.UNO_ACTION_BUTTON_STYLES[unoKey];
+        if (!button || !styleSet)
+            return;
+        button.style.fg = styleSet.base.fg;
+        button.style.bg = styleSet.base.bg;
+    }
     renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasLiveHand) {
         if (boardCards.length > 0) {
             this.flopContent.setContent((0, utils_1.renderCardLines)(boardCards, this.cardOptions(flopCardSize)).join('\n'));

@@ -15,6 +15,7 @@ exports.buildActivityHints = buildActivityHints;
 const constants_1 = require("./constants");
 function buildActivityHints(input) {
     const { viewMode, table, isUno, userId, engine } = input;
+    const kind = input.gameKind ?? (isUno ? 'uno' : 'poker');
     if (viewMode !== 'table' || !table || !userId)
         return [];
     const lines = [];
@@ -39,8 +40,13 @@ function buildActivityHints(input) {
             }
         }
     }
-    lines.push(isUno
+    lines.push(kind === 'uno'
         ? `{${constants_1.UI_THEME.dim}-fg}Keys: D Draw  L Leave{/}`
-        : `{${constants_1.UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
+        : kind === 'skitgubbe'
+            // Two moves: play the card you picked, or take the one in front of
+            // you. The keys are the door's existing ones - X is "do the main
+            // thing" at every table, C is the second action.
+            ? `{${constants_1.UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take  L Leave  D Deal{/}`
+            : `{${constants_1.UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
     return lines;
 }

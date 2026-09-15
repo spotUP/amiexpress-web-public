@@ -22,3 +22,4 @@ __exportStar(require("./types"), exports);
 __exportStar(require("./constants"), exports);
 __exportStar(require("./settings"), exports);
 __exportStar(require("./utils"), exports);
+__exportStar(require("./games"), exports);

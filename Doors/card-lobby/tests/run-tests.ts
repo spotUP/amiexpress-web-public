@@ -16,6 +16,8 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './menus.test',
   './card-style.test',
   './chat.test',
+  './skitgubbe-engine.test',
+  './skitgubbe-table.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

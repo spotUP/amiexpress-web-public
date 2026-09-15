@@ -10,7 +10,8 @@
 import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
-import { type LobbyTable, type PlayerProfile, isBotPlayer, isUnoTable, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
+import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
+import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule } from '../lib/games';
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
 
@@ -47,6 +48,8 @@ export interface GameViewHost {
   readonly viewMode: 'lobby' | 'table';
   readonly tableFlow: { isObserverForTable(table: LobbyTable, userId: string): boolean };
   readonly screen: { render(): void };
+  gameModuleFor(table: LobbyTable): TableGameModule | undefined;
+  readonly skitgubbe: SkitgubbeGameModule;
 }
 
 export class GameViews {
@@ -103,9 +106,11 @@ export class GameViews {
       this.host.tableActions.show();
       this.host.layoutTablePanels();
 
-      // Detect game type and render appropriately
-      if (isUnoTable(table)) {
-        this.renderUnoGameView(table);
+      // Each game paints its own panels, through the registry rather than a
+      // chain of "is this UNO?" (lib/games/types.ts).
+      const module = this.host.gameModuleFor(table);
+      if (module) {
+        module.render(this, table);
       } else {
         this.renderPokerGameView(table);
       }
@@ -283,5 +288,81 @@ export class GameViews {
 
     // Render activity/events
     this.host.uiManager.renderUnoActivity(state.lastAction, state.challengeWindow);
+  }
+
+  /**
+   * SKITGUBBE in the same four panels.
+   *
+   * The cards are an ordinary pack, so this borrows poker's card painter
+   * whole (`renderBoardAndHand`): the trick on the table goes where the
+   * board goes, and the caller's hand where a hand goes. What is left is the
+   * part that is peculiar to this game - which phase it is, what trumps are,
+   * how deep the stock still is, and who is about to be stuck with the lot.
+   */
+  renderSkitgubbeGameView(table: LobbyTable): void {
+    const loaded = this.host.skitgubbe.load(table);
+    if (!loaded) {
+      this.host.flopContent.setContent('Waiting for a game to start...');
+      this.host.playersContent.setContent('No Skitgubbe game.');
+      this.host.handContent.setContent('Press {cyan-fg}D{/} to deal.');
+      this.host.activityContent.setContent('');
+      return;
+    }
+
+    const state = loaded.engine.state;
+    const meId = this.host.currentProfile?.userId ?? '';
+    const me = state.players.find((player) => player.id === meId);
+    const onTurn = loaded.engine.currentPlayerId();
+
+    this.host.renderBoardAndHand(
+      state.table as any,
+      (me?.hand ?? []) as any,
+      'auto',
+      'auto',
+      true,
+    );
+
+    // Who is where, and how much they are still carrying. In phase one the
+    // pile in front of a player is what they have WON and will have to shed,
+    // which is the number that actually matters.
+    const lines: string[] = [];
+    lines.push(state.phase === 'tricks'
+      ? '{cyan-fg}Phase 1{/} - win tricks'
+      : state.phase === 'shedding'
+        ? '{cyan-fg}Phase 2{/} - get rid of them'
+        : '{cyan-fg}Game over{/}');
+    lines.push(state.trump ? `Trumps: {yellow-fg}${SUIT_NAMES[state.trump]}{/}` : 'Trumps: not turned yet');
+    if (state.phase === 'tricks') lines.push(`Stock: ${state.stock.length}`);
+    lines.push('');
+
+    for (const player of state.players) {
+      const marker = player.id === onTurn ? '{green-fg}>{/}' : ' ';
+      const carrying = state.phase === 'tricks' ? player.won.length : player.hand.length;
+      const label = player.out ? 'OUT' : `${carrying}`;
+      const name = `${player.name}${player.isBot ? '*' : ''}`.slice(0, 12);
+      lines.push(`${marker} ${pad(name, 12)} ${pad(label, 4)}`);
+    }
+    this.host.playersContent.setContent(lines.join('\n'));
+
+    // The legend does the teaching: which keys are live right now, and which
+    // cards in hand can legally be played.
+    const activity: string[] = [state.lastAction];
+    if (state.phase !== 'over' && me && onTurn === meId) {
+      const legal = loaded.engine.legalPlays(meId);
+      const selected = this.host.skitgubbe.selectedCardIndex;
+      const keys = legal.map((index) => {
+        const label = index === 9 ? '0' : String(index + 1);
+        return index === selected ? `{yellow-bg}{black-fg}[${label}]{/}{/}` : `{green-fg}[${label}]{/}`;
+      });
+      activity.push('');
+      activity.push(keys.length > 0 ? `Playable: ${keys.join(' ')}` : 'Nothing in hand beats it.');
+      activity.push(loaded.engine.canTake(meId)
+        ? 'X plays the picked card - or C takes the card in front of you.'
+        : 'Pick a card with its number, then X to play it.');
+    } else if (state.phase !== 'over') {
+      activity.push('');
+      activity.push('Waiting for the other players...');
+    }
+    this.host.activityContent.setContent(activity.join('\n'));
   }
 }

@@ -1,0 +1,85 @@
+/**
+ * ONE SEAM FOR EVERY GAME IN THE LOBBY.
+ *
+ * Hold'em came first and UNO was threaded in beside it: fourteen
+ * `isUnoTable(table)` branches across index.ts, GameViews and the gamepad
+ * bindings, plus a set of uno-named methods on the app. It worked, but it
+ * priced every future game at the same fourteen edits, and the sysop asked
+ * for Skitgubbe "without duplicating code" (2026-09-15).
+ *
+ * So the questions the door actually asks about a table are written down
+ * here, once, and each game answers them:
+ *
+ *   - may the poker engine restore this table's hand?   `usesPokerEngine`
+ *   - which hints belong in the activity panel?          `hintKind`
+ *   - how does a game start here?                        `start`
+ *   - what goes in the four panels?                      `render`
+ *   - what do the number keys and the pad buttons do?     `selectCard`,
+ *                                                         `primaryAction`,
+ *                                                         `secondaryAction`,
+ *                                                         `tertiaryAction`
+ *
+ * A game that answers them is playable; nothing else in the door needs to
+ * learn its name. Hold'em and UNO answer by delegating to the code that
+ * already runs them - this is a seam, not a rewrite - and Skitgubbe answers
+ * for itself.
+ */
+
+import type { LobbyTable } from '../types';
+
+/** What the activity panel should say while this game is up. */
+export type GameHintKind = 'poker' | 'uno' | 'skitgubbe';
+
+/**
+ * The painter. GameViews owns the four panels; a module only says which of
+ * its methods draws this game, so the drawing stays in one file.
+ */
+export interface TableGamePainter {
+  renderPokerGameView(table: LobbyTable): void;
+  renderUnoGameView(table: LobbyTable): void;
+  renderSkitgubbeGameView(table: LobbyTable): void;
+}
+
+export interface TableGameModule {
+  /** The catalogue ids this module serves (a game may have variants). */
+  readonly ids: readonly string[];
+
+  /**
+   * Whether `table.hand.snapshot` is a PokerEngine snapshot.
+   *
+   * `loadTableHand` hands the snapshot to `PokerEngine.restore()`, and a
+   * game that keeps a different shape there must say so or the table screen
+   * throws on every repaint - which is exactly what UNO did on 2026-09-02.
+   */
+  readonly usesPokerEngine: boolean;
+
+  readonly hintKind: GameHintKind;
+
+  /** Deal / start a game at this table. */
+  start(table: LobbyTable): Promise<void>;
+
+  /** Paint the table panels for this game. */
+  render(painter: TableGamePainter, table: LobbyTable): void;
+
+  /** A number key: pick the nth card of the hand (0-based). */
+  selectCard(index: number): void;
+
+  /** Pad A, and the key that means "do the main thing" at this table. */
+  primaryAction(): void;
+
+  /** Pad B - fold at poker, draw at UNO, take the card at Skitgubbe. */
+  secondaryAction(): void;
+
+  /** Pad Y - raise at poker, call UNO, and nothing at Skitgubbe. */
+  tertiaryAction(): void;
+
+  /**
+   * Q at a table. UNO steals it for CHALLENGE while a challenge window is
+   * open; every other game lets it mean quit. Return true to say the key was
+   * consumed.
+   */
+  quitAction?(): boolean;
+
+  /** Label the four action buttons for this game. */
+  updateActionButtons?(table: LobbyTable): void;
+}

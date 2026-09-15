@@ -10,7 +10,7 @@ import type { UnoColor as EngineUnoColor, UnoValue as EngineUnoValue } from '@am
 import {
   attachDoorChrome, type DoorChrome, type GlitchSource,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
-import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, activeTheme, type ActionButtonKey } from '../lib/constants';
+import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, UNO_ACTION_BUTTON_STYLES, activeTheme, type ActionButtonKey } from '../lib/constants';
 import { renderCardLines, stripBlessedTags, wrapTagged, padColumn } from '../lib/utils';
 import { resolveCardStyle, toRenderOptions, FULL_CARD_ROWS } from '../lib/card-style';
 import type { CardPreferences, LobbyTable } from '../lib/types';
@@ -1130,6 +1130,67 @@ export class UIManager {
       this.unicodeCapable,
     );
     return { ...toRenderOptions(chrome), ...extra };
+  }
+
+  /**
+   * Label the four action buttons for a poker table.
+   *
+   * The labels and their palette are presentation, and the widgets live
+   * here, so the labelling does too - index.ts only has to say which game is
+   * up and whether it has a live hand (it was over the door's 2000-line
+   * ceiling with this inline, 2026-09-15).
+   */
+  labelPokerButtons(hasLiveHand: boolean): void {
+    this.actionButtons.fold.setContent('FOLD');
+    this.actionButtons.check.setContent(hasLiveHand ? 'CHECK' : 'DEAL');
+    this.actionButtons.call.setContent('CALL');
+    this.actionButtons.raise.setContent('RAISE');
+    this.actionButtons.quit.setContent('QUIT');
+
+    this.applyActionButtonPalette('fold');
+    this.applyActionButtonPalette('check');
+    this.applyActionButtonPalette('call');
+    this.applyActionButtonPalette('raise');
+    this.applyActionButtonPalette('quit');
+  }
+
+  /** The same four buttons, saying what they do in UNO. */
+  labelUnoButtons(hasGame: boolean, challengeOpen: boolean): void {
+    this.actionButtons.fold.hide();                       // no folding in UNO
+    this.actionButtons.check.setContent(hasGame ? 'PLAY' : 'DEAL');
+    this.actionButtons.call.setContent('DRAW');
+    this.actionButtons.raise.setContent('UNO');
+    this.actionButtons.quit.setContent(challengeOpen ? 'CHALLENGE' : 'QUIT');
+
+    this.applyUnoButtonPalette('check', 'play');
+    this.applyUnoButtonPalette('call', 'draw');
+    this.applyUnoButtonPalette('raise', 'uno');
+    this.applyUnoButtonPalette('quit', challengeOpen ? 'challenge' : 'quit');
+  }
+
+  /** And in Skitgubbe, where there are only two moves and no bluffing. */
+  labelSkitgubbeButtons(hasGame: boolean, canTake: boolean): void {
+    this.actionButtons.fold.hide();
+    this.actionButtons.check.setContent(hasGame ? 'PLAY' : 'DEAL');
+    this.actionButtons.call.setContent(canTake ? 'TAKE' : '-');
+    this.actionButtons.raise.setContent('-');
+    this.actionButtons.quit.setContent('QUIT');
+
+    this.applyActionButtonPalette('check');
+    this.applyActionButtonPalette('call');
+    this.applyActionButtonPalette('raise');
+    this.applyActionButtonPalette('quit');
+  }
+
+  private applyUnoButtonPalette(
+    buttonKey: ActionButtonKey,
+    unoKey: 'play' | 'draw' | 'uno' | 'challenge' | 'quit',
+  ): void {
+    const button = this.actionButtons[buttonKey];
+    const styleSet = UNO_ACTION_BUTTON_STYLES[unoKey];
+    if (!button || !styleSet) return;
+    button.style.fg = styleSet.base.fg;
+    button.style.bg = styleSet.base.bg;
   }
 
   renderBoardAndHand(

@@ -48,10 +48,18 @@ import {
   CardGameAI,
   PokerAIStrategy,
   UnoAIStrategy,
+  SkitgubbeAIStrategy,
 } from '@amiexpress/bbs-door-sdk';
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
 import { UnoGameEngine, type UnoGameSnapshot } from './lib/uno-engine';
+import {
+  GameRegistry,
+  HoldemGameModule,
+  UnoGameModule,
+  SkitgubbeGameModule,
+  type TableGameModule,
+} from './lib/games';
 import {
   type DoorSession,
   type LobbyState,
@@ -71,7 +79,6 @@ import {
   applyTheme,
   ACTION_BUTTON_STYLES,
   ACTION_BUTTON_ORDER,
-  UNO_ACTION_BUTTON_STYLES,
   UNO_ACTION_BUTTON_ORDER,
   CHIP_NAME,
   DAILY_RESET_MS,
@@ -148,6 +155,16 @@ export class CardLobbyApp {
   public tableFlow!: TableFlow;
   private unoEvents!: UnoEventBus;
   private gameViews!: GameViews;
+  /**
+   * Which game a table is playing, asked in one place (lib/games/registry.ts).
+   * Hold'em and UNO are adapters over the handlers in this file; Skitgubbe
+   * brings its own module, so adding it cost no branches here.
+   */
+  private games!: GameRegistry;
+  /** Kept by name as well: the Skitgubbe module owns the caller's selection. */
+  public skitgubbe!: SkitgubbeGameModule;
+  /** The SDK's AI, shared by every game's bots. */
+  public cardGameAI: CardGameAI | null = null;
   private terminalMode!: TerminalModeSwitch;
   /** The board's theme, resolved once: tags, and the palette behind them. */
   private styles!: ThemeStyles;
@@ -439,9 +456,7 @@ export class CardLobbyApp {
         const table = this.currentProfile?.currentTableId
           ? this.findTableById(this.currentProfile.currentTableId)
           : null;
-        if (table && (isUnoTable(table))) {
-          this.selectUnoCard(i - 1);  // Convert 1-based to 0-based index
-        }
+        this.games.for(table)?.selectCard(i - 1);  // Convert 1-based to 0-based index
       });
     }
     this.screen.key(['0'], () => {
@@ -449,9 +464,7 @@ export class CardLobbyApp {
       const table = this.currentProfile?.currentTableId
         ? this.findTableById(this.currentProfile.currentTableId)
         : null;
-      if (table && (isUnoTable(table))) {
-        this.selectUnoCard(9);  // 0 key = 10th card (index 9)
-      }
+      this.games.for(table)?.selectCard(9);  // 0 key = 10th card (index 9)
     });
 
     this.desktop = createBox({
@@ -483,7 +496,22 @@ export class CardLobbyApp {
     const ai = new CardGameAI();
     ai.registerStrategy(new PokerAIStrategy());
     ai.registerStrategy(new UnoAIStrategy());
+    ai.registerStrategy(new SkitgubbeAIStrategy());
     this.gameStateManager.setAI(ai);
+    this.cardGameAI = ai;
+
+    /*
+     * Every game at a table goes through here (lib/games/registry.ts).
+     * Hold'em and UNO are adapters over the handlers just above; Skitgubbe
+     * brings its own. Nothing else in this file asks which game a table is
+     * playing any more.
+     */
+    this.skitgubbe = new SkitgubbeGameModule(this);
+    this.games = new GameRegistry([
+      new HoldemGameModule(this),
+      new UnoGameModule(this),
+      this.skitgubbe,
+    ]);
 
     // Build overlay FIRST so overlayShade exists
     this.uiManager.buildOverlay();
@@ -731,6 +759,16 @@ export class CardLobbyApp {
     await globalStore.save(PROFILES_KEY, this.profiles);
   }
 
+  /** Which module serves this table - the pad, the painter and the keys all ask. */
+  public gameModuleFor(table: LobbyTable | null | undefined): TableGameModule | undefined {
+    return this.games.for(table);
+  }
+
+  /** The seat a player occupies at a table, or undefined for an observer. */
+  public seatOf(table: LobbyTable, userId: string) {
+    return table.players.find((player) => player.userId === userId && player.role === 'player');
+  }
+
   public findTableById(tableId: number): LobbyTable | undefined {
     return this.lobby?.tables.find((table) => table.id === tableId);
   }
@@ -744,7 +782,7 @@ export class CardLobbyApp {
     // moment a game was dealt (reported live 2026-09-02). The guard lives
     // HERE rather than at the call sites: two of the twelve had already
     // forgotten it, and a thirteenth would have too.
-    if (isUnoTable(table)) return null;
+    if (!this.games.usesPokerEngine(table)) return null;
     try {
       const engine = PokerEngine.restore(table.hand.snapshot) as PokerEngine;
       return { engine, beforeStacks: table.hand.beforeStacks ?? {} };
@@ -780,7 +818,7 @@ export class CardLobbyApp {
     table.updatedAt = Date.now();
   }
 
-  private clearTableHand(table: LobbyTable): void {
+  public clearTableHand(table: LobbyTable): void {
     table.hand = undefined;
     table.updatedAt = Date.now();
   }
@@ -1100,7 +1138,8 @@ export class CardLobbyApp {
     const hintLines = buildActivityHints({
       viewMode: this.viewMode,
       table: table as any,
-      isUno: table ? isUnoTable(table) : false,
+      isUno: this.games.hintKind(table) === 'uno',
+      gameKind: this.games.hintKind(table) ?? 'poker',
       userId: this.currentProfile?.userId ?? null,
       engine: (engineOverride ?? (table ? this.loadTableHand(table)?.engine : null) ?? null) as any,
     });
@@ -1252,15 +1291,15 @@ export class CardLobbyApp {
     if (this.currentProfile?.currentTableId && this.lobby) {
       const table = this.findTableById(this.currentProfile.currentTableId);
 
-      // Route to appropriate game handler
-      if (table && (isUnoTable(table))) {
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState) {
+      // Route to whichever game this table is playing. Poker falls through
+      // to the betting path below; the card games take the key themselves.
+      const module = this.games.for(table);
+      if (table && module && !module.usesPokerEngine) {
+        if (!table.hand) {
           this.runAction(() => this.dealHand());
           return;
         }
-        // For UNO, CHECK button becomes PLAY CARD
-        this.triggerUnoPlayCard();
+        module.primaryAction();
         return;
       }
 
@@ -1285,8 +1324,9 @@ export class CardLobbyApp {
     // Route to UNO handler if UNO game
     if (this.currentProfile?.currentTableId && this.lobby) {
       const table = this.findTableById(this.currentProfile.currentTableId);
-      if (table && (isUnoTable(table))) {
-        this.triggerUnoDrawCard();
+      const module = this.games.for(table);
+      if (table && module && !module.usesPokerEngine) {
+        module.secondaryAction();
         return;
       }
     }
@@ -1302,8 +1342,9 @@ export class CardLobbyApp {
     // Route to UNO handler if UNO game
     if (this.currentProfile?.currentTableId && this.lobby) {
       const table = this.findTableById(this.currentProfile.currentTableId);
-      if (table && (isUnoTable(table))) {
-        this.triggerUnoCallUno();
+      const module = this.games.for(table);
+      if (table && module && !module.usesPokerEngine) {
+        module.tertiaryAction();
         return;
       }
     }
@@ -1319,10 +1360,8 @@ export class CardLobbyApp {
     // Route to UNO handler if UNO game
     if (this.currentProfile?.currentTableId && this.lobby) {
       const table = this.findTableById(this.currentProfile.currentTableId);
-      if (table && (isUnoTable(table))) {
-        this.triggerUnoChallenge();
-        return;
-      }
+      const module = this.games.for(table);
+      if (table && module?.quitAction?.()) return;
     }
 
     this.exitDoor();
@@ -1332,7 +1371,7 @@ export class CardLobbyApp {
   // UNO ACTION TRIGGERS
   // ============================================================================
 
-  private triggerUnoPlayCard(): void {
+  public triggerUnoPlayCard(): void {
     if (this.modalActive || !this.currentProfile || !this.lobby) return;
     const table = this.currentProfile.currentTableId
       ? this.findTableById(this.currentProfile.currentTableId)
@@ -1425,7 +1464,7 @@ export class CardLobbyApp {
     this.runAction(() => this.handleUnoAction('call-uno'));
   }
 
-  private triggerUnoChallenge(): void {
+  public triggerUnoChallenge(): void {
     if (this.modalActive || !this.currentProfile || !this.lobby) return;
     const table = this.currentProfile.currentTableId
       ? this.findTableById(this.currentProfile.currentTableId)
@@ -1468,9 +1507,10 @@ export class CardLobbyApp {
 
     const table = this.findTableById(this.currentProfile.currentTableId);
 
-    // Detect game type and update button labels
-    if (table && (isUnoTable(table))) {
-      this.updateUnoActionButtons(table);
+    // Each game labels its own buttons (lib/games/registry.ts).
+    const module = this.games.for(table);
+    if (table && module?.updateActionButtons) {
+      module.updateActionButtons(table);
     } else {
       this.updatePokerActionButtons(table ?? null);
     }
@@ -1478,73 +1518,18 @@ export class CardLobbyApp {
     this.layoutActionButtons();
   }
 
-  private updatePokerActionButtons(table: LobbyTable | null): void {
-    this.actionButtons.fold.setContent('FOLD');
-    const handState = table ? this.loadTableHand(table) : null;
-    this.actionButtons.check.setContent(handState ? 'CHECK' : 'DEAL');
-    this.actionButtons.call.setContent('CALL');
-    this.actionButtons.raise.setContent('RAISE');
-    this.actionButtons.quit.setContent('QUIT');
-
-    this.applyActionButtonPalette('fold');
-    this.applyActionButtonPalette('check');
-    this.applyActionButtonPalette('call');
-    this.applyActionButtonPalette('raise');
-    this.applyActionButtonPalette('quit');
+  public updatePokerActionButtons(table: LobbyTable | null): void {
+    this.uiManager.labelPokerButtons(Boolean(table && this.loadTableHand(table)));
   }
 
-  private updateUnoActionButtons(table: LobbyTable): void {
+  public labelSkitgubbeButtons(hasGame: boolean, canTake: boolean): void {
+    this.uiManager.labelSkitgubbeButtons(hasGame, canTake);
+  }
+
+  public updateUnoActionButtons(table: LobbyTable): void {
     const gameState = this.loadUnoGameState(table);
-    const state = gameState?.engine.getGameState();
-
-    // Fold button -> hidden (not used in UNO)
-    this.actionButtons.fold.hide();
-
-    // Check button -> PLAY CARD / DEAL
-    if (!gameState) {
-      this.actionButtons.check.setContent('DEAL');
-    } else {
-      this.actionButtons.check.setContent('PLAY');
-    }
-
-    // Call button -> DRAW
-    this.actionButtons.call.setContent('DRAW');
-
-    // Raise button -> UNO
-    this.actionButtons.raise.setContent('UNO');
-
-    // Quit button -> CHALLENGE (if window active) or QUIT
-    if (state?.challengeWindow) {
-      this.actionButtons.quit.setContent('CHALLENGE');
-    } else {
-      this.actionButtons.quit.setContent('QUIT');
-    }
-
-    // Apply UNO button styles
-    this.applyUnoButtonPalette('check', 'play');
-    this.applyUnoButtonPalette('call', 'draw');
-    this.applyUnoButtonPalette('raise', 'uno');
-    if (state?.challengeWindow) {
-      this.applyUnoButtonPalette('quit', 'challenge');
-    } else {
-      this.applyUnoButtonPalette('quit', 'quit');
-    }
-  }
-
-  private applyUnoButtonPalette(
-    buttonKey: 'fold' | 'check' | 'call' | 'raise' | 'quit',
-    unoKey: 'play' | 'draw' | 'uno' | 'challenge' | 'quit'
-  ): void {
-    const button = this.actionButtons[buttonKey];
-    const styleSet = UNO_ACTION_BUTTON_STYLES[unoKey];
-    if (!button || !styleSet) return;
-
-    // Apply base style
-    button.style.fg = styleSet.base.fg;
-    button.style.bg = styleSet.base.bg;
-
-    // Note: hover and focus styles would be applied by blessed's event handlers
-    // For now, we just set the base style
+    const challengeOpen = Boolean(gameState?.engine.getGameState().challengeWindow);
+    this.uiManager.labelUnoButtons(Boolean(gameState), challengeOpen);
   }
 
   public focusLobby(): void {
@@ -1743,14 +1728,12 @@ export class CardLobbyApp {
       return;
     }
 
-    if (table.gameId === 'holdem') {
-      await this.startHoldemHand(table);
-    } else if (isUnoTable(table)) {
-      await this.startUnoGame(table);
-    } else {
+    const module = this.games.for(table);
+    if (!module) {
       this.pushNotice(`${table.gameName} is not implemented yet.`);
       return;
     }
+    await module.start(table);
 
     this.updateAllPanels();
   }
@@ -1807,7 +1790,7 @@ export class CardLobbyApp {
     });
   }
 
-  private async startHoldemHand(table: LobbyTable): Promise<void> {
+  public async startHoldemHand(table: LobbyTable): Promise<void> {
     await this.gameStateManager.startHoldemHand(table, this.lobby, this.currentProfile, {
       reloadState: this.reloadState.bind(this),
       findTableById: this.findTableById.bind(this),
@@ -1855,7 +1838,7 @@ export class CardLobbyApp {
   // UNO GAME METHODS
   // ============================================================================
 
-  private async startUnoGame(table: LobbyTable): Promise<void> {
+  public async startUnoGame(table: LobbyTable): Promise<void> {
     await this.gameStateManager.startUnoGame(table, this.lobby, this.currentProfile, {
       reloadState: this.reloadState.bind(this),
       findTableById: this.findTableById.bind(this),

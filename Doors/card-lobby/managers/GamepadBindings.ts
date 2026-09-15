@@ -12,7 +12,7 @@
  * is allowed to reach.
  */
 
-import { isUnoTable } from '../lib/utils';
+import type { TableGameModule } from '../lib/games';
 import { GamepadInputManager } from '@amiexpress/bbs-door-sdk/utils/gamepad-input-manager';
 import type { DoorSession, LobbyTable, PlayerProfile } from '../lib';
 
@@ -35,6 +35,12 @@ export interface GamepadHost {
   triggerRaise(): void;
   triggerUnoDrawCard(): void;
   triggerUnoCallUno(): void;
+  /**
+   * The game this table is playing, or undefined for one the lobby cannot
+   * deal. The pad asks once and calls the module's own action, so a new game
+   * is playable on a gamepad the day it registers (lib/games/registry.ts).
+   */
+  gameModuleFor(table: LobbyTable): TableGameModule | undefined;
 }
 
 /** Wire the pad to the door and hand back the manager to clean up later. */
@@ -88,10 +94,10 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
       if (table) {
         if (table.gameId === 'poker' || table.gameId === 'poker-house') {
           host.triggerCall();
-        } else if (isUnoTable(table)) {
-          // Select the first card in hand; selectUnoCard loads the
-          // game itself and does nothing when there is no game.
-          host.selectUnoCard(0);
+        } else {
+          // Select the first card in hand; the module loads the game itself
+          // and does nothing when there is no game.
+          host.gameModuleFor(table)?.selectCard(0);
         }
       }
     }
@@ -117,8 +123,8 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
     if (table) {
       if (table.gameId === 'poker' || table.gameId === 'poker-house') {
         host.triggerFold();
-      } else if (isUnoTable(table)) {
-        host.triggerUnoDrawCard();
+      } else {
+        host.gameModuleFor(table)?.secondaryAction();
       }
     }
   });
@@ -134,8 +140,8 @@ export function attachGamepadBindings(session: DoorSession, host: GamepadHost): 
     if (table) {
       if (table.gameId === 'poker' || table.gameId === 'poker-house') {
         host.triggerRaise();
-      } else if (isUnoTable(table)) {
-        host.triggerUnoCallUno();
+      } else {
+        host.gameModuleFor(table)?.tertiaryAction();
       }
     }
   });

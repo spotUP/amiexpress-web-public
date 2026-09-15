@@ -127,7 +127,7 @@ export type {
   AudioQualityProfile,
   QualityChangeEvent,
 } from './media';
-export { CardEngine } from './engines/cards/card-engine';
+export { CardEngine, buildStandardDeck, buildUnoDeck, shuffleCards } from './engines/cards/card-engine';
 export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';
@@ -137,6 +137,10 @@ export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialog
 export type {
   BackStyle,
   Card,
+  Rank,
+  Suit,
+  SuitAscii,
+  SuitSymbol,
   CardEngineOptions,
   CardFace,
   CardSize,
@@ -182,6 +186,7 @@ export {
 export { CardGameAI } from './engines/cards/ai/card-game-ai';
 export { PokerAIStrategy } from './engines/cards/ai/poker-ai-strategy';
 export { UnoAIStrategy } from './engines/cards/ai/uno-ai-strategy';
+export { SkitgubbeAIStrategy } from './engines/cards/ai/skitgubbe-ai-strategy';
 export {
   getDifficultyConfig,
   applyThinkingDelay,
@@ -193,8 +198,10 @@ export type {
   AIDecision,
   PokerDecisionContext,
   UnoDecisionContext,
+  SkitgubbeDecisionContext,
   PokerAIDecision,
   UnoAIDecision,
+  SkitgubbeAIDecision,
   DifficultyConfig,
   HandStrength,
   PotOdds,
@@ -205,6 +212,7 @@ export {
   GameType,
   PokerActionType,
   UnoActionType,
+  SkitgubbeActionType,
 } from './engines/cards/ai/types';
 
 // UI Library - Blessed (full neo-blessed port without Node.js dependencies)

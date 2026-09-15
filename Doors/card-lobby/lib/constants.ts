@@ -283,6 +283,25 @@ export const GAME_CATALOG: GameDefinition[] = [
     enabled: true,
   },
   {
+    id: 'skitgubbe',
+    name: 'Skitgubbe',
+    /*
+     * The Swedish "dirty old man": two phases with opposite goals. Win
+     * tricks to collect cards, then get rid of every one of them. The last
+     * player holding cards is the Skitgubbe.
+     * https://www.pagat.com/beating/skitgubbe.html
+     */
+    description: 'Win tricks, then shed every card. Last one holding is the Skitgubbe.',
+    minPlayers: 2,
+    maxPlayers: 4,
+    stakes: [
+      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+      { label: '50', smallBlind: 0, bigBlind: 50, buyIn: 1000 },
+    ],
+    enabled: true,
+  },
+  {
     id: 'uno-house',
     name: 'UNO: House Rules',
     description: 'UNO with customizable house rules. Create your own chaos!',
