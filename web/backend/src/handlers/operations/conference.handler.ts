@@ -376,6 +376,30 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     await continueJoinAfterBull(socket, session, conference, messageBase, messageBases, confId, auto, mailStat, isCustom, msgBaseId, confScan, forceMailScan);
   }
 
+  /*
+   * THE MAIL SCAN IS NOT PART OF THE DISPLAY.
+   *
+   * express.e:5056 opens `IF(confScan=FALSE)` around the display block -
+   * CONF_BULL, the "Joining Conference" line, the message stats - and closes
+   * it at 5117. The mail scan at 5119-5128 sits OUTSIDE that block, gated
+   * only by `auto=FALSE` and `forceMailScan<>FORCE_MAILSCAN_SKIP`.
+   *
+   * This port nested the scan inside its own display gate instead:
+   * `runJoinMailScan` is reached only through `continueJoinAfterBull`, which
+   * is called at two places, both inside `if (!silent)`. `MS` joins every
+   * conference with `silent=true` (advanced-commands.handler.ts:239,
+   * mirroring express.e:25264), so the scan was unreachable from MS - the
+   * board scanned nothing, and a CUSTOM conference never reached its door.
+   * The command printed "Conferences scanned: N" over an empty walk.
+   *
+   * The silent path therefore runs the scan on its own, which is what
+   * express.e does. `!silent` keeps reaching it through the bulletin
+   * continuation, so nothing scans twice.
+   */
+  if (silent) {
+    await runJoinMailScan(socket, session, confId, msgBaseId, auto, confScan, forceMailScan, isCustom);
+  }
+
   return true;
 }
 
