@@ -16,7 +16,6 @@
  *   > document.activeElement.className   -> "xterm-helper-textarea"
  *   > document.querySelector('.xterm').classList.contains('focus') -> false
  */
-import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 
@@ -26,10 +25,19 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
     options: Record<string, any>;
     textarea: HTMLTextAreaElement | null = null;
-    rows: HTMLElement | null = null;
     element: HTMLElement | null = null;
     cols = 80;
-    rows = 25;
+    /*
+     * ONE field, because that is what the runtime always had.
+     *
+     * xterm's own `rows` is a NUMBER, and this fake also stands in for the
+     * `.xterm-rows` element that the focus class lands on - the thing the
+     * assertions below read. It used to be declared twice, which TypeScript
+     * rejected (TS2300/TS2717) while the runtime quietly did the obvious
+     * thing: the number won until `open()` replaced it with the div. This
+     * types what was already happening rather than changing it.
+     */
+    rows: any = 25;
     /** Every blur()/focus() pair the component asks for, in order. */
     focusCalls: string[] = [];
     constructor(opts: any) { this.options = { ...opts }; rec.terminals.push(this); }
