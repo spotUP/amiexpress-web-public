@@ -85,7 +85,14 @@ beforeAll(() => {
 });
 
 let seq = 0;
-async function show(screenPath: string, session: any): Promise<string> {
+/**
+ * `expectShown` is displayScreen's OWN answer: "did the caller see this
+ * screen?". Every screen here is shown except the skipped art one - a
+ * screen replaced by a one-line token was NOT shown, and callers such as
+ * login-post.service's ONENODE check read that false to run their
+ * fallback. See tests/handlers/a-skipped-screen-was-not-shown.test.ts.
+ */
+async function show(screenPath: string, session: any, expectShown = true): Promise<string> {
   const emitted: Array<{ event: string; data: any }> = [];
   const socket = {
     // getAnsiBuffer (reached via displayScreen's flushOutput) keys its
@@ -95,7 +102,7 @@ async function show(screenPath: string, session: any): Promise<string> {
     on: () => {},
   };
   const ok = await displayScreen(socket as any, session, screenPath);
-  expect(ok).toBe(true);
+  expect(ok).toBe(expectShown);
   return emitted
     .filter((e) => e.event === 'ansi-output')
     .map((e) => String(e.data))
@@ -130,7 +137,7 @@ describe('PETSCII text-screen fallback on the real displayScreen path', () => {
   });
 
   it('skips an ANSI-art screen with the ASCII token instead of smearing it', async () => {
-    const out = await show(artPath, { petsciiMode: true, screenWidth: 40, nodeId: 0 });
+    const out = await show(artPath, { petsciiMode: true, screenWidth: 40, nodeId: 0 }, false);
 
     expect(out).toBe(ANSI_ART_SKIPPED_NOTICE);
     expect(out).not.toContain(UNICODE_BLOCKS);

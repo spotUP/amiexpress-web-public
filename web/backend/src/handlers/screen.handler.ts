@@ -2523,7 +2523,33 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     if (petsciiTextPlan === 'art-skip') {
       socket.emit('ansi-output', ANSI_ART_SKIPPED_NOTICE);
       screenFlowLog(screenName, `PETSCII session: 80-col ANSI art screen skipped (${filePath})`);
-      return true;
+      session.lastScreenFilePath = filePath;
+      /*
+       * ANSWER **FALSE**: THE CALLER WAS NOT SHOWN THIS SCREEN.
+       *
+       * Sysop, 2026-09-15, with a photograph of a C64 screen holding nothing
+       * but the skip token: "stuck here on live". He was not stuck - he was
+       * already logged in on another node, and this is what he was told
+       * about it.
+       *
+       * `login-post.service.ts:600` is express.e:29715-29727:
+       *
+       *     IF displayScreen(SCREEN_ONENODE) = FALSE
+       *       aePuts('You are already logged into another node!')
+       *
+       * The fallback line exists precisely for a board whose ONENODE screen
+       * does not reach the caller. Answering TRUE for a screen we DECLINED to
+       * draw told that branch the caller had been informed, so the one
+       * sentence that would have explained the disconnect was suppressed, and
+       * the line went dead a half second later.
+       *
+       * The token is a notice, not a screen: it says why nothing was drawn.
+       * Everything that asks "was the screen shown" - the fallback lines, the
+       * display flow's `IF (displayScreen(X)) THEN doPause()` - now gets the
+       * true answer, and a caller is not asked to press a key to dismiss
+       * something they were never shown.
+       */
+      return false;
     }
 
     // [NEWLINE-DEBUG] Log raw content newlines
