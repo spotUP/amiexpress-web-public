@@ -298,6 +298,30 @@ export function armSegmentBoundaryPause(
 }
 
 /**
+ * IS A PAUSE PROMPT ALREADY ON THE CALLER'S SCREEN?
+ *
+ * An installed `doPause` gate means the prompt has been written and not yet
+ * answered - `handlePaginationInput` clears the gate the moment a key arrives,
+ * so finding one here means the caller is looking at it right now.
+ *
+ * Four places emit `(Pause)...Space To Resume:` and each decides for itself.
+ * On this board's logon screen, `doPause` and `displayScreen-B` both fired for
+ * `Screens/flt/003.flt` - the first while `paginated=N`, before the gate
+ * existed and before the art had flushed - so the caller got a prompt through
+ * the middle of the logo and another after it (sysop, 2026-09-15, with the
+ * board's own trace naming both emitters).
+ *
+ * This suppresses the second PROMPT only. The gate the caller is answering is
+ * left exactly as it was, and nothing about which gate gets installed changes -
+ * an early return there would drop a screen's queued commands, which is a
+ * continuation rather than a decoration and a far worse bug than a doubled
+ * prompt.
+ */
+export function aPausePromptIsShowing(session: any): boolean {
+  return session?.paginatedScreen?.kind === 'doPause';
+}
+
+/**
  * TEMPORARY INSTRUMENTATION - 2026-09-14, remove once the double pause is found.
  *
  * "two prompts in a row, and the prompt from the prior screen is missing"
@@ -3074,6 +3098,16 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
      */
     const streamHasContent = AnsiUtil.stripAnsiForPlainText(parsed).trim().length > 0;
 
+    /*
+     * Was a prompt ALREADY on the caller's screen when this screen arrived?
+     *
+     * Taken here, before either pause branch below installs a gate of its own -
+     * asking after the install would always answer "yes, mine". This is the
+     * question the caller's eyes ask: is there an unanswered
+     * `(Pause)...Space To Resume:` up there already?
+     */
+    const pauseAlreadyShowing = aPausePromptIsShowing(session);
+
     // Skip slowmo if wipe animation is active - wipes handle their own timing
     if (slowmoSpeed !== 0 && !hasWipeAnimation && streamHasContent) {
       await emitSlowmoFrame(parsed);
@@ -3091,8 +3125,12 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           session.queuedScreenCommands = commands;
           screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
         }
-        tracePause('displayScreen-A', session);
-        emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+        if (pauseAlreadyShowing) {
+          tracePause('displayScreen-A-already-showing', session);
+        } else {
+          tracePause('displayScreen-A', session);
+          emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+        }
         restoreModemState(socket, session);
         return true;
       }
@@ -3246,8 +3284,12 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         session.queuedScreenCommands = commands;
         screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
       }
-      tracePause('displayScreen-B', session);
-      emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+      if (pauseAlreadyShowing) {
+        tracePause('displayScreen-B-already-showing', session);
+      } else {
+        tracePause('displayScreen-B', session);
+        emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+      }
       await emitWithModem(''); // ensure promise chain consistent
       restoreModemState(socket, session);
       return true;
@@ -3843,8 +3885,14 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
   // encoded against a cursor two rows above the real one. The transport
   // choke feeds it; `emitPrompt` flushes immediately, so the bytes reach the
   // model in wire order.
-  tracePause('doPause', session);
-  emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  // One prompt on screen at a time. The gate below is still installed either
+  // way, so whatever this pause was protecting still happens.
+  if (aPausePromptIsShowing(session)) {
+    tracePause('doPause-already-showing', session);
+  } else {
+    tracePause('doPause', session);
+    emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  }
 
   // Install a minimal pagination gate so the next keypress is required.
   // express.e:5149 doPause() response: lineCount:=0; aePuts('\b\n') — just a newline.
