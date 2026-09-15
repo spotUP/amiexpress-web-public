@@ -557,8 +557,76 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     return !drawn.has(drawnKey(file, reader));
   });
 
-  return groups
-    .map(copies => {
+  /**
+   * ONE CARD PER SCREEN, not one per version.
+   *
+   * The grouping above turns 41 identical copies into one group. This turns
+   * the several GROUPS of one screen into one card: measured on the live
+   * board, 59 content-grouped cards stood for 44 screens, so 15 of them were
+   * a screen the artist had already scrolled past - `bull20.txt` alone was
+   * six versions.
+   *
+   * The key is the screen the INDEX says a file serves, never its filename.
+   * `Logon100.txt` serves LOGON at level 100 and folds in, because which
+   * level a caller has is the board's business and not the artist's (sysop,
+   * 2026-09-15). `bull20.txt` serves BULL20 and must not fold into BULL - and
+   * a basename regex gets exactly that wrong, since 20 is a multiple of five
+   * and `variantOf` would read it as a level.
+   */
+  const screenKeyOf = (copies: ScreenFileShape[]): string => {
+    const named = copies.find(c => c.readBy?.some(r => r.screen)) ?? copies[0];
+    const reader = named.readBy?.find(r => r.screen);
+    // A file the index could not place has only its name to go on, and two
+    // unplaced files with the same name are the same screen as far as anyone
+    // can tell from here.
+    const screen = (reader?.screen ?? named.relPath.split('/').pop() ?? named.relPath).toLowerCase();
+    /*
+     * THE LEVEL IS FOLDED IN; THE THEME AND THE SCREEN TYPE ARE NOT.
+     *
+     * Level: `Logon100.txt` is the logon screen at level 100 and the artist
+     * draws the logon screen once - the sysop's rule, 2026-09-15.
+     *
+     * Theme: a theme's copy is an OVERRIDE, not drift. The gallery shows a
+     * drawn screen once in its own studio and twice on the board, on purpose,
+     * and folding the two together took the board's original off the sysop's
+     * page entirely.
+     *
+     * Screen type: `menu250.txt.GR` is the same screen drawn for a different
+     * TERMINAL, so it is a drawing of its own that still has to be made - the
+     * "twins the theme has not drawn". Folding it in hid work from the person
+     * whose job is to do it.
+     *
+     * All three were found by the four gallery tests that this grouping broke
+     * on its first run, which is what those tests are for.
+     */
+    /*
+     * And `generated` is a fourth dimension, for the same reason as the other
+     * three: a file the BOARD writes is not a version of an artist's drawing,
+     * even when the index says the two serve the same screen. Folding them
+     * together hid a runtime file behind the art whenever the sysop asked to
+     * see generated screens.
+     */
+    return [screen, named.theme ?? '', reader?.screenType ?? '', named.generated ?? ''].join('|');
+  };
+
+  const scopesOf = (copies: ScreenFileShape[]): number =>
+    copies.reduce((n, f) => n + (f.readBy?.length ?? 0), 0);
+
+  const byScreen = new Map<string, ScreenFileShape[][]>();
+  for (const copies of groups) {
+    const key = screenKeyOf(copies);
+    byScreen.set(key, [...(byScreen.get(key) ?? []), copies]);
+  }
+
+  /** The versions of one screen, the most-read first - that is the one an
+   *  edit should change, and the one the card stands for. */
+  const ranked = [...byScreen.values()].map(versions =>
+    [...versions].sort((a, b) => scopesOf(b) - scopesOf(a)));
+
+  return ranked
+    .map(versions => {
+      const copies = versions[0];
+      const otherVersions = versions.slice(1);
       // The copy a screen actually resolves to leads; failing that, the first.
       const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
       const bulletin = bulletinTitles.get(file.relPath);
@@ -578,6 +646,10 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         path: file.relPath,
         label,
         sortKey: gallerySortKey(reader, label),
+        /** How many distinct contents this screen has. 1 is the quiet case. */
+        versions: versions.length,
+        /** The versions this card stands in front of, most-read first. */
+        otherVersions,
         detail: copies.length > 1
           ? `${detail} - and ${copies.length - 1} identical ${copies.length === 2 ? 'copy' : 'copies'}`
           : detail,

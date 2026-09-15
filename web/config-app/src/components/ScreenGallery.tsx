@@ -79,6 +79,21 @@ export interface GalleryItem {
    */
   placeholder?: boolean;
   /**
+   * How many distinct CONTENTS this screen has across the board.
+   *
+   * 1 is the quiet case and says nothing on the card. More than one is DRIFT:
+   * the same screen edited in one place and not the others, which is what
+   * produced five versions of `logoff.txt` and six of `bull20.txt` on this
+   * board. The card stands for the version the most scopes read.
+   */
+  versions?: number;
+  /**
+   * The versions this card stands in front of, most-read first - so the drift
+   * can be shown INSIDE the card instead of as more cards the artist has to
+   * recognise as the same screen.
+   */
+  otherVersions?: unknown[];
+  /**
    * Which of the three formats this screen HAS, so an artist can see at a
    * glance how far along it is. A caller is served by extension - the loader
    * looks for `<stem>.rip` for a RIP terminal, `<stem>.seq` for a C64 and the
