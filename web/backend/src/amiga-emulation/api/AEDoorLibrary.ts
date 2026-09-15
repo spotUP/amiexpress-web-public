@@ -1902,6 +1902,11 @@ console.warn(
         // reaches. The board's own inactivity timer is what disconnects an
         // idle caller, and it owns that decision, not this loop.
         const deadline = Date.now() + waitBudgetMs(command);
+        // Console-level, once per wait: which ports this pump polls. On
+        // 2026-09-15 a door sat silent in here for minutes after the XIM IO
+        // handler had answered its JH_HK - the reply went to a port this loop
+        // was not reading, and nothing said which was which.
+console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} bbsPort=0x${state.bbsPortAddr.toString(16)} replyPort=0x${state.replyPortAddr.toString(16)} msg=0x${state.messageAddr.toString(16)}`);
         // This loop OWNS the pump while it runs. The XIM processor it calls
         // below drains its own handler promises with deasync too, and two
         // pumps must not nest - see api/pump-owner.ts. Registered here, read
@@ -1946,8 +1951,11 @@ console.warn(
       if (!replied) {
         console.warn(
           `[AEDoorLibrary] No reply for command ${command} after ${iterations} iterations ` +
-          `(${asyncWait ? 'async' : 'sync'} wait)`
+          `(${asyncWait ? 'async' : 'sync'} wait)` +
+          (this.sessionTornDownUnderThisWait(state) ? ' - wait ended: session torn down / abandoned' : ' - wait ended: budget')
         );
+      } else if (asyncWait) {
+console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} replied after ${iterations} iterations`);
       }
       if (profile) {
         const elapsed = Date.now() - started;
