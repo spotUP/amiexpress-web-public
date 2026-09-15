@@ -9,6 +9,8 @@ import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import { Textbox, Box, Text, List, AutocompleteTextbox, Message } from '@amiexpress/bbs-door-sdk';
 import { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { T, S, CURRENT, applyTheme } from './door-theme';
+import { attachDoorChrome, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 const door = new Door({
     name: 'Mail Composer',
     version: '2.0.0',
@@ -20,6 +22,9 @@ let inputManager = null;
 door.onStart(async (ctx) => {
     const { bbs, user, output } = ctx;
     const username = user?.username || 'Guest';
+    // Before any widget is built: T and S are live bindings, so every style
+    // object below reads the caller's theme rather than the classic default.
+    applyTheme(bbs);
     const screen = createScreen(bbs, { title: 'Mail Composer' });
     screen.program.write('\x1b[2J');
     screen.program.write('\x1b[H');
@@ -32,11 +37,60 @@ door.onStart(async (ctx) => {
     });
     inputManager.enable();
     output.write('\x1b[2J\x1b[H');
+    /*
+     * THE BOARD'S CHROME, not just its colours.
+     *
+     * Sysop, 2026-09-03: "only colors makes no great theme". A door that takes
+     * the theme takes the masthead, the rail, the glitch and the footer from
+     * the one SDK entry point, so it cannot drift from the next door -
+     * `theme-chrome-wiring.test.ts` is the pin, and it is what caught this door
+     * the moment it started importing the theme.
+     *
+     * Two one-row strips at the very top and bottom: the composer's own box is
+     * centred and 12 rows tall, so it never reaches either of them.
+     */
+    const chromeTop = new Box({
+        parent: screen,
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        content: '',
+        style: { fg: T.dim, bg: T.ground },
+    });
+    const chromeFooter = new Box({
+        parent: screen,
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        content: '',
+        style: footerStyle(CURRENT),
+    });
+    const chrome = attachDoorChrome(CURRENT, {
+        width: screen.width || 80,
+        title: 'MAIL COMPOSER',
+        masthead: chromeTop,
+        footer: chromeFooter,
+        hints: [
+            { key: 'Tab', does: 'next field' },
+            { key: 'ESC', does: 'cancel' },
+        ],
+        footerPad: ' ',
+        styles: S,
+        render: () => screen.render(),
+    });
     const runComposer = async () => {
         try {
             await showComposer(screen, bbs, username, ctx);
         }
         finally {
+            // Stop the rail/glitch timer BEFORE the screen goes, or it renders
+            // into a destroyed screen on the way out.
+            try {
+                chrome.stop();
+            }
+            catch { /* leaving anyway */ }
             if (inputManager)
                 inputManager.disable();
             inputManager = null;
@@ -193,18 +247,16 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             left: 'center',
             width: 70,
             height: 12,
-            border: 'line',
-            style: {
-                border: { fg: 'cyan' },
-            },
-            label: ' {cyan-fg}New Message{/} ',
+            border: S.frame.border,
+            style: S.frame.style,
+            label: ` ${S.accentAlt('New Message')} `,
             shadow: true,
         });
         new Text({
             parent: container,
             top: 1,
             left: 2,
-            content: '{yellow-fg}To:{/}' + (usernames.length > 0 ? ' {gray-fg}(type to search users){/}' : ''),
+            content: S.accent('To:') + (usernames.length > 0 ? ' ' + S.dim('(type to search users)') : ''),
         });
         const toInput = new AutocompleteTextbox({
             parent: container,
@@ -217,8 +269,8 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             keys: true,
             value: draft?.to || initialTo,
             style: {
-                fg: 'white',
-                bg: 'blue',
+                fg: T.selectionInk,
+                bg: T.selectionBg,
             },
             suggestions: usernames,
             minLength: 1,
@@ -242,7 +294,7 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             top: 4,
             left: 2,
-            content: '{yellow-fg}Subject:{/}',
+            content: S.accent('Subject:'),
         });
         const subjectInput = new Textbox({
             parent: container,
@@ -255,16 +307,16 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             keys: true,
             value: draft?.subject || initialSubject,
             style: {
-                fg: 'white',
-                bg: 'blue',
+                fg: T.selectionInk,
+                bg: T.selectionBg,
             },
         });
         new Text({
             parent: container,
             bottom: 1,
             left: 2,
-            content: '{gray-fg}Tab{/}: Next field  {gray-fg}Enter{/}: Continue  {gray-fg}ESC{/}: Cancel',
-            style: { fg: 'cyan' },
+            content: `${S.key('Tab')}: Next field  ${S.key('Enter')}: Continue  ${S.key('ESC')}: Cancel`,
+            style: { fg: T.accentAlt },
         });
         const inputs = [toInput, subjectInput];
         let currentIndex = 0;
@@ -309,8 +361,8 @@ async function confirmExitAction(screen) {
             width: 60,
             height: 12,
             border: 'line',
-            style: { border: { fg: 'yellow' } },
-            label: ' {yellow-fg}Exit Editor{/} ',
+            style: { ...S.frame.style, border: { fg: T.accent } },
+            label: ` ${S.accent('Exit Editor')} `,
             shadow: true,
         });
         new Text({
@@ -318,7 +370,7 @@ async function confirmExitAction(screen) {
             top: 1,
             left: 2,
             right: 2,
-            content: '{cyan-fg}What would you like to do?{/}',
+            content: S.accentAlt('What would you like to do?'),
         });
         const list = new List({
             parent: box,
@@ -331,8 +383,8 @@ async function confirmExitAction(screen) {
             mouse: true,
             vi: true,
             style: {
-                selected: { bg: 'blue', fg: 'white', bold: true },
-                item: { fg: 'white' },
+                selected: { bg: T.selectionBg, fg: T.selectionInk, bold: true },
+                item: { fg: T.ink },
             },
         });
         list.on('select', (_item, index) => {
@@ -359,11 +411,11 @@ async function showMsg(screen, title, message) {
             width: '50%',
             height: 'shrink',
             border: 'line',
-            style: { border: { fg: 'cyan' } },
-            label: ` {cyan-fg}${title}{/} `,
+            style: S.frame.style,
+            label: ` ${S.accentAlt(title)} `,
             shadow: true,
         });
-        msg.display(message + '\n\n{gray-fg}Press any key to continue...{/}', () => {
+        msg.display(message + '\n\n' + S.dim('Press any key to continue...'), () => {
             msg.destroy();
             screen.render();
             resolve();
