@@ -60,6 +60,18 @@ export function ArtistStudioPage() {
     enabled: !!theme,
   });
 
+  /**
+   * Which format the thumbnails are drawn in.
+   *
+   * A screen exists several times over - `.txt`, `.seq`, `.rip`, `.ttx` - and
+   * the gallery drew whichever file the card resolved to, almost always the
+   * ANSI one. An artist reviewing the board as a C64 caller sees it had no way
+   * to look at it ("we need to be able to select the screen type to list in
+   * the thumbnails", sysop 2026-09-15). Empty means "whatever the screen
+   * resolves to", which is how it behaved before and stays the default.
+   */
+  const [thumbnailFormat, setThumbnailFormat] = useState('');
+
   const items = useMemo(
     () => (data && theme
       ? buildGalleryItems(data, {
@@ -73,9 +85,10 @@ export function ArtistStudioPage() {
         ownedBy: theme.slug === 'default' ? undefined : theme.slug,
         // A sysop auditing an artist's studio is not looking at their own art.
         ownedLabel: auditing ? `Redrawn by ${theme.owner || 'the artist'}` : 'Yours',
+        ...(thumbnailFormat ? { thumbnailFormat } : {}),
       })
       : []),
-    [data, theme, auditing],
+    [data, theme, auditing, thumbnailFormat],
   );
 
   /**
@@ -210,6 +223,24 @@ export function ArtistStudioPage() {
         <label className="flex items-center gap-2 text-sm text-content-secondary">
           <input type="checkbox" checked={todoOnly} onChange={event => setTodoOnly(event.target.checked)} />
           Only what is still to draw ({undrawn.length})
+        </label>
+        <label className="flex items-center gap-2 text-sm text-content-secondary">
+          Draw as
+          <select
+            aria-label="Draw thumbnails as"
+            className="input-field"
+            value={thumbnailFormat}
+            onChange={event => setThumbnailFormat(event.target.value)}
+          >
+            {/* Empty is what the board itself would serve - the file each
+                screen resolves to - and it is the default because it is what
+                the gallery did before there was a choice. */}
+            <option value="">What the screen resolves to</option>
+            <option value="ansi">ANSI</option>
+            <option value="petscii">PETSCII (.seq)</option>
+            <option value="rip">RIP</option>
+            <option value="teletext">Teletext (.ttx)</option>
+          </select>
         </label>
         <input
           type="search"

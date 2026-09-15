@@ -409,11 +409,62 @@ export function formatsPresent(
   return have;
 }
 
+/** The extension each drawable format is stored under. `.tti` is native
+ *  teletext, which wins over `.ttx` once rendered. */
+const FORMAT_EXTENSIONS: Record<string, string[]> = {
+  ansi: ['txt', 'gr', 'ibm', 'ans'],
+  petscii: ['seq'],
+  rip: ['rip'],
+  teletext: ['ttx'],
+  teletextNative: ['tti'],
+};
+
+/**
+ * The file this screen would be DRAWN from in a chosen format.
+ *
+ * Keyed on the stem, exactly as `formatsPresent` and the board's own loader
+ * are: one screen is `<stem>.txt`, `<stem>.seq`, `<stem>.rip` and friends in
+ * the same directory. Null when the screen has no such sibling - the caller
+ * then keeps the file it had, because a screen that lacks a format is work
+ * still to do and not a reason to blank its card.
+ */
+export function siblingInFormat(
+  openPath: string,
+  files: Record<string, { relPath: string; format?: string }> | undefined,
+  format: string,
+): string | null {
+  const wanted = FORMAT_EXTENSIONS[format];
+  if (!wanted) return null;
+
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
+  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
+  const stem = base.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '').toLowerCase();
+
+  for (const key of Object.keys(files ?? {})) {
+    const lower = key.toLowerCase();
+    if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
+    const name = lower.slice(lower.lastIndexOf('/') + 1);
+    if (name.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (wanted.includes(name.slice(name.lastIndexOf('.') + 1))) return key;
+  }
+  return null;
+}
+
 export interface GalleryBuildOptions {
   /** The theme being looked through; `default` is the board's own screens. */
   theme: string;
   showGenerated: boolean;
   showUnread: boolean;
+  /**
+   * Draw every thumbnail in THIS format where the screen has it.
+   *
+   * A screen exists several times over - `.txt` for an ANSI caller, `.seq`
+   * for a C64, `.rip` for a RIP terminal - and without this the gallery drew
+   * whichever file the card resolved to, which is almost always the ANSI one.
+   * An artist reviewing the board as a C64 caller sees it had no way to look
+   * at it. A screen with no such sibling keeps the file it had.
+   */
+  thumbnailFormat?: string;
   /**
    * Set when the gallery belongs to a theme: each card then says whose art it
    * is, so an artist can see at a glance what they have redrawn and what is
@@ -657,8 +708,18 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
             ? describeReader(reader, index.callersByLevel)
             : 'read by nothing';
 
+      /*
+       * The file this card DRAWS, which is not always the file it stands for.
+       * With a format chosen, the card shows that sibling - same screen, same
+       * card, different drawing - and a screen without one keeps what it had.
+       */
+      const drawnPath = opts.thumbnailFormat
+        ? siblingInFormat(file.relPath, index.files, opts.thumbnailFormat) ?? file.relPath
+        : file.relPath;
+      const drawn = drawnPath === file.relPath ? file : index.files?.[drawnPath] ?? file;
+
       return {
-        path: file.relPath,
+        path: drawnPath,
         label,
         sortKey: gallerySortKey(reader, label),
         /** How many distinct contents this screen has. 1 is the quiet case. */
@@ -681,7 +742,7 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         // `.seq` fed to the CP437 canvas is a wall of noise - which is what
         // every PETSCII card in the gallery was ("the petscii previews dont
         // display correctly in the admin ui", sysop).
-        format: file.format,
+        format: drawn.format,
         formats: formatsPresent(file.relPath, index.files),
         ...(opts.ownedBy
           ? {

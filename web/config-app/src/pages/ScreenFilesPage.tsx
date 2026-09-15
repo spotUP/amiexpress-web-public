@@ -1167,9 +1167,18 @@ export function ScreenFilesPage() {
    * "How can we make it easy for artists to find everything? render mugshots
    * of all screen files?" A designer recognises the art, never the path.
    */
+  /** Which format the gallery's thumbnails are drawn in; empty is whatever
+   *  each screen resolves to, which is how it behaved before the choice. */
+  const [thumbnailFormat, setThumbnailFormat] = useState('');
+
   const galleryItems: GalleryItem[] = useMemo(
-    () => (data ? buildGalleryItems(data, { theme, showGenerated, showUnread }) : []),
-    [data, showGenerated, showUnread, theme],
+    () => (data
+      ? buildGalleryItems(data, {
+        theme, showGenerated, showUnread,
+        ...(thumbnailFormat ? { thumbnailFormat } : {}),
+      })
+      : []),
+    [data, showGenerated, showUnread, theme, thumbnailFormat],
   );
 
   /**
@@ -1217,6 +1226,21 @@ export function ScreenFilesPage() {
                 onChange={e => setShowUnread(e.target.checked)}
               />
               Show art nothing reads
+            </label>
+            <label className="flex items-center gap-2 text-sm text-content-secondary">
+              Draw as
+              <select
+                aria-label="Draw thumbnails as"
+                className="input-field"
+                value={thumbnailFormat}
+                onChange={e => setThumbnailFormat(e.target.value)}
+              >
+                <option value="">What the screen resolves to</option>
+                <option value="ansi">ANSI</option>
+                <option value="petscii">PETSCII (.seq)</option>
+                <option value="rip">RIP</option>
+                <option value="teletext">Teletext (.ttx)</option>
+              </select>
             </label>
           </div>
           <ScreenGallery
