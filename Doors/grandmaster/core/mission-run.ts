@@ -26,8 +26,18 @@ export function nextIsHidden(state: {
 export interface LockEvent {
   /** Lines this lock cleared (0-4). */
   lineCount: number;
-  /** True when the clear was a confirmed T-Spin. */
+  /** True when the clear was a T-Spin of ANY kind, a mini included. */
   tSpin: boolean;
+  /**
+   * True only for the 3-CORNER T-Spin.
+   *
+   * MISSION mode in the reference forces `tspin_flag` through the 3-corner
+   * check, so it is 2 or 0 there and a mini counts for nothing
+   * (`ars.c:545-552`, the `gameMode == 8` clause). The engine has always
+   * known which kind it was - `detectTSpin()` returns 'full' | 'mini' |
+   * 'none' - and only this event flattened the two together.
+   */
+  tSpinFull: boolean;
   /** True when the board was left completely empty. */
   allClear: boolean;
   /** The combo counter AFTER this lock. */
@@ -80,7 +90,11 @@ export class MissionRun {
   /** 'survive' has no count to reach; everything else has its norm. */
   private target(): number {
     if (this.mission.objective === 'survive') return 0;
-    if (this.mission.objective === 'cycle') return 4;   // one of each clear size
+    // 'cycle' counts DISTINCT clear sizes, and the reference compares that
+    // count against mission_norm like every other type (mission.c:874-879) -
+    // it does not hardcode four. A pack asking for two of the four sizes was
+    // being judged as asking for all four; the loader keeps the norm inside
+    // 1..4, because a fifth size does not exist.
     return this.mission.norm;
   }
 
@@ -99,9 +113,13 @@ export class MissionRun {
       if (event.lineCount > 0) this.cycleSeen.add(event.lineCount);
       this.current = this.cycleSeen.size;
     } else if (objective === 'tspin') {
-      if (event.tSpin && event.lineCount > 0) this.current++;
+      // mission.c:955-957, with tspin_flag forced 3-corner in MISSION mode.
+      if (event.tSpinFull && event.lineCount > 0) this.current++;
     } else if (objective === 'tspinDouble') {
-      if (event.tSpin && event.lineCount === 2) this.current++;
+      // mission.c:1101-1103 is `tspin_flag == 2 && lines >= 2`, so a T-spin
+      // TRIPLE counts too. It did not here, which made the objective harder
+      // than the one it is named after.
+      if (event.tSpinFull && event.lineCount >= 2) this.current++;
     } else if (objective === 'combo') {
       // "Do %d combo(s)" - the highest combo reached, not a running total.
       this.current = Math.max(this.current, event.combo);
@@ -163,7 +181,7 @@ export class MissionRun {
       case 'survive':
         return `SURVIVE ${timeLimitSeconds}s  ${Math.floor(this.current)}/${timeLimitSeconds}`;
       case 'cycle':
-        return `ALL CLEAR SIZES  ${this.current}/4`;
+        return `ALL CLEAR SIZES  ${this.current}/${norm}`;
       case 'combo':
         return `COMBO ${norm}  BEST ${this.current}`;
       case 'level':

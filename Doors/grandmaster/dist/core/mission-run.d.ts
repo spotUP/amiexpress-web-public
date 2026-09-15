@@ -23,8 +23,18 @@ export declare function nextIsHidden(state: {
 export interface LockEvent {
     /** Lines this lock cleared (0-4). */
     lineCount: number;
-    /** True when the clear was a confirmed T-Spin. */
+    /** True when the clear was a T-Spin of ANY kind, a mini included. */
     tSpin: boolean;
+    /**
+     * True only for the 3-CORNER T-Spin.
+     *
+     * MISSION mode in the reference forces `tspin_flag` through the 3-corner
+     * check, so it is 2 or 0 there and a mini counts for nothing
+     * (`ars.c:545-552`, the `gameMode == 8` clause). The engine has always
+     * known which kind it was - `detectTSpin()` returns 'full' | 'mini' |
+     * 'none' - and only this event flattened the two together.
+     */
+    tSpinFull: boolean;
     /** True when the board was left completely empty. */
     allClear: boolean;
     /** The combo counter AFTER this lock. */

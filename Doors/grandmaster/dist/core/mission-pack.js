@@ -59,9 +59,23 @@ function parseMissionPack(raw, source = 'mission pack') {
         if (objective === 'survive' && timeLimitSeconds <= 0) {
             fail(where, 'a survive mission needs a timeLimitSeconds to outlast');
         }
-        const norm = asPositiveInt(m.norm, where, 'norm', objective === 'survive' ? 0 : undefined);
-        if (objective !== 'survive' && objective !== 'cycle' && norm <= 0) {
+        /*
+         * 'cycle' used to be judged against a hardcoded four, so a pack written
+         * against this door may leave its norm out entirely. Four is what that
+         * meant, and it is still what it means - the norm is read now, but an
+         * absent one keeps every existing pack playing the same mission.
+         */
+        const normDefault = objective === 'survive' ? 0 : objective === 'cycle' ? 4 : undefined;
+        const norm = asPositiveInt(m.norm, where, 'norm', normDefault);
+        if (objective !== 'survive' && norm <= 0) {
             fail(where, `objective "${objective}" needs a norm of 1 or more`);
+        }
+        // 'cycle' counts DISTINCT clear sizes and there are exactly four of them,
+        // so a norm of five is a mission nobody can finish. The judge compares
+        // against the norm (mission.c:874-879); the loader is where an
+        // unplayable one is refused.
+        if (objective === 'cycle' && norm > 4) {
+            fail(where, 'a cycle mission cannot ask for more than the four clear sizes');
         }
         const rawModifiers = (m.modifiers ?? {});
         const hidden = rawModifiers.hidden;

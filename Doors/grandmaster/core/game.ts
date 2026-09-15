@@ -1572,6 +1572,9 @@ export class GameEngine {
     this.onLockCallback?.({
       lineCount,
       tSpin: tSpin !== 'none',
+      // The judge needs the 3-corner kind on its own: MISSION mode in the
+      // reference does not count a mini at all.
+      tSpinFull: tSpin === 'full',
       allClear: isPerfectClear(this.state.board),
       combo: this.state.combo,
       piecesPlaced: this.state.piecesPlaced,

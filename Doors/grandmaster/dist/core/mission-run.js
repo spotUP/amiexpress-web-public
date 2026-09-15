@@ -46,8 +46,11 @@ class MissionRun {
     target() {
         if (this.mission.objective === 'survive')
             return 0;
-        if (this.mission.objective === 'cycle')
-            return 4; // one of each clear size
+        // 'cycle' counts DISTINCT clear sizes, and the reference compares that
+        // count against mission_norm like every other type (mission.c:874-879) -
+        // it does not hardcode four. A pack asking for two of the four sizes was
+        // being judged as asking for all four; the loader keeps the norm inside
+        // 1..4, because a fifth size does not exist.
         return this.mission.norm;
     }
     /** The engine locked a piece. Returns the outcome after judging it. */
@@ -69,11 +72,15 @@ class MissionRun {
             this.current = this.cycleSeen.size;
         }
         else if (objective === 'tspin') {
-            if (event.tSpin && event.lineCount > 0)
+            // mission.c:955-957, with tspin_flag forced 3-corner in MISSION mode.
+            if (event.tSpinFull && event.lineCount > 0)
                 this.current++;
         }
         else if (objective === 'tspinDouble') {
-            if (event.tSpin && event.lineCount === 2)
+            // mission.c:1101-1103 is `tspin_flag == 2 && lines >= 2`, so a T-spin
+            // TRIPLE counts too. It did not here, which made the objective harder
+            // than the one it is named after.
+            if (event.tSpinFull && event.lineCount >= 2)
                 this.current++;
         }
         else if (objective === 'combo') {
@@ -141,7 +148,7 @@ class MissionRun {
             case 'survive':
                 return `SURVIVE ${timeLimitSeconds}s  ${Math.floor(this.current)}/${timeLimitSeconds}`;
             case 'cycle':
-                return `ALL CLEAR SIZES  ${this.current}/4`;
+                return `ALL CLEAR SIZES  ${this.current}/${norm}`;
             case 'combo':
                 return `COMBO ${norm}  BEST ${this.current}`;
             case 'level':

@@ -21,7 +21,15 @@ function mission(objective: MissionObjective, over: Partial<Mission> = {}): Miss
 }
 
 function lock(over: Partial<LockEvent> = {}): LockEvent {
-  return { lineCount: 0, tSpin: false, allClear: false, combo: 0, piecesPlaced: 1, level: 0, ...over };
+  const base: LockEvent = {
+    lineCount: 0, tSpin: false, tSpinFull: false,
+    allClear: false, combo: 0, piecesPlaced: 1, level: 0,
+  };
+  const event = { ...base, ...over };
+  // A 3-corner T-Spin is a T-Spin: a test that sets one without the other is
+  // describing a lock the engine cannot produce.
+  if (event.tSpinFull) event.tSpin = true;
+  return event;
 }
 
 export async function linesCountEveryLineAndTheOthersCountEvents(): Promise<void> {
@@ -40,8 +48,10 @@ export async function linesCountEveryLineAndTheOthersCountEvents(): Promise<void
 }
 
 export async function cycleWantsOneOfEachClearSize(): Promise<void> {
-  // mission_info_en[5]: "Do cycle! (all kinds of line erase)".
-  const run = new MissionRun(mission('cycle'));
+  // mission_info_en[5]: "Do cycle! (all kinds of line erase)". The norm is
+  // spelled out here because the judge READS it now - the four is the
+  // mission's ask, not a constant in the engine.
+  const run = new MissionRun(mission('cycle', { norm: 4 }));
   for (const lineCount of [1, 1, 2, 3]) run.onLock(lock({ lineCount }));
   assert.strictEqual(run.getProgress().current, 3, 'repeats do not count twice');
   assert.strictEqual(run.getProgress().outcome, 'playing');
@@ -54,14 +64,14 @@ export async function tSpinObjectivesWantARealTSpin(): Promise<void> {
   const tspin = new MissionRun(mission('tspin', { norm: 2 }));
   tspin.onLock(lock({ lineCount: 2, tSpin: false }));
   assert.strictEqual(tspin.getProgress().current, 0, 'a plain double is not a T-spin');
-  tspin.onLock(lock({ lineCount: 1, tSpin: true }));
-  tspin.onLock(lock({ lineCount: 2, tSpin: true }));
+  tspin.onLock(lock({ lineCount: 1, tSpinFull: true }));
+  tspin.onLock(lock({ lineCount: 2, tSpinFull: true }));
   assert.strictEqual(tspin.getProgress().outcome, 'cleared');
 
   const tsd = new MissionRun(mission('tspinDouble', { norm: 1 }));
-  tsd.onLock(lock({ lineCount: 1, tSpin: true }));
+  tsd.onLock(lock({ lineCount: 1, tSpinFull: true }));
   assert.strictEqual(tsd.getProgress().current, 0, 'a T-spin single is not a T-spin double');
-  tsd.onLock(lock({ lineCount: 2, tSpin: true }));
+  tsd.onLock(lock({ lineCount: 2, tSpinFull: true }));
   assert.strictEqual(tsd.getProgress().outcome, 'cleared');
 }
 
@@ -204,4 +214,85 @@ export async function theHudLineSaysWhatToDoAndHowFarAlong(): Promise<void> {
   const survive = new MissionRun(mission('survive', { norm: 0, timeLimitSeconds: 90 }));
   survive.onTime(30);
   assert.strictEqual(survive.describe(), 'SURVIVE 90s  30/90');
+}
+
+/**
+ * A MINI is not a T-Spin for a mission.
+ *
+ * The reference forces `tspin_flag` through the 3-corner check in MISSION
+ * mode, so it is 2 or 0 there (`ars.c:545-552`, the `gameMode == 8` clause).
+ * The door's LockEvent flattened 'full' and 'mini' into one boolean, so a
+ * mini cleared a T-SPIN mission - an objective the arcade would not have
+ * given you.
+ */
+export async function aTSpinMiniDoesNotCountForAMission(): Promise<void> {
+  const run = new MissionRun(mission('tspin', { norm: 1 }));
+  run.onLock(lock({ lineCount: 1, tSpin: true, tSpinFull: false }));
+  assert.strictEqual(run.getProgress().current, 0,
+    'a mini is a T-Spin for scoring and NOT for a mission');
+  assert.strictEqual(run.getProgress().outcome, 'playing');
+
+  run.onLock(lock({ lineCount: 1, tSpinFull: true }));
+  assert.strictEqual(run.getProgress().outcome, 'cleared', 'the 3-corner one counts');
+}
+
+/**
+ * A T-Spin TRIPLE clears a T-SPIN DOUBLE mission.
+ *
+ * `mission.c:1101-1103` is `tspin_flag[0] == 2 && lines >= 2`. The door
+ * demanded exactly two, which made the harder spin count for nothing.
+ */
+export async function aTSpinTripleCountsForTheDoubleObjective(): Promise<void> {
+  const run = new MissionRun(mission('tspinDouble', { norm: 1 }));
+  run.onLock(lock({ lineCount: 3, tSpinFull: true }));
+  assert.strictEqual(run.getProgress().outcome, 'cleared',
+    'two lines OR MORE - the reference does not punish the bigger spin');
+}
+
+/**
+ * CYCLE is judged against its own norm.
+ *
+ * `mission.c:874-879` latches each clear size once and compares the count
+ * against `mission_norm`, exactly like every other type. The door hardcoded
+ * four, so a pack asking for two sizes was judged as asking for all four -
+ * a mission that reads as one thing on the select screen and another in
+ * play.
+ */
+export async function cycleIsJudgedAgainstItsNormNotAlwaysFour(): Promise<void> {
+  const run = new MissionRun(mission('cycle', { norm: 2 }));
+  assert.strictEqual(run.getProgress().target, 2, 'the target is the norm');
+  run.onLock(lock({ lineCount: 1 }));
+  run.onLock(lock({ lineCount: 1 }));
+  assert.strictEqual(run.getProgress().outcome, 'playing', 'a repeat is not a new size');
+  run.onLock(lock({ lineCount: 4 }));
+  assert.strictEqual(run.getProgress().outcome, 'cleared', 'two DIFFERENT sizes was the ask');
+}
+
+/**
+ * And a pack cannot ask for a fifth clear size.
+ *
+ * There are four. The judge would never reach five, so the mission is
+ * unplayable, and an unplayable mission is refused at LOAD - which is the
+ * loader's whole job in this door.
+ */
+export async function aCycleNormAboveFourIsRefused(): Promise<void> {
+  const pack = {
+    name: 'bad', missions: [{
+      id: '01', name: 'FIVE SIZES', objective: 'cycle', norm: 5,
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.throws(() => parseMissionPack(pack, 'test'), MissionPackError,
+    'five clear sizes do not exist');
+
+  // And the form every existing pack is written in still loads: cycle with
+  // no norm at all meant "all four" when the judge hardcoded it.
+  const old = {
+    name: 'ok', missions: [{
+      id: '01', name: 'CYCLE', objective: 'cycle',
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.strictEqual(parseMissionPack(old, 'test').missions[0].norm, 4,
+    'an absent cycle norm still means the four sizes');
 }
