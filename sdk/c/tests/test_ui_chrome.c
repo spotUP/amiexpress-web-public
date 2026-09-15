@@ -257,6 +257,104 @@ static void a_rail_still_moves(void)
     printf("  [OK] a rail theme still moves between ticks\n");
 }
 
+
+static void an_animation_frame_leaves_the_title_alone(void)
+{
+    /* "themec still blinks" - the sysop, 2026-09-15, with the rail theme on.
+       The tick redrew the whole row, so the title at the end of it was
+       repainted about five times a second and the caller saw it flicker.
+
+       An animation frame must carry the rail and NOT the title. */
+    char frame[1024];
+    ansi_buf b;
+
+    /* Zeroed: ansi_begin does not clear the caller's buffer, so whatever the
+       previous case left on the stack would be read past the frame's own
+       bytes - and the previous case here draws the very title this one is
+       asserting is absent. */
+    memset(frame, 0, sizeof frame);
+    ansi_begin(&b, frame, (long)sizeof frame);
+    ui_masthead_rail_tick(&b, 1, 1, 80, "DOOR THEME", "///", 7, 0, 3);
+
+    assert(strstr(frame, "DOOR THEME") == 0);
+    assert(strstr(frame, "/") != 0);
+    printf("  [OK] an animation frame carries the rail and not the title\n");
+}
+
+static void the_animation_still_moves(void)
+{
+    char frame_a[1024];
+    char frame_b[1024];
+    ansi_buf a;
+    ansi_buf b;
+
+    memset(frame_a, 0, sizeof frame_a);
+    memset(frame_b, 0, sizeof frame_b);
+    ansi_begin(&a, frame_a, (long)sizeof frame_a);
+    ansi_begin(&b, frame_b, (long)sizeof frame_b);
+    ui_masthead_rail_tick(&a, 1, 1, 80, "DOOR THEME", "///", 7, 0, 3);
+    ui_masthead_rail_tick(&b, 1, 1, 80, "DOOR THEME", "///", 7, 0, 4);
+
+    assert(frame_a[0] != '\0');
+    assert(strcmp(frame_a, frame_b) != 0);
+    printf("  [OK] and it still moves between ticks\n");
+}
+
+static void plain(const char *in, char *out, unsigned long cap)
+{
+    /* The printable cells of a frame: what the caller would see. */
+    unsigned long at = 0;
+
+    while (*in != '\0' && at + 1 < cap) {
+        if (*in == '\033') {
+            while (*in != '\0' && !((*in >= 'A' && *in <= 'Z') || (*in >= 'a' && *in <= 'z'))) in++;
+            if (*in != '\0') in++;
+            continue;
+        }
+        out[at++] = *in++;
+    }
+    out[at] = '\0';
+}
+
+static void the_frame_stops_where_the_title_starts(void)
+{
+    /* The two paths have to agree about the run's width, or the animation
+       creeps onto the title a column at a time. Measured on what reaches the
+       glass: the tick's whole output is the run, and the full row is that
+       same run followed by the space before the title. */
+    char tick_frame[1024];
+    char full_frame[1024];
+    char tick_text[1024];
+    char full_text[1024];
+    ansi_buf t;
+    ansi_buf f;
+    unsigned long run_len;
+
+    memset(tick_frame, 0, sizeof tick_frame);
+    memset(full_frame, 0, sizeof full_frame);
+    ansi_begin(&t, tick_frame, (long)sizeof tick_frame);
+    ansi_begin(&f, full_frame, (long)sizeof full_frame);
+    ui_masthead_rail_tick(&t, 1, 1, 80, "DOOR THEME", "///", 7, 0, 5);
+    ui_masthead_draw_tick(&f, 1, 1, 80, "DOOR THEME", "///", 7, 0, 5);
+
+    plain(tick_frame, tick_text, sizeof tick_text);
+    plain(full_frame, full_text, sizeof full_text);
+
+    run_len = (unsigned long)strlen(tick_text);
+    assert(run_len > 0);
+
+    /* The full row is its fill, then the same run, then a space and the
+       title. The tick is the run alone - which is the whole point: 69 cells
+       instead of 160, and none of them the title's. */
+    {
+        const char *run_in_full = strstr(full_text, tick_text);
+        assert(run_in_full != 0);
+        assert(strncmp(run_in_full + run_len, " DOOR THEME", 11) == 0);
+        assert(strlen(full_text) > run_len);
+    }
+    printf("  [OK] the frame is exactly the run, and stops where the title starts\n");
+}
+
 int main(void)
 {
     printf("ui_chrome\n");
@@ -272,6 +370,9 @@ int main(void)
     a_crowded_status_drops_the_right_rather_than_colliding();
     a_themeless_masthead_has_nothing_to_animate();
     a_rail_still_moves();
+    an_animation_frame_leaves_the_title_alone();
+    the_animation_still_moves();
+    the_frame_stops_where_the_title_starts();
     printf("ui_chrome: all passed\n");
     return 0;
 }

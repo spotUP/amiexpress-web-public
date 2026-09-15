@@ -113,6 +113,24 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
 int ui_masthead_rail_animates(const char *rail);
 
 /**
+ * ONE FRAME OF THE RAIL, and nothing else on the row.
+ *
+ * ui_masthead_draw_tick draws the whole masthead - fill, rail, title - which
+ * is right when the screen has just been cleared and wrong five times a
+ * second: the title does not move, so repainting it is what the caller sees
+ * as the title blinking. The sysop, 2026-09-15: "themec still blinks", with
+ * the rail theme on, and it is the tail of "DOOR THEME" that flickers.
+ *
+ * So the idle hook calls THIS, which writes only the run's own cells. A view
+ * change still calls ui_masthead_draw_tick, because then the row really is
+ * new. Both take the run's width from one place, so the animation cannot
+ * creep onto the title.
+ */
+void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
+                           const char *title, const char *rail,
+                           int fg, int bg, int tick);
+
+/**
  * The status line: left text, right text, and the gap between them filled.
  *
  * The right side is dropped rather than overlapped when both cannot fit -

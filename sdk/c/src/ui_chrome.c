@@ -168,6 +168,44 @@ void ui_masthead_draw(ansi_buf *b, int row, int left, int cols,
     ui_masthead_draw_tick(b, row, left, cols, title, rail, fg, bg, 0);
 }
 
+/* The masthead composes into a 256-byte line; this names that size once so
+   the geometry helper and the drawer cannot disagree about it. */
+typedef struct { char line[256]; } ui_masthead_geom_probe;
+
+/**
+ * Where the rail's run sits on the masthead row, and how wide it is.
+ *
+ * ONE definition, because two of them would drift by a column and the
+ * animation would start painting over the title - which is the bug this file
+ * was carrying in the other direction. Returns 0 when there is no run: no
+ * rail, or a screen too narrow for one beside the title.
+ */
+static unsigned long masthead_run_width(int cols, const char *title,
+                                        const char *rail,
+                                        unsigned long *title_len_out)
+{
+    unsigned long title_len;
+    unsigned long run_width;
+    int budget = cols;
+
+    if (cols <= 0) return 0;
+    if (budget > (int) sizeof(((ui_masthead_geom_probe *)0)->line) - 1) {
+        budget = (int) sizeof(((ui_masthead_geom_probe *)0)->line) - 1;
+    }
+    if (!title) title = "";
+    title_len = ui_printable_len(title);
+    if (title_len > (unsigned long) budget) title_len = (unsigned long) budget;
+    if (title_len_out) *title_len_out = title_len;
+
+    if (!rail || !*rail) return 0;
+    if ((unsigned long) budget <= title_len + 1) return 0;
+
+    run_width = (unsigned long) budget - title_len - 1;
+    if (run_width > 255) run_width = 255;
+    if (run_width > 256 - title_len - 6) run_width = 256 - title_len - 6;
+    return run_width;
+}
+
 int ui_masthead_rail_animates(const char *rail)
 {
     /* The no-rail branch of ui_masthead_draw_tick below ignores `tick`
@@ -256,6 +294,34 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
     }
 
     ui_bar_draw(b, row, left, cols, line, fg, bg);
+}
+
+
+void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
+                           const char *title, const char *rail,
+                           int fg, int bg, int tick)
+{
+    char run[256];
+    unsigned long run_width;
+
+    if (!b) return;
+    run_width = masthead_run_width(cols, title, rail, 0);
+    if (run_width == 0) return;   /* nothing moves: no rail, or no room for one */
+
+    ui_rail_stream(rail, (int) run_width, tick, 1UL, run, sizeof(run));
+
+    /*
+     * ONLY THE RUN. The title sits at the end of this row and does not move,
+     * so an animation frame that redrew the whole row repainted it five times
+     * a second - and a terminal shows that as the title blinking. The sysop,
+     * 2026-09-15: "themec still blinks", with the rail theme on.
+     *
+     * No ansi_fill either: the cells being written are exactly the cells
+     * being overwritten, and filling the row first is what made the frame a
+     * clear-then-draw in the first place.
+     */
+    ansi_color(b, fg, bg, 0);
+    ansi_text(b, row, left, run, (int) run_width);
 }
 
 void ui_status_draw(ansi_buf *b, int row, int left, int cols,

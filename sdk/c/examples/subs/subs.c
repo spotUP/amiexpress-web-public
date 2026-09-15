@@ -221,7 +221,8 @@ static void door_idle(void *ctx)
        spins hot on a 68K otherwise. */
     if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(10); return; }
     rail_tick++;
-    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+    /* The RAIL, not the row - see ui_chrome.h. */
+    ui_masthead_rail_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
                           UI_TOKEN(UI_T_BAR), rail_tick);
     ui_screen_flush(&screen);
