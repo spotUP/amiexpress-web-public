@@ -2,7 +2,7 @@
 date: 2026-09-15
 topic: "A door setting whose value names its art, and the Studio slot that follows"
 tags: [doors, ansi-studio, screens, settings, requests, sdk-c]
-status: draft
+status: implemented
 session: session_014HgBVxWkPvLox7zP2jrcEF
 ---
 

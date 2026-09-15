@@ -1,6 +1,6 @@
 # Door Art Settings Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** A door setting whose value names an art file becomes an editable slot in the ANSI Studio, with a picker that swaps which file the door uses.
 
@@ -36,7 +36,7 @@
 - Consumes: nothing.
 - Produces: `AE_SETTING_ART(key, label, def, cfgkey, help)`; a manifest setting carrying `"art": true`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the existing `describe('a C SDK door declares its own settings')` in `web/backend/tests/doors/c-sdk-settings-manifest.test.ts`:
 
@@ -57,7 +57,7 @@ Append inside the existing `describe('a C SDK door declares its own settings')` 
   });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/c-sdk-settings-manifest.test.ts
@@ -65,7 +65,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: FAIL - `expect(art).toEqual(['bulletinHeader','bulletinTail'])` receives `[]`, because nothing emits the flag yet.
 
-- [ ] **Step 3: Add the struct field**
+- [x] **Step 3: Add the struct field**
 
 In `sdk/c/include/ae_settings.h`, add to `ae_setting` AFTER `from_system_config` (last member on purpose, for the same reason that one is: every existing macro predates it and C zero-fills what an initializer does not name):
 
@@ -76,7 +76,7 @@ In `sdk/c/include/ae_settings.h`, add to `ae_setting` AFTER `from_system_config`
   int         art;
 ```
 
-- [ ] **Step 4: Add the macro**
+- [x] **Step 4: Add the macro**
 
 In the same file, beside `AE_SETTING_STR_HELP`:
 
@@ -90,7 +90,7 @@ In the same file, beside `AE_SETTING_STR_HELP`:
     NULL, 1 },
 ```
 
-- [ ] **Step 5: Emit it**
+- [x] **Step 5: Emit it**
 
 In `sdk/c/src/ae_settings.c`, directly after the `secret` line (`if (s->secret) fputs(",\n      \"secret\": true", out);`):
 
@@ -100,7 +100,7 @@ In `sdk/c/src/ae_settings.c`, directly after the `secret` line (`if (s->secret) 
     if (s->art) fputs(",\n      \"art\": true", out);
 ```
 
-- [ ] **Step 6: Declare REQUESTS' art**
+- [x] **Step 6: Declare REQUESTS' art**
 
 In `sdk/c/examples/requests/settings.c`, replace the two `AE_SETTING_STR_HELP` lines for `bulletinHeader` and `bulletinTail` with `AE_SETTING_ART`, keeping their labels, defaults, cfg keys and help text byte-identical:
 
@@ -113,7 +113,7 @@ In `sdk/c/examples/requests/settings.c`, replace the two `AE_SETTING_STR_HELP` l
 
 Leave `bulletin` as `AE_SETTING_STR_HELP`.
 
-- [ ] **Step 7: Regenerate and check nothing else moved**
+- [x] **Step 7: Regenerate and check nothing else moved**
 
 ```bash
 make -C sdk/c settings
@@ -122,7 +122,7 @@ git diff --stat Doors/REQUESTS/door.settings.json Doors/SUBS/door.settings.json 
 
 Expected: only `Doors/REQUESTS/door.settings.json` changed. If SUBS or TEXTTV moved, their `settings.c` had drifted from their shipped manifest - stop and report it rather than committing someone else's revert.
 
-- [ ] **Step 8: Run the C suite and the manifest test**
+- [x] **Step 8: Run the C suite and the manifest test**
 
 ```bash
 make -C sdk/c test
@@ -131,7 +131,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: C suite green; the manifest suite green including the new case and the byte-compare for all three doors.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add sdk/c/include/ae_settings.h sdk/c/src/ae_settings.c sdk/c/examples/requests/settings.c Doors/REQUESTS/door.settings.json web/backend/tests/doors/c-sdk-settings-manifest.test.ts
@@ -150,7 +150,7 @@ git commit -m "feat(sdk/c): a setting can say its value names an art file"
 - Consumes: Task 1's `"art": true` in a manifest.
 - Produces: `DoorSetting.art?: boolean`, `.artMaxLines?: number`, `.artMaxLineLength?: number` surviving `readManifestFromDir`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `web/backend/tests/doors/door-art-settings.test.ts`:
 
@@ -215,7 +215,7 @@ describe('an art-valued setting', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-settings.test.ts
@@ -223,7 +223,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: FAIL - first case receives `undefined` for `.art`.
 
-- [ ] **Step 3: Extend the schema**
+- [x] **Step 3: Extend the schema**
 
 In `web/backend/src/doors/door-settings.service.ts`, add to `SettingSchema`'s object body (beside `secret`):
 
@@ -249,7 +249,7 @@ and add a second `.refine` after the existing `choice` one:
 
 Add the same three optional fields to the `DoorSetting` interface beside `secret`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-settings.test.ts tests/doors/c-sdk-settings-manifest.test.ts
@@ -257,7 +257,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: PASS, all cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/backend/src/doors/door-settings.service.ts web/backend/tests/doors/door-art-settings.test.ts
@@ -280,7 +280,7 @@ git commit -m "fix(doors): the manifest schema keeps an art flag instead of stri
   - `listArtChoices(doorDir: string): Array<{ file: string; lines: number }>`
   - `artFileLines(file: string): number` - rendered rows, the trailing newline not counting as one
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `web/backend/tests/doors/door-art-file.test.ts`:
 
@@ -349,7 +349,7 @@ describe('listArtChoices', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-file.test.ts
@@ -357,7 +357,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: FAIL - `Cannot find module '../../src/doors/door-art-file'`.
 
-- [ ] **Step 3: Write the module**
+- [x] **Step 3: Write the module**
 
 Create `web/backend/src/doors/door-art-file.ts`:
 
@@ -445,7 +445,7 @@ export function listArtChoices(doorDir: string): Array<{ file: string; lines: nu
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-file.test.ts
@@ -453,7 +453,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: PASS, all 11 cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/backend/src/doors/door-art-file.ts web/backend/tests/doors/door-art-file.test.ts
@@ -472,7 +472,7 @@ git commit -m "feat(doors): an art setting's value resolves to a path inside the
 - Consumes: Task 2's `setting.art`; Task 3's `resolveArtValue`, `listArtChoices`.
 - Produces: slots whose `section` is `setting:<key>` and whose `file` is the setting's current value; `DoorArtListing` gains `choices?: Array<{file: string; lines: number}>` and `missing?: boolean`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `web/backend/tests/doors/door-art-settings.test.ts`:
 
@@ -578,7 +578,7 @@ describe('an art setting is a Studio slot', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-settings.test.ts
@@ -586,7 +586,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: FAIL - `listDoorArtSections` throws `This door declares no art sections for the Studio`.
 
-- [ ] **Step 3: Teach the manifest reader that settings can be art**
+- [x] **Step 3: Teach the manifest reader that settings can be art**
 
 In `door-settings.service.ts`, change `readArtManifest` so a door with art SETTINGS is not rejected. Replace its `if (sections.length === 0) throw ...` with:
 
@@ -602,7 +602,7 @@ In `door-settings.service.ts`, change `readArtManifest` so a door with art SETTI
 
 and widen its return type to `DoorSettingsManifest & { artSections: DoorArtSection[]; artSettings: DoorSetting[] }`.
 
-- [ ] **Step 4: List them**
+- [x] **Step 4: List them**
 
 Add near `listDoorArtSections`, and call it from there (`return [...sectionListings, ...settingListings]`):
 
@@ -647,7 +647,7 @@ Add `missing?: boolean` and `choices?: Array<{ file: string; lines: number }>` t
 import { resolveArtValue, listArtChoices, artFileLines } from './door-art-file';
 ```
 
-- [ ] **Step 5: Read and write them**
+- [x] **Step 5: Read and write them**
 
 In `readDoorArtSections`, before the Empire branch:
 
@@ -688,7 +688,7 @@ In `writeDoorArtSection`, before it looks for a matching `artSections` entry:
   }
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/door-art-settings.test.ts tests/doors/
@@ -696,7 +696,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: PASS, including the existing `emp_tools` art-section cases - the Empire path must be untouched.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/backend/src/doors/door-settings.service.ts web/backend/tests/doors/door-art-settings.test.ts
@@ -715,7 +715,7 @@ git commit -m "feat(doors): an art setting is a Studio slot backed by a whole fi
 - Consumes: Task 4's listings with `section: 'setting:<key>'`, `choices`, `missing`.
 - Produces: `/api/door-art` entries carrying `choices` and `missing`; PUT accepting a `setting:` section.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `web/backend/tests/api/door-art-settings-routes.test.ts`. The harness is
 the router with its door list injected - `createDoorArtRouter({ getDoors })`
@@ -795,7 +795,7 @@ Then the cases:
   });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/api/door-art-settings-routes.test.ts
@@ -803,7 +803,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: FAIL - REQUESTS absent from the listing, since the router only asked for `artSections`.
 
-- [ ] **Step 3: Pass the fields through**
+- [x] **Step 3: Pass the fields through**
 
 The router already maps `listDoorArtSections` output. Confirm it does not pick fields one by one; if it does, add `choices` and `missing`. Extend `handleError`'s status mapping so a resolve failure is a 400:
 
@@ -814,7 +814,7 @@ The router already maps `listDoorArtSections` output. Confirm it does not pick f
                      : 500;
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/api/
@@ -822,7 +822,7 @@ cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests
 
 Expected: PASS, including the existing door-art route tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/backend/src/api/door-art-routes.ts web/backend/tests/api/door-art-settings-routes.test.ts
@@ -842,7 +842,7 @@ git commit -m "feat(api): door art carries file-backed slots and their choices"
 - Consumes: Task 5's `choices`, `missing`, `file` on a listing entry.
 - Produces: no new exports; UI behaviour only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `web/config-app/src/test/door-art-picker.test.tsx`, following `door-art-opens-in-a-dialog.test.tsx` for its render harness and API mock:
 
@@ -890,7 +890,7 @@ it('offers the picker and not the editor when the file is missing', async () => 
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/door-art-picker.test.tsx
@@ -898,13 +898,13 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/door-art-picker.tes
 
 Expected: FAIL - the filename and the picker are not rendered.
 
-- [ ] **Step 3: Draw it**
+- [x] **Step 3: Draw it**
 
 In `ScreenFilesPage.tsx`'s door-art card, for an entry whose `section` starts with `setting:`, render below the label: the `file` string, `{lines} rows`, an **Edit** button (existing `DoorArtDialog`, suppressed when `missing`) and a **Choose another** control listing `choices` as `file - N rows`. Choosing calls the existing door-settings save with `{ [key]: file }`, where `key` is `section.slice('setting:'.length)`, then invalidates the `['door-art']` query.
 
 Use the design system's existing Select/Menu and Button components - no raw Tailwind palette classes, no hand-rolled dropdown (`design-system-usage.test.ts` enforces this).
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run
@@ -912,7 +912,7 @@ cd web/config-app && ./node_modules/.bin/vitest run
 
 Expected: PASS, including `design-system-usage.test.ts` and the existing door-art dialog tests.
 
-- [ ] **Step 5: Typecheck and build both halves**
+- [x] **Step 5: Typecheck and build both halves**
 
 ```bash
 cd web/config-app && npx tsc --noEmit && npm run build
@@ -921,7 +921,7 @@ cd ../backend && npx tsc --noEmit
 
 Expected: all clean. The vite BUILD matters here and a typecheck does not replace it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/config-app/src/pages/ScreenFilesPage.tsx web/config-app/src/api/client.ts web/config-app/src/test/door-art-picker.test.tsx
@@ -939,7 +939,7 @@ git commit -m "feat(studio): an art slot names its file and offers the alternate
 - Consumes: everything above.
 - Produces: nothing - this is the reachability gate.
 
-- [ ] **Step 1: Add the case that uses the REAL door directory**
+- [x] **Step 1: Add the case that uses the REAL door directory**
 
 ```ts
   it('finds REQUESTS own art in the repo, not just a fixture', () => {
@@ -958,7 +958,7 @@ git commit -m "feat(studio): an art slot names its file and offers the alternate
   });
 ```
 
-- [ ] **Step 2: Run the whole affected surface**
+- [x] **Step 2: Run the whole affected surface**
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/ tests/api/ tests/screens/
@@ -968,7 +968,7 @@ cd ../config-app && ./node_modules/.bin/vitest run
 
 Expected: green throughout.
 
-- [ ] **Step 3: Drive it in the real admin**
+- [x] **Step 3: Drive it in the real admin**
 
 ```bash
 ./dev/scripts/start-servers.sh --bbs-only
@@ -976,7 +976,7 @@ Expected: green throughout.
 
 Open `http://localhost:3001/admin/` -> ANSI Studio -> door art. REQUESTS must show two slots, `Bulletin_Header.txt` (8 rows) and `Bulletin_Tail.txt` (2 rows). Open the header, confirm the logo draws on the canvas in colour, close without saving. Choose `bulletindesign/Header3.ansi`, confirm the card now says that file at 7 rows, and confirm `Doors/REQUESTS/REQUESTS.cfg` gained `BulletinHeader=bulletindesign/Header3.ansi`.
 
-- [ ] **Step 4: Confirm the door still writes the bulletin**
+- [x] **Step 4: Confirm the door still writes the bulletin**
 
 With the new header selected, run the door and check the screen it writes:
 
@@ -987,9 +987,37 @@ cd web/backend && printf '4000 Q\n' | npx tsx src/scripts/run-amiga-door.ts \
 
 Then confirm the written bulletin still fits: 23 rows or fewer, header 7 rows, and one MORE request row than before. This is the gate that matters - a picker that changes a card but not the screen a caller reads has changed nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/backend/tests/doors/door-art-settings.test.ts
 git commit -m "test(doors): the art slots resolve against the real REQUESTS folder"
 ```
+
+---
+
+## Done, 2026-09-15
+
+All seven tasks, each committed with its own failing test first:
+
+    8a784b92d  1  AE_SETTING_ART in the C settings DSL
+    3db67f4a6  2  the zod schema keeps the flag instead of stripping it
+    fdfbdb821  3  the value resolves to a path inside the door
+    2f6dd4ec7  4  an art setting is a Studio slot backed by a whole file
+    28d57f8ea  5  the endpoints carry it; a bad value is a 400
+    c275bfb0b  6  the Studio slot names its file and offers the alternates
+    5b3bd6f7c  7  the gate: the real Doors/REQUESTS folder
+
+WHAT THE GATE PROVED, which is the part worth keeping. Pointed at
+`bulletindesign/Header3.ansi` (7 rows) and `Tail3.ansi` (1 row), the real 68K
+binary ran under the board's emulator and wrote 7 + 15 + 1 = 23 rows, against
+8 + 13 + 2 for the default art on the same server data. The row budget follows
+the art the setting names rather than a number compiled into the door.
+
+DEVIATIONS, both made deliberately:
+- Task 3 gained a third check the plan did not ask for. The regex and the
+  containment test are both LEXICAL, and a symlink defeats them; door folders
+  on this board really do contain symlinks. Realpath, both sides.
+- Task 6 put the slot in its own component rather than in ScreenFilesPage,
+  which is 2,289 lines. Rendering that page in a test needs the whole screen
+  index for a question that is "which value does the picker save".

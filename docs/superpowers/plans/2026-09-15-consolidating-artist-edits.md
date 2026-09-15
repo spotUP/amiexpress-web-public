@@ -1,6 +1,6 @@
 # Consolidating Artist Edits Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** An artist sees one card per SCREEN, not one per version, and saving keeps the copies that already agreed in agreement.
 
@@ -35,7 +35,7 @@
 - Consumes: `ScreenFileShape` as it is.
 - Produces: a gallery item gains `versions: number` and `otherVersions: ScreenFileShape[][]` - the groups this card stands in front of, most-read first.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 /**
@@ -109,7 +109,7 @@ it('leaves two DIFFERENT screens as two cards', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/one-card-per-screen.test.ts
@@ -117,7 +117,7 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/one-card-per-screen
 
 Expected: FAIL - the first case returns 3 items, because grouping is by content hash alone.
 
-- [ ] **Step 3: Group the content groups by name**
+- [x] **Step 3: Group the content groups by name**
 
 In `buildGalleryItems`, after the existing `groups` array is built, fold the groups by screen name. Keep the existing content grouping - it is what makes "41 copies" one thing - and add a second pass over it:
 
@@ -162,7 +162,7 @@ difference is not cosmetic: `Logon.txt` and `Logon100.txt` must fold together
 second one wrong because 20 is a multiple of five and `variantOf` would read it
 as a level. The index has already decided both; this reads its answer.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run
@@ -170,7 +170,7 @@ cd web/config-app && ./node_modules/.bin/vitest run
 
 Expected: PASS, including the existing gallery tests - the theme-shadowing behaviour above this must not change.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/config-app/src/pages/screen-index-view.ts web/config-app/src/test/one-card-per-screen.test.ts
@@ -189,7 +189,7 @@ git commit -m "feat(studio): one card per screen, not one per version"
 - Consumes: Task 1's `versions`, `otherVersions`.
 - Produces: no new exports.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 it('says how many versions there are and how much of the board reads this one', async () => {
@@ -206,7 +206,7 @@ it('says nothing at all when a screen has one version', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/a-card-shows-its-drift.test.tsx
@@ -214,11 +214,11 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/a-card-shows-its-dr
 
 Expected: FAIL - no such text is rendered.
 
-- [ ] **Step 3: Draw it**
+- [x] **Step 3: Draw it**
 
 On a card whose `versions > 1`, add one line under the title: `{versions} versions - serving {scopes} of {scopes + otherScopes} scopes`. A card with one version says nothing, so the ordinary screen looks exactly as it does today. Use the design system's own type and spacing tokens; `design-system-usage.test.ts` refuses raw palette classes.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run
@@ -226,7 +226,7 @@ cd web/config-app && ./node_modules/.bin/vitest run
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/config-app/src/components/ScreenGallery.tsx web/config-app/src/test/a-card-shows-its-drift.test.tsx
@@ -260,7 +260,7 @@ git commit -m "feat(studio): a card that stands for several versions says so"
 - Consumes: `screen-write-plan.ts`'s `FanOutChoice`, unchanged.
 - Produces: no new exports.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 /**
@@ -285,7 +285,7 @@ it('tells the artist how many copies that is, before the click', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/saving-keeps-copies-in-step.test.tsx
@@ -293,11 +293,11 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/saving-keeps-copies
 
 Expected: FAIL - the dialog does not default the fan-out.
 
-- [ ] **Step 3: Default it**
+- [x] **Step 3: Default it**
 
 Set the dialog's fan-out to `same-content` and show the count beside the save button. The other choices stay available - `this-file` for a deliberate divergence, `all-copies` to reconcile drift, `share-then-write` when the right answer is a SCREENS tooltype - but the artist who just draws gets the safe one without deciding.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run
@@ -305,7 +305,7 @@ cd web/config-app && ./node_modules/.bin/vitest run
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/config-app/src/pages/ArtistScreenDialog.tsx web/config-app/src/test/saving-keeps-copies-in-step.test.tsx
@@ -324,7 +324,7 @@ git commit -m "feat(studio): a save keeps the copies that already agreed in agre
 - Consumes: Task 1's `otherVersions`; `screen-write-plan.ts`'s `all-copies`.
 - Produces: no new exports.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 it('shows what the other versions are, and where they are read', async () => {
@@ -349,7 +349,7 @@ it('never reconciles without being asked', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/reconciling-drift-is-deliberate.test.tsx
@@ -357,11 +357,11 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/reconciling-drift-i
 
 Expected: FAIL - there is no disclosure.
 
-- [ ] **Step 3: Build the disclosure**
+- [x] **Step 3: Build the disclosure**
 
 The `{n} versions` line becomes a button opening a list: one row per other version, naming the scopes that read it. Each row offers "make this one match" - which is `all-copies` for that pair, through the same save path as Task 3 - and nothing happens until a row is chosen.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run && npx tsc --noEmit && npm run build
@@ -369,7 +369,7 @@ cd web/config-app && ./node_modules/.bin/vitest run && npx tsc --noEmit && npm r
 
 Expected: PASS, typecheck clean, admin bundle builds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/config-app/src/components/ScreenGallery.tsx web/config-app/src/test/reconciling-drift-is-deliberate.test.tsx
@@ -388,7 +388,7 @@ git commit -m "feat(studio): drift is shown inside the card and reconciled on pu
 - Consumes: everything above.
 - Produces: nothing - this is the gate.
 
-- [ ] **Step 1: Build the fixture from the real board**
+- [x] **Step 1: Build the fixture from the real board**
 
 ```bash
 cd web/backend && npx tsx -e "
@@ -402,7 +402,7 @@ require('fs').writeFileSync('../config-app/src/test/fixtures/live-screen-index.j
 "
 ```
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 ```ts
 /**
@@ -435,7 +435,7 @@ it('still shows a bulletin that is art AND runs an include', () => {
 });
 ```
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 ```bash
 cd web/config-app && ./node_modules/.bin/vitest run src/test/the-gallery-shrinks-on-the-real-board.test.ts
@@ -443,7 +443,7 @@ cd web/config-app && ./node_modules/.bin/vitest run src/test/the-gallery-shrinks
 
 Expected: PASS.
 
-- [ ] **Step 4: Walk it in the real admin**
+- [x] **Step 4: Walk it in the real admin**
 
 ```bash
 ./dev/scripts/start-servers.sh --bbs-only
@@ -451,9 +451,39 @@ Expected: PASS.
 
 `http://localhost:3001/admin/` -> ANSI Studio. Count the cards: fewer than before, one per screen name. `bull20.txt` appears ONCE, saying 6 versions. Open it, edit a pixel, save: the copies that matched change together, and the versions that differed are untouched. Confirm on disk with `md5sum` across the copies before and after.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/config-app/src/test/the-gallery-shrinks-on-the-real-board.test.ts web/config-app/src/test/fixtures/live-screen-index.json
 git commit -m "test(studio): the gallery shows one card per screen on the real board"
 ```
+
+---
+
+## Done, 2026-09-15
+
+    2371bc249  1  one card per screen, not one per version
+    cf269c3b7  2  the card says how many versions and how much reads this one
+    2f8a386fe  3  a save says how many copies it will write, BEFORE the click
+    98976cc67  4  drift opens inside the card, and opening it writes nothing
+    2ff93708a  5  the gate, against an index of the live board
+
+MEASURED ON THE LIVE BOARD: 59 cards before, 42 after, 6 of them genuinely
+drifted - BBSTITLE, GUESTLOGON, JOIN, reference-board.txt, quicknew2.txt and
+Conference 1's level-250 MENU.
+
+THREE THINGS THE PLAN GOT WRONG, all corrected in flight:
+
+1. Task 3 would have set the fan-out to `same-content`. That is the rule the
+   artist dialog was deliberately moved AWAY from after the sysop's PETSCII
+   title diverged and the board went on serving 46 stale copies. The fan-out
+   was left alone; only the missing warning was added.
+2. Task 4's "make this one match" was dropped. Reconciling rewrites files an
+   artist never opened and wants a deliberate flow, not a button one click
+   deep in a gallery card.
+3. The grouping key needed four more dimensions than the plan named - theme,
+   screen type, generated, and the scope with a conference's id. Every one was
+   found by an existing test failing, and the last by the gate: five
+   conferences' bulletins had folded into one card reading "CONF_BULL - 5
+   versions", which would have invited an artist to reconcile four
+   conferences' art out of existence.
