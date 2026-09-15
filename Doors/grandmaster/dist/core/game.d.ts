@@ -8,6 +8,7 @@ import type { AttackManager } from '../network/attack-system';
 import { type Replay } from '../server/replay-manager';
 import { type Medal } from './medals';
 import type { LockEvent } from './mission-run';
+import type { MissionModifiers } from './mission-types';
 import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
@@ -62,6 +63,12 @@ export declare class GameEngine {
      * a piece that was held, so the judge has to be told.
      */
     private currentCameFromHold;
+    /**
+     * ROTATELOCK's queue of six rotations. Each spawn takes the head and pushes
+     * a fresh random one on the end (gamestart.c:3880-3887). Empty in every
+     * other run.
+     */
+    private rotationQueue;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -146,11 +153,7 @@ export declare class GameEngine {
      * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
      * ROLL exist as items too; a mission simply never lets them expire.
      */
-    setMissionModifiers(modifiers: {
-        big?: boolean;
-        hideNext?: boolean;
-        rollRoll?: boolean;
-    } | null): void;
+    setMissionModifiers(modifiers: MissionModifiers | null): void;
     /**
      * Fill the bottom `rows` rows with garbage before the run starts
      * (HeborisCE's mission_erase, mission.c:226-236). Each row gets its own

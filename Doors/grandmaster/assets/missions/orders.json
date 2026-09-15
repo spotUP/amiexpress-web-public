@@ -179,6 +179,73 @@
         "hideNext": true
       },
       "hint": "Four lines by a held I piece, no preview, five minutes."
+    },
+    {
+      "id": "16",
+      "name": "TURNED AND STUCK",
+      "objective": "lines",
+      "norm": 8,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "rotateLock": true
+      },
+      "hint": "Eight lines. Pieces arrive turned, and you cannot turn them."
+    },
+    {
+      "id": "17",
+      "name": "FEEL THE STACK",
+      "objective": "lines",
+      "norm": 6,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 2,
+      "modifiers": {
+        "blind": true
+      },
+      "hint": "Six lines with the stack invisible. It is still there."
+    },
+    {
+      "id": "18",
+      "name": "THE FLOOR RISES",
+      "objective": "lines",
+      "norm": 10,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "riseEveryPieces": 20
+      },
+      "hint": "Ten lines while a row rises every twenty pieces."
+    },
+    {
+      "id": "19",
+      "name": "DEVIL EIGHT",
+      "objective": "tetris",
+      "norm": 2,
+      "timeLimitSeconds": 0,
+      "startLevel": 300,
+      "garbageRows": 0,
+      "modifiers": {
+        "riseEveryPieces": 12,
+        "hideNext": true
+      },
+      "hint": "Two tetrises, no preview, and the floor coming up every twelve."
+    },
+    {
+      "id": "20",
+      "name": "BLIND ORDER",
+      "objective": "singleOrder",
+      "norm": 3,
+      "requiredPiece": "T",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "blind": true
+      },
+      "hint": "Three singles with a T piece, and no stack to look at."
     }
   ]
 }

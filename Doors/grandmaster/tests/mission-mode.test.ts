@@ -15,6 +15,7 @@ import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { MenuScreen } from '../ui/menu';
 import { GameEngine } from '../core/game';
 import { GameScreen } from '../ui/game-screen';
+import { filledCells } from './painted';
 import { MissionRun, type LockEvent } from '../core/mission-run';
 import { MissionProgress } from '../core/mission-progress';
 import { loadMissionPack } from '../core/mission-pack';
@@ -371,4 +372,150 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   assert.ok(every.some((m) => m.strictness === 'exactOrReset'), 'and the resetting one');
   assert.ok(every.some((m) => m.ignoreSingles), "and COMBO's NOT1LINE");
   assert.ok(every.some((m) => m.requireHold), 'and HOLD USE');
+
+  // The rules a mission can switch on are the same story: a modifier the
+  // engine reads and no shipped mission asks for is a rule nobody plays.
+  assert.ok(every.some((m) => m.modifiers.rotateLock), 'ROTATELOCK is played');
+  assert.ok(every.some((m) => m.modifiers.blind), 'BLIND is played');
+  assert.ok(every.some((m) => (m.modifiers.riseEveryPieces ?? 0) > 0),
+    'and the rising floor');
+}
+
+/**
+ * ROTATELOCK: the piece cannot be turned, and it does not arrive upright.
+ *
+ * Reference type 17 (`mission.c:1369-1385`). Half of this rule is the half
+ * that makes it a mode rather than an annoyance: a queue of six random
+ * rotations hands the next one to every spawning piece
+ * (`gamestart.c:3880-3887`), so the run is about placing what you are given.
+ * A door that only refused rotation would be playing an easier game.
+ */
+export async function rotateLockRefusesRotationAndSpawnsTurnedPieces(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setMissionModifiers({ rotateLock: true });
+  engine.start();
+
+  assert.strictEqual(engine.rotate(1), false, 'the piece cannot be turned');
+  assert.strictEqual(engine.rotate(-1), false, 'in either direction');
+
+  const seen = new Set<number>([engine.getState().currentPiece.rotation]);
+  for (let piece = 0; piece < 20; piece++) {
+    engine.hardDrop();
+    for (let f = 0; f < 60 && !engine.getState().currentPiece; f++) engine.update(50);
+    const live = engine.getState().currentPiece;
+    if (!live) break;
+    seen.add(live.rotation);
+  }
+  assert.ok(seen.size > 1,
+    `pieces arrive in different orientations, saw only ${[...seen].join(', ')}`);
+
+  // And an ordinary mission is untouched: upright, and turnable.
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  assert.strictEqual(plain.getState().currentPiece.rotation, 0, 'upright');
+  assert.strictEqual(plain.rotate(1), true, 'and it turns');
+}
+
+/**
+ * The rising floor of DEVIL 800: one row every N pieces LOCKED.
+ *
+ * `mission.c:1394-1399` paces it by the piece count, not by a clock, so the
+ * only timer a player has is their own placing.
+ */
+export async function theFloorRisesEveryNPieces(): Promise<void> {
+  /*
+   * A row with ONE hole, which is the only kind that survives a lock: a
+   * solid row is cleared the moment a piece lands, so it cannot mark
+   * anything. The hole is at column 0 and the rest is filled.
+   */
+  const MARKER_HOLE = 0;
+  const layMarker = (engine: any, y: number): void => {
+    const board = engine.getState().board;
+    for (let x = 0; x < board.width; x++) {
+      board.grid[y][x] = x === MARKER_HOLE
+        ? { filled: false, color: null, locked: false, item: null }
+        : { filled: true, color: 'I', locked: true, item: null };
+    }
+  };
+  const markerRow = (engine: any): number => {
+    const board = engine.getState().board;
+    for (let y = 0; y < board.height; y++) {
+      const row = board.grid[y];
+      const holes = row.filter((c: any) => !c.filled).length;
+      if (holes === 1 && !row[MARKER_HOLE].filled) return y;
+    }
+    return -1;
+  };
+
+  const withRise: any = new GameEngine('mission', settings, sounds);
+  withRise.setMissionModifiers({ riseEveryPieces: 2 });
+  withRise.start();
+  // A solid row is unmistakable: it can only move by the floor rising,
+  // because a full row would otherwise be cleared.
+  const start = withRise.getState().board.height - 3;
+  layMarker(withRise, start);
+  assert.strictEqual(markerRow(withRise), start);
+
+  withRise.hardDrop();
+  for (let f = 0; f < 60 && !withRise.getState().currentPiece; f++) withRise.update(50);
+  assert.strictEqual(markerRow(withRise), start,
+    'one piece in, nothing has risen yet');
+
+  withRise.hardDrop();
+  assert.strictEqual(markerRow(withRise), start - 1,
+    'the second lock pushes the whole stack up one row');
+
+  // And a mission that did not ask for it keeps its floor where it is.
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  layMarker(plain, start);
+  plain.hardDrop();
+  for (let f = 0; f < 60 && !plain.getState().currentPiece; f++) plain.update(50);
+  plain.hardDrop();
+  assert.strictEqual(markerRow(plain), start, 'no rise was asked for, none happens');
+}
+
+/**
+ * BLIND: the stack is not DRAWN, and is still there.
+ *
+ * Reference type 25 (`mission.c:1326-1332`, hidden at `view.c:1647`). The
+ * collision path is untouched, which is the whole difficulty - a mode that
+ * also removed the blocks would be easier, not harder.
+ */
+export async function blindHidesTheStackButNotTheBoard(): Promise<void> {
+  /** Paint one scene - a solid row near the floor - with and without BLIND. */
+  const paint = (modifiers: any): string => {
+    const screen: any = new Screen({ title: 'blind', width: 80, height: 25 } as any);
+    const engine: any = new GameEngine('mission', settings, sounds);
+    engine.setMissionModifiers(modifiers);
+    engine.start();
+    const board = engine.getState().board;
+    const row = board.height - 1;
+    for (let x = 0; x < board.width; x++) {
+      board.grid[row][x] = { filled: true, color: 'I', locked: true, item: null };
+    }
+    const game: any = new GameScreen(
+      screen, engine, { on() {}, off() {}, setEnabled() {} } as any,
+      sounds, { settings }, null, null,
+    );
+    try {
+      game.setupUI();
+      game.renderBoard(engine.getState());
+      return String(game.boardBox.getContent());
+    } finally { screen.destroy(); }
+  };
+
+  // A filled cell is a BACKGROUND COLOUR here, not a block glyph - `█` is
+  // not an Amiga character and the telnet wire turns it into `?`
+  // (ui/block-width.ts, and tests/painted.ts counts both forms).
+  const blocks = (painted: string) => filledCells(painted);
+
+  const seeing = paint({ big: false });
+  const blind = paint({ blind: true });
+
+  assert.ok(blocks(seeing) > 0, 'the ordinary run draws the stack');
+  assert.strictEqual(blocks(blind), 0,
+    `a blind run draws none of it, got ${blocks(blind)} block glyphs`);
 }

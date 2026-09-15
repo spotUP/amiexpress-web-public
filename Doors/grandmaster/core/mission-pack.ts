@@ -163,6 +163,18 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       fail(where, `modifiers.hidden must be one of ${HIDDEN_MODES.join(', ')}`);
     }
 
+    /*
+     * The rising floor is a NUMBER of pieces, and the reference defaults its
+     * option to twenty when a pack leaves it at zero (mission.c:1396-1398).
+     * A rise of zero written on purpose is the same as not asking for one,
+     * so it is the absent case that gets the default, not the written zero.
+     */
+    const rawRise = rawModifiers.riseEveryPieces;
+    if (rawRise !== undefined
+      && (typeof rawRise !== 'number' || !Number.isInteger(rawRise) || rawRise < 1)) {
+      fail(where, 'modifiers.riseEveryPieces must be a whole number of pieces, 1 or more');
+    }
+
     return {
       ...(strictness !== undefined ? { strictness } : {}),
       ...(ignoreSingles !== undefined ? { ignoreSingles: ignoreSingles as boolean } : {}),
@@ -180,6 +192,9 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
         hidden,
         hideNext: rawModifiers.hideNext === true,
         rollRoll: rawModifiers.rollRoll === true,
+        rotateLock: rawModifiers.rotateLock === true,
+        blind: rawModifiers.blind === true,
+        ...(rawRise !== undefined ? { riseEveryPieces: rawRise as number } : {}),
       },
       hint: typeof m.hint === 'string' ? m.hint : undefined,
     };

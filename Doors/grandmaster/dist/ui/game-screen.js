@@ -1324,6 +1324,7 @@ class GameScreen {
         const creditRoll = this.engine.creditRollManager;
         const invisibleManager = this.engine.invisiblePieceManager;
         const isMasterRoll = state.creditRollActive;
+        const blind = state.missionModifiers?.blind === true;
         // Update connected blocks cache if enabled
         // One character per block on a square-celled screen, two on a terminal.
         const cols = (0, block_width_1.blockCols)(this.screen.width);
@@ -1394,10 +1395,16 @@ class GameScreen {
                 if (char === '  ' && !cell.filled && !isMasterRoll) {
                     char = (0, board_effects_1.trailCharAt)(this.hardDropTrails, x, y, now) ?? char;
                 }
-                // HIDDEN (core/hidden.ts): the block is still there - it just is
-                // not drawn any more. Checked before every other filled-cell
-                // treatment so glow, shine and connected blocks cannot bring it back.
-                if (char === '  ' && cell.filled && (0, hidden_1.isCellHidden)(cell) && !isMasterRoll) {
+                // HIDDEN (core/hidden.ts) and BLIND (the mission modifier): the block
+                // is still there - it just is not drawn any more. Checked before
+                // every other filled-cell treatment so glow, shine and connected
+                // blocks cannot bring it back.
+                //
+                // BLIND hides the WHOLE stack for the whole run (reference type 25,
+                // `view.c:1647`), while HIDDEN fades each block on its own timer. The
+                // live piece and its ghost are drawn above this, which is what makes
+                // the mode playable at all.
+                if (char === '  ' && cell.filled && (blind || (0, hidden_1.isCellHidden)(cell)) && !isMasterRoll) {
                     char = '  ';
                 }
                 else if (char === '  ' && cell.filled) {

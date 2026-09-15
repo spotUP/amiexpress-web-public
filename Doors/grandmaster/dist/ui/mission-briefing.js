@@ -99,6 +99,15 @@ function missionConditions(mission) {
     if (mission.modifiers.hideNext) {
         conditions.push('HIDE NEXT: no preview of what is coming');
     }
+    if (mission.modifiers.rotateLock) {
+        conditions.push('ROTATELOCK: pieces arrive turned, and cannot be turned');
+    }
+    if (mission.modifiers.blind) {
+        conditions.push('BLIND: the stack is not drawn - it is still there');
+    }
+    if (mission.modifiers.riseEveryPieces) {
+        conditions.push(`The floor rises one row every ${mission.modifiers.riseEveryPieces} pieces`);
+    }
     if (mission.modifiers.hidden) {
         conditions.push('HIDDEN: locked blocks vanish - they are still there');
     }

@@ -55,6 +55,12 @@ class GameEngine {
          * a piece that was held, so the judge has to be told.
          */
         this.currentCameFromHold = false;
+        /**
+         * ROTATELOCK's queue of six rotations. Each spawn takes the head and pushes
+         * a fresh random one on the end (gamestart.c:3880-3887). Empty in every
+         * other run.
+         */
+        this.rotationQueue = [];
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -310,6 +316,12 @@ class GameEngine {
      */
     setMissionModifiers(modifiers) {
         this.state.missionModifiers = modifiers ?? undefined;
+        // ROTATELOCK hands each spawning piece a rotation from a queue of six
+        // random ones (gamestart.c:3880-3887), so the queue is filled before the
+        // first piece rather than the first six arriving upright.
+        this.rotationQueue = modifiers?.rotateLock
+            ? Array.from({ length: 6 }, () => Math.floor(Math.random() * 4))
+            : [];
     }
     /**
      * Fill the bottom `rows` rows with garbage before the run starts
@@ -402,6 +414,14 @@ class GameEngine {
             this.state.bigPiecesRemaining--;
         if (this.state.rollRollPiecesRemaining > 0)
             this.state.rollRollPiecesRemaining--;
+        // ROTATELOCK: the piece arrives in whatever orientation the queue hands
+        // it, and the queue tops itself up (gamestart.c:3880-3887). Every other
+        // run spawns upright.
+        let spawnRotation = 0;
+        if (this.state.missionModifiers?.rotateLock && this.rotationQueue.length > 0) {
+            spawnRotation = this.rotationQueue.shift();
+            this.rotationQueue.push(Math.floor(Math.random() * 4));
+        }
         const spawnPos = this.pieceManager.getSpawnPosition(pieceType, this.state.board.width);
         // A BIG piece is twice as wide, so the ordinary spawn column can put its
         // right-hand cells off the board - an I piece spawning at x=3 reaches
@@ -435,8 +455,13 @@ class GameEngine {
             }
         }
         // Apply IRS (Initial Rotation System)
-        let initialRotation = 0;
-        if (this.state.pendingIRS !== 0) {
+        let initialRotation = spawnRotation;
+        // ROTATELOCK also refuses IRS (gamestart.c:7359/7452/7488), so the queued
+        // rotation is the whole story for such a run.
+        if (this.state.missionModifiers?.rotateLock) {
+            this.state.pendingIRS = 0;
+        }
+        else if (this.state.pendingIRS !== 0) {
             // Apply rotation based on pending input
             if (this.state.pendingIRS > 0) {
                 initialRotation = 1; // Clockwise
@@ -718,8 +743,12 @@ class GameEngine {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
         // ROTATE LOCK (item 6): the piece cannot be turned at all
-        // (ars.c:83 `if((move) && (isrotatelock[player] == 0))`).
+        // (ars.c:83 `if((move) && (isrotatelock[player] == 0))`). A MISSION can
+        // switch the same rule on for its whole run, which is the item without
+        // the timer.
         if (this.state.rotateLockFrames > 0)
+            return false;
+        if (this.state.missionModifiers?.rotateLock)
             return false;
         const piece = this.state.currentPiece;
         const newRotation = ((piece.rotation + direction + 4) % 4);
@@ -1291,6 +1320,15 @@ class GameEngine {
         this.state.lockDelay = (speedParams.lockDelay / 60) * 1000;
         // Spawn next piece (will happen after ARE delay)
         this.state.currentPiece = null;
+        /*
+         * The rising floor of DEVIL 800 (reference type 19, mission.c:1394-1399
+         * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
+         * seconds - so the clock a player keeps is their own piece count.
+         */
+        const rise = this.state.missionModifiers?.riseEveryPieces ?? 0;
+        if (rise > 0 && this.state.piecesPlaced > 0 && this.state.piecesPlaced % rise === 0) {
+            (0, garbage_1.riseGarbageRow)(this.state.board);
+        }
         // Report the lock. Everything a MISSION judges comes from here, which is
         // why it is the LAST thing lockPiece does: lines are cleared, the combo
         // and the level are settled, and the board is in the state the player

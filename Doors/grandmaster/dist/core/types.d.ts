@@ -1,6 +1,7 @@
 /**
  * Core types for GRANDMASTER
  */
+import type { MissionModifiers } from './mission-types';
 export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 export interface Piece {
     type: PieceType;
@@ -143,11 +144,13 @@ export interface GameState {
      * BIG, HIDE NEXT and ROLL ROLL are mission TYPES as well as items
      * (mission_info.c's name list).
      */
-    missionModifiers?: {
-        big?: boolean;
-        hideNext?: boolean;
-        rollRoll?: boolean;
-    };
+    /**
+     * The rules a MISSION switched on for its whole run. Type-only import, so
+     * the two modules can describe each other without a runtime cycle - and one
+     * shape, so a modifier added to a mission cannot be silently unreadable
+     * here (the old inline copy named three of them).
+     */
+    missionModifiers?: MissionModifiers;
     lrReverseFrames: number;
     boostFrames: number;
 }

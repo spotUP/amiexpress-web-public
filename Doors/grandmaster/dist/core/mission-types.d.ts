@@ -39,6 +39,26 @@ export interface MissionModifiers {
     hideNext?: boolean;
     /** The piece rotates by itself (the ROLL ROLL mission type). */
     rollRoll?: boolean;
+    /**
+     * ROTATELOCK (reference type 17, `mission.c:1369-1385`): the piece cannot
+     * be turned at all - and it does not arrive upright either. The reference
+     * keeps a queue of six random rotations and hands the next one to each
+     * spawning piece (`gamestart.c:3880-3887`), so the run is about placing
+     * whatever orientation you are given.
+     */
+    rotateLock?: boolean;
+    /**
+     * BLIND (reference type 25, `mission.c:1326-1332`): the stack is not
+     * DRAWN. It is still there - the piece lands on it exactly as it would
+     * otherwise (`view.c:1647` hides it; collision is untouched).
+     */
+    blind?: boolean;
+    /**
+     * The rising floor of DEVIL 800 (reference type 19, `mission.c:1394-1399`):
+     * one row rises every N pieces you lock. The reference defaults its option
+     * to 20 when a pack leaves it at zero.
+     */
+    riseEveryPieces?: number;
 }
 export interface Mission {
     /** Stable id, used for the cleared-missions record. */

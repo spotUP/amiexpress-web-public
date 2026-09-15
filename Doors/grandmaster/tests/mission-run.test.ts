@@ -172,7 +172,12 @@ export async function aPackIsReadWithItsDefaults(): Promise<void> {
   assert.strictEqual(m.timeLimitSeconds, 0, 'no clock unless the pack asks for one');
   assert.strictEqual(m.startLevel, 0);
   assert.strictEqual(m.garbageRows, 0);
-  assert.deepStrictEqual(m.modifiers, { big: false, hidden: undefined, hideNext: false, rollRoll: false });
+  // Every modifier the loader knows, defaulted off. A new one that forgets
+  // its default here is a rule a pack can ask for and the engine will not read.
+  assert.deepStrictEqual(m.modifiers, {
+    big: false, hidden: undefined, hideNext: false, rollRoll: false,
+    rotateLock: false, blind: false,
+  });
 }
 
 export async function aPackWithAnUnjudgeableObjectiveIsRefused(): Promise<void> {
