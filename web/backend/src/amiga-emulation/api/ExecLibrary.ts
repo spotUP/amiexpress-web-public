@@ -108,6 +108,8 @@ export class ExecLibrary {
 
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
+  /** Ports already reported by the GetMsg BLIND diagnostic; once each. */
+  private blindPortsReported = new Set<number>();
   private repliedMessages: Set<number> = new Set(); // track messages we've replied to via ReplyMsg
   private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
 
@@ -5535,6 +5537,25 @@ debugLog(
     // We added via addHead() which updated memory, now we must remove from memory too
     const msgListAddr = portAddr + 20; // mp_MsgList offset
     const msgAddr = this.remHead(msgListAddr); // Remove from memory list
+    if (msgAddr === 0 && port.messages.length > 0 && !this.blindPortsReported.has(portAddr) && this.blindPortsReported.size < 8) {
+      /*
+       * THE QUEUE SAYS THERE IS A MESSAGE; THE MEMORY LIST SAYS THERE IS NOT.
+       *
+       * Live, 2026-09-15: a door's trap-level wait polled its reply port 174
+       * times after the IO handler had replied, and saw nothing until the
+       * caller's reload. This is the only path that can answer 0 with a
+       * queued reply. Once per port, print both views so the next occurrence
+       * says which is lying, and how.
+       */
+      this.blindPortsReported.add(portAddr);
+      const head = this.emulator.readMemory32(msgListAddr + 0);
+      const tail = this.emulator.readMemory32(msgListAddr + 4);
+      const tailPred = this.emulator.readMemory32(msgListAddr + 8);
+      const q = port.messages.map(m => '0x' + m.toString(16)).join(',');
+      const firstSucc = this.emulator.readMemory32(port.messages[0] + 0);
+      const firstType = this.emulator.readMemory(port.messages[0] + 8);
+console.error(`[ExecLibrary] GetMsg BLIND on port 0x${portAddr.toString(16)} ("${port.name}"): queue=[${q}] but MsgList head=0x${head.toString(16)} tail=0x${tail.toString(16)} tailPred=0x${tailPred.toString(16)} (tailAddr=0x${(msgListAddr + 4).toString(16)}) queue[0].ln_Succ=0x${firstSucc.toString(16)} ln_Type=${firstType}`);
+    }
 
     // DEBUG: Log remHead result
     this.logExecDebug(`GetMsg: remHead returned 0x${msgAddr.toString(16)}`);
