@@ -688,6 +688,28 @@ export class ANSIEditor extends Box {
   }
 
   private createUI(options: ANSIEditorOptions): void {
+    /*
+     * WHERE THE CANVAS ENDS HAS TO BE VISIBLE (sysop, 2026-09-15: "i need to
+     * see what is the canvas and whats outside the canvas in the ansi editor,
+     * most usefull in responsive mode").
+     *
+     * `centredCanvasGeometry` centres the canvas in whatever room is left, so
+     * the moment the terminal is bigger than the art - which is exactly what
+     * responsive mode is for - the canvas floats in dead space. Both were
+     * black, so there was no seeing where an 80x25 screen stopped and the
+     * terminal began, and an artist drawing to the edge could not tell
+     * whether he was at it.
+     *
+     * The surround takes the theme's `dim`. Checked against all seven themes
+     * rather than picked by eye: every one of them has `ground: black` and a
+     * `dim` that is not black, so the canvas always reads as the darker
+     * rectangle inside the lighter surround. A host that passed its own style
+     * keeps it - this fills a gap, it does not overrule a caller.
+     */
+    if (!options.style || (options.style as any).bg === undefined) {
+      this.style.bg = activeTheme().tokens.dim;
+    }
+
     // Calculate layout offsets based on enabled UI components
     let topOffset = 0;
     const showMenuBar = options.showMenuBar !== false;
