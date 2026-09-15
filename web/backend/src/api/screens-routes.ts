@@ -51,6 +51,7 @@ import { repairOneFile } from '../screens/screen-repair';
 import { planMciCarry, applyMciCarry, type MciPlacement } from '../screens/mci-carry';
 import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
 import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
+import { findScreenReferences, removeScreenReferences } from '../screens/screen-references';
 
 export const screensRouter = express.Router();
 
@@ -1224,6 +1225,19 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
   }
 
   const before = buildScreenIndex(baseDir);
+  const relPath = path.relative(baseDir, full);
+
+  /*
+   * WHAT POINTS AT IT.
+   *
+   * A screen is pulled into another by `~SS_BBS:screens/<name>`; delete the
+   * target and the including screen draws nothing where the logo was, without
+   * a word anywhere - the hollow-screen class this board spent a night on.
+   *
+   * Found BEFORE the unlink, because the file has to exist for the references
+   * to mean anything to whoever reads this answer.
+   */
+  const references = findScreenReferences(baseDir, relPath);
 
   try {
     fs.copyFileSync(full, `${full}.backup`);
@@ -1233,10 +1247,26 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: (error as Error).message });
   }
 
+  /*
+   * MENDING THEM IS OPT-IN, and only ever the unambiguous ones.
+   *
+   * `?fixReferences=1` drops the lines that exist ONLY to make the include.
+   * A sentinel sharing its line with art is never rewritten: that line is part
+   * of a composition and nothing here can tell what the rest of it is holding
+   * up (the sysop's rule, 2026-09-15). Every screen rewritten gets a revision
+   * first, so the admin's own panel can put it back.
+   */
+  const fixed = String(req.query.fixReferences ?? '') === '1'
+    ? removeScreenReferences(baseDir, references, saveRevision)
+    : [];
+  if (fixed.length > 0) invalidateScreenIndex();
+
   return sendOk(res, {
-    deleted: path.relative(baseDir, full),
-    backup: `${path.relative(baseDir, full)}.backup`,
+    deleted: relPath,
+    backup: `${relPath}.backup`,
     stopsResolving: resolutionsLost(baseDir, before),
+    referencedBy: references,
+    fixed,
   });
 });
 
