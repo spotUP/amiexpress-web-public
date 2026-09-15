@@ -213,6 +213,63 @@ export function writeTheme(bbsRoot: string, entry: ThemeEntry): void {
   cache = null;
 }
 
+/**
+ * Retire a theme: its registry entry goes, its DIRECTORY does not.
+ *
+ * The board told artists to do this and gave them no way. `POST /themes`
+ * refuses a sixth theme with "retire one before starting another", and until
+ * now nothing could - the router had no DELETE at all.
+ *
+ * WHY THE INDICES ARE NOT RENUMBERED. The registry is `TYPE.0`, `TITLE.0`,
+ * `DIR.0` and so on, and `readThemeRegistry` scans every key matching
+ * `TYPE.<n>` rather than walking 0 upwards. So dropping one theme's block
+ * leaves a hole that costs nothing, and renumbering would rewrite every
+ * LATER theme's lines to fix a problem that does not exist - each one a
+ * chance to lose somebody's entry.
+ *
+ * THE DIRECTORY IS LEFT ALONE, deliberately. It holds an artist's drawings,
+ * and what to do with them - move aside, keep, delete - is a decision for the
+ * caller that has a sysop in front of it, made once and visibly. A function
+ * that quietly removed a directory could not be called from a test, let alone
+ * from an admin button.
+ */
+export function removeTheme(bbsRoot: string, slug: string): void {
+  const wanted = slug.trim().toLowerCase();
+
+  if (wanted === DEFAULT_SLUG) {
+    throw new Error(`"${DEFAULT_SLUG}" is the board's own screens, not a theme that can be retired`);
+  }
+
+  const registry = readThemeRegistry(bbsRoot);
+  const entry = registry.themes.find(theme => theme.slug === wanted);
+  if (!entry) throw new Error(`No such theme: "${slug}"`);
+
+  if (registry.defaultSlug === wanted) {
+    throw new Error(
+      `"${wanted}" is the board default - name another default before retiring it`
+    );
+  }
+
+  // The INDEX this theme occupies, found by its own TYPE line rather than by
+  // its position in the parsed list: the parser skips entries it cannot use,
+  // so the two can disagree.
+  const file = registryPath(bbsRoot);
+  const tooltypes = readTooltypeMap(file);
+  let index: string | null = null;
+  for (const [key, value] of tooltypes.entries()) {
+    const match = /^TYPE\.(\d+)$/i.exec(key);
+    if (match && value.trim().toLowerCase() === wanted) {
+      index = match[1];
+      break;
+    }
+  }
+  if (index === null) throw new Error(`No such theme: "${slug}"`);
+
+  const mine = new RegExp(`^(TYPE|TITLE|AUTHOR|OWNER|DIR|WIDTHS|DOORTHEME|STATUS)\\.${index}$`, 'i');
+  applyTooltypes(file, [], { removeKeys: key => mine.test(key) });
+  cache = null;
+}
+
 /** Name the board default. The slug must already be a theme. */
 export function setDefaultTheme(bbsRoot: string, slug: string): void {
   const wanted = slug.trim().toLowerCase();

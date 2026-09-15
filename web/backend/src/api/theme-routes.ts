@@ -39,6 +39,7 @@ import {
   writeTheme,
   type ThemeEntry,
   type ThemeStatus,
+  removeTheme,
 } from '../screens/theme-registry';
 
 export const themesRouter = express.Router();
@@ -363,6 +364,75 @@ themesRouter.put('/:slug', (req: Request, res: Response) => {
  * report for a theme the server would then refuse, or a red one for a theme it
  * would accept.
  */
+/**
+ * DELETE /api/themes/:slug
+ *
+ * The retirement the board already asks for. `POST /` refuses a sixth theme
+ * with "retire one before starting another" and, until this route, nothing
+ * could - so an artist at their limit was told to do something the board did
+ * not offer.
+ *
+ * THE ART IS MOVED ASIDE, NEVER DELETED. A theme directory is somebody's
+ * drawings and this is one click in an admin page, so it becomes
+ * `Themes/<slug>.removed-YYYYMMDD` - the convention the live volume already
+ * uses for a screen sweep, and one `mv` from coming back. The registry entry
+ * IS removed: that is what takes the theme off the board.
+ *
+ * Refused while the theme is the board DEFAULT. Falling back silently would
+ * change what every caller with no preference sees as a side effect of a
+ * delete; the sysop names another default first, and knows they did.
+ */
+themesRouter.delete('/:slug', (req: Request, res: Response) => {
+  const bbsRoot = config.get('dataDir');
+  const who = caller(req);
+  const slug = String(req.params.slug ?? '').trim().toLowerCase();
+
+  if (slug === DEFAULT_SLUG) {
+    return refuse(res, 400, `"${DEFAULT_SLUG}" is the board's own screens, not a theme`);
+  }
+
+  const registry = readThemeRegistry(bbsRoot);
+  const existing = registry.themes.find(theme => theme.slug === slug);
+  if (!existing) return refuse(res, 404, `No such theme: "${slug}"`);
+
+  // Ownership mirrors the create and update paths exactly: an artist owns
+  // their own sandbox and nobody else's.
+  const mine = ownedThemes(bbsRoot, who).some(theme => theme.slug === slug);
+  if (!isSysop(who) && !mine) return refuse(res, 403, 'That theme is not yours');
+
+  if (registry.defaultSlug === slug) {
+    return refuse(res, 409, `"${slug}" is the board default - name another default before retiring it`);
+  }
+
+  // The directory first: if the move fails the theme stays ON the board,
+  // which is the recoverable order. The other way round leaves a registry
+  // with no art behind it.
+  const dir = themeDirectory(bbsRoot, existing);
+  let movedTo: string | null = null;
+  if (dir && fs.existsSync(dir)) {
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    let target = `${dir}.removed-${stamp}`;
+    // A second retirement on the same day must not overwrite the first.
+    for (let n = 2; fs.existsSync(target); n++) target = `${dir}.removed-${stamp}-${n}`;
+    try {
+      fs.renameSync(dir, target);
+      movedTo = path.basename(target);
+    } catch (error) {
+      return refuse(res, 500, `Could not move ${existing.dir} aside: ${(error as Error).message}`);
+    }
+  }
+
+  try {
+    removeTheme(bbsRoot, slug);
+  } catch (error) {
+    return refuse(res, 409, (error as Error).message);
+  }
+
+  return ok(res, { slug, movedTo }, movedTo
+    ? `${existing.title} retired - its art is in ${movedTo}`
+    : `${existing.title} retired`);
+});
+
 themesRouter.get('/:slug/validation', (req: Request, res: Response) => {
   const bbsRoot = config.get('dataDir');
   const slug = String(req.params.slug ?? '').trim().toLowerCase();

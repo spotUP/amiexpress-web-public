@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle, UserCog } from 'lucide-react';
+import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle, UserCog, Archive } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -272,6 +272,37 @@ export function ScreenThemesPage() {
     if (answer) statusMutation.mutate({ slug: theme.slug, status: 'live' });
   }
 
+  const retireMutation = useMutation({
+    mutationFn: (slug: string) => apiClient.deleteScreenTheme(slug),
+    onSuccess: (result: unknown) => {
+      invalidate();
+      const moved = (result as { data?: { movedTo?: string | null } })?.data?.movedTo;
+      showSuccess(moved
+        ? `Retired - its art is in Themes/${moved} and one move brings it back`
+        : 'Retired');
+    },
+    onError: (err: Error) => showError(`Could not retire that theme: ${err.message}`),
+  });
+
+  /**
+   * RETIRE, not delete - and the confirm says which.
+   *
+   * The board already tells an artist at five themes to "retire one before
+   * starting another", so this is the thing it was asking for. The art is
+   * moved aside rather than removed: a theme directory is somebody's drawings
+   * and this is one click.
+   */
+  async function retire(theme: ScreenTheme) {
+    const answer = await confirm({
+      title: `Retire "${theme.title}"?`,
+      message: theme.screens === 0
+        ? `${theme.title} carries no screens, so nothing a caller sees changes. It comes off the list of themes.`
+        : `${theme.title} comes off the list of themes. Its ${theme.screens} screens are MOVED ASIDE, not deleted - callers wearing it fall back to the board's own art, and the drawings can be put back.`,
+      confirmText: 'Retire',
+    });
+    if (answer) retireMutation.mutate(theme.slug);
+  }
+
   async function makeDefault(theme: ScreenTheme) {
     const answer = await confirm({
       title: `Make "${theme.title}" the board default?`,
@@ -378,6 +409,21 @@ export function ScreenThemesPage() {
           {canCreate && row.status === 'live' && row.slug !== defaultSlug && (
             <button type="button" onClick={() => makeDefault(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Make the board default">
               <Eye size={16} />
+            </button>
+          )}
+          {/* RETIRE. Offered on a theme this account may WRITE and that is not
+              the board default - the two the server refuses anyway, kept off
+              the screen so nobody is invited to press something that answers
+              409. An archive box rather than a bin, because the art is moved
+              aside and not destroyed. */}
+          {row.writable && row.dir !== '' && row.slug !== defaultSlug && (
+            <button
+              type="button"
+              onClick={() => retire(row)}
+              className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors"
+              title="Retire this theme - its art is moved aside, not deleted"
+            >
+              <Archive size={16} />
             </button>
           )}
         </div>

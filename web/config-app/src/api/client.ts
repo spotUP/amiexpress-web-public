@@ -757,6 +757,20 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}/validation`);
   }
 
+  /**
+   * Retire a theme. The registry entry goes; the ART is moved aside to
+   * `Themes/<slug>.removed-YYYYMMDD` and one `mv` brings it back.
+   *
+   * Refused for `default`, refused while the theme is the board default, and
+   * refused for a theme the account does not own - the same ownership rule
+   * the create and update calls follow.
+   */
+  async deleteScreenTheme(slug: string) {
+    return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}`, {
+      method: 'DELETE',
+    });
+  }
+
   async setDefaultScreenTheme(slug: string) {
     return this.request<ApiResponse>(`${API_BASE}/themes/default`, {
       method: 'POST',
