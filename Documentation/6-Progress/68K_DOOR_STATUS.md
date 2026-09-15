@@ -28,7 +28,7 @@ Last updated: 2026-04-20
 | S | doors:ustats/stats | ZooStats user statistics |
 | Z | Doors:5D-ZippySearch/5D-ZippySearch | Zippy search |
 | games | doors:5D-AdiMenu/5D-AdiMenu | Games menu |
-| req | BBS:Doors/Request/Request | File request - fixed VFPrintf offset and config paths |
+| req | Doors/REQUESTS/requests | Global requests (our own C door). The classic `Request v2.1` it replaced was removed 2026-09-15; REQUESTS also writes `Bulletins/bull9.txt` |
 | SIZE | DOORS:SizeCheck/SizeCheck | Conference size checker - counts files/bytes per directory |
 | RTW | DOORS:RTW/rtw | Real Time Who - shows who's online across nodes |
 | TList | Doors:SRH/TList/TLP2 | T-List BBS listing - line-by-line intro (press n to skip, Enter/y to continue) |

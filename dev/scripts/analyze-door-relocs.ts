@@ -1,7 +1,7 @@
 #!/usr/bin/env npx ts-node
 /**
  * Analyze door binary relocations - check if all absolute addresses are covered
- * Usage: npx ts-node dev/scripts/analyze-door-relocs.ts Doors/Request/Request
+ * Usage: npx ts-node dev/scripts/analyze-door-relocs.ts Doors/REQUESTS/requests
  */
 
 import * as fs from 'fs';

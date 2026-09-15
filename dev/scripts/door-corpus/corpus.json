@@ -5032,42 +5032,6 @@
    }
   },
   {
-   "id": "request",
-   "name": "Request",
-   "category": "auto-added",
-   "binary": "Doors/Request/Request",
-   "doorType": "XIM",
-   "command": "REQUEST",
-   "timeoutMs": 30000,
-   "notes": "auto-added from Doors/Request; needs capture + triage",
-   "integration": {
-    "timeoutMs": 8000,
-    "inputs": [
-     {
-      "delayMs": 1000,
-      "data": "\r"
-     },
-     {
-      "delayMs": 3000,
-      "data": "q\r"
-     },
-     {
-      "delayMs": 5000,
-      "data": "\r"
-     }
-    ],
-    "assertions": {
-     "mustNotContain": [
-      "TRAP",
-      "PANIC",
-      "Guru",
-      "Software failure"
-     ],
-     "expectedSubState": "DISPLAY_MENU"
-    }
-   }
-  },
-  {
    "id": "rexxdebug",
    "name": "rexxdebug",
    "category": "auto-added",

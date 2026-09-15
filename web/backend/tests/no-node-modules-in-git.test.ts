@@ -58,7 +58,7 @@ describe('node_modules and git', () => {
   // The general form of the same bug: node_modules was the path that broke,
   // an absolute symlink target is what made it unbuildable anywhere but the
   // machine it was made on. The tracked symlinks this repo does want -
-  // amitools' bin wrappers, Doors/Request/REQ.info - are all relative.
+  // amitools' bin wrappers, a door's second command icon - are all relative.
   it('tracks no symlink pointing outside the repository', () => {
     const listing = execFileSync('git', ['ls-files', '-s'], {
       cwd: REPO,
