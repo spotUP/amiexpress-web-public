@@ -981,11 +981,29 @@ export async function getScreenFile(path: string) {
   return res.data;
 }
 
+/**
+ * Write one screen file.
+ *
+ * The path goes in the QUERY STRING: the backend reads `req.query.path`
+ * (screens-routes.ts:977) and, when it is missing, falls back to writing
+ * `targets: ['']` - an empty path, with a 200 and no error. This function
+ * used to take `path` and drop it on the floor, which nothing noticed only
+ * because no caller had wired it up yet.
+ *
+ * `content` is BASE64 of latin1 bytes. A screen carries Amiga high-bit
+ * bytes and a UTF-8 round trip turns one into U+FFFD, so the caller encodes
+ * from a latin1 buffer and the endpoint decodes the same way.
+ */
 export async function putScreenFile(path: string, content: string, targets?: string[]) {
-  const res = await request<{ success: boolean; data?: { written?: string[] } }>('/api/screens/file', {
-    method: 'PUT',
-    body: JSON.stringify({ content, targets }),
-  });
+  const body: { content: string; targets?: string[] } = { content };
+  if (targets && targets.length) body.targets = targets;
+  const res = await request<{ success: boolean; data?: { written?: string[] } }>(
+    `/api/screens/file?path=${encodeURIComponent(path)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    },
+  );
   return res.data ?? {};
 }
 

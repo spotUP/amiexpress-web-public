@@ -50,6 +50,9 @@ import {
   getFileCheckerErrors,
   createFileCheckerError,
   deleteFileCheckerError,
+  putScreenFile,
+  getSharedScreenDirs,
+  shareScreens,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -489,4 +492,59 @@ test('the client source never reaches the dead security_level_access mirror', ()
 
   assert.ok(!code.includes('`${BASE_URL}/api/config/security`'));
   assert.ok(!code.includes("'/api/config/security'"));
+});
+
+/*
+ * The screen WRITE path. `putScreenFile` took a `path` argument and never
+ * sent it: the request went to `/api/screens/file` with no query string,
+ * and the backend reads `req.query.path` (screens-routes.ts:977) and falls
+ * back to `targets: ['']` when it is absent. So the call wrote to an empty
+ * path instead of erroring - the silent class this file was written for.
+ * It was never noticed because nothing in the TUI called it yet.
+ */
+test('putScreenFile PUTs to /api/screens/file WITH the path in the query string', async () => {
+  stubFetch({ success: true, data: { written: ['Node1/BBSTITLE.SEQ'] } });
+  await putScreenFile('Node1/BBSTITLE.SEQ', 'QUJD');
+
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].url,
+    `${BASE_URL}/api/screens/file?path=${encodeURIComponent('Node1/BBSTITLE.SEQ')}`,
+  );
+  assert.equal(calls[0].method, 'PUT');
+  assert.deepEqual(calls[0].body, { content: 'QUJD' });
+});
+
+test('putScreenFile escapes a path that needs it', async () => {
+  stubFetch({ success: true, data: { written: [] } });
+  await putScreenFile('Conf 1/bull 20.txt', 'QQ==');
+
+  assert.ok(calls[0].url.endsWith('?path=Conf%201%2Fbull%2020.txt'), calls[0].url);
+});
+
+test('putScreenFile carries explicit targets when given them', async () => {
+  stubFetch({ success: true, data: { written: [] } });
+  await putScreenFile('Node1/LOGON.txt', 'QQ==', ['Node1/LOGON.txt', 'Node2/LOGON.txt']);
+
+  assert.deepEqual(calls[0].body, {
+    content: 'QQ==',
+    targets: ['Node1/LOGON.txt', 'Node2/LOGON.txt'],
+  });
+});
+
+test('getSharedScreenDirs reads the shared-directories endpoint', async () => {
+  stubFetch({ success: true, data: { directories: [{ dir: 'Screens/shared', files: ['LOGON.txt'] }] } });
+  const dirs = await getSharedScreenDirs();
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/screens/shared-directories`);
+  assert.deepEqual(dirs, [{ dir: 'Screens/shared', files: ['LOGON.txt'] }]);
+});
+
+test('shareScreens POSTs the nodes, the directory and the dry-run flag', async () => {
+  stubFetch({ success: true, data: { canShare: true, wouldWrite: ['Node1'], blocked: [] } });
+  await shareScreens([1, 2], 'Screens/shared', true);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/screens/share`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { nodes: [1, 2], sharedDir: 'Screens/shared', dryRun: true });
 });

@@ -3,12 +3,16 @@ import { Box, Text, useInput } from 'ink';
 import {
   getScreenIndex, getScreenFile, deleteScreenFile, repairScreenFile,
   getScreenRevisions, getScreenRevision, restoreScreenRevision, repairAllScreens,
+  putScreenFile, getSharedScreenDirs, shareScreens,
   type ScreenFileFacts, type ScreenIndex, type ScreenRevisionMeta, type RepairAllResult,
 } from '../../api/client.js';
 import { T, BlessedBox, BlessedText, BlessedSpinner } from '../../theme/blessed-theme.js';
 import { useMouse, useHover, type MouseEvent } from '../../hooks/useMouse.js';
 import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
 import { ConfirmDialog as SharedConfirmDialog } from '../shared/ConfirmDialog.js';
+import { InlineEdit } from '../shared/InlineEdit.js';
+import { readFileSync } from 'node:fs';
+import { parseNodeList } from '../../utils/node-list.js';
 
 type Tab = 'all' | 'node' | 'conf' | 'board' | 'unused' | 'bulletins';
 
@@ -172,6 +176,28 @@ export function ScreenFilesPage() {
   const [repairAllMode, setRepairAllMode] = useState<'idle' | 'dry-run-loading' | 'confirm' | 'running' | 'result'>('idle');
   const [repairAllDamaged, setRepairAllDamaged] = useState<string[]>([]);
   const [repairAllResult, setRepairAllResult] = useState<RepairAllResult | null>(null);
+
+  /*
+   * UPLOAD - [u]. A terminal has no file picker, so "upload" here is the two
+   * paths the sysop types: a source file on the machine running this console,
+   * and the screen path it lands on. The bytes are read as latin1 and sent
+   * base64, because a screen carries Amiga high-bit bytes and a UTF-8 round
+   * trip turns one into U+FFFD.
+   */
+  const [uploadMode, setUploadMode] = useState<'idle' | 'source' | 'dest' | 'working'>('idle');
+  const [uploadSource, setUploadSource] = useState('');
+  const [uploadDest, setUploadDest] = useState('');
+
+  /*
+   * SHARE - [s]. Point one or more nodes at a shared screen directory. The
+   * dry run is not optional: it names what would be written and what is
+   * blocked, and the real pass only runs once the sysop has seen that.
+   */
+  const [shareMode, setShareMode] = useState<'idle' | 'loading' | 'pick-dir' | 'nodes' | 'confirm' | 'working' | 'result'>('idle');
+  const [shareDirs, setShareDirs] = useState<Array<{ dir: string; files: string[] }>>([]);
+  const [shareDirIdx, setShareDirIdx] = useState(0);
+  const [shareNodes, setShareNodes] = useState('');
+  const [sharePreview, setSharePreview] = useState<{ blocked?: string[]; canShare?: boolean; wouldWrite?: string[]; tooltype?: string } | null>(null);
 
   const TAB_ROW = 7;
   const TAB_RANGES: Array<{ from: number; to: number; key: Tab }> = [
@@ -396,7 +422,87 @@ export function ScreenFilesPage() {
   // does — but SharedConfirmDialog's typed-confirmation mode DOES accept
   // arbitrary text, and repair-all's own dialog uses arrows, so both need
   // the lock.)
-  useTextEntryLock(historyPath !== null || repairAllMode !== 'idle');
+  /** Read the typed source file and write it to the typed screen path. */
+  const runUpload = useCallback(async (dest: string) => {
+    setUploadMode('working');
+    try {
+      // latin1 -> base64: the endpoint decodes base64 as latin1, so anything
+      // else corrupts every byte above 0x7F on the way through.
+      const bytes = readFileSync(uploadSource);
+      const result = await putScreenFile(dest, bytes.toString('base64'));
+      const written = result.written ?? [];
+      setOperationResult(
+        written.length
+          ? `Uploaded ${uploadSource} -> ${written.join(', ')}`
+          : `Uploaded ${uploadSource} -> ${dest}`,
+      );
+      load();
+    } catch (err) {
+      setOperationResult(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setUploadMode('idle');
+      setUploadSource('');
+      setUploadDest('');
+    }
+  }, [uploadSource, load]);
+
+  /** Ask which directories can host shared screens, then let one be picked. */
+  const openShare = useCallback(() => {
+    setShareMode('loading');
+    setSharePreview(null);
+    setShareNodes('');
+    getSharedScreenDirs()
+      .then((dirs) => {
+        setShareDirs(dirs);
+        setShareDirIdx(0);
+        setShareMode(dirs.length ? 'pick-dir' : 'result');
+        if (!dirs.length) setSharePreview({ canShare: false, wouldWrite: [], blocked: [] });
+      })
+      .catch((err) => {
+        setOperationResult(`Could not read shared directories: ${err instanceof Error ? err.message : String(err)}`);
+        setShareMode('idle');
+      });
+  }, []);
+
+  const runShareDryRun = useCallback(async (raw: string) => {
+    const nodes = parseNodeList(raw);
+    if (!nodes.length) {
+      setOperationResult('Give at least one node number, e.g. 1,2,3.');
+      setShareMode('idle');
+      return;
+    }
+    setShareMode('working');
+    try {
+      const preview = await shareScreens(nodes, shareDirs[shareDirIdx].dir, true);
+      setSharePreview(preview);
+      setShareMode('confirm');
+    } catch (err) {
+      setOperationResult(`Share dry run failed: ${err instanceof Error ? err.message : String(err)}`);
+      setShareMode('idle');
+    }
+  }, [shareDirs, shareDirIdx]);
+
+  const runShareReal = useCallback(async () => {
+    setShareMode('working');
+    try {
+      const result = await shareScreens(parseNodeList(shareNodes), shareDirs[shareDirIdx].dir, false);
+      setSharePreview(result);
+      setShareMode('result');
+      load();
+    } catch (err) {
+      setOperationResult(`Share failed: ${err instanceof Error ? err.message : String(err)}`);
+      setShareMode('idle');
+    }
+  }, [shareNodes, shareDirs, shareDirIdx, load]);
+
+  // The typed fields swallow keys, so the page's own hotkeys must stand down
+  // while one is open - otherwise typing "Node1/..." fires [d]etail and [v]iew.
+  useTextEntryLock(
+    historyPath !== null
+    || repairAllMode !== 'idle'
+    || uploadMode === 'source' || uploadMode === 'dest'
+    || shareMode === 'nodes',
+  );
 
   useInput((input, key) => {
     if (confirmDelete) return; // confirmation dialog handles its own input
@@ -405,6 +511,29 @@ export function ScreenFilesPage() {
       return;
     }
     if (previewContent !== null || previewLoading) return;
+
+    // The upload prompts and the share flow own the keyboard while they are
+    // open. Only the steps that are NOT a typed field read keys here.
+    if (uploadMode !== 'idle') {
+      if (uploadMode === 'working') return;
+      if (key.escape) { setUploadMode('idle'); setUploadSource(''); setUploadDest(''); }
+      return; // InlineEdit owns the rest
+    }
+    if (shareMode !== 'idle') {
+      if (shareMode === 'working' || shareMode === 'loading' || shareMode === 'nodes') return;
+      if (shareMode === 'result') {
+        if (input === 'q' || key.escape) { setShareMode('idle'); setSharePreview(null); }
+        return;
+      }
+      if (shareMode === 'pick-dir') {
+        if (key.escape || input === 'q') { setShareMode('idle'); return; }
+        if (key.upArrow) { setShareDirIdx((i) => Math.max(0, i - 1)); return; }
+        if (key.downArrow) { setShareDirIdx((i) => Math.min(shareDirs.length - 1, i + 1)); return; }
+        if (key.return && shareDirs[shareDirIdx]) { setShareMode('nodes'); return; }
+        return;
+      }
+      return; // 'confirm' is owned by SharedConfirmDialog
+    }
 
     if (repairAllMode !== 'idle') {
       if (repairAllMode === 'confirm' || repairAllMode === 'result') {
@@ -453,6 +582,8 @@ export function ScreenFilesPage() {
     if (input === 'p' && selected && selected.path) { handleRepair(selected.path); return; }
     if (input === 'h' && detail) { openHistory(detail.path); return; }
     if (input === 'R' && !detail) { runRepairAllDryRun(); return; }
+    if (input === 'u' && !detail) { setUploadMode('source'); return; }
+    if (input === 's' && !detail) { openShare(); return; }
     if (input === 'q' || input === 'escape') { setDetail(null); return; }
   });
 
@@ -524,6 +655,156 @@ export function ScreenFilesPage() {
             ))}
           </>
         )}
+        <Box marginTop={1}><BlessedText variant="dim">[q] Back</BlessedText></Box>
+      </Box>
+    );
+  }
+
+  // Upload — [u]. Two typed paths, then the write.
+  if (uploadMode === 'working') {
+    return <Box><BlessedSpinner/><Text> Uploading...</Text></Box>;
+  }
+  if (uploadMode === 'source' || uploadMode === 'dest') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>UPLOAD SCREEN</BlessedText>
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>
+            A console has no file picker: type the file to read on THIS machine,
+            then the screen path it becomes on the board.
+          </Text>
+        </Box>
+        <Box marginTop={1}>
+          {uploadMode === 'source' ? (
+            <InlineEdit
+              label="Source file:"
+              value={uploadSource}
+              width={60}
+              editing
+              onSave={(v) => {
+                const src = v.trim();
+                if (!src) { setUploadMode('idle'); return; }
+                setUploadSource(src);
+                // Offer the file's own name under the selected screen's
+                // directory, which is nearly always what is wanted.
+                const base = src.split(/[\\/]/).pop() ?? src;
+                const dir = (selected?.path ?? '').split(/[\\/]/).slice(0, -1).join('/');
+                setUploadDest(dir ? `${dir}/${base}` : base);
+                setUploadMode('dest');
+              }}
+              onCancel={() => { setUploadMode('idle'); setUploadSource(''); }}
+            />
+          ) : (
+            <Box flexDirection="column">
+              <Text dimColor>Source: {uploadSource}</Text>
+              <InlineEdit
+                label="Screen path:"
+                value={uploadDest}
+                width={60}
+                editing
+                onSave={(v) => {
+                  const dest = v.trim();
+                  if (!dest) { setUploadMode('idle'); return; }
+                  void runUpload(dest);
+                }}
+                onCancel={() => { setUploadMode('idle'); setUploadSource(''); setUploadDest(''); }}
+              />
+            </Box>
+          )}
+        </Box>
+        <Box marginTop={1}><BlessedText variant="dim">[Enter] Next  [Esc] Cancel</BlessedText></Box>
+      </Box>
+    );
+  }
+
+  // Share — [s]. Pick a directory, name the nodes, see the dry run, confirm.
+  if (shareMode === 'loading') {
+    return <Box><BlessedSpinner/><Text> Reading shared directories...</Text></Box>;
+  }
+  if (shareMode === 'working') {
+    return <Box><BlessedSpinner/><Text> Sharing...</Text></Box>;
+  }
+  if (shareMode === 'pick-dir') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>SHARE SCREENS — pick a directory</BlessedText>
+        {shareDirs.map((d, i) => (
+          <Text key={d.dir} inverse={i === shareDirIdx}>
+            {i === shareDirIdx ? '> ' : '  '}{d.dir} ({d.files.length} file{d.files.length === 1 ? '' : 's'})
+          </Text>
+        ))}
+        <Box marginTop={1}><BlessedText variant="dim">[↑↓] Pick  [Enter] Choose  [q] Cancel</BlessedText></Box>
+      </Box>
+    );
+  }
+  if (shareMode === 'nodes') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>SHARE SCREENS — which nodes</BlessedText>
+        <Text dimColor>Directory: {shareDirs[shareDirIdx]?.dir}</Text>
+        <Box marginTop={1}>
+          <InlineEdit
+            label="Nodes:"
+            value={shareNodes}
+            width={30}
+            editing
+            onSave={(v) => { setShareNodes(v); void runShareDryRun(v); }}
+            onCancel={() => setShareMode('idle')}
+          />
+        </Box>
+        <Box marginTop={1}><BlessedText variant="dim">e.g. 1,2,3   [Enter] Dry run  [Esc] Cancel</BlessedText></Box>
+      </Box>
+    );
+  }
+  if (shareMode === 'confirm' && sharePreview) {
+    const would = sharePreview.wouldWrite ?? [];
+    const blocked = sharePreview.blocked ?? [];
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>SHARE SCREENS — dry run</BlessedText>
+        <Text dimColor>{shareDirs[shareDirIdx]?.dir} -&gt; nodes {shareNodes}</Text>
+        {sharePreview.tooltype && <Text dimColor>Tooltype: {sharePreview.tooltype}</Text>}
+        {would.length > 0 && (
+          <>
+            <Text>Would write {would.length}:</Text>
+            {would.slice(0, 20).map((w, i) => <Text key={i}>  {w}</Text>)}
+            {would.length > 20 && <BlessedText variant="dim">  ... and {would.length - 20} more</BlessedText>}
+          </>
+        )}
+        {blocked.length > 0 && (
+          <>
+            <BlessedText variant="alert" bold>Blocked: {blocked.length}</BlessedText>
+            {blocked.map((b, i) => <Text key={i}>  [XX] {b}</Text>)}
+          </>
+        )}
+        <Box marginTop={1}>
+          {sharePreview.canShare === false ? (
+            <Box flexDirection="column">
+              <BlessedText variant="alert">This cannot be shared as asked.</BlessedText>
+              <BlessedText variant="dim">[q] Back</BlessedText>
+            </Box>
+          ) : (
+            <SharedConfirmDialog
+              message={`Point node(s) ${shareNodes} at ${shareDirs[shareDirIdx]?.dir}?`}
+              onConfirm={runShareReal}
+              onCancel={() => { setShareMode('idle'); setSharePreview(null); }}
+            />
+          )}
+        </Box>
+      </Box>
+    );
+  }
+  if (shareMode === 'result') {
+    const would = sharePreview?.wouldWrite ?? [];
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>SHARE SCREENS — done</BlessedText>
+        {shareDirs.length === 0 ? (
+          <Text dimColor>No directory on this board can host shared screens.</Text>
+        ) : (
+          <Text>Wrote {would.length} entr{would.length === 1 ? 'y' : 'ies'}.</Text>
+        )}
+        {would.slice(0, 20).map((w, i) => <Text key={i}>  [OK] {w}</Text>)}
         <Box marginTop={1}><BlessedText variant="dim">[q] Back</BlessedText></Box>
       </Box>
     );
@@ -752,7 +1033,7 @@ export function ScreenFilesPage() {
 
       {/* Footer */}
       <Box flexDirection="row" gap={1} marginTop={1}>
-        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [x] Delete  [p] Repair  [R]epair all  [r] Refresh</BlessedText>
+        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [x] Delete  [p] Repair  [R]epair all  [u]pload  [s]hare  [r] Refresh</BlessedText>
       </Box>
     </Box>
   );
