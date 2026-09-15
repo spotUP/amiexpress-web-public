@@ -5539,7 +5539,7 @@ debugLog(
     // We added via addHead() which updated memory, now we must remove from memory too
     const msgListAddr = portAddr + 20; // mp_MsgList offset
     const msgAddr = this.remHead(msgListAddr); // Remove from memory list
-    if (msgAddr === 0 && port.messages.length > 0 && !this.blindPortsReported.has(portAddr) && this.blindPortsReported.size < 8) {
+    if (msgAddr === 0 && port.messages.length > 0 && (this.isDoorReplyPort(port) || (!this.blindPortsReported.has(portAddr) && this.blindPortsReported.size < 8))) {
       /*
        * THE QUEUE SAYS THERE IS A MESSAGE; THE MEMORY LIST SAYS THERE IS NOT.
        *
@@ -5556,7 +5556,7 @@ debugLog(
       const q = port.messages.map(m => '0x' + m.toString(16)).join(',');
       const firstSucc = this.emulator.readMemory32(port.messages[0] + 0);
       const firstType = this.emulator.readMemory(port.messages[0] + 8);
-console.error(`[ExecLibrary] GetMsg BLIND on port 0x${portAddr.toString(16)} ("${port.name}"): queue=[${q}] but MsgList head=0x${head.toString(16)} tail=0x${tail.toString(16)} tailPred=0x${tailPred.toString(16)} (tailAddr=0x${(msgListAddr + 4).toString(16)}) queue[0].ln_Succ=0x${firstSucc.toString(16)} ln_Type=${firstType}`);
+console.error(`[ExecLibrary#${this.instanceId}] GetMsg BLIND on port 0x${portAddr.toString(16)} ("${port.name}"): queue=[${q}] but MsgList head=0x${head.toString(16)} tail=0x${tail.toString(16)} tailPred=0x${tailPred.toString(16)} (tailAddr=0x${(msgListAddr + 4).toString(16)}) queue[0].ln_Succ=0x${firstSucc.toString(16)} ln_Type=${firstType}`);
     }
 
     // DEBUG: Log remHead result
@@ -5581,7 +5581,7 @@ debugLog(
     if (this.repliedMessages.has(msgAddr)) {
       this.repliedMessages.delete(msgAddr);
     }
-    if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && !this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8) {
+    if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && (this.isDoorReplyPort(port) || (!this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8))) {
       /*
        * WHO TAKES A REPLY OFF THIS PORT. Live, 2026-09-15: a reply was put on
        * a door's reply port at the keypress, the door's own wait then polled
@@ -5590,7 +5590,7 @@ debugLog(
        * between. Once per port, name the caller.
        */
       this.replyTakersReported.add(portAddr);
-console.log(`[ExecLibrary] GetMsg took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}")\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
+console.log(`[ExecLibrary#${this.instanceId}] GetMsg took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}") ${port.messages.length} left\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
     }
     this.protectReturnedMessage(
       msgAddr,
@@ -5610,6 +5610,28 @@ console.log(`[ExecLibrary] GetMsg took a REPLY 0x${msgAddr.toString(16)} off por
    * Used by PutMsg callback to remove the exact message that triggered the callback,
    * since getMsg returns HEAD (oldest) but callback receives newly added message (TAIL).
    */
+  /**
+   * One line naming this instance and what its registry holds for a port -
+   * the JS queue and the memory MsgList head/tail. Port addresses repeat
+   * across emulators (every door lays its ports out the same), so a log line
+   * that names a port without naming the instance cannot tell two doors on
+   * one node apart. Diagnostic for the GWall hotkey wait (2026-09-15).
+   */
+  describePort(portAddr: number): string {
+    const port = this.messagePorts.get(portAddr);
+    if (!port) return `exec#${this.instanceId} port 0x${portAddr.toString(16)} NOT REGISTERED`;
+    const msgListAddr = portAddr + 20;
+    const head = this.emulator.readMemory32(msgListAddr + 0);
+    const tail = this.emulator.readMemory32(msgListAddr + 4);
+    const q = port.messages.map(m => '0x' + m.toString(16)).join(',');
+    return `exec#${this.instanceId} port 0x${portAddr.toString(16)} ("${port.name}") queue=[${q}] head=0x${head.toString(16)} tail=0x${tail.toString(16)}`;
+  }
+
+  /** The door's own reply port - every take off it is worth a line while the hotkey wait is under investigation. */
+  private isDoorReplyPort(port: { name?: string }): boolean {
+    return typeof port.name === 'string' && port.name.startsWith('DoorReplyPort');
+  }
+
   removeMessageFromPort(portAddr: number, msgAddr: number): boolean {
     const port = this.messagePorts.get(portAddr);
     if (!port) {
@@ -5618,11 +5640,11 @@ console.log(`[ExecLibrary] GetMsg took a REPLY 0x${msgAddr.toString(16)} off por
 
     const index = port.messages.indexOf(msgAddr);
     if (index !== -1) {
-      if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && !this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8) {
+      if (this.emulator.readMemory(msgAddr + 8) === 6 /* NT_REPLYMSG */ && (this.isDoorReplyPort(port) || (!this.replyTakersReported.has(portAddr) && this.replyTakersReported.size < 8))) {
         // The other way a reply leaves a port - queue and list together, which
         // is the exact emptiness the door's wait saw on 2026-09-15. Name it.
         this.replyTakersReported.add(portAddr);
-console.log(`[ExecLibrary] removeMessageFromPort took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}")\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
+console.log(`[ExecLibrary#${this.instanceId}] removeMessageFromPort took a REPLY 0x${msgAddr.toString(16)} off port 0x${portAddr.toString(16)} ("${port.name}")\n${new Error().stack?.split('\n').slice(2, 6).join('\n')}`);
       }
       port.messages.splice(index, 1);
       debugLog(`[ExecLibrary] removeMessageFromPort: removed 0x${msgAddr.toString(16)} from port 0x${portAddr.toString(16)}, ${port.messages.length} remaining`);
@@ -5903,9 +5925,9 @@ debugLog(
     this.markMessageAsReplied(msgAddr);
 
     // Send message back to reply port via PutMsg
-    console.log(`[ExecLibrary] replyMsg: Putting message 0x${msgAddr.toString(16)} to replyPort 0x${replyPortAddr.toString(16)}`);
+    console.log(`[ExecLibrary#${this.instanceId}] replyMsg: Putting message 0x${msgAddr.toString(16)} to replyPort 0x${replyPortAddr.toString(16)} - before: ${this.describePort(replyPortAddr)}`);
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
-    console.log(`[ExecLibrary] replyMsg: Message delivered to replyPort`);
+    console.log(`[ExecLibrary#${this.instanceId}] replyMsg: Message delivered to replyPort - after: ${this.describePort(replyPortAddr)}`);
 
     // NOTE: Doors should poll their own reply port for replies, not AEDoorPort.
     // The standard Exec message flow is:
