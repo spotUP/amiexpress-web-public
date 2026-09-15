@@ -1,5 +1,6 @@
 {
   "Conf1/Menu.seq": "c9849fc50338f1015625738b4c40fe64ac8fae61",
+  "Conf1/MENU250.seq": "48a70acdde9a7a8699dfd48a04d95055e635bb85",
   "Conf1/uploadmsg.seq": "6e04b22df8bdb6798e1049d88a3038f1706ddfa4",
   "Conf10/downloadmsg.seq": "85811233983c8425190fb211cfd060765b762df5",
   "Conf10/Menu.seq": "90c40f39fb8c7ed6dceb835ae69690b4a279b38e",
@@ -180,6 +181,7 @@
   "Screens/flt.seq": "d5617dc2e08b6d4ab6dde9c0b8e7a090353f6ed5",
   "Screens/Logon24hrs.seq": "a71e83a4f65bdbb18b3b4c98d3ebf4e152d054d8",
   "Screens/ONENODE.seq": "b548498587b1f83c1b75bea2d5d0beaf125212a1",
+  "Screens/PRIVACY.seq": "ba54a25d1b8ece39029e3e8af1b28334eebad4b6",
   "Screens/reference-board/001.reference-board.seq": "66b533ffc1ab072e18970c5815ad7c61229903b5",
   "Screens/reference-board/002.reference-board.seq": "34a2f560cd9ba0e1afc5893b876cf3370cd46c1b",
   "Screens/reference-board/003.reference-board.seq": "34a2f560cd9ba0e1afc5893b876cf3370cd46c1b",

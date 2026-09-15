@@ -569,6 +569,40 @@ function trimBlankRows(rows: Cell[][]): Cell[][] {
   return rows.slice(first, last + 1);
 }
 
+/**
+ * A SCREEN THAT IS A FEW ROWS OVER LOSES ITS DECORATION, NOT ITS CONTENT.
+ *
+ * `Conf1/MENU250.TXT` - this board's main menu, the one a level-250 caller
+ * actually sees - comes to 28 rows at 40 columns. Three over, and the three
+ * cheapest rows on it are a blank separator and two full-width rules. An
+ * 80-column screen has room for that furniture and a C64 screen does not;
+ * every command survives, which is the thing a menu is for.
+ *
+ * Blanks go before rules, and neither is taken unless the screen is over
+ * budget. A screen still too tall afterwards is not written at all: raw
+ * PETSCII is paged by nothing downstream, so it would lose its top row
+ * instead of its dividers.
+ */
+export function dropDecorationToFit(rows: Cell[][], maxRows = SCREEN_ROWS): Cell[][] {
+  if (rows.length <= maxRows) return rows;
+
+  const ink = (row: Cell[]) => row.filter((c) => c.ch !== ' ' || c.rvs);
+  const isBlankRow = (row: Cell[]) => ink(row).length === 0;
+  const isRuleRow = (row: Cell[]) => {
+    const cells = ink(row);
+    if (cells.length < 8) return false;
+    return cells.every((c) => !/[A-Za-z0-9]/.test(c.ch));
+  };
+
+  let out = rows.slice();
+  for (const expendable of [isBlankRow, isRuleRow]) {
+    for (let y = out.length - 1; y >= 0 && out.length > maxRows; y--) {
+      if (expendable(out[y])) out = [...out.slice(0, y), ...out.slice(y + 1)];
+    }
+  }
+  return out;
+}
+
 export function generateSeqBytes(source: string, title: string, maxRows = SCREEN_ROWS): { bytes: Uint8Array | null; rows: number; banner: boolean } {
   const { text, mciRemains } = stripDirectiveLines(source);
   const lines = text.split(/\r?\n/);
@@ -584,7 +618,7 @@ export function generateSeqBytes(source: string, title: string, maxRows = SCREEN
     { cols: 80, rows: flowed.length, cells: flowed, cursor: { x: 0, y: 0 } },
     { cols: SCREEN_COLS }
   );
-  const trimmed = trimBlankRows(adapted.rows.map((r) => r.cells));
+  const trimmed = dropDecorationToFit(trimBlankRows(adapted.rows.map((r) => r.cells)), maxRows);
   if (trimmed.length === 0) return { bytes: null, rows: 0, banner };
   if (trimmed.length > maxRows) return { bytes: null, rows: trimmed.length, banner };
 
