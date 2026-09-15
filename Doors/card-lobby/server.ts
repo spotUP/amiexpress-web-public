@@ -25,20 +25,30 @@ export const metadata = {
 // door's real sounds go out as the OSC sfx sequence instead. Both halves are
 // gone rather than left as a channel that looks wired.
 
-/**
- * RPC handler for forwarding client input to the door
+/*
+ * THERE IS NO `input` RPC, AND THERE MUST NOT BE ONE.
+ *
+ * A key pressed in the browser reaches this door's server half ONCE already:
+ * `key-down` -> socket-handlers -> `session.doorInputHandler`, which the
+ * blessed door installed over the client-door no-op when it enabled its
+ * DoorInputManager. The client half used to forward every key it was shown
+ * back here as `rpc('input', { raw })`, and a `forwardInput` handler fed it to
+ * that same doorInputHandler - so every keystroke arrived TWICE, the second a
+ * network round trip behind the first.
+ *
+ * It was invisible for a year because the client bundle threw on load and
+ * never forwarded anything (fixed 2026-09-14, dfb730eaa); from that day V -
+ * which turns a panel over - turned it over twice and landed where it
+ * started, "flickers broken cards and flips back", then "just switches view
+ * for a frame and then back", then "does nothing" once the redraw got fast
+ * enough for both flips to land in one frame (sysop, 2026-09-15). A number
+ * key that picks on one press and plays on the next would pick AND play.
+ *
+ * Leaving the method unregistered is deliberate rather than tidy: the bridge
+ * answers an unknown method with an RPC error and NO side effect, so a stale
+ * client bundle that still sends the echo cannot deliver a key twice, whether
+ * or not the caller has reloaded. tests/a-key-reaches-the-door-once pins it.
  */
-function forwardInput(params: { raw?: string }, session?: DoorSession): { ok: boolean } {
-  const raw = typeof params?.raw === 'string' ? params.raw : '';
-  const handler = session?.bbsSession?.doorInputHandler;
-
-  if (!raw || typeof handler !== 'function') {
-    return { ok: false };
-  }
-
-  handler(raw);
-  return { ok: true };
-}
 
 /**
  * RPC handler for polling UNO table events
@@ -78,7 +88,6 @@ function broadcastUnoEvent(
 }
 
 export const rpcHandlers = {
-  input: forwardInput,
   pollTableEvents,
   broadcastUnoEvent,
 };

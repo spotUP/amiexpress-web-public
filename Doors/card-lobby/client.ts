@@ -38,27 +38,6 @@ const KEY_MAP: Record<string, string> = {
   ' ': ' ',
 };
 
-const keyToRaw = (key: KeyEvent): string => {
-  const raw = (key as any).raw;
-  if (typeof raw === 'string' && raw.length > 0) {
-    return raw;
-  }
-
-  const keyName = (key as any).key ?? '';
-  if (typeof keyName === 'string' && keyName.startsWith('{')) {
-    return keyName;
-  }
-
-  if (typeof keyName === 'string' && KEY_MAP[keyName]) {
-    return KEY_MAP[keyName];
-  }
-
-  if (typeof keyName === 'string' && keyName.length === 1) {
-    return keyName;
-  }
-
-  return '';
-};
 
 const initAudio = async (): Promise<void> => {
   if (audioReady) return;
@@ -390,11 +369,13 @@ door.onInput((_user, key) => {
     void playSound('menu-move');
   }
 
-  // Forward input to server
-  const raw = keyToRaw(key);
-  if (raw) {
-    void door.rpc('input', { raw }).catch(() => undefined);
-  }
+  /*
+   * NOT forwarded to the server. The server half already has this key: the
+   * board delivers every browser key-down straight to the door's own input
+   * handler, and this bundle is shown a copy for its sounds. Sending it back
+   * over an input RPC was a second delivery of every keystroke - see
+   * server.ts on why there is no such method any more (2026-09-15).
+   */
 });
 
 door.onConnect(async () => {
