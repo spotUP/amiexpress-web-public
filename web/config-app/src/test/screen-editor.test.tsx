@@ -189,6 +189,11 @@ describe('editing a screen in the browser', () => {
     await openTheFile(user);
 
     // A stroke on an empty row, in a colour the loaded screen does not carry.
+    // Pick the tool this test is about. It used to rely on the editor opening
+    // in Draw; it opens in Type now, because these screens are mostly text
+    // and typing is what an artist opens the editor to do (sysop,
+    // 2026-09-15). A test that asserts PAINTING should say so.
+    await user.click(screen.getByRole('button', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Bright green foreground' }));
     const canvas = screen.getByTestId('ansi-canvas');
     await user.pointer([{ target: canvas, coords: { clientX: 0, clientY: 32 }, keys: '[MouseLeft]' }]);

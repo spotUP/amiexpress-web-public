@@ -22,7 +22,7 @@ import { EditorState } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/cor
 import { cloneCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 import {
   handleDrawEvent, paintCell, snapshotUndoState, undoDrawing, redoDrawing,
-  copySelection, pasteSelection, getSelectionBounds,
+  copySelection, pasteSelection, getSelectionBounds, clearSelection,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 
 export interface EditorSurface {
@@ -49,7 +49,13 @@ export function createSurface(canvas: Cell[][]): EditorSurface {
 
   return {
     canvas,
-    tool: 'draw',
+    /*
+     * TYPE, not draw. Opening in a painting tool means the first thing an
+     * artist types lands as brush strokes - and these screens are mostly
+     * TEXT with art around it, so typing is what the editor is opened to do
+     * (sysop, 2026-09-15: "the default mode should be type not draw").
+     */
+    tool: 'text',
     fg: state.getCurrentFg(),
     bg: state.getCurrentBg(),
     char: state.getCurrentChar(),
@@ -411,6 +417,26 @@ export function pasteText(
   });
   return settle(surface, surface.pending);
 }
+/**
+ * Switch tools, and drop the selection when we leave `select`.
+ *
+ * The marquee is the SELECT TOOL'S cursor. Leaving it on while another tool
+ * is active shows an artist a rectangle they can no longer move or resize -
+ * "the select marker is not removed when i am not in select mode" (sysop,
+ * 2026-09-15) - and worse, it stays LIVE: copy and cut read the committed
+ * rect, so an invisible-in-spirit selection would still be what Alt+C took.
+ *
+ * Clearing rather than hiding, for that reason. A hidden selection that
+ * still answers the clipboard is the kind of state nobody can reason about
+ * from the screen.
+ */
+export function withTool(surface: EditorSurface, tool: DrawingTool): EditorSurface {
+  if (surface.tool === 'select' && tool !== 'select') {
+    clearSelection(surface.state);
+  }
+  return { ...surface, tool };
+}
+
 export type ClipboardRegion = Cell[][];
 
 /**

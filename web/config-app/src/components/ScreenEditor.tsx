@@ -12,8 +12,7 @@ import {
   pointerToCanvas, typeCharacter, typeText, insertCharacter, centreLine,
   undo, redo, type EditorSurface, selectionHighlightRuns,
   copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
-  type ClipboardRegion, insertLine, removeLine,
-} from '../pages/screen-editor-state';
+  type ClipboardRegion, insertLine, removeLine, withTool } from '../pages/screen-editor-state';
 import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, tokenAt, explainToken, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
@@ -431,7 +430,7 @@ export function ScreenEditor({
             className={`px-2 py-1 text-sm border ${selectedRing(surface.tool === tool)} ${
               surface.tool === tool ? 'text-content-primary' : 'text-content-secondary'
             }`}
-            onClick={() => onChange?.({ ...surface, tool })}
+            onClick={() => onChange?.(withTool(surface, tool))}
           >
             {label}
           </button>
