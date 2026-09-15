@@ -373,8 +373,67 @@ static void a_header_that_fits_still_leaves_rows(void)
                                       REQUESTS_BULLETIN_ROW_BUDGET) > 0);
 }
 
+/**
+ * A canvas editor's padding is not art.
+ *
+ * The sysop's header is SEVEN rows and arrived as a file of twenty-three: the
+ * studio canvas is 25 rows tall and saves the empty remainder with the
+ * drawing. Counting file lines made a small logo look like a whole screen,
+ * which drove the bulletin's capacity to zero and the door's layout out of
+ * the window. "my logo is not 23 rows.." - and it was not.
+ */
+static void canvas_padding_is_not_counted_as_art(void)
+{
+    char art[2048];
+    int i;
+
+    strcpy(art,
+        "\033[93m  LOGO LINE ONE\n"
+        "\033[93m  LOGO LINE TWO\n"
+        "\033[36m| Requested by \n");
+    for (i = 0; i < 16; i++) strcat(art, "\033[0m            \n");
+
+    assert(requests_bulletin_art_rows(art) == 19);   /* as the file has it */
+    requests_bulletin_trim_padding(art);
+    assert(requests_bulletin_art_rows(art) == 3);    /* as the artist drew it */
+}
+
+/** A row that only sets a colour draws nothing, so it is padding too. */
+static void a_row_of_pure_escapes_is_padding(void)
+{
+    char art[256];
+
+    strcpy(art, "\033[93mINK\n\033[0m\n\033[31m\n");
+    requests_bulletin_trim_padding(art);
+    assert(requests_bulletin_art_rows(art) == 1);
+}
+
+/** But a gap the artist left INSIDE the art is theirs, and stays. */
+static void a_blank_row_between_inked_rows_survives(void)
+{
+    char art[256];
+
+    strcpy(art, "TOP\n\n BOTTOM\n   \n");
+    requests_bulletin_trim_padding(art);
+    assert(requests_bulletin_art_rows(art) == 3);
+}
+
+/** Art that is nothing but padding trims to nothing, and says so. */
+static void art_that_is_all_padding_becomes_empty(void)
+{
+    char art[256];
+
+    strcpy(art, "\033[0m   \n   \n\n");
+    requests_bulletin_trim_padding(art);
+    assert(art[0] == '\0');
+}
+
 int main(void)
 {
+    canvas_padding_is_not_counted_as_art();
+    a_row_of_pure_escapes_is_padding();
+    a_blank_row_between_inked_rows_survives();
+    art_that_is_all_padding_becomes_empty();
     tall_art_earns_a_taller_bulletin();
     short_art_keeps_the_one_screen_budget();
     a_tall_bulletin_is_not_judged_oversized();

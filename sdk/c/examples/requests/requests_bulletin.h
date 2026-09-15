@@ -90,6 +90,23 @@ typedef struct {
  * How many rows the art in `art` occupies, a trailing newline not counting
  * as one. LF and CRLF both read as one row.
  */
+/**
+ * Cut the blank rows a canvas editor leaves on the end of a drawing.
+ *
+ * A studio canvas is 25 rows and saves its empty remainder with the art, so a
+ * SEVEN-row logo arrives as a file of twenty-three. Counting those made the
+ * bulletin's capacity zero and threw the door's layout out - the sysop, of
+ * exactly that: "my logo is not 23 rows..".
+ *
+ * A row is blank when nothing but ANSI escapes and spaces are left of it: the
+ * art's colours are escapes, so a row that only sets a colour draws nothing
+ * and is padding too.
+ *
+ * TRAILING ONLY. A blank row between two inked ones is spacing the artist
+ * chose, and cutting it would redraw their work. Edits `buf` in place.
+ */
+void requests_bulletin_trim_padding(char *buf);
+
 int requests_bulletin_art_rows(const char *art);
 
 /**

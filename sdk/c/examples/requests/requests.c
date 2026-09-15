@@ -431,6 +431,12 @@ static void say(ui_screen *screen, int row, const char *text)
 /**
  * The fewest request rows worth showing under the art.
  *
+ * Back to six. It went to three when the sysop's 7-row logo was being
+ * measured as 23 - sixteen of those rows being canvas padding - and three was
+ * the only way to fit art that was never that big. With the padding ignored
+ * (requests_bulletin_trim_padding) his header costs seven rows and six is
+ * comfortable again.
+ *
  * Below this the art has eaten the door: a caller came here to read a list,
  * not to admire a logo with two lines under it.
  */
@@ -439,13 +445,6 @@ static void say(ui_screen *screen, int row, const char *text)
 /* -------------------------------------------------------------------- door */
 
 static ui_screen screen;
-/**
- * Rows of art standing where the masthead usually is.
- *
- * Read by the idle tick, which animates the masthead's rail on row 1 - and
- * must not, when row 1 belongs to the art instead.
- */
-static int art_rows_drawn;
 
 /* The bulletin's art, read once at startup: the door draws the header above
    its own list too, not only into the bulletin it writes at exit. */
@@ -504,16 +503,26 @@ static void draw_masthead(const char *title)
 static int draw_list_art(void)
 {
     const char *p = bulletin_header_art;
-    int row = 1;
+    int row = 2;
     int rows;
 
     if (!wide) return 0;
     if (bulletin_header_art[0] == '\0') return 0;
 
     rows = requests_bulletin_art_rows(bulletin_header_art);
-    /* The list needs room to be a list: a caret, some requests, and the two
-       rows the status and footer own at the bottom. */
-    if (rows < 1 || rows + REQUESTS_DOOR_MIN_LIST_ROWS + 3 > screen.rows) return 0;
+    /*
+     * UNDER THE LINE (sysop, 2026-09-15: "put the art under the line then").
+     *
+     * The first version put the art on row 1, where the masthead lives, which
+     * meant the animated rail had to be switched off to stop it scribbling
+     * across the top of the logo. Keeping the masthead and starting the art
+     * on row 2 keeps both: the rail still runs, and the art is whole.
+     *
+     * So the budget is one row for the masthead, the art, at least
+     * REQUESTS_DOOR_MIN_LIST_ROWS of list, and the two rows the status and
+     * footer own at the bottom.
+     */
+    if (rows < 1 || 1 + rows + REQUESTS_DOOR_MIN_LIST_ROWS + 2 > screen.rows) return 0;
 
     while (*p && row <= rows) {
         const char *nl = strchr(p, '\n');
@@ -543,13 +552,7 @@ static void door_idle(void *ctx)
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
     if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
-    /*
-     * ROW 1 IS THE ART'S when the art is up, and the rail would scribble
-     * across the top line of the sysop's logo five times a second. The rail
-     * animates the MASTHEAD; where there is no masthead there is nothing here
-     * to animate. Still yield, or the poll loop spins hot on a 68K.
-     */
-    if (art_rows_drawn > 0) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
+
     rail_tick += UI_RAIL_STEP;
     /* The RAIL, not the row: the title does not move, and repainting it five
        times a second is what the caller sees as it blinking. */
@@ -640,6 +643,7 @@ static char bulletin_text[16384];
 static requests_bulletin_row bulletin_rows[REQUESTS_BULLETIN_ROW_BUDGET];
 
 /** The whole file into `buf`, NUL-terminated. 0 if it will not fit or open. */
+
 static int slurp(const char *path, char *buf, unsigned long cap)
 {
     FILE *f = fopen(path, "rb");
@@ -652,7 +656,10 @@ static int slurp(const char *path, char *buf, unsigned long cap)
     if (n >= cap - 1) { fclose(f); return 0; }
     buf[n] = '\0';
     fclose(f);
-    return n > 0;
+    /* Art, not canvas: a drawing saved from a 25-row editor carries the empty
+       rows below it, and every measurement downstream would count them. */
+    requests_bulletin_trim_padding(buf);
+    return buf[0] != '\0';
 }
 
 /**
@@ -1069,17 +1076,19 @@ int main(int argc, char **argv)
                  * belongs where the requests are - which is the screen the
                  * bulletin mirrors.
                  */
-                int after = current_view == VIEW_MENU ? 0 : draw_list_art();
+                int after;
+
+                /* The masthead first and always: the art goes UNDER the line,
+                   so the rail keeps running above it. */
+                draw_masthead(current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title);
+                after = current_view == VIEW_MENU ? 0 : draw_list_art();
                 if (after > 0) {
-                    art_rows_drawn = after - 1;
                     list.top = after + 1;
                     list.height = screen.rows - list.top - 2;
                     if (list.height < 1) list.height = 1;
                 } else {
-                    art_rows_drawn = 0;
                     list.top = 3;
                     list.height = screen.rows - 6;
-                    draw_masthead(current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title);
                 }
             }
 

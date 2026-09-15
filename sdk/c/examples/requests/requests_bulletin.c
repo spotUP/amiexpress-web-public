@@ -104,6 +104,54 @@ static const char *art_line(const char *p, unsigned long *len,
     return p;
 }
 
+/**
+ * Cut the blank rows a canvas editor leaves on the end of a drawing.
+ *
+ * The sysop's header is SEVEN rows of art and arrived as a file of
+ * twenty-three: the studio's canvas is 25 rows tall and the empty remainder
+ * is saved with it. Counting file lines made a 7-row logo look like a whole
+ * screen, which is what drove the bulletin's capacity to zero and the door's
+ * layout out of the window - "my logo is not 23 rows..", and it was not.
+ *
+ * A row is blank when nothing but ANSI escapes and spaces are left of it. The
+ * art's own colours are escapes, so a row that only sets a colour is padding
+ * too - it draws nothing.
+ *
+ * Trailing only. A blank row BETWEEN two inked ones is spacing the artist
+ * chose, and cutting it would redraw their work.
+ */
+void requests_bulletin_trim_padding(char *buf)
+{
+    char *last_ink_end = buf;
+    char *p = buf;
+
+    while (*p != '\0') {
+        char *line = p;
+        char *nl = strchr(p, '\n');
+        char *end = nl ? nl : p + strlen(p);
+        char *q = line;
+        int ink = 0;
+
+        while (q < end) {
+            if (*q == '\033') {                    /* skip a CSI sequence */
+                q++;
+                if (q < end && *q == '[') {
+                    q++;
+                    while (q < end && ((*q >= '0' && *q <= '9') || *q == ';' || *q == '?')) q++;
+                    if (q < end) q++;             /* the final letter */
+                }
+                continue;
+            }
+            if (*q != ' ' && *q != '\r' && *q != '\t') { ink = 1; break; }
+            q++;
+        }
+        if (ink) last_ink_end = end;
+        if (!nl) break;
+        p = nl + 1;
+    }
+    *last_ink_end = '\0';
+}
+
 int requests_bulletin_art_rows(const char *art)
 {
     int rows = 0;
