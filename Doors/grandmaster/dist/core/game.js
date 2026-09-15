@@ -19,6 +19,7 @@ const time_limit_1 = require("./time-limit");
 const devil_grade_1 = require("./devil-grade");
 const hidden_1 = require("./hidden");
 const up_key_lock_1 = require("./up-key-lock");
+const board_writes_1 = require("./board-writes");
 const tspin_1 = require("./tspin");
 const garbage_1 = require("./garbage");
 const practice_goal_1 = require("./practice-goal");
@@ -1555,72 +1556,13 @@ class GameEngine {
      * Place piece with lock timestamp for credit roll fade
      */
     placePieceWithTimestamp(shape, x, y, pieceType, lockTime) {
-        const board = this.state.board;
-        for (let row = 0; row < shape.length; row++) {
-            for (let col = 0; col < shape[row].length; col++) {
-                if (shape[row][col]) {
-                    const boardX = x + col;
-                    const boardY = y + row;
-                    if (boardY >= 0 && boardY < board.height) {
-                        board.grid[boardY][boardX] = {
-                            filled: true,
-                            color: pieceType,
-                            locked: true,
-                            lockTime,
-                            // HIDDEN: the cell starts its shadow timer the moment it locks
-                            // (gamestart.c:16224-16225).
-                            shadowFrames: (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode) > 0
-                                ? hidden_1.SHADOW_TIMER_FRAMES
-                                : undefined,
-                        };
-                    }
-                }
-            }
-        }
+        (0, board_writes_1.placePieceWithTimestamp)(this.state.board, shape, x, y, pieceType, lockTime, (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode) > 0);
     }
-    /**
-     * Stamp an item id onto every cell of a just-locked piece.
-     * gamestart.c:16230/16317: `fldi[bx2+by2*w+pl*220] = item[player]` inside
-     * the same 4-cell loop that locks the piece into fld[] - the whole piece
-     * carries the item, not one cell of it.
-     */
     stampItemOnPiece(shape, x, y, itemId) {
-        const board = this.state.board;
-        for (let row = 0; row < shape.length; row++) {
-            for (let col = 0; col < shape[row].length; col++) {
-                if (!shape[row][col])
-                    continue;
-                const boardX = x + col;
-                const boardY = y + row;
-                if (boardY >= 0 && boardY < board.height && board.grid[boardY]?.[boardX]) {
-                    board.grid[boardY][boardX].item = itemId;
-                }
-            }
-        }
+        (0, board_writes_1.stampItemOnPiece)(this.state.board, shape, x, y, itemId);
     }
-    /**
-     * Scan a set of about-to-clear rows for a collectible item, matching
-     * gamestart.c:10127-10138: for each cleared row, ascending column, the
-     * LAST item cell found wins (item_waiting is overwritten each hit); across
-     * multiple simultaneously-cleared rows the loop runs row-ascending too, so
-     * the bottom-most cleared row's item wins ties. Hard block cells never
-     * reach here since getClearableLines() already excluded their whole row
-     * (see core/board.ts) - a simplification of an edge case in the reference
-     * where a hard block elsewhere in an otherwise-cancelled row could still
-     * leave an item_waiting write before the row-level cancellation landed.
-     */
     collectItemFromLines(rows) {
-        let found = null;
-        for (const y of [...rows].sort((a, b) => a - b)) {
-            const row = this.state.board.grid[y];
-            for (let x = 0; x < row.length; x++) {
-                const item = row[x].item;
-                if (item && item !== items_1.HARD_BLOCK_ITEM) {
-                    found = item;
-                }
-            }
-        }
-        return found;
+        return (0, board_writes_1.collectItemFromLines)(this.state.board, rows);
     }
     /**
      * Apply a collected item's effect and show the HUD banner.

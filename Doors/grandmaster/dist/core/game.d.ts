@@ -347,24 +347,7 @@ export declare class GameEngine {
      * Place piece with lock timestamp for credit roll fade
      */
     private placePieceWithTimestamp;
-    /**
-     * Stamp an item id onto every cell of a just-locked piece.
-     * gamestart.c:16230/16317: `fldi[bx2+by2*w+pl*220] = item[player]` inside
-     * the same 4-cell loop that locks the piece into fld[] - the whole piece
-     * carries the item, not one cell of it.
-     */
     private stampItemOnPiece;
-    /**
-     * Scan a set of about-to-clear rows for a collectible item, matching
-     * gamestart.c:10127-10138: for each cleared row, ascending column, the
-     * LAST item cell found wins (item_waiting is overwritten each hit); across
-     * multiple simultaneously-cleared rows the loop runs row-ascending too, so
-     * the bottom-most cleared row's item wins ties. Hard block cells never
-     * reach here since getClearableLines() already excluded their whole row
-     * (see core/board.ts) - a simplification of an edge case in the reference
-     * where a hard block elsewhere in an otherwise-cancelled row could still
-     * leave an item_waiting write before the row-level cancellation landed.
-     */
     private collectItemFromLines;
     /**
      * Apply a collected item's effect and show the HUD banner.
