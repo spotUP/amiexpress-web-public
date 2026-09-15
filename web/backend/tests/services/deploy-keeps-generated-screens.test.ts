@@ -12,7 +12,7 @@
  * same bug in this entrypoint - Access/*.info and the nine 68K door state files
  * were the first two.
  *
- * ONE LIST, TWO READERS. `screens/board-written-screens.txt` is the single copy;
+ * ONE LIST, TWO READERS. `screens/board-written-screens.json` is the single copy;
  * `screen-tables.ts` builds BOARD_WRITTEN_NAME from it and the entrypoint greps
  * it. This test drives the ENTRYPOINT'S OWN BLOCK against a staged board, so
  * what is checked is the shell that runs, not a restatement of its rule.
@@ -25,7 +25,7 @@ import * as path from 'path';
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 const ENTRYPOINT = path.join(REPO, 'docker-entrypoint.sh');
-const LIST = path.join(REPO, 'web', 'backend', 'src', 'screens', 'board-written-screens.txt');
+const LIST = path.join(REPO, 'web', 'backend', 'src', 'screens', 'board-written-screens.json');
 
 /** The exclude-building pass, lifted verbatim. */
 function extractExcludePass(): string {
@@ -133,11 +133,27 @@ describe('generated screens across a deploy', () => {
   });
 
   it('reads the shared list rather than a copy of it', () => {
+    // The count the shell reports must match the file, so an edit that stops
+    // reading it fails here instead of silently falling back.
     const out = runDeploy(root);
-    const patterns = fs.readFileSync(LIST, 'utf8')
-      .split('\n')
-      .filter(l => l.trim() && !l.trim().startsWith('#'));
+    const patterns = Object.keys(JSON.parse(fs.readFileSync(LIST, 'utf8')))
+      .filter(k => k !== '_comment');
 
     expect(out).toContain(`${patterns.length} pattern(s) held back`);
+  });
+
+  it('is the same file the TypeScript table reads', () => {
+    // JSON because the third reader is a browser: web/config-app aliases
+    // @bbs/screens at the backend source, so screen-tables.ts is bundled by
+    // vite and has no filesystem. Parsing here is the cheap proof that the
+    // shell and the bundle are looking at one document.
+    const parsed = JSON.parse(fs.readFileSync(LIST, 'utf8'));
+    const patterns = Object.keys(parsed).filter(k => k !== '_comment');
+
+    expect(patterns).toContain('quicknew\\.txt');
+    // Every pattern carries its reason beside it, not in a comment above it.
+    for (const p of patterns) expect(typeof parsed[p]).toBe('string');
+    // And every one compiles as the regex the table will build.
+    for (const p of patterns) expect(() => new RegExp(`^(${p})$`, 'i')).not.toThrow();
   });
 });

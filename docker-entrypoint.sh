@@ -891,8 +891,12 @@ else
     # door state files were the first two - and the cure is the same rule: seeded
     # when the board has none, never overwritten after.
     #
-    # THE LIST LIVES IN ONE PLACE AND THIS READS IT.
-    # `web/backend/src/screens/board-written-screens.txt` is the single copy;
+    # THE LIST LIVES IN ONE PLACE AND THIS READS IT. It is JSON because the
+    # THIRD reader is a BROWSER - web/config-app aliases @bbs/screens at the
+    # backend source, so screen-tables.ts is bundled by vite and has no
+    # filesystem. A text file would have forced `fs` into a module whose own
+    # header promises it has none, and broken the admin build with it.
+    # `web/backend/src/screens/board-written-screens.json` is the single copy;
     # `screen-tables.ts` builds BOARD_WRITTEN_NAME from the same file. A mirror
     # here plus a test to catch the drift would still be two sources of truth -
     # the test would only tell us which copy we had already broken.
@@ -903,9 +907,15 @@ else
     SCREEN_WRITTEN_EXCLUDES=$(mktemp)
     # Overridable so the test can drive THIS block against a staged board
     # rather than restating the rule in TypeScript.
-    BOARD_WRITTEN_LIST=${BOARD_WRITTEN_LIST:-/app/web/backend/src/screens/board-written-screens.txt}
+    BOARD_WRITTEN_LIST=${BOARD_WRITTEN_LIST:-/app/web/backend/src/screens/board-written-screens.json}
     if [ -f "$BOARD_WRITTEN_LIST" ]; then
-        grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$BOARD_WRITTEN_LIST" \
+        # The KEYS of a flat JSON object, which is all this file is. `_comment`
+        # carries the prose and is skipped. A key is a regex source for the
+        # TypeScript readers; the two metacharacters it uses become globs with
+        # two substitutions, and that is the whole conversion.
+        grep -oE '^[[:space:]]*"[^"]+"[[:space:]]*:' "$BOARD_WRITTEN_LIST" \
+          | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*:$//' \
+          | grep -v '^_comment$' \
           | sed -e 's/\\\./\./g' -e 's/\.\*/*/g' \
           | while IFS= read -r pat; do
                 [ -n "$pat" ] || continue
