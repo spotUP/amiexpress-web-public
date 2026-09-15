@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
+**Status:** implemented and live 2026-09-16 (25/25 steps).
+
 **Goal:** An artist sees one card per SCREEN, not one per version, and saving keeps the copies that already agreed in agreement.
 
 **Architecture:** The gallery already groups by content hash and already hides `codesOnly` screens, so provisioning is solved. What remains is DRIFT - the same screen in several versions - and it is handled in two places: the gallery groups a name's versions into one card that names the version most scopes read, and the save fans out to the copies that already matched (`same-content`, which `screen-write-plan.ts` already models). Nothing silently rewrites a copy that was already different.

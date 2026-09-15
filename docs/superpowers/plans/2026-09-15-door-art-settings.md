@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
+**Status:** implemented and live 2026-09-16 (42/42 steps). Verified on the
+board: the REQUESTS bulletin header and tail are editable slots with upload
+buttons. Two defects found after the plan closed and fixed separately - the
+dialog closed on upload instead of showing the art (`21fb79147`), and the
+art files were reverted by every deploy because the entrypoint's exclusion
+list harvested only `cfgFile` (`5cdbf2aa9`).
+
 **Goal:** A door setting whose value names an art file becomes an editable slot in the ANSI Studio, with a picker that swaps which file the door uses.
 
 **Architecture:** One new macro in the C settings DSL emits `"art": true` on an ordinary string setting. The backend's art service grows a third slot kind beside `markers` and `quicknew` - a whole file named by a setting's current value - addressed as `setting:<key>` so the existing narrow-variant storage keeps working unchanged. The Studio's existing card and `DoorArtDialog` canvas are reused; only the card's chrome grows a filename, a row count and a picker.
