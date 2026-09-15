@@ -590,13 +590,20 @@ export async function reverseSwapsBothAxesForTheWholeRun(): Promise<void> {
   engine.move(-1);
   assert.strictEqual(engine.getState().currentPiece.x, startX, 'and back again');
 
-  // Up and down swap: the soft drop key drops the piece all the way, and the
-  // sonic drop key nudges it one row.
+  /*
+   * UP AND DOWN SWAP AT THE KEY, NOT IN THE ENGINE. The sysop found the
+   * first version of this by playing it - "up/down is not switched" - and
+   * the reason is the binding: the down key is the soft drop in every scheme
+   * this door ships, but the UP key is the HARD drop by default and the
+   * SONIC drop under WASD, so an engine that traded softDrop for sonicDrop
+   * swapped neither of the keys a player actually presses. The swap is in
+   * ui/game-screen.ts's action handlers now, and what the ENGINE must do is
+   * leave its two drops alone.
+   */
   const before = engine.getState().currentPiece.y;
   engine.softDrop();
-  const afterSoft = engine.getState().currentPiece?.y ?? Infinity;
-  assert.ok(afterSoft - before > 1,
-    `the soft drop key sonic-drops under REVERSE (${before} -> ${afterSoft})`);
+  assert.strictEqual(engine.getState().currentPiece.y, before + 1,
+    'the engine soft drop is one row under REVERSE too - the keys swap, not the drops');
 
   const plain: any = new GameEngine('mission', settings, sounds);
   plain.setMissionModifiers({ big: false });
@@ -1019,4 +1026,116 @@ export async function clearingAStageAdvancesToTheNext(): Promise<void> {
 
   assert.strictEqual(run.getProgress().current, 1, 'the stage counted');
   assert.strictEqual(engine.getStage().id, '001', 'and the next one is up');
+}
+
+/**
+ * REVERSE swaps the KEYS, which is the only way the sysop could have found
+ * it: "4, all works except EVERYTHING BACK, up/down is not switched".
+ *
+ * The first version traded the engine's softDrop for its sonicDrop. The down
+ * key IS the soft drop in every scheme this door ships - but the UP key is
+ * the HARD drop by default (input/config.ts: `hardDrop: ['up', ...]`) and the
+ * sonic drop only under WASD, so swapping those two engine methods swapped
+ * neither key a player presses. The swap belongs where the binding has
+ * already been resolved into an action, and this drives it there.
+ */
+export async function reverseSwapsTheKeysAPlayerActuallyPresses(): Promise<void> {
+  const screen: any = new Screen({ title: 'rev-keys', width: 80, height: 25 } as any);
+  const actions = new Map<string, () => void>();
+  const input: any = {
+    on: (action: string, cb: () => void) => actions.set(action, cb),
+    off() {}, setEnabled() {},
+  };
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setMissionModifiers({ reverse: true });
+  engine.start();
+
+  const game: any = new GameScreen(screen, engine, input, sounds, { settings }, null, null);
+  try {
+    game.setupUI();
+    game.setupInput();
+    assert.ok(actions.has('soft_drop') && actions.has('hard_drop'),
+      'both drop actions are bound');
+
+    // DOWN under REVERSE does what UP does: the piece goes to the floor and
+    // locks, so the live piece is gone.
+    const start = engine.getState().currentPiece;
+    assert.ok(start, 'a piece is live');
+    actions.get('soft_drop')!();
+    assert.strictEqual(engine.getState().currentPiece, null,
+      'the down key HARD DROPPED the piece, which is what the up key does');
+
+    // And UP does what DOWN does: one row, piece still live.
+    for (let f = 0; f < 60 && !engine.getState().currentPiece; f++) engine.update(50);
+    const live = engine.getState().currentPiece;
+    assert.ok(live, 'the next piece spawned');
+    const y = live.y;
+    actions.get('hard_drop')!();
+    assert.ok(engine.getState().currentPiece, 'the up key did NOT lock the piece');
+    assert.strictEqual(engine.getState().currentPiece.y, y + 1, 'it moved one row, like a soft drop');
+  } finally { screen.destroy(); }
+
+  // An ordinary mission is untouched: down is one row, up locks.
+  const plainScreen: any = new Screen({ title: 'plain-keys', width: 80, height: 25 } as any);
+  const plainActions = new Map<string, () => void>();
+  const plainInput: any = {
+    on: (action: string, cb: () => void) => plainActions.set(action, cb),
+    off() {}, setEnabled() {},
+  };
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  const plainGame: any = new GameScreen(
+    plainScreen, plain, plainInput, sounds, { settings }, null, null,
+  );
+  try {
+    plainGame.setupUI();
+    plainGame.setupInput();
+    const y = plain.getState().currentPiece.y;
+    plainActions.get('soft_drop')!();
+    assert.strictEqual(plain.getState().currentPiece.y, y + 1, 'down is one row');
+    plainActions.get('hard_drop')!();
+    assert.strictEqual(plain.getState().currentPiece, null, 'and up locks it');
+  } finally { plainScreen.destroy(); }
+}
+
+/**
+ * A pack's NAME has to be true, because the name is how a mission is found.
+ *
+ * Sysop, 2026-09-15: "i could not find four by four". It was mission 29 of
+ * ORDERS & SPLITS while the pack called TARGET, ERASER & SQUARE held no
+ * square mission at all - so the one place a player would look for it was
+ * the one place it was not. It lives in the pack that promises it now, and
+ * this is the check that keeps every pack's name honest.
+ */
+export async function eachPackHoldsWhatItsNamePromises(): Promise<void> {
+  const { listPacks } = await import('../core/mission-store');
+  const os: typeof import('os') = await import('os');
+  const { packs } = listPacks(path.join(__dirname, '..'), fs.mkdtempSync(path.join(os.tmpdir(), 'gm-names-')));
+
+  /** A word in a pack's name, and an objective that word promises. */
+  const PROMISES: Array<[string, (objective: string) => boolean]> = [
+    ['SQUARE', (o) => o === 'square' || o === 'goldSquare'],
+    ['ERASER', (o) => o === 'eraser' || o === 'eraserHeboris'],
+    ['TARGET', (o) => o === 'target'],
+    ['ORDERS', (o) => o.endsWith('Order')],
+    ['SPLITS', (o) => o.startsWith('split')],
+  ];
+
+  for (const stored of packs) {
+    const name = stored.pack.name.toUpperCase();
+    const objectives = stored.pack.missions.map((m) => m.objective);
+    for (const [word, promised] of PROMISES) {
+      if (!name.includes(word)) continue;
+      assert.ok(objectives.some(promised),
+        `${stored.pack.name} says ${word} and has no mission that is one`);
+    }
+  }
+
+  // And the specific case the sysop hit: the square missions are in the pack
+  // whose name says SQUARE.
+  const squares = packs.find((p) => p.pack.missions.some((m) => m.objective === 'square'));
+  assert.ok(squares, 'some pack has a SQUARE mission');
+  assert.ok(squares!.pack.name.toUpperCase().includes('SQUARE'),
+    `they are in ${squares!.pack.name}, which does not say so`);
 }

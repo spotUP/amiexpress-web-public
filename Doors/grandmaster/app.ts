@@ -915,33 +915,49 @@ export class GrandmasterApp {
       return;
     }
 
-    let stored = packs[0];
-    if (packs.length > 1) {
-      // Only asked when there is a choice: one pack should not cost the
-      // player a dialog.
-      this.inputManager.suspend();
-      const chosen = await showPackSelect(this.screen, packs, problems);
-      this.inputManager.resume();
-      if (!chosen) return;
-      stored = chosen;
-    }
-    const pack: MissionPack = stored.pack;
-
-    // Pick, read the briefing, and start - or go back to the pack. A player
-    // who has just chosen from a one-line list has not yet been told the
-    // clock, the starting speed, the garbage or the rule changes, and meets
-    // all of them at once when the first piece falls.
-    this.inputManager.suspend();
-    const mission = await pickMission(
-      pack,
-      (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId),
-      {
-        select: (p) => showMissionSelect(this.screen, p, this.missionProgress, this.state.playerName),
-        brief: (m, clear) => showMissionBriefing(this.screen, m, clear),
+    /*
+     * ESCAPE GOES BACK ONE STEP, NOT OUT.
+     *
+     * Sysop, 2026-09-15: "if i press esc in the mission select menus it
+     * exits". With one pack that was right - there was nowhere else to go -
+     * but a second pack put a screen behind the list, and ESC was still
+     * leaving the door's whole MISSIONS branch. The loop is the fix: ESC on
+     * the list returns to the packs, ESC on the packs returns to the menu,
+     * and a board with a single pack behaves exactly as it did.
+     */
+    let pack: MissionPack;
+    let mission: Mission | null = null;
+    for (;;) {
+      let stored = packs[0];
+      if (packs.length > 1) {
+        // Only asked when there is a choice: one pack should not cost the
+        // player a dialog.
+        this.inputManager.suspend();
+        const chosen = await showPackSelect(this.screen, packs, problems);
+        this.inputManager.resume();
+        if (!chosen) return;
+        stored = chosen;
       }
-    );
-    this.inputManager.resume();
-    if (!mission) return;
+      pack = stored.pack;
+
+      // Pick, read the briefing, and start - or go back to the pack. A
+      // player who has just chosen from a one-line list has not yet been told
+      // the clock, the starting speed, the garbage or the rule changes, and
+      // meets all of them at once when the first piece falls.
+      this.inputManager.suspend();
+      mission = await pickMission(
+        pack,
+        (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId),
+        {
+          select: (p) => showMissionSelect(this.screen, p, this.missionProgress, this.state.playerName),
+          brief: (m, clear) => showMissionBriefing(this.screen, m, clear),
+        }
+      );
+      this.inputManager.resume();
+      if (mission) break;
+      // Backed out of the list. One pack means there is nothing behind it.
+      if (packs.length <= 1) return;
+    }
 
     const run = new MissionRun(mission);
     await this.startGame('mission', mission.startLevel, null, run);

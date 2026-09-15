@@ -36,6 +36,7 @@ import { xrayVisibleColumn } from '../core/xray';
 import { washColour } from '../core/color-wash';
 import { blockChar, fadedBlockChar, pieceColorName } from './block-glyphs';
 import { miniPiece } from './preview-panes';
+import { digHud, zoneHud, ultraTime } from './hud-text';
 import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden, MissionRun } from '../core/mission-run';
 
@@ -770,17 +771,32 @@ export class GameScreen {
       if (r1 || r2) this.sounds.playSfx('rotate');
     });
 
-    on('soft_drop', () => {
-      this.engine.softDrop();
-    });
+    /*
+     * REVERSE (mission modifier, reference type 24) swaps the UP key and the
+     * DOWN key - the reference does it on the press states themselves
+     * (gamestart.c:10036-10037). The swap has to happen HERE, where the
+     * player's binding has already been resolved into an action, and not in
+     * the engine: the down key is the soft drop in every scheme this door
+     * ships, but the UP key is the HARD drop by default and the SONIC drop
+     * under WASD, so there is no one pair of engine methods to trade.
+     *
+     * The sysop found this the only way it can be found - by playing it:
+     * "up/down is not switched". The engine-side swap traded soft for sonic,
+     * which is not what either key does.
+     */
+    const reversed = () => this.engine.getState().missionModifiers?.reverse === true;
 
-    on('hard_drop', () => {
+    const softDrop = () => {
+      this.engine.softDrop();
+    };
+
+    const hardDrop = () => {
       this.addHardDropTrail();
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
-    });
+    };
 
-    on('sonic_drop', () => {
+    const sonicDrop = () => {
       // ACE-ARS locks on this key (ars.c:331,361-389), every other rotation
       // system just lands the piece - so the trail and the landing sound are
       // for the locking case only.
@@ -789,6 +805,29 @@ export class GameScreen {
       if (this.engine.sonicDrop() && locks) {
         this.sounds.playSfx('hard_drop');
       }
+    };
+
+    /** What the UP key does in this player's scheme, for the swap. */
+    const upDrop = () => {
+      const bindings: any = (this.state.settings as any).keyBindings ?? {};
+      const sonicHasUp = Array.isArray(bindings.sonicDrop)
+        && bindings.sonicDrop.includes('up');
+      return sonicHasUp ? sonicDrop() : hardDrop();
+    };
+
+    on('soft_drop', () => {
+      if (reversed()) return upDrop();
+      softDrop();
+    });
+
+    on('hard_drop', () => {
+      if (reversed()) return softDrop();
+      hardDrop();
+    });
+
+    on('sonic_drop', () => {
+      if (reversed()) return softDrop();
+      sonicDrop();
     });
 
     on('hold', () => {
@@ -973,35 +1012,12 @@ export class GameScreen {
   }
 
   private getDigHud(state: any): string {
-    if (state.mode !== 'dig') return '';
-    const remaining = state.digLinesRemaining ?? 0;
-    const color = remaining <= 3 ? T.ok : remaining <= 6 ? T.warn : T.alert;
-    const filled = 10 - remaining;
-    const bar = '#'.repeat(filled) + '-'.repeat(remaining);
-    return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{${T.dim}-fg}[${bar}]{/${T.dim}-fg}`;
+    return digHud(state);
   }
 
-  /**
-   * The zone meter, or the countdown while zone is running.
-   *
-   * Exported shape kept as a string builder so it can be tested without a
-   * Screen; the box only exists in zone mode.
-   */
+  /** Kept as a static because tests and the zone box both ask for it. */
   static zoneHudContent(state: any): string {
-    if (state.zoneActive) {
-      const s = Math.ceil(Math.max(0, state.zoneTimeRemaining) / 1000);
-      const n = state.zoneBufferedLines ?? 0;
-      return `\n {${T.chrome}-fg}{bold}ACTIVE{/bold}{/${T.chrome}-fg}\n {${T.chrome}-fg}${s}s{/${T.chrome}-fg}\n {${T.ink}-fg}${n} lines held{/${T.ink}-fg}`;
-    }
-    const meter = state.zoneMeter ?? 0;
-    const pct = Math.round(meter * 100);
-    const filled = Math.max(0, Math.min(10, Math.round(meter * 10)));
-    const bar = '#'.repeat(filled) + '-'.repeat(10 - filled);
-    // 20% is the threshold activateZone() enforces; say so rather than
-    // leaving the player guessing why the key does nothing.
-    const color = pct >= 100 ? T.accent : pct >= 20 ? T.chrome : T.dim;
-    const hint = pct >= 20 ? `{${T.ok}-fg}FLIP to enter{/${T.ok}-fg}` : `{${T.dim}-fg}needs 20%{/${T.dim}-fg}`;
-    return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {${T.dim}-fg}[${bar}]{/${T.dim}-fg}\n ${hint}`;
+    return zoneHud(state);
   }
 
   private renderZone(state: any): void {
@@ -1015,13 +1031,7 @@ export class GameScreen {
   }
 
   private getUltraTime(state: any): string {
-    if (state.mode !== 'ultra' || state.ultraTimeRemaining === undefined) return '';
-    const ms = Math.max(0, state.ultraTimeRemaining);
-    const totalSecs = Math.ceil(ms / 1000);
-    const m = Math.floor(totalSecs / 60);
-    const s = (totalSecs % 60).toString().padStart(2, '0');
-    const color = ms < 30000 ? T.alert : ms < 60000 ? T.warn : T.ok;
-    return `\n  {${color}-fg}TIME: ${m}:${s}{/${color}-fg}`;
+    return ultraTime(state);
   }
 
   private renderStats(state: any): void {

@@ -144,12 +144,7 @@ export declare class GameScreen {
     private getBoardHash;
     private getPPS;
     private getDigHud;
-    /**
-     * The zone meter, or the countdown while zone is running.
-     *
-     * Exported shape kept as a string builder so it can be tested without a
-     * Screen; the box only exists in zone mode.
-     */
+    /** Kept as a static because tests and the zone box both ask for it. */
     static zoneHudContent(state: any): string;
     private renderZone;
     private getUltraTime;

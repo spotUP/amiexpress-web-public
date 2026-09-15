@@ -369,28 +369,6 @@
         "das": 15
       },
       "hint": "Ten lines the way the handheld played it: no hold, no preview."
-    },
-    {
-      "id": "29",
-      "name": "FOUR BY FOUR",
-      "objective": "square",
-      "norm": 2,
-      "timeLimitSeconds": 0,
-      "startLevel": 0,
-      "garbageRows": 0,
-      "modifiers": {},
-      "hint": "Build a free-standing four-by-four block of pieces, twice."
-    },
-    {
-      "id": "30",
-      "name": "GOLD SQUARE",
-      "objective": "goldSquare",
-      "norm": 1,
-      "timeLimitSeconds": 0,
-      "startLevel": 0,
-      "garbageRows": 0,
-      "modifiers": {},
-      "hint": "A four-by-four block, every piece of it the same colour."
     }
   ]
 }

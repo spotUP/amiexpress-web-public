@@ -1046,13 +1046,6 @@ export class GameEngine {
    * Soft drop (faster gravity)
    */
   softDrop(): boolean {
-    /*
-     * REVERSE swaps the two press states (gamestart.c:10036-10037), so under
-     * it the soft drop key does what the sonic drop key does. The swap lives
-     * here rather than in the key handler for the same reason the left/right
-     * one does: it is a rule of the run, and a rule the tests can reach.
-     */
-    if (this.state.missionModifiers?.reverse) return this.doSonicDrop();
     return this.doSoftDrop();
   }
 
@@ -1138,7 +1131,6 @@ export class GameEngine {
    * both), false when it was a no-op - the same contract as softDrop().
    */
   sonicDrop(): boolean {
-    if (this.state.missionModifiers?.reverse) return this.doSoftDrop();
     return this.doSonicDrop();
   }
 
