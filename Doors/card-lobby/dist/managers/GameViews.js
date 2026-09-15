@@ -217,6 +217,18 @@ class GameViews {
             const playableIndices = engine.getPlayableCards(player.id);
             const selectedIndex = this.host.selectedUnoCardIndex ?? null;
             this.host.uiManager.renderUnoHand(player.hand, playableIndices, selectedIndex);
+            /*
+             * ...and the same hand as WIDGETS on top, so UNO's cards can be
+             * clicked and tabbed to and the picked one stands proud, exactly as
+             * Skitgubbe's do: "this goes for all card games dont [do] changes for
+             * only one game" (sysop, 2026-09-15). It falls back to the text the
+             * line above drew whenever the panel cannot hold card art.
+             */
+            this.host.cardButtons.render(player.hand.map((card) => ({ kind: 'uno', card })), {
+                selected: selectedIndex,
+                playable: playableIndices,
+                onPick: (index) => this.host.selectUnoCard(index),
+            });
         }
         else {
             this.host.handContent.setContent('Observing game...');
@@ -324,7 +336,7 @@ class GameViews {
          * tabbed to. It falls back to the text the line above drew when the
          * panel is too small for full-size cards, which is why both run.
          */
-        this.host.cardButtons.render(showing, {
+        this.host.cardButtons.renderStandard(showing, {
             selected: swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
             playable: swapping
                 ? (me?.hand ?? []).map((_, index) => index)

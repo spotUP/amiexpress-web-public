@@ -49,26 +49,72 @@ class CardButtons {
      * @returns false when the panel cannot hold them, so the caller falls back
      *          to the text list rather than drawing something unreadable.
      */
+    /** Convenience for the ordinary pack, which most callers have. */
+    renderStandard(cards, options) {
+        return this.render(cards.map((card) => ({ kind: 'standard', card })), options);
+    }
     render(cards, options) {
         const panel = this.host.handPanel;
         const rows = Math.max(0, (Number(panel.height) || 0) - 2);
         const width = Math.max(0, (Number(panel.width) || 0) - 2);
+        /*
+         * THE PICKED CARD STANDS PROUD of the rest, the way a card pulled half
+         * out of a hand does - "can the active card be shifted up one row?"
+         * (sysop, 2026-09-15), and asked for EVERY game rather than one, which
+         * is why it lives here in the shared renderer and not in a module.
+         *
+         * The lift needs a row to rise into, so one is kept back from the card
+         * size below. That is the whole cost: on a panel that can no longer hold
+         * a full-size card with it, the cards come out one size down rather than
+         * the lift being dropped - a hand you can read and a card that clearly
+         * stands out beats a slightly taller hand that all looks the same.
+         */
+        const LIFT_ROWS = 1;
         if (cards.length === 0) {
             this.clear();
             return false;
         }
-        const chrome = (0, card_style_1.resolveCardStyle)(this.host.cardPreferences, rows - 1, this.host.unicodeCapable);
-        if (chrome.size !== 'full') {
-            this.clear();
-            return false; // the list says more in less
+        /*
+         * MEASURE, do not trust the table. `card-style.ts` says a full card is
+         * seven rows (FULL_CARD_ROWS) and the engine actually draws ten, so a
+         * panel the chooser calls roomy can still be one the art overflows. So
+         * the art is rendered, measured, and dropped a size if it does not fit -
+         * rather than the whole hand falling back to text, which is what the
+         * first build did on the sysop's own screen.
+         */
+        const chrome = (0, card_style_1.resolveCardStyle)(this.host.cardPreferences, rows - LIFT_ROWS, this.host.unicodeCapable);
+        const draw = (size) => {
+            const renderOptions = (0, card_style_1.toRenderOptions)({ ...chrome, size });
+            return cards.map((entry) => {
+                const lines = entry.kind === 'uno'
+                    ? cardEngine.renderUnoCardLines({ ...entry.card, face: options.faceDown ? 'back' : 'front' }, renderOptions)
+                    : cardEngine.renderCardLines({ ...entry.card, face: options.faceDown ? 'back' : 'front' }, renderOptions);
+                return lines.map((line) => (0, utils_1.ansiToBlessedTags)(line));
+            });
+        };
+        const fits = (candidate) => {
+            const cardWidth = (0, utils_1.stripBlessedTags)(candidate[0]?.[0] ?? '').length;
+            const cardHeight = candidate[0]?.length ?? 0;
+            if (cardWidth === 0 || cardHeight === 0)
+                return null;
+            const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
+            const cardRows = Math.ceil(cards.length / perRow);
+            if (cardRows * cardHeight + LIFT_ROWS > rows)
+                return null;
+            return { perRow, cardRows, height: cardHeight };
+        };
+        let art = draw(chrome.size);
+        let layout = fits(art);
+        if (!layout && chrome.size === 'full') {
+            art = draw('mini'); // a smaller card beats no card at all
+            layout = fits(art);
         }
-        const art = cards.map((card) => cardEngine.renderCardLines({ ...card, face: options.faceDown ? 'back' : 'front' }, (0, card_style_1.toRenderOptions)(chrome)).map((line) => (0, utils_1.ansiToBlessedTags)(line)));
-        const cardWidth = (0, utils_1.stripBlessedTags)(art[0]?.[0] ?? '').length;
-        const cardHeight = art[0]?.length ?? 0;
-        if (cardWidth === 0 || cardHeight === 0) {
+        if (!layout) {
             this.clear();
             return false;
         }
+        const cardWidth = (0, utils_1.stripBlessedTags)(art[0][0]).length;
+        const cardHeight = layout.height;
         /*
          * A full-size card is TEN rows and the hand panel's inside is ten, so a
          * number printed under each card does not fit - it was the difference
@@ -77,14 +123,9 @@ class CardButtons {
          * card with no number under it is still clickable and still focusable,
          * and the activity panel names the keys either way.
          */
-        const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
-        const cardRows = Math.ceil(cards.length / perRow);
-        const withLabels = cardRows * (cardHeight + 1) <= rows;
+        const perRow = layout.perRow;
+        const withLabels = layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
         const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
-        if (cardRows * buttonHeight > rows) {
-            this.clear();
-            return false;
-        }
         this.host.handContent.hide();
         this.ensure(cards.length);
         cards.forEach((_, index) => {
@@ -97,7 +138,8 @@ class CardButtons {
             button.show();
             button.width = cardWidth;
             button.height = buttonHeight;
-            button.top = row * buttonHeight;
+            // Everything sits one row down, and the picked card rises into the gap.
+            button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
             button.left = column * (cardWidth + 1);
             button.setContent(withLabels
                 ? [
@@ -121,7 +163,9 @@ class CardButtons {
         }
         // Only repaint when something actually changed - a table refresh runs
         // every few seconds and the cards are usually the same ones.
-        const key = `${cards.map((c) => `${c.rank}${c.suit}`).join(',')}|${options.selected}`
+        const key = `${cards.map((entry) => entry.kind === 'uno'
+            ? `${entry.card.color}${entry.card.value}`
+            : `${entry.card.rank}${entry.card.suit}`).join(',')}|${options.selected}`
             + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`;
         if (key !== this.lastKey) {
             this.lastKey = key;

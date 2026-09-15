@@ -66,7 +66,7 @@ export async function theCardsAreWidgetsWithSomethingToClick(): Promise<void> {
   try {
     sizeHandPanel(app, 60, 12);
     const picked: number[] = [];
-    const drawn = app.cardButtons.render(HAND, {
+    const drawn = app.cardButtons.renderStandard(HAND, {
       selected: null,
       playable: [0, 1, 2],
       onPick: (index: number) => picked.push(index),
@@ -93,7 +93,7 @@ export async function tabWalksTheCardsBeforeThePanels(): Promise<void> {
   const app = await openApp();
   try {
     sizeHandPanel(app, 60, 12);
-    app.cardButtons.render(HAND, { selected: null, playable: [0], onPick: () => {} });
+    app.cardButtons.renderStandard(HAND, { selected: null, playable: [0], onPick: () => {} });
     app.currentProfile.currentTableId = 1;
     (app as any).viewMode = 'table';
 
@@ -117,7 +117,7 @@ export async function aPanelTooSmallForCardsFallsBackToText(): Promise<void> {
   const app = await openApp(40, 25);
   try {
     sizeHandPanel(app, 20, 6);      // no room for full-size card art
-    const drawn = app.cardButtons.render(HAND, {
+    const drawn = app.cardButtons.renderStandard(HAND, {
       selected: null,
       playable: [0, 1, 2],
       onPick: () => {},
@@ -130,14 +130,57 @@ export async function aPanelTooSmallForCardsFallsBackToText(): Promise<void> {
   } finally { app.screen?.destroy?.(); }
 }
 
+export async function unoCardsGetTheSameWidgets(): Promise<void> {
+  /*
+   * "this goes for all card games dont [do] changes for only one game"
+   * (sysop, 2026-09-15). UNO's pack is drawn by a different call in the SDK,
+   * so the shared renderer has to speak both - otherwise "all games" quietly
+   * means "the one I was looking at".
+   */
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 12);
+    const picked: number[] = [];
+    const drawn = app.cardButtons.render(
+      [
+        { kind: 'uno', card: { color: 'R', value: '5' } },
+        { kind: 'uno', card: { color: 'B', value: 'skip' } },
+      ],
+      { selected: 1, playable: [0, 1], onPick: (i: number) => picked.push(i) },
+    );
+
+    assert.strictEqual(drawn, true, 'UNO cards draw as widgets too');
+    const buttons = app.cardButtons.focusables();
+    assert.strictEqual(buttons.length, 2);
+    buttons[0].emit('click');
+    assert.deepStrictEqual(picked, [0]);
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function thePickedCardStandsProudOfTheRest(): Promise<void> {
+  // "can the active card be shifted up one row?" (sysop, 2026-09-15) - the
+  // way a card pulled half out of a hand sits. Shared, so every game gets it.
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 14);
+    app.cardButtons.renderStandard(HAND, { selected: 1, playable: [0, 1, 2], onPick: () => {} });
+
+    const tops = app.cardButtons.focusables().map((button: any) => Number(button.top));
+    assert.strictEqual(tops.length, 3);
+    assert.ok(tops[1] < tops[0], 'the picked card sits a row above its neighbours');
+    assert.strictEqual(tops[0], tops[2], 'and the rest are level with each other');
+    assert.strictEqual(tops[0] - tops[1], 1, 'by exactly one row');
+  } finally { app.screen?.destroy?.(); }
+}
+
 export async function anEmptyHandLeavesNoGhostCards(): Promise<void> {
   const app = await openApp();
   try {
     sizeHandPanel(app, 60, 12);
-    app.cardButtons.render(HAND, { selected: null, playable: [], onPick: () => {} });
+    app.cardButtons.renderStandard(HAND, { selected: null, playable: [], onPick: () => {} });
     assert.strictEqual(app.cardButtons.focusables().length, 3);
 
-    app.cardButtons.render([], { selected: null, playable: [], onPick: () => {} });
+    app.cardButtons.renderStandard([], { selected: null, playable: [], onPick: () => {} });
     assert.strictEqual(app.cardButtons.focusables().length, 0,
       'a played-out hand hides its widgets rather than leaving them on screen');
   } finally { app.screen?.destroy?.(); }

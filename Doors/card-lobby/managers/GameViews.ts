@@ -13,6 +13,14 @@ import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
 import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule } from '../lib/games';
 
+/** What every game passes to the shared card renderer (managers/CardButtons.ts). */
+interface CardButtonArgs {
+  selected: number | null;
+  playable: number[];
+  faceDown?: boolean;
+  onPick(index: number): void;
+}
+
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
 
@@ -28,6 +36,7 @@ export interface GameViewHost {
   readonly activityContent: Log;
   readonly dealAnimationInProgress: boolean;
   selectedUnoCardIndex: number | null;
+  selectUnoCard(index: number): void;
   lastAnimatedHandStartedAt: number | null;
   loadTableHand(table: LobbyTable): { engine: PokerEngine; beforeStacks: Record<string, number> } | null;
   loadUnoGameState(table: LobbyTable): { engine: UnoGameEngine; beforeStacks: Record<string, number> } | null;
@@ -53,12 +62,8 @@ export interface GameViewHost {
   readonly skitgubbe: SkitgubbeGameModule;
   readonly vandtia: VandtiaGameModule;
   readonly cardButtons: {
-    render(cards: unknown[], options: {
-      selected: number | null;
-      playable: number[];
-      faceDown?: boolean;
-      onPick(index: number): void;
-    }): boolean;
+    render(cards: Array<{ kind: 'standard' | 'uno'; card: unknown }>, options: CardButtonArgs): boolean;
+    renderStandard(cards: unknown[], options: CardButtonArgs): boolean;
     clear(): void;
   };
 }
@@ -293,6 +298,22 @@ export class GameViews {
       const playableIndices = engine.getPlayableCards(player.id);
       const selectedIndex = this.host.selectedUnoCardIndex ?? null;
       this.host.uiManager.renderUnoHand(player.hand, playableIndices, selectedIndex);
+
+      /*
+       * ...and the same hand as WIDGETS on top, so UNO's cards can be
+       * clicked and tabbed to and the picked one stands proud, exactly as
+       * Skitgubbe's do: "this goes for all card games dont [do] changes for
+       * only one game" (sysop, 2026-09-15). It falls back to the text the
+       * line above drew whenever the panel cannot hold card art.
+       */
+      this.host.cardButtons.render(
+        player.hand.map((card: { color: string; value: string }) => ({ kind: 'uno' as const, card })),
+        {
+          selected: selectedIndex,
+          playable: playableIndices,
+          onPick: (index: number) => this.host.selectUnoCard(index),
+        },
+      );
     } else {
       this.host.handContent.setContent('Observing game...');
     }
@@ -421,7 +442,7 @@ export class GameViews {
      * tabbed to. It falls back to the text the line above drew when the
      * panel is too small for full-size cards, which is why both run.
      */
-    this.host.cardButtons.render(showing as any, {
+    this.host.cardButtons.renderStandard(showing as any, {
       selected: swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
       playable: swapping
         ? (me?.hand ?? []).map((_, index) => index)
