@@ -143,4 +143,26 @@ describe('a C SDK door declares its own settings', () => {
       expect(new Set(keys).size).toBe(keys.length);
     });
   }
+
+  /**
+   * A setting can say its VALUE names an art file, so the ANSI Studio offers
+   * it as a drawable slot and the picker writes that same setting. One
+   * declaration, one filename - the alternative was a second list repeating
+   * the name, which is the shape this repository has paid for three times
+   * this week.
+   */
+  it('REQUESTS marks its two art files as art, and nothing else', () => {
+    if (!compiler) return;
+    const parsed = JSON.parse(generate('requests')) as {
+      settings: Array<{ key: string; type: string; art?: boolean }>;
+    };
+    const art = parsed.settings.filter((s) => s.art === true).map((s) => s.key);
+
+    // `bulletin` names the screen the door WRITES - a destination, not a
+    // drawing - and must not be here.
+    expect(art).toEqual(['bulletinHeader', 'bulletinTail']);
+    for (const s of parsed.settings) {
+      if (s.art) expect(s.type).toBe('string');
+    }
+  });
 });

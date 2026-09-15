@@ -77,6 +77,10 @@ int ae_settings_emit_manifest(FILE *out, const ae_settings_table *t) {
     /* `secret` before `default` so a reader meets the warning first. */
     if (s->secret) fputs(",\n      \"secret\": true", out);
 
+    /* Before `default`, like `secret`: a reader meets what the field IS
+       before what it currently holds. */
+    if (s->art) fputs(",\n      \"art\": true", out);
+
     /* Where the value comes from when the door has none: the backend reads
        this and falls back to the board's own system config. */
     if (s->from_system_config && s->from_system_config[0]) {

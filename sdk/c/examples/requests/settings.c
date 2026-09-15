@@ -24,8 +24,8 @@ AE_SETTINGS_BEGIN(REQ, "REQUESTS.cfg")
   AE_SETTING_INT_RANGE("timeout", "Request timeout (seconds)", 10, 1, 120, "Timeout", NULL)
   AE_SETTING_STR_HELP("bulletin", "Bulletin file", "BBS:Bulletins/bull9.txt", "Bulletin",
     "The board's requests screen, rewritten when a caller adds or changes a request - and repaired when what is on disk does not fit a 24-row terminal. Clear it and the door writes no bulletin at all.")
-  AE_SETTING_STR_HELP("bulletinHeader", "Bulletin header art", "Bulletin_Header.txt", "BulletinHeader",
+  AE_SETTING_ART("bulletinHeader", "Bulletin header art", "Bulletin_Header.txt", "BulletinHeader",
     "The art above the request table, relative to the door's own folder. Its height comes off the 23-row budget, so taller art shows fewer requests.")
-  AE_SETTING_STR_HELP("bulletinTail", "Bulletin tail art", "Bulletin_Tail.txt", "BulletinTail",
+  AE_SETTING_ART("bulletinTail", "Bulletin tail art", "Bulletin_Tail.txt", "BulletinTail",
     "The art below the request table, relative to the door's own folder.")
 AE_SETTINGS_END

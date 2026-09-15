@@ -74,6 +74,13 @@ typedef struct {
      Last member on purpose: every macro above predates it and C zero-fills
      what an initializer does not name. */
   const char *from_system_config;
+  /* The VALUE of this setting names an art file inside the door's own folder,
+     so the ANSI Studio offers it as a drawable slot and the picker writes
+     this same setting - one declaration, one filename, no second list. Only
+     meaningful on AE_SET_STRING. Last member for the same reason
+     from_system_config is: every macro above predates it, and C zero-fills
+     what an initializer does not name. */
+  int         art;
 } ae_setting;
 
 typedef struct {
@@ -95,6 +102,13 @@ typedef struct {
 
 #define AE_SETTING_STR_HELP(key, label, def, cfgkey, help)                    \
   { key, cfgkey, label, AE_SET_STRING, def, 0, 0, help, 0, 0, 0, 0, NULL },
+
+/* A string setting whose value NAMES AN ART FILE in the door's folder. The
+   admin still gets an ordinary field - that is what writes the value - and
+   the Studio additionally gets a slot whose picker writes this same setting. */
+#define AE_SETTING_ART(key, label, def, cfgkey, help)                         \
+  { key, cfgkey, label, AE_SET_STRING, def, 0, 0, help, 0, 0, 0, 0, NULL,     \
+    NULL, 1 },
 
 #define AE_SETTING_SECRET(key, label, cfgkey, help)                           \
   { key, cfgkey, label, AE_SET_STRING, "", 0, 0, help, 0, 0, 0, 1, NULL },
