@@ -255,6 +255,12 @@ describe('SUBS on all three screens', () => {
    * The 80-column pin. Its subject is "the 40-column work did not disturb the
    * 80-column screen"; refresh it deliberately when the door's own layout
    * changes on purpose, never to make a red run green.
+   *
+   * REFRESHED 2026-09-15, deliberately: `ui_screen_open` hides the caller's
+   * cursor now (ESC[?25l, 9379da62b, binaries rebuilt in 2e6f9a7a8), which is
+   * a change to every C door on the board and moved the first byte of this
+   * screen. Everything after it was byte-identical, which is what made the
+   * refresh safe to make - checked before the file was rewritten.
    */
   it('an 80-column caller sees the door byte-for-byte as it was pinned', async () => {
     const ansi = await drive(80);

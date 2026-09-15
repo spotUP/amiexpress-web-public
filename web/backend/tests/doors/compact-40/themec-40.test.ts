@@ -230,6 +230,18 @@ describe('THEMEC opens on a 40-column caller', () => {
   });
 
   /**
+   * REFRESHED AGAIN 2026-09-15: the C doors hide the caller's cursor now.
+   * `ui_screen_open` emits ESC[?25l before it paints (9379da62b, binaries
+   * rebuilt in 2e6f9a7a8), which is a deliberate change to every C door and
+   * moved the first byte of this screen. The golden carries it.
+   *
+   * The golden is also ONE SCREEN now, with the way out cut off it. A
+   * capture that caught a single frame runs on into ui_screen_close's reset,
+   * clear, home and cursor-back-on, and a capture that caught three does
+   * not - the count depends on how many masthead frames the 4-second wait
+   * happened to fit on the machine that ran it, which is the one thing this
+   * pin must not be sensitive to.
+   *
    * REFRESHED 2026-09-07. The pin's subject is "the 40-column work did not
    * disturb the 80-column screen", and it held until two commits changed the
    * caret rule at BOTH widths on purpose - 28fcf7a5e ("the row the cursor
@@ -252,7 +264,12 @@ describe('THEMEC opens on a 40-column caller', () => {
     const firstScreen = (out: string) => {
       const second = out.indexOf('\x1b[1;1H', out.indexOf('\x1b[1;1H') + 1);
       const tail = out.indexOf('\x1b[1;1H', second + 1);
-      return tail === -1 ? out : out.slice(0, tail);
+      const screen = tail === -1 ? out : out.slice(0, tail);
+      // The way OUT is not part of the screen: ui_screen_close resets, clears,
+      // homes and puts the cursor back on. It is only IN the capture when the
+      // wait fitted fewer than three frames, so leaving it in would make this
+      // pin depend on the speed of the machine.
+      return screen.replace(/\x1b\[0m\x1b\[0m\x1b\[2J\x1b\[H\x1b\[\?25h$/, '');
     };
     expect(firstScreen(ansi)).toBe(firstScreen(before));
   });
