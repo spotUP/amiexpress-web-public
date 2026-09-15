@@ -315,7 +315,6 @@ export function armSegmentBoundaryPause(
   const theCallerIsStillReadingIt = !!gate
     && (gate.kind === 'doPause' || gate.nextIndex < gate.lines.length);
   if (theCallerIsStillReadingIt) {
-    tracePause(`${site}-already-armed`, session);
     return true;
   }
 
@@ -331,7 +330,6 @@ export function armSegmentBoundaryPause(
   // Same reason as `doPause`: this prompt lands between two chunks of the
   // SAME `.seq`, so the model must see the rows it moves through - which
   // the transport choke guarantees for every emit on this socket.
-  tracePause(site, session);
   emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
   return true;
 }
@@ -360,32 +358,6 @@ export function aPausePromptIsShowing(session: any): boolean {
   return session?.paginatedScreen?.kind === 'doPause';
 }
 
-/**
- * TEMPORARY INSTRUMENTATION - 2026-09-14, remove once the double pause is found.
- *
- * "two prompts in a row, and the prompt from the prior screen is missing"
- * (sysop, on live). FOUR places emit `(Pause)...Space To Resume:` and THREE
- * pieces of session state decide whether one is owed - `lastScreenHadPause`,
- * `paginatedScreen`, `flowPauseAfterSegments`. Five reproductions from
- * fixtures have failed between two sessions, so the board itself has to say
- * which two sites fire back to back and what each thought it owed.
- *
- * `console.log` and nothing else: no branch, no emit, no behaviour. The one
- * thing it must not do is change what it is measuring.
- */
-function tracePause(site: string, session: any): void {
-  try {
-    console.log(
-      `[PAUSE-TRACE] site=${site}`
-      + ` screen=${session?.paginatedScreen?.screenName ?? '-'}`
-      + ` lastScreenHadPause=${session?.lastScreenHadPause ? 'Y' : 'N'}`
-      + ` paginated=${session?.paginatedScreen ? 'Y' : 'N'}`
-      + ` segments=${session?.screenSegments?.segments?.length ?? 0}`
-      + ` flowDebt=${session?.flowPauseAfterSegments ? 'Y' : 'N'}`
-      + ` subState=${session?.subState ?? '-'}`,
-    );
-  } catch { /* a trace must never be the thing that breaks a login */ }
-}
 
 
 
@@ -3251,9 +3223,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
         }
         if (pauseAlreadyShowing) {
-          tracePause('displayScreen-A-already-showing', session);
         } else {
-          tracePause('displayScreen-A', session);
           emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
         }
         restoreModemState(socket, session);
@@ -3410,9 +3380,7 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
       }
       if (pauseAlreadyShowing) {
-        tracePause('displayScreen-B-already-showing', session);
       } else {
-        tracePause('displayScreen-B', session);
         emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
       }
       await emitWithModem(''); // ensure promise chain consistent
@@ -4013,14 +3981,16 @@ console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.s
   // One prompt on screen at a time. The gate below is still installed either
   // way, so whatever this pause was protecting still happens.
   if (aPausePromptIsShowing(session)) {
-    tracePause('doPause-already-showing', session);
   } else {
-    tracePause('doPause', session);
     emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
   }
 
   /*
-   * TEMPORARY INSTRUMENTATION - 2026-09-15, remove with the PAUSE-TRACE block.
+   * A SENTINEL, and deliberately still here. The noisy half of this - a
+   * line per pause, and a line per booked debt in command.handler - was
+   * removed on 2026-09-16 once the ordering work closed. This one prints
+   * NOTHING unless the fault occurs, so it costs a comparison per pause
+   * and answers the question below the day it happens.
    *
    * THE SECOND INSTANCE OF THE SHAPE 1a5291c4c FIXED, if it is reachable.
    *

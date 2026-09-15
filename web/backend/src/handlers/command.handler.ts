@@ -783,27 +783,10 @@ function rememberTheDebtIfSegmentsRemain(session: BBSSession, site: string): voi
    * flow reaches it - after the join's output, where express.e:28579 puts it.
    */
   if (typeof (session.screenSegments as any)?.onComplete === 'function') {
-    console.log(
-      `[PAUSE-DEBT] not booked at site=${site}: the screen has an owner that pauses it`
-    );
     return;
   }
   if (segments && segments.length > 0) {
     session.flowPauseAfterSegments = true;
-    /*
-     * TEMPORARY INSTRUMENTATION - 2026-09-15, remove with the other
-     * PAUSE-TRACE block in screen.handler.
-     *
-     * The debt is booked HERE and spent a long way away, at "pause after the
-     * last segment". Neither end said which of `pauseDisplayFlow`'s four call
-     * sites booked it, so the second `(Pause)...Space To Resume:` a caller
-     * meets under "Joining Conference" could be traced to the settle and no
-     * further. This names the borrower.
-     */
-    console.log(
-      `[PAUSE-DEBT] booked site=${site} subState=${session.subState}`
-      + ` segments=${segments.length} menuPause=${session.menuPause ? 'Y' : 'N'}`
-    );
   }
 }
 

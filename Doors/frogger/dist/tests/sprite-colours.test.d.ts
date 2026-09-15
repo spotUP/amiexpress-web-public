@@ -46,4 +46,19 @@ export declare function nothingVisibleIsPaintedBlackOnBlack(): Promise<void>;
  * about the pairing rather than about colour 2.
  */
 export declare function theFrogIsNotDarkGreenOnTheRoad(): Promise<void>;
+/**
+ * No hole inside a sprite's own outline.
+ *
+ * The sysop sent a screenshot of the frog on 2026-09-16: a green body with two
+ * black squares punched through it. They were the UPPER halves of the leg
+ * cells - black, with green directly above and green directly below, which is
+ * the definition of inside. Transparency at the EDGE is how these sprites let
+ * the road through and is untouched by this; a black half surrounded
+ * vertically by the sprite is not transparency, it is a hole.
+ *
+ * Filled with each sprite's own dark twin (10 -> 2 for the frog, 13 -> 5 for
+ * the lady frog), which is the shading the art already used in `hop-up` and
+ * `home` before anyone noticed the others were missing it.
+ */
+export declare function noSpriteHasAHoleInsideItsOutline(): Promise<void>;
 //# sourceMappingURL=sprite-colours.test.d.ts.map

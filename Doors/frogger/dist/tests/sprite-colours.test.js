@@ -23,6 +23,7 @@ exports.theRoadStillShowsThroughTheOtherHalf = theRoadStillShowsThroughTheOtherH
 exports.everyCellStillHasItsGlyph = everyCellStillHasItsGlyph;
 exports.nothingVisibleIsPaintedBlackOnBlack = nothingVisibleIsPaintedBlackOnBlack;
 exports.theFrogIsNotDarkGreenOnTheRoad = theFrogIsNotDarkGreenOnTheRoad;
+exports.noSpriteHasAHoleInsideItsOutline = noSpriteHasAHoleInsideItsOutline;
 const assert_1 = __importDefault(require("assert"));
 const fs_1 = require("fs");
 const path_1 = require("path");
@@ -43,6 +44,35 @@ const MUST_BE_SEEN = [
     'snake', 'crocodile', 'turtle',
     'log-short', 'log-medium', 'log-long',
 ];
+/**
+ * The two halves of a cell, top then bottom, or null for an empty one.
+ *
+ * Every sprite here is drawn in half-blocks, so a "pixel" is half a cell and
+ * the glyph decides which half the foreground paints.
+ */
+function halvesOf(cell) {
+    if (cell === null)
+        return null;
+    const [glyph, fg, bg] = cell;
+    if (glyph === '\u2588')
+        return [fg, fg]; // full block
+    if (glyph === '\u2580')
+        return [fg, bg]; // upper half in fg
+    if (glyph === '\u2584')
+        return [bg, fg]; // lower half in fg
+    return [fg, bg];
+}
+/** Each frame as a grid of half-cells, so a hole can be seen vertically. */
+function framesOf(name) {
+    const path = (0, path_1.join)(__dirname, '..', 'sprites', `${name}.sprite.json`);
+    const sprite = JSON.parse((0, fs_1.readFileSync)(path, 'utf8'));
+    const frames = [];
+    for (const animation of Object.values(sprite.animations)) {
+        for (const frame of animation.frames)
+            frames.push(frame);
+    }
+    return frames;
+}
 function cellsOf(name) {
     const path = (0, path_1.join)(__dirname, '..', 'sprites', `${name}.sprite.json`);
     const sprite = JSON.parse((0, fs_1.readFileSync)(path, 'utf8'));
@@ -118,6 +148,44 @@ async function theFrogIsNotDarkGreenOnTheRoad() {
     for (const name of ['frog', 'frog-sit']) {
         const dim = cellsOf(name).filter((cell) => cell !== null && cell[1] === DARK_GREEN && cell[2] === BLACK);
         assert_1.default.deepStrictEqual(dim, [], `${name} draws ${dim.length} dark-green cell(s) straight onto the road`);
+    }
+}
+/**
+ * No hole inside a sprite's own outline.
+ *
+ * The sysop sent a screenshot of the frog on 2026-09-16: a green body with two
+ * black squares punched through it. They were the UPPER halves of the leg
+ * cells - black, with green directly above and green directly below, which is
+ * the definition of inside. Transparency at the EDGE is how these sprites let
+ * the road through and is untouched by this; a black half surrounded
+ * vertically by the sprite is not transparency, it is a hole.
+ *
+ * Filled with each sprite's own dark twin (10 -> 2 for the frog, 13 -> 5 for
+ * the lady frog), which is the shading the art already used in `hop-up` and
+ * `home` before anyone noticed the others were missing it.
+ */
+async function noSpriteHasAHoleInsideItsOutline() {
+    for (const name of MUST_BE_SEEN) {
+        for (const frame of framesOf(name)) {
+            const rows = frame.length;
+            const halfAt = (pixelRow, col) => {
+                const row = Math.floor(pixelRow / 2);
+                if (row < 0 || row >= rows || col >= frame[row].length)
+                    return null;
+                const halves = halvesOf(frame[row][col]);
+                return halves === null ? null : halves[pixelRow % 2];
+            };
+            for (let pixelRow = 0; pixelRow < rows * 2; pixelRow++) {
+                for (let col = 0; col < Math.max(...frame.map((r) => r.length)); col++) {
+                    if (halfAt(pixelRow, col) !== BLACK)
+                        continue;
+                    const above = halfAt(pixelRow - 1, col);
+                    const below = halfAt(pixelRow + 1, col);
+                    const enclosed = above !== null && above !== BLACK && below !== null && below !== BLACK;
+                    assert_1.default.ok(!enclosed, `${name} has a black half at row ${pixelRow}, column ${col} with its own colour above and below it`);
+                }
+            }
+        }
     }
 }
 //# sourceMappingURL=sprite-colours.test.js.map
