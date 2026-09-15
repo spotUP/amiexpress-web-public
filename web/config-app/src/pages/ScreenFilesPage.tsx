@@ -40,7 +40,7 @@ import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, type ScreenFileShape, buildGalleryItems, describeReader, describeProblem,
+  type MciReferenceShape, type ScreenFileShape, buildGalleryItems, describeReader, describeProblem, screenPrecedence,
   formatsPresent, missingFormats,
   isDoorArt, isCommandsOnly, isNotArt,
 } from './screen-index-view';
@@ -2009,6 +2009,28 @@ export function ScreenFilesPage() {
               joining Amiga Demoscene, if their security level is 20 to 24" -
               and that is the sentence a sysop or a designer needs.
             */}
+            {/*
+              * WHICH COPY THE BOARD SERVES.
+              *
+              * A theme covers the board's screen rather than deleting it, so
+              * two real files with real readers sit in this list looking
+              * identical - and on the live board they WERE all but identical,
+              * differing by one `~XISUBSCAN` line that executes rather than
+              * draws. Without this the sysop is left to guess which a caller
+              * gets ("they look identical", 2026-09-15).
+              */}
+            {data && file.relPath && (() => {
+              const verdict = screenPrecedence(file as ScreenFileShape, data as never);
+              if (verdict.covers.length === 0 && verdict.coveredBy.length === 0) return null;
+              return (
+                <p className="text-sm text-accent">
+                  {verdict.serves
+                    ? `Served to callers wearing ${verdict.serves}. It covers ${verdict.covers.join(', ')}, which everyone else still gets.`
+                    : `Covered by ${verdict.coveredBy.map(c => c.path ?? `${c.theme}'s copy`).join(', ')} for callers wearing ${verdict.coveredBy.map(c => c.theme).join(', ')}. This file is what everyone else gets.`}
+                </p>
+              );
+            })()}
+
             {file.readBy && file.readBy.length > 0 ? (
               <div className="text-sm">
                 <h4 className="text-content-primary">Read by</h4>

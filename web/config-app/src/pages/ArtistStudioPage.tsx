@@ -85,6 +85,10 @@ export function ArtistStudioPage() {
         ownedBy: theme.slug === 'default' ? undefined : theme.slug,
         // A sysop auditing an artist's studio is not looking at their own art.
         ownedLabel: auditing ? `Redrawn by ${theme.owner || 'the artist'}` : 'Yours',
+        // A draft is served to nobody, so the board's screens are still what
+        // every caller sees - the fact that decides which of two identical
+        // looking copies wins, and one no comparison of the files reveals.
+        themeIsDraft: theme.status === 'draft',
         ...(thumbnailFormat ? { thumbnailFormat } : {}),
       })
       : []),

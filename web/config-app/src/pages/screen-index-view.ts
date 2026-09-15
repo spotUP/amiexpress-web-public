@@ -291,6 +291,70 @@ export function describeCallers(
   return callers === 1 ? '1 caller' : callers === 0 ? 'no callers' : `${callers} callers`;
 }
 
+/**
+ * Which copy of a screen the board actually serves, and what it covers.
+ *
+ * A theme COVERS the board's screen; it does not delete it. Both files are
+ * real, both have readers, and the index marks the covered one `shadowed`.
+ * Without saying so the admin lists two files that look identical and leaves
+ * the sysop to guess which a caller gets - which is exactly what happened:
+ * "why do i see Themes/607080/Conf/3/bull20.txt and Conf3/bull20.txt in
+ * 607080's theme? they look identical" (2026-09-15). They were not: the themed
+ * copy carried one extra `~XISUBSCAN` line, invisible because an MCI code
+ * executes rather than draws.
+ *
+ * MATCHED ON THE SCREEN AND THE SCOPE, never the name. Conference 3's bulletin
+ * is not conference 5's, and a theme drawing one covers that one only - saying
+ * otherwise would tell a sysop his conference 5 art was dead when it is what
+ * every caller there sees.
+ */
+export interface ScreenPrecedence {
+  /** The theme this file serves, when it is a theme's own copy. */
+  serves?: string;
+  /** Board files this copy covers. */
+  covers: string[];
+  /** Themes whose copy covers THIS file, with the covering path. */
+  coveredBy: Array<{ theme: string; path?: string }>;
+}
+
+const scopeKey = (r: { screen?: string; scope?: string; id?: number | null }): string =>
+  `${(r.screen ?? '').toLowerCase()}|${r.scope ?? ''}|${r.id ?? ''}`;
+
+export function screenPrecedence(
+  file: ScreenFileShape,
+  index: ScreenIndexShape,
+): ScreenPrecedence {
+  const files = Object.values(index.files ?? {}) as ScreenFileShape[];
+  const mine = new Set((file.readBy ?? []).map(scopeKey));
+
+  const covers: string[] = [];
+  const coveredBy: Array<{ theme: string; path?: string }> = [];
+
+  if (file.theme) {
+    // A theme's own copy: the board files it covers are the ones the index
+    // marked `shadowed` BY this theme, for a screen and scope this file serves.
+    for (const other of files) {
+      if (other.theme) continue;
+      const shadowed = (other.readBy ?? []).some(
+        r => r.via === 'shadowed' && r.shadowedBy === file.theme && mine.has(scopeKey(r)),
+      );
+      if (shadowed) covers.push(other.relPath);
+    }
+    return { serves: file.theme, covers, coveredBy };
+  }
+
+  // A board file: whoever shadows it, and where their copy is.
+  for (const reader of file.readBy ?? []) {
+    if (reader.via !== 'shadowed' || !reader.shadowedBy) continue;
+    const covering = files.find(other =>
+      other.theme === reader.shadowedBy
+      && (other.readBy ?? []).some(r => r.via === 'resolved' && scopeKey(r) === scopeKey(reader)));
+    coveredBy.push({ theme: reader.shadowedBy, path: covering?.relPath });
+  }
+
+  return { covers, coveredBy };
+}
+
 export function describeReader(
   reader: ScreenReaderShape,
   callersByLevel?: Record<number, number>,
@@ -487,6 +551,18 @@ export interface GalleryBuildOptions {
    * studio is not looking at their own work and should not be told they are.
    */
   ownedLabel?: string;
+  /**
+   * The theme is a DRAFT, so nothing in it is served to anybody yet.
+   *
+   * This is the fact that decides which copy wins, and no amount of comparing
+   * the two files reveals it. Measured on the live board 2026-09-15: theme
+   * `607080` is a draft, so `Themes/607080/Conf/3/bull20.txt` has NO readers
+   * at all while the board's `Conf3/bull20.txt` resolves - and the gallery
+   * drew both, leaving the sysop asking which one a caller gets ("they look
+   * identical"). For a draft the answer is always the board's, until it is
+   * published.
+   */
+  themeIsDraft?: boolean;
 }
 
 /**
@@ -769,8 +845,18 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         ...(opts.ownedBy
           ? {
             badge: file.theme === opts.ownedBy
-              ? { label: opts.ownedLabel ?? 'Yours', kind: 'mine' as const }
-              : { label: "Board's - not redrawn yet", kind: 'theirs' as const },
+              ? {
+                label: opts.themeIsDraft
+                  ? `${opts.ownedLabel ?? 'Yours'} - draft, not served yet`
+                  : opts.ownedLabel ?? 'Yours',
+                kind: 'mine' as const,
+              }
+              : {
+                label: opts.themeIsDraft
+                  ? "Board's - still what callers see"
+                  : "Board's - not redrawn yet",
+                kind: 'theirs' as const,
+              },
           }
           : {}),
       };
