@@ -150,3 +150,19 @@ export function writeEverywhereLabel(option: FanOutOption): string {
     ? `Write all ${count} identical copies`
     : `Write all ${count} copies`;
 }
+
+/**
+ * What a SAVE is about to touch, said before the click rather than after it.
+ *
+ * The artist dialog already fans out - it writes the union of every copy the
+ * screen resolves to and every copy still identical to this one - and it says
+ * "Saved 38 copies" afterwards. Afterwards is the wrong moment: an artist who
+ * believes they are editing one node's screen and is in fact rewriting
+ * thirty-eight has no way to know until it has happened.
+ *
+ * One file reads as nothing, because "Saving 1 copy" is noise on every
+ * ordinary screen this board has.
+ */
+export function savingLabel(targets: string[]): string {
+  return targets.length > 1 ? `Saving ${targets.length} copies` : '';
+}

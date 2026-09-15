@@ -22,7 +22,7 @@ import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
 import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
-import { fanOutOptions } from './screen-write-plan';
+import { fanOutOptions, savingLabel } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas } from './screen-bytes';
@@ -462,6 +462,21 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
       {auditingHere && (
         <p className="text-sm text-accent border border-dashed border-accent rounded p-2">
           Editing in {theme.title}{theme.owner ? ` (${theme.owner}'s theme)` : ''} — saves land there, not in yours.
+        </p>
+      )}
+
+      {savingLabel(writeTargets) && (
+        /*
+         * WHAT THIS SAVE TOUCHES, BEFORE IT IS TOUCHED.
+         *
+         * This dialog fans out - one screen is provisioned to 41 nodes here -
+         * and it already says "Saved 38 copies" afterwards. Afterwards is the
+         * wrong moment: an artist who believes they are editing one node's
+         * screen and is in fact rewriting thirty-eight only finds out once it
+         * has happened.
+         */
+        <p className="text-sm text-content-secondary" data-testid="saving-label">
+          {savingLabel(writeTargets)} — this screen is the same file on every one of them.
         </p>
       )}
 

@@ -237,6 +237,21 @@ git commit -m "feat(studio): a card that stands for several versions says so"
 
 ### Task 3: Saving keeps the copies that already agreed
 
+> **AMENDED DURING EXECUTION, 2026-09-15.** The default this task set out to
+> add is already there, and `same-content` - the choice the sysop and I both
+> picked when I asked - is the rule this dialog was explicitly changed AWAY
+> from. `ArtistScreenDialog:240-258` records why: the sysop uploaded a PETSCII
+> title, it landed on `Node0/BBSTITLE.SEQ`, and from then on that file matched
+> nothing, so the next upload fanned out to itself alone and the board went on
+> serving the other 46 copies. He reported it twice - "the bbs still reads the
+> old bbs title petscii". The dialog now writes the UNION of every copy the
+> screen resolves to and every copy still identical to this one.
+>
+> Setting `same-content` as the default would re-break that. So this task does
+> NOT touch the fan-out. What it delivers is the half that was genuinely
+> missing: the artist is told the count BEFORE the click, not after.
+
+
 **Files:**
 - Modify: `web/config-app/src/pages/ArtistScreenDialog.tsx` (the save path's fan-out default)
 - Test: `web/config-app/src/test/saving-keeps-copies-in-step.test.tsx` (create)
