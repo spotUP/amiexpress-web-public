@@ -615,3 +615,5 @@ Node*/DORINFO*.DEF
 # The global-requests door holds the board secret in its cfg beside the
 # binary; never commit it.
 Doors/REQUESTS/REQUESTS.cfg
+# The achievements board key in plain text, same shape as REQUESTS.cfg above.
+Doors/ACHIEVEC/ACHIEVE.cfg
