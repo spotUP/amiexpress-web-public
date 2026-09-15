@@ -355,9 +355,41 @@ static void the_frame_stops_where_the_title_starts(void)
     printf("  [OK] the frame is exactly the run, and stops where the title starts\n");
 }
 
+/**
+ * An animation frame puts the caller's cursor back.
+ *
+ * The rail repaints five times a second, and `ansi_text` leaves the terminal
+ * cursor at the end of what it wrote - the top right of the screen. A caller
+ * typing into a prompt therefore watched their cursor sit up in the banner
+ * while their text went into the field. Reported with a screenshot of POST A
+ * REQUEST (sysop, 2026-09-15: "the cursor is in the upper right corner of the
+ * screen when i type in the input").
+ *
+ * Pinned because the obvious future optimisation - this frame must fit one
+ * XIM message, ~198 bytes on 68K - is to start deleting bytes from it, and
+ * these four are the ones that look most like decoration.
+ */
+static void an_animation_frame_leaves_the_cursor_where_it_found_it(void)
+{
+    ansi_buf b;
+
+    memset(frame, 0, sizeof frame);
+    ansi_begin(&b, frame, (long)sizeof frame);
+    ui_masthead_rail_tick(&b, 1, 1, 80, "DOOR THEME", "///", 7, 0, 3);
+    frame[b.len] = '\0';
+
+    /* DECSC before the paint, DECRC after: whatever the cursor was doing, it
+       is doing it again by the time the caller's next keystroke arrives. */
+    assert(strstr(frame, "\0337") != 0);
+    assert(strstr(frame, "\0338") != 0);
+    assert(strstr(frame, "\0337") < strstr(frame, "\0338"));
+    printf("  [OK] an animation frame leaves the cursor where it found it\n");
+}
+
 int main(void)
 {
     printf("ui_chrome\n");
+    an_animation_frame_leaves_the_cursor_where_it_found_it();
     the_rail_stream_matches_the_typescript();
     the_rail_travels();
     a_wide_screen_shows_every_key();

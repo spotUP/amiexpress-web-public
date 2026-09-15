@@ -228,6 +228,22 @@ void ansi_reverse(ansi_buf *b, int on);
 /* Hides/shows the hardware cursor. */
 void ansi_cursor(ansi_buf *b, int visible);
 
+/**
+ * Save and restore where the TERMINAL's cursor is (DECSC/DECRC, ESC 7 / 8).
+ *
+ * For chrome that repaints itself while a caller is typing. An animated
+ * masthead rail ticks five times a second, and each repaint leaves the cursor
+ * wherever that paint ended - the top right of the screen - so the caller
+ * types into a field while the cursor sits in the banner. Reported against
+ * REQUESTS with a screenshot (sysop, 2026-09-15: "the cursor is in the upper
+ * right corner of the screen when i type in the input").
+ *
+ * Two bytes each on the wire, which matters on a 68K where a frame over ~198
+ * bytes costs a second XIM message.
+ */
+void ansi_save_cursor(ansi_buf *b);
+void ansi_restore_cursor(ansi_buf *b);
+
 /* Writes `text` at (row, col), truncated to `maxlen` columns and padded
  * with spaces to exactly that width, so a row always overwrites whatever
  * was under it without a separate clearing pass.

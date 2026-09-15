@@ -294,6 +294,16 @@ void ansi_cursor(ansi_buf *b, int visible)
     put_str(b, visible ? "\033[?25h" : "\033[?25l");
 }
 
+void ansi_save_cursor(ansi_buf *b)
+{
+    put_str(b, "\0337");
+}
+
+void ansi_restore_cursor(ansi_buf *b)
+{
+    put_str(b, "\0338");
+}
+
 static void write_text(ansi_buf *b, int row, int col, const char *text, int maxlen, int pad)
 {
     int n;            /* columns written - markers do not count */

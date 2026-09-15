@@ -320,8 +320,25 @@ void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
      * being overwritten, and filling the row first is what made the frame a
      * clear-then-draw in the first place.
      */
+    /*
+     * AND THE CALLER'S CURSOR STAYS WHERE THE CALLER PUT IT.
+     *
+     * This is chrome repainting itself on a timer while somebody may be
+     * TYPING. `ansi_text` leaves the terminal cursor at the end of what it
+     * wrote - the top right of the screen - so every tick threw the cursor
+     * out of the input field and left it in the banner, five times a second.
+     * Reported with a screenshot of POST A REQUEST, the caller's text going
+     * into the field while the cursor sat up in the rail (sysop,
+     * 2026-09-15).
+     *
+     * Save and restore, rather than a goto: this function has no idea where
+     * the cursor was, and the widget that owns it is blocked in a key read
+     * and cannot be asked.
+     */
+    ansi_save_cursor(b);
     ansi_color(b, fg, bg, 0);
     ansi_text(b, row, left, run, (int) run_width);
+    ansi_restore_cursor(b);
 }
 
 void ui_status_draw(ansi_buf *b, int row, int left, int cols,
