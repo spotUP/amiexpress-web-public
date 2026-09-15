@@ -96,6 +96,23 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
                            int fg, int bg, int tick);
 
 /**
+ * Is there anything for the idle hook to animate?
+ *
+ * A theme with NO rail draws ` title ` and nothing else, so every tick paints
+ * the identical row - five times a second, 172 bytes a frame, and on a real
+ * terminal the text under the repaint flickers. The sysop, 2026-09-15, in
+ * THEMEC and REQUESTS: "theme and uests are blinking" - the tail of each
+ * masthead title, being cleared and redrawn about five times a second with
+ * nothing changing.
+ *
+ * The rule lives here rather than in each door because four of them have the
+ * same idle hook: ask before painting, and a themeless caller gets a still
+ * masthead instead of a blinking one. The rail themes animate exactly as
+ * before.
+ */
+int ui_masthead_rail_animates(const char *rail);
+
+/**
  * The status line: left text, right text, and the gap between them filled.
  *
  * The right side is dropped rather than overlapped when both cannot fit -

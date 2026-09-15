@@ -168,6 +168,13 @@ void ui_masthead_draw(ansi_buf *b, int row, int left, int cols,
     ui_masthead_draw_tick(b, row, left, cols, title, rail, fg, bg, 0);
 }
 
+int ui_masthead_rail_animates(const char *rail)
+{
+    /* The no-rail branch of ui_masthead_draw_tick below ignores `tick`
+       entirely, so without a rail every frame is the previous frame. */
+    return rail != 0 && *rail != '\0';
+}
+
 void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
                            const char *title, const char *rail,
                            int fg, int bg, int tick)

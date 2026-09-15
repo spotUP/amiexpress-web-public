@@ -216,6 +216,11 @@ static void draw_masthead(const char *title)
 static void door_idle(void *ctx)
 {
     (void)ctx;
+    /* Nothing to animate without a rail: the tick would repaint the
+       identical row five times a second and the title flickers under it
+       (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
+       spins hot on a 68K otherwise. */
+    if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(10); return; }
     rail_tick++;
     ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),

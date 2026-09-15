@@ -212,6 +212,51 @@ static void the_rail_travels(void)
     printf("  [OK] the rail travels rather than sitting still\n");
 }
 
+
+static void a_themeless_masthead_has_nothing_to_animate(void)
+{
+    /* The sysop, 2026-09-15, in THEMEC and REQUESTS: "theme and uests are
+       blinking" - the tail of each masthead title. The doors' idle hooks were
+       repainting the row about five times a second, and with no rail every
+       one of those frames is the previous frame, so the only thing the caller
+       sees is the text being cleared and redrawn under him.
+
+       Two assertions, and the second is the one that makes skipping safe:
+       without a rail, two different ticks ARE the same bytes. */
+    char frame_a[1024];
+    char frame_b[1024];
+    ansi_buf a;
+    ansi_buf b;
+
+    assert(ui_masthead_rail_animates("") == 0);
+    assert(ui_masthead_rail_animates(0) == 0);
+    assert(ui_masthead_rail_animates("///") != 0);
+
+    ansi_begin(&a, frame_a, (long)sizeof frame_a);
+    ansi_begin(&b, frame_b, (long)sizeof frame_b);
+    ui_masthead_draw_tick(&a, 1, 1, 80, "GLOBAL REQUESTS", "", 7, 0, 3);
+    ui_masthead_draw_tick(&b, 1, 1, 80, "GLOBAL REQUESTS", "", 7, 0, 97);
+    assert(strcmp(frame_a, frame_b) == 0);
+    printf("  [OK] without a rail every tick is the same row, so the idle hook may skip it\n");
+}
+
+static void a_rail_still_moves(void)
+{
+    /* And the other half: a theme WITH a rail must still animate, or the fix
+       for the flicker would have stopped the branding everywhere. */
+    char frame_a[1024];
+    char frame_b[1024];
+    ansi_buf a;
+    ansi_buf b;
+
+    ansi_begin(&a, frame_a, (long)sizeof frame_a);
+    ansi_begin(&b, frame_b, (long)sizeof frame_b);
+    ui_masthead_draw_tick(&a, 1, 1, 80, "DOOR THEME", "///", 7, 0, 3);
+    ui_masthead_draw_tick(&b, 1, 1, 80, "DOOR THEME", "///", 7, 0, 4);
+    assert(strcmp(frame_a, frame_b) != 0);
+    printf("  [OK] a rail theme still moves between ticks\n");
+}
+
 int main(void)
 {
     printf("ui_chrome\n");
@@ -225,6 +270,8 @@ int main(void)
     the_rail_is_what_gets_cut();
     the_status_line_puts_the_right_side_right();
     a_crowded_status_drops_the_right_rather_than_colliding();
+    a_themeless_masthead_has_nothing_to_animate();
+    a_rail_still_moves();
     printf("ui_chrome: all passed\n");
     return 0;
 }
