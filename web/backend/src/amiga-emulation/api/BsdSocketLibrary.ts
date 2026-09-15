@@ -17,6 +17,19 @@
 import * as net from 'net';
 import * as dns from 'dns';
 import * as deasync from 'deasync';
+/*
+ * TEMPORARY INSTRUMENTATION - 2026-09-15, remove once the GWall wait is
+ * explained. GWall connects on the FIRST WaitSelect when it is run standalone
+ * INSIDE the live container (run-amiga-door.ts against the live binary), and
+ * hangs there for as long as the caller will tolerate when the same binary
+ * runs inside the BBS at login. The one structural difference is that the BBS
+ * may already be pumping, and `pump-owner.ts` says a second pump inside the
+ * first is the thing that must not happen - but only AEDoorLibrary registers
+ * as an owner, and none of the six socket/SSL waits ask. This says whether the
+ * live wait is nested. It reads the register and prints; it does not branch on
+ * it, because a fix chosen before the measurement is a guess.
+ */
+import { pumpDepth } from './pump-owner';
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { SocketTee } from './bsdsocket-tee';
 import { debugLog, isDebugEnabled } from '../../utils/debug-log';
@@ -516,7 +529,7 @@ export class BsdSocketLibrary {
     this.attachStreamHandlers(state);
     state.socket.connect(port, host);
 
-    console.log(`[BsdSocketLibrary] connect: non-blocking, returning -1/EINPROGRESS`);
+    console.log(`[BsdSocketLibrary] connect: non-blocking, returning -1/EINPROGRESS (pumpDepth=${pumpDepth()})`);
     this.errno = EINPROGRESS;
     return -1;
   }
@@ -944,7 +957,7 @@ export class BsdSocketLibrary {
       if (timeoutMs === 0) timeoutMs = 1;
     }
 
-    console.log(`[BsdSocketLibrary] WaitSelect(nfds=${nfds}, timeout=${timeoutMs}ms)`);
+    console.log(`[BsdSocketLibrary] WaitSelect(nfds=${nfds}, timeout=${timeoutMs}ms) pumpDepth=${pumpDepth()}`);
 
     const readFds = this.parseFdSet(readfdsPtr, nfds);
     const writeFds = this.parseFdSet(writefdsPtr, nfds);
@@ -990,7 +1003,10 @@ export class BsdSocketLibrary {
     if (exceptfdsPtr !== 0) this.clearFdSet(exceptfdsPtr, nfds);
 
     const totalReady = readyReadFds.length + readyWriteFds.length;
-    console.log(`[BsdSocketLibrary] WaitSelect returning ${totalReady}`);
+    // The elapsed time separates "the wait was satisfied" from "the wait timed
+    // out": a full timeoutMs with 0 ready is the hang, and a door that calls
+    // WaitSelect twelve times in a row is twelve of those.
+    console.log(`[BsdSocketLibrary] WaitSelect returning ${totalReady} after ${Date.now() - startTime}ms (pumpDepth=${pumpDepth()})`);
     return totalReady;
   }
 

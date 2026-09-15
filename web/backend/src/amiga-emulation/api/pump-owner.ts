@@ -43,6 +43,18 @@ export function isPumping(): boolean {
 }
 
 /**
+ * How many pumps are running up the stack, for diagnostics only.
+ *
+ * `isPumping()` answers the question a caller ACTS on; this one answers the
+ * question an investigator asks - a socket wait that reports depth 1 is
+ * nested inside exactly one other pump, which is the thing to prove or
+ * disprove before anything is changed.
+ */
+export function pumpDepth(): number {
+  return depth;
+}
+
+/**
  * Run `body` as the owner of the pump.
  *
  * The count is restored in a `finally`, so a throw from inside the loop -
