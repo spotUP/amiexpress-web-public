@@ -957,6 +957,43 @@ else
             echo "Doors/$door/$cfg" >> "$DOOR_CFG_LIST"
             echo "./$door/$cfg" >> "$DOOR_CFG_EXCLUDES"
         done
+
+        # A DOOR'S ART IS NOT A CFG FILE, AND IT WAS NOT COVERED BY EITHER RULE.
+        #
+        # `door.settings.json` declares art slots - `"art": true` on a string
+        # setting whose VALUE is a filename relative to the door's folder.
+        # REQUESTS declares two, `Bulletin_Header.txt` and `Bulletin_Tail.txt`.
+        # They are tracked in git and shipped in the image, and the harvesting
+        # above reads only `cfgFile`, so the blanket tar put the image's copy
+        # back over the sysop's uploaded art on every deploy: "the bulletin
+        # header and footer gets reset on deploys" (sysop, 2026-09-16). Live
+        # confirmed it - both files byte-identical to the image's.
+        #
+        # Fifth instance of the same shape in this file (Access/*.info, the 68K
+        # door state files, quicknew.txt, every edited screen), and the cure is
+        # the one the cfg files already use: join the tracked set, where the
+        # image leads until the sysop takes a file over.
+        #
+        # The DEFAULT name is what needs holding back, and only that. A sysop
+        # who renames the art in the door's settings points at a file the image
+        # has never heard of, and tar extraction only writes paths the archive
+        # contains - so a renamed file was never at risk.
+        #
+        # Read from the manifests, so a new door that declares art needs no
+        # edit here - the same property the cfgFile loop has.
+        awk 'BEGIN { RS = "}" }
+             /"art"[ \t]*:[ \t]*true/ {
+               if (match($0, /"default"[ \t]*:[ \t]*"[^"]*"/)) {
+                 v = substr($0, RSTART, RLENGTH)
+                 sub(/^"default"[ \t]*:[ \t]*"/, "", v)
+                 sub(/"$/, "", v)
+                 if (v != "") print v
+               }
+             }' "$manifest" | sort -u | while IFS= read -r art; do
+            [ -n "$art" ] || continue
+            echo "Doors/$door/$art" >> "$DOOR_CFG_LIST"
+            echo "./$door/$art" >> "$DOOR_CFG_EXCLUDES"
+        done
     done
 
     # A 68K DOOR WRITES ITS STATE BESIDE ITS BINARY, because that is how an
