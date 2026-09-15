@@ -96,6 +96,7 @@ import {
   makeFrame,
   renderDiff,
   type AdaptedRow,
+  type AdaptOptions,
   type AlignMemo,
   type Cell,
   type Cursor,
@@ -454,6 +455,32 @@ export class C64DoorFrameAdapter {
   }
 
   /**
+   * The viewport half of the adapt options - TYPED, which is the whole point.
+   *
+   * This used to be a conditional spread written inline:
+   *
+   *     ...(this.viewport ? { regions: [...], viewportOffset: ... } : {})
+   *
+   * An object literal inside a spread is NOT contextually typed as
+   * `AdaptOptions`, so `rule: 'viewport' as const` was never checked against
+   * `AdaptRule`. The backend asked for a rule the SDK did not have, compiled
+   * clean, and a door declaring C64_VIEWPORT crashed the adapter on its first
+   * frame - `applyRule` dereferencing the `undefined` that fell off the end of
+   * a switch with no `default:` (fixed SDK-side in b188fcb70).
+   *
+   * Declaring the return type is what makes the compiler check the rule name
+   * again, so the next rename or removal in the SDK is a build error here
+   * rather than a black screen for a C64 caller.
+   */
+  private viewportOptions(): Pick<AdaptOptions, 'regions' | 'viewportOffset'> | Record<string, never> {
+    if (!this.viewport) return {};
+    return {
+      regions: [{ rows: [0, ROWS - 1], rule: 'viewport' }],
+      viewportOffset: this.viewportOffset,
+    };
+  }
+
+  /**
    * Move the window, and repaint if it actually moved.
    *
    * `columns` is signed; the rule clamps the result, so panning past either
@@ -595,12 +622,7 @@ export class C64DoorFrameAdapter {
        * so no row is folded and the caller sees a window instead. The offset
        * is the adapter's, moved by the pan keys, and the rule clamps it.
        */
-      ...(this.viewport
-        ? {
-          regions: [{ rows: [0, ROWS - 1] as [number, number], rule: 'viewport' as const }],
-          viewportOffset: this.viewportOffset,
-        }
-        : {}),
+      ...this.viewportOptions(),
     });
     // The blank tail of a 25-row grid is not content. It still costs adapted
     // rows, which is exactly how adaptFrame comes to push painted rows off the
