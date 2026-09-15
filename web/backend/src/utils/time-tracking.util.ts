@@ -59,6 +59,11 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
     // timeTotal := timeLimit (both in seconds)
     session.user.timeTotal = session.user.timeLimit;
     session.user.timeUsed = 0;
+    // express.e:537 gives the chat allowance back with the time allowance.
+    // This board counts chatUsed UP where express.e counts chatRemain DOWN,
+    // so `chatRemain := chatLimit` is `chatUsed := 0` here. Without it the
+    // allowance below could only ever run out.
+    session.user.chatUsed = 0;
     session.logonTime = currTime;
     session.lastTimeUpdate = currTime;
   }
@@ -66,9 +71,28 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
   // Update time used based on elapsed time (express.e:543-553)
   const elapsed = currTime - (session.lastTimeUpdate || currTime);
   if (elapsed > 0) {
-    // Only update if not in chat (chatFlag=0 in express.e:544)
-    // For now, always update - chat time tracking can be added later
-    session.user.timeUsed += elapsed;
+    /*
+     * CHAT IS NOT THE CALLER'S TIME (express.e:543-553).
+     *
+     * `chatFlag=0` means "not in chat", and only then does express.e bill
+     * timeUsed. In chat it spends the CHAT allowance instead, and only for a
+     * user who has one (`chatLimit>0`) - a user with no allowance is charged
+     * nothing at all rather than falling back to his session time.
+     *
+     * `session.inChat` is this board's chatFlag (index.ts:575, the flag
+     * terminal-input.ts:246 routes keystrokes on). This used to bill the
+     * caller regardless, with "chat time tracking can be added later" in
+     * place of the ELSE branch, so a caller the sysop kept talking to paid
+     * for the sysop's conversation and a long chat could log him off.
+     */
+    if (!session.inChat) {
+      session.user.timeUsed += elapsed;
+    } else if (session.user.chatLimit > 0) {
+      session.user.chatUsed += elapsed;
+    }
+    // Advanced in every branch, exactly as express.e:552 does it outside the
+    // IF - otherwise the chat's seconds are still owed and get billed to the
+    // caller the moment he leaves it.
     session.lastTimeUpdate = currTime;
   }
 }
