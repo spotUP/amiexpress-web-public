@@ -242,7 +242,7 @@ import { finalizeCommand } from '../utils/command-response.util';
 
 // Import utilities
 import { AnsiUtil } from '../utils/ansi.util';
-import { emitText, emitPrompt, flushOutput, eraseRestOfLine } from '../utils/output.util';
+import { emitText, emitPrompt, flushOutput, eraseRestOfLine, clearTheScreen } from '../utils/output.util';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
@@ -1021,6 +1021,19 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // into Screens/AchieveTop.txt on its own timer. Silent and skipped
         // when the file is not there, which is every board that has no
         // achievements server configured - same contract as NODE_BULL.
+        /*
+         * Clear first, for the same reason the upload block does.
+         *
+         * `achievements/bulletin.ts` used to open the file with '\x0c',
+         * expecting the terminal to clear the way a real Amiga does on a form
+         * feed (express.e:5224-5228). xterm.js treats 0x0C as a line feed, so
+         * the leaderboard has always drawn on top of whatever art was behind
+         * it. The file cannot ask for the clear itself without turning MCI on
+         * for its whole generated body (express.e:6800-6806 gates MCI on the
+         * first line starting with `~`, and user names go in this file), so
+         * the clear lives here, with the code that decides to show it.
+         */
+        emitText(socket, clearTheScreen(socket));
         displayFlowLog('showing ACHIEVETOP');
         const shown = await displayScreen(socket, session, 'ACHIEVETOP', true, /* silent */ true);
         if (shown && pauseDisplayFlow(socket, session, false, 'achievetop')) {

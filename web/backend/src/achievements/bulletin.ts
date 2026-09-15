@@ -99,7 +99,22 @@ export function renderAchievementsBulletin(
     out.push(art.header.replace(/\r?\n$/, ''));
   } else {
     const strap = fit('  ACHIEVEMENTS', WIDTH - 31) + 'Global and local leaderboards  ';
-    out.push('\x0c' + `${TITLE_BAR}${' '.repeat(WIDTH)}${OFF}`);
+    /*
+     * No form feed here any more.
+     *
+     * This used to open with '\x0c', expecting the terminal to clear on it the
+     * way a real Amiga does (express.e:5224-5228 sendCLS sends ASCII 12).
+     * xterm.js treats 0x0C as a LINE FEED, so it never cleared anything - the
+     * leaderboard simply drew on top of whatever art was behind it.
+     *
+     * Writing `~f` instead would work, but only by turning MCI on for the
+     * WHOLE file: express.e:6800-6806 enables MCI for a file when its first
+     * line starts with `~`, and this file's body is generated - user names and
+     * board names go into it, and a `~` in one would then be read as a code.
+     * The clear belongs to whoever DISPLAYS the screen, so the display flow
+     * does it (command.handler, DISPLAY_ACHIEVE_BULL) and this just writes art.
+     */
+    out.push(`${TITLE_BAR}${' '.repeat(WIDTH)}${OFF}`);
     out.push(`${TITLE_TEXT}${fit(strap, WIDTH)}${OFF}`);
     out.push('');
   }
