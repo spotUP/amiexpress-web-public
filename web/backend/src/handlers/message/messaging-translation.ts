@@ -28,6 +28,8 @@ import { headingIndent } from '../../utils/table-format.util';
 export async function handleTranslationCommand(socket: any, session: BBSSession, command: string): Promise<void> {
   // Lazy import to break circular dependency with messaging.handler
   const { displayMessageNavigationPrompt } = require('./messaging.handler');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { doPause } = require('../screen.handler');
 
   // Initialize translation service if needed
   await translationService.initialize();
@@ -49,9 +51,33 @@ export async function handleTranslationCommand(socket: any, session: BBSSession,
       return;
     }
 
-    // Loop through all languages - express.e:11067-11090
-    for (const lang of languages) {
-      if (lang === hostLanguage) continue;
+    /*
+     * ONE LANGUAGE PER KEYPRESS (express.e:11085).
+     *
+     * express.e calls doPause() after each language's displayMessage, so the
+     * caller reads one translation, presses space, and gets the next. This
+     * was a plain `for` loop that printed pressKeyPrompt() and carried on -
+     * "In a real implementation, we'd wait for keypress here" - so a board
+     * with several LANGUAGE.n tooltypes threw every translation past in one
+     * burst and the caller kept only the last. The prompt made it worse than
+     * no pause at all, because it claimed to be waiting.
+     *
+     * doPause is a GATE, not an await: it installs a continuation and
+     * returns. So the loop is a chain - each language's step ends by handing
+     * doPause the next one, and the LAST step is what reaches the navigation
+     * prompt. Written as a recursive step rather than a loop with an await,
+     * because there is nothing to await.
+     */
+    const toShow = languages.filter((lang) => lang !== hostLanguage);
+
+    const showLanguage = async (i: number): Promise<void> => {
+      if (i >= toShow.length) {
+        emitText(socket, '\r\n');
+        displayMessageNavigationPrompt(socket, session);
+        return;
+      }
+
+      const lang = toShow[i];
 
       // Display translation header
       emitText(socket, '\r\n');
@@ -69,11 +95,14 @@ export async function handleTranslationCommand(socket: any, session: BBSSession,
         ? TranslatorMode.TRANS_HOST_TO_DEFINED
         : TranslatorMode.TRANS_DEFINED_TO_HOST;
 
-      // Check if translator exists
+      // A language with no dictionary displays nothing, so it earns no pause -
+      // express.e has no such case at all (it has a dictionary for every
+      // LANGUAGE.n it is given); pausing on a one-line notice would make the
+      // caller press space to acknowledge an absence.
       if (!translationService.hasTranslator(lang)) {
         emitText(socket, AnsiUtil.colorize(`(No dictionary for ${lang})`, 'yellow'));
         emitText(socket, '\r\n');
-        continue;
+        return showLanguage(i + 1);
       }
 
       // Translate and display message body
@@ -82,16 +111,15 @@ export async function handleTranslationCommand(socket: any, session: BBSSession,
       emitText(socket, translatedBody);
       emitText(socket, '\r\n');
 
-      // Pause after each language - express.e:11085
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.pressKeyPrompt());
+      // Pause after each language - express.e:11085. doPause draws its own
+      // prompt, so the hand-written pressKeyPrompt() that used to stand here
+      // is gone with the loop: two prompts on one screen is the bug
+      // aPausePromptIsShowing() exists to prevent.
       await flushOutput(socket);
-      // Note: In a real implementation, we'd wait for keypress here
-      // For now, we just continue to the next language
-    }
+      doPause(socket, session, () => showLanguage(i + 1));
+    };
 
-    emitText(socket, '\r\n');
-    displayMessageNavigationPrompt(socket, session);
+    await showLanguage(0);
     return;
   }
 
