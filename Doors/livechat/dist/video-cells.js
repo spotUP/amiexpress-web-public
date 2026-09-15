@@ -18,7 +18,7 @@
  * camera or a terminal.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.pixelsPerChar = exports.ASCII_RAMP = exports.MODE_BRAILLE = exports.MODE_ASCII_COLOR = exports.MODE_ASCII = exports.MODE_HALFBLOCK = void 0;
+exports.pixelsPerChar = exports.ASCII_RAMP = exports.DEFAULT_RENDER_MODE = exports.MODE_BRAILLE = exports.MODE_ASCII_COLOR = exports.MODE_ASCII = exports.MODE_HALFBLOCK = void 0;
 exports.modeCode = modeCode;
 exports.halfblockCells = halfblockCells;
 exports.asciiCells = asciiCells;
@@ -36,6 +36,19 @@ exports.MODE_HALFBLOCK = 0;
 exports.MODE_ASCII = 1;
 exports.MODE_ASCII_COLOR = 2;
 exports.MODE_BRAILLE = 3;
+/**
+ * What a caller gets before choosing anything.
+ *
+ * Coloured ASCII, on the sysop's judgement after using all four: halfblock is
+ * the least nice of them and was the default for no better reason than being
+ * written first.
+ *
+ * This is the door's single answer to that question. Both places that used to
+ * carry their own `'halfblock'` literal - the server's header text and the
+ * voice UX's own mode - read it from here, because when those two disagreed
+ * the header announced one mode while another was being rendered.
+ */
+exports.DEFAULT_RENDER_MODE = 'color';
 /** The ramp the ASCII modes quantise brightness to. Ten steps fit four bits. */
 exports.ASCII_RAMP = ' .:-=+*#%@';
 /** Map a render mode name to its wire code. */

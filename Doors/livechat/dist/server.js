@@ -125,6 +125,7 @@ const events_1 = require("./commands/events");
 // Types
 const types_1 = require("./types");
 const door_theme_1 = require("./door-theme");
+const video_cells_1 = require("./video-cells");
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element) {
     if (!element)
@@ -1226,7 +1227,7 @@ async function createApp(session) {
     }
     // Track the current video render mode so we can include it in the chat
     // header. Seeded to 'halfblock' (default); updated by onRenderModeChange.
-    let currentRenderMode = 'halfblock';
+    let currentRenderMode = video_cells_1.DEFAULT_RENDER_MODE;
     function updateChatHeader() {
         const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
         const inVoice = !!(voiceChannel && voiceChannel.isInVoiceChannel?.());

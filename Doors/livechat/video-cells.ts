@@ -28,6 +28,23 @@ export const MODE_ASCII = 1;
 export const MODE_ASCII_COLOR = 2;
 export const MODE_BRAILLE = 3;
 
+/** The render modes the door offers, in the order its button cycles them. */
+export type RenderMode = 'ascii' | 'color' | 'halfblock' | 'braille';
+
+/**
+ * What a caller gets before choosing anything.
+ *
+ * Coloured ASCII, on the sysop's judgement after using all four: halfblock is
+ * the least nice of them and was the default for no better reason than being
+ * written first.
+ *
+ * This is the door's single answer to that question. Both places that used to
+ * carry their own `'halfblock'` literal - the server's header text and the
+ * voice UX's own mode - read it from here, because when those two disagreed
+ * the header announced one mode while another was being rendered.
+ */
+export const DEFAULT_RENDER_MODE: RenderMode = 'color';
+
 /** The ramp the ASCII modes quantise brightness to. Ten steps fit four bits. */
 export const ASCII_RAMP = ' .:-=+*#%@';
 

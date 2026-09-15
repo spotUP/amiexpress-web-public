@@ -138,6 +138,7 @@ import { PRESENCE_INDICATORS } from './types';
 import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
 import type { SlashCommand } from './commands/types';
 import { T, S, CURRENT, applyTheme } from './door-theme';
+import { DEFAULT_RENDER_MODE, type RenderMode } from './video-cells';
 
 // Import widget types (Log already imported above)
 
@@ -1365,7 +1366,7 @@ export async function createApp(session: DoorSession) {
 
   // Track the current video render mode so we can include it in the chat
   // header. Seeded to 'halfblock' (default); updated by onRenderModeChange.
-  let currentRenderMode: 'ascii' | 'color' | 'halfblock' | 'braille' = 'halfblock';
+  let currentRenderMode: RenderMode = DEFAULT_RENDER_MODE;
 
   function updateChatHeader() {
     const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';

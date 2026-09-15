@@ -11,6 +11,33 @@ import type { BBSSession } from '../index';
 import { rgbToHsv } from '../utils/image-to-ascii.util';
 import { renderShapeAscii } from '../utils/shape-ascii.util';
 
+/**
+ * The render modes a client may ask for on `video:data`.
+ *
+ * `'color'` was missing from this union while the livechat door had been
+ * sending it all along (`video-cells.ts` maps it to MODE_ASCII_COLOR). It
+ * worked only because an unrecognised mode falls through every branch below
+ * to the ASCII one, which is what coloured ASCII wants - so the protocol was
+ * right by accident and the type was wrong. Naming it here makes the
+ * fall-through a decision instead of a coincidence.
+ *
+ * `'superres'` is an alias of `'halfblock'`, and `'hsv'` and `'shape'` are
+ * backend-only modes the door does not offer.
+ */
+export type VideoMode =
+  | 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv' | 'shape' | 'color';
+
+/**
+ * What a client that names no mode gets.
+ *
+ * Coloured ASCII, matching `DEFAULT_RENDER_MODE` in
+ * `Doors/livechat/video-cells.ts`. These two cannot share a constant - the
+ * backend deliberately imports nothing from `Doors/` - so
+ * `web/backend/tests/doors/livechat-default-render-mode.test.ts` asserts they
+ * still render the same thing. Change one and that test names the other.
+ */
+export const DEFAULT_VIDEO_MODE: VideoMode = 'color';
+
 // Global cache for temporal smoothing (stabilizes flickering pixels)
 const lumaCache = new Map<string, Float32Array>();
 
@@ -263,10 +290,10 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
   // Handle raw video data and convert to ASCII art
   // Inspired by Python/Pillow ASCII art techniques with calibrated characters
   // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based), 'hsv' (16-color HSV-based), 'shape' (shape-based geometric rendering)
-  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv' | 'shape', data: ArrayBuffer }) => {
+  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: VideoMode, data: ArrayBuffer }) => {
     const session = getSessionBySocketId(socket.id);
 
-    const { width, height, colored, mode = 'halfblock', data: buffer } = data;
+    const { width, height, colored, mode = DEFAULT_VIDEO_MODE, data: buffer } = data;
     const pixels = new Uint8Array(buffer);
 
     // ========== COLOR CONVERSION (using global pre-computed LAB palette) ==========

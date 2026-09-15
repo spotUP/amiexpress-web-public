@@ -26,7 +26,10 @@ import { VideoGrid, type VideoParticipant } from './video-grid';
 import { capStreamCells } from './video-layout';
 import { needsReshape, reshapeStream } from './stream-resize';
 import { decodeRichFrame } from '../video-codec';
-import { richToTags, fitRichToTile, modeCode, type RichFrame } from '../video-cells';
+import {
+  richToTags, fitRichToTile, modeCode, DEFAULT_RENDER_MODE,
+  type RichFrame, type RenderMode,
+} from '../video-cells';
 import { T } from '../door-theme';
 
 /** Columns in the microphone meter - also its resolution in distinct values. */
@@ -477,7 +480,7 @@ export class EnhancedVoiceChannel {
   private videoEnabled = false;
   private currentStreamDims: { width: number; height: number } | null = null;
   private resizeStreamTimer: NodeJS.Timeout | null = null;
-  private renderMode: 'ascii' | 'color' | 'halfblock' | 'braille' = 'halfblock';
+  private renderMode: RenderMode = DEFAULT_RENDER_MODE;
   private static readonly RENDER_MODE_CYCLE: Array<'ascii' | 'color' | 'halfblock' | 'braille'> =
     ['ascii', 'color', 'halfblock', 'braille'];
 

@@ -378,7 +378,7 @@ class EnhancedVoiceChannel {
         this.videoEnabled = false;
         this.currentStreamDims = null;
         this.resizeStreamTimer = null;
-        this.renderMode = 'halfblock';
+        this.renderMode = video_cells_1.DEFAULT_RENDER_MODE;
         this.parent = options.parent;
         this.channelList = options.channelList;
         this.screen = options.screen;
