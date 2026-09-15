@@ -16,6 +16,7 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { ArtUploadButton, ANSI_UPLOAD_ACCEPT } from '../components/ArtUploadButton';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
 
@@ -228,6 +229,30 @@ export function DoorArtDialog({
               onSave={save}
               onCancel={onClose}
             />
+            {/*
+              * Sysop, 2026-09-15: "i see no upload button in this dialog: REQ
+              * - Bulletin header art". The screen dialog had one and this did
+              * not, so a door's art could only be edited with the mouse -
+              * and most ANSI artists arrive with a file from PabloDraw.
+              *
+              * It feeds `save`, the same function the editor's own Save
+              * calls, so the DOC limits, the trailing-row trim and the
+              * server's refusals all apply exactly as they do to a drawing
+              * made here. ANSI only: a door's art block is ANSI inside its
+              * own config file, and a .rip in there would be bytes the door
+              * cannot print.
+              */}
+            <div className="flex items-center gap-3 text-sm">
+              <ArtUploadButton
+                accept={ANSI_UPLOAD_ACCEPT}
+                disabled={saving}
+                testId="door-art-upload"
+                onPick={base64 => save(base64)}
+              />
+              <span className="text-content-secondary">
+                Replaces the {VARIANT_LABELS[variant].toLowerCase()} art with a drawing you bring.
+              </span>
+            </div>
             <p className="text-xs text-content-secondary">
               {lineCount} lines now; at most {maxLines} lines of{' '}
               {variant === 'wide' ? maxLineLength : VARIANT_COLUMNS} columns{' '}

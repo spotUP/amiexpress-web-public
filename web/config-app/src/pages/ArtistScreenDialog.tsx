@@ -25,7 +25,7 @@ import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
 import { fanOutOptions, savingLabel } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
-import { screenToCanvas } from './screen-bytes';
+import { screenToCanvas, readAsBase64 } from './screen-bytes';
 import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
 import { describeProblem, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
@@ -393,15 +393,6 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
     if (isNew) return missingFormats(path, []);
     return missingFormats(path, siblings);
   }, [path, siblings, isNew]);
-
-  /** Bytes, never text, all the way through. */
-  const readAsBase64 = (chosen: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-      reader.readAsDataURL(chosen);
-    });
 
   /**
    * An SVG, converted and held for a look before it is written.

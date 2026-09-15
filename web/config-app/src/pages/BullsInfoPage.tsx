@@ -5,6 +5,7 @@ import { SkeletonRows } from '../components/ui/states';
 import { Modal } from '../components/ui/Modal';
 import { BullsMasksMatrix } from '../components/BullsMasksMatrix';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { ArtUploadButton, ANSI_UPLOAD_ACCEPT } from '../components/ArtUploadButton';
 import { AnsiCanvas } from '../components/AnsiCanvas';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
@@ -418,6 +419,26 @@ function BulletinModal({ name, onClose, onSaved }: { name: string; onClose: () =
                     onSave={saveSurface}
                     onCancel={onClose}
                   />
+                  {/*
+                    * A bulletin is art too (sysop, 2026-09-15: "all screen and
+                    * door art editors needs upload buttons"), and this one had
+                    * only the canvas. It feeds `saveSurface`, the same
+                    * function the editor's Save calls, so an uploaded drawing
+                    * and a drawn one are written identically.
+                    *
+                    * ANSI only: bulletins are served as text to every
+                    * terminal, so a .rip or .seq here would be bytes no
+                    * caller of this file can read.
+                    */}
+                  <div className="flex items-center gap-3 text-sm">
+                    <ArtUploadButton
+                      accept={ANSI_UPLOAD_ACCEPT}
+                      disabled={saving}
+                      testId="bulletin-upload"
+                      onPick={base64 => saveSurface(base64)}
+                    />
+                    <span className="text-content-secondary">Replaces this bulletin with a drawing you bring.</span>
+                  </div>
                   <p className="text-xs text-content-secondary">Saving rewrites spacing and line endings to canvas format and flattens bold; bytes otherwise survive.</p>
                 </>
               ) : (

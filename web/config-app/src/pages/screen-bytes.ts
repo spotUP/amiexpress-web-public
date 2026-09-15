@@ -88,3 +88,20 @@ export function base64ToLatin1(base64: string): string {
 export function latin1ToBase64(text: string): string {
   return btoa(text);
 }
+
+/**
+ * A picked file as base64. Bytes, never text, all the way through.
+ *
+ * Lived in ArtistScreenDialog until DoorArtDialog needed it too (the sysop
+ * had no upload on a door's art block: "i see no upload button in this
+ * dialog: REQ - Bulletin header art"). It belongs beside the other base64
+ * helpers rather than in whichever dialog asked for it first.
+ */
+export function readAsBase64(chosen: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.readAsDataURL(chosen);
+  });
+}
