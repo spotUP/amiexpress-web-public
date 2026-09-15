@@ -44,6 +44,7 @@ import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
 import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
 import { getSystemTime } from "../utils/date-time.util";
+import { amiExpressDay } from '../utils/time-tracking.util';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
@@ -208,12 +209,58 @@ export async function runPostAuthLogin(
     }
   }
 
+  /*
+   * A NEW DAY GIVES THE ALLOWANCES BACK AT LOGON (express.e:28506-28528).
+   *
+   *   currDay := Div(currTime-21600,86400)
+   *   lastDay := Div(loggedOnUser.timeLastOn-21600,86400)
+   *   IF (lastDay<>currDay)
+   *     timesOnToday:=0; timeUsed:=0; chatRemain:=chatLimit
+   *     dailyBytesDld:=0; timeTotal:=timeLimit
+   *   ELSE
+   *     timesOnToday:=timesOnToday+1
+   *
+   * updateTimeUsed() has the same reset for a session that is ONLINE when the
+   * day turns, but that one cannot help a caller who hit their limit
+   * yesterday and dials in today: nothing had run since. So the daily
+   * download limit was permanent for exactly the people it had already
+   * stopped. express.e resets in BOTH places, and the comparison here is
+   * against the user's LAST-ON day rather than this session's - which
+   * `lastLoginBeforeUpdate` is, captured before the write below overwrites it.
+   *
+   * `todaysBytesLimit` has no counterpart to keep: express.e stores it, while
+   * file-status.handler.ts:147 derives it from `dailyBytesLimit ?? byteLimit`
+   * on every read, which is already what express.e's new-day branch sets it
+   * to. Nothing to reset, rather than something forgotten.
+   */
+  const currDay = amiExpressDay(Math.floor(getSystemTime().getTime() / 1000));
+  const lastDay = amiExpressDay(Math.floor(ctx.lastLoginBeforeUpdate.getTime() / 1000));
+  const newDay = lastDay !== currDay;
+
   // Update last login (preserve previous via ctx for new-since scans).
   await db.updateUser(user.id, {
     lastLogin: getSystemTime(),
     calls: user.calls + 1,
-    callsToday: user.callsToday + 1,
+    // express.e:28513 zeroes it on a new day rather than starting at one.
+    callsToday: newDay ? 0 : user.callsToday + 1,
+    ...(newDay ? {
+      timeUsed: 0,
+      chatUsed: 0,
+      dailyBytesDld: 0,
+      timeTotal: user.timeLimit,
+    } : {}),
   });
+
+  if (newDay) {
+    // The row is written above; the object this session runs on is the one
+    // handed to `session.user` below, so it has to agree or the caller spends
+    // this session against yesterday's counters.
+    user.timeUsed = 0;
+    user.chatUsed = 0;
+    user.dailyBytesDld = 0;
+    user.timeTotal = user.timeLimit;
+    user.callsToday = 0;
+  }
 
   // Set session user data
   session.state = BBSState.LOGGEDON;
