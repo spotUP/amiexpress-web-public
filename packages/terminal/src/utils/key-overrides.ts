@@ -152,3 +152,45 @@ export function classifyKey(ev: KeyLike, state: TerminalKeyState): TerminalKeyAc
 
   return { kind: 'pass' };
 }
+
+
+/** Which auto-repeat the running door asked for. */
+export type KeyRepeatMode = 'game' | 'application';
+
+/**
+ * Keys that never auto-repeat, whatever the mode.
+ *
+ * Movement and action keys in an arcade door: the door polls the held-key
+ * state instead, so a synthetic repeat would double every press.
+ */
+const NEVER_REPEAT = new Set([
+  'w', 'W', 'a', 'A', 's', 'S', 'd', 'D',
+  ' ', 'Control', 'Shift', 'Alt', 'Meta',
+  'Escape', 'Enter', 'Tab',
+]);
+
+/** Keys that STEER: a list scrolls, a cursor walks, a hand of twenty is read. */
+const NAVIGATION = new Set([
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'PageUp', 'PageDown', 'Home', 'End', 'Backspace', 'Delete',
+]);
+
+/**
+ * May this key repeat while it is held?
+ *
+ * "pressing v flicks back directly" (sysop, 2026-09-15). V turns the card
+ * lobby's lower panel over; a press held past the 400ms repeat delay sent the
+ * key again, and again, so the panel turned an even number of times and
+ * landed back where it started. The same repeat throws a second card now that
+ * a repeated card key plays the card it picked.
+ *
+ * So: in APPLICATION mode - a door whose screen is a list or a table - a key
+ * is a COMMAND and gets one delivery per press, and only the keys that STEER
+ * repeat. That is what application mode's slower rate was always for. GAME
+ * mode is untouched: an arcade door is built on these repeats.
+ */
+export function mayAutoRepeat(key: string, mode: KeyRepeatMode): boolean {
+  if (NEVER_REPEAT.has(key)) return false;
+  if (mode === 'application') return NAVIGATION.has(key);
+  return true;
+}

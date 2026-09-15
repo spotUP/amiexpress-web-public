@@ -23,7 +23,7 @@ import { readCookieModemSpeed, writeCookieModemSpeed } from '../utils/session-co
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { classifyKey, trackKeyId, repeatAlive } from '../utils/key-overrides';
+import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
@@ -318,6 +318,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * declares `GAME_REPEAT=1` gets the arcade rate. See `key-repeat-mode`.
    */
   const keyRepeatRateRef = useRef<number>(30);  // Last keydown edge per physical key (repeat heartbeat)
+  /**
+   * Which repeat the door asked for: `game` (an arcade door, everything
+   * repeats) or `application` (a door whose screen is a list or a table).
+   * The RATE alone could not answer the question that matters in a menu -
+   * WHICH keys may repeat at all.
+   */
+  const keyRepeatModeRef = useRef<'game' | 'application'>('game');
   const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1519,18 +1526,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const GAME_REPEAT_RATE = 30;         // ~33/sec - arcade movement
     const APPLICATION_REPEAT_RATE = 120; // ~8/sec - a list you can steer
 
-    // Keys that should NOT auto-repeat
-    // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs
-    // Games that need single-press arrow handling should track state themselves
-    const NO_REPEAT_KEYS = new Set([
-      'w', 'W', 'a', 'A', 's', 'S', 'd', 'D',
-      ' ', 'Control', 'Shift', 'Alt', 'Meta',
-      'Escape', 'Enter', 'Tab'
-    ]);
-
     const startKeyRepeat = (key: string, code: string) => {
-      // Don't auto-repeat movement/action keys - games should poll key state instead
-      if (NO_REPEAT_KEYS.has(key)) {
+      /*
+       * WHICH KEYS MAY REPEAT is `mayAutoRepeat`'s decision, in
+       * utils/key-overrides.ts beside `classifyKey` - a pure rule a test can
+       * ask, rather than a set buried in an effect. In application mode only
+       * the keys that STEER repeat; everything else is one press, one
+       * delivery ("pressing v flicks back directly", sysop 2026-09-15).
+       */
+      if (!mayAutoRepeat(key, keyRepeatModeRef.current)) {
         return;
       }
       // Physical identity: 'L'-down + 'l'-up (Shift released first) is one
@@ -2953,6 +2957,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * before this existed.
      */
     socket.on('key-repeat-mode', (mode: string) => {
+      keyRepeatModeRef.current = mode === 'application' ? 'application' : 'game';
       keyRepeatRateRef.current = mode === 'game' ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;
       console.log('[BBSTerminal] key repeat mode:', mode, keyRepeatRateRef.current + 'ms');
     });

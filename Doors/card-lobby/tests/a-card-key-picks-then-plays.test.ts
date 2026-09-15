@@ -17,6 +17,8 @@
  */
 
 import assert from 'assert';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { isolatedDataDir } from './isolated-data-dir';
 
 isolatedDataDir('cardkeys');
@@ -244,4 +246,29 @@ export async function aTwentyCardHandIsDrawnInTwoRows(): Promise<void> {
         'and every card is inside the panel');
     }
   } finally { app.screen?.destroy?.(); }
+}
+
+export async function theDoorAsksForTheKeyRepeatOfAMenu(): Promise<void> {
+  /*
+   * "pressing v flicks back directly" (sysop, 2026-09-15). The browser
+   * auto-repeats a held key, and in GAME repeat - the default for every door
+   * that does not say otherwise - that is every 30ms after 400ms. V turns
+   * the lower panel over, so a press held half a second turned it over four
+   * times and left it where it started; and a repeated card key now throws
+   * the card it picked.
+   *
+   * `KEY_REPEAT=application` has existed and been read by the server all
+   * along (`declaredKeyRepeatMode`) and NOT ONE DOOR IN THE TREE DECLARED
+   * IT - a feature that shipped and never ran. This door declares it, and
+   * the browser's half of the rule is pinned next door in
+   * web/frontend/src/components/__tests__/a-command-key-does-not-repeat.
+   */
+  const icon = readFileSync(join(__dirname, '..', 'card-lobby.info'), 'latin1');
+  const declared = icon.split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.toUpperCase().startsWith('KEY_REPEAT='));
+
+  assert.ok(declared, 'the door icon declares a key repeat mode');
+  assert.strictEqual(declared!.split('=')[1].trim().toLowerCase(), 'application',
+    'and it is the one for a door whose screen is a table, not an arcade door');
 }

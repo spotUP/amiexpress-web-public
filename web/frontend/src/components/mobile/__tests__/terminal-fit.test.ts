@@ -337,10 +337,15 @@ describe('the rounding the model uses', () => {
 describe('the height a handheld can draw into', () => {
   const OVERLAY = {
     innerHeight: 844,
+    // `ViewportLike` requires innerWidth; these two fixtures predate it and
+    // have failed `tsc --noEmit` on main ever since, which blocks the push
+    // gate for every session. A phone's width, to go with its height.
+    innerWidth: 390,
     visualViewport: { height: 750, width: 390, offsetTop: 94 },
   };
   const INSET = {
     innerHeight: 844,
+    innerWidth: 390,
     visualViewport: { height: 750, width: 390, offsetTop: 0 },
   };
 
@@ -367,6 +372,6 @@ describe('the height a handheld can draw into', () => {
   });
 
   it('is the plain visible height where there is no visualViewport at all', () => {
-    expect(handheldHeight({ innerHeight: 844 })).toBe(844);
+    expect(handheldHeight({ innerHeight: 844, innerWidth: 390 })).toBe(844);
   });
 });

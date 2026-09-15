@@ -22,7 +22,9 @@ export {
 export {
   keyOverride,
   classifyKey,
+  mayAutoRepeat,
   type KeyLike,
+  type KeyRepeatMode,
   type TerminalKeyState,
   type TerminalKeyAction,
 } from './utils/key-overrides';
