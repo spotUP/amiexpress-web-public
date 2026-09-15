@@ -11,7 +11,7 @@
  * The card still STANDS for the screen. Only which sibling file it draws, and
  * therefore fetches, changes.
  */
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { buildGalleryItems } from '../pages/screen-index-view';
 
@@ -119,4 +119,37 @@ it('draws the warning on the card', async () => {
   );
 
   expect(await screen.findByText(/No PETSCII/)).toBeInTheDocument();
+  expect(await screen.findByText(/Not drawn in PETSCII/)).toBeInTheDocument();
+});
+
+/**
+ * And it does NOT draw the fallback art.
+ *
+ * "i still see the fallbacks" - the caption alone was not enough, because a
+ * thumbnail of the ANSI drawing reads as "this screen has PETSCII" however the
+ * words underneath are phrased.
+ */
+it('draws a gap rather than the art it fell back to', async () => {
+  const { render } = await import('@testing-library/react');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { MemoryRouter } = await import('react-router-dom');
+  const { ScreenGallery } = await import('../components/ScreenGallery');
+  const React = await import('react');
+
+  const getScreenFile = vi.fn(async () => ({ data: { content: '' } }));
+  vi.doMock('../api/client', () => ({ apiClient: { getScreenFile } }));
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    React.createElement(MemoryRouter, null,
+      React.createElement(QueryClientProvider, { client },
+        React.createElement(ScreenGallery, {
+          items: [{ path: 'Screens/JOIN.TXT', label: 'JOIN', format: 'ansi', missingFormat: 'PETSCII' }],
+          onOpen: () => {},
+        }))),
+  );
+
+  // No request for the fallback file: there is nothing to show, and fetching
+  // it would cost a round trip to draw art that answers a different question.
+  expect(getScreenFile).not.toHaveBeenCalled();
 });

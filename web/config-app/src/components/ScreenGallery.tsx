@@ -229,7 +229,10 @@ function GalleryCard(
     // path read through two themes has different readers.
     queryKey: ['screen-file', item.path, theme ?? 'default'],
     // A placeholder has no file behind it; asking would be a 404 per card.
-    enabled: visible && !item.placeholder,
+    // A card whose screen has no drawing in the CHOSEN format has nothing to
+    // show: fetching the fallback would cost a request to draw art that
+    // answers a different question from the one the gallery was asked.
+    enabled: visible && !item.placeholder && !item.missingFormat,
     queryFn: async () => {
       await acquire();
       try {
@@ -262,7 +265,7 @@ function GalleryCard(
       className="block w-full text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
-      <div className={`relative h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+      <div className={`relative h-32 overflow-hidden ${item.placeholder || item.missingFormat ? 'bg-surface-2' : 'bg-black'}`}>
         {isFetching && !item.placeholder && (
           <span
             data-testid="card-updating"
@@ -270,7 +273,23 @@ function GalleryCard(
             className="absolute right-1 top-1 z-10 h-3 w-3 animate-spin rounded-full border border-accent border-t-transparent"
           />
         )}
-        {item.placeholder
+        {item.missingFormat
+          /*
+           * NOT DRAWN IN THE FORMAT THAT WAS ASKED FOR.
+           *
+           * Showing the ANSI art here was the complaint: "i still see the
+           * fallbacks". A thumbnail of a drawing that exists in a DIFFERENT
+           * format reads as "this screen has PETSCII" however the caption is
+           * worded, so the gap is drawn as a gap - the same dashed box an
+           * undrawn screen gets, which is exactly what this is.
+           */
+          ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 border border-dashed border-border text-content-muted">
+              <span className="text-2xl leading-none">+</span>
+              <span className="text-xs">No {item.missingFormat}</span>
+            </div>
+          )
+          : item.placeholder
           // An invitation, not a thumbnail: there is no file yet, and the card
           // exists so an artist can see the gap and click into it.
           ? (
@@ -294,7 +313,7 @@ function GalleryCard(
 
         {item.missingFormat && (
           <span className="block truncate text-status-warn">
-            No {item.missingFormat} - showing what the board serves
+            Not drawn in {item.missingFormat}
           </span>
         )}
         {item.credit && (
