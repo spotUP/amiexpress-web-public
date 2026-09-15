@@ -3,6 +3,7 @@ import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
 import { keyEventToPetscii, pastedTextToPetscii } from './keymap';
+import { XTERM_CONFIG } from '../utils/terminal-utils';
 
 export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
@@ -50,6 +51,25 @@ export interface PetsciiCanvasProps {
    * any non-undefined value switches the blink off.
    */
   cursorVisible?: boolean;
+  /**
+   * What colour the cursor block is painted.
+   *
+   * Defaults to the BOARD'S OWN CURSOR COLOUR - the same `#ff0000` the ANSI
+   * terminal's theme uses (utils/terminal-utils.ts) - because the cursor is
+   * the TERMINAL's chrome and not something the C64 ever drew: a caller who
+   * switches between the two modes should not be told they have changed
+   * machine by the colour of their cursor (sysop, 2026-09-15: "i get a white
+   * cursor in the petscii mode. make it red like the ansi mode").
+   *
+   * It used to take the colour RAM under the cursor, which on a fresh screen
+   * is white and on a coloured one is whatever the last PETSCII colour code
+   * said - so the cursor changed colour as the caller typed.
+   *
+   * An EDITOR may want the old behaviour back: pass `'ink'` and the cell's
+   * own colour is used again, which is the right thing when the cursor is
+   * showing you the colour you are about to draw with.
+   */
+  cursorColour?: string | 'ink';
   /**
    * The cell under the pointer, for an editor drawing on this canvas.
    *
@@ -113,6 +133,13 @@ function isBlankScreenCode(screenCode: number): boolean {
 const CELL_PX = 8; // native C64 character cell, both axes (320x200 / 40x25)
 const ATLAS_PX_SIZE = 8; // atlas built 1:1 with the native cell; `scale` does the zoom
 const CURSOR_BLINK_MS = 500;
+
+/**
+ * The board's cursor colour, taken from the ANSI terminal's own theme so the
+ * two modes cannot drift apart. The cursor is the TERMINAL's chrome, not the
+ * C64's screen, which is why it is not a palette index.
+ */
+const CURSOR_COLOUR = XTERM_CONFIG.theme.cursor;
 const BORDER_PER_SCALE = 16; // px of border per axis, per unit of scale - matches `border = 16 * scale` below
 // Bordered screen footprint per unit of integer scale: 40*8 + 2*16 = 352
 // wide, 25*8 + 2*16 = 232 tall. Derived from the same constants `border`/
@@ -166,6 +193,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   scale: maxScale = 4,
   onData,
   cursorVisible,
+  cursorColour = CURSOR_COLOUR,
   focusable = false,
   swedish = false,
   focusOnMount = false,
@@ -319,7 +347,9 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     const effectiveCursorOn = s.cursorShown === false ? false : (cursorVisible ?? cursorOn);
     if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * cols + s.cursorX;
-      ctx.fillStyle = colours[s.colorRam[cursorIdx] & 0x0F];
+      ctx.fillStyle = cursorColour === 'ink'
+        ? colours[s.colorRam[cursorIdx] & 0x0F]
+        : cursorColour;
       ctx.fillRect(border + s.cursorX * destW, border + s.cursorY * destH, destW, destH);
     }
     // THE EDITOR'S TWO OVERLAYS, and they are drawn last so nothing paints
