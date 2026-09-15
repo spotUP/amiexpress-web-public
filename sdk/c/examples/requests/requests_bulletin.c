@@ -183,6 +183,26 @@ static int put_art(char *out, unsigned long cap, unsigned long *used,
     return 1;
 }
 
+unsigned long requests_bulletin_render_header(char *out, unsigned long cap,
+                                              const char *header)
+{
+    unsigned long used = 0;
+
+    if (out == 0 || cap == 0) return 0;
+    if (!put_art(out, cap, &used, header, 0)) return 0;
+    return used;
+}
+
+unsigned long requests_bulletin_render_tail(char *out, unsigned long cap,
+                                            const char *tail)
+{
+    unsigned long used = 0;
+
+    if (out == 0 || cap == 0) return 0;
+    if (!put_art(out, cap, &used, tail, 1)) return 0;
+    return used;
+}
+
 unsigned long requests_bulletin_render(char *out, unsigned long cap,
                                        const char *header, const char *tail,
                                        const requests_bulletin_row *rows,

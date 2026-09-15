@@ -236,8 +236,74 @@ static void a_buffer_too_small_writes_nothing(void)
                                     REQUESTS_BULLETIN_ROW_BUDGET) == 0);
 }
 
+/**
+ * The bulletin has to notice when the ART changed, not only when a request
+ * did.
+ *
+ * Sysop, 2026-09-15: "i uploaded a header and footer for the request door now
+ * but its not used in the bulletin". It was behaving as built - a rewrite was
+ * judged by whether a REQUEST had changed - so new art sat unused while the
+ * old bulletin still fitted its row budget. Measured on the live board: the
+ * art was written at 19:48 and bull9.txt was still the one from 10:01.
+ *
+ * The door compares these blocks against the file's own start and end, which
+ * is why they must come out byte-identical to what `render` writes. Compare
+ * the raw .txt instead and every bulletin looks stale for ever: the art is
+ * padded to the bulletin's columns on the way in, and the tail closes with a
+ * reset and no trailing newline.
+ */
+static void the_blocks_match_what_render_writes(void)
+{
+    requests_bulletin_row rows[1];
+    char full[4096];
+    char head[4096];
+    char tail[4096];
+    unsigned long n_full, n_head, n_tail;
+
+    rows[0].handle = "sysop";
+    rows[0].title = "a request";
+
+    n_full = requests_bulletin_render(full, sizeof full, HEADER, TAIL, rows, 1,
+                                      REQUESTS_BULLETIN_ROW_BUDGET);
+    n_head = requests_bulletin_render_header(head, sizeof head, HEADER);
+    n_tail = requests_bulletin_render_tail(tail, sizeof tail, TAIL);
+
+    assert(n_full > 0 && n_head > 0 && n_tail > 0);
+    /* The header block IS the start of the bulletin. */
+    assert(strncmp(full, head, n_head) == 0);
+    /* And the tail block IS its end. */
+    assert(n_full >= n_tail);
+    assert(strncmp(full + (n_full - n_tail), tail, n_tail) == 0);
+}
+
+/** Different art, different block - which is what makes staleness visible. */
+static void other_art_renders_a_different_block(void)
+{
+    char a[4096];
+    char b[4096];
+    unsigned long na, nb;
+
+    na = requests_bulletin_render_header(a, sizeof a, HEADER);
+    nb = requests_bulletin_render_header(b, sizeof b, "\033[93mSOMETHING ELSE\n");
+
+    assert(na > 0 && nb > 0);
+    assert(na != nb || strncmp(a, b, na) != 0);
+}
+
+/** A buffer too small answers zero, so the door cannot judge on half a block. */
+static void a_small_buffer_renders_no_block(void)
+{
+    char tiny[8];
+
+    assert(requests_bulletin_render_header(tiny, sizeof tiny, HEADER) == 0);
+    assert(requests_bulletin_render_tail(tiny, sizeof tiny, TAIL) == 0);
+}
+
 int main(void)
 {
+    the_blocks_match_what_render_writes();
+    other_art_renders_a_different_block();
+    a_small_buffer_renders_no_block();
     art_rows_ignore_the_trailing_newline();
     the_art_leaves_room_for_thirteen_requests();
     a_long_listing_still_fits_the_screen();

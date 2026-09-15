@@ -89,6 +89,29 @@ int requests_bulletin_fits(const char *text, int budget);
  * MUST NOT reach the disk: half a bulletin is worse than yesterday's, so the
  * door writes the file only on a non-zero return.
  */
+/**
+ * The HEADER block alone, exactly as `requests_bulletin_render` writes it.
+ *
+ * For one question the door could not otherwise answer: has the art changed
+ * since this bulletin was written? The art is not copied into the file
+ * verbatim - every line is padded to the bulletin's columns and the block
+ * ends without a reset - so comparing the raw `.txt` against the file finds a
+ * difference that is not there. Rendering it the same way and comparing the
+ * prefix is exact, and costs no request to the server.
+ *
+ * Returns bytes written, or 0 if the buffer is too small.
+ */
+unsigned long requests_bulletin_render_header(char *out, unsigned long cap,
+                                              const char *header);
+
+/**
+ * The TAIL block alone, as the renderer ends a bulletin: padded, and closed
+ * with a reset and no trailing newline. Compared against the END of an
+ * existing bulletin for the same reason as the header.
+ */
+unsigned long requests_bulletin_render_tail(char *out, unsigned long cap,
+                                            const char *tail);
+
 unsigned long requests_bulletin_render(char *out, unsigned long cap,
                                        const char *header, const char *tail,
                                        const requests_bulletin_row *rows,

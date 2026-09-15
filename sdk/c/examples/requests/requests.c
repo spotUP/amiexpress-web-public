@@ -584,6 +584,40 @@ static int slurp(const char *path, char *buf, unsigned long cap)
  * behind, and without this check it would sit there paginating until some
  * caller happened to post.
  */
+static char bulletin_block[4096];
+
+/**
+ * Has the header or tail art changed since this bulletin was written?
+ *
+ * The sysop drew new art for the door and the bulletin kept the old
+ * (2026-09-15: "i uploaded a header and footer for the request door now but
+ * its not used in the bulletin"). It was working as built: a rewrite was
+ * judged by whether a REQUEST had changed, and art is not a request, so a
+ * bulletin that still fitted its row budget was left exactly as it was.
+ *
+ * The art is not copied in verbatim - lines are padded to the bulletin's
+ * columns and the tail closes with a reset - so this renders each block the
+ * way the writer does and compares it against the file's own start and end.
+ * Exact, and it costs no request to the server.
+ */
+static int bulletin_art_changed(void)
+{
+    unsigned long n = requests_bulletin_render_header(bulletin_block,
+                                                      sizeof bulletin_block,
+                                                      bulletin_header_art);
+    if (n == 0) return 0;                      /* cannot tell; leave it be */
+    if (strncmp(bulletin_text, bulletin_block, n) != 0) return 1;
+
+    n = requests_bulletin_render_tail(bulletin_block, sizeof bulletin_block,
+                                      bulletin_tail_art);
+    if (n == 0) return 0;
+    {
+        unsigned long have = (unsigned long)strlen(bulletin_text);
+        if (have < n) return 1;
+        return strncmp(bulletin_text + (have - n), bulletin_block, n) != 0;
+    }
+}
+
 static int bulletin_needs_rewrite(void)
 {
     FILE *f;
@@ -597,7 +631,9 @@ static int bulletin_needs_rewrite(void)
     fclose(f);
     if (n >= sizeof bulletin_text - 1) return 1;   /* far too big to be ours */
     bulletin_text[n] = '\0';
-    return !requests_bulletin_fits(bulletin_text, REQUESTS_BULLETIN_ROW_BUDGET);
+    if (!requests_bulletin_fits(bulletin_text, REQUESTS_BULLETIN_ROW_BUDGET))
+        return 1;
+    return bulletin_art_changed();
 }
 
 /**
@@ -615,12 +651,16 @@ static void bulletin_write(void)
     FILE *f;
 
     if (config.bulletin[0] == '\0') return;
-    if (!bulletin_needs_rewrite()) return;
 
+    /* The art is read BEFORE the decision, because the decision now asks
+       whether the art still matches what is in the file. Both were already
+       required for a write, so nothing is read that was not read before. */
     if (!slurp(config.bulletin_header, bulletin_header_art,
                sizeof bulletin_header_art)) return;
     if (!slurp(config.bulletin_tail, bulletin_tail_art,
                sizeof bulletin_tail_art)) return;
+
+    if (!bulletin_needs_rewrite()) return;
 
     if (fetch_text(AE_REQ_BASE "/list.txt?scope=global&state=open") != 200)
         return;
