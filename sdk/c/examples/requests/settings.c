@@ -12,7 +12,7 @@
  */
 #include "ae_settings.h"
 
-AE_SETTINGS_BEGIN(REQUESTS, "REQUESTS.cfg")
+AE_SETTINGS_BEGIN(REQ, "REQUESTS.cfg")
   AE_SETTING_STR_HELP("host", "Door server host", "doors.uprough.net", "Host",
     "Plain HTTP host serving /requests/v1. The 68K stack cannot do TLS, so this is http, not https.")
   AE_SETTING_INT_RANGE("port", "Port", 80, 1, 65535, "Port",
