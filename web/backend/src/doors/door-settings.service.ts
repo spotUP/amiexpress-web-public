@@ -1160,6 +1160,7 @@ import {
   VARIANT_COLUMNS,
   type ArtAlphabet,
 } from './door-art-variants';
+import { resolveArtValue, listArtChoices, artFileLines } from './door-art-file';
 
 export interface DoorArtSection {
   /** Bare filename inside the door directory (e.g. `Bulls.CFG`). */
@@ -1210,17 +1211,23 @@ export interface DoorArtContent {
 function readArtManifest(
   doorDir: string,
   command?: string,
-): DoorSettingsManifest & { artSections: DoorArtSection[] } {
+): DoorSettingsManifest & { artSections: DoorArtSection[]; artSettings: DoorSetting[] } {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest) throw new Error('This door does not declare any settings');
   const want = command ? command.toUpperCase() : null;
-  const sections = (manifest.artSections ?? []).filter(
-    a => !want || !a.commands || a.commands.some(c => c.toUpperCase() === want),
-  );
-  if (sections.length === 0) {
+  const scoped = <T extends { commands?: string[] }>(x: T): boolean =>
+    !want || !x.commands || x.commands.some(c => c.toUpperCase() === want);
+  const sections = (manifest.artSections ?? []).filter(scoped);
+  /**
+   * A door can also declare art by marking a SETTING whose value names a
+   * file - see DoorSetting.art. Those are slots too, and a door may have only
+   * that kind, so the "declares no art" refusal has to consider both.
+   */
+  const artSettings = (manifest.settings ?? []).filter(x => x.art && scoped(x));
+  if (sections.length === 0 && artSettings.length === 0) {
     throw new Error('This door declares no art sections for the Studio');
   }
-  return { ...manifest, artSections: sections };
+  return { ...manifest, artSections: sections, artSettings };
 }
 
 function loadArtFile(doorDir: string, file: string): EmpireFile {
@@ -1247,6 +1254,33 @@ export function readDoorArtSections(
   artRoot?: string,
 ): DoorArtContent[] {
   return listDoorArtSections(doorDir, command).map((entry) => {
+    const drawnFor = (section: string) => (alphabet: ArtAlphabet): boolean =>
+      !!artRoot && !!command && readVariant(artRoot, command, section, alphabet) !== null;
+
+    /**
+     * A file-backed slot is the whole file, not a section cut out of one. A
+     * missing file reads as an empty canvas rather than a throw - the setting
+     * names something that is not there, which the listing already reports and
+     * the Studio answers with the picker.
+     */
+    const settingKey = artSettingKey(entry.section);
+    if (settingKey !== null) {
+      const body = entry.missing
+        ? ''
+        : fs.readFileSync(resolveArtValue(doorDir, entry.file), 'latin1');
+      const drawn = drawnFor(entry.section);
+      return {
+        file: entry.file,
+        section: entry.section,
+        label: entry.label,
+        content: Buffer.from(body, 'latin1').toString('base64'),
+        lines: entry.lines,
+        maxLines: entry.maxLines,
+        maxLineLength: entry.maxLineLength,
+        variants: { c64: drawn('c64'), ttx: drawn('ttx') },
+      };
+    }
+
     const discovered = parseQuickNewSectionName(entry.section);
     const body = discovered
       ? quickNewBody(doorDir, entry.file, discovered)
@@ -1274,14 +1308,62 @@ export interface DoorArtListing {
   lines: number;
   maxLines: number;
   maxLineLength: number;
+  /**
+   * The setting names a file that is not there. The Studio offers the PICKER
+   * and not the editor - a door whose art setting points at something deleted
+   * must not take the whole door-art tab down with it.
+   */
+  missing?: boolean;
+  /** For a file-backed slot: the art this door ships, as a picker's options. */
+  choices?: Array<{ file: string; lines: number }>;
+}
+
+/**
+ * The section name an art SETTING is addressed by.
+ *
+ * Namespaced so it can never collide with an Empire section name, and stable
+ * across a file swap - which is what lets the C64 and Teletext variants, which
+ * are stored per section, survive the picker changing which file the wide slot
+ * draws.
+ */
+export const artSettingSection = (key: string): string => `setting:${key}`;
+export const artSettingKey = (section: string): string | null =>
+  section.startsWith('setting:') ? section.slice('setting:'.length) : null;
+
+/** The slots a door's art SETTINGS contribute, with live line counts. */
+function artSettingListings(doorDir: string, command?: string): DoorArtListing[] {
+  const manifest = readArtManifest(doorDir, command);
+  const values = readValuesFromDir(doorDir);
+  return manifest.artSettings.map((setting) => {
+    const value = String(values[setting.key] ?? setting.default ?? '');
+    let lines = 0;
+    let missing = true;
+    try {
+      lines = artFileLines(resolveArtValue(doorDir, value));
+      missing = false;
+    } catch {
+      /* the picker, not the editor */
+    }
+    return {
+      file: value,
+      section: artSettingSection(setting.key),
+      label: setting.label,
+      lines,
+      missing,
+      maxLines: setting.artMaxLines ?? 100,
+      maxLineLength: setting.artMaxLineLength ?? 1000,
+      choices: listArtChoices(doorDir),
+    };
+  });
 }
 
 /** Declared art sections with live line counts, without the bodies. */
 export function listDoorArtSections(doorDir: string, command?: string): DoorArtListing[] {
   const manifest = readArtManifest(doorDir, command);
   // flatMap, not map: a discovered format turns ONE manifest entry into two
-  // sections per configured area.
-  return manifest.artSections.flatMap((entry) => {
+  // sections per configured area. The art SETTINGS are appended after, so a
+  // door that declares both keeps its config sections first.
+  const sections = manifest.artSections.flatMap((entry) => {
     if (entry.format === 'quicknew') {
       return quickNewListings(doorDir, entry);
     }
@@ -1297,6 +1379,7 @@ export function listDoorArtSections(doorDir: string, command?: string): DoorArtL
       maxLineLength: entry.maxLineLength,
     }];
   });
+  return [...sections, ...artSettingListings(doorDir, command)];
 }
 
 /** Read QuickNew's config as one editable template per heading and stats line. */
@@ -1344,6 +1427,27 @@ export function writeDoorArtSection(
   // Scoped like the read and like a settings PUT: a request in one door's
   // name cannot rewrite the other door's logo just by naming its file.
   const manifest = readArtManifest(doorDir, command);
+
+  /**
+   * A file-backed slot: the whole file is the body.
+   *
+   * `fileName` comes from the request, but only a value this setting could
+   * legally hold, resolved inside the door - so a request in one door's name
+   * cannot write another's file, exactly as for a section. The file need not
+   * be the one the setting currently names: the Studio saves a drawing into
+   * whichever alternate the artist has open.
+   */
+  const settingKey = artSettingKey(section);
+  if (settingKey !== null) {
+    const declared = manifest.artSettings.find((x) => x.key === settingKey);
+    if (!declared) throw new Error(`No art setting ${settingKey} — the manifest must declare it`);
+    const full = resolveArtValue(doorDir, fileName);
+    fs.writeFileSync(full, Buffer.from(contentBase64, 'base64').toString('latin1'), 'latin1');
+    const written = readDoorArtSections(doorDir, command).find((c) => c.section === section);
+    if (!written) throw new Error(`${section} vanished between the write and the read`);
+    return written;
+  }
+
   const discovered = parseQuickNewSectionName(section);
   const entry = manifest.artSections.find((a) =>
     a.file === fileName &&
