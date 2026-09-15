@@ -26,7 +26,14 @@ interface Manifest {
   command: string;
   cfgFile?: string;
   cfgFormat?: string;
-  settings: Array<{ key: string; cfgKey?: string; help?: string; label: string }>;
+  settings: Array<{
+    key: string;
+    cfgKey?: string;
+    help?: string;
+    label: string;
+    /** The board holds this value; the manifest must NOT carry it. */
+    fromSystemConfig?: string;
+  }>;
 }
 
 /** Every door shipping a manifest that REWRITES a plain Key=value cfg. */
@@ -50,6 +57,38 @@ function cfgKeys(file: string): string[] {
     .filter(line => line && !line.startsWith(';') && !line.startsWith('#'))
     .map(line => line.split('=')[0].trim())
     .filter(Boolean);
+}
+
+/** Key -> value for every settable line in a cfg. */
+function cfgValues(text: string): Map<string, string> {
+  return new Map(
+    text
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith(';') && !l.startsWith('#') && l.includes('='))
+      .map(l => [l.slice(0, l.indexOf('=')).trim().toLowerCase(), l.slice(l.indexOf('=') + 1).trim()]),
+  );
+}
+
+/**
+ * The settings whose manifest default disagrees with the cfg on disk.
+ *
+ * Named and exported to the tests below so the EXEMPTION can be pinned:
+ * loosening a check is only safe if something proves how far it loosened.
+ */
+function driftRows(
+  settings: Manifest['settings'],
+  onDisk: Map<string, string>,
+): Array<{ key: string; file?: string; manifest: string }> {
+  return settings
+    .filter(s => s.cfgKey && onDisk.has(s.cfgKey.toLowerCase()))
+    .filter(s => !s.fromSystemConfig)
+    .map(s => ({
+      key: s.cfgKey!,
+      file: onDisk.get(s.cfgKey!.toLowerCase()),
+      manifest: String((s as { default?: unknown }).default ?? ''),
+    }))
+    .filter(row => row.file !== row.manifest);
 }
 
 const cases = keyValueDoors();
@@ -92,24 +131,43 @@ describe('a door manifest that rewrites a legacy cfg', () => {
      *
      * This is the check that makes adding a manifest to a working door safe.
      */
-    const onDisk = new Map(
-      fs.readFileSync(cfg, 'utf8')
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(l => l && !l.startsWith(';') && !l.startsWith('#') && l.includes('='))
-        .map(l => [l.slice(0, l.indexOf('=')).trim().toLowerCase(), l.slice(l.indexOf('=') + 1).trim()]),
-    );
+    expect(driftRows(manifest.settings, cfgValues(fs.readFileSync(cfg, 'utf8')))).toEqual([]);
+  });
 
-    const drifted = manifest.settings
-      .filter(s => s.cfgKey && onDisk.has(s.cfgKey.toLowerCase()))
-      .map(s => ({
-        key: s.cfgKey!,
-        file: onDisk.get(s.cfgKey!.toLowerCase()),
-        manifest: String((s as { default?: unknown }).default ?? ''),
-      }))
-      .filter(row => row.file !== row.manifest);
+  /*
+   * The exemption above, pinned. A setting the BOARD supplies (ACHIEVEC and
+   * REQUESTS both take BoardKey from `achievements_board_key`) has an empty
+   * manifest default on purpose - that is what stopped the board key being
+   * pasted anywhere - so comparing it to a running board's cfg demanded the
+   * secret be written into the manifest. Nothing else is exempt.
+   */
+  describe('the system-config exemption', () => {
+    const onDisk = new Map([['boardkey', 'a-real-secret'], ['pagelen', '20']]);
 
-    expect(drifted).toEqual([]);
+    it('does not report a value the board supplies', () => {
+      expect(
+        driftRows(
+          [{ key: 'boardKey', cfgKey: 'BoardKey', label: 'Board key', fromSystemConfig: 'achievements_board_key' }],
+          onDisk,
+        ),
+      ).toEqual([]);
+    });
+
+    it('still reports an ordinary key whose default disagrees', () => {
+      const rows = driftRows(
+        [{ key: 'pageLen', cfgKey: 'PageLen', label: 'Page length', default: '10' } as never],
+        onDisk,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].key).toBe('PageLen');
+    });
+
+    it('would have reported the board key without the exemption, which is why it is there', () => {
+      const withoutExemption = [
+        { key: 'boardKey', cfgKey: 'BoardKey', label: 'Board key', default: '' },
+      ].filter(s => onDisk.get(s.cfgKey.toLowerCase()) !== s.default);
+      expect(withoutExemption).toHaveLength(1);
+    });
   });
 
   it.each(cases)('keeps a commented key\'s explanation in $door', ({ manifest, cfg }) => {
