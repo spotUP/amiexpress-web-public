@@ -34,11 +34,33 @@ import * as path from 'path';
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 const SDK_C = path.join(REPO, 'sdk', 'c');
 
-/** Every door that declares its settings in C, and where its manifest ships. */
-const C_SDK_DOORS: Array<{ src: string; doorsDir: string }> = [
-  { src: 'requests', doorsDir: 'REQUESTS' },
-  { src: 'subs', doorsDir: 'SUBS' },
-];
+/**
+ * Every door that declares its settings in C, READ FROM THE MAKEFILE.
+ *
+ * This list used to be written out here, and it named two of the three doors
+ * the generator actually emits. TEXTTV was the missing one, so its manifest
+ * drifted away from its declaration - two help strings had been improved in
+ * the shipped JSON, behind the generator's back - and the guard below could
+ * not see it, because the guard did not know the door existed. Found on
+ * 2026-09-15 when `make -C sdk/c settings` silently reverted both strings.
+ *
+ * `SETTINGS_DOORS` in sdk/c/Makefile is what the generator iterates, so it is
+ * the list this test must use. A third copy is a third place to forget.
+ */
+function cSdkDoors(): Array<{ src: string; doorsDir: string }> {
+  const makefile = fs.readFileSync(path.join(SDK_C, 'Makefile'), 'utf8');
+  const line = /^SETTINGS_DOORS\s*=\s*(.+)$/m.exec(makefile);
+  if (line === null) throw new Error('sdk/c/Makefile declares no SETTINGS_DOORS');
+  return line[1]
+    .trim()
+    .split(/\s+/)
+    .map(pair => {
+      const [src, doorsDir] = pair.split(':');
+      return { src, doorsDir };
+    });
+}
+
+const C_SDK_DOORS = cSdkDoors();
 
 function haveCompiler(): boolean {
   try {
