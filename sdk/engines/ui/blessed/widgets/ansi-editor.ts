@@ -382,6 +382,25 @@ export class ANSIEditor extends Box {
   // Clipboard for cut/copy/paste
   private clipboard: Cell[][] | null = null;
 
+  /**
+   * TEXT-MODE SELECTION (sysop, 2026-09-15: "i cant select with the mouse
+   * either in text mode that would be nice").
+   *
+   * Draw mode has had a selection for ever - the select tool's marching-ants
+   * rectangle - and text mode had nothing: a click moved the cursor and that
+   * was the whole of the mouse. So there was no way to lift a block of an
+   * existing screen while typing on it.
+   *
+   * It is a RECTANGLE, not a run of text that wraps at the line end, because
+   * this is an ANSI art editor: what an artist wants out of a screen is a
+   * box of it. That also means Cut/Copy/Paste need no second clipboard - the
+   * text branch fills the SAME `clipboard` of cells that draw mode uses, so a
+   * block lifted while typing can be pasted while drawing.
+   */
+  private textSelection: { anchor: { line: number; col: number }; head: { line: number; col: number } } | null = null;
+  /** A drag in progress: mousemove only extends a selection the button started. */
+  private textDragging = false;
+
   // Selection state
   private selection: { x1: number; y1: number; x2: number; y2: number } | null = null;
 
@@ -1879,12 +1898,71 @@ export class ANSIEditor extends Box {
   // ============================================
 
   /**
+   * The text-mode selection as a normalised rectangle, or null.
+   *
+   * Normalised because a drag can go up or leftwards: anchor and head are
+   * where the mouse WAS and IS, not min and max.
+   */
+  private textSelectionBounds(): { l1: number; c1: number; l2: number; c2: number } | null {
+    if (!this.textSelection) return null;
+    const { anchor, head } = this.textSelection;
+    return {
+      l1: Math.min(anchor.line, head.line),
+      l2: Math.max(anchor.line, head.line),
+      c1: Math.min(anchor.col, head.col),
+      c2: Math.max(anchor.col, head.col),
+    };
+  }
+
+  /**
+   * Lift the text-mode selection into the shared cell clipboard.
+   *
+   * The characters come from `lines`; the colours are the ones currently
+   * selected, because text mode has no per-cell colour of its own to read.
+   * `blank` is the cut: the same rectangle is spaced out afterwards.
+   */
+  private copyTextSelection(blank: boolean): boolean {
+    const sel = this.textSelectionBounds();
+    if (!sel) return false;
+
+    this.clipboard = [];
+    for (let line = sel.l1; line <= sel.l2; line++) {
+      const row: Cell[] = [];
+      const text = this.lines[line] ?? '';
+      for (let col = sel.c1; col <= sel.c2; col++) {
+        row.push({ char: text[col] ?? ' ', fg: this.currentFg, bg: this.currentBg });
+      }
+      this.clipboard.push(row);
+    }
+
+    if (blank) {
+      for (let line = sel.l1; line <= sel.l2; line++) {
+        const text = this.lines[line] ?? '';
+        if (!text) continue;
+        const padded = text.padEnd(sel.c2 + 1, ' ');
+        this.lines[line] =
+          padded.slice(0, sel.c1) + ' '.repeat(sel.c2 - sel.c1 + 1) + padded.slice(sel.c2 + 1);
+      }
+      this.modified = true;
+    }
+    return true;
+  }
+
+  /**
    * Cut selection to clipboard. Undoable (fix-round-2, riding along with
    * moveBlock()'s fix - same class of bug, identical treatment): an
    * explicit snapshotUndoState() before mutating this.cellCanvas in place,
    * since there is no dedicated ToolHandler for a cut.
    */
   private cutSelection(): void {
+    // Text mode has its own model (`lines`), so it cuts from there - into the
+    // SAME clipboard, so the block can be pasted in either mode.
+    if (this.mode === 'text' && this.copyTextSelection(true)) {
+      this.textSelection = null;
+      this.updateDisplay();
+      this.screen?.render();
+      return;
+    }
     if (!this.cellCanvas || !this.coreState) return;
 
     // If no selection, select entire canvas
@@ -1914,6 +1992,7 @@ export class ANSIEditor extends Box {
    * Copy selection to clipboard
    */
   private copySelection(): void {
+    if (this.mode === 'text' && this.copyTextSelection(false)) return;
     // If no selection, select entire canvas
     const sel = this.selection || this.fullCanvasSelection();
     this.copyRegion(sel.x1, sel.y1, sel.x2, sel.y2);
@@ -2785,6 +2864,18 @@ BBS Door SDK v2.0{/gray-fg}
       // Don't exit if a modal is open - ESC should only close the modal
       if (this.modalOpen) return true;
 
+      // ESC drops a text selection before it drops the editor. Leaving the
+      // door is the more destructive of the two things ESC can mean here, so
+      // it is the second one: a selection on screen is visible state the
+      // artist can see, and clearing it is what he is asking for.
+      if (this.mode === 'text' && this.textSelection) {
+        this.textSelection = null;
+        this.textDragging = false;
+        this.updateDisplay();
+        this.screen?.render();
+        return true;
+      }
+
       if (this.onExitCallback) {
         if (this.modified) {
           this.confirmExit();
@@ -2884,6 +2975,59 @@ BBS Door SDK v2.0{/gray-fg}
         col: this.screenToCanvasX(data.x - this.drawCanvas.ileft),
         line: this.screenToCanvasY(data.y - this.drawCanvas.itop),
       });
+    });
+
+    /*
+     * TEXT MODE - drag to select a block.
+     *
+     * blessed reports mousedown / mousemove / mouseup on the element, and a
+     * drag is a mousemove with a button held - the same shape the draw
+     * canvas already uses below. A press starts the rectangle, movement
+     * extends it, and a release that never moved clears it, so a plain click
+     * still just puts the cursor somewhere.
+     */
+    this.viewport.on('mouse', (data: any) => {
+      if (!data || !data.action || this.mode !== 'text') return;
+      if (this.modalOpen || DropdownMenu.shouldBlockClick()) return;
+      if (data.action === 'wheelup' || data.action === 'wheeldown') return;
+
+      const x = data.x - this.viewport.aleft;
+      const y = data.y - this.viewport.atop;
+      if (x < 0 || y < 0) return;
+
+      const lineNumberWidth = this.showLineNumbers ? 5 : 0;
+      const at = {
+        line: y + this.scrollTop,
+        col: Math.max(0, x - lineNumberWidth) + this.scrollLeft,
+      };
+
+      if (data.action === 'mousedown') {
+        this.textSelection = { anchor: at, head: at };
+        this.textDragging = true;
+        this.updateDisplay();
+        this.screen?.render();
+        return;
+      }
+
+      if (data.action === 'mousemove' && this.textDragging && data.button) {
+        this.textSelection = { anchor: this.textSelection?.anchor ?? at, head: at };
+        this.updateDisplay();
+        this.screen?.render();
+        return;
+      }
+
+      if (data.action === 'mouseup') {
+        this.textDragging = false;
+        const sel = this.textSelectionBounds();
+        // A press and release in one cell is a click, not a selection of one
+        // character - leaving it set would make the next Copy silently take
+        // that single cell instead of the whole canvas.
+        if (sel && sel.l1 === sel.l2 && sel.c1 === sel.c2) {
+          this.textSelection = null;
+        }
+        this.updateDisplay();
+        this.screen?.render();
+      }
     });
 
     // TEXT MODE - Mouse click on viewport for cursor positioning
@@ -4326,8 +4470,20 @@ BBS Door SDK v2.0{/gray-fg}
         displayLine += `{gray-fg}${(lineIndex + 1).toString().padStart(4)} {/}`;
       }
 
-      // Show cursor on current line
-      if (lineIndex === this.cursor.line) {
+      // The selected block, inverted. It REPLACES the cursor's own inversion
+      // on a line it covers, deliberately: nesting {inverse} inside {inverse}
+      // does not render as "stands out", it renders as broken markup. While a
+      // selection is up, the block is what you are looking at.
+      const sel = this.textSelectionBounds();
+      const selectedHere = sel && lineIndex >= sel.l1 && lineIndex <= sel.l2;
+
+      if (selectedHere && sel) {
+        const padded = line.padEnd(sel.c2 + 1, ' ');
+        const before = padded.slice(0, sel.c1);
+        const inside = padded.slice(sel.c1, sel.c2 + 1);
+        const after = padded.slice(sel.c2 + 1);
+        displayLine += before + `{inverse}${inside}{/inverse}` + after;
+      } else if (lineIndex === this.cursor.line) {
         const before = line.substring(0, this.cursor.col);
         const at = line[this.cursor.col] || ' ';
         const after = line.substring(this.cursor.col + 1);
