@@ -331,7 +331,9 @@ class GameViews {
         const showing = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
         const top = loaded.engine.topOfPile();
         const blind = !swapping && loaded.engine.sourceFor(meId) === 'faceDown';
-        this.host.renderBoardAndHand((top ? [top] : []), showing, 'auto', 'auto', true);
+        // The hand only: the board panel is painted below, by whichever of the
+        // two rows this phase calls for.
+        this.host.renderBoardAndHand([], showing, 'auto', 'auto', true);
         /*
          * THE CALLER'S OWN TABLE, in the board panel. Three cards face up in
          * front of you and three face down under them are half of this game -
@@ -340,21 +342,47 @@ class GameViews {
          * perform: "i dont see any table cards i see just 3 cards" (sysop,
          * 2026-09-15). Numbered from 4, which is the key that picks them.
          */
-        if (me) {
-            const faceDownBacks = me.faceDown.map(() => ({ rank: 'A', suit: 'S' }));
-            const drewTable = this.host.tableCardButtons.renderStandard([...me.faceUp, ...(swapping ? [] : faceDownBacks)], {
+        /*
+         * THE BOARD PANEL SHOWS WHAT MATTERS NOW.
+         *
+         * While swapping, that is the caller's OWN table - you cannot trade with
+         * a card you cannot see. Once play starts it is THE PILE, and the top
+         * THREE of it rather than the top one: a player who will not beat the
+         * top card takes only that card, so what lies under it is the next
+         * player's problem and worth reading before you decide ("i need to see
+         * the pile in skitgubbe as well... the top 3 cards", sysop 2026-09-15).
+         *
+         * The caller's own table cards do not disappear when play starts: the
+         * hand panel draws whatever they are playing FROM, so the face-up three
+         * arrive there the moment the hand runs out, which is when they matter.
+         */
+        if (swapping && me) {
+            const drewTable = this.host.tableCardButtons.renderStandard(me.faceUp, {
                 selected: null,
-                playable: swapping ? me.faceUp.map((_, index) => index) : [],
+                playable: me.faceUp.map((_, index) => index),
                 labelFrom: 4,
-                onPick: (index) => {
-                    if (swapping)
-                        this.host.vandtia.selectCard(3 + index);
-                },
+                onPick: (index) => this.host.vandtia.selectCard(3 + index),
+                onFocus: (index) => this.host.vandtia.selectCard(3 + index),
             });
             if (!drewTable) {
                 this.host.flopContent.setContent(`{${constants_1.UI_THEME.accent}-fg}Your table{/}\n`
                     + `Up:   ${me.faceUp.map((card, i) => `${i + 4}:${card.rank}${card.suit}`).join('  ')}\n`
                     + `Down: ${me.faceDown.length} face down`);
+            }
+        }
+        else {
+            const top3 = state.pile.slice(-3);
+            const drewPile = this.host.tableCardButtons.renderStandard(top3, {
+                selected: null,
+                playable: [],
+                labels: false,
+                onPick: () => { },
+            });
+            if (!drewPile) {
+                this.host.flopContent.setContent(top3.length > 0
+                    ? `{${constants_1.UI_THEME.accent}-fg}Pile{/} (${state.pile.length})\n`
+                        + top3.map((card) => `${card.rank}${card.suit}`).join('  ')
+                    : 'The pile is empty - lead anything.');
             }
         }
         /*

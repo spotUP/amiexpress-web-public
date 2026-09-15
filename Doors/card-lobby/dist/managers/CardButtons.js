@@ -142,7 +142,8 @@ class CardButtons {
             // Everything sits one row down, and the picked card rises into the gap.
             button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
             button.left = column * (cardWidth + 1);
-            button.setContent(withLabels
+            const showLabel = withLabels && options.labels !== false;
+            button.setContent(showLabel
                 ? [
                     ...art[index],
                     picked
@@ -161,6 +162,9 @@ class CardButtons {
             button.on('press', () => options.onPick(index));
             if (options.onFocus)
                 button.on('focus', () => options.onFocus?.(index));
+            // A row that cannot be picked from does not take the focus either.
+            button.options.focusable = options.labels !== false;
+            button.clickable = options.labels !== false;
         });
         for (let index = cards.length; index < this.buttons.length; index += 1) {
             this.buttons[index].hide();

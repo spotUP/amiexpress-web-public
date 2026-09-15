@@ -42,6 +42,12 @@ export interface CardButtonHost {
 export interface CardButtonOptionsBase {
   /** What the number under each card says: 1-based by default. */
   labelFrom?: number;
+  /**
+   * Draw the numbers at all. A row nobody can pick from - the pile in the
+   * middle of the table - is there to be READ, and numbering it invites a
+   * keypress that does nothing.
+   */
+  labels?: boolean;
 }
 
 /**
@@ -211,7 +217,8 @@ export class CardButtons {
       // Everything sits one row down, and the picked card rises into the gap.
       button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
       button.left = column * (cardWidth + 1);
-      button.setContent(withLabels
+      const showLabel = withLabels && options.labels !== false;
+      button.setContent(showLabel
         ? [
           ...art[index],
           picked
@@ -230,6 +237,9 @@ export class CardButtons {
       (button as any).on('click', () => options.onPick(index));
       (button as any).on('press', () => options.onPick(index));
       if (options.onFocus) (button as any).on('focus', () => options.onFocus?.(index));
+      // A row that cannot be picked from does not take the focus either.
+      (button as any).options.focusable = options.labels !== false;
+      (button as any).clickable = options.labels !== false;
     });
 
     for (let index = cards.length; index < this.buttons.length; index += 1) {

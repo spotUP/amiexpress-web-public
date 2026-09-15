@@ -340,9 +340,16 @@ export function parseGameDefinition(source: string): GameDefinition {
       continue;
     }
 
-    // Anything else: skip it and whatever it carries.
-    if (reader.peek() === '{') parseRuleBlock(reader);
-    else reader.next();
+    /*
+     * A word followed by `{` at the top level IS a pile declaration, and one
+     * we do not know is a pile the game would silently lose - a typo that
+     * deals a different game. That is refused. An unknown SCALAR key is only
+     * a setting from a newer csol, and is skipped so the rest still loads.
+     */
+    if (reader.peek() === '{') {
+      throw new Error(`Unknown pile type "${key}"`);
+    }
+    reader.next();
   }
 
   reader.expect('}');
