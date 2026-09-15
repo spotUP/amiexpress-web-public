@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
+import { readQuickNewFreshness } from './quicknew-freshness';
 import { config } from '../config';
 import { findCaseInsensitive, resolveExistingAncestors } from '../utils/amigafs';
 
@@ -690,6 +691,44 @@ console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
    * does, so the file written is the file read.
    */
   if (program.includes('quicknew/quicknew')) {
+    /*
+     * NOTHING UPLOADED, NOTHING TO REBUILD.
+     *
+     * The door takes about thirty seconds on the live board and runs on every
+     * logoff, and batch doors are serialised - so that time also sits in front
+     * of the next caller. It cannot move to a timer:
+     *
+     *   "it needs to be rebuilt per caller if a caller uploads something,
+     *    trading is competitive"  - the sysop, 2026-09-15
+     *
+     * and that is right. But a caller who uploaded NOTHING leaves every listing
+     * as it was, and the door then spends thirty seconds writing the bytes
+     * already on disk. Skipping only THAT run keeps the trader's guarantee
+     * exactly: the instant a listing changes - or the day turns, because the
+     * door prints today's date - the screen is stale and the door runs.
+     */
+    try {
+      const cfgArg = resolvedArgs[0]?.replace(/^"|"$/g, '');
+      if (cfgArg) {
+        const screenTarget = resolveExistingAncestors(
+          resolveAssign(redirect || 'bbs:screens/quicknew.txt')
+        );
+        const verdict = readQuickNewFreshness(
+          resolveExistingAncestors(resolveAssign(cfgArg)),
+          screenTarget,
+          (amigaPath) => resolveExistingAncestors(resolveAssign(amigaPath)),
+        );
+        if (!verdict.stale) {
+console.log(`[BatchScheduler] QuickNew: skipped - ${verdict.reason}`);
+          return;
+        }
+console.log(`[BatchScheduler] QuickNew: rebuilding - ${verdict.reason}`);
+      }
+    } catch (err: any) {
+      // A freshness check that throws must not stop the door running.
+console.warn('[BatchScheduler] QuickNew: freshness check failed, running anyway:', err?.message || err);
+    }
+
     /*
      * THE REAL 68K DOOR FIRST, ALWAYS.
      *
