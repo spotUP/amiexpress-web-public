@@ -492,9 +492,13 @@ function requestsDoor(): string {
         default: 'Bulletin_Header.txt', cfgKey: 'BulletinHeader', art: true },
     ],
   }));
-  // The door's CURRENT value lives in the saved settings, not the default.
-  fs.writeFileSync(path.join(dir, 'door.settings.values.json'),
-    JSON.stringify({ bulletinHeader: 'Bulletin_Header.txt' }));
+  // The door's CURRENT value lives in the saved settings (VALUES_FILE, which
+  // is `settings.json`), not in the default. It is deliberately DIFFERENT
+  // from the default here: a fixture whose saved value equals the default
+  // passes whether the code reads the value or the default, and proves
+  // neither.
+  fs.writeFileSync(path.join(dir, 'settings.json'),
+    JSON.stringify({ bulletinHeader: 'headers/Header3.ansi' }));
   return dir;
 }
 
@@ -506,10 +510,20 @@ describe('an art setting is a Studio slot', () => {
 
     expect(slots).toEqual([expect.objectContaining({
       section: 'setting:bulletinHeader',
-      file: 'Bulletin_Header.txt',
+      file: 'headers/Header3.ansi',   // the SAVED value, not the default
       label: 'Bulletin header art',
-      lines: 2,
+      lines: 3,
     })]);
+  });
+
+  it('falls back to the default when the sysop has saved nothing', () => {
+    const dir = requestsDoor();
+    fs.unlinkSync(path.join(dir, 'settings.json'));
+
+    const [slot] = listDoorArtSections(dir, 'REQUESTS');
+
+    expect(slot.file).toBe('Bulletin_Header.txt');
+    expect(slot.lines).toBe(2);
   });
 
   it('offers the alternates as choices', () => {
@@ -525,7 +539,7 @@ describe('an art setting is a Studio slot', () => {
 
   it('reads the whole file, bytes intact', () => {
     const dir = requestsDoor();
-    fs.writeFileSync(path.join(dir, 'Bulletin_Header.txt'), '\x1b[35m\xa6art\n', 'latin1');
+    fs.writeFileSync(path.join(dir, 'headers', 'Header3.ansi'), '\x1b[35m\xa6art\n', 'latin1');
 
     const [content] = readDoorArtSections(dir, 'REQUESTS');
 
@@ -535,16 +549,16 @@ describe('an art setting is a Studio slot', () => {
   it('writes the whole file, bytes intact', () => {
     const dir = requestsDoor();
 
-    writeDoorArtSection(dir, 'Bulletin_Header.txt', 'setting:bulletinHeader',
+    writeDoorArtSection(dir, 'headers/Header3.ansi', 'setting:bulletinHeader',
       Buffer.from('\x1b[34m\xa6new\n', 'latin1').toString('base64'), 'REQUESTS');
 
-    expect(fs.readFileSync(path.join(dir, 'Bulletin_Header.txt'), 'latin1'))
+    expect(fs.readFileSync(path.join(dir, 'headers', 'Header3.ansi'), 'latin1'))
       .toBe('\x1b[34m\xa6new\n');
   });
 
   it('reports a setting naming a file that is not there, rather than throwing', () => {
     const dir = requestsDoor();
-    fs.unlinkSync(path.join(dir, 'Bulletin_Header.txt'));
+    fs.unlinkSync(path.join(dir, 'headers', 'Header3.ansi'));
 
     const [slot] = listDoorArtSections(dir, 'REQUESTS');
 
@@ -730,7 +744,7 @@ beforeEach(() => {
         default: 'Bulletin_Header.txt', cfgKey: 'BulletinHeader', art: true },
     ],
   }));
-  fs.writeFileSync(path.join(doorDir, 'door.settings.values.json'),
+  fs.writeFileSync(path.join(doorDir, 'settings.json'),
     JSON.stringify({ bulletinHeader: 'Bulletin_Header.txt' }));
 });
 
