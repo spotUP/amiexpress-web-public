@@ -48,12 +48,13 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
 	./build/test_ui_list
 	./build/test_ui_chrome
+	./build/test_ui_screen
 	./build/test_ui_input
 	./build/test_ui_editor
 	./build/test_frame_budget
@@ -124,6 +125,10 @@ build/test_ui_profile: src/ui_profile.c tests/test_ui_profile.c include/ui_profi
 build/test_ui_list: src/ui_ansi.c src/ui_list.c src/ui_profile.c tests/test_ui_list.c include/ui_list.h include/ui_profile.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c src/ui_profile.c tests/test_ui_list.c -o $@
+
+build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ui_profile.c tests/test_ui_screen.c include/ui_screen.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_screen.c src/ui_profile.c tests/test_ui_screen.c -o $@
 
 build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c include/ui_chrome.h
 	@mkdir -p build

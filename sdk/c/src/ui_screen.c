@@ -42,6 +42,22 @@ int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
     memset(sc, 0, sizeof(*sc));
     sc->session = s;
     ansi_begin(&sc->buf, frame, cap);
+    /*
+     * THE CALLER'S CURSOR IS NOT PART OF THE DOOR'S DRAWING.
+     *
+     * A door positions every cell it paints, so wherever the terminal's own
+     * cursor lands is an accident of the last write - it sat blinking in the
+     * middle of the art, and on a caret-driven screen it competed with the
+     * door's own caret. The sysop, 2026-09-15, inside ACHIEVEC: "the cursor
+     * should be disabled inside the door".
+     *
+     * Here rather than in each door: ui_screen_close already turns it back
+     * on, so this is the other half of a pair that was only ever half
+     * written, and every C door gets it without being edited. The widgets
+     * that DO want a cursor - ui_input, ui_doc - turn it on for as long as
+     * they own the keyboard and off again after.
+     */
+    ansi_cursor(&sc->buf, 0);
     ui_screen_measure(sc);
     return 0;
 }
