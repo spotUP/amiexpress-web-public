@@ -46,6 +46,15 @@ export interface Enemy {
     targetY?: number;
     /** Moves spent on the current target, so a stale one gets re-aimed. */
     targetAge?: number;
+    /**
+     * The last Sno-Bee standing, running for a corner to escape.
+     *
+     * The arcade's own rule: "If a single Sno-Bee remains in the round, a
+     * jingle plays and the Sno-Bee accelerates in an attempt to reach a
+     * corner, where it safely fades away". It is NOT a kill - reaching the
+     * corner ends the round and scores the player nothing for it.
+     */
+    fleeing?: boolean;
 }
 export interface Block {
     x: number;

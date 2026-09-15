@@ -19,6 +19,7 @@ const TEST_MODULES = [
     './levels.test',
     './ai.test',
     './mechanics.test',
+    './last-enemy-flees.test',
 ];
 (async () => {
     let passed = 0;

@@ -397,6 +397,40 @@ class PengoGame {
             }
         }
     }
+    /**
+     * The one Sno-Bee left walking, or null while it has company.
+     *
+     * Counted over enemies that are still IN the round - a crushed one is
+     * mid-squash and a dead one is already gone, but a stunned or hatching
+     * one is very much still there and means the survivor is not alone.
+     * Eggs count too: a Sno-Bee is not the last while one is still hatching.
+     */
+    lastWalkingEnemy() {
+        if (this.data.eggs.length > 0)
+            return null;
+        const inPlay = this.data.enemies.filter(e => e.state !== 'dead' && e.state !== 'crushed');
+        if (inPlay.length !== 1)
+            return null;
+        return inPlay[0].state === 'walking' ? inPlay[0] : null;
+    }
+    /** The interior corner this Sno-Bee is closest to, by walking distance. */
+    nearestCorner(at) {
+        const corners = [
+            { x: 1, y: 1 },
+            { x: constants_1.GRID_WIDTH - 2, y: 1 },
+            { x: 1, y: constants_1.GRID_HEIGHT - 2 },
+            { x: constants_1.GRID_WIDTH - 2, y: constants_1.GRID_HEIGHT - 2 },
+        ];
+        return corners.reduce((best, corner) => {
+            const d = Math.abs(corner.x - at.x) + Math.abs(corner.y - at.y);
+            const bestD = Math.abs(best.x - at.x) + Math.abs(best.y - at.y);
+            return d < bestD ? corner : best;
+        });
+    }
+    /** A fleeing Sno-Bee's move timer: faster, never zero. See FLEE_SPEED_DIVISOR. */
+    fleeSpeedFor(enemySpeed) {
+        return Math.max(1, Math.floor(enemySpeed / constants_1.FLEE_SPEED_DIVISOR));
+    }
     update() {
         this.data.lastUpdateTime = Date.now();
         this.data.frameCount++;
@@ -470,8 +504,42 @@ class PengoGame {
                 }
                 continue;
             }
+            /*
+             * THE LAST SNO-BEE RUNS FOR A CORNER.
+             *
+             * The arcade's rule, and the one behaviour here that changes how a
+             * round can end: "If a single Sno-Bee remains in the round, a jingle
+             * plays and the Sno-Bee accelerates in an attempt to reach a corner,
+             * where it safely fades away ... ending the round if it reaches a
+             * corner." So it escapes, the player gets no kill for it, and the
+             * round ends anyway.
+             *
+             * Only a WALKING one flees - a stunned Sno-Bee is the player's to
+             * crush, and letting it stroll off while frozen would take a kill
+             * away that the player had already earned.
+             */
+            if (this.lastWalkingEnemy() === enemy) {
+                if (!enemy.fleeing) {
+                    enemy.fleeing = true;
+                    // The arcade plays a jingle here. `warp` is the nearest thing the
+                    // shared cue vocabulary has to "something is getting away".
+                    this.cues.push('warp');
+                }
+                const corner = this.nearestCorner(enemy);
+                enemy.targetX = corner.x;
+                enemy.targetY = corner.y;
+                enemy.targetAge = 0;
+                if (enemy.x === corner.x && enemy.y === corner.y) {
+                    // Faded away. Not a kill: no score, no crush animation.
+                    enemy.state = 'dead';
+                    continue;
+                }
+            }
             enemy.moveTimer++;
-            if (enemy.moveTimer < config.enemySpeed)
+            const speed = enemy.fleeing
+                ? this.fleeSpeedFor(config.enemySpeed)
+                : config.enemySpeed;
+            if (enemy.moveTimer < speed)
                 continue;
             enemy.moveTimer = 0;
             // AI: head for a random point near Pengo, not Pengo's own cell -
@@ -480,16 +548,19 @@ class PengoGame {
             // reference clone, and than the arcade itself. Re-picked once the
             // enemy has reached its current target (or never had one).
             enemy.targetAge = (enemy.targetAge ?? 0) + 1;
-            if (enemy.targetX === undefined || enemy.targetY === undefined ||
-                (enemy.x === enemy.targetX && enemy.y === enemy.targetY) ||
-                enemy.targetAge >= constants_1.AI_RETARGET_MOVES) {
+            if (!enemy.fleeing &&
+                (enemy.targetX === undefined || enemy.targetY === undefined ||
+                    (enemy.x === enemy.targetX && enemy.y === enemy.targetY) ||
+                    enemy.targetAge >= constants_1.AI_RETARGET_MOVES)) {
                 enemy.targetAge = 0;
                 const target = (0, ai_1.gaussianTargetNear)(this.data.pengo, constants_1.AI_TARGET_SIGMA, { minX: 1, maxX: constants_1.GRID_WIDTH - 2, minY: 1, maxY: constants_1.GRID_HEIGHT - 2 });
                 enemy.targetX = target.x;
                 enemy.targetY = target.y;
             }
-            const dx = enemy.targetX - enemy.x;
-            const dy = enemy.targetY - enemy.y;
+            // Both are set by now: the retarget above fills them for a chaser, and
+            // the flee branch fills them for the runner.
+            const dx = (enemy.targetX ?? enemy.x) - enemy.x;
+            const dy = (enemy.targetY ?? enemy.y) - enemy.y;
             let moveDir;
             if (Math.abs(dx) > Math.abs(dy)) {
                 moveDir = dx > 0 ? 'right' : 'left';

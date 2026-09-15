@@ -183,6 +183,17 @@ export const AI_RETARGET_MOVES = 6;
  */
 export const ENEMY_BREAK_BLOCK_CHANCE = 0.5;
 
+/**
+ * How much the LAST Sno-Bee speeds up while running for a corner.
+ *
+ * The arcade "accelerates" it; it does not say by how much, so this is the
+ * smallest honest reading - it moves twice as often - rather than a number
+ * invented to feel right. `fleeSpeedFor` floors it at 1: a zero move-timer
+ * would step the Sno-Bee on every frame of every tick, which is not
+ * acceleration, it is teleporting.
+ */
+export const FLEE_SPEED_DIVISOR = 2;
+
 export const LEVEL_CONFIGS: LevelConfig[] = [
   { enemies: 3, eggs: 0, iceBlocks: 53, enemySpeed: 10, timeLimit: 180 },
   { enemies: 4, eggs: 1, iceBlocks: 48, enemySpeed: 9, timeLimit: 160 },

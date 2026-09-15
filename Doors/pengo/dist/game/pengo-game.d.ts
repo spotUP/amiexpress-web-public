@@ -2,7 +2,7 @@
  * Pengo - Game Engine
  * Core game logic for the 1982 Sega arcade puzzle game
  */
-import { PengoData, Direction } from './types';
+import { PengoData, Direction, Enemy } from './types';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 export declare class PengoGame {
@@ -93,6 +93,25 @@ export declare class PengoGame {
      * flag still false after the first real alignment.
      */
     private checkDiamondAlignment;
+    /**
+     * The one Sno-Bee left walking, or null while it has company.
+     *
+     * Counted over enemies that are still IN the round - a crushed one is
+     * mid-squash and a dead one is already gone, but a stunned or hatching
+     * one is very much still there and means the survivor is not alone.
+     * Eggs count too: a Sno-Bee is not the last while one is still hatching.
+     */
+    lastWalkingEnemy(): Enemy | null;
+    /** The interior corner this Sno-Bee is closest to, by walking distance. */
+    nearestCorner(at: {
+        x: number;
+        y: number;
+    }): {
+        x: number;
+        y: number;
+    };
+    /** A fleeing Sno-Bee's move timer: faster, never zero. See FLEE_SPEED_DIVISOR. */
+    fleeSpeedFor(enemySpeed: number): number;
     update(): void;
     private updateEnemies;
     private updateEggs;

@@ -3,7 +3,7 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SLIDE_TICKS_PER_CELL = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.ARCADE_ROWS = exports.ARCADE_COLS = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.FLEE_SPEED_DIVISOR = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SLIDE_TICKS_PER_CELL = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.ARCADE_ROWS = exports.ARCADE_COLS = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
 exports.crushComboScore = crushComboScore;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
@@ -165,6 +165,16 @@ exports.AI_RETARGET_MOVES = 6;
  * coinflip per blocked direction).
  */
 exports.ENEMY_BREAK_BLOCK_CHANCE = 0.5;
+/**
+ * How much the LAST Sno-Bee speeds up while running for a corner.
+ *
+ * The arcade "accelerates" it; it does not say by how much, so this is the
+ * smallest honest reading - it moves twice as often - rather than a number
+ * invented to feel right. `fleeSpeedFor` floors it at 1: a zero move-timer
+ * would step the Sno-Bee on every frame of every tick, which is not
+ * acceleration, it is teleporting.
+ */
+exports.FLEE_SPEED_DIVISOR = 2;
 exports.LEVEL_CONFIGS = [
     { enemies: 3, eggs: 0, iceBlocks: 53, enemySpeed: 10, timeLimit: 180 },
     { enemies: 4, eggs: 1, iceBlocks: 48, enemySpeed: 9, timeLimit: 160 },

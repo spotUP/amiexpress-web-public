@@ -158,6 +158,16 @@ export declare const AI_RETARGET_MOVES = 6;
  * coinflip per blocked direction).
  */
 export declare const ENEMY_BREAK_BLOCK_CHANCE = 0.5;
+/**
+ * How much the LAST Sno-Bee speeds up while running for a corner.
+ *
+ * The arcade "accelerates" it; it does not say by how much, so this is the
+ * smallest honest reading - it moves twice as often - rather than a number
+ * invented to feel right. `fleeSpeedFor` floors it at 1: a zero move-timer
+ * would step the Sno-Bee on every frame of every tick, which is not
+ * acceleration, it is teleporting.
+ */
+export declare const FLEE_SPEED_DIVISOR = 2;
 export declare const LEVEL_CONFIGS: LevelConfig[];
 export declare function getLevelConfig(level: number): LevelConfig;
 export declare const MENU_OPTIONS: string[];
