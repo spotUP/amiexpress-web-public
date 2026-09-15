@@ -231,6 +231,26 @@ export function DoorsPage() {
   };
 
   const handleEdit = (door: Door) => {
+    /*
+     * The door's own flags come with it. They are tooltypes underneath, which
+     * the sysop rightly does not care about - "to them its just settings" -
+     * so the dialog that edits a door loads them rather than sending him to a
+     * second page to find them.
+     *
+     * Failure is quiet on purpose: a door whose .info cannot be read still
+     * has a registration worth editing, and the flag sections simply come up
+     * empty rather than blocking the dialog.
+     */
+    void (async () => {
+      try {
+        const response = await apiClient.getInfoFile(`Commands/BBSCmd/${door.door_command}.info`);
+        setTooltypes(response.data?.tooltypes || []);
+        setInfoDirty(false);
+      } catch {
+        setTooltypes([]);
+        setInfoDirty(false);
+      }
+    })();
     setFormData({
       door_name: door.door_name,
       door_command: door.door_command,
@@ -253,12 +273,148 @@ export function DoorsPage() {
    */
   const pendingSettingsSave = useRef<(() => Promise<unknown>) | null>(null);
 
+  /**
+   * The door's SETTINGS, rendered wherever a sysop is looking at that door.
+   *
+   * These are tooltypes underneath, and the sysop does not care: "why hide the
+   * tooltypes in a subpage? show it all in the dialog instead, the user doesnt
+   * really care if its tooltypes or not, to them its just settings"
+   * (2026-09-15). So the Edit dialog renders them too, and the raw key/value
+   * table stays where it is for the keys nothing has a form for yet.
+   *
+   * ONE definition called from both dialogs, not a copy in each: they write
+   * the same `tooltypes` state and two of them would be two ways to disagree
+   * about the same file - the reason the pointer-not-a-second-editor note
+   * below exists at all.
+   */
+  const doorFlagSections = () => (
+    <>
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">Command Flags</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  Per-command switches AmiExpress reads from this command's own tooltypes.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {COMMAND_FLAG_TOOLTYPES.map((flag) => (
+                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isCommandFlagSet(flag.key)}
+                        onChange={(e) => setCommandFlag(flag.key, e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-content-primary text-sm">{flag.label}</span>
+                        <span className="block text-content-secondary text-xs">{flag.help}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label htmlFor="door-flag-pass-params" className="label">Pass Parameters</label>
+                    <input
+                      id="door-flag-pass-params"
+                      type="number"
+                      value={getCommandFlagValue('PASS_PARAMETERS')}
+                      onChange={(e) => setCommandFlagValue('PASS_PARAMETERS', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="blank = not set"
+                    />
+                    <p className="text-xs text-content-secondary mt-1">
+                      Only takes effect when INTERNAL is also set on this icon. 1 skips
+                      running the command entirely; any value above 0 also appends the
+                      caller's own command-line parameters.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="door-flag-mimic-version" className="label">Mimic Version</label>
+                    <input
+                      id="door-flag-mimic-version"
+                      type="text"
+                      value={getCommandFlagValue('MIMICVER')}
+                      onChange={(e) => setCommandFlagValue('MIMICVER', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="blank = not set"
+                    />
+                    <p className="text-xs text-content-secondary mt-1">
+                      The AmiExpress version this command reports itself as.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">C64 / PETSCII</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  How this door behaves for a 40-column caller. A door with none of these
+                  set is refused on a C64 rather than shown a broken screen.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {C64_FLAG_TOOLTYPES.map((flag) => (
+                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isTruthyFlagSet(flag.key)}
+                        onChange={(e) => setTruthyFlag(flag.key, e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-content-primary text-sm">{flag.label}</span>
+                        <span className="block text-content-secondary text-xs">{flag.help}</span>
+                        {/*
+                          The raw key, quietly. A sysop reading a forum post or
+                          an old handoff knows the NAME, not the label, and has
+                          to be able to find it here - the whole reason the
+                          dialog names these at all.
+                        */}
+                        <code className="block text-content-secondary text-[10px] opacity-60">{flag.key}</code>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {C64_VALUE_TOOLTYPES.map((field) => (
+                    <div key={field.key}>
+                      <label htmlFor={`door-c64-${field.key}`} className="label">{field.label}</label>
+                      <input
+                        id={`door-c64-${field.key}`}
+                        type="number"
+                        value={getCommandFlagValue(field.key)}
+                        onChange={(e) => setCommandFlagValue(field.key, e.target.value)}
+                        className="input-field w-full"
+                        placeholder={field.placeholder}
+                      />
+                      <p className="text-xs text-content-secondary mt-1">
+                        {field.help} <code className="opacity-60">{field.key}</code>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+    </>
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Settings first: if they fail, the message names the setting, and the
     // door's own fields have not been touched yet.
+    /*
+     * The flags save with the door, for the reason the settings already do:
+     * "the dialog has two save buttons ... the first sysop to use the feature
+     * typed an address, pressed Update Door, and lost it". A sysop who ticks
+     * a C64 box and presses Update Door must not lose the tick.
+     */
+    const saveFlags = editingDoor && infoDirty
+      ? apiClient.updateInfoFile(`Commands/BBSCmd/${editingDoor.door_command}.info`, tooltypes)
+      : null;
+
     const saveSettings = pendingSettingsSave.current;
+    if (saveFlags) {
+      await saveFlags;
+      setInfoDirty(false);
+    }
     if (saveSettings) {
       try {
         await saveSettings();
@@ -861,10 +1017,11 @@ export function DoorsPage() {
               */}
               {editingDoor && (
                 <div className="pt-6 border-t border-border">
+                  {doorFlagSections()}
                   <p className="text-content-secondary text-sm">
-                    Tooltypes - what AmiExpress itself reads, including flags
-                    like <code>C64_ADAPT</code> - live in this door's{' '}
-                    <code>{editingDoor.door_command}.info</code>.
+                    Anything without a field of its own - the rest of{' '}
+                    <code>{editingDoor.door_command}.info</code> - is in the raw
+                    tooltype table.
                   </p>
                   <button
                     type="button"
@@ -952,100 +1109,7 @@ export function DoorsPage() {
                 used to have to know the exact tooltype spelling to set any of
                 them by hand.
               */}
-              <div className="mb-6 border-b border-border/40 pb-6">
-                <h3 className="text-lg text-accent mb-1">Command Flags</h3>
-                <p className="text-content-secondary text-sm mb-4">
-                  Per-command switches AmiExpress reads from this command's own tooltypes.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {COMMAND_FLAG_TOOLTYPES.map((flag) => (
-                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isCommandFlagSet(flag.key)}
-                        onChange={(e) => setCommandFlag(flag.key, e.target.checked)}
-                        className="mt-0.5 h-4 w-4 accent-accent"
-                      />
-                      <span>
-                        <span className="block text-content-primary text-sm">{flag.label}</span>
-                        <span className="block text-content-secondary text-xs">{flag.help}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label htmlFor="door-flag-pass-params" className="label">Pass Parameters</label>
-                    <input
-                      id="door-flag-pass-params"
-                      type="number"
-                      value={getCommandFlagValue('PASS_PARAMETERS')}
-                      onChange={(e) => setCommandFlagValue('PASS_PARAMETERS', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="blank = not set"
-                    />
-                    <p className="text-xs text-content-secondary mt-1">
-                      Only takes effect when INTERNAL is also set on this icon. 1 skips
-                      running the command entirely; any value above 0 also appends the
-                      caller's own command-line parameters.
-                    </p>
-                  </div>
-                  <div>
-                    <label htmlFor="door-flag-mimic-version" className="label">Mimic Version</label>
-                    <input
-                      id="door-flag-mimic-version"
-                      type="text"
-                      value={getCommandFlagValue('MIMICVER')}
-                      onChange={(e) => setCommandFlagValue('MIMICVER', e.target.value)}
-                      className="input-field w-full"
-                      placeholder="blank = not set"
-                    />
-                    <p className="text-xs text-content-secondary mt-1">
-                      The AmiExpress version this command reports itself as.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-6 border-b border-border/40 pb-6">
-                <h3 className="text-lg text-accent mb-1">C64 / PETSCII</h3>
-                <p className="text-content-secondary text-sm mb-4">
-                  How this door behaves for a 40-column caller. A door with none of these
-                  set is refused on a C64 rather than shown a broken screen.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {C64_FLAG_TOOLTYPES.map((flag) => (
-                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isTruthyFlagSet(flag.key)}
-                        onChange={(e) => setTruthyFlag(flag.key, e.target.checked)}
-                        className="mt-0.5 h-4 w-4 accent-accent"
-                      />
-                      <span>
-                        <span className="block text-content-primary text-sm">{flag.label}</span>
-                        <span className="block text-content-secondary text-xs">{flag.help}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {C64_VALUE_TOOLTYPES.map((field) => (
-                    <div key={field.key}>
-                      <label htmlFor={`door-c64-${field.key}`} className="label">{field.label}</label>
-                      <input
-                        id={`door-c64-${field.key}`}
-                        type="number"
-                        value={getCommandFlagValue(field.key)}
-                        onChange={(e) => setCommandFlagValue(field.key, e.target.value)}
-                        className="input-field w-full"
-                        placeholder={field.placeholder}
-                      />
-                      <p className="text-xs text-content-secondary mt-1">{field.help}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {doorFlagSections()}
 
               <div className="mb-4 flex justify-between items-center">
                 <p className="text-content-secondary text-sm">

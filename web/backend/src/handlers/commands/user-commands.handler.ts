@@ -27,7 +27,7 @@ import * as path from 'path';
 import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
-import { emitText, clearTheScreen } from '../../utils/output.util';
+import { emitText } from '../../utils/output.util';
 
 interface Conference {
   id: number;
@@ -1128,20 +1128,22 @@ export async function handleUploadCommand(socket: any, session: BBSSession): Pro
 console.log('[ENV] Uploading');
 
   /*
-   * CLEAR FIRST, so the conference's own upload art lands on a blank screen.
+   * NO CLEAR HERE. express.e:18981-19016 is the whole sequence and it clears
+   * NOWHERE: NOUPLOADS, then SCREEN_UPLOAD, then the UPLOADING/space/filename
+   * lines straight after it.
    *
-   * The sysop, 2026-09-15: "clear. the. fucking. screen. before. drawing. the.
-   * upload. stuff." The first attempt cleared inside the upload INTERFACE,
-   * which runs after the screens below - so it wiped the very art he had
-   * asked to be able to see, and he got a clean screen with no UPLOADMSG on
-   * it. The clear belongs ahead of everything this command draws.
+   * A clear was added here on 2026-09-15 and taken out again the same day.
+   * Two things were wrong with it. It is not what AmiExpress does - the sysop
+   * asked for 1:1 once he saw the result - and it did not even land where it
+   * was written: `emitText` BUFFERS, while `displayScreen` emits straight to
+   * the socket, so a clear queued before the art flushed AFTER it. He watched
+   * the upload art draw, get wiped, and the text appear on the empty screen.
    *
-   * express.e does not clear here (its uploadDesc opens with cleanItUp, the
-   * node WORK DIRECTORY, express.e:17807) and it does not need to: its output
-   * scrolls up a terminal holding nothing else. This board draws over
-   * full-screen art that stays put.
+   * The mess that prompted it is handled where it belongs: each line of the
+   * upload block erases the rest of its own row (`eraseRestOfLine`), so
+   * nothing inherits the tail of whatever sat behind it, and the art the
+   * conference supplies stays on screen exactly as express.e leaves it.
    */
-  emitText(socket, clearTheScreen(socket));
 
   // express.e:18981 - IF displayScreen(SCREEN_NOUPLOADS) THEN RETURN.
   //

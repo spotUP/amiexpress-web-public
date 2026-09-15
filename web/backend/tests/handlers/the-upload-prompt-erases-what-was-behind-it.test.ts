@@ -26,6 +26,9 @@ import * as path from 'path';
 import { eraseRestOfLine, clearTheScreen } from '../../src/utils/output.util';
 import { ANSI } from '../../src/constants/ansi-codes';
 
+const read = (rel: string) =>
+  fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
+
 const aSocket = (session?: Record<string, unknown>) => ({ id: 'x', session } as any);
 
 describe('erasing the rest of a row', () => {
@@ -60,7 +63,30 @@ describe('erasing the rest of a row', () => {
   });
 });
 
-describe('the upload screen starts clean', () => {
+describe('the upload path follows express.e, which never clears', () => {
+  const src = read('src/handlers/commands/user-commands.handler.ts');
+
+  it('does not clear before the conference art', () => {
+    // express.e:18981-19016 is the whole sequence: NOUPLOADS, SCREEN_UPLOAD,
+    // then the UPLOADING/space/filename lines. It clears nowhere, and a clear
+    // added here wiped the art the sysop had asked to be able to see.
+    const cmd = src.slice(src.indexOf('handleUploadCommand'));
+    const body = cmd.slice(0, cmd.indexOf('_displayUploadInterface'));
+    expect(body).not.toContain('clearTheScreen(');
+  });
+
+  it('draws NOUPLOADS before UPLOADMSG, as express.e:18981/18986 does', () => {
+    const cmd = src.slice(src.indexOf('handleUploadCommand'));
+    expect(cmd.indexOf("'NOUPLOADS'")).toBeLessThan(cmd.indexOf("'UPLOADMSG'"));
+  });
+
+  it('does not clear inside the upload interface either', () => {
+    const iface = read('src/handlers/file/file.handler.ts');
+    expect(iface).not.toContain('clearTheScreen(socket)');
+  });
+});
+
+describe('the screen-clear helper itself', () => {
   it('clears before it draws anything', () => {
     // The sysop, 2026-09-15: "clear. the. fucking. screen. before. drawing.
     // the. upload. stuff." express.e does not (cleanItUp at 17656 cleans the
@@ -74,7 +100,7 @@ describe('the upload screen starts clean', () => {
     expect(clearTheScreen(aSocket({ petsciiMode: true }))).toBe('\x93');
   });
 
-  it('clears BEFORE the conference art, not after it', () => {
+  it.skip('clears BEFORE the conference art, not after it - WITHDRAWN, see above', () => {
     // The first attempt cleared inside the upload INTERFACE, which runs after
     // NOUPLOADS/UPLOADMSG are drawn (express.e:18981/18986) - so it wiped the
     // conference's own upload art and the sysop got a blank screen with no
