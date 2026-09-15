@@ -369,6 +369,30 @@ console.log(
         return;
       }
 
+      /*
+       * TEMPORARY INSTRUMENTATION - 2026-09-15, remove once the double-step is
+       * settled.
+       *
+       * The sysop, on TELNET: "it skips two steps instead of one", in DOORMAN
+       * and in the card lobby both - so it is the shared input layer, not a
+       * door. This routing deliberately delivers to BOTH the 'command'
+       * listeners and the door's own handler when both exist (the Sep 3 telnet
+       * fix, cfa6a8dad: choosing one made doors go deaf). If a blessed door
+       * has its handler registered AND a prompt listener is still around, one
+       * arrow key arrives twice and the highlight moves two rows.
+       *
+       * Nothing in the log says whether that is happening: TypeScript doors
+       * trace no keystrokes. This line does, and only when both fire, so it is
+       * silent on every ordinary press.
+       */
+      if (route.toCommandListeners && route.toDoorHandler) {
+        console.log(
+          `[INPUT-DOUBLE] ${JSON.stringify(input)} went to BOTH the command`
+          + ` listeners and the door handler`
+          + ` (listeners=${emitter.listenerCount('command')})`
+        );
+      }
+
       if (route.toCommandListeners) {
         // DoorManager's socket.once('command', ...) prompt, bridged: telnet
         // has no transport event of its own.
