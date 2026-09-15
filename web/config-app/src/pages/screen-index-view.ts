@@ -650,6 +650,11 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         versions: versions.length,
         /** The versions this card stands in front of, most-read first. */
         otherVersions,
+        /** Scopes reading THIS version, and those reading the others - so the
+         *  card can say "38 of 41" rather than leaving the artist to wonder
+         *  how much of the board the drift actually covers. */
+        scopes: scopesOf(copies),
+        otherScopes: otherVersions.reduce((n, other) => n + scopesOf(other), 0),
         detail: copies.length > 1
           ? `${detail} - and ${copies.length - 1} identical ${copies.length === 2 ? 'copy' : 'copies'}`
           : detail,

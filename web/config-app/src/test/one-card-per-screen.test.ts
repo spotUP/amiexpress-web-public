@@ -84,6 +84,19 @@ it('leaves two DIFFERENT screens as two cards', () => {
   expect(items).toHaveLength(2);
 });
 
+it('counts the scopes on each side of the drift', () => {
+  // The card says "38 of 41", so both halves have to come from the grouping
+  // rather than be guessed in the component.
+  const [card] = build({
+    'Node0/logoff.txt': file('Node0/logoff.txt', 'aaa', 'LOGOFF', 38),
+    'Node7/logoff.txt': file('Node7/logoff.txt', 'bbb', 'LOGOFF', 1),
+    'Conf4/logoff.txt': file('Conf4/logoff.txt', 'ccc', 'LOGOFF', 2),
+  });
+
+  expect(card.scopes).toBe(38);
+  expect(card.otherScopes).toBe(3);
+});
+
 it('says one version for a screen that has not drifted', () => {
   const [card] = build({
     'Node0/join.txt': file('Node0/join.txt', 'aaa', 'JOIN', 40),

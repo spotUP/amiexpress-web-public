@@ -93,6 +93,10 @@ export interface GalleryItem {
    * recognise as the same screen.
    */
   otherVersions?: unknown[];
+  /** Scopes reading the version this card stands for. */
+  scopes?: number;
+  /** Scopes reading the OTHER versions of the same screen. */
+  otherScopes?: number;
   /**
    * Which of the three formats this screen HAS, so an artist can see at a
    * glance how far along it is. A caller is served by extension - the loader
@@ -271,6 +275,23 @@ function GalleryCard(
         {item.detail && (
           <span className={`block truncate ${item.problem ? 'text-status-warn' : 'text-content-secondary'}`}>
             {item.detail}
+          </span>
+        )}
+        {(item.versions ?? 1) > 1 && (
+          /*
+           * DRIFT, said once and quietly.
+           *
+           * This card stands for the version the most scopes read; the others
+           * are the same screen edited somewhere else and never reconciled.
+           * Without this line the grouping would simply HIDE them, and a node
+           * serving different art would have no explanation anywhere - which
+           * is the failure this board keeps finding.
+           */
+          <span className="block truncate text-status-warn" data-testid="drift">
+            {item.versions} versions
+            {item.scopes !== undefined && item.otherScopes !== undefined
+              ? ` - serving ${item.scopes} of ${item.scopes + item.otherScopes} scopes`
+              : ''}
           </span>
         )}
         {item.credit && (
