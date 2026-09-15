@@ -4618,12 +4618,27 @@ console.log(' Command text stored:', session.commandText);
           handleCommand(socket, session, '');  // Trigger process command
         }, 0);
       } else {
-        // express.e:28228 - Empty command, just redisplay menu
+        /*
+         * express.e:28228 - Empty command, just redisplay menu.
+         *
+         * BYPASSES THE DEBOUNCE, because this is a keystroke and not a race.
+         * `displayMainMenu` drops any call within 500ms of the last one, which
+         * exists for "rapid door-completion/state-transition races" and has no
+         * express.e equivalent. A caller pressing Return twice is not a race -
+         * express.e redraws the menu every time - and the live board showed the
+         * guard eating exactly that: two separate `handleCommand data:"\r"`
+         * entries, the second answered with
+         * `SKIPPED (debounce - last menu was 129 ms ago)`. The sysop pressed a
+         * key and the board did nothing.
+         *
+         * Only this path is exempted. The races the debounce was written for
+         * are internal callers, and they still go through it.
+         */
 console.log(' Empty command, redisplaying menu');
         session.menuPause = false;
         // Immediately display the menu/prompt instead of waiting for another key
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        await menuDisplayMainMenu(socket, session);
+        await menuDisplayMainMenu(socket, session, false, /* bypassDebounce */ true);
       }
     }
     // express.e:2236-2400 lineInput supports curpos-based editing.
