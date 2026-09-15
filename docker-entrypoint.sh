@@ -840,10 +840,46 @@ else
         done
     done
 
+    # A 68K DOOR WRITES ITS STATE BESIDE ITS BINARY, because that is how an
+    # Amiga door works - there is no `data/` convention to exclude and no
+    # manifest to read. Those files are tracked in git, so the image ships
+    # them, so the blanket tar above put the image's copy back on top of the
+    # live one on EVERY deploy. The 2026-09-08 backup audit found ten of them
+    # and they have been reverting ever since:
+    # thoughts/shared/research/2026-09-08_bbs-backup-and-recovery-audit.md
+    #
+    # VOLUME-OWNED, not "the image leads until the sysop takes it over" - the
+    # rule the cfg files and Commands use is right for CONFIGURATION and wrong
+    # for STATE. A newer `mrcusers.dat` in the image is not an upgrade to the
+    # board's roster, it is the sample the door shipped with; overwriting a
+    # live high-score table with it is never what anyone wanted. So: seeded on
+    # a board that has none, never written again. Same rule this file applies
+    # to Access/.
+    #
+    # An explicit list, and it has the limitation that an explicit list always
+    # has: a NEW door that writes beside its binary needs a line here. The cfg
+    # files escaped that by being declared in each door.settings.json, and a
+    # door that HAS a manifest should say so there rather than be added below -
+    # but six of these nine are 68K doors with no manifest at all, and giving
+    # them one purely for this would put an empty settings form in the admin
+    # for doors that have no settings.
+    #
+    # `Kickboxing/Fighters` is a directory; the rest are files.
+    DOOR_STATE_PATHS="mrc/mrcusers.dat mrc/mrcstat1 mrc/mrcstat2 STNG/HISCORES Kickboxing/KB.LChamp Kickboxing/Fighters ustats/stats dRE/dRE!WAll/dRE!WAll.dAtA zOOtILITY/zOOsTAT"
+    for rel in $DOOR_STATE_PATHS; do
+        [ -e "$DEFAULT_DATA_DIR/Doors/$rel" ] || continue
+        echo "./$rel" >> "$DOOR_CFG_EXCLUDES"
+        # A directory needs its contents named too - busybox tar does not
+        # always take the parent as covering what is under it.
+        if [ -d "$DEFAULT_DATA_DIR/Doors/$rel" ]; then
+            echo "./$rel/*" >> "$DOOR_CFG_EXCLUDES"
+        fi
+    done
+
     for sync_dir in Doors Screens Libs C; do
         [ -d "$DEFAULT_DATA_DIR/$sync_dir" ] || continue
 
-        # Only the Doors pass has cfg files to hold back.
+        # Only the Doors pass has cfg and state files to hold back.
         if [ "$sync_dir" = "Doors" ]; then
             SYNC_EXCLUDE_FROM="$DOOR_CFG_EXCLUDES"
         else
@@ -886,6 +922,26 @@ else
 
         echo "[Entrypoint]   Synced $sync_dir from image"
     done
+
+    # The state files the tar was told to leave alone: seeded only when the
+    # board has none, so a fresh install still gets a working door and an
+    # existing board keeps what its callers built.
+    DOOR_STATE_SEEDED=0
+    for rel in $DOOR_STATE_PATHS; do
+        src="$DEFAULT_DATA_DIR/Doors/$rel"
+        dst="$BBS_DATA_DIR/Doors/$rel"
+        [ -e "$src" ] || continue
+        if [ ! -e "$dst" ]; then
+            mkdir -p "$(dirname "$dst")"
+            cp -r "$src" "$dst" && DOOR_STATE_SEEDED=$((DOOR_STATE_SEEDED + 1))
+            echo "[Entrypoint]   [VOLUME-OWNED] Doors/$rel: seeded from image (first run)"
+        fi
+    done
+    # `[ ... ] && echo` is not an if: it exits 1 when the test is false, and
+    # under `set -e` that ends the entrypoint on any board that seeded a file.
+    if [ "$DOOR_STATE_SEEDED" -eq 0 ]; then
+        echo "[Entrypoint]   [VOLUME-OWNED] door state: all present, none overwritten"
+    fi
 
     # Now the cfg files the tar was told to leave alone, the tracked way.
     echo "[Entrypoint] Syncing door settings files (tracked)..."
