@@ -27,6 +27,21 @@ import { beginLogoff } from '../server/logoff';
 export const DEFAULT_DAILY_TIME_LIMIT_SECONDS = 3600;
 
 /**
+ * Which AmiExpress day a moment belongs to (express.e:529).
+ *
+ *     currDay := Div(currTime-21600,86400)
+ *
+ * A day turns at 06:00 UTC. That 21600 is not decoration: a board's "daily"
+ * limits are meant to reset while the board is QUIET, not at midnight when
+ * somebody is mid-download. We compared `toDateString()` values instead,
+ * which rolls at the SERVER's local midnight - a different instant, and one
+ * that moves when the host's timezone does.
+ */
+export function amiExpressDay(unixSeconds: number): number {
+  return Math.floor((unixSeconds - 21600) / 86400);
+}
+
+/**
  * Update time used in session based on elapsed time since last update.
  * Based on express.e:525-554 (PROC updateTimeUsed)
  *
@@ -80,14 +95,15 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
     }
   }
 
-  // Check if new day (express.e:531-542)
-  // Amiga uses "day since epoch minus 6 hours" to handle timezone
-  // For simplicity, we check if calendar day changed
-  const logonDay = new Date(session.logonTime * 1000).toDateString();
-  const currDay = new Date(currTime * 1000).toDateString();
+  // Check if new day (express.e:531-542), by express.e's OWN day number
+  // rather than the server's local calendar - see amiExpressDay().
+  const currDay = amiExpressDay(currTime);
+  if (session.lastAccountingDay === undefined) {
+    session.lastAccountingDay = amiExpressDay(session.logonTime);
+  }
 
-  if (logonDay !== currDay) {
-    // New day - reset time used (express.e:534-541)
+  if (session.lastAccountingDay !== currDay) {
+    // New day - give the allowances back (express.e:534-541)
     // timeTotal := timeLimit (both in seconds)
     session.user.timeTotal = session.user.timeLimit;
     session.user.timeUsed = 0;
@@ -96,7 +112,26 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
     // so `chatRemain := chatLimit` is `chatUsed := 0` here. Without it the
     // allowance below could only ever run out.
     session.user.chatUsed = 0;
-    session.logonTime = currTime;
+    /*
+     * AND THE DOWNLOAD ALLOWANCE (express.e:535, `dailyBytesDld:=0`).
+     *
+     * Nothing in this codebase reset it. The only assignments to zero are in
+     * the user.data serialisers, which hardcode it on every write - so the
+     * counter only ever grew, and `file-status.handler.ts:154` computes
+     * `bytesAvail = todaysBytesLimit - dailyBytesDld`. A caller who reached
+     * their daily download limit was blocked by it FOR EVER, with no way
+     * back short of a sysop editing the account.
+     */
+    session.user.dailyBytesDld = 0;
+    session.lastAccountingDay = currDay;
+    /*
+     * `logonTime` STAYS PUT, where express.e:540 moves it to the day start.
+     * Ours is read by two other things as the real moment this caller logged
+     * on - mci-dispatch.ts:261 renders it to them, clean-playpen.util.ts:44
+     * attributes playpen files by it - and a logon time of 06:00 would
+     * misreport the first and make the second claim files that are not his.
+     * The day itself is tracked above instead.
+     */
     session.lastTimeUpdate = currTime;
   }
 

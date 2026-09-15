@@ -137,7 +137,20 @@ describe('Time Tracking Utility Functions', () => {
 
       expect(mockSession.user!.timeUsed).toBe(0);
       expect(mockSession.user!.timeTotal).toBe(mockSession.user!.timeLimit);
-      expect(mockSession.logonTime).toBe(Math.floor(day2 / 1000));
+      /*
+       * CHANGED 2026-09-15, and the change is the point rather than a
+       * concession to make a red test green.
+       *
+       * This used to assert that a rollover MOVES logonTime, mirroring
+       * express.e:540. Two other readers of session.logonTime take it as the
+       * real moment this caller logged on - mci-dispatch.ts:261 renders it to
+       * them, clean-playpen.util.ts:44 decides from it which playpen files
+       * are theirs - so moving it misreported one and widened the other's net
+       * over files that were not his. The day is tracked in
+       * `lastAccountingDay` now, and logonTime means what its two readers
+       * already believed it meant.
+       */
+      expect(mockSession.logonTime).toBe(Math.floor(day1 / 1000));
     });
 
     it('should handle same day correctly', () => {

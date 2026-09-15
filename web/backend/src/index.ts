@@ -319,6 +319,21 @@ export interface BBSSession {
   lastActivity: number;
   logonTime?: number; // Unix timestamp when user logged on (express.e:540)
   lastTimeUpdate?: number; // Unix timestamp of last time update (express.e:541,552)
+  /**
+   * Which AmiExpress "day" this session's time accounting last belonged to.
+   *
+   * express.e:529 counts days as `Div(currTime-21600, 86400)` - a day turns at
+   * 06:00 UTC, not at the server's local midnight - and it derives the
+   * comparison from `logonTime`, which it MOVES to the day boundary on
+   * rollover (express.e:540).
+   *
+   * We cannot move `logonTime`: two other readers take it as the real moment
+   * this caller logged on - mci-dispatch.ts:261 shows it to them, and
+   * clean-playpen.util.ts:44 decides from it which files in the playpen are
+   * theirs. So the rollover check carries its own state instead of
+   * reinterpreting a field other code depends on.
+   */
+  lastAccountingDay?: number;
   confRJoin: number; // Default conference to join (from user preferences)
   msgBaseRJoin: number; // Default message base to join
   commandBuffer: string; // Buffer for command input
