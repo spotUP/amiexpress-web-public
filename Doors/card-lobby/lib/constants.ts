@@ -294,10 +294,14 @@ export const GAME_CATALOG: GameDefinition[] = [
     description: 'Win tricks, then shed every card. Last one holding is the Skitgubbe.',
     minPlayers: 2,
     maxPlayers: 4,
+    /*
+     * SOCIAL, not staked: "skitgubbe is a social game, it requires no buy
+     * in" (sysop, 2026-09-15). Nothing is wagered and nothing changes hands
+     * - the only thing at stake is being the Skitgubbe. A single free stake
+     * also means the create dialog never asks (managers/TableFlow.ts).
+     */
     stakes: [
-      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
-      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
-      { label: '50', smallBlind: 0, bigBlind: 50, buyIn: 1000 },
+      { label: 'Social', smallBlind: 0, bigBlind: 0, buyIn: 0 },
     ],
     enabled: true,
   },

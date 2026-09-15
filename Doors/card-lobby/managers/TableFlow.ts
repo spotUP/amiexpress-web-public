@@ -78,11 +78,17 @@ export class TableFlow {
     if (gameIndex === null) return;
 
     const game = enabledGames[gameIndex];
-    const stakeIndex = await this.host.showListDialog(
-      'Select Stakes',
-      game.stakes.map((stake) => `${stake.label} (Buy-in ${stake.buyIn})`),
-    );
-    if (stakeIndex === null) return;
+    // A game with one stake - a social game, where nothing is wagered - has
+    // nothing to ask about.
+    let stakeIndex = 0;
+    if (game.stakes.length > 1) {
+      const chosen = await this.host.showListDialog(
+        'Select Stakes',
+        game.stakes.map((stake) => `${stake.label} (Buy-in ${stake.buyIn})`),
+      );
+      if (chosen === null) return;
+      stakeIndex = chosen;
+    }
 
     const maxPlayersStr = await this.host.showPromptDialog(
       'Table Size',

@@ -268,6 +268,9 @@ export const buildBotName = (seat: number): string => {
 };
 
 export const calculateEntryFee = (buyIn: number): number => {
+  // A free table costs nothing to sit at. Without this the floor of 1 chip
+  // charged an entry fee for a social game that wagers nothing.
+  if (buyIn <= 0) return 0;
   return Math.max(1, Math.floor(buyIn * settings().entryFeeRate));
 };
 

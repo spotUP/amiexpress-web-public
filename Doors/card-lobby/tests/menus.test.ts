@@ -108,6 +108,20 @@ export async function openingATableAnnouncesItOffTheBoard(): Promise<void> {
   try {
     assert.strictEqual(app.announce.available, true, 'the host can carry announcements');
 
+    /*
+     * Fund the wallet first. This test creates a table through the real
+     * path, which SPENDS the buy-in and the entry fee, and the lobby's state
+     * is persistent scratch under BBS_DATA_DIR that every run adds to - so
+     * after enough runs on one machine the profile is broke and the test
+     * fails with "no open announcement" rather than with the reason
+     * (2026-09-15: 164 chips left against a 200 buy-in, and 105 tables in
+     * the file). A test that spends has to fund itself.
+     */
+    app.currentProfile.wallet.chips = 10_000;
+    // ...and persist it: finalizeCreateTable reloads from disk first, which
+    // would throw an in-memory top-up away.
+    await app.persistState();
+
     // Through the door's own creation path, past the dialogs.
     const { GAME_CATALOG } = await import('../lib/constants');
     const uno = GAME_CATALOG.find((game: any) => game.id === 'uno');

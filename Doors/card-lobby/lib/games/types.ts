@@ -64,6 +64,18 @@ export interface TableGameModule {
   /** A number key: pick the nth card of the hand (0-based). */
   selectCard(index: number): void;
 
+  /**
+   * Move the picked card left or right by `delta`, wrapping at the ends.
+   *
+   * The number keys reach the first TEN cards and no more (index.ts binds
+   * 1-9 and 0), which is fine for a hand of seven and useless for a
+   * Skitgubbe hand in the shedding phase - fifteen cards is ordinary there,
+   * and every card past the tenth was unplayable. csol steers a cursor with
+   * the arrow keys for exactly this reason; the number keys stay as the
+   * shortcut they always were.
+   */
+  moveSelection(delta: number): void;
+
   /** Pad A, and the key that means "do the main thing" at this table. */
   primaryAction(): void;
 

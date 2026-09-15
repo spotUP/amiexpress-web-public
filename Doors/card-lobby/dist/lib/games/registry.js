@@ -26,6 +26,7 @@ class HoldemGameModule {
     render(painter, table) { painter.renderPokerGameView(table); }
     /** Poker has no card selection: the hand plays itself. */
     selectCard() { }
+    moveSelection() { }
     primaryAction() { this.host.triggerCall(); }
     secondaryAction() { this.host.triggerFold(); }
     tertiaryAction() { this.host.triggerRaise(); }
@@ -48,6 +49,7 @@ class UnoGameModule {
     start(table) { return this.host.startUnoGame(table); }
     render(painter, table) { painter.renderUnoGameView(table); }
     selectCard(index) { this.host.selectUnoCard(index); }
+    moveSelection(delta) { this.host.moveUnoSelection(delta); }
     primaryAction() { this.host.triggerUnoPlayCard(); }
     secondaryAction() { this.host.triggerUnoDrawCard(); }
     tertiaryAction() { this.host.triggerUnoCallUno(); }

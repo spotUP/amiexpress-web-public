@@ -45,8 +45,8 @@ async function openApp(): Promise<any> {
 async function seatedAtSkitgubbeTable(app: any, id: number): Promise<any> {
   const me = app.currentProfile.userId;
   const table: any = {
-    id, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: '10',
-    smallBlind: 0, bigBlind: 10, buyIn: 200, entryFee: 0,
+    id, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+    smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
     minPlayers: 2, maxPlayers: 3, status: 'open',
     createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
     autoStart: false, isPrivate: false, observers: [],
@@ -148,7 +148,24 @@ export async function botsPlayAWholeGameToAnEnd(): Promise<void> {
    */
   const strategy = new SkitgubbeAIStrategy();
 
-  for (const seed of ['bot-game-1', 'bot-game-2', 'bot-game-3']) {
+  /*
+   * And a pinned dice cup. The strategy throws a move away at a rate set by
+   * the difficulty (40% at MEDIUM), so an unpinned run is a different game
+   * every time and a failure here would be unreproducible - which is worse
+   * than no test. A seeded generator keeps each of the three games fixed
+   * while still exercising the mistake path.
+   */
+  const realRandom = Math.random;
+  const seededRandom = (seed: number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+
+  for (const [index, seed] of ['bot-game-1', 'bot-game-2', 'bot-game-3'].entries()) {
+    Math.random = seededRandom(index + 1);
     const engine = new SkitgubbeEngine(
       ['b1', 'b2', 'b3'], ['Ada', 'Bo', 'Cai'], [true, true, true], { seed },
     );
@@ -178,6 +195,7 @@ export async function botsPlayAWholeGameToAnEnd(): Promise<void> {
     assert.strictEqual(engine.state.finishedOrder.length, 2,
       `${seed}: two players got out and one was left holding the cards`);
   }
+  Math.random = realRandom;
 }
 
 export async function theOrchestratorKnowsHowToPlaySkitgubbe(): Promise<void> {
@@ -220,13 +238,58 @@ export async function theAiPrefersTheCheapestCardThatBeats(): Promise<void> {
     { rank: '2', suit: 'C' } as any,
   ];
 
-  const decision: any = await new SkitgubbeAIStrategy().makeDecision({
-    difficulty: Difficulty.EXPERT,
-    playerId: 'b2',
-    engine: engine as any,
-  } as any);
+  /*
+   * No dice: even an expert throws a move away now and then
+   * (`shouldMakeMistake` rolls against the skill level, 5% at EXPERT), and a
+   * test of JUDGEMENT must not fail one run in twenty on the strategy's own
+   * deliberate randomness. Pinning Math.random to 0 keeps the mistake path
+   * shut for the length of the call.
+   */
+  const realRandom = Math.random;
+  Math.random = () => 0;
+  let decision: any;
+  try {
+    decision = await new SkitgubbeAIStrategy().makeDecision({
+      difficulty: Difficulty.EXPERT,
+      playerId: 'b2',
+      engine: engine as any,
+    } as any);
+  } finally {
+    Math.random = realRandom;
+  }
 
   const chosen = engine.state.players[1].hand[decision.cardIndex];
   assert.strictEqual(`${chosen.rank}${chosen.suit}`, '10S',
     'the ten beats the nine; the ace is kept and the trump is not burned');
+}
+
+export async function aSocialTableCostsNothingAndMovesNoChips(): Promise<void> {
+  /*
+   * "skitgubbe is a social game, it requires no buy in" (sysop, 2026-09-15).
+   * The catalogue says so, the entry fee has to agree - it used to floor at
+   * one chip, so a free table still charged - and when the game ends, the
+   * only thing anybody loses is the title.
+   */
+  const { GAME_CATALOG, calculateEntryFee } = await import('../lib');
+  const game = GAME_CATALOG.find((entry) => entry.id === 'skitgubbe');
+  assert.strictEqual(game?.stakes.length, 1, 'one stake, so the create dialog never asks');
+  assert.strictEqual(game?.stakes[0].buyIn, 0, 'and it is free');
+  assert.strictEqual(calculateEntryFee(0), 0, 'a free table charges no entry fee either');
+
+  const app = await openApp();
+  try {
+    await seatedAtSkitgubbeTable(app, 73);
+    const before = app.findTableById(73).players.map((p: any) => p.stack);
+
+    // Run the hand to its end with bots in every seat.
+    const table = app.findTableById(73);
+    table.players = table.players.map((p: any) => ({ ...p, isBot: true }));
+    await app.dealHand();
+    for (let i = 0; i < 50 && app.findTableById(73).hand; i += 1) {
+      await app.skitgubbe.advance(app.findTableById(73));
+    }
+
+    const after = app.findTableById(73).players.map((p: any) => p.stack);
+    assert.deepStrictEqual(after, before, 'nobody won or lost a chip at a social table');
+  } finally { app.screen?.destroy?.(); }
 }

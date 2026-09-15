@@ -219,6 +219,33 @@ export class SkitgubbeGameModule implements TableGameModule {
     this.host.updateAllPanels();
   }
 
+  /**
+   * Left/right: walk the hand, wrapping at both ends. Starts at the first
+   * card that can legally be played, so the arrow keys are useful before
+   * they are precise.
+   */
+  public moveSelection(delta: number): void {
+    const table = this.currentTable();
+    if (!table) return;
+    const loaded = this.load(table);
+    if (!loaded) return;
+
+    const userId = this.host.currentProfile?.userId;
+    const player = userId ? loaded.engine.playerById(userId) : undefined;
+    if (!player || player.hand.length === 0) return;
+
+    const size = player.hand.length;
+    if (this.selectedCardIndex === null) {
+      const legal = userId ? loaded.engine.legalPlays(userId) : [];
+      this.selectedCardIndex = legal.length > 0 ? legal[0] : (delta >= 0 ? 0 : size - 1);
+    } else {
+      this.selectedCardIndex = ((this.selectedCardIndex + delta) % size + size) % size;
+    }
+
+    this.host.pushNotice(`Selected ${cardId(player.hand[this.selectedCardIndex])}. X plays it.`);
+    this.host.updateAllPanels();
+  }
+
   /** X / pad A: play the selected card. */
   public primaryAction(): void {
     const table = this.currentTable();
@@ -316,10 +343,14 @@ export class SkitgubbeGameModule implements TableGameModule {
   // ------------------------------------------------------------------
 
   /**
-   * One loser, everybody else safe: the Skitgubbe pays the table's stake to
-   * each player who got out. Same chip plumbing as the other games - the
-   * stacks move here and the profiles are reconciled by the caller's
-   * `updateStatsAfterHand` on the next hand summary.
+   * One loser, everybody else safe.
+   *
+   * Skitgubbe is a SOCIAL game and the board's table for it is free: "it
+   * requires no buy in" (sysop, 2026-09-15). So when the stake is zero
+   * nothing changes hands at all - the result is the whole point, and being
+   * the Skitgubbe is the only thing anybody loses. A table created with a
+   * stake (the catalogue could offer one later) settles it the way the other
+   * games do: the loser pays each survivor.
    */
   private async finalize(
     table: LobbyTable,
@@ -327,26 +358,32 @@ export class SkitgubbeGameModule implements TableGameModule {
     beforeStacks: Record<string, number>,
   ): Promise<void> {
     const loserId = engine.state.loserId;
-    const stake = Math.max(1, table.bigBlind);
+    const stake = Math.max(0, table.bigBlind);
     const seated = table.players.filter((player) => player.role === 'player');
     const survivors = seated.filter((player) => player.userId !== loserId);
 
-    table.players = table.players.map((player) => {
-      if (player.role !== 'player') return player;
-      if (player.userId === loserId) {
-        return { ...player, stack: Math.max(0, player.stack - stake * survivors.length) };
-      }
-      return loserId ? { ...player, stack: player.stack + stake } : player;
-    });
+    if (stake > 0) {
+      table.players = table.players.map((player) => {
+        if (player.role !== 'player') return player;
+        if (player.userId === loserId) {
+          return { ...player, stack: Math.max(0, player.stack - stake * survivors.length) };
+        }
+        return loserId ? { ...player, stack: player.stack + stake } : player;
+      });
+    }
 
     const loserName = engine.state.players.find((p) => p.id === loserId)?.name ?? 'Nobody';
     this.host.pushEvent(`${loserName} is the Skitgubbe at table #${table.id}!`);
 
     const me = this.host.currentProfile?.userId;
     if (me && loserId === me) {
-      this.host.pushNotice(`You are the Skitgubbe - ${stake * survivors.length} ${CHIP_NAME} to the table.`);
-    } else if (me && beforeStacks[me] !== undefined && loserId) {
-      this.host.pushNotice(`${loserName} is the Skitgubbe. You take ${stake} ${CHIP_NAME}.`);
+      this.host.pushNotice(stake > 0
+        ? `You are the Skitgubbe - ${stake * survivors.length} ${CHIP_NAME} to the table.`
+        : 'You are the Skitgubbe. Deal again?');
+    } else if (me && loserId) {
+      this.host.pushNotice(stake > 0
+        ? `${loserName} is the Skitgubbe. You take ${stake} ${CHIP_NAME}.`
+        : `${loserName} is the Skitgubbe.`);
     }
 
     // Keep the finished position on the table for a moment: the panels read

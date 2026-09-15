@@ -53,6 +53,7 @@ import {
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
 import { UnoGameEngine, type UnoGameSnapshot } from './lib/uno-engine';
+import { attachKeyBindings } from './managers/KeyBindings';
 import {
   GameRegistry,
   HoldemGameModule,
@@ -372,100 +373,7 @@ export class CardLobbyApp {
       };
     }
 
-    this.screen.key(['C-c'], () => {
-      if (this.modalActive) return;
-      this.exitDoor();
-    });
-
-    this.screen.key(['q'], () => {
-      if (this.modalActive) return;
-      this.exitDoor();
-    });
-
-    this.screen.key(['tab'], () => {
-      if (this.modalActive) return;
-      this.cycleFocus(1);
-    });
-
-    this.screen.key(['S-tab'], () => {
-      if (this.modalActive) return;
-      this.cycleFocus(-1);
-    });
-
-    this.screen.key(['f'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.triggerFold();
-    });
-
-    this.screen.key(['x'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.triggerCheck();
-    });
-
-    this.screen.key(['c'], () => {
-      if (this.modalActive) return;
-      if (this.viewMode === 'table') {
-        this.triggerCall();
-      } else if (this.viewMode === 'lobby') {
-        this.runAction(() => this.tableFlow.createTableFlow());
-      }
-    });
-
-    this.screen.key(['t'], () => {
-      if (this.modalActive) return;
-      this.runAction(() => this.saySomething());
-    });
-
-    this.screen.key(['r'], () => {
-      if (this.modalActive) return;
-      if (this.viewMode === 'table') {
-        this.triggerRaise();
-      } else if (this.viewMode === 'lobby') {
-        this.runAction(() => this.manualRefresh());
-      }
-    });
-
-    // J is NOT bound. The lobby list reads j/k as vi-style down/up, so a J
-    // that also joined moved the cursor and joined whatever the cursor had
-    // just left. ENTER joins, through the list's own 'select' event.
-
-
-    this.screen.key(['o'], () => {
-      if (this.modalActive || this.viewMode !== 'lobby') return;
-      this.runAction(() => this.tableFlow.observeSelectedTable());
-    });
-
-    this.screen.key(['l'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      this.runAction(() => this.tableFlow.leaveCurrentTable());
-    });
-
-    this.screen.key(['d'], () => {
-      if (this.modalActive) return;
-      if (this.viewMode === 'table') {
-        this.runAction(() => this.dealHand());
-      } else if (this.viewMode === 'lobby') {
-        this.runAction(() => this.tableFlow.deleteTableFlow());
-      }
-    });
-
-    // UNO card selection keys (1-9, 0 for 10th card)
-    for (let i = 1; i <= 9; i++) {
-      this.screen.key([String(i)], () => {
-        if (this.modalActive || this.viewMode !== 'table') return;
-        const table = this.currentProfile?.currentTableId
-          ? this.findTableById(this.currentProfile.currentTableId)
-          : null;
-        this.games.for(table)?.selectCard(i - 1);  // Convert 1-based to 0-based index
-      });
-    }
-    this.screen.key(['0'], () => {
-      if (this.modalActive || this.viewMode !== 'table') return;
-      const table = this.currentProfile?.currentTableId
-        ? this.findTableById(this.currentProfile.currentTableId)
-        : null;
-      this.games.for(table)?.selectCard(9);  // 0 key = 10th card (index 9)
-    });
+    attachKeyBindings(this);
 
     this.desktop = createBox({
       parent: this.screen,
@@ -633,7 +541,7 @@ export class CardLobbyApp {
     })();
   }
 
-  private exitDoor(): void {
+  public exitDoor(): void {
     void this.shutdown();
   }
 
@@ -1026,7 +934,7 @@ export class CardLobbyApp {
   }
 
   /** T talks. The lobby had no way to say anything at all until now. */
-  private async saySomething(): Promise<void> {
+  public async saySomething(): Promise<void> {
     await this.chat.saySomething();
   }
 
@@ -1286,7 +1194,7 @@ export class CardLobbyApp {
     this.runAction(() => this.handlePlayerAction('fold'));
   }
 
-  private triggerCheck(): void {
+  public triggerCheck(): void {
     if (this.modalActive) return;
     if (this.currentProfile?.currentTableId && this.lobby) {
       const table = this.findTableById(this.currentProfile.currentTableId);
@@ -1354,7 +1262,7 @@ export class CardLobbyApp {
     this.runAction(() => this.handlePlayerAction('bet'));
   }
 
-  private triggerQuit(): void {
+  public triggerQuit(): void {
     if (this.modalActive) return;
 
     // Route to UNO handler if UNO game
@@ -1549,7 +1457,7 @@ export class CardLobbyApp {
     this.screen.render();
   }
 
-  private cycleFocus(direction: 1 | -1): void {
+  public cycleFocus(direction: 1 | -1): void {
     const focusOrder: Array<any> = this.viewMode === 'table'
       ? [
         this.playersContent,
@@ -1702,7 +1610,7 @@ export class CardLobbyApp {
 
 
 
-  private async dealHand(): Promise<void> {
+  public async dealHand(): Promise<void> {
     if (this.modalActive || !this.currentProfile || !this.lobby) return;
     const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
     if (!tableId) {
@@ -1938,6 +1846,33 @@ export class CardLobbyApp {
       this.selectedUnoCardIndex = index;
     }
 
+    this.updateTablePanel();
+  }
+
+  /**
+   * Walk the UNO hand with the arrow keys - the same reason Skitgubbe needs
+   * it: a hand can outgrow the ten number keys (a Draw Four stack does it
+   * quickly), and a card that cannot be selected cannot be played.
+   */
+  public moveUnoSelection(delta: number): void {
+    const table = this.currentProfile?.currentTableId
+      ? this.findTableById(this.currentProfile.currentTableId)
+      : null;
+    if (!table) return;
+    const gameState = this.loadUnoGameState(table);
+    if (!gameState) return;
+
+    const state = gameState.engine.getGameState();
+    const player = state.players.find((p) => p.id === this.currentProfile?.userId);
+    if (!player || player.hand.length === 0) return;
+
+    const size = player.hand.length;
+    if (this.selectedUnoCardIndex === null) {
+      const playable = gameState.engine.getPlayableCards(player.id);
+      this.selectedUnoCardIndex = playable.length > 0 ? playable[0] : (delta >= 0 ? 0 : size - 1);
+    } else {
+      this.selectedUnoCardIndex = ((this.selectedUnoCardIndex + delta) % size + size) % size;
+    }
     this.updateTablePanel();
   }
 

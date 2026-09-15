@@ -20,6 +20,7 @@ export interface LegacyGameHost {
   startHoldemHand(table: LobbyTable): Promise<void>;
   startUnoGame(table: LobbyTable): Promise<void>;
   selectUnoCard(index: number): void;
+  moveUnoSelection(delta: number): void;
   triggerUnoPlayCard(): void;
   triggerUnoDrawCard(): void;
   triggerUnoCallUno(): void;
@@ -43,6 +44,7 @@ export class HoldemGameModule implements TableGameModule {
   render(painter: TableGamePainter, table: LobbyTable): void { painter.renderPokerGameView(table); }
   /** Poker has no card selection: the hand plays itself. */
   selectCard(): void { /* nothing to pick */ }
+  moveSelection(): void { /* nor anything to walk */ }
   primaryAction(): void { this.host.triggerCall(); }
   secondaryAction(): void { this.host.triggerFold(); }
   tertiaryAction(): void { this.host.triggerRaise(); }
@@ -65,6 +67,7 @@ export class UnoGameModule implements TableGameModule {
   start(table: LobbyTable): Promise<void> { return this.host.startUnoGame(table); }
   render(painter: TableGamePainter, table: LobbyTable): void { painter.renderUnoGameView(table); }
   selectCard(index: number): void { this.host.selectUnoCard(index); }
+  moveSelection(delta: number): void { this.host.moveUnoSelection(delta); }
   primaryAction(): void { this.host.triggerUnoPlayCard(); }
   secondaryAction(): void { this.host.triggerUnoDrawCard(); }
   tertiaryAction(): void { this.host.triggerUnoCallUno(); }
