@@ -53,6 +53,15 @@ export interface DoorSetting {
   max?: number;
   secret?: boolean;
   /**
+   * This setting's VALUE names an art file in the door's own folder, so the
+   * ANSI Studio offers it as a drawable slot and the picker writes this same
+   * setting. Declared in C with AE_SETTING_ART. Only meaningful on a string.
+   */
+  art?: boolean;
+  /** Editor limits for that slot. Omitted, the canvas ceilings apply. */
+  artMaxLines?: number;
+  artMaxLineLength?: number;
+  /**
    * Render this value into the door's legacy cfg file under this key, when the
    * manifest declares `cfgFile`. 68K/C doors cannot read settings.json - they
    * read a plain `Key=value` file beside the binary - so this is the bridge.
@@ -217,6 +226,15 @@ const SettingSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   secret: z.boolean().optional(),
+  /**
+   * The value names an art file - see DoorSetting.art. It MUST be declared
+   * here: zod strips unknown keys, so a manifest carrying the flag against a
+   * schema without it loses it between the file and every reader, and the
+   * Studio draws nothing with no error anywhere.
+   */
+  art: z.boolean().optional(),
+  artMaxLines: z.number().int().min(1).max(100).optional(),
+  artMaxLineLength: z.number().int().min(1).max(1000).optional(),
   cfgKey: z.string().min(1).max(64).optional(),
   narrowValue: z.string().min(1).max(64).optional(),
   fromSystemConfig: z.string().min(1).max(64).optional(),
@@ -229,6 +247,9 @@ const SettingSchema = z.object({
 }).refine(
   s => s.type !== 'choice' || (s.choices?.length ?? 0) > 0,
   { message: 'a choice needs choices' }
+).refine(
+  s => !s.art || s.type === 'string',
+  { message: 'art is only meaningful on a string setting - a number cannot name a file' }
 ).refine(
   s => s.pattern === undefined || s.type === 'string',
   { message: 'pattern is for strings' }
