@@ -1491,8 +1491,31 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
     // Typing keys have initial delay before repeat for single character typing
     // Delay is long enough for comfortable typing while still responsive for games
-    const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing, responsive for games
-    const KEY_REPEAT_RATE = 30;    // Interval between repeats (ms) - ~33fps, fast enough for games
+    /*
+     * KEY REPEAT FOR A MENU, NOT FOR AN ARCADE CABINET.
+     *
+     * Game mode is switched on for EVERY client door (`door.handler.ts:4821`),
+     * not just the games - so doorman and the card lobby drive blessed LISTS
+     * with this repeat. At 30ms that is ~33 moves a second: the sysop,
+     * 2026-09-15, "it skips two ore more entries" and "navigation is super
+     * fast". A list is not a Sno-Bee.
+     *
+     * 120ms is ~8 rows a second: a held arrow still travels, and a tap is one
+     * row. The DELAY is unchanged - 400ms is what keeps a deliberate single
+     * press from ever repeating.
+     *
+     * WHAT THIS IS NOT. It is not the right fix for a game, and it is a
+     * stopgap that trades the arcade doors' feel for usable menus, taken on
+     * the sysop's call ("pengos key handling is wack anyway and needs to be
+     * fixed"). The right model is the one GRANDMASTER already uses and
+     * documents: real key-down/key-up EDGES with the door's own DAS/ARR
+     * (`Doors/grandmaster/input/handler.ts:78-87`), which is why grandmaster
+     * is untouched by this constant and feels exactly as it was tuned. A door
+     * that wants arcade repeat should own its timing the same way rather than
+     * inherit a number from the terminal.
+     */
+    const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing
+    const KEY_REPEAT_RATE = 120;   // Interval between repeats (ms) - ~8/sec, a list you can steer
 
     // Keys that should NOT auto-repeat
     // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs
