@@ -1,5 +1,5 @@
 {
-  "command": "REQUESTS",
+  "command": "REQ",
   "cfgFile": "REQUESTS.cfg",
   "settings": [
     {
