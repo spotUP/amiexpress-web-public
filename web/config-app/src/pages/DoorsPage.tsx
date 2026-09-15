@@ -28,6 +28,71 @@ const COMMAND_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }
 ];
 
 /**
+ * The C64 / PETSCII adapter's per-door switches.
+ *
+ * TRUTHY, NOT PRESENT - and that is the difference from the command flags
+ * above. `runCommand()` reads its flags as "the key is on the icon", whatever
+ * the value; these are read with `/^(1|yes|true)$/i`
+ * (`utils/door-min-columns.util.ts`), so a bare key with no value is OFF. A
+ * checkbox that wrote only the key would leave the sysop looking at a ticked
+ * box that does nothing, which is why these write `1`.
+ *
+ * Both flags this list starts with were hand-edited on the live volume for
+ * want of this form (`door-edit-offers-tooltypes.test.tsx`: "Twice this year a
+ * door flag has been hand-edited on the live volume ... C64_ADAPT, and then
+ * C64_DROP_OLDEST").
+ */
+const C64_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = [
+  {
+    key: 'C64_VIEWPORT',
+    label: 'Window instead of folding',
+    help: "The door's screen is a positioned UI nothing can reduce - an editor, a map - so a 40-column caller gets a WINDOW onto it and pans with the cursor keys. Last resort: navigable, not pretty.",
+  },
+  {
+    key: 'C64_DROP_OLDEST',
+    label: 'May drop its oldest entries',
+    help: 'A list that can lose its OLDEST rows to fit 40 columns - a wall shedding its oldest comment.',
+  },
+  {
+    key: 'C64_DROP_LAST',
+    label: 'May drop its lowest-ranked entries',
+    help: 'A ranked table that sheds its LOWEST rank instead of its oldest row - ctop and conftop, where the oldest row is the top uploader.',
+  },
+];
+
+/**
+ * The adapter's numeric settings. Every one is a positive integer or blank;
+ * `validColumns` rejects anything else, so a bad value reads as "not set"
+ * rather than as zero.
+ */
+const C64_VALUE_TOOLTYPES: Array<{ key: string; label: string; help: string; placeholder: string }> = [
+  {
+    key: 'C64_ADAPT',
+    label: 'Adapt at (columns)',
+    help: 'Turns the 40-column adapter on for this door and says how many columns to adapt to. Usually 40.',
+    placeholder: 'blank = not adapted',
+  },
+  {
+    key: 'MIN_COLUMNS',
+    label: 'Minimum columns',
+    help: 'The narrowest screen this door is usable on. A door with no value gates at 80, so a C64 caller is refused rather than shown a broken screen.',
+    placeholder: 'blank = 80',
+  },
+  {
+    key: 'REDACTED',
+    label: 'Marker columns',
+    help: "How many columns this door's list markers occupy, so the adapter keeps a marked list's left edge still.",
+    placeholder: 'blank = auto',
+  },
+  {
+    key: 'OVERCLOCK',
+    label: 'CPU overclock',
+    help: '68K speed multiplier. 0 is auto; 1-50 pins a specific factor.',
+    placeholder: 'blank = auto',
+  },
+];
+
+/**
  * What the form can actually change.
  *
  * `description`, `runtime_env` and `time_limit` were on it and are not here.
@@ -357,6 +422,16 @@ export function DoorsPage() {
     const idx = findCommandFlagIndex(key);
     return idx !== -1 ? tooltypes[idx].value : '';
   };
+
+  /**
+   * The C64 flags are read as `/^(1|yes|true)$/i`, so "set" means a truthy
+   * VALUE and not merely a present key - see C64_FLAG_TOOLTYPES.
+   */
+  const isTruthyFlagSet = (key: string): boolean =>
+    /^(1|yes|true)$/i.test(getCommandFlagValue(key).trim());
+
+  /** Ticking writes `1`; clearing removes the tooltype rather than writing `0`. */
+  const setTruthyFlag = (key: string, on: boolean) => setCommandFlagValue(key, on ? '1' : '');
 
   const setCommandFlagValue = (key: string, value: string) => {
     const idx = findCommandFlagIndex(key);
@@ -929,6 +1004,46 @@ export function DoorsPage() {
                       The AmiExpress version this command reports itself as.
                     </p>
                   </div>
+                </div>
+              </div>
+
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">C64 / PETSCII</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  How this door behaves for a 40-column caller. A door with none of these
+                  set is refused on a C64 rather than shown a broken screen.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {C64_FLAG_TOOLTYPES.map((flag) => (
+                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isTruthyFlagSet(flag.key)}
+                        onChange={(e) => setTruthyFlag(flag.key, e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-content-primary text-sm">{flag.label}</span>
+                        <span className="block text-content-secondary text-xs">{flag.help}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {C64_VALUE_TOOLTYPES.map((field) => (
+                    <div key={field.key}>
+                      <label htmlFor={`door-c64-${field.key}`} className="label">{field.label}</label>
+                      <input
+                        id={`door-c64-${field.key}`}
+                        type="number"
+                        value={getCommandFlagValue(field.key)}
+                        onChange={(e) => setCommandFlagValue(field.key, e.target.value)}
+                        className="input-field w-full"
+                        placeholder={field.placeholder}
+                      />
+                      <p className="text-xs text-content-secondary mt-1">{field.help}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 

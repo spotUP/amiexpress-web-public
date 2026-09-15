@@ -92,6 +92,11 @@ describe('editing a door', () => {
     await waitFor(() => expect(getInfoFile).toHaveBeenCalledWith('Commands/BBSCmd/GWALL.info'));
     // The table itself, with the door's own tooltypes in it.
     expect(await screen.findByDisplayValue('C64_ADAPT')).toBeTruthy();
-    expect(screen.getByDisplayValue('40')).toBeTruthy();
+    // TWO inputs now show `40`, and both should: the raw table row, and the
+    // named "Adapt at (columns)" field in the C64 section, which reads the
+    // same tooltype. `getByDisplayValue` was unambiguous only while the
+    // adapter's flags had no form of their own - it is the arrival of that
+    // form, not a regression, that makes this `getAll`.
+    expect(screen.getAllByDisplayValue('40').length).toBeGreaterThan(0);
   });
 });
