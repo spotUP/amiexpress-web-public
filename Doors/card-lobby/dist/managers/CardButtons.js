@@ -183,7 +183,7 @@ class CardButtons {
             const cardRows = Math.ceil(cards.length / perRow);
             if (cardRows * cardHeight + LIFT_ROWS > rows)
                 return null;
-            return { perRow, size, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
+            return { perRow, size, stride: cardWidth + 1, stackY: 0, cardRows, height: cardHeight, cardWidth };
         };
         /** One row, each card overlapping the one before it. */
         const fan = (candidate, size) => {
@@ -200,7 +200,28 @@ class CardButtons {
             return {
                 perRow: cards.length,
                 size,
+                stackY: 0,
                 stride: Math.min(stride, cardWidth + 1),
+                cardRows: 1,
+                height: cardHeight,
+                cardWidth,
+            };
+        };
+        /** One pile: each card a step down and right of the one below it. */
+        const asPile = (candidate, size) => {
+            const { cardWidth, cardHeight } = measure(candidate);
+            if (cardWidth === 0 || cardHeight === 0)
+                return null;
+            const steps = cards.length - 1;
+            if (cardHeight + steps * STACK_Y + LIFT_ROWS > rows)
+                return null;
+            if (cardWidth + steps * STACK_X > width)
+                return null;
+            return {
+                perRow: cards.length,
+                size,
+                stride: STACK_X,
+                stackY: STACK_Y,
                 cardRows: 1,
                 height: cardHeight,
                 cardWidth,
@@ -216,7 +237,7 @@ class CardButtons {
         };
         let art = null;
         let layout = null;
-        for (const shape of [grid, fan]) {
+        for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
             for (const size of sizes) {
                 const candidate = artFor(size);
                 const found = shape(candidate, size);
@@ -252,7 +273,8 @@ class CardButtons {
          * and the activity panel names the keys either way.
          */
         const perRow = layout.perRow;
-        const withLabels = layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
+        const withLabels = layout.stackY === 0
+            && layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
         const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
         this.host.fallback.hide();
         this.ensure(cards.length);
@@ -266,7 +288,7 @@ class CardButtons {
             const playable = options.playable.includes(index);
             const number = (options.labelFrom ?? 1) + index;
             const label = number === 10 ? '0' : String(number);
-            const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
+            const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS) + index * layout.stackY;
             const slotLeft = column * layout.stride;
             /*
              * The card UNDER this one, at the slot's own corner: the card on top
@@ -323,6 +345,14 @@ class CardButtons {
         }
         for (let index = cards.length; index < this.unders.length; index += 1) {
             this.unders[index].hide();
+        }
+        /*
+         * A pile is read from the top card down, so the cards have to be laid in
+         * that order: the last one in the row is the one lying on all the rest.
+         */
+        if (layout.stackY > 0) {
+            for (const button of this.buttons.slice(0, cards.length))
+                button.setFront?.();
         }
         /*
          * In a fan each card is drawn over the one before it, so the card the

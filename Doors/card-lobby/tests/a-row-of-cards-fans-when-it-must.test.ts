@@ -218,3 +218,38 @@ export async function aPileWhoseOpenCardIsGoneIsStillABlindCard(): Promise<void>
     assert.strictEqual(new Set(faces).size, 1, 'and all three are backs');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function theDiscardPileIsAPileNotARowOfCards(): Promise<void> {
+  /*
+   * "the pile have 3 cards side by side now, make them look like the pile in
+   * front of me but with all cards open" (sysop, 2026-09-15). The top three
+   * of the pile are three cards LYING ON EACH OTHER, the last one on top and
+   * every face showing - the same shape as the piles in front of a player,
+   * without the backs.
+   */
+  const app = await openApp();
+  try {
+    app.uiManager.flopPanel.width = 59;
+    app.uiManager.flopPanel.height = 12;
+
+    const drawn = app.tableCardButtons.renderStandard(SIX.slice(0, 3), {
+      selected: null, playable: [], labels: false, pile: true, onPick: () => {},
+    });
+    assert.strictEqual(drawn, true, 'the pile draws');
+
+    const cards = app.tableCardButtons.focusables();
+    assert.strictEqual(cards.length, 3, 'three cards');
+
+    for (let index = 1; index < cards.length; index += 1) {
+      const right = Number(cards[index].left) - Number(cards[index - 1].left);
+      const down = Number(cards[index].top) - Number(cards[index - 1].top);
+      assert.ok(right > 0 && right < Number(cards[0].width),
+        `each card lies on the last, a step to the right: ${right}`);
+      assert.ok(down > 0, `and a step down: ${down}`);
+    }
+
+    // Every card in the pile is a face - none of them is turned over.
+    const contents = cards.map((card: any) => card.getContent());
+    assert.strictEqual(new Set(contents).size, 3, 'three different cards, all open');
+  } finally { app.screen?.destroy?.(); }
+}

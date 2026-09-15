@@ -84,6 +84,14 @@ export interface CardButtonOptions extends CardButtonOptionsBase {
   playable: number[];
   /** Face down - draw the back, not the face. Used for the blind endgame. */
   faceDown?: boolean;
+  /**
+   * Draw the row as ONE PILE: every card lying on the one before it, each a
+   * step down and to the right, the last one on top. That is what a discard
+   * pile looks like on a table - "make them look like the pile in front of
+   * me but with all cards open" (sysop, 2026-09-15) - rather than three
+   * separate cards side by side, which reads as three piles.
+   */
+  pile?: boolean;
   /** A click, or ENTER while focused. */
   onPick(index: number): void;
   /**
@@ -104,6 +112,8 @@ interface Layout {
   size: 'full' | 'mini';
   /** Columns from one card's left edge to the next: overlapping when < width. */
   stride: number;
+  /** Rows from one card's top to the next. Only a pile steps downwards. */
+  stackY: number;
   cardRows: number;
   height: number;
   cardWidth: number;
@@ -279,7 +289,7 @@ export class CardButtons {
       const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
       const cardRows = Math.ceil(cards.length / perRow);
       if (cardRows * cardHeight + LIFT_ROWS > rows) return null;
-      return { perRow, size, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
+      return { perRow, size, stride: cardWidth + 1, stackY: 0, cardRows, height: cardHeight, cardWidth };
     };
 
     /** One row, each card overlapping the one before it. */
@@ -293,7 +303,26 @@ export class CardButtons {
       return {
         perRow: cards.length,
         size,
+        stackY: 0,
         stride: Math.min(stride, cardWidth + 1),
+        cardRows: 1,
+        height: cardHeight,
+        cardWidth,
+      };
+    };
+
+    /** One pile: each card a step down and right of the one below it. */
+    const asPile = (candidate: string[][], size: 'full' | 'mini'): Layout | null => {
+      const { cardWidth, cardHeight } = measure(candidate);
+      if (cardWidth === 0 || cardHeight === 0) return null;
+      const steps = cards.length - 1;
+      if (cardHeight + steps * STACK_Y + LIFT_ROWS > rows) return null;
+      if (cardWidth + steps * STACK_X > width) return null;
+      return {
+        perRow: cards.length,
+        size,
+        stride: STACK_X,
+        stackY: STACK_Y,
         cardRows: 1,
         height: cardHeight,
         cardWidth,
@@ -310,7 +339,7 @@ export class CardButtons {
 
     let art: string[][] | null = null;
     let layout: Layout | null = null;
-    for (const shape of [grid, fan]) {
+    for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
       for (const size of sizes) {
         const candidate = artFor(size);
         const found = shape(candidate, size);
@@ -343,7 +372,8 @@ export class CardButtons {
      * and the activity panel names the keys either way.
      */
     const perRow = layout.perRow;
-    const withLabels = layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
+    const withLabels = layout.stackY === 0
+      && layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
     const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
 
     this.host.fallback.hide();
@@ -359,7 +389,7 @@ export class CardButtons {
       const number = (options.labelFrom ?? 1) + index;
       const label = number === 10 ? '0' : String(number);
 
-      const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
+      const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS) + index * layout!.stackY;
       const slotLeft = column * layout!.stride;
 
       /*
@@ -418,6 +448,14 @@ export class CardButtons {
     }
     for (let index = cards.length; index < this.unders.length; index += 1) {
       this.unders[index].hide();
+    }
+
+    /*
+     * A pile is read from the top card down, so the cards have to be laid in
+     * that order: the last one in the row is the one lying on all the rest.
+     */
+    if (layout.stackY > 0) {
+      for (const button of this.buttons.slice(0, cards.length)) (button as any).setFront?.();
     }
 
     /*

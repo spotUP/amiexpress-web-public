@@ -442,6 +442,10 @@ class GameViews {
             selected: null,
             playable: [],
             labels: false,
+            // A PILE, not three cards: each one lying on the last, all faces up,
+            // the top card on top. "make them look like the pile in front of me
+            // but with all cards open" (sysop, 2026-09-15).
+            pile: true,
             onPick: () => { },
         });
         if (!drewPile) {

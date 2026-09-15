@@ -13,18 +13,13 @@ import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
 import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule, type PatienceGameModule } from '../lib/games';
 
-/** What every game passes to the shared card renderer (managers/CardButtons.ts). */
-interface CardButtonArgs {
-  selected: number | null;
-  playable: number[];
-  faceDown?: boolean;
-  /** The number printed under the first card; 4 for a table row. */
-  labelFrom?: number;
-  /** false for a row that is read rather than picked from - the pile. */
-  labels?: boolean;
-  onFocus?(index: number): void;
-  onPick(index: number): void;
-}
+/*
+ * What every game passes to the shared card renderer is the renderer's OWN
+ * type, imported. This file used to declare a structural copy of it, so a
+ * new option - `pile`, and `face` before it - typechecked in CardButtons and
+ * was rejected at the call site here for not existing.
+ */
+import type { CardButtonOptions as CardButtonArgs, PlayableCard } from './CardButtons';
 
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
@@ -98,7 +93,7 @@ export interface GameViewHost {
   readonly vandtia: VandtiaGameModule;
   readonly patience: PatienceGameModule;
   readonly cardButtons: {
-    render(cards: Array<{ kind: 'standard' | 'uno'; card: unknown }>, options: CardButtonArgs): boolean;
+    render(cards: PlayableCard[], options: CardButtonArgs): boolean;
     renderStandard(cards: unknown[], options: CardButtonArgs): boolean;
     clear(): void;
   };
@@ -561,6 +556,10 @@ export class GameViews {
       selected: null,
       playable: [],
       labels: false,
+      // A PILE, not three cards: each one lying on the last, all faces up,
+      // the top card on top. "make them look like the pile in front of me
+      // but with all cards open" (sysop, 2026-09-15).
+      pile: true,
       onPick: () => { /* the pile is read, not picked */ },
     });
     if (!drewPile) {
