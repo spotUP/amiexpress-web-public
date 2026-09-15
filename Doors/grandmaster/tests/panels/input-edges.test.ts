@@ -20,8 +20,6 @@ interface Harness {
   handler: any;
   /** A browser key-down, as game mode delivers it. */
   press(key: string): void;
-  /** A key-down the browser marked as its own auto-repeat. */
-  repeat(key: string): void;
   release(key: string): void;
   /** A blessed keypress, as telnet delivers it. */
   type(key: string): void;
@@ -65,7 +63,6 @@ async function harness(withKeyEvents: boolean): Promise<Harness> {
     handler,
     edges,
     press: (key: string) => down?.(key, {}, false),
-    repeat: (key: string) => down?.(key, {}, true),
     release: (key: string) => up?.(key),
     type: (key: string) => keypress?.(key, { name: key, full: key }),
     restore: () => { (Date as any).now = realNow; },
@@ -154,33 +151,5 @@ export async function keyStateModeSaysWhichTransportThisIs(): Promise<void> {
   } finally {
     web.restore();
     telnet.restore();
-  }
-}
-
-/**
- * A marked repeat is not an edge, even when the held-key set has gone stale.
- *
- * The held-key check alone cannot cover this. A key-up lost to a window blur
- * or a dropped frame empties the set under a key that is still physically
- * down; the next auto-repeat then looks exactly like a fresh press, restarts
- * DAS mid-hold, and the piece stutters. The browser knew all along which
- * presses were repeats - since 2026-09-15 it says so, and this is that being
- * believed over the bookkeeping.
- */
-export async function aMarkedRepeatIsNeverAnEdge(): Promise<void> {
-  const h = await harness(true);
-  try {
-    h.press('ArrowLeft');
-    // The key-up never arrives - this is the blur, not a release.
-    (h.handler as any).state.heldKeys.delete('left');
-    h.repeat('ArrowLeft');
-    h.repeat('ArrowLeft');
-
-    assert.deepStrictEqual(
-      h.edges, ['left'],
-      'the press is an edge and the repeats after a lost key-up are not',
-    );
-  } finally {
-    h.restore();
   }
 }

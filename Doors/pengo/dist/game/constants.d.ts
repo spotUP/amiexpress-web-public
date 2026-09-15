@@ -71,6 +71,21 @@ export declare const VIEW_ROWS: number;
 export declare const BOARD_COLS: number;
 export declare const BOARD_ROWS: number;
 export declare const GAME_TICK_MS = 100;
+/**
+ * How long the penguin takes to walk one cell while a direction is HELD.
+ *
+ * The arcade's own cadence: one cell per eight frames at 60Hz. We were at
+ * 90ms - a third faster than the cabinet - and the sysop, once the menu
+ * stopped spinning and the game could be felt on its own, said so: "the
+ * pengo in the game moves too fast" (2026-09-15).
+ *
+ * This is the ONLY thing setting walking speed on a browser session. The
+ * character stream is not: `handleGameInput` stands down whenever held-key
+ * tracking is live, so a held key steps here and nowhere else. A telnet
+ * caller has no key-up and therefore no held keys, and still walks one cell
+ * per keypress.
+ */
+export declare const PLAYER_MOVE_MS = 133;
 export declare const STARTING_LIVES = 3;
 export declare const INITIAL_TIME = 180;
 export declare const SCORES: {

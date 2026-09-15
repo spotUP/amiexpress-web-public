@@ -2880,6 +2880,9 @@ async function executeNativeGccDoor(
 console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePath}`);
 
   // Enable game mode for GCC doors (they use different input handling)
+  // Every launch route states the mode, so the one before it cannot leak
+  // in - see the note in disableGameMode.
+  session.doorKeyRepeatMode = declaredKeyRepeatMode(door);
   enableGameMode(socket, session, 'XIM');
 
   // Move to fresh line

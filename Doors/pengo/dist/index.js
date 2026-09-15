@@ -435,7 +435,7 @@ function pollHeldDirections() {
     if (!inputManager?.isKeyStateActive())
         return;
     for (const dir of ["up", "down", "left", "right"]) {
-        if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+        if (inputManager.consumeRepeat(dir, { repeatRate: constants_1.PLAYER_MOVE_MS })) {
             game?.handleDirection(dir);
         }
     }

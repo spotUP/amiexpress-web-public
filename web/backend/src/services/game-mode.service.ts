@@ -100,9 +100,22 @@ export function disableGameMode(socket: Socket, session: BBSSession): void {
   session.currentDoorType = undefined;
   session.keyState = {};
   socket.emit('game-mode', false);
-  // Back to the arcade rate for whatever runs next. The board's own prompts
-  // never saw anything else, and the next door states its own mode on entry.
-  session.doorKeyRepeatMode = undefined;
+  /*
+   * Back to the arcade rate for whatever runs next: the board's own prompts
+   * never saw anything else.
+   *
+   * What is NOT done here is forgetting `session.doorKeyRepeatMode`, and that
+   * is the whole point. A HYBRID door - CARDLOBBY is one - launches its
+   * client half and its server half in one breath, and the sequence on the
+   * live board reads: executeClientDoor sets the mode and emits it,
+   * something disables game mode, executeTypeScriptDoor's door enables it
+   * again. Clearing the mode in the middle of that left the second enable
+   * with nothing to say, so the card lobby ran at the arcade rate with
+   * `KEY_REPEAT=application` sitting in its icon, doing nothing.
+   *
+   * The field is set afresh by every launch route instead, so a stale value
+   * cannot survive into the next door.
+   */
   socket.emit('key-repeat-mode', 'game');
   console.log('[GameMode] Disabled');
 }

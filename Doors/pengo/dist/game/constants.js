@@ -3,7 +3,7 @@
  * Pengo - Game Constants
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.FLEE_SPEED_DIVISOR = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SLIDE_TICKS_PER_CELL = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.ARCADE_ROWS = exports.ARCADE_COLS = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
+exports.DEFAULT_HIGHSCORES = exports.MENU_OPTIONS = exports.LEVEL_CONFIGS = exports.FLEE_SPEED_DIVISOR = exports.ENEMY_BREAK_BLOCK_CHANCE = exports.AI_RETARGET_MOVES = exports.AI_TARGET_SIGMA = exports.MAX_LIVING_ENEMIES = exports.ENEMY_MOVE_DELAY = exports.HATCH_TIME = exports.STUN_DURATION = exports.SLIDE_TICKS_PER_CELL = exports.CRUSH_FRAMES = exports.MAX_SCORE = exports.CRUSH_COMBO = exports.SCORES = exports.INITIAL_TIME = exports.STARTING_LIVES = exports.PLAYER_MOVE_MS = exports.GAME_TICK_MS = exports.BOARD_ROWS = exports.BOARD_COLS = exports.VIEW_ROWS = exports.VIEW_COLS = exports.VIEW_GRID_ROWS = exports.WORLD_ROWS = exports.WORLD_COLS = exports.CELL_H = exports.CELL_W = exports.GRID_HEIGHT = exports.GRID_WIDTH = exports.ARCADE_ROWS = exports.ARCADE_COLS = exports.SCREEN_HEIGHT = exports.SCREEN_WIDTH = void 0;
 exports.crushComboScore = crushComboScore;
 exports.getLevelConfig = getLevelConfig;
 exports.SCREEN_WIDTH = 80;
@@ -75,6 +75,21 @@ exports.VIEW_ROWS = exports.VIEW_GRID_ROWS * exports.CELL_H;
 exports.BOARD_COLS = exports.VIEW_COLS;
 exports.BOARD_ROWS = exports.VIEW_ROWS;
 exports.GAME_TICK_MS = 100;
+/**
+ * How long the penguin takes to walk one cell while a direction is HELD.
+ *
+ * The arcade's own cadence: one cell per eight frames at 60Hz. We were at
+ * 90ms - a third faster than the cabinet - and the sysop, once the menu
+ * stopped spinning and the game could be felt on its own, said so: "the
+ * pengo in the game moves too fast" (2026-09-15).
+ *
+ * This is the ONLY thing setting walking speed on a browser session. The
+ * character stream is not: `handleGameInput` stands down whenever held-key
+ * tracking is live, so a held key steps here and nowhere else. A telnet
+ * caller has no key-up and therefore no held keys, and still walks one cell
+ * per keypress.
+ */
+exports.PLAYER_MOVE_MS = 133;
 exports.STARTING_LIVES = 3;
 exports.INITIAL_TIME = 180;
 exports.SCORES = {

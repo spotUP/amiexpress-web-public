@@ -17,6 +17,7 @@ import {
   BOARD_COLS,
   BOARD_ROWS,
   GAME_TICK_MS,
+  PLAYER_MOVE_MS,
   MENU_OPTIONS,
   DEFAULT_HIGHSCORES,
 } from "./game/constants";
@@ -457,7 +458,7 @@ function handleMenuInput(key: InputKey): void {
 function pollHeldDirections(): void {
   if (!inputManager?.isKeyStateActive()) return;
   for (const dir of ["up", "down", "left", "right"] as Direction[]) {
-    if (inputManager.consumeRepeat(dir, { repeatRate: 90 })) {
+    if (inputManager.consumeRepeat(dir, { repeatRate: PLAYER_MOVE_MS })) {
       game?.handleDirection(dir);
     }
   }
