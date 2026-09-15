@@ -112,7 +112,8 @@ describe('the door art dialog', () => {
     const { DoorArtDialog } = await import('../pages/DoorArtDialog');
     render(
       <DoorArtDialog command="REQ" doorName="Requests" file="Bulls.CFG"
-        section="bulletinHeader" label="Bulletin header art" onClose={vi.fn()} />,
+        section="bulletinHeader" label="Bulletin header art"
+        maxLines={10} maxLineLength={80} onClose={vi.fn()} />,
       { wrapper },
     );
 
