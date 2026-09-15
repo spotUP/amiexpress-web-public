@@ -66,6 +66,12 @@ export interface LockEvent {
    * (`mission.c:1053-1098`).
    */
   clearedRows: number[];
+  /**
+   * What the SQUARE scan found on this lock: 0 for nothing, 1 for a square,
+   * 2 for a gold one (`gamestart.c:10506-10541`). Always 0 unless the
+   * mission asked for the scan.
+   */
+  square: 0 | 1 | 2;
 }
 
 /**
@@ -231,6 +237,13 @@ export class MissionRun {
       const gap = gapBetween(rows);
       const gapOk = objective === 'splitDouble2' ? gap === 2 : gap !== 0;
       if (rows.length === wantedCount && gapOk) this.current++;
+    } else if (objective === 'square') {
+      // Any square counts (gamestart.c:8678: `>= 1`).
+      if (event.square >= 1) this.current++;
+    } else if (objective === 'goldSquare') {
+      // Only the gold one, which is sixteen cells of ONE colour
+      // (gamestart.c:8680/10023: the scan's result must be 2).
+      if (event.square === 2) this.current++;
     } else if (objective === 'combo') {
       // "Do %d combo(s)" - the highest combo reached, not a running total.
       // With NOT1LINE it is the counter singles do not advance that is read.

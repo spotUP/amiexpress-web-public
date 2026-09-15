@@ -49,6 +49,9 @@ export const MISSION_OBJECTIVES = [
   'splitDouble',  // "SPLIT DOUBLE"
   'splitTriple',  // "SPLIT TRIPLE"
   'splitDouble2', // "SPLIT DOUBLE2" - the gap is exactly two rows
+  // A free-standing 4x4 block of locked pieces (mission.c:1451-1455).
+  'square',       // "SQUARE"
+  'goldSquare',   // "GOLD SQUARE" - all sixteen cells one colour
 ] as const;
 
 /**

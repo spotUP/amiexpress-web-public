@@ -20,6 +20,8 @@ const devil_grade_1 = require("./devil-grade");
 const hidden_1 = require("./hidden");
 const up_key_lock_1 = require("./up-key-lock");
 const board_writes_1 = require("./board-writes");
+const square_1 = require("./square");
+const credit_roll_rules_1 = require("./credit-roll-rules");
 const tspin_1 = require("./tspin");
 const garbage_1 = require("./garbage");
 const practice_goal_1 = require("./practice-goal");
@@ -68,6 +70,13 @@ class GameEngine {
          * mission.c:1192-1308). Null in every other run.
          */
         this.missionSpeed = null;
+        /**
+         * One id per placement, stamped on the cells it locks (the reference's
+         * `flds`). SQUARE reads it; nothing else does.
+         */
+        this.nextPieceId = 1;
+        /** SQUARE mode: the scan runs after every lock (reference types 40/41). */
+        this.squareMode = false;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -327,6 +336,14 @@ class GameEngine {
      * Applied through the same path the mode's curve takes, so a mission that
      * names only `gravity` still gets the mode's ARE and lock delay.
      */
+    /**
+     * Look for 4x4 squares after every lock (the reference's `squaremode`,
+     * mission.c:1451-1455). Only SQUARE and GOLD SQUARE missions ask for it -
+     * a scan every lock is not free, and no other mode is judged on it.
+     */
+    setSquareMode(on) {
+        this.squareMode = on;
+    }
     setMissionSpeed(speed) {
         this.missionSpeed = speed ?? null;
         if (speed) {
@@ -1393,6 +1410,9 @@ class GameEngine {
          * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
          * seconds - so the clock a player keeps is their own piece count.
          */
+        // SQUARE: the scan runs after the clears, so a square that was just
+        // broken up by a line clear does not count (gamestart.c:8678-8683).
+        const square = this.squareMode ? (0, square_1.makeSquares)(this.state.board) : 0;
         // MIRROR flips the stack after EVERY piece in MISSION mode
         // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
         // is what makes it a mode rather than an effect.
@@ -1421,6 +1441,7 @@ class GameEngine {
             pieceType: piece.type,
             cameFromHold: this.currentCameFromHold,
             clearedRows: [...clearedLines].sort((a, b) => a - b),
+            square,
         });
     }
     /**
@@ -1538,63 +1559,26 @@ class GameEngine {
      * Get bone block probability for current grade
      */
     getBoneBlockChance(grade) {
-        // No bone blocks before S13
-        if (!this.gradeManager.isGradeAtLeast('S13')) {
-            return 0;
-        }
-        // Grade tier probabilities
-        const BONE_PROBABILITIES = {
-            'S13': 0.20,
-            'm1': 0.30, 'm2': 0.30, 'm3': 0.30,
-            'm4': 0.40, 'm5': 0.40, 'm6': 0.40,
-            'm7': 0.50, 'm8': 0.50, 'm9': 0.50,
-            'M': 0.60, 'MK': 0.60,
-            'MV': 0.70, 'MO': 0.70,
-            'GM': 0.80,
-        };
-        return BONE_PROBABILITIES[grade] || 0;
+        return (0, credit_roll_rules_1.boneBlockChance)(grade, this.gradeManager.isGradeAtLeast('S13'));
     }
-    /**
-     * Check if M grade reached and trigger credit roll
-     */
+    /** Check if M grade reached and trigger credit roll */
     checkCreditRollTrigger() {
-        // Only trigger once
         if (this.state.creditRollActive)
             return;
-        // Check if grade qualifies for M rank
-        if (this.gradeManager.isQualifiedForM()) {
+        if (this.gradeManager.isQualifiedForM())
             this.startCreditRoll();
-        }
     }
-    /**
-     * Start credit roll mode
-     */
     startCreditRoll() {
-        this.state.creditRollActive = true;
-        this.creditRollManager.start(this.state.level);
-        const crState = this.creditRollManager.getState();
-        this.state.creditRollStartTime = crState.startTime;
-        this.state.creditRollTimeRemaining = crState.timeRemaining;
+        (0, credit_roll_rules_1.startCreditRoll)(this.state, this.creditRollManager);
     }
-    /**
-     * Complete credit roll and award rank based on qualification
-     */
     completeCreditRoll() {
-        if (this.creditRollManager.isQualified()) {
-            this.state.grade = 'GM'; // Qualified for Grand Master
-        }
-        else {
-            this.state.grade = 'M'; // Failed invisible challenge, stay at Master
-        }
-        this.state.status = 'complete';
-        this.state.endTime = Date.now();
-        this.state.creditRollActive = false;
+        (0, credit_roll_rules_1.completeCreditRoll)(this.state, this.creditRollManager);
     }
     /**
      * Place piece with lock timestamp for credit roll fade
      */
     placePieceWithTimestamp(shape, x, y, pieceType, lockTime) {
-        (0, board_writes_1.placePieceWithTimestamp)(this.state.board, shape, x, y, pieceType, lockTime, (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode) > 0);
+        (0, board_writes_1.placePieceWithTimestamp)(this.state.board, shape, x, y, pieceType, lockTime, (0, hidden_1.shadowDecayRate)(this.settings.hiddenMode) > 0, this.nextPieceId++);
     }
     stampItemOnPiece(shape, x, y, itemId) {
         (0, board_writes_1.stampItemOnPiece)(this.state.board, shape, x, y, itemId);

@@ -178,6 +178,17 @@ class MissionRun {
             if (rows.length === wantedCount && gapOk)
                 this.current++;
         }
+        else if (objective === 'square') {
+            // Any square counts (gamestart.c:8678: `>= 1`).
+            if (event.square >= 1)
+                this.current++;
+        }
+        else if (objective === 'goldSquare') {
+            // Only the gold one, which is sixteen cells of ONE colour
+            // (gamestart.c:8680/10023: the scan's result must be 2).
+            if (event.square === 2)
+                this.current++;
+        }
         else if (objective === 'combo') {
             // "Do %d combo(s)" - the highest combo reached, not a running total.
             // With NOT1LINE it is the counter singles do not advance that is read.

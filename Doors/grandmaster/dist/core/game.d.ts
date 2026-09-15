@@ -75,6 +75,13 @@ export declare class GameEngine {
      * mission.c:1192-1308). Null in every other run.
      */
     private missionSpeed;
+    /**
+     * One id per placement, stamped on the cells it locks (the reference's
+     * `flds`). SQUARE reads it; nothing else does.
+     */
+    private nextPieceId;
+    /** SQUARE mode: the scan runs after every lock (reference types 40/41). */
+    private squareMode;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -165,6 +172,12 @@ export declare class GameEngine {
      * Applied through the same path the mode's curve takes, so a mission that
      * names only `gravity` still gets the mode's ARE and lock delay.
      */
+    /**
+     * Look for 4x4 squares after every lock (the reference's `squaremode`,
+     * mission.c:1451-1455). Only SQUARE and GOLD SQUARE missions ask for it -
+     * a scan every lock is not free, and no other mode is judged on it.
+     */
+    setSquareMode(on: boolean): void;
     setMissionSpeed(speed: MissionSpeed | null): void;
     /** The mode's curve, with the mission's own timings on top of it. */
     private speedParams;
@@ -333,17 +346,9 @@ export declare class GameEngine {
      * Get bone block probability for current grade
      */
     private getBoneBlockChance;
-    /**
-     * Check if M grade reached and trigger credit roll
-     */
+    /** Check if M grade reached and trigger credit roll */
     private checkCreditRollTrigger;
-    /**
-     * Start credit roll mode
-     */
     private startCreditRoll;
-    /**
-     * Complete credit roll and award rank based on qualification
-     */
     private completeCreditRoll;
     /**
      * Place piece with lock timestamp for credit roll fade

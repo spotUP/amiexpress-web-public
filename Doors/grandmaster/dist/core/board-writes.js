@@ -21,9 +21,11 @@ const hidden_1 = require("./hidden");
  * `lockTime` is what the credit roll fades against, and `shadowFrames` is
  * HIDDEN's own timer, started the moment the cell locks
  * (gamestart.c:16224-16225). A run with HIDDEN off leaves it undefined, and
- * the cell is drawn for ever.
+ * the cell is drawn for ever. `pieceId` is the reference's `flds`: one value
+ * for the four cells of one placement, which is how SQUARE tells a
+ * free-standing block from a piece that reaches outside it.
  */
-function placePieceWithTimestamp(board, shape, x, y, pieceType, lockTime, hidden) {
+function placePieceWithTimestamp(board, shape, x, y, pieceType, lockTime, hidden, pieceId) {
     for (let row = 0; row < shape.length; row++) {
         for (let col = 0; col < shape[row].length; col++) {
             if (shape[row][col]) {
@@ -36,6 +38,9 @@ function placePieceWithTimestamp(board, shape, x, y, pieceType, lockTime, hidden
                         locked: true,
                         lockTime,
                         shadowFrames: hidden ? hidden_1.SHADOW_TIMER_FRAMES : undefined,
+                        // The four cells of one placement share an id, which is what
+                        // SQUARE is judged on (core/square.ts).
+                        pieceId,
                     };
                 }
             }

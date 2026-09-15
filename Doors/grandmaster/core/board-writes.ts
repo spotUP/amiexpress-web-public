@@ -17,7 +17,9 @@ import type { Board, PieceType } from './types';
  * `lockTime` is what the credit roll fades against, and `shadowFrames` is
  * HIDDEN's own timer, started the moment the cell locks
  * (gamestart.c:16224-16225). A run with HIDDEN off leaves it undefined, and
- * the cell is drawn for ever.
+ * the cell is drawn for ever. `pieceId` is the reference's `flds`: one value
+ * for the four cells of one placement, which is how SQUARE tells a
+ * free-standing block from a piece that reaches outside it.
  */
 export function placePieceWithTimestamp(
   board: Board,
@@ -27,6 +29,7 @@ export function placePieceWithTimestamp(
   pieceType: PieceType,
   lockTime: number,
   hidden: boolean,
+  pieceId?: number,
 ): void {
   for (let row = 0; row < shape.length; row++) {
     for (let col = 0; col < shape[row].length; col++) {
@@ -41,6 +44,9 @@ export function placePieceWithTimestamp(
             locked: true,
             lockTime,
             shadowFrames: hidden ? SHADOW_TIMER_FRAMES : undefined,
+            // The four cells of one placement share an id, which is what
+            // SQUARE is judged on (core/square.ts).
+            pieceId,
           };
         }
       }

@@ -44,6 +44,21 @@ export interface Cell {
      * undefined = HIDDEN is off and the cell is drawn for ever.
      */
     shadowFrames?: number;
+    /**
+     * Which LOCKED PIECE this cell came from - the reference's `flds`, a value
+     * shared by the four cells of one placement (`gamestart.c:10543`). SQUARE
+     * is judged on it: a 4x4 block only counts if no piece inside it reaches
+     * outside it, which is a question about pieces and not about colours.
+     *
+     * Undefined for garbage and for a field a mission started with, which is
+     * the reference's `<= 0` - neither can be part of a square.
+     */
+    pieceId?: number;
+    /**
+     * This cell is already part of a counted square (the reference writes -1
+     * into `flds`), so it cannot be counted into another one.
+     */
+    squared?: boolean;
 }
 export interface Board {
     width: number;

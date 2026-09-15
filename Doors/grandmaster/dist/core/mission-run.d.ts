@@ -63,6 +63,12 @@ export interface LockEvent {
      * (`mission.c:1053-1098`).
      */
     clearedRows: number[];
+    /**
+     * What the SQUARE scan found on this lock: 0 for nothing, 1 for a square,
+     * 2 for a gold one (`gamestart.c:10506-10541`). Always 0 unless the
+     * mission asked for the scan.
+     */
+    square: 0 | 1 | 2;
 }
 export type MissionOutcome = 'playing' | 'cleared' | 'failed';
 export interface MissionProgress {

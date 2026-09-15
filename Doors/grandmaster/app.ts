@@ -1000,6 +1000,11 @@ export class GrandmasterApp {
       // The mission's own timings, if it named any: 20G from the first piece,
       // a shorter lock delay, whatever the pack asked for.
       this.gameEngine.setMissionSpeed(mission.speed ?? null);
+      // The square scan costs a pass over the board every lock, so only the
+      // two objectives judged on it ask for it.
+      this.gameEngine.setSquareMode(
+        mission.objective === 'square' || mission.objective === 'goldSquare'
+      );
       this.gameEngine.onLock((event) => { missionRun.onLock(event); });
       if (mission.garbageRows > 0) this.gameEngine.seedGarbageRows(mission.garbageRows);
     }

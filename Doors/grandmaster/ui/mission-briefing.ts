@@ -77,6 +77,10 @@ export function missionObjectiveText(mission: Mission): string {
                               + `between them, ${times(norm)}.`;
     case 'splitDouble2': return `Clear two lines at once with exactly two rows `
                               + `left between them, ${times(norm)}.`;
+    case 'square':       return `Build a free-standing four-by-four block of `
+                              + `pieces, ${times(norm)}.`;
+    case 'goldSquare':   return `Build a four-by-four block of pieces, all of `
+                              + `one colour, ${times(norm)}.`;
     default:            return 'Play.';
   }
 }

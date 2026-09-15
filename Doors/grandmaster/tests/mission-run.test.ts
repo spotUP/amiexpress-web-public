@@ -181,13 +181,20 @@ export async function aPackIsReadWithItsDefaults(): Promise<void> {
 }
 
 export async function aPackWithAnUnjudgeableObjectiveIsRefused(): Promise<void> {
-  // The reference has 42 objective types; this engine can judge fourteen of
-  // them. A pack asking for one of the others is not a mission that plays
-  // oddly - it is one that can never be completed.
+  // The reference has 42 objective types and this engine judges most of them
+  // now, but not TARGET - which loads a stage file and wants a platinum cell
+  // kind the board does not have. A pack asking for one it cannot judge is
+  // not a mission that plays oddly; it is one that can never be completed.
   assert.throws(
-    () => parseMissionPack({ missions: [{ objective: 'goldSquare', norm: 1 }] }, 'pack.json'),
-    (error: Error) => error instanceof MissionPackError && /goldSquare/.test(error.message)
+    () => parseMissionPack({ missions: [{ objective: 'target', norm: 1 }] }, 'pack.json'),
+    (error: Error) => error instanceof MissionPackError && /target/.test(error.message)
       && /pack.json #1/.test(error.message)
+  );
+  // And the one that USED to stand here is judged now, so it loads.
+  assert.strictEqual(
+    parseMissionPack({ missions: [{ objective: 'goldSquare', norm: 1 }] }, 'pack.json')
+      .missions[0].objective,
+    'goldSquare',
   );
 }
 

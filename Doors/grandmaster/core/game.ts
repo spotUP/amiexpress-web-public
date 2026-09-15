@@ -36,6 +36,10 @@ import type { MissionModifiers, MissionSpeed } from './mission-types';
 import {
   placePieceWithTimestamp, stampItemOnPiece, collectItemFromLines, mirrorBoard,
 } from './board-writes';
+import { makeSquares, type SquareResult } from './square';
+import {
+  boneBlockChance, startCreditRoll, completeCreditRoll,
+} from './credit-roll-rules';
 import { detectTSpin } from './tspin';
 import { riseGarbageRow, seedGarbageRows } from './garbage';
 import {
@@ -126,6 +130,13 @@ export class GameEngine {
    * mission.c:1192-1308). Null in every other run.
    */
   private missionSpeed: MissionSpeed | null = null;
+  /**
+   * One id per placement, stamped on the cells it locks (the reference's
+   * `flds`). SQUARE reads it; nothing else does.
+   */
+  private nextPieceId = 1;
+  /** SQUARE mode: the scan runs after every lock (reference types 40/41). */
+  private squareMode = false;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -421,6 +432,15 @@ export class GameEngine {
    * Applied through the same path the mode's curve takes, so a mission that
    * names only `gravity` still gets the mode's ARE and lock delay.
    */
+  /**
+   * Look for 4x4 squares after every lock (the reference's `squaremode`,
+   * mission.c:1451-1455). Only SQUARE and GOLD SQUARE missions ask for it -
+   * a scan every lock is not free, and no other mode is judged on it.
+   */
+  setSquareMode(on: boolean): void {
+    this.squareMode = on;
+  }
+
   setMissionSpeed(speed: MissionSpeed | null): void {
     this.missionSpeed = speed ?? null;
     if (speed) {
@@ -1608,6 +1628,10 @@ export class GameEngine {
      * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
      * seconds - so the clock a player keeps is their own piece count.
      */
+    // SQUARE: the scan runs after the clears, so a square that was just
+    // broken up by a line clear does not count (gamestart.c:8678-8683).
+    const square: SquareResult = this.squareMode ? makeSquares(this.state.board) : 0;
+
     // MIRROR flips the stack after EVERY piece in MISSION mode
     // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
     // is what makes it a mode rather than an effect.
@@ -1638,6 +1662,7 @@ export class GameEngine {
       pieceType: piece.type,
       cameFromHold: this.currentCameFromHold,
       clearedRows: [...clearedLines].sort((a, b) => a - b),
+      square,
     });
   }
 
@@ -1768,62 +1793,21 @@ export class GameEngine {
    * Get bone block probability for current grade
    */
   private getBoneBlockChance(grade: string): number {
-    // No bone blocks before S13
-    if (!this.gradeManager.isGradeAtLeast('S13')) {
-      return 0;
-    }
-
-    // Grade tier probabilities
-    const BONE_PROBABILITIES: Record<string, number> = {
-      'S13': 0.20,
-      'm1': 0.30, 'm2': 0.30, 'm3': 0.30,
-      'm4': 0.40, 'm5': 0.40, 'm6': 0.40,
-      'm7': 0.50, 'm8': 0.50, 'm9': 0.50,
-      'M': 0.60, 'MK': 0.60,
-      'MV': 0.70, 'MO': 0.70,
-      'GM': 0.80,
-    };
-
-    return BONE_PROBABILITIES[grade] || 0;
+    return boneBlockChance(grade, this.gradeManager.isGradeAtLeast('S13'));
   }
 
-  /**
-   * Check if M grade reached and trigger credit roll
-   */
+  /** Check if M grade reached and trigger credit roll */
   private checkCreditRollTrigger(): void {
-    // Only trigger once
     if (this.state.creditRollActive) return;
-
-    // Check if grade qualifies for M rank
-    if (this.gradeManager.isQualifiedForM()) {
-      this.startCreditRoll();
-    }
+    if (this.gradeManager.isQualifiedForM()) this.startCreditRoll();
   }
 
-  /**
-   * Start credit roll mode
-   */
   private startCreditRoll(): void {
-    this.state.creditRollActive = true;
-    this.creditRollManager.start(this.state.level);
-    const crState = this.creditRollManager.getState();
-    this.state.creditRollStartTime = crState.startTime;
-    this.state.creditRollTimeRemaining = crState.timeRemaining;
+    startCreditRoll(this.state, this.creditRollManager as any);
   }
 
-  /**
-   * Complete credit roll and award rank based on qualification
-   */
   private completeCreditRoll(): void {
-    if (this.creditRollManager.isQualified()) {
-      this.state.grade = 'GM';  // Qualified for Grand Master
-    } else {
-      this.state.grade = 'M';   // Failed invisible challenge, stay at Master
-    }
-    
-    this.state.status = 'complete';
-    this.state.endTime = Date.now();
-    this.state.creditRollActive = false;
+    completeCreditRoll(this.state, this.creditRollManager as any);
   }
 
   /**
@@ -1839,6 +1823,7 @@ export class GameEngine {
     placePieceWithTimestamp(
       this.state.board, shape, x, y, pieceType, lockTime,
       shadowDecayRate(this.settings.hiddenMode) > 0,
+      this.nextPieceId++,
     );
   }
 

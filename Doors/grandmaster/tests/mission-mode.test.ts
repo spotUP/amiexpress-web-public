@@ -364,6 +364,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   for (const objective of [
     'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
     'splitDouble', 'splitTriple', 'splitDouble2',
+    'square', 'goldSquare',
   ]) {
     assert.ok(used.has(objective as any),
       `${objective} is judged but no shipped mission asks for it`);
@@ -761,4 +762,117 @@ export async function oldStyleHasNoHoldAndNoBackToBack(): Promise<void> {
   holder.setMissionModifiers({ big: false });
   holder.start();
   assert.strictEqual(holder.hold(), true, 'hold works when the mission allows it');
+}
+
+/**
+ * SQUARE: a four-by-four block of PIECES that reaches nowhere outside itself.
+ *
+ * `gamestart.c:10453-10503`. The clever half of the reference's test is the
+ * border check: it compares the piece id of each edge cell with its
+ * neighbour one step out, so a placement that straddles the border - four
+ * cells of one piece, two in and two out - disqualifies the block. That is
+ * why the board has to remember which piece each cell came from.
+ */
+export async function aSquareIsFourPiecesThatReachNowhereElse(): Promise<void> {
+  const { checkSquare, makeSquares } = await import('../core/square');
+  const { createBoard } = await import('../core/board');
+
+  /** Lay a 2x2 patch of one piece id, the shape an O piece locks in. */
+  const lay = (board: any, x: number, y: number, id: number, color: string) => {
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        board.grid[y + j][x + i] = {
+          filled: true, color, locked: true, item: null, pieceId: id,
+        };
+      }
+    }
+  };
+
+  // Four O pieces in a 4x4: the reference's own example of a square.
+  const board: any = createBoard(10, 24);
+  lay(board, 0, 20, 1, 'O'); lay(board, 2, 20, 2, 'O');
+  lay(board, 0, 22, 3, 'O'); lay(board, 2, 22, 4, 'O');
+  assert.strictEqual(checkSquare(board, 0, 20, false), true, 'four pieces, nothing outside');
+  assert.strictEqual(checkSquare(board, 0, 20, true), true, 'and all one colour, so GOLD');
+
+  // Two colours: a square, but not a gold one.
+  const mixed: any = createBoard(10, 24);
+  lay(mixed, 0, 20, 1, 'O'); lay(mixed, 2, 20, 2, 'I');
+  lay(mixed, 0, 22, 3, 'O'); lay(mixed, 2, 22, 4, 'O');
+  assert.strictEqual(checkSquare(mixed, 0, 20, false), true);
+  assert.strictEqual(checkSquare(mixed, 0, 20, true), false, 'a gold square is one colour');
+
+  // A piece that STRADDLES the border: the same id inside and outside.
+  const straddling: any = createBoard(10, 24);
+  lay(straddling, 0, 20, 1, 'O'); lay(straddling, 2, 20, 2, 'O');
+  lay(straddling, 0, 22, 3, 'O');
+  lay(straddling, 2, 22, 4, 'O');
+  // Piece 4's twin cells outside the block, on the row below.
+  straddling.grid[23 + 1] = straddling.grid[23]; // guard: board is 24 tall
+  lay(straddling, 2, 22, 4, 'O');
+  straddling.grid[22][4] = {
+    filled: true, color: 'O', locked: true, item: null, pieceId: 4,
+  };
+  assert.strictEqual(checkSquare(straddling, 0, 20, false), false,
+    'a piece reaching out of the block disqualifies it');
+
+  // Garbage cannot be part of one: it has no piece id at all.
+  const withGarbage: any = createBoard(10, 24);
+  lay(withGarbage, 0, 20, 1, 'O'); lay(withGarbage, 2, 20, 2, 'O');
+  lay(withGarbage, 0, 22, 3, 'O');
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      withGarbage.grid[22 + j][2 + i] = {
+        filled: true, color: 'I', locked: true, item: null,
+      };
+    }
+  }
+  assert.strictEqual(checkSquare(withGarbage, 0, 20, false), false,
+    'garbage has no piece behind it');
+
+  // The scan marks what it counts, so nothing is counted twice.
+  assert.strictEqual(makeSquares(board), 2, 'gold');
+  assert.strictEqual(makeSquares(board), 0, 'and not again');
+}
+
+/**
+ * And it reaches the judge through a real lock.
+ *
+ * The scan runs AFTER the clears (gamestart.c:8678-8683), so a square broken
+ * up by the line it completed does not count.
+ */
+export async function aSquareBuiltInPlayClearsTheMission(): Promise<void> {
+  const mission: Mission = {
+    id: 'sq', name: 'SQUARE', objective: 'square', norm: 1,
+    timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+  };
+  const run = new MissionRun(mission);
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setSquareMode(true);
+  engine.onLock((event: LockEvent) => { run.onLock(event); });
+  engine.start();
+
+  // Three O pieces of a 4x4 already down, and the fourth in the player's hand.
+  const board = engine.getState().board;
+  const top = board.height - 4;
+  const lay = (x: number, y: number, id: number) => {
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        board.grid[y + j][x + i] = {
+          filled: true, color: 'O', locked: true, item: null, pieceId: id,
+        };
+      }
+    }
+  };
+  // The hole is the TOP-RIGHT quarter, so the last piece can reach it: a
+  // block walled in on three sides is one no player could have built.
+  lay(0, top, 101); lay(0, top + 2, 103); lay(2, top + 2, 104);
+  // An O piece occupies columns 1 and 2 of its own box, so x is one left of
+  // the columns it fills.
+  engine.getState().currentPiece = { type: 'O', rotation: 0, x: 1, y: 0 };
+
+  engine.hardDrop();
+
+  assert.strictEqual(run.getProgress().outcome, 'cleared',
+    'the fourth piece closed the square, and the mission with it');
 }

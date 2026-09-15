@@ -22,7 +22,7 @@ import type { HiddenMode, PieceType } from './types';
  * The objectives this engine can judge, each with the reference type it comes
  * from (mission_info.c's `mission_name_editor` list).
  */
-export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive", "blockOrder", "singleOrder", "doubleOrder", "tripleOrder", "reTripleOrder", "splitDouble", "splitTriple", "splitDouble2"];
+export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive", "blockOrder", "singleOrder", "doubleOrder", "tripleOrder", "reTripleOrder", "splitDouble", "splitTriple", "splitDouble2", "square", "goldSquare"];
 /**
  * A piece an ORDER mission asks for - the reference's `mission_opt_3`, where
  * 0..6 name one piece, 7 is "L or J" and 8 is "S or Z" (mission.c:354-362).
