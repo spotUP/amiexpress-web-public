@@ -30,7 +30,7 @@ export function missionRows(
 ): string[] {
   return pack.missions.map((mission, index) => {
     const cleared = clears[mission.id];
-    const mark = cleared ? `{green-fg}[${formatClearTime(cleared.seconds)}]{/green-fg}` : '{gray-fg}[  -  ]{/gray-fg}';
+    const mark = cleared ? `{${T.ok}-fg}[${formatClearTime(cleared.seconds)}]{/${T.ok}-fg}` : `{${T.dim}-fg}[  -  ]{/${T.dim}-fg}`;
     const number = String(index + 1).padStart(2, '0');
     return `${number}  ${mission.name.padEnd(16).slice(0, 16)}  ${mark}`;
   });
@@ -94,8 +94,8 @@ export async function showMissionSelect(
       tags: true,
       style: { fg: T.dim },
       content: canEdit
-        ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
-        : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
+        ? `{${T.accent}-fg}ENTER{/${T.accent}-fg} play  {${T.accent}-fg}E{/${T.accent}-fg} edit pack  {${T.accent}-fg}ESC{/${T.accent}-fg} back`
+        : `{${T.accent}-fg}ENTER{/${T.accent}-fg} play  {${T.accent}-fg}ESC{/${T.accent}-fg} back`,
     } as any);
 
     const list = createList({

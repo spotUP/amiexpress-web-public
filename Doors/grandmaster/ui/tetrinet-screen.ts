@@ -1056,7 +1056,7 @@ const holdEnabled = this.engine.isHoldEnabled();
   private hintLine(): string {
     const keys = (this.state.settings.keyBindings ?? {}) as any;
     const pad = (this.state.settings.gamepadBindings ?? {}) as any;
-    return `{gray-fg} ${tetrinetHints(this.inputSource, keys, pad)}{/gray-fg}`;
+    return `{${T.dim}-fg} ${tetrinetHints(this.inputSource, keys, pad)}{/${T.dim}-fg}`;
   }
 
   /** Note which device is in use and refresh the hints if it changed. */
@@ -1131,7 +1131,7 @@ const holdEnabled = this.engine.isHoldEnabled();
         // A notice, so centre it on both axes.
         align: 'center',
         valign: 'middle',
-        content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+        content: `{${T.accent}-fg}{bold}${text}{/bold}{/${T.accent}-fg}`,
         focusable: false,
         mouse: false,
         clickable: false,
@@ -1159,7 +1159,7 @@ const holdEnabled = this.engine.isHoldEnabled();
     if (!effects.hasDarkness()) {
       this.renderPreview(gameState);
     } else {
-      this.previewBox.setContent('{gray-fg}  ???{/gray-fg}');
+      this.previewBox.setContent(`{${T.dim}-fg}  ???{/${T.dim}-fg}`);
     }
 
     // Held piece
@@ -1176,9 +1176,9 @@ const holdEnabled = this.engine.isHoldEnabled();
     // Render stats. Two lines, because the panel is 24 columns wide inside
     // its border - one long line wrapped and lost the tail.
     this.statsBox.setContent(
-      `Score: {yellow-fg}${gameState.score}{/yellow-fg}\n` +
-      `Level: {cyan-fg}${gameState.level}{/cyan-fg}  ` +
-      `Lines: {green-fg}${gameState.lines}{/green-fg}`
+      `Score: {${T.accent}-fg}${gameState.score}{/${T.accent}-fg}\n` +
+      `Level: {${T.chrome}-fg}${gameState.level}{/${T.chrome}-fg}  ` +
+      `Lines: {${T.ok}-fg}${gameState.lines}{/${T.ok}-fg}`
     );
 
     // Render sudden death status
@@ -1311,7 +1311,7 @@ const holdEnabled = this.engine.isHoldEnabled();
     const shape = this.engine.getPieceShape(state.holdPiece, 0);
     const block = state.canHold
       ? this.getBlockChar(state.holdPiece)
-      : '{gray-fg}||{/gray-fg}';
+      : `{${T.dim}-fg}||{/${T.dim}-fg}`;
 
     let content = '';
     for (const row of shape) {
@@ -1440,7 +1440,7 @@ const holdEnabled = this.engine.isHoldEnabled();
 
     // Two visible columns: the letter on a block, so it still reads as a
     // filled cell rather than a hole in the stack.
-    return `{black-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/black-fg}`;
+    return `{${T.ground}-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/${T.ground}-fg}`;
   }
 
   /**

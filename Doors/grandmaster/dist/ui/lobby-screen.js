@@ -9,6 +9,7 @@ exports.LobbyScreen = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const broker_lobby_adapter_1 = require("../network/broker-lobby-adapter");
 const bot_lobby_1 = require("../network/bot-lobby");
+const door_theme_1 = require("../door-theme");
 /**
  * Lobby Screen
  *
@@ -103,12 +104,12 @@ class LobbyScreen {
                 }
             },
             formatPlayer: (player, isLocal, isHost) => {
-                const hostBadge = isHost ? '{yellow-fg}[HOST]{/yellow-fg} ' : '';
-                const youBadge = isLocal ? '{cyan-fg}(You){/cyan-fg} ' : '';
+                const hostBadge = isHost ? `{${door_theme_1.T.accent}-fg}[HOST]{/${door_theme_1.T.accent}-fg} ` : '';
+                const youBadge = isLocal ? `{${door_theme_1.T.chrome}-fg}(You){/${door_theme_1.T.chrome}-fg} ` : '';
                 const botBadge = player.isBot
                     ? `{magenta-fg}[CPU-${player.botDifficulty}]{/magenta-fg} `
                     : '';
-                return `${hostBadge}${youBadge}${botBadge}{white-fg}${player.name}{/white-fg}`;
+                return `${hostBadge}${youBadge}${botBadge}{${door_theme_1.T.ink}-fg}${player.name}{/${door_theme_1.T.ink}-fg}`;
             },
         });
         // Convert lobby mode to entry mode

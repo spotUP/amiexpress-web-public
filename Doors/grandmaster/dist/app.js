@@ -644,11 +644,11 @@ class GrandmasterApp {
             },
         });
         const frames = [
-            '{bold}{cyan-fg}INITIALIZING...{/cyan-fg}{/bold}',
-            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Loading TGM3 Engine...{/gray-fg}',
-            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Calibrating 20G Gravity...{/gray-fg}',
-            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Initializing Grade System...{/gray-fg}',
-            '{bold}{yellow-fg}G R A N D M A S T E R{/yellow-fg}{/bold}\n\n{white-fg}TGM3-Inspired Multiplayer Tetris{/white-fg}\n\n{gray-fg}Press any key...{/gray-fg}',
+            `{bold}{${door_theme_1.T.chrome}-fg}INITIALIZING...{/${door_theme_1.T.chrome}-fg}{/bold}`,
+            `{bold}{${door_theme_1.T.chrome}-fg}GRANDMASTER{/${door_theme_1.T.chrome}-fg}{/bold}\n\n{${door_theme_1.T.dim}-fg}Loading TGM3 Engine...{/${door_theme_1.T.dim}-fg}`,
+            `{bold}{${door_theme_1.T.chrome}-fg}GRANDMASTER{/${door_theme_1.T.chrome}-fg}{/bold}\n\n{${door_theme_1.T.dim}-fg}Calibrating 20G Gravity...{/${door_theme_1.T.dim}-fg}`,
+            `{bold}{${door_theme_1.T.chrome}-fg}GRANDMASTER{/${door_theme_1.T.chrome}-fg}{/bold}\n\n{${door_theme_1.T.dim}-fg}Initializing Grade System...{/${door_theme_1.T.dim}-fg}`,
+            `{bold}{${door_theme_1.T.accent}-fg}G R A N D M A S T E R{/${door_theme_1.T.accent}-fg}{/bold}\n\n{${door_theme_1.T.ink}-fg}TGM3-Inspired Multiplayer Tetris{/${door_theme_1.T.ink}-fg}\n\n{${door_theme_1.T.dim}-fg}Press any key...{/${door_theme_1.T.dim}-fg}`,
         ];
         for (let i = 0; i < frames.length; i++) {
             bootBox.setContent(`${frames[i]}`);
@@ -960,10 +960,10 @@ class GrandmasterApp {
                 // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
                 align: 'center',
                 valign: 'middle',
-                content: '{bold}{red-fg}ERROR{/red-fg}{/bold}\n\n' +
-                    '{white-fg}Multiplayer not available\n' +
-                    'Network connection required{/white-fg}\n\n' +
-                    '{gray-fg}Press any key to return{/gray-fg}',
+                content: `{bold}{${door_theme_1.T.alert}-fg}ERROR{/${door_theme_1.T.alert}-fg}{/bold}\n\n` +
+                    `{${door_theme_1.T.ink}-fg}Multiplayer not available\n` +
+                    `Network connection required{/${door_theme_1.T.ink}-fg}\n\n` +
+                    `{${door_theme_1.T.dim}-fg}Press any key to return{/${door_theme_1.T.dim}-fg}`,
                 fixed: true,
             });
             this.screen.render();
@@ -1679,7 +1679,7 @@ class GrandmasterApp {
                 height: 5,
                 label: ' TETRIS ATTACK ',
                 tags: true,
-                content: `\n {white-fg}${message}{/white-fg}`,
+                content: `\n {${door_theme_1.T.ink}-fg}${message}{/${door_theme_1.T.ink}-fg}`,
                 style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
             });
             this.screen.render();
@@ -2333,14 +2333,14 @@ class GrandmasterApp {
         const items = running.length > 0
             ? running.map(game => `${game.mode.padEnd(14)} ${String(game.players).padStart(2)}/${game.maxPlayers}  ` +
                 `${game.state === 'waiting' ? 'in lobby' : 'playing '}  ${game.playerNames.join(', ').slice(0, 20)}`)
-            : ['{gray-fg}No games running right now{/gray-fg}'];
+            : [`{${door_theme_1.T.dim}-fg}No games running right now{/${door_theme_1.T.dim}-fg}`];
         const list = (0, blessed_helpers_1.createList)({
             parent: panel,
             top: 1,
             left: 1,
             width: '100%-2',
             height: 12,
-            items: [...items, '{gray-fg}Back{/gray-fg}'],
+            items: [...items, `{${door_theme_1.T.dim}-fg}Back{/${door_theme_1.T.dim}-fg}`],
             keys: true,
             vi: true,
             mouse: true,
@@ -2410,10 +2410,10 @@ class GrandmasterApp {
         const getItems = () => [
             ...predefinedServers.map(s => s.name),
             '',
-            '{yellow-fg}Enter Custom Server...{/yellow-fg}',
-            '{cyan-fg}Update Server List (Live)...{/cyan-fg}',
+            `{${door_theme_1.T.accent}-fg}Enter Custom Server...{/${door_theme_1.T.accent}-fg}`,
+            `{${door_theme_1.T.chrome}-fg}Update Server List (Live)...{/${door_theme_1.T.chrome}-fg}`,
             '',
-            '{gray-fg}Back{/gray-fg}',
+            `{${door_theme_1.T.dim}-fg}Back{/${door_theme_1.T.dim}-fg}`,
         ];
         const serverPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -2565,7 +2565,7 @@ class GrandmasterApp {
                 left: 2,
                 width: '100%-2',
                 height: 1,
-                content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
+                content: `{${door_theme_1.T.dim}-fg}Tab to switch, Enter to continue, ESC to cancel{/${door_theme_1.T.dim}-fg}`,
             });
             this.screen.render();
             const inputs = [serverInput, portInput];
@@ -2720,7 +2720,7 @@ class GrandmasterApp {
             width: '100%-2',
             height: 1,
             border: { type: 'none' },
-            content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
+            content: `{${door_theme_1.T.dim}-fg}Enter your nickname (max 15 chars), ESC to cancel{/${door_theme_1.T.dim}-fg}`,
         });
         this.screen.render();
         nickInput.focus();
@@ -2795,7 +2795,7 @@ class GrandmasterApp {
                 left: 2,
                 width: '100%-2',
                 height: 1,
-                content: '{gray-fg}Enter TSpec password (ESC to cancel){/gray-fg}',
+                content: `{${door_theme_1.T.dim}-fg}Enter TSpec password (ESC to cancel){/${door_theme_1.T.dim}-fg}`,
             });
             this.screen.render();
             passwordInput.focus();
@@ -2841,7 +2841,7 @@ class GrandmasterApp {
             // A notice, so centre it on both axes.
             align: 'center',
             valign: 'middle',
-            content: `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+            content: `{bold}{${door_theme_1.T.chrome}-fg}Connecting to TetriNET server...{/${door_theme_1.T.chrome}-fg}{/bold}\n\n` +
                 `Server: ${result.server}:${result.port}\n` +
                 `Mode: ${result.mode}\n` +
                 `Status: Initializing...`,
@@ -2850,7 +2850,7 @@ class GrandmasterApp {
         this.screen.render();
         // Helper to update status
         const updateStatus = (status) => {
-            statusBox.setContent(`{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+            statusBox.setContent(`{bold}{${door_theme_1.T.chrome}-fg}Connecting to TetriNET server...{/${door_theme_1.T.chrome}-fg}{/bold}\n\n` +
                 `Server: ${result.server}:${result.port}\n` +
                 `Mode: ${result.mode}\n` +
                 `Status: ${status}`);
@@ -2882,7 +2882,7 @@ class GrandmasterApp {
             });
             updateStatus('Initiating TCP connection...');
             await client.connect();
-            statusBox.setContent(`{bold}{green-fg}Connected!{/green-fg}{/bold}\n\n` +
+            statusBox.setContent(`{bold}{${door_theme_1.T.ok}-fg}Connected!{/${door_theme_1.T.ok}-fg}{/bold}\n\n` +
                 `${client.getSlot() ? `Slot ${client.getSlot()} assigned` : 'Spectator connected'}`);
             this.screen.render();
             // Wait a moment to show connected status
@@ -2893,7 +2893,7 @@ class GrandmasterApp {
             client.disconnect();
         }
         catch (error) {
-            statusBox.setContent(`{bold}{red-fg}Connection Failed{/red-fg}{/bold}\n\n` +
+            statusBox.setContent(`{bold}{${door_theme_1.T.alert}-fg}Connection Failed{/${door_theme_1.T.alert}-fg}{/bold}\n\n` +
                 `${error.message}`);
             this.screen.render();
             await this.waitForKey();
@@ -3038,7 +3038,7 @@ class GrandmasterApp {
             const modeLabel = client.getSlot() ? 'Player' : 'Spectator';
             const chatMode = spectatorPublic ? 'Public' : 'Private';
             const chatHint = client.getSlot() ? 'Partyline' : `TSpec ${chatMode}`;
-            lobbyUi.footerStatus.setContent(`{gray-fg}Mode:{/gray-fg} ${modeLabel}  {gray-fg}Chat:{/gray-fg} ${chatHint}`);
+            lobbyUi.footerStatus.setContent(`{${door_theme_1.T.dim}-fg}Mode:{/${door_theme_1.T.dim}-fg} ${modeLabel}  {${door_theme_1.T.dim}-fg}Chat:{/${door_theme_1.T.dim}-fg} ${chatHint}`);
             this.screen.render();
         };
         const updatePlayerList = () => {
@@ -3049,12 +3049,12 @@ class GrandmasterApp {
             for (let slot = 1; slot <= 6; slot++) {
                 const player = players.find(p => p.slot === slot);
                 if (player) {
-                    const alive = player.alive ? '{green-fg}[OK]{/green-fg}' : '{red-fg}[OUT]{/red-fg}';
-                    const team = player.team ? `{gray-fg}(${player.team}){/gray-fg}` : '';
-                    content += `${slot}. {white-fg}${player.name}{/white-fg} ${alive} ${team}\n`;
+                    const alive = player.alive ? `{${door_theme_1.T.ok}-fg}[OK]{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.alert}-fg}[OUT]{/${door_theme_1.T.alert}-fg}`;
+                    const team = player.team ? `{${door_theme_1.T.dim}-fg}(${player.team}){/${door_theme_1.T.dim}-fg}` : '';
+                    content += `${slot}. {${door_theme_1.T.ink}-fg}${player.name}{/${door_theme_1.T.ink}-fg} ${alive} ${team}\n`;
                 }
                 else {
-                    content += `${slot}. {gray-fg}(empty){/gray-fg}\n`;
+                    content += `${slot}. {${door_theme_1.T.dim}-fg}(empty){/${door_theme_1.T.dim}-fg}\n`;
                 }
             }
             lobbyUi.playerList.setContent(content.trim());
@@ -3065,7 +3065,7 @@ class GrandmasterApp {
                 return;
             const spectators = client.getSpectators();
             if (spectators.length === 0) {
-                lobbyUi.spectatorList.setContent('{gray-fg}(none){/gray-fg}');
+                lobbyUi.spectatorList.setContent(`{${door_theme_1.T.dim}-fg}(none){/${door_theme_1.T.dim}-fg}`);
             }
             else {
                 lobbyUi.spectatorList.setContent(spectators.join('\n'));
@@ -3179,17 +3179,17 @@ class GrandmasterApp {
         externalAdapter.onUpdate(() => refreshOpponents());
         client.drainBacklog();
         client.on('player:joined', (player) => {
-            addChatMessage(`{green-fg}*** ${player.name} joined (slot ${player.slot}){/green-fg}`);
+            addChatMessage(`{${door_theme_1.T.ok}-fg}*** ${player.name} joined (slot ${player.slot}){/${door_theme_1.T.ok}-fg}`);
             updatePlayerList();
             refreshOpponents();
         });
         client.on('player:left', (data) => {
-            addChatMessage(`{red-fg}*** Player left slot ${data.slot}{/red-fg}`);
+            addChatMessage(`{${door_theme_1.T.alert}-fg}*** Player left slot ${data.slot}{/${door_theme_1.T.alert}-fg}`);
             updatePlayerList();
             refreshOpponents();
         });
         client.on('player:team', (data) => {
-            addChatMessage(`{cyan-fg}*** Slot ${data.slot} joined team: ${data.team}{/cyan-fg}`);
+            addChatMessage(`{${door_theme_1.T.chrome}-fg}*** Slot ${data.slot} joined team: ${data.team}{/${door_theme_1.T.chrome}-fg}`);
             updatePlayerList();
         });
         client.on('chat', (data) => {
@@ -3197,7 +3197,7 @@ class GrandmasterApp {
                 addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
             }
             else if (data.isGameMessage) {
-                addChatMessage(`{yellow-fg}[GAME] ${data.text}{/yellow-fg}`);
+                addChatMessage(`{${door_theme_1.T.accent}-fg}[GAME] ${data.text}{/${door_theme_1.T.accent}-fg}`);
             }
             else {
                 addChatMessage(`<${data.name}> ${data.text}`);
@@ -3226,8 +3226,8 @@ class GrandmasterApp {
             if (gameScreen)
                 return;
             addChatMessage(data.inProgress
-                ? `{yellow-fg}*** Game is already in progress{/yellow-fg}`
-                : `{bold}{green-fg}*** GAME STARTING! ***{/green-fg}{/bold}`);
+                ? `{${door_theme_1.T.accent}-fg}*** Game is already in progress{/${door_theme_1.T.accent}-fg}`
+                : `{bold}{${door_theme_1.T.ok}-fg}*** GAME STARTING! ***{/${door_theme_1.T.ok}-fg}{/bold}`);
             if (lobbyUi) {
                 lobbyUi.destroy();
                 lobbyUi = null;
@@ -3288,11 +3288,11 @@ class GrandmasterApp {
             void handleGameStart(data);
         });
         client.on('game:end', () => {
-            addChatMessage(`{bold}{yellow-fg}*** GAME OVER ***{/yellow-fg}{/bold}`);
+            addChatMessage(`{bold}{${door_theme_1.T.accent}-fg}*** GAME OVER ***{/${door_theme_1.T.accent}-fg}{/bold}`);
             updatePlayerList();
         });
         client.on('player:lost', (data) => {
-            addChatMessage(`{red-fg}*** Slot ${data.slot} topped out!{/red-fg}`);
+            addChatMessage(`{${door_theme_1.T.alert}-fg}*** Slot ${data.slot} topped out!{/${door_theme_1.T.alert}-fg}`);
             updatePlayerList();
             refreshOpponents();
         });
@@ -3312,10 +3312,10 @@ class GrandmasterApp {
             }
         });
         client.on('disconnected', () => {
-            addChatMessage(`{red-fg}*** Disconnected from server{/red-fg}`);
+            addChatMessage(`{${door_theme_1.T.alert}-fg}*** Disconnected from server{/${door_theme_1.T.alert}-fg}`);
         });
         client.on('error', (error) => {
-            addChatMessage(`{red-fg}*** Error: ${error.message}{/red-fg}`);
+            addChatMessage(`{${door_theme_1.T.alert}-fg}*** Error: ${error.message}{/${door_theme_1.T.alert}-fg}`);
         });
         await new Promise((resolve) => {
             registerLobbyEscape(resolve);
@@ -3478,8 +3478,8 @@ class GrandmasterApp {
             align: 'center',
             valign: 'middle',
             content: `{bold}Initializing CPU Battle{/bold}\n\n` +
-                `{gray-fg}Opponent Difficulty: ${botDifficulty}/10{/gray-fg}\n` +
-                `{gray-fg}Loading AI...{/gray-fg}`,
+                `{${door_theme_1.T.dim}-fg}Opponent Difficulty: ${botDifficulty}/10{/${door_theme_1.T.dim}-fg}\n` +
+                `{${door_theme_1.T.dim}-fg}Loading AI...{/${door_theme_1.T.dim}-fg}`,
             fixed: true,
         });
         this.screen.render();
@@ -3782,8 +3782,8 @@ class GrandmasterApp {
             style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             align: 'center',
             valign: 'middle',
-            content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
-                + `{gray-fg}Press any key to continue...{/gray-fg}`,
+            content: `{bold}{${door_theme_1.T.chrome}-fg}${title}{/${door_theme_1.T.chrome}-fg}{/bold}\n\n${body}\n\n`
+                + `{${door_theme_1.T.dim}-fg}Press any key to continue...{/${door_theme_1.T.dim}-fg}`,
             fixed: true,
             tags: true,
         });
@@ -3812,10 +3812,10 @@ class GrandmasterApp {
             style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'center',
             valign: 'middle',
-            content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +
-                `{white-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/white-fg}\n` +
-                `{white-fg}Score: {bold}${score.toLocaleString()}{/bold}{/white-fg}\n\n` +
-                `{gray-fg}Press any key to continue...{/gray-fg}`,
+            content: `{bold}{${door_theme_1.T.accent}-fg}NEW HIGH SCORE!{/${door_theme_1.T.accent}-fg}{/bold}\n\n` +
+                `{${door_theme_1.T.ink}-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/${door_theme_1.T.ink}-fg}\n` +
+                `{${door_theme_1.T.ink}-fg}Score: {bold}${score.toLocaleString()}{/bold}{/${door_theme_1.T.ink}-fg}\n\n` +
+                `{${door_theme_1.T.dim}-fg}Press any key to continue...{/${door_theme_1.T.dim}-fg}`,
             fixed: true,
         });
         this.screen.render();

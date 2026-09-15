@@ -78,25 +78,25 @@ export function missionConditions(mission: Mission): string[] {
  */
 export function missionBriefingLines(mission: Mission, clear: MissionClear | null): string[] {
   const lines: string[] = [
-    `{bold}{yellow-fg}${mission.name}{/yellow-fg}{/bold}`,
+    `{bold}{${T.accent}-fg}${mission.name}{/${T.accent}-fg}{/bold}`,
     '',
-    `{white-fg}${missionObjectiveText(mission)}{/white-fg}`,
+    `{${T.ink}-fg}${missionObjectiveText(mission)}{/${T.ink}-fg}`,
   ];
 
   const conditions = missionConditions(mission);
   if (conditions.length > 0) {
     lines.push('');
-    for (const condition of conditions) lines.push(`{cyan-fg}- ${condition}{/cyan-fg}`);
+    for (const condition of conditions) lines.push(`{${T.chrome}-fg}- ${condition}{/${T.chrome}-fg}`);
   }
 
   if (mission.hint) {
-    lines.push('', `{gray-fg}${mission.hint}{/gray-fg}`);
+    lines.push('', `{${T.dim}-fg}${mission.hint}{/${T.dim}-fg}`);
   }
 
   lines.push('');
   lines.push(clear
-    ? `{green-fg}Cleared in ${formatClearTime(clear.seconds)}{/green-fg}`
-    : '{gray-fg}Not cleared yet{/gray-fg}');
+    ? `{${T.ok}-fg}Cleared in ${formatClearTime(clear.seconds)}{/${T.ok}-fg}`
+    : `{${T.dim}-fg}Not cleared yet{/${T.dim}-fg}`);
 
   return lines;
 }

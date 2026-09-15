@@ -25,6 +25,10 @@ import { MenuScreen } from '../ui/menu';
 import { GameScreen } from '../ui/game-screen';
 import { GameEngine } from '../core/game';
 import { PIECE_COLORS } from '../core/pieces';
+import { missionRows } from '../ui/mission-select';
+import { MENU_ITEMS } from '../ui/menu';
+import { loadMissionPack } from '../core/mission-pack';
+import * as path from 'path';
 import { applyTheme } from '../door-theme';
 
 const sounds: any = { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} };
@@ -193,5 +197,64 @@ export async function theMenuCarriesTheSdkMasthead(): Promise<void> {
       assert.ok(painted.includes('GRANDMASTER'),
         `the masthead carries the door's name, got ${JSON.stringify(painted)}`);
     } finally { h.destroy(); }
+  } finally { backToClassic(); }
+}
+
+/**
+ * The COLOUR TAGS follow too, not just the widget styles.
+ *
+ * Half the door's colour lived in blessed tags inside painted strings -
+ * `{cyan-fg}`, `{gray-fg}`, `{green-fg}` - and a door whose borders take the
+ * theme while its labels stay classic-cyan is a door with two palettes on
+ * one screen. `missionRows` is the pure one, so it is the one that can be
+ * read straight.
+ */
+export async function thePaintedTagsFollowTheThemeAsWell(): Promise<void> {
+  const packPath = path.join(__dirname, '..', 'assets', 'missions', 'starter.json');
+  const pack = loadMissionPack(packPath);
+  const first = pack.missions[0].id;
+
+  const phosphor = themeById('quiet-phosphor');
+  applyTheme(phosphor);
+  try {
+    const rows = missionRows(pack, { [first]: { seconds: 75 } });
+    const cleared = rows[0];
+    assert.ok(cleared.includes(`{${phosphor.tokens.ok}-fg}`),
+      `a cleared mission's mark takes the theme's ok colour, got ${cleared}`);
+    assert.ok(!cleared.includes('{green-fg}'),
+      'and not the classic literal it was written with');
+    const open = cleared.match(/\{[^/{}]+-fg\}/g) ?? [];
+    const close = cleared.match(/\{\/[^{}]+-fg\}/g) ?? [];
+    assert.strictEqual(open.length, close.length,
+      'every tag the rewrite opened is closed, or the colour runs on down the list');
+  } finally { backToClassic(); }
+
+  // And classic still paints the literal it always did.
+  const classicRows = missionRows(pack, { [first]: { seconds: 75 } });
+  assert.ok(classicRows[0].includes('{green-fg}'),
+    'classic is unchanged: the mark is still green');
+}
+
+/**
+ * A module-level `const` must never carry a token.
+ *
+ * MENU_ITEMS is built at IMPORT time, which is before `applyTheme` has run,
+ * so a token written into it would freeze at classic and follow nothing ever
+ * after - the quiet failure this migration could most easily have shipped.
+ * Its per-mode colours are identity art anyway, so the rule and the art
+ * agree: the literals stay.
+ */
+export async function theMenuItemsStayLiteralBecauseTheyAreBuiltBeforeTheThemeIs(): Promise<void> {
+  applyTheme(themeById('quiet-phosphor'));
+  try {
+    const joined = MENU_ITEMS.join('|');
+    assert.ok(joined.includes('{yellow-fg}TETRINET{/yellow-fg}'),
+      'the mode labels are literal art, and must not be tokenised into a const');
+    const phosphor = themeById('quiet-phosphor');
+    for (const token of [phosphor.tokens.accent, phosphor.tokens.chrome, phosphor.tokens.ok]) {
+      assert.ok(!joined.includes(token),
+        `a theme colour (${token}) in a module-level const is frozen at whatever `
+        + 'theme was loaded first - make it a function before tokenising it');
+    }
   } finally { backToClassic(); }
 }

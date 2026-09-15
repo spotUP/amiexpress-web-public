@@ -43,7 +43,7 @@ function ask(screen: Screen, title: string, current: string): Promise<string | n
       style: { bg: T.ground, border: { fg: T.chrome } },
       fixed: true,
       tags: true,
-      content: `\n {white-fg}Type a value and press ENTER. ESC keeps "${current}".{/white-fg}`,
+      content: `\n {${T.ink}-fg}Type a value and press ENTER. ESC keeps "${current}".{/${T.ink}-fg}`,
     } as any);
 
     const input: any = (screen as any).program
@@ -91,7 +91,7 @@ function say(screen: Screen, title: string, message: string): Promise<void> {
       fixed: true,
       tags: true,
       keys: true,
-      content: `\n {white-fg}${message}{/white-fg}\n\n {yellow-fg}Any key.{/yellow-fg}`,
+      content: `\n {${T.ink}-fg}${message}{/${T.ink}-fg}\n\n {${T.accent}-fg}Any key.{/${T.accent}-fg}`,
     } as any);
 
     (box as any).focus();
@@ -157,8 +157,8 @@ function editMission(screen: Screen, mission: Mission): Promise<Mission | null> 
       (list as any).select(at);
       const spec = MISSION_FIELDS[at];
       help.setContent(
-        ` {cyan-fg}${spec?.help ?? ''}{/cyan-fg}\n`
-        + ` {yellow-fg}LEFT/RIGHT{/yellow-fg} change  {yellow-fg}ENTER{/yellow-fg} type  {yellow-fg}ESC{/yellow-fg} back`,
+        ` {${T.chrome}-fg}${spec?.help ?? ''}{/${T.chrome}-fg}\n`
+        + ` {${T.accent}-fg}LEFT/RIGHT{/${T.accent}-fg} change  {${T.accent}-fg}ENTER{/${T.accent}-fg} type  {${T.accent}-fg}ESC{/${T.accent}-fg} back`,
       );
       screen.render();
     };
@@ -286,12 +286,12 @@ type PackChoice = 'name' | 'add' | 'save' | { edit: number } | { remove: number 
 function pickRow(screen: Screen, pack: MissionPack): Promise<PackChoice> {
   return new Promise((resolve) => {
     const rows = [
-      ` {cyan-fg}Pack name{/cyan-fg}  ${pack.name}`,
+      ` {${T.chrome}-fg}Pack name{/${T.chrome}-fg}  ${pack.name}`,
       ...pack.missions.map((mission, index) =>
         ` ${String(index + 1).padStart(2, ' ')}. ${mission.name.padEnd(22, ' ')}`
         + `${mission.objective} ${mission.objective === 'survive' ? '' : mission.norm}`),
-      ' {green-fg}+ Add a mission{/green-fg}',
-      ' {yellow-fg}S Save this pack{/yellow-fg}',
+      ` {${T.ok}-fg}+ Add a mission{/${T.ok}-fg}`,
+      ` {${T.accent}-fg}S Save this pack{/${T.accent}-fg}`,
     ];
 
     const box = createBox({
@@ -329,8 +329,8 @@ function pickRow(screen: Screen, pack: MissionPack): Promise<PackChoice> {
       height: 1,
       tags: true,
       style: { bg: T.ground, fg: T.ink },
-      content: ' {yellow-fg}ENTER{/yellow-fg} edit  {yellow-fg}D{/yellow-fg} delete  '
-        + '{yellow-fg}S{/yellow-fg} save  {yellow-fg}ESC{/yellow-fg} leave',
+      content: ` {${T.accent}-fg}ENTER{/${T.accent}-fg} edit  {${T.accent}-fg}D{/${T.accent}-fg} delete  `
+        + `{${T.accent}-fg}S{/${T.accent}-fg} save  {${T.accent}-fg}ESC{/${T.accent}-fg} leave`,
     } as any);
 
     const done = (choice: PackChoice): void => {

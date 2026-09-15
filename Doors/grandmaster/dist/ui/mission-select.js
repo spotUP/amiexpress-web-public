@@ -26,7 +26,7 @@ function formatClearTime(seconds) {
 function missionRows(pack, clears) {
     return pack.missions.map((mission, index) => {
         const cleared = clears[mission.id];
-        const mark = cleared ? `{green-fg}[${formatClearTime(cleared.seconds)}]{/green-fg}` : '{gray-fg}[  -  ]{/gray-fg}';
+        const mark = cleared ? `{${door_theme_1.T.ok}-fg}[${formatClearTime(cleared.seconds)}]{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}[  -  ]{/${door_theme_1.T.dim}-fg}`;
         const number = String(index + 1).padStart(2, '0');
         return `${number}  ${mission.name.padEnd(16).slice(0, 16)}  ${mark}`;
     });
@@ -72,8 +72,8 @@ canEdit = false) {
             tags: true,
             style: { fg: door_theme_1.T.dim },
             content: canEdit
-                ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
-                : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
+                ? `{${door_theme_1.T.accent}-fg}ENTER{/${door_theme_1.T.accent}-fg} play  {${door_theme_1.T.accent}-fg}E{/${door_theme_1.T.accent}-fg} edit pack  {${door_theme_1.T.accent}-fg}ESC{/${door_theme_1.T.accent}-fg} back`
+                : `{${door_theme_1.T.accent}-fg}ENTER{/${door_theme_1.T.accent}-fg} play  {${door_theme_1.T.accent}-fg}ESC{/${door_theme_1.T.accent}-fg} back`,
         });
         const list = (0, blessed_helpers_1.createList)({
             parent: box,

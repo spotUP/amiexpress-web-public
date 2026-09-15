@@ -77,7 +77,7 @@ export class InventoryPanel {
   private renderEmpty(): string {
     let content = '';
     for (let i = 0; i < this.maxSlots; i++) {
-      content += '{gray-fg}. {/gray-fg}';
+      content += `{${T.dim}-fg}. {/${T.dim}-fg}`;
     }
     return content;
   }
@@ -96,12 +96,12 @@ export class InventoryPanel {
 
         // First slot (usable) gets highlighted background
         if (i === 0) {
-          content += `{${color}-fg}{white-bg}{bold}${char}{/bold}{/white-bg}{/${color}-fg} `;
+          content += `{${color}-fg}{${T.ink}-bg}{bold}${char}{/bold}{/${T.ink}-bg}{/${color}-fg} `;
         } else {
           content += `{${color}-fg}${char}{/${color}-fg} `;
         }
       } else {
-        content += '{gray-fg}. {/gray-fg}';
+        content += `{${T.dim}-fg}. {/${T.dim}-fg}`;
       }
     }
 

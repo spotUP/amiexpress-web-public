@@ -14,6 +14,7 @@
 
 import type { Board } from '../core/types';
 
+import { T } from '../door-theme';
 // Opponents per row before switching to text list
 const BUCKET_THRESHOLD = 10;
 
@@ -202,7 +203,7 @@ export class MinimapRenderer {
           line += `{${col}-fg}${'█'.repeat(BAR_W)}{/${col}-fg} `;
         } else {
           // Empty portion — faint dots so the bar outline is visible
-          line += `{gray-fg}${'·'.repeat(BAR_W)}{/gray-fg} `;
+          line += `{${T.dim}-fg}${'·'.repeat(BAR_W)}{/${T.dim}-fg} `;
         }
       }
       rows.push(line);
@@ -266,8 +267,8 @@ export class MinimapRenderer {
       return `{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`;
     };
 
-    const header = `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`;
-    const rule = `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`;
+    const header = `{${T.chrome}-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/${T.chrome}-fg}`;
+    const rule = `{${T.dim}-fg}${'─'.repeat(rowW)}{/${T.dim}-fg}`;
     const gap = ' '.repeat(COLUMN_GAP);
     const lines: string[] = [
       Array.from({ length: columns }, () => header).join(gap),
@@ -286,7 +287,7 @@ export class MinimapRenderer {
     }
 
     if (overflow) {
-      lines.push(`{gray-fg}${String(sorted.length - shown).padStart(2)} more still playing{/gray-fg}`);
+      lines.push(`{${T.dim}-fg}${String(sorted.length - shown).padStart(2)} more still playing{/${T.dim}-fg}`);
     }
 
     return lines.join('\n');

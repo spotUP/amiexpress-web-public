@@ -121,14 +121,14 @@ class GameScreen {
             border: { type: 'line' },
             style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             align: 'center',
-            content: '{bold}{yellow-fg}READY{/yellow-fg}{/bold}',
+            content: `{bold}{${door_theme_1.T.accent}-fg}READY{/${door_theme_1.T.accent}-fg}{/bold}`,
             fixed: true,
             tags: true,
         });
         try {
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 900));
-            readyBox.setContent('{bold}{green-fg}  GO !{/green-fg}{/bold}');
+            readyBox.setContent(`{bold}{${door_theme_1.T.ok}-fg}  GO !{/${door_theme_1.T.ok}-fg}{/bold}`);
             this.screen.render();
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -856,10 +856,10 @@ class GameScreen {
         if (state.mode !== 'dig')
             return '';
         const remaining = state.digLinesRemaining ?? 0;
-        const color = remaining <= 3 ? 'green' : remaining <= 6 ? 'yellow' : 'red';
+        const color = remaining <= 3 ? door_theme_1.T.ok : remaining <= 6 ? door_theme_1.T.warn : door_theme_1.T.alert;
         const filled = 10 - remaining;
         const bar = '#'.repeat(filled) + '-'.repeat(remaining);
-        return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{gray-fg}[${bar}]{/gray-fg}`;
+        return `\n{${color}-fg}DIG: ${remaining} left{/${color}-fg}\n{${door_theme_1.T.dim}-fg}[${bar}]{/${door_theme_1.T.dim}-fg}`;
     }
     /**
      * The zone meter, or the countdown while zone is running.
@@ -871,7 +871,7 @@ class GameScreen {
         if (state.zoneActive) {
             const s = Math.ceil(Math.max(0, state.zoneTimeRemaining) / 1000);
             const n = state.zoneBufferedLines ?? 0;
-            return `\n {cyan-fg}{bold}ACTIVE{/bold}{/cyan-fg}\n {cyan-fg}${s}s{/cyan-fg}\n {white-fg}${n} lines held{/white-fg}`;
+            return `\n {${door_theme_1.T.chrome}-fg}{bold}ACTIVE{/bold}{/${door_theme_1.T.chrome}-fg}\n {${door_theme_1.T.chrome}-fg}${s}s{/${door_theme_1.T.chrome}-fg}\n {${door_theme_1.T.ink}-fg}${n} lines held{/${door_theme_1.T.ink}-fg}`;
         }
         const meter = state.zoneMeter ?? 0;
         const pct = Math.round(meter * 100);
@@ -879,9 +879,9 @@ class GameScreen {
         const bar = '#'.repeat(filled) + '-'.repeat(10 - filled);
         // 20% is the threshold activateZone() enforces; say so rather than
         // leaving the player guessing why the key does nothing.
-        const color = pct >= 100 ? 'yellow' : pct >= 20 ? 'cyan' : 'gray';
-        const hint = pct >= 20 ? '{green-fg}FLIP to enter{/green-fg}' : '{gray-fg}needs 20%{/gray-fg}';
-        return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {gray-fg}[${bar}]{/gray-fg}\n ${hint}`;
+        const color = pct >= 100 ? door_theme_1.T.accent : pct >= 20 ? door_theme_1.T.chrome : door_theme_1.T.dim;
+        const hint = pct >= 20 ? `{${door_theme_1.T.ok}-fg}FLIP to enter{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}needs 20%{/${door_theme_1.T.dim}-fg}`;
+        return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {${door_theme_1.T.dim}-fg}[${bar}]{/${door_theme_1.T.dim}-fg}\n ${hint}`;
     }
     renderZone(state) {
         if (!this.zoneBox)
@@ -900,7 +900,7 @@ class GameScreen {
         const totalSecs = Math.ceil(ms / 1000);
         const m = Math.floor(totalSecs / 60);
         const s = (totalSecs % 60).toString().padStart(2, '0');
-        const color = ms < 30000 ? 'red' : ms < 60000 ? 'yellow' : 'green';
+        const color = ms < 30000 ? door_theme_1.T.alert : ms < 60000 ? door_theme_1.T.warn : door_theme_1.T.ok;
         return `\n  {${color}-fg}TIME: ${m}:${s}{/${color}-fg}`;
     }
     renderStats(state) {
@@ -914,17 +914,17 @@ class GameScreen {
         let gravDisplay;
         if (state.gravity >= 20) {
             const flash = Math.floor(this.twentyGFlashTimer / 250) % 2 === 0;
-            gravDisplay = `{${flash ? 'red' : 'yellow'}-fg}{bold}20.00{/bold}{/${flash ? 'red' : 'yellow'}-fg}`;
+            gravDisplay = `{${flash ? door_theme_1.T.alert : door_theme_1.T.accent}-fg}{bold}20.00{/bold}{/${flash ? door_theme_1.T.alert : door_theme_1.T.accent}-fg}`;
         }
         else {
-            gravDisplay = `{yellow-fg}${state.gravity.toFixed(2)}{/yellow-fg}`;
+            gravDisplay = `{${door_theme_1.T.accent}-fg}${state.gravity.toFixed(2)}{/${door_theme_1.T.accent}-fg}`;
         }
-        let statsContent = `\n  Level: {cyan-fg}${state.level}{/cyan-fg}\n` +
-            `  Lines: {green-fg}${state.lines}{/green-fg}\n` +
-            `  Score: {white-fg}${state.score.toLocaleString()}{/white-fg}\n` +
+        let statsContent = `\n  Level: {${door_theme_1.T.chrome}-fg}${state.level}{/${door_theme_1.T.chrome}-fg}\n` +
+            `  Lines: {${door_theme_1.T.ok}-fg}${state.lines}{/${door_theme_1.T.ok}-fg}\n` +
+            `  Score: {${door_theme_1.T.ink}-fg}${state.score.toLocaleString()}{/${door_theme_1.T.ink}-fg}\n` +
             `  Combo: ${comboDisplay}\n` +
             `  Grav:  ${gravDisplay}G\n` +
-            `  PPS:   {white-fg}${this.getPPS(state)}{/white-fg}` +
+            `  PPS:   {${door_theme_1.T.ink}-fg}${this.getPPS(state)}{/${door_theme_1.T.ink}-fg}` +
             this.getUltraTime(state) +
             this.getDigHud(state);
         // Zone has its own box: the six stats above already fill this one.
@@ -933,17 +933,17 @@ class GameScreen {
             statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
         }
         else if (state.lastTSpin === 'mini') {
-            statsContent += `\n\n  {cyan-fg}T-SPIN MINI{/cyan-fg}`;
+            statsContent += `\n\n  {${door_theme_1.T.chrome}-fg}T-SPIN MINI{/${door_theme_1.T.chrome}-fg}`;
         }
         if (state.backToBack && state.backToBackCount > 1) {
-            statsContent += `\n  {yellow-fg}{bold}B2B x${state.backToBackCount}{/bold}{/yellow-fg}`;
+            statsContent += `\n  {${door_theme_1.T.accent}-fg}{bold}B2B x${state.backToBackCount}{/bold}{/${door_theme_1.T.accent}-fg}`;
         }
         else if (state.backToBack) {
-            statsContent += `\n  {yellow-fg}{bold}B2B{/bold}{/yellow-fg}`;
+            statsContent += `\n  {${door_theme_1.T.accent}-fg}{bold}B2B{/bold}{/${door_theme_1.T.accent}-fg}`;
         }
         if (state.creditRollActive) {
             const timeLeft = Math.ceil(state.creditRollTimeRemaining / 1000);
-            const color = timeLeft < 30 ? 'red' : 'yellow';
+            const color = timeLeft < 30 ? door_theme_1.T.alert : door_theme_1.T.warn;
             statsContent += `\n\n  {${color}-fg}CREDIT{/${color}-fg}\n`;
             statsContent += `  {${color}-fg}${timeLeft}s{/${color}-fg}`;
         }
@@ -953,7 +953,7 @@ class GameScreen {
         if (this.missionRun) {
             const mission = this.missionRun.getMission();
             const progress = this.missionRun.getProgress();
-            const colour = progress.outcome === 'cleared' ? 'green' : 'cyan';
+            const colour = progress.outcome === 'cleared' ? door_theme_1.T.ok : door_theme_1.T.chrome;
             statsContent += `\n\n  {${colour}-fg}${mission.name}{/${colour}-fg}\n`;
             statsContent += `  {${colour}-fg}${this.missionRun.describe()}{/${colour}-fg}`;
         }
@@ -1044,7 +1044,7 @@ class GameScreen {
             if (text.timer > 80) {
                 alpha = 1.0 - ((text.timer - 80) / 20);
             }
-            const color = alpha > 0.5 ? text.color : 'gray';
+            const color = alpha > 0.5 ? text.color : door_theme_1.T.dim;
             // text.x is board X, text.y is board Y (floating upward from originY)
             const boardY = Math.floor(text.y);
             const boardX = Math.floor(text.x);
@@ -1296,19 +1296,19 @@ class GameScreen {
         const section = state.section;
         const sectionTime = state.sectionTime / 1000;
         const coolTarget = COOL_TARGETS[section] || 45;
-        let timeColor = 'white';
+        let timeColor = door_theme_1.T.ink;
         if (sectionTime < coolTarget) {
-            timeColor = 'green';
+            timeColor = door_theme_1.T.ok;
         }
         else {
-            timeColor = 'yellow';
+            timeColor = door_theme_1.T.warn;
         }
-        let content = `\n {cyan-fg}SEC:{/cyan-fg} ${section}\n`;
+        let content = `\n {${door_theme_1.T.chrome}-fg}SEC:{/${door_theme_1.T.chrome}-fg} ${section}\n`;
         content += ` {${timeColor}-fg}${sectionTime.toFixed(1)}s{/${timeColor}-fg}\n`;
-        content += ` {green-fg}${coolTarget}s{/green-fg}`;
+        content += ` {${door_theme_1.T.ok}-fg}${coolTarget}s{/${door_theme_1.T.ok}-fg}`;
         if (state.lastSectionResult) {
-            const resultColor = state.lastSectionResult === 'COOL' ? 'green'
-                : state.lastSectionResult === 'REGRET' ? 'red' : 'yellow';
+            const resultColor = state.lastSectionResult === 'COOL' ? door_theme_1.T.ok
+                : state.lastSectionResult === 'REGRET' ? door_theme_1.T.alert : door_theme_1.T.warn;
             content += `\n {${resultColor}-fg}${state.lastSectionResult}{/${resultColor}-fg}`;
         }
         if (this.sectionBox) {
@@ -1556,7 +1556,7 @@ class GameScreen {
         if (!this.holdBox)
             return;
         if (!piece) {
-            this.holdBox.setContent('\n   {gray-fg}---{/gray-fg}');
+            this.holdBox.setContent(`\n   {${door_theme_1.T.dim}-fg}---{/${door_theme_1.T.dim}-fg}`);
             return;
         }
         const mini = this.getMiniPiece(piece, this.state.settings.rotationSystem);
@@ -1637,14 +1637,14 @@ class GameScreen {
         const secSecs = Math.floor(secMs / 1000);
         const secMins = Math.floor(secSecs / 60);
         const secS = (secSecs % 60).toString().padStart(2, '0');
-        const content = `\n{bold}{yellow-fg}PAUSED{/yellow-fg}{/bold}\n\n` +
-            `{white-fg}Time:    ${mins}:${secs}{/white-fg}\n` +
-            `{cyan-fg}Grade:   ${state.grade}{/cyan-fg}\n` +
-            `{white-fg}Level:   ${state.level}{/white-fg}\n` +
-            `{green-fg}PPS:     ${pps}{/green-fg}\n` +
-            `{white-fg}Section: ${secMins}:${secS}{/white-fg}\n` +
+        const content = `\n{bold}{${door_theme_1.T.accent}-fg}PAUSED{/${door_theme_1.T.accent}-fg}{/bold}\n\n` +
+            `{${door_theme_1.T.ink}-fg}Time:    ${mins}:${secs}{/${door_theme_1.T.ink}-fg}\n` +
+            `{${door_theme_1.T.chrome}-fg}Grade:   ${state.grade}{/${door_theme_1.T.chrome}-fg}\n` +
+            `{${door_theme_1.T.ink}-fg}Level:   ${state.level}{/${door_theme_1.T.ink}-fg}\n` +
+            `{${door_theme_1.T.ok}-fg}PPS:     ${pps}{/${door_theme_1.T.ok}-fg}\n` +
+            `{${door_theme_1.T.ink}-fg}Section: ${secMins}:${secS}{/${door_theme_1.T.ink}-fg}\n` +
             `{${finErr === 0 ? 'green' : 'red'}-fg}Finesse: ${finErr} err{/${finErr === 0 ? 'green' : 'red'}-fg}\n\n` +
-            `{gray-fg}P=resume  ESC/Q=quit{/gray-fg}`;
+            `{${door_theme_1.T.dim}-fg}P=resume  ESC/Q=quit{/${door_theme_1.T.dim}-fg}`;
         const pauseBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
@@ -1684,23 +1684,23 @@ class GameScreen {
     async showGameOver() {
         const result = this.engine.getResult();
         const gameState = this.engine.getState();
-        let gameOverTitle = '{bold}{red-fg}GAME OVER{/red-fg}{/bold}';
-        let gameOverColor = 'red';
+        let gameOverTitle = `{bold}{${door_theme_1.T.alert}-fg}GAME OVER{/${door_theme_1.T.alert}-fg}{/bold}`;
+        let gameOverColor = door_theme_1.T.alert;
         // Dig mode complete
         if (gameState.mode === 'dig' && gameState.status === 'complete') {
-            gameOverTitle = '{bold}{green-fg}DIG COMPLETE!{/green-fg}{/bold}';
-            gameOverColor = 'green';
+            gameOverTitle = `{bold}{${door_theme_1.T.ok}-fg}DIG COMPLETE!{/${door_theme_1.T.ok}-fg}{/bold}`;
+            gameOverColor = door_theme_1.T.ok;
         }
         else if (gameState.mode === 'ultra' && gameState.status === 'complete') {
             // Ultra mode time-up
-            gameOverTitle = '{bold}{cyan-fg}TIME UP!{/cyan-fg}{/bold}';
-            gameOverColor = 'cyan';
+            gameOverTitle = `{bold}{${door_theme_1.T.chrome}-fg}TIME UP!{/${door_theme_1.T.chrome}-fg}{/bold}`;
+            gameOverColor = door_theme_1.T.chrome;
         }
         else if (result.grade === 'GMM' || result.grade === 'GM') {
             gameOverTitle = result.grade === 'GMM'
-                ? '{bold}{yellow-fg}GRAND MASTER MARU!{/yellow-fg}{/bold}'
-                : '{bold}{yellow-fg}GRAND MASTER!{/yellow-fg}{/bold}';
-            gameOverColor = 'yellow';
+                ? `{bold}{${door_theme_1.T.accent}-fg}GRAND MASTER MARU!{/${door_theme_1.T.accent}-fg}{/bold}`
+                : `{bold}{${door_theme_1.T.accent}-fg}GRAND MASTER!{/${door_theme_1.T.accent}-fg}{/bold}`;
+            gameOverColor = door_theme_1.T.accent;
             this.sounds.playVoice('bravo');
         }
         // Clear all game UI to prevent border overlap
@@ -1729,12 +1729,12 @@ class GameScreen {
             align: 'center',
             valign: 'middle',
             content: `${gameOverTitle}\n\n` +
-                `Grade:  {yellow-fg}${result.grade}{/yellow-fg}\n` +
+                `Grade:  {${door_theme_1.T.accent}-fg}${result.grade}{/${door_theme_1.T.accent}-fg}\n` +
                 `Level:  ${result.level}\n` +
                 `Lines:  ${result.lines}\n` +
                 `Score:  ${result.score.toLocaleString()}\n` +
                 `Combo:  ${result.combo}x\n\n` +
-                '{gray-fg}Press any key to continue{/gray-fg}',
+                `{${door_theme_1.T.dim}-fg}Press any key to continue{/${door_theme_1.T.dim}-fg}`,
             fixed: true,
         });
         this.screen.render();

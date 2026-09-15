@@ -212,15 +212,15 @@ export class SpectatorScreen {
 
     const living = watched.filter(p => p.alive).length;
     this.headerBox.setContent(
-      `{cyan-fg}Watching:{/cyan-fg} ${this.title}  ` +
-      `{gray-fg}${watched.length} players, ${living} alive - ` +
-      `${watched.length > 1 ? 'TAB to change focus, ' : ''}ESC to stop watching{/gray-fg}`
+      `{${T.chrome}-fg}Watching:{/${T.chrome}-fg} ${this.title}  ` +
+      `{${T.dim}-fg}${watched.length} players, ${living} alive - ` +
+      `${watched.length > 1 ? 'TAB to change focus, ' : ''}ESC to stop watching{/${T.dim}-fg}`
     );
 
     this.chatBox.setContent(
       this.chatLines.length > 0
         ? this.chatLines.join('\n')
-        : '{gray-fg}(quiet){/gray-fg}'
+        : `{${T.dim}-fg}(quiet){/${T.dim}-fg}`
     );
 
     this.screen.render();

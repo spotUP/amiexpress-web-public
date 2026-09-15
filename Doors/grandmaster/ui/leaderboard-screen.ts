@@ -135,7 +135,7 @@ export class LeaderboardScreen {
       // is given, which is where the boxes around the title, the tabs and the
       // hint line came from.
       border: undefined,
-      content: '{bold}{yellow-fg}═══ LEADERBOARDS ═══{/yellow-fg}{/bold}',
+      content: `{bold}{${T.accent}-fg}═══ LEADERBOARDS ═══{/${T.accent}-fg}{/bold}`,
     });
 
     // Mode tabs
@@ -190,7 +190,7 @@ export class LeaderboardScreen {
       width: headerWidth,
       height: 1,
       border: undefined,
-      content: '{gray-fg}← → / TAB: Change Mode  |  Q/ESC: Back{/gray-fg}',
+      content: `{${T.dim}-fg}← → / TAB: Change Mode  |  Q/ESC: Back{/${T.dim}-fg}`,
     });
 
     this.screen.render();
@@ -212,9 +212,9 @@ export class LeaderboardScreen {
     let tabs = '';
     for (const { mode, name } of modes) {
       if (mode === this.currentMode) {
-        tabs += `{black-bg}{white-fg}{bold}[ ${name} ]{/bold}{/white-fg}{/black-bg} `;
+        tabs += `{${T.ground}-bg}{${T.ink}-fg}{bold}[ ${name} ]{/bold}{/${T.ink}-fg}{/${T.ground}-bg} `;
       } else {
-        tabs += `{gray-fg}  ${name}  {/gray-fg} `;
+        tabs += `{${T.dim}-fg}  ${name}  {/${T.dim}-fg} `;
       }
     }
     tabs += '';
@@ -254,7 +254,7 @@ export class LeaderboardScreen {
    */
   private renderScoresTable(scores: HighScoreEntry[]): string {
     if (scores.length === 0) {
-      return '\n\n{gray-fg}No scores yet{/gray-fg}\n\nBe the first to set a record!';
+      return `\n\n{${T.dim}-fg}No scores yet{/${T.dim}-fg}\n\nBe the first to set a record!`;
     }
 
     let content = '{bold}  #  Player          Grade Level    Score  Time      Date{/bold}\n';
@@ -273,7 +273,7 @@ export class LeaderboardScreen {
 
         content += `  ${rank}  ${player} ${grade} ${level} ${score}  ${time}  ${date}\n`;
       } else {
-        content += `  ${this.formatRank(i + 1)}  {gray-fg}───{/gray-fg}\n`;
+        content += `  ${this.formatRank(i + 1)}  {${T.dim}-fg}───{/${T.dim}-fg}\n`;
       }
     }
 
@@ -285,7 +285,7 @@ export class LeaderboardScreen {
    */
   private renderPersonalBest(best: HighScoreEntry | null): string {
     if (!best) {
-      return '{gray-fg}No personal record in this mode yet{/gray-fg}';
+      return `{${T.dim}-fg}No personal record in this mode yet{/${T.dim}-fg}`;
     }
 
     return (
@@ -307,7 +307,7 @@ export class LeaderboardScreen {
    * Format player name
    */
   private formatPlayer(name: string): string {
-    return `{cyan-fg}${name.substring(0, 15).padEnd(15, ' ')}{/cyan-fg}`;
+    return `{${T.chrome}-fg}${name.substring(0, 15).padEnd(15, ' ')}{/${T.chrome}-fg}`;
   }
 
   /**
@@ -322,14 +322,14 @@ export class LeaderboardScreen {
    * Format level
    */
   private formatLevel(level: number): string {
-    return `{white-fg}${level.toString().padStart(4, ' ')}{/white-fg}`;
+    return `{${T.ink}-fg}${level.toString().padStart(4, ' ')}{/${T.ink}-fg}`;
   }
 
   /**
    * Format score
    */
   private formatScore(score: number): string {
-    return `{yellow-fg}${score.toLocaleString().padStart(8, ' ')}{/yellow-fg}`;
+    return `{${T.accent}-fg}${score.toLocaleString().padStart(8, ' ')}{/${T.accent}-fg}`;
   }
 
   /**
@@ -337,14 +337,14 @@ export class LeaderboardScreen {
    */
   private formatTime(time: number | null): string {
     if (time === null) {
-      return '{gray-fg}  --:--  {/gray-fg}';
+      return `{${T.dim}-fg}  --:--  {/${T.dim}-fg}`;
     }
 
     const minutes = Math.floor(time / 60000);
     const seconds = Math.floor((time % 60000) / 1000);
     const ms = Math.floor((time % 1000) / 10);
 
-    return `{white-fg}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}{/white-fg}`;
+    return `{${T.ink}-fg}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}{/${T.ink}-fg}`;
   }
 
   /**
@@ -355,6 +355,6 @@ export class LeaderboardScreen {
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     const year = date.getFullYear().toString().substring(2);
-    return `{gray-fg}${month}/${day}/${year}{/gray-fg}`;
+    return `{${T.dim}-fg}${month}/${day}/${year}{/${T.dim}-fg}`;
   }
 }

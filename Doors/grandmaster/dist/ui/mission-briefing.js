@@ -75,23 +75,23 @@ function missionConditions(mission) {
  */
 function missionBriefingLines(mission, clear) {
     const lines = [
-        `{bold}{yellow-fg}${mission.name}{/yellow-fg}{/bold}`,
+        `{bold}{${door_theme_1.T.accent}-fg}${mission.name}{/${door_theme_1.T.accent}-fg}{/bold}`,
         '',
-        `{white-fg}${missionObjectiveText(mission)}{/white-fg}`,
+        `{${door_theme_1.T.ink}-fg}${missionObjectiveText(mission)}{/${door_theme_1.T.ink}-fg}`,
     ];
     const conditions = missionConditions(mission);
     if (conditions.length > 0) {
         lines.push('');
         for (const condition of conditions)
-            lines.push(`{cyan-fg}- ${condition}{/cyan-fg}`);
+            lines.push(`{${door_theme_1.T.chrome}-fg}- ${condition}{/${door_theme_1.T.chrome}-fg}`);
     }
     if (mission.hint) {
-        lines.push('', `{gray-fg}${mission.hint}{/gray-fg}`);
+        lines.push('', `{${door_theme_1.T.dim}-fg}${mission.hint}{/${door_theme_1.T.dim}-fg}`);
     }
     lines.push('');
     lines.push(clear
-        ? `{green-fg}Cleared in ${(0, mission_select_1.formatClearTime)(clear.seconds)}{/green-fg}`
-        : '{gray-fg}Not cleared yet{/gray-fg}');
+        ? `{${door_theme_1.T.ok}-fg}Cleared in ${(0, mission_select_1.formatClearTime)(clear.seconds)}{/${door_theme_1.T.ok}-fg}`
+        : `{${door_theme_1.T.dim}-fg}Not cleared yet{/${door_theme_1.T.dim}-fg}`);
     return lines;
 }
 /**

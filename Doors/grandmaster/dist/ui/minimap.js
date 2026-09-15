@@ -14,6 +14,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentTracker = exports.MinimapRenderer = void 0;
+const door_theme_1 = require("../door-theme");
 // Opponents per row before switching to text list
 const BUCKET_THRESHOLD = 10;
 // Chars per bucket slot (bar width + 1 space separator)
@@ -144,7 +145,7 @@ class MinimapRenderer {
                 }
                 else {
                     // Empty portion — faint dots so the bar outline is visible
-                    line += `{gray-fg}${'·'.repeat(BAR_W)}{/gray-fg} `;
+                    line += `{${door_theme_1.T.dim}-fg}${'·'.repeat(BAR_W)}{/${door_theme_1.T.dim}-fg} `;
                 }
             }
             rows.push(line);
@@ -198,8 +199,8 @@ class MinimapRenderer {
             const htS = String(ht).padStart(3);
             return `{${col}-fg}${rank} ${name} ${lv} ${htS}{/${col}-fg}`;
         };
-        const header = `{cyan-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/cyan-fg}`;
-        const rule = `{gray-fg}${'─'.repeat(rowW)}{/gray-fg}`;
+        const header = `{${door_theme_1.T.chrome}-fg}${'#'.padStart(2)} ${'Name'.padEnd(nameW)} ${'Lv'.padStart(3)} ${'Ht'.padStart(3)}{/${door_theme_1.T.chrome}-fg}`;
+        const rule = `{${door_theme_1.T.dim}-fg}${'─'.repeat(rowW)}{/${door_theme_1.T.dim}-fg}`;
         const gap = ' '.repeat(COLUMN_GAP);
         const lines = [
             Array.from({ length: columns }, () => header).join(gap),
@@ -216,7 +217,7 @@ class MinimapRenderer {
             lines.push(parts.join(gap).replace(/\s+$/, ''));
         }
         if (overflow) {
-            lines.push(`{gray-fg}${String(sorted.length - shown).padStart(2)} more still playing{/gray-fg}`);
+            lines.push(`{${door_theme_1.T.dim}-fg}${String(sorted.length - shown).padStart(2)} more still playing{/${door_theme_1.T.dim}-fg}`);
         }
         return lines.join('\n');
     }

@@ -170,12 +170,12 @@ class SpectatorScreen {
         }));
         this.boards.updateBoards(watched);
         const living = watched.filter(p => p.alive).length;
-        this.headerBox.setContent(`{cyan-fg}Watching:{/cyan-fg} ${this.title}  ` +
-            `{gray-fg}${watched.length} players, ${living} alive - ` +
-            `${watched.length > 1 ? 'TAB to change focus, ' : ''}ESC to stop watching{/gray-fg}`);
+        this.headerBox.setContent(`{${door_theme_1.T.chrome}-fg}Watching:{/${door_theme_1.T.chrome}-fg} ${this.title}  ` +
+            `{${door_theme_1.T.dim}-fg}${watched.length} players, ${living} alive - ` +
+            `${watched.length > 1 ? 'TAB to change focus, ' : ''}ESC to stop watching{/${door_theme_1.T.dim}-fg}`);
         this.chatBox.setContent(this.chatLines.length > 0
             ? this.chatLines.join('\n')
-            : '{gray-fg}(quiet){/gray-fg}');
+            : `{${door_theme_1.T.dim}-fg}(quiet){/${door_theme_1.T.dim}-fg}`);
         this.screen.render();
     }
     /** How many players this spectator has seen so far. */

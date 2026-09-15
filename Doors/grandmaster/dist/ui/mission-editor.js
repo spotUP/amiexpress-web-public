@@ -34,7 +34,7 @@ function ask(screen, title, current) {
             style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
             fixed: true,
             tags: true,
-            content: `\n {white-fg}Type a value and press ENTER. ESC keeps "${current}".{/white-fg}`,
+            content: `\n {${door_theme_1.T.ink}-fg}Type a value and press ENTER. ESC keeps "${current}".{/${door_theme_1.T.ink}-fg}`,
         });
         const input = screen.program
             ? require('@amiexpress/bbs-door-sdk/engines/ui/blessed').Textbox
@@ -76,7 +76,7 @@ function say(screen, title, message) {
             fixed: true,
             tags: true,
             keys: true,
-            content: `\n {white-fg}${message}{/white-fg}\n\n {yellow-fg}Any key.{/yellow-fg}`,
+            content: `\n {${door_theme_1.T.ink}-fg}${message}{/${door_theme_1.T.ink}-fg}\n\n {${door_theme_1.T.accent}-fg}Any key.{/${door_theme_1.T.accent}-fg}`,
         });
         box.focus();
         screen.render();
@@ -134,8 +134,8 @@ function editMission(screen, mission) {
             list.setItems(rows());
             list.select(at);
             const spec = mission_edit_1.MISSION_FIELDS[at];
-            help.setContent(` {cyan-fg}${spec?.help ?? ''}{/cyan-fg}\n`
-                + ` {yellow-fg}LEFT/RIGHT{/yellow-fg} change  {yellow-fg}ENTER{/yellow-fg} type  {yellow-fg}ESC{/yellow-fg} back`);
+            help.setContent(` {${door_theme_1.T.chrome}-fg}${spec?.help ?? ''}{/${door_theme_1.T.chrome}-fg}\n`
+                + ` {${door_theme_1.T.accent}-fg}LEFT/RIGHT{/${door_theme_1.T.accent}-fg} change  {${door_theme_1.T.accent}-fg}ENTER{/${door_theme_1.T.accent}-fg} type  {${door_theme_1.T.accent}-fg}ESC{/${door_theme_1.T.accent}-fg} back`);
             screen.render();
         };
         const done = (result) => {
@@ -250,11 +250,11 @@ async function showMissionEditor(screen, pack, dataDir) {
 function pickRow(screen, pack) {
     return new Promise((resolve) => {
         const rows = [
-            ` {cyan-fg}Pack name{/cyan-fg}  ${pack.name}`,
+            ` {${door_theme_1.T.chrome}-fg}Pack name{/${door_theme_1.T.chrome}-fg}  ${pack.name}`,
             ...pack.missions.map((mission, index) => ` ${String(index + 1).padStart(2, ' ')}. ${mission.name.padEnd(22, ' ')}`
                 + `${mission.objective} ${mission.objective === 'survive' ? '' : mission.norm}`),
-            ' {green-fg}+ Add a mission{/green-fg}',
-            ' {yellow-fg}S Save this pack{/yellow-fg}',
+            ` {${door_theme_1.T.ok}-fg}+ Add a mission{/${door_theme_1.T.ok}-fg}`,
+            ` {${door_theme_1.T.accent}-fg}S Save this pack{/${door_theme_1.T.accent}-fg}`,
         ];
         const box = (0, blessed_helpers_1.createBox)({
             parent: screen,
@@ -289,8 +289,8 @@ function pickRow(screen, pack) {
             height: 1,
             tags: true,
             style: { bg: door_theme_1.T.ground, fg: door_theme_1.T.ink },
-            content: ' {yellow-fg}ENTER{/yellow-fg} edit  {yellow-fg}D{/yellow-fg} delete  '
-                + '{yellow-fg}S{/yellow-fg} save  {yellow-fg}ESC{/yellow-fg} leave',
+            content: ` {${door_theme_1.T.accent}-fg}ENTER{/${door_theme_1.T.accent}-fg} edit  {${door_theme_1.T.accent}-fg}D{/${door_theme_1.T.accent}-fg} delete  `
+                + `{${door_theme_1.T.accent}-fg}S{/${door_theme_1.T.accent}-fg} save  {${door_theme_1.T.accent}-fg}ESC{/${door_theme_1.T.accent}-fg} leave`,
         });
         const done = (choice) => {
             list.destroy();

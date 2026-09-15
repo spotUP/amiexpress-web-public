@@ -55,7 +55,7 @@ class InventoryPanel {
     renderEmpty() {
         let content = '';
         for (let i = 0; i < this.maxSlots; i++) {
-            content += '{gray-fg}. {/gray-fg}';
+            content += `{${door_theme_1.T.dim}-fg}. {/${door_theme_1.T.dim}-fg}`;
         }
         return content;
     }
@@ -71,14 +71,14 @@ class InventoryPanel {
                 const color = (0, specials_1.getSpecialColor)(special);
                 // First slot (usable) gets highlighted background
                 if (i === 0) {
-                    content += `{${color}-fg}{white-bg}{bold}${char}{/bold}{/white-bg}{/${color}-fg} `;
+                    content += `{${color}-fg}{${door_theme_1.T.ink}-bg}{bold}${char}{/bold}{/${door_theme_1.T.ink}-bg}{/${color}-fg} `;
                 }
                 else {
                     content += `{${color}-fg}${char}{/${color}-fg} `;
                 }
             }
             else {
-                content += '{gray-fg}. {/gray-fg}';
+                content += `{${door_theme_1.T.dim}-fg}. {/${door_theme_1.T.dim}-fg}`;
             }
         }
         return content;

@@ -19,6 +19,7 @@ import { modePlayerTarget } from '../network/bot-lobby';
 import type { AppState } from '../core/types';
 import type { SoundEngine, SoundEffect } from '../audio/sounds';
 
+import { T } from '../door-theme';
 /**
  * Lobby mode
  */
@@ -133,13 +134,13 @@ export class LobbyScreen {
         }
       },
       formatPlayer: (player, isLocal, isHost) => {
-        const hostBadge = isHost ? '{yellow-fg}[HOST]{/yellow-fg} ' : '';
-        const youBadge = isLocal ? '{cyan-fg}(You){/cyan-fg} ' : '';
+        const hostBadge = isHost ? `{${T.accent}-fg}[HOST]{/${T.accent}-fg} ` : '';
+        const youBadge = isLocal ? `{${T.chrome}-fg}(You){/${T.chrome}-fg} ` : '';
         const botBadge = player.isBot
           ? `{magenta-fg}[CPU-${player.botDifficulty}]{/magenta-fg} `
           : '';
 
-        return `${hostBadge}${youBadge}${botBadge}{white-fg}${player.name}{/white-fg}`;
+        return `${hostBadge}${youBadge}${botBadge}{${T.ink}-fg}${player.name}{/${T.ink}-fg}`;
       },
     });
 

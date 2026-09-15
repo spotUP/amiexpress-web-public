@@ -145,7 +145,7 @@ export class SettingsScreen {
         left: 'center',
         width: 60,
         height: 3,
-        content: '{bold}{yellow-fg}SETTINGS{/yellow-fg}{/bold}',
+        content: `{bold}{${T.accent}-fg}SETTINGS{/${T.accent}-fg}{/bold}`,
         style: { fg: T.ink, bg: T.ground },
       });
 
@@ -246,9 +246,9 @@ export class SettingsScreen {
    */
   private menuRows(): SettingsRow[] {
     const s = this.state.settings;
-    const yellow = (value: string | number) => `{yellow-fg}${value}{/yellow-fg}`;
+    const yellow = (value: string | number) => `{${T.accent}-fg}${value}{/${T.accent}-fg}`;
     const separator: SettingsRow = { label: '' };
-    const header = (text: string): SettingsRow => ({ label: `{cyan-fg}--- ${text} ---{/cyan-fg}` });
+    const header = (text: string): SettingsRow => ({ label: `{${T.chrome}-fg}--- ${text} ---{/${T.chrome}-fg}` });
 
     return [
       {
@@ -403,14 +403,14 @@ export class SettingsScreen {
       separator,
       header('DISPLAY'),
       {
-        label: `Screen Size:       ${yellow(this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25')}  {gray-fg}(Alt+Enter){/gray-fg}`,
+        label: `Screen Size:       ${yellow(this.terminalMode?.mode() === 'wide' ? 'RESPONSIVE' : '80x25')}  {${T.dim}-fg}(Alt+Enter){/${T.dim}-fg}`,
         description: 'Fixed 80x25, or the terminal you really have (Alt+Enter does the same)',
         run: () => { this.terminalMode?.toggle(); },
         keepsSelection: true,
       },
       separator,
       {
-        label: '{green-fg}Save & Exit{/green-fg}',
+        label: `{${T.ok}-fg}Save & Exit{/${T.ok}-fg}`,
         description: 'Save changes and return to menu',
         exits: true,
       },
@@ -504,10 +504,10 @@ export class SettingsScreen {
       border: { type: 'line' },
       style: { bg: T.ground, border: { fg: T.accent } },
       content: `{bold}${key.toUpperCase()}{/bold}\n\n` +
-        `Current: {yellow-fg}${current}{/yellow-fg}\n` +
+        `Current: {${T.accent}-fg}${current}{/${T.accent}-fg}\n` +
         `Range: ${min} - ${max}\n\n` +
-        `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
-        `{gray-fg}Press Enter to confirm{/gray-fg}`,
+        `{${T.dim}-fg}Use Left/Right arrows to adjust{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Press Enter to confirm{/${T.dim}-fg}`,
       fixed: true,
       focusable: true,  // Steal focus from menu so Enter doesn't re-trigger menu.on('select')
     });
@@ -522,19 +522,19 @@ export class SettingsScreen {
           newValue = Math.max(min, newValue - step);
           this.sounds.playSfx('menu_select');
           inputBox.setContent(`{bold}${settingKey.toUpperCase()}{/bold}\n\n` +
-            `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
+            `Current: {${T.accent}-fg}${newValue}{/${T.accent}-fg}\n` +
             `Range: ${min} - ${max}\n\n` +
-            `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
-            `{gray-fg}Press Enter to confirm{/gray-fg}`);
+            `{${T.dim}-fg}Use Left/Right arrows to adjust{/${T.dim}-fg}\n` +
+            `{${T.dim}-fg}Press Enter to confirm{/${T.dim}-fg}`);
           this.screen.render();
         } else if (keyEvent.name === 'right') {
           newValue = Math.min(max, newValue + step);
           this.sounds.playSfx('menu_select');
           inputBox.setContent(`{bold}${settingKey.toUpperCase()}{/bold}\n\n` +
-            `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
+            `Current: {${T.accent}-fg}${newValue}{/${T.accent}-fg}\n` +
             `Range: ${min} - ${max}\n\n` +
-            `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
-            `{gray-fg}Press Enter to confirm{/gray-fg}`);
+            `{${T.dim}-fg}Use Left/Right arrows to adjust{/${T.dim}-fg}\n` +
+            `{${T.dim}-fg}Press Enter to confirm{/${T.dim}-fg}`);
           this.screen.render();
         } else if (keyEvent.name === 'return' || keyEvent.name === 'enter') {
           (this.state.settings as any)[settingKey] = newValue;  // Use settingKey, not keyEvent
@@ -583,8 +583,8 @@ export class SettingsScreen {
     const updateDisplay = () => {
       const bar = '='.repeat(Math.floor(volume / 5)) + ' '.repeat(20 - Math.floor(volume / 5));
       volumeBox.setContent(`{bold}${settingKey === 'musicVolume' ? 'MUSIC' : 'SFX'} VOLUME{/bold}\n\n` +
-        `[${bar}] {yellow-fg}${volume}%{/yellow-fg}\n\n` +
-        `{gray-fg}Left/Right: Adjust | Enter: Confirm{/gray-fg}`);
+        `[${bar}] {${T.accent}-fg}${volume}%{/${T.accent}-fg}\n\n` +
+        `{${T.dim}-fg}Left/Right: Adjust | Enter: Confirm{/${T.dim}-fg}`);
     };
 
     updateDisplay();
@@ -660,12 +660,12 @@ export class SettingsScreen {
 
     const updateDisplay = () => {
       bindingBox.setContent(
-        `{bold}{cyan-fg}${displayName.toUpperCase()}{/cyan-fg}{/bold}\n\n` +
-        `Current: {yellow-fg}${formatKeyBinding(keys)}{/yellow-fg}\n\n` +
-        `{gray-fg}Press a key to add it to the binding{/gray-fg}\n` +
-        `{gray-fg}Press Backspace to remove last key{/gray-fg}\n` +
-        `{gray-fg}Press Delete to clear all keys{/gray-fg}\n` +
-        `{gray-fg}Press Enter to save, Escape to cancel{/gray-fg}`
+        `{bold}{${T.chrome}-fg}${displayName.toUpperCase()}{/${T.chrome}-fg}{/bold}\n\n` +
+        `Current: {${T.accent}-fg}${formatKeyBinding(keys)}{/${T.accent}-fg}\n\n` +
+        `{${T.dim}-fg}Press a key to add it to the binding{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Press Backspace to remove last key{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Press Delete to clear all keys{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Press Enter to save, Escape to cancel{/${T.dim}-fg}`
       );
     };
 
@@ -807,14 +807,14 @@ export class SettingsScreen {
       const total = ACTIONS.length;
       const bar = '#'.repeat(n) + '-'.repeat(total - n);
       bindingBox.setContent(
-        `{cyan-fg}Key Wizard (${n}/${total}){/cyan-fg}\n\n` +
-        `Action:  {yellow-fg}${action.name}{/yellow-fg}\n` +
-        `Current: {white-fg}${cur ? (KEY_DISPLAY_NAMES[cur] ?? cur) : '(unbound)'}{/white-fg}\n\n` +
+        `{${T.chrome}-fg}Key Wizard (${n}/${total}){/${T.chrome}-fg}\n\n` +
+        `Action:  {${T.accent}-fg}${action.name}{/${T.accent}-fg}\n` +
+        `Current: {${T.ink}-fg}${cur ? (KEY_DISPLAY_NAMES[cur] ?? cur) : '(unbound)'}{/${T.ink}-fg}\n\n` +
         (feedback
-          ? `{green-fg}${feedback}{/green-fg}\n\n`
-          : `{gray-fg}Press a key to bind{/gray-fg}\n` +
-            `{gray-fg}Enter = skip (leave unbound)   Escape = done{/gray-fg}\n\n`) +
-        `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
+          ? `{${T.ok}-fg}${feedback}{/${T.ok}-fg}\n\n`
+          : `{${T.dim}-fg}Press a key to bind{/${T.dim}-fg}\n` +
+            `{${T.dim}-fg}Enter = skip (leave unbound)   Escape = done{/${T.dim}-fg}\n\n`) +
+        `{${T.dim}-fg}[${bar}] ${n}/${total}{/${T.dim}-fg}`
       );
       this.screen.render();
     };
@@ -1042,14 +1042,14 @@ export class SettingsScreen {
       const total = ordered.length;
       const bar = '#'.repeat(n) + '-'.repeat(total - n);
       bindingBox.setContent(
-        `{cyan-fg}Joypad Wizard (${n}/${total}){/cyan-fg}\n\n` +
-        `Action:  {yellow-fg}${action.name}{/yellow-fg}\n` +
-        `Current: {white-fg}${cur ? formatTriggerStr(cur) : '(unbound)'}{/white-fg}\n\n` +
+        `{${T.chrome}-fg}Joypad Wizard (${n}/${total}){/${T.chrome}-fg}\n\n` +
+        `Action:  {${T.accent}-fg}${action.name}{/${T.accent}-fg}\n` +
+        `Current: {${T.ink}-fg}${cur ? formatTriggerStr(cur) : '(unbound)'}{/${T.ink}-fg}\n\n` +
         (feedback
-          ? `{green-fg}${feedback}{/green-fg}\n\n`
-          : `{gray-fg}Press a button/stick to bind{/gray-fg}\n` +
-            `{gray-fg}Enter = skip (leave unbound)   Escape = done{/gray-fg}\n\n`) +
-        `{gray-fg}[${bar}] ${n}/${total}{/gray-fg}`
+          ? `{${T.ok}-fg}${feedback}{/${T.ok}-fg}\n\n`
+          : `{${T.dim}-fg}Press a button/stick to bind{/${T.dim}-fg}\n` +
+            `{${T.dim}-fg}Enter = skip (leave unbound)   Escape = done{/${T.dim}-fg}\n\n`) +
+        `{${T.dim}-fg}[${bar}] ${n}/${total}{/${T.dim}-fg}`
       );
       this.screen.render();
     };
@@ -1166,11 +1166,11 @@ export class SettingsScreen {
         ? triggers.map(formatTriggerStr).join(' / ')
         : '(none)';
       bindingBox.setContent(
-        `{cyan-fg}${displayName.toUpperCase()}{/cyan-fg}\n\n` +
-        `Current: {yellow-fg}${current}{/yellow-fg}\n\n` +
-        `{gray-fg}Press a joypad button/stick to add (max 3){/gray-fg}\n` +
-        `{gray-fg}Backspace = remove last   Delete = clear all{/gray-fg}\n` +
-        `{gray-fg}Enter = save              Escape = cancel{/gray-fg}`
+        `{${T.chrome}-fg}${displayName.toUpperCase()}{/${T.chrome}-fg}\n\n` +
+        `Current: {${T.accent}-fg}${current}{/${T.accent}-fg}\n\n` +
+        `{${T.dim}-fg}Press a joypad button/stick to add (max 3){/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Backspace = remove last   Delete = clear all{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Enter = save              Escape = cancel{/${T.dim}-fg}`
       );
       this.screen.render();
     };

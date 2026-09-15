@@ -699,11 +699,11 @@ export class GrandmasterApp {
     });
 
     const frames = [
-      '{bold}{cyan-fg}INITIALIZING...{/cyan-fg}{/bold}',
-      '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Loading TGM3 Engine...{/gray-fg}',
-      '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Calibrating 20G Gravity...{/gray-fg}',
-      '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Initializing Grade System...{/gray-fg}',
-      '{bold}{yellow-fg}G R A N D M A S T E R{/yellow-fg}{/bold}\n\n{white-fg}TGM3-Inspired Multiplayer Tetris{/white-fg}\n\n{gray-fg}Press any key...{/gray-fg}',
+      `{bold}{${T.chrome}-fg}INITIALIZING...{/${T.chrome}-fg}{/bold}`,
+      `{bold}{${T.chrome}-fg}GRANDMASTER{/${T.chrome}-fg}{/bold}\n\n{${T.dim}-fg}Loading TGM3 Engine...{/${T.dim}-fg}`,
+      `{bold}{${T.chrome}-fg}GRANDMASTER{/${T.chrome}-fg}{/bold}\n\n{${T.dim}-fg}Calibrating 20G Gravity...{/${T.dim}-fg}`,
+      `{bold}{${T.chrome}-fg}GRANDMASTER{/${T.chrome}-fg}{/bold}\n\n{${T.dim}-fg}Initializing Grade System...{/${T.dim}-fg}`,
+      `{bold}{${T.accent}-fg}G R A N D M A S T E R{/${T.accent}-fg}{/bold}\n\n{${T.ink}-fg}TGM3-Inspired Multiplayer Tetris{/${T.ink}-fg}\n\n{${T.dim}-fg}Press any key...{/${T.dim}-fg}`,
     ];
 
     for (let i = 0; i < frames.length; i++) {
@@ -1079,10 +1079,10 @@ export class GrandmasterApp {
         // A notice, so centre it on both axes - reported as uncentred 2026-08-25.
         align: 'center',
         valign: 'middle',
-        content: '{bold}{red-fg}ERROR{/red-fg}{/bold}\n\n' +
-          '{white-fg}Multiplayer not available\n' +
-          'Network connection required{/white-fg}\n\n' +
-          '{gray-fg}Press any key to return{/gray-fg}',
+        content: `{bold}{${T.alert}-fg}ERROR{/${T.alert}-fg}{/bold}\n\n` +
+          `{${T.ink}-fg}Multiplayer not available\n` +
+          `Network connection required{/${T.ink}-fg}\n\n` +
+          `{${T.dim}-fg}Press any key to return{/${T.dim}-fg}`,
         fixed: true,
       });
       this.screen.render();
@@ -1908,7 +1908,7 @@ export class GrandmasterApp {
         height: 5,
         label: ' TETRIS ATTACK ',
         tags: true,
-        content: `\n {white-fg}${message}{/white-fg}`,
+        content: `\n {${T.ink}-fg}${message}{/${T.ink}-fg}`,
         style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
       });
       this.screen.render();
@@ -2671,7 +2671,7 @@ export class GrandmasterApp {
       ? running.map(game =>
           `${game.mode.padEnd(14)} ${String(game.players).padStart(2)}/${game.maxPlayers}  ` +
           `${game.state === 'waiting' ? 'in lobby' : 'playing '}  ${game.playerNames.join(', ').slice(0, 20)}`)
-      : ['{gray-fg}No games running right now{/gray-fg}'];
+      : [`{${T.dim}-fg}No games running right now{/${T.dim}-fg}`];
 
     const list = createList({
       parent: panel,
@@ -2679,7 +2679,7 @@ export class GrandmasterApp {
       left: 1,
       width: '100%-2',
       height: 12,
-      items: [...items, '{gray-fg}Back{/gray-fg}'],
+      items: [...items, `{${T.dim}-fg}Back{/${T.dim}-fg}`],
       keys: true,
       vi: true,
       mouse: true,
@@ -2758,10 +2758,10 @@ export class GrandmasterApp {
     const getItems = () => [
       ...predefinedServers.map(s => s.name),
       '',
-      '{yellow-fg}Enter Custom Server...{/yellow-fg}',
-      '{cyan-fg}Update Server List (Live)...{/cyan-fg}',
+      `{${T.accent}-fg}Enter Custom Server...{/${T.accent}-fg}`,
+      `{${T.chrome}-fg}Update Server List (Live)...{/${T.chrome}-fg}`,
       '',
-      '{gray-fg}Back{/gray-fg}',
+      `{${T.dim}-fg}Back{/${T.dim}-fg}`,
     ];
 
     const serverPanel = createBox({
@@ -2929,7 +2929,7 @@ export class GrandmasterApp {
         left: 2,
         width: '100%-2',
         height: 1,
-        content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
+        content: `{${T.dim}-fg}Tab to switch, Enter to continue, ESC to cancel{/${T.dim}-fg}`,
       });
 
       this.screen.render();
@@ -3104,7 +3104,7 @@ export class GrandmasterApp {
       width: '100%-2',
       height: 1,
       border: { type: 'none' },
-      content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
+      content: `{${T.dim}-fg}Enter your nickname (max 15 chars), ESC to cancel{/${T.dim}-fg}`,
     });
 
     this.screen.render();
@@ -3190,7 +3190,7 @@ export class GrandmasterApp {
         left: 2,
         width: '100%-2',
         height: 1,
-        content: '{gray-fg}Enter TSpec password (ESC to cancel){/gray-fg}',
+        content: `{${T.dim}-fg}Enter TSpec password (ESC to cancel){/${T.dim}-fg}`,
       });
 
       this.screen.render();
@@ -3245,7 +3245,7 @@ export class GrandmasterApp {
       // A notice, so centre it on both axes.
       align: 'center',
       valign: 'middle',
-      content: `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+      content: `{bold}{${T.chrome}-fg}Connecting to TetriNET server...{/${T.chrome}-fg}{/bold}\n\n` +
         `Server: ${result.server}:${result.port}\n` +
         `Mode: ${result.mode}\n` +
         `Status: Initializing...`,
@@ -3256,7 +3256,7 @@ export class GrandmasterApp {
     // Helper to update status
     const updateStatus = (status: string) => {
       statusBox.setContent(
-        `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+        `{bold}{${T.chrome}-fg}Connecting to TetriNET server...{/${T.chrome}-fg}{/bold}\n\n` +
         `Server: ${result.server}:${result.port}\n` +
         `Mode: ${result.mode}\n` +
         `Status: ${status}`
@@ -3294,7 +3294,7 @@ export class GrandmasterApp {
       await client.connect();
 
       statusBox.setContent(
-        `{bold}{green-fg}Connected!{/green-fg}{/bold}\n\n` +
+        `{bold}{${T.ok}-fg}Connected!{/${T.ok}-fg}{/bold}\n\n` +
         `${client.getSlot() ? `Slot ${client.getSlot()} assigned` : 'Spectator connected'}`
       );
       this.screen.render();
@@ -3310,7 +3310,7 @@ export class GrandmasterApp {
 
     } catch (error) {
       statusBox.setContent(
-        `{bold}{red-fg}Connection Failed{/red-fg}{/bold}\n\n` +
+        `{bold}{${T.alert}-fg}Connection Failed{/${T.alert}-fg}{/bold}\n\n` +
         `${(error as Error).message}`
       );
       this.screen.render();
@@ -3472,7 +3472,7 @@ export class GrandmasterApp {
       const chatMode = spectatorPublic ? 'Public' : 'Private';
       const chatHint = client.getSlot() ? 'Partyline' : `TSpec ${chatMode}`;
       lobbyUi.footerStatus.setContent(
-        `{gray-fg}Mode:{/gray-fg} ${modeLabel}  {gray-fg}Chat:{/gray-fg} ${chatHint}`
+        `{${T.dim}-fg}Mode:{/${T.dim}-fg} ${modeLabel}  {${T.dim}-fg}Chat:{/${T.dim}-fg} ${chatHint}`
       );
       this.screen.render();
     };
@@ -3484,11 +3484,11 @@ export class GrandmasterApp {
       for (let slot = 1; slot <= 6; slot++) {
         const player = players.find(p => p.slot === slot);
         if (player) {
-          const alive = player.alive ? '{green-fg}[OK]{/green-fg}' : '{red-fg}[OUT]{/red-fg}';
-          const team = player.team ? `{gray-fg}(${player.team}){/gray-fg}` : '';
-          content += `${slot}. {white-fg}${player.name}{/white-fg} ${alive} ${team}\n`;
+          const alive = player.alive ? `{${T.ok}-fg}[OK]{/${T.ok}-fg}` : `{${T.alert}-fg}[OUT]{/${T.alert}-fg}`;
+          const team = player.team ? `{${T.dim}-fg}(${player.team}){/${T.dim}-fg}` : '';
+          content += `${slot}. {${T.ink}-fg}${player.name}{/${T.ink}-fg} ${alive} ${team}\n`;
         } else {
-          content += `${slot}. {gray-fg}(empty){/gray-fg}\n`;
+          content += `${slot}. {${T.dim}-fg}(empty){/${T.dim}-fg}\n`;
         }
       }
       lobbyUi.playerList.setContent(content.trim());
@@ -3499,7 +3499,7 @@ export class GrandmasterApp {
       if (!lobbyUi) return;
       const spectators = client.getSpectators();
       if (spectators.length === 0) {
-        lobbyUi.spectatorList.setContent('{gray-fg}(none){/gray-fg}');
+        lobbyUi.spectatorList.setContent(`{${T.dim}-fg}(none){/${T.dim}-fg}`);
       } else {
         lobbyUi.spectatorList.setContent(spectators.join('\n'));
       }
@@ -3611,19 +3611,19 @@ export class GrandmasterApp {
     client.drainBacklog();
 
     client.on('player:joined', (player: any) => {
-      addChatMessage(`{green-fg}*** ${player.name} joined (slot ${player.slot}){/green-fg}`);
+      addChatMessage(`{${T.ok}-fg}*** ${player.name} joined (slot ${player.slot}){/${T.ok}-fg}`);
       updatePlayerList();
       refreshOpponents();
     });
 
     client.on('player:left', (data: any) => {
-      addChatMessage(`{red-fg}*** Player left slot ${data.slot}{/red-fg}`);
+      addChatMessage(`{${T.alert}-fg}*** Player left slot ${data.slot}{/${T.alert}-fg}`);
       updatePlayerList();
       refreshOpponents();
     });
 
     client.on('player:team', (data: any) => {
-      addChatMessage(`{cyan-fg}*** Slot ${data.slot} joined team: ${data.team}{/cyan-fg}`);
+      addChatMessage(`{${T.chrome}-fg}*** Slot ${data.slot} joined team: ${data.team}{/${T.chrome}-fg}`);
       updatePlayerList();
     });
 
@@ -3631,7 +3631,7 @@ export class GrandmasterApp {
       if (data.isAction) {
         addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
       } else if (data.isGameMessage) {
-        addChatMessage(`{yellow-fg}[GAME] ${data.text}{/yellow-fg}`);
+        addChatMessage(`{${T.accent}-fg}[GAME] ${data.text}{/${T.accent}-fg}`);
       } else {
         addChatMessage(`<${data.name}> ${data.text}`);
       }
@@ -3662,8 +3662,8 @@ export class GrandmasterApp {
     const handleGameStart = async (data: any) => {
       if (gameScreen) return;
       addChatMessage(data.inProgress
-        ? `{yellow-fg}*** Game is already in progress{/yellow-fg}`
-        : `{bold}{green-fg}*** GAME STARTING! ***{/green-fg}{/bold}`);
+        ? `{${T.accent}-fg}*** Game is already in progress{/${T.accent}-fg}`
+        : `{bold}{${T.ok}-fg}*** GAME STARTING! ***{/${T.ok}-fg}{/bold}`);
 
       if (lobbyUi) {
         lobbyUi.destroy();
@@ -3736,12 +3736,12 @@ export class GrandmasterApp {
     });
 
     client.on('game:end', () => {
-      addChatMessage(`{bold}{yellow-fg}*** GAME OVER ***{/yellow-fg}{/bold}`);
+      addChatMessage(`{bold}{${T.accent}-fg}*** GAME OVER ***{/${T.accent}-fg}{/bold}`);
       updatePlayerList();
     });
 
     client.on('player:lost', (data: any) => {
-      addChatMessage(`{red-fg}*** Slot ${data.slot} topped out!{/red-fg}`);
+      addChatMessage(`{${T.alert}-fg}*** Slot ${data.slot} topped out!{/${T.alert}-fg}`);
       updatePlayerList();
       refreshOpponents();
     });
@@ -3763,11 +3763,11 @@ export class GrandmasterApp {
     });
 
     client.on('disconnected', () => {
-      addChatMessage(`{red-fg}*** Disconnected from server{/red-fg}`);
+      addChatMessage(`{${T.alert}-fg}*** Disconnected from server{/${T.alert}-fg}`);
     });
 
     client.on('error', (error: Error) => {
-      addChatMessage(`{red-fg}*** Error: ${error.message}{/red-fg}`);
+      addChatMessage(`{${T.alert}-fg}*** Error: ${error.message}{/${T.alert}-fg}`);
     });
 
     await new Promise<void>((resolve) => {
@@ -3968,8 +3968,8 @@ export class GrandmasterApp {
       align: 'center',
       valign: 'middle',
       content: `{bold}Initializing CPU Battle{/bold}\n\n` +
-        `{gray-fg}Opponent Difficulty: ${botDifficulty}/10{/gray-fg}\n` +
-        `{gray-fg}Loading AI...{/gray-fg}`,
+        `{${T.dim}-fg}Opponent Difficulty: ${botDifficulty}/10{/${T.dim}-fg}\n` +
+        `{${T.dim}-fg}Loading AI...{/${T.dim}-fg}`,
       fixed: true,
     });
     this.screen.render();
@@ -4334,8 +4334,8 @@ export class GrandmasterApp {
       style: { bg: T.ground, border: { fg: T.chrome } },
       align: 'center',
       valign: 'middle',
-      content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
-        + `{gray-fg}Press any key to continue...{/gray-fg}`,
+      content: `{bold}{${T.chrome}-fg}${title}{/${T.chrome}-fg}{/bold}\n\n${body}\n\n`
+        + `{${T.dim}-fg}Press any key to continue...{/${T.dim}-fg}`,
       fixed: true,
       tags: true,
     } as any);
@@ -4364,10 +4364,10 @@ export class GrandmasterApp {
       style: { bg: T.ground, border: { fg: T.accent } },
       align: 'center',
       valign: 'middle',
-      content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +
-        `{white-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/white-fg}\n` +
-        `{white-fg}Score: {bold}${score.toLocaleString()}{/bold}{/white-fg}\n\n` +
-        `{gray-fg}Press any key to continue...{/gray-fg}`,
+      content: `{bold}{${T.accent}-fg}NEW HIGH SCORE!{/${T.accent}-fg}{/bold}\n\n` +
+        `{${T.ink}-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/${T.ink}-fg}\n` +
+        `{${T.ink}-fg}Score: {bold}${score.toLocaleString()}{/bold}{/${T.ink}-fg}\n\n` +
+        `{${T.dim}-fg}Press any key to continue...{/${T.dim}-fg}`,
       fixed: true,
     });
 

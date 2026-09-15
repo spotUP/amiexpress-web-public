@@ -992,8 +992,8 @@ export class VersusScreen {
         align: 'center',
         valign: 'middle',
         content: won
-          ? '{bold}{green-fg}YOU WIN!{/green-fg}{/bold}\nAll opponents eliminated'
-          : '{bold}{red-fg}GAME OVER{/red-fg}{/bold}\nBetter luck next time',
+          ? `{bold}{${T.ok}-fg}YOU WIN!{/${T.ok}-fg}{/bold}\nAll opponents eliminated`
+          : `{bold}{${T.alert}-fg}GAME OVER{/${T.alert}-fg}{/bold}\nBetter luck next time`,
       });
       this.screen.render();
       await new Promise(r => setTimeout(r, 2500));
@@ -1151,7 +1151,7 @@ export class VersusScreen {
         left: 'center',
         width: 20,
         height: 5,
-        content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+        content: `{${T.accent}-fg}{bold}${text}{/bold}{/${T.accent}-fg}`,
         focusable: false,
         mouse: false,
         clickable: false,
@@ -1519,13 +1519,13 @@ export class VersusScreen {
         ? this.renderVoiceSection(localUserId, oppUserId)
         : '';
       this.opponentInfoBox.setContent(
-        `{cyan-fg}${oppName}{/cyan-fg}\n\n` +
-        `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
+        `{${T.chrome}-fg}${oppName}{/${T.chrome}-fg}\n\n` +
+        `Level: {${T.accent}-fg}${oppLevel}{/${T.accent}-fg}\n` +
         `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
         `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
         (attackPending > 0
-          ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
-          : `{gray-fg}No incoming attack{/gray-fg}`) +
+          ? `{${T.alert}-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/${T.alert}-fg}`
+          : `{${T.dim}-fg}No incoming attack{/${T.dim}-fg}`) +
         voiceSection
       );
     }
@@ -1540,12 +1540,12 @@ export class VersusScreen {
     let b2bStr = '';
     if (gameState.backToBack) {
       const b2bCount = gameState.backToBackCount ?? 1;
-      b2bStr = `  {yellow-fg}B2B${b2bCount > 1 ? ` x${b2bCount}` : ''}{/yellow-fg}`;
+      b2bStr = `  {${T.accent}-fg}B2B${b2bCount > 1 ? ` x${b2bCount}` : ''}{/${T.accent}-fg}`;
     }
 
     this.statsBox.setContent(
-      `Score: {yellow-fg}${gameState.score}{/yellow-fg}` +
-      `  Level: {cyan-fg}${gameState.level}{/cyan-fg}` +
+      `Score: {${T.accent}-fg}${gameState.score}{/${T.accent}-fg}` +
+      `  Level: {${T.chrome}-fg}${gameState.level}{/${T.chrome}-fg}` +
       `  Grade: {magenta-fg}${gameState.grade}{/magenta-fg}` +
       comboStr +
       b2bStr
@@ -1810,8 +1810,8 @@ export class VersusScreen {
             // Ink in the foreground where the screen has no background to
             // put it on, or the banner is black on black.
             char = cellsCanCarryBackground(this.screen)
-              ? `{yellow-bg}{black-fg}${chunk}{/black-fg}{/yellow-bg}`
-              : `{yellow-fg}${chunk}{/yellow-fg}`;
+              ? `{${T.accent}-bg}{${T.ground}-fg}${chunk}{/${T.ground}-fg}{/${T.accent}-bg}`
+              : `{${T.accent}-fg}${chunk}{/${T.accent}-fg}`;
           }
         }
 
@@ -1859,7 +1859,7 @@ export class VersusScreen {
     if (!this.holdBox) return;
 
     if (!state.holdPiece) {
-      this.holdBox.setContent('{gray-fg}(empty){/gray-fg}');
+      this.holdBox.setContent(`{${T.dim}-fg}(empty){/${T.dim}-fg}`);
       return;
     }
 
@@ -1890,8 +1890,8 @@ export class VersusScreen {
     }
     this.garbageIndicator.show();
     const capped = Math.min(pending, 18);
-    const bars = '{red-fg}' + ('█\n').repeat(capped).trim() + '{/red-fg}';
-    this.garbageIndicator.setContent(`{red-fg}${pending}{/red-fg}\n${bars}`);
+    const bars = `{${T.alert}-fg}` + ('█\n').repeat(capped).trim() + `{/${T.alert}-fg}`;
+    this.garbageIndicator.setContent(`{${T.alert}-fg}${pending}{/${T.alert}-fg}\n${bars}`);
   }
 
   /**
@@ -1959,18 +1959,18 @@ export class VersusScreen {
     const fmtRow = (uid: string, label: string, isLocal: boolean) => {
       const muted = isLocal ? this.localMuted : (this.voiceStates.get(uid)?.muted ?? false);
       const speaking = this.voiceStates.get(uid)?.speaking ?? false;
-      if (muted)    return `{red-fg}[M]{/red-fg} ${label}`;
-      if (speaking) return `{green-fg}[*]{/green-fg} ${label}`;
-      return `{gray-fg}[ ]{/gray-fg} ${label}`;
+      if (muted)    return `{${T.alert}-fg}[M]{/${T.alert}-fg} ${label}`;
+      if (speaking) return `{${T.ok}-fg}[*]{/${T.ok}-fg} ${label}`;
+      return `{${T.dim}-fg}[ ]{/${T.dim}-fg} ${label}`;
     };
     const localName = (this.state as any).playerName || 'You';
     const opp = this.opponentTracker.getAliveOpponents()[0];
     const oppName = opp?.name || 'Opp';
     return (
-      `\n{cyan-fg}-- VOICE ----------{/cyan-fg}\n` +
+      `\n{${T.chrome}-fg}-- VOICE ----------{/${T.chrome}-fg}\n` +
       `${fmtRow(localUserId, localName, true)}\n` +
       `${fmtRow(oppUserId, oppName, false)}\n` +
-      `{gray-fg}M=mute{/gray-fg}`
+      `{${T.dim}-fg}M=mute{/${T.dim}-fg}`
     );
   }
 

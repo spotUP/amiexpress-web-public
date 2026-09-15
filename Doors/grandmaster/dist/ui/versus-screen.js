@@ -875,8 +875,8 @@ class VersusScreen {
                 align: 'center',
                 valign: 'middle',
                 content: won
-                    ? '{bold}{green-fg}YOU WIN!{/green-fg}{/bold}\nAll opponents eliminated'
-                    : '{bold}{red-fg}GAME OVER{/red-fg}{/bold}\nBetter luck next time',
+                    ? `{bold}{${door_theme_1.T.ok}-fg}YOU WIN!{/${door_theme_1.T.ok}-fg}{/bold}\nAll opponents eliminated`
+                    : `{bold}{${door_theme_1.T.alert}-fg}GAME OVER{/${door_theme_1.T.alert}-fg}{/bold}\nBetter luck next time`,
             });
             this.screen.render();
             await new Promise(r => setTimeout(r, 2500));
@@ -1035,7 +1035,7 @@ class VersusScreen {
                 left: 'center',
                 width: 20,
                 height: 5,
-                content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+                content: `{${door_theme_1.T.accent}-fg}{bold}${text}{/bold}{/${door_theme_1.T.accent}-fg}`,
                 focusable: false,
                 mouse: false,
                 clickable: false,
@@ -1373,13 +1373,13 @@ class VersusScreen {
             const voiceSection = this.sessionSocket
                 ? this.renderVoiceSection(localUserId, oppUserId)
                 : '';
-            this.opponentInfoBox.setContent(`{cyan-fg}${oppName}{/cyan-fg}\n\n` +
-                `Level: {yellow-fg}${oppLevel}{/yellow-fg}\n` +
+            this.opponentInfoBox.setContent(`{${door_theme_1.T.chrome}-fg}${oppName}{/${door_theme_1.T.chrome}-fg}\n\n` +
+                `Level: {${door_theme_1.T.accent}-fg}${oppLevel}{/${door_theme_1.T.accent}-fg}\n` +
                 `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
                 `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
                 (attackPending > 0
-                    ? `{red-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/red-fg}`
-                    : `{gray-fg}No incoming attack{/gray-fg}`) +
+                    ? `{${door_theme_1.T.alert}-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/${door_theme_1.T.alert}-fg}`
+                    : `{${door_theme_1.T.dim}-fg}No incoming attack{/${door_theme_1.T.dim}-fg}`) +
                 voiceSection);
         }
         // Stats bar
@@ -1392,10 +1392,10 @@ class VersusScreen {
         let b2bStr = '';
         if (gameState.backToBack) {
             const b2bCount = gameState.backToBackCount ?? 1;
-            b2bStr = `  {yellow-fg}B2B${b2bCount > 1 ? ` x${b2bCount}` : ''}{/yellow-fg}`;
+            b2bStr = `  {${door_theme_1.T.accent}-fg}B2B${b2bCount > 1 ? ` x${b2bCount}` : ''}{/${door_theme_1.T.accent}-fg}`;
         }
-        this.statsBox.setContent(`Score: {yellow-fg}${gameState.score}{/yellow-fg}` +
-            `  Level: {cyan-fg}${gameState.level}{/cyan-fg}` +
+        this.statsBox.setContent(`Score: {${door_theme_1.T.accent}-fg}${gameState.score}{/${door_theme_1.T.accent}-fg}` +
+            `  Level: {${door_theme_1.T.chrome}-fg}${gameState.level}{/${door_theme_1.T.chrome}-fg}` +
             `  Grade: {magenta-fg}${gameState.grade}{/magenta-fg}` +
             comboStr +
             b2bStr);
@@ -1633,8 +1633,8 @@ class VersusScreen {
                         // Ink in the foreground where the screen has no background to
                         // put it on, or the banner is black on black.
                         char = (0, block_width_1.cellsCanCarryBackground)(this.screen)
-                            ? `{yellow-bg}{black-fg}${chunk}{/black-fg}{/yellow-bg}`
-                            : `{yellow-fg}${chunk}{/yellow-fg}`;
+                            ? `{${door_theme_1.T.accent}-bg}{${door_theme_1.T.ground}-fg}${chunk}{/${door_theme_1.T.ground}-fg}{/${door_theme_1.T.accent}-bg}`
+                            : `{${door_theme_1.T.accent}-fg}${chunk}{/${door_theme_1.T.accent}-fg}`;
                     }
                 }
                 // Board overlay (highest priority)
@@ -1674,7 +1674,7 @@ class VersusScreen {
         if (!this.holdBox)
             return;
         if (!state.holdPiece) {
-            this.holdBox.setContent('{gray-fg}(empty){/gray-fg}');
+            this.holdBox.setContent(`{${door_theme_1.T.dim}-fg}(empty){/${door_theme_1.T.dim}-fg}`);
             return;
         }
         const type = state.holdPiece;
@@ -1701,8 +1701,8 @@ class VersusScreen {
         }
         this.garbageIndicator.show();
         const capped = Math.min(pending, 18);
-        const bars = '{red-fg}' + ('█\n').repeat(capped).trim() + '{/red-fg}';
-        this.garbageIndicator.setContent(`{red-fg}${pending}{/red-fg}\n${bars}`);
+        const bars = `{${door_theme_1.T.alert}-fg}` + ('█\n').repeat(capped).trim() + `{/${door_theme_1.T.alert}-fg}`;
+        this.garbageIndicator.setContent(`{${door_theme_1.T.alert}-fg}${pending}{/${door_theme_1.T.alert}-fg}\n${bars}`);
     }
     /**
      * Render opponent board (full size)
@@ -1766,18 +1766,18 @@ class VersusScreen {
             const muted = isLocal ? this.localMuted : (this.voiceStates.get(uid)?.muted ?? false);
             const speaking = this.voiceStates.get(uid)?.speaking ?? false;
             if (muted)
-                return `{red-fg}[M]{/red-fg} ${label}`;
+                return `{${door_theme_1.T.alert}-fg}[M]{/${door_theme_1.T.alert}-fg} ${label}`;
             if (speaking)
-                return `{green-fg}[*]{/green-fg} ${label}`;
-            return `{gray-fg}[ ]{/gray-fg} ${label}`;
+                return `{${door_theme_1.T.ok}-fg}[*]{/${door_theme_1.T.ok}-fg} ${label}`;
+            return `{${door_theme_1.T.dim}-fg}[ ]{/${door_theme_1.T.dim}-fg} ${label}`;
         };
         const localName = this.state.playerName || 'You';
         const opp = this.opponentTracker.getAliveOpponents()[0];
         const oppName = opp?.name || 'Opp';
-        return (`\n{cyan-fg}-- VOICE ----------{/cyan-fg}\n` +
+        return (`\n{${door_theme_1.T.chrome}-fg}-- VOICE ----------{/${door_theme_1.T.chrome}-fg}\n` +
             `${fmtRow(localUserId, localName, true)}\n` +
             `${fmtRow(oppUserId, oppName, false)}\n` +
-            `{gray-fg}M=mute{/gray-fg}`);
+            `{${door_theme_1.T.dim}-fg}M=mute{/${door_theme_1.T.dim}-fg}`);
     }
     /**
      * Cleanup

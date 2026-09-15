@@ -114,7 +114,7 @@ class LeaderboardScreen {
             // is given, which is where the boxes around the title, the tabs and the
             // hint line came from.
             border: undefined,
-            content: '{bold}{yellow-fg}═══ LEADERBOARDS ═══{/yellow-fg}{/bold}',
+            content: `{bold}{${door_theme_1.T.accent}-fg}═══ LEADERBOARDS ═══{/${door_theme_1.T.accent}-fg}{/bold}`,
         });
         // Mode tabs
         const modeTabs = this.renderModeTabs();
@@ -165,7 +165,7 @@ class LeaderboardScreen {
             width: headerWidth,
             height: 1,
             border: undefined,
-            content: '{gray-fg}← → / TAB: Change Mode  |  Q/ESC: Back{/gray-fg}',
+            content: `{${door_theme_1.T.dim}-fg}← → / TAB: Change Mode  |  Q/ESC: Back{/${door_theme_1.T.dim}-fg}`,
         });
         this.screen.render();
     }
@@ -184,10 +184,10 @@ class LeaderboardScreen {
         let tabs = '';
         for (const { mode, name } of modes) {
             if (mode === this.currentMode) {
-                tabs += `{black-bg}{white-fg}{bold}[ ${name} ]{/bold}{/white-fg}{/black-bg} `;
+                tabs += `{${door_theme_1.T.ground}-bg}{${door_theme_1.T.ink}-fg}{bold}[ ${name} ]{/bold}{/${door_theme_1.T.ink}-fg}{/${door_theme_1.T.ground}-bg} `;
             }
             else {
-                tabs += `{gray-fg}  ${name}  {/gray-fg} `;
+                tabs += `{${door_theme_1.T.dim}-fg}  ${name}  {/${door_theme_1.T.dim}-fg} `;
             }
         }
         tabs += '';
@@ -224,7 +224,7 @@ class LeaderboardScreen {
      */
     renderScoresTable(scores) {
         if (scores.length === 0) {
-            return '\n\n{gray-fg}No scores yet{/gray-fg}\n\nBe the first to set a record!';
+            return `\n\n{${door_theme_1.T.dim}-fg}No scores yet{/${door_theme_1.T.dim}-fg}\n\nBe the first to set a record!`;
         }
         let content = '{bold}  #  Player          Grade Level    Score  Time      Date{/bold}\n';
         content += '  ─────────────────────────────────────────────────────────────\n';
@@ -241,7 +241,7 @@ class LeaderboardScreen {
                 content += `  ${rank}  ${player} ${grade} ${level} ${score}  ${time}  ${date}\n`;
             }
             else {
-                content += `  ${this.formatRank(i + 1)}  {gray-fg}───{/gray-fg}\n`;
+                content += `  ${this.formatRank(i + 1)}  {${door_theme_1.T.dim}-fg}───{/${door_theme_1.T.dim}-fg}\n`;
             }
         }
         return content;
@@ -251,7 +251,7 @@ class LeaderboardScreen {
      */
     renderPersonalBest(best) {
         if (!best) {
-            return '{gray-fg}No personal record in this mode yet{/gray-fg}';
+            return `{${door_theme_1.T.dim}-fg}No personal record in this mode yet{/${door_theme_1.T.dim}-fg}`;
         }
         return (`Grade: ${this.formatGrade(best.grade)}  Level: ${this.formatLevel(best.level)}  ` +
             `Score: ${this.formatScore(best.score)}  ` +
@@ -268,7 +268,7 @@ class LeaderboardScreen {
      * Format player name
      */
     formatPlayer(name) {
-        return `{cyan-fg}${name.substring(0, 15).padEnd(15, ' ')}{/cyan-fg}`;
+        return `{${door_theme_1.T.chrome}-fg}${name.substring(0, 15).padEnd(15, ' ')}{/${door_theme_1.T.chrome}-fg}`;
     }
     /**
      * Format grade
@@ -281,25 +281,25 @@ class LeaderboardScreen {
      * Format level
      */
     formatLevel(level) {
-        return `{white-fg}${level.toString().padStart(4, ' ')}{/white-fg}`;
+        return `{${door_theme_1.T.ink}-fg}${level.toString().padStart(4, ' ')}{/${door_theme_1.T.ink}-fg}`;
     }
     /**
      * Format score
      */
     formatScore(score) {
-        return `{yellow-fg}${score.toLocaleString().padStart(8, ' ')}{/yellow-fg}`;
+        return `{${door_theme_1.T.accent}-fg}${score.toLocaleString().padStart(8, ' ')}{/${door_theme_1.T.accent}-fg}`;
     }
     /**
      * Format time
      */
     formatTime(time) {
         if (time === null) {
-            return '{gray-fg}  --:--  {/gray-fg}';
+            return `{${door_theme_1.T.dim}-fg}  --:--  {/${door_theme_1.T.dim}-fg}`;
         }
         const minutes = Math.floor(time / 60000);
         const seconds = Math.floor((time % 60000) / 1000);
         const ms = Math.floor((time % 1000) / 10);
-        return `{white-fg}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}{/white-fg}`;
+        return `{${door_theme_1.T.ink}-fg}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}{/${door_theme_1.T.ink}-fg}`;
     }
     /**
      * Format date
@@ -309,7 +309,7 @@ class LeaderboardScreen {
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         const day = date.getDate().toString().padStart(2, '0');
         const year = date.getFullYear().toString().substring(2);
-        return `{gray-fg}${month}/${day}/${year}{/gray-fg}`;
+        return `{${door_theme_1.T.dim}-fg}${month}/${day}/${year}{/${door_theme_1.T.dim}-fg}`;
     }
 }
 exports.LeaderboardScreen = LeaderboardScreen;

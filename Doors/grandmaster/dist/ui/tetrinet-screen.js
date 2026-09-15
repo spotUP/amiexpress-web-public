@@ -877,7 +877,7 @@ class TetriNetScreen {
     hintLine() {
         const keys = (this.state.settings.keyBindings ?? {});
         const pad = (this.state.settings.gamepadBindings ?? {});
-        return `{gray-fg} ${(0, input_hints_1.tetrinetHints)(this.inputSource, keys, pad)}{/gray-fg}`;
+        return `{${door_theme_1.T.dim}-fg} ${(0, input_hints_1.tetrinetHints)(this.inputSource, keys, pad)}{/${door_theme_1.T.dim}-fg}`;
     }
     /** Note which device is in use and refresh the hints if it changed. */
     useSource(source) {
@@ -945,7 +945,7 @@ class TetriNetScreen {
                 // A notice, so centre it on both axes.
                 align: 'center',
                 valign: 'middle',
-                content: `{yellow-fg}{bold}${text}{/bold}{/yellow-fg}`,
+                content: `{${door_theme_1.T.accent}-fg}{bold}${text}{/bold}{/${door_theme_1.T.accent}-fg}`,
                 focusable: false,
                 mouse: false,
                 clickable: false,
@@ -971,7 +971,7 @@ class TetriNetScreen {
             this.renderPreview(gameState);
         }
         else {
-            this.previewBox.setContent('{gray-fg}  ???{/gray-fg}');
+            this.previewBox.setContent(`{${door_theme_1.T.dim}-fg}  ???{/${door_theme_1.T.dim}-fg}`);
         }
         // Held piece
         if (this.holdBox) {
@@ -983,9 +983,9 @@ class TetriNetScreen {
         this.effectOverlay.update(effects);
         // Render stats. Two lines, because the panel is 24 columns wide inside
         // its border - one long line wrapped and lost the tail.
-        this.statsBox.setContent(`Score: {yellow-fg}${gameState.score}{/yellow-fg}\n` +
-            `Level: {cyan-fg}${gameState.level}{/cyan-fg}  ` +
-            `Lines: {green-fg}${gameState.lines}{/green-fg}`);
+        this.statsBox.setContent(`Score: {${door_theme_1.T.accent}-fg}${gameState.score}{/${door_theme_1.T.accent}-fg}\n` +
+            `Level: {${door_theme_1.T.chrome}-fg}${gameState.level}{/${door_theme_1.T.chrome}-fg}  ` +
+            `Lines: {${door_theme_1.T.ok}-fg}${gameState.lines}{/${door_theme_1.T.ok}-fg}`);
         // Render sudden death status
         const suddenDeath = this.engine.getSuddenDeath();
         if (suddenDeath && suddenDeath.isEnabled()) {
@@ -1095,7 +1095,7 @@ class TetriNetScreen {
         const shape = this.engine.getPieceShape(state.holdPiece, 0);
         const block = state.canHold
             ? this.getBlockChar(state.holdPiece)
-            : '{gray-fg}||{/gray-fg}';
+            : `{${door_theme_1.T.dim}-fg}||{/${door_theme_1.T.dim}-fg}`;
         let content = '';
         for (const row of shape) {
             for (const cell of row) {
@@ -1207,7 +1207,7 @@ class TetriNetScreen {
         }
         // Two visible columns: the letter on a block, so it still reads as a
         // filled cell rather than a hole in the stack.
-        return `{black-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/black-fg}`;
+        return `{${door_theme_1.T.ground}-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/${door_theme_1.T.ground}-fg}`;
     }
     /**
      * Toggle pause
