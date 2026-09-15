@@ -41,6 +41,13 @@ class GameEngine {
         // Stats tracking
         this.tetrisCount = 0;
         this.tSpinCount = 0;
+        /**
+         * The combo a SINGLE does not advance - the reference's `combo2`
+         * (`gamestart.c:10256`). A lock clearing nothing breaks it like the normal
+         * combo (`gamestart.c:10159`); a single neither advances nor breaks it.
+         * MISSION's COMBO objective reads this one when its NOT1LINE option is set.
+         */
+        this.comboIgnoringSingles = 0;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -315,6 +322,9 @@ class GameEngine {
     start() {
         this.state.status = 'playing';
         this.state.startTime = Date.now();
+        // A restarted engine starts both combo counters at zero, like the state
+        // object it is about to play with.
+        this.comboIgnoringSingles = 0;
         this.sectionManager.reset();
         this.gradeManager.reset(); // Reset grade to 9
         this.gradeManager.setStartTime(this.state.startTime); // Set GM flag timer
@@ -1174,6 +1184,8 @@ class GameEngine {
             // Update stats
             this.state.lines += lineCount;
             this.state.combo++;
+            if (lineCount >= 2)
+                this.comboIgnoringSingles++;
             // Update speed parameters based on new level
             const speedParams = (0, gravity_1.getSpeedParams)(this.state.level, this.state.mode);
             this.state.gravity = speedParams.gravity;
@@ -1315,6 +1327,7 @@ class GameEngine {
         else {
             // No lines cleared, reset combo
             this.state.combo = 0;
+            this.comboIgnoringSingles = 0;
         }
         // Apply grade decay (handled per-frame now)
         // this.gradeManager.applyDecay(this.state.level); // Removed legacy call
@@ -1350,6 +1363,7 @@ class GameEngine {
             tSpinFull: tSpin === 'full',
             allClear: (0, board_1.isPerfectClear)(this.state.board),
             combo: this.state.combo,
+            comboIgnoringSingles: this.comboIgnoringSingles,
             piecesPlaced: this.state.piecesPlaced,
             level: this.state.level,
         });

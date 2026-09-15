@@ -62,6 +62,29 @@ export interface Mission {
   objective: MissionObjective;
   /** How many (mission_norm). Ignored by 'survive'. */
   norm: number;
+  /**
+   * How strictly an "erase exactly N lines" objective is counted
+   * (the reference's `mission_opt_1`, labelled GRADE in its editor,
+   * `mission.c:841-866`):
+   *
+   *   'exact'         N lines and nothing else counts. The default, and what
+   *                   every pack written before this field meant.
+   *   'atLeast'       N lines or more counts.
+   *   'exactOrReset'  N lines counts, and ANY other clear puts the count
+   *                   back to zero. This is the shape BTOB 4L has always
+   *                   had, which is why it is expressed through this now
+   *                   rather than as a branch of its own.
+   *
+   * Read by 'single', 'double', 'triple' and 'tetris'; ignored by the rest.
+   */
+  strictness?: 'exact' | 'atLeast' | 'exactOrReset';
+  /**
+   * COMBO only (the reference's `mission_opt_3`, NOT1LINE,
+   * `mission.c:344-353`): count the combo that SINGLES do not advance
+   * (`combo2`, `gamestart.c:10256`). A single neither advances nor breaks it;
+   * a lock that clears nothing still breaks both (`gamestart.c:10159`).
+   */
+  ignoreSingles?: boolean;
   /** The clock (mission_time). 0 = no limit; 'survive' needs one. */
   timeLimitSeconds: number;
   /** Starting speed (mission_lv). */

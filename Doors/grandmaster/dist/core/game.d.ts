@@ -49,6 +49,13 @@ export declare class GameEngine {
     private onLockCallback?;
     private tetrisCount;
     private tSpinCount;
+    /**
+     * The combo a SINGLE does not advance - the reference's `combo2`
+     * (`gamestart.c:10256`). A lock clearing nothing breaks it like the normal
+     * combo (`gamestart.c:10159`); a single neither advances nor breaks it.
+     * MISSION's COMBO objective reads this one when its NOT1LINE option is set.
+     */
+    private comboIgnoringSingles;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;

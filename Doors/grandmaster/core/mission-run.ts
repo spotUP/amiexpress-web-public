@@ -42,6 +42,12 @@ export interface LockEvent {
   allClear: boolean;
   /** The combo counter AFTER this lock. */
   combo: number;
+  /**
+   * The combo counter a SINGLE does not advance (the reference's `combo2`,
+   * `gamestart.c:10256`), which is what a COMBO mission counts when its
+   * NOT1LINE option is set. A lock that clears nothing breaks both.
+   */
+  comboIgnoringSingles: number;
   /** Total pieces locked so far. */
   piecesPlaced: number;
   /** The run's level after this lock. */
@@ -63,6 +69,16 @@ export interface MissionProgress {
 /** Line counts that count toward each "exactly N lines" objective. */
 const EXACT_CLEAR: Partial<Record<MissionObjective, number>> = {
   single: 1, double: 2, triple: 3, tetris: 4,
+  // mission_info_en[28]: "Erase 4 lines at once %d times! Do not erase 3 or
+  // less lines!" - four lines, and a smaller clear does not merely fail to
+  // count, it resets. That is 'exactOrReset' of four, so the objective is
+  // expressed through the strictness rather than as a branch of its own.
+  b2bTetris: 4,
+};
+
+/** Objectives whose strictness is part of what they ARE, not an option. */
+const FORCED_STRICTNESS: Partial<Record<MissionObjective, 'exactOrReset'>> = {
+  b2bTetris: 'exactOrReset',
 };
 
 export class MissionRun {
@@ -108,7 +124,18 @@ export class MissionRun {
     if (objective === 'lines') {
       this.current += event.lineCount;
     } else if (exact !== undefined) {
-      if (event.lineCount === exact) this.current++;
+      /*
+       * The GRADE option (mission_opt_1, mission.c:841-866). 'exact' is the
+       * default and what every pack meant before the field existed;
+       * 'atLeast' takes the bigger clear too; 'exactOrReset' takes the exact
+       * one and throws the count away on any other clear.
+       */
+      const strictness = FORCED_STRICTNESS[objective] ?? this.mission.strictness ?? 'exact';
+      const counts = strictness === 'atLeast'
+        ? event.lineCount >= exact
+        : event.lineCount === exact;
+      if (counts) this.current++;
+      else if (strictness === 'exactOrReset' && event.lineCount > 0) this.current = 0;
     } else if (objective === 'cycle') {
       if (event.lineCount > 0) this.cycleSeen.add(event.lineCount);
       this.current = this.cycleSeen.size;
@@ -122,19 +149,17 @@ export class MissionRun {
       if (event.tSpinFull && event.lineCount >= 2) this.current++;
     } else if (objective === 'combo') {
       // "Do %d combo(s)" - the highest combo reached, not a running total.
-      this.current = Math.max(this.current, event.combo);
+      // With NOT1LINE it is the counter singles do not advance that is read.
+      const reached = this.mission.ignoreSingles
+        ? event.comboIgnoringSingles
+        : event.combo;
+      this.current = Math.max(this.current, reached);
     } else if (objective === 'allClear') {
       if (event.allClear) this.current++;
     } else if (objective === 'pieces') {
       this.current = event.piecesPlaced;
     } else if (objective === 'level') {
       this.current = event.level;
-    } else if (objective === 'b2bTetris') {
-      // mission_info_en[28]: "Erase 4 lines at once %d times! Do not erase 3
-      // or less lines!" - a smaller clear does not just fail to count, it
-      // resets what has been counted.
-      if (event.lineCount === 4) this.current++;
-      else if (event.lineCount > 0) this.current = 0;
     }
 
     if (objective !== 'survive' && this.current >= this.target()) {
@@ -186,8 +211,13 @@ export class MissionRun {
         return `COMBO ${norm}  BEST ${this.current}`;
       case 'level':
         return `REACH LEVEL ${norm}  ${this.current}/${norm}`;
-      default:
-        return `${objective.toUpperCase()} ${norm}  ${this.current}/${norm}`;
+      default: {
+        // 'atLeast' is a different mission from 'exact' and the player has to
+        // be told which one they are playing: "DOUBLE 4" and "DOUBLE 4+" are
+        // not the same ask.
+        const plus = (this.mission.strictness ?? 'exact') === 'atLeast' ? '+' : '';
+        return `${objective.toUpperCase()} ${norm}${plus}  ${this.current}/${norm}`;
+      }
     }
   }
 }

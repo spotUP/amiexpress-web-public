@@ -22,6 +22,15 @@ function nextIsHidden(state) {
 /** Line counts that count toward each "exactly N lines" objective. */
 const EXACT_CLEAR = {
     single: 1, double: 2, triple: 3, tetris: 4,
+    // mission_info_en[28]: "Erase 4 lines at once %d times! Do not erase 3 or
+    // less lines!" - four lines, and a smaller clear does not merely fail to
+    // count, it resets. That is 'exactOrReset' of four, so the objective is
+    // expressed through the strictness rather than as a branch of its own.
+    b2bTetris: 4,
+};
+/** Objectives whose strictness is part of what they ARE, not an option. */
+const FORCED_STRICTNESS = {
+    b2bTetris: 'exactOrReset',
 };
 class MissionRun {
     constructor(mission) {
@@ -63,8 +72,20 @@ class MissionRun {
             this.current += event.lineCount;
         }
         else if (exact !== undefined) {
-            if (event.lineCount === exact)
+            /*
+             * The GRADE option (mission_opt_1, mission.c:841-866). 'exact' is the
+             * default and what every pack meant before the field existed;
+             * 'atLeast' takes the bigger clear too; 'exactOrReset' takes the exact
+             * one and throws the count away on any other clear.
+             */
+            const strictness = FORCED_STRICTNESS[objective] ?? this.mission.strictness ?? 'exact';
+            const counts = strictness === 'atLeast'
+                ? event.lineCount >= exact
+                : event.lineCount === exact;
+            if (counts)
                 this.current++;
+            else if (strictness === 'exactOrReset' && event.lineCount > 0)
+                this.current = 0;
         }
         else if (objective === 'cycle') {
             if (event.lineCount > 0)
@@ -85,7 +106,11 @@ class MissionRun {
         }
         else if (objective === 'combo') {
             // "Do %d combo(s)" - the highest combo reached, not a running total.
-            this.current = Math.max(this.current, event.combo);
+            // With NOT1LINE it is the counter singles do not advance that is read.
+            const reached = this.mission.ignoreSingles
+                ? event.comboIgnoringSingles
+                : event.combo;
+            this.current = Math.max(this.current, reached);
         }
         else if (objective === 'allClear') {
             if (event.allClear)
@@ -96,15 +121,6 @@ class MissionRun {
         }
         else if (objective === 'level') {
             this.current = event.level;
-        }
-        else if (objective === 'b2bTetris') {
-            // mission_info_en[28]: "Erase 4 lines at once %d times! Do not erase 3
-            // or less lines!" - a smaller clear does not just fail to count, it
-            // resets what has been counted.
-            if (event.lineCount === 4)
-                this.current++;
-            else if (event.lineCount > 0)
-                this.current = 0;
         }
         if (objective !== 'survive' && this.current >= this.target()) {
             this.outcome = 'cleared';
@@ -153,8 +169,13 @@ class MissionRun {
                 return `COMBO ${norm}  BEST ${this.current}`;
             case 'level':
                 return `REACH LEVEL ${norm}  ${this.current}/${norm}`;
-            default:
-                return `${objective.toUpperCase()} ${norm}  ${this.current}/${norm}`;
+            default: {
+                // 'atLeast' is a different mission from 'exact' and the player has to
+                // be told which one they are playing: "DOUBLE 4" and "DOUBLE 4+" are
+                // not the same ask.
+                const plus = (this.mission.strictness ?? 'exact') === 'atLeast' ? '+' : '';
+                return `${objective.toUpperCase()} ${norm}${plus}  ${this.current}/${norm}`;
+            }
         }
     }
 }

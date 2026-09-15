@@ -39,6 +39,12 @@ export interface LockEvent {
     allClear: boolean;
     /** The combo counter AFTER this lock. */
     combo: number;
+    /**
+     * The combo counter a SINGLE does not advance (the reference's `combo2`,
+     * `gamestart.c:10256`), which is what a COMBO mission counts when its
+     * NOT1LINE option is set. A lock that clears nothing breaks both.
+     */
+    comboIgnoringSingles: number;
     /** Total pieces locked so far. */
     piecesPlaced: number;
     /** The run's level after this lock. */

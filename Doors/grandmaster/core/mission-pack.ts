@@ -14,6 +14,16 @@
 import { MISSION_OBJECTIVES, type Mission, type MissionObjective, type MissionPack } from './mission-types';
 import type { HiddenMode } from './types';
 
+/** The GRADE forms an "erase exactly N" objective can be counted in. */
+const STRICTNESS: ReadonlyArray<NonNullable<Mission['strictness']>> = [
+  'exact', 'atLeast', 'exactOrReset',
+];
+
+/** The objectives that read it (mission.c:841-866 - DOUBLE and TRIPLE). */
+const STRICT_OBJECTIVES: ReadonlyArray<MissionObjective> = [
+  'single', 'double', 'triple', 'tetris', 'b2bTetris',
+];
+
 const HIDDEN_MODES: readonly HiddenMode[] = ['OFF', 'SLOW', 'FAST', 'FASTEST'];
 
 export class MissionPackError extends Error {}
@@ -80,6 +90,31 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       fail(where, 'a cycle mission cannot ask for more than the four clear sizes');
     }
 
+    /*
+     * The GRADE option (mission_opt_1). Only the "erase exactly N" family
+     * reads it, and BTOB 4L's strictness is part of what that objective IS -
+     * a pack asking for a softer one is asking for a different mission, so
+     * it is refused rather than quietly ignored.
+     */
+    const strictness = m.strictness as Mission['strictness'] | undefined;
+    if (strictness !== undefined && !STRICTNESS.includes(strictness)) {
+      fail(where, `strictness must be one of ${STRICTNESS.join(', ')}`);
+    }
+    if (strictness !== undefined && !STRICT_OBJECTIVES.includes(objective)) {
+      fail(where, `objective "${objective}" does not take a strictness`);
+    }
+    if (strictness !== undefined && objective === 'b2bTetris' && strictness !== 'exactOrReset') {
+      fail(where, 'b2bTetris IS the exactOrReset form; a softer one is a tetris mission');
+    }
+
+    const ignoreSingles = m.ignoreSingles;
+    if (ignoreSingles !== undefined && typeof ignoreSingles !== 'boolean') {
+      fail(where, 'ignoreSingles must be true or false');
+    }
+    if (ignoreSingles !== undefined && objective !== 'combo') {
+      fail(where, `objective "${objective}" does not take ignoreSingles`);
+    }
+
     const rawModifiers = (m.modifiers ?? {}) as Record<string, unknown>;
     const hidden = rawModifiers.hidden as HiddenMode | undefined;
     if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -87,6 +122,8 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
     }
 
     return {
+      ...(strictness !== undefined ? { strictness } : {}),
+      ...(ignoreSingles !== undefined ? { ignoreSingles: ignoreSingles as boolean } : {}),
       id,
       name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
       objective,

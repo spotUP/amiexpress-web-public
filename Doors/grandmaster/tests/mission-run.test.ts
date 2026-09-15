@@ -23,7 +23,7 @@ function mission(objective: MissionObjective, over: Partial<Mission> = {}): Miss
 function lock(over: Partial<LockEvent> = {}): LockEvent {
   const base: LockEvent = {
     lineCount: 0, tSpin: false, tSpinFull: false,
-    allClear: false, combo: 0, piecesPlaced: 1, level: 0,
+    allClear: false, combo: 0, comboIgnoringSingles: 0, piecesPlaced: 1, level: 0,
   };
   const event = { ...base, ...over };
   // A 3-corner T-Spin is a T-Spin: a test that sets one without the other is
@@ -295,4 +295,95 @@ export async function aCycleNormAboveFourIsRefused(): Promise<void> {
   };
   assert.strictEqual(parseMissionPack(old, 'test').missions[0].norm, 4,
     'an absent cycle norm still means the four sizes');
+}
+
+/**
+ * The GRADE option: the same judge, counted three ways.
+ *
+ * `mission_opt_1` on DOUBLE and TRIPLE (`mission.c:841-866`): 0 is exactly N,
+ * 1 is N or more, 2 is exactly N with any other clear throwing the count
+ * away. The door only ever had the first.
+ */
+export async function anExactObjectiveCanBeAskedForThreeWays(): Promise<void> {
+  const exact = new MissionRun(mission('double', { norm: 2 }));
+  exact.onLock(lock({ lineCount: 3 }));
+  assert.strictEqual(exact.getProgress().current, 0, 'a triple is not a double');
+
+  const atLeast = new MissionRun(mission('double', { norm: 2, strictness: 'atLeast' }));
+  atLeast.onLock(lock({ lineCount: 3 }));
+  atLeast.onLock(lock({ lineCount: 4 }));
+  assert.strictEqual(atLeast.getProgress().outcome, 'cleared', 'two lines OR MORE');
+
+  const orReset = new MissionRun(mission('triple', { norm: 2, strictness: 'exactOrReset' }));
+  orReset.onLock(lock({ lineCount: 3 }));
+  assert.strictEqual(orReset.getProgress().current, 1);
+  orReset.onLock(lock({ lineCount: 1 }));
+  assert.strictEqual(orReset.getProgress().current, 0, 'any other clear throws it away');
+  assert.strictEqual(orReset.getProgress().outcome, 'playing');
+}
+
+/**
+ * BTOB 4L is that third form, and it still behaves exactly as it did.
+ *
+ * It used to be a branch of its own; it is now "four lines, exactOrReset",
+ * which is the same rule expressed once. The pin is that the BEHAVIOUR did
+ * not move - a mission written before this refactor plays the same.
+ */
+export async function b2bTetrisIsTheExactOrResetFormAndCannotBeSoftened(): Promise<void> {
+  const run = new MissionRun(mission('b2bTetris', { norm: 2 }));
+  run.onLock(lock({ lineCount: 4 }));
+  run.onLock(lock({ lineCount: 2 }));
+  assert.strictEqual(run.getProgress().current, 0, 'a double still resets it');
+  run.onLock(lock({ lineCount: 4 }));
+  run.onLock(lock({ lineCount: 0 }));
+  run.onLock(lock({ lineCount: 4 }));
+  assert.strictEqual(run.getProgress().outcome, 'cleared',
+    'a lock that clears NOTHING does not break the chain');
+
+  // And a pack cannot ask for a soft one: that is a tetris mission.
+  const soft = {
+    name: 'soft', missions: [{
+      id: '01', name: 'SOFT', objective: 'b2bTetris', norm: 2, strictness: 'atLeast',
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.throws(() => parseMissionPack(soft, 'test'), MissionPackError);
+}
+
+/**
+ * COMBO's NOT1LINE reads the counter singles do not advance.
+ *
+ * `combo2` (`gamestart.c:10256`): a clear of two or more advances it, a
+ * single leaves it alone, and a lock that clears nothing breaks it like the
+ * normal combo. The engine keeps it; the mission chooses which counter it
+ * is judged on.
+ */
+export async function comboCanBeAskedToIgnoreSingles(): Promise<void> {
+  const plain = new MissionRun(mission('combo', { norm: 3 }));
+  plain.onLock(lock({ lineCount: 1, combo: 3, comboIgnoringSingles: 1 }));
+  assert.strictEqual(plain.getProgress().outcome, 'cleared', 'singles count by default');
+
+  const notOne = new MissionRun(mission('combo', { norm: 3, ignoreSingles: true }));
+  notOne.onLock(lock({ lineCount: 1, combo: 3, comboIgnoringSingles: 1 }));
+  assert.strictEqual(notOne.getProgress().current, 1, 'a single-driven combo does not');
+  notOne.onLock(lock({ lineCount: 2, combo: 4, comboIgnoringSingles: 3 }));
+  assert.strictEqual(notOne.getProgress().outcome, 'cleared');
+}
+
+/** An option on an objective that does not take it is a pack bug, not a no-op. */
+export async function anOptionOnTheWrongObjectiveIsRefused(): Promise<void> {
+  const packWith = (extra: Record<string, unknown>) => ({
+    name: 'x', missions: [{
+      id: '01', name: 'X', objective: 'lines', norm: 3,
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {}, ...extra,
+    }],
+  });
+  assert.throws(() => parseMissionPack(packWith({ strictness: 'atLeast' }), 'test'),
+    MissionPackError, 'lines counts every line; a grade means nothing to it');
+  assert.throws(() => parseMissionPack(packWith({ ignoreSingles: true }), 'test'),
+    MissionPackError, 'only COMBO has two counters to choose between');
+  assert.throws(() => parseMissionPack(
+    { name: 'x', missions: [{ id: '01', name: 'X', objective: 'double', norm: 2,
+      strictness: 'sometimes', timeLimitSeconds: 0, startLevel: 0, garbageRows: 0,
+      modifiers: {} }] }, 'test'), MissionPackError, 'and the value is checked');
 }

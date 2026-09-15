@@ -96,6 +96,13 @@ export class GameEngine {
   // Stats tracking
   private tetrisCount: number = 0;
   private tSpinCount: number = 0;
+  /**
+   * The combo a SINGLE does not advance - the reference's `combo2`
+   * (`gamestart.c:10256`). A lock clearing nothing breaks it like the normal
+   * combo (`gamestart.c:10159`); a single neither advances nor breaks it.
+   * MISSION's COMBO objective reads this one when its NOT1LINE option is set.
+   */
+  private comboIgnoringSingles: number = 0;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -409,6 +416,9 @@ export class GameEngine {
   start(): void {
     this.state.status = 'playing';
     this.state.startTime = Date.now();
+    // A restarted engine starts both combo counters at zero, like the state
+    // object it is about to play with.
+    this.comboIgnoringSingles = 0;
     this.sectionManager.reset();
     this.gradeManager.reset();  // Reset grade to 9
     this.gradeManager.setStartTime(this.state.startTime);  // Set GM flag timer
@@ -1382,6 +1392,7 @@ export class GameEngine {
       // Update stats
       this.state.lines += lineCount;
       this.state.combo++;
+      if (lineCount >= 2) this.comboIgnoringSingles++;
 
       // Update speed parameters based on new level
       const speedParams = getSpeedParams(this.state.level, this.state.mode);
@@ -1536,6 +1547,7 @@ export class GameEngine {
     } else {
       // No lines cleared, reset combo
       this.state.combo = 0;
+      this.comboIgnoringSingles = 0;
     }
 
     // Apply grade decay (handled per-frame now)
@@ -1577,6 +1589,7 @@ export class GameEngine {
       tSpinFull: tSpin === 'full',
       allClear: isPerfectClear(this.state.board),
       combo: this.state.combo,
+      comboIgnoringSingles: this.comboIgnoringSingles,
       piecesPlaced: this.state.piecesPlaced,
       level: this.state.level,
     });
