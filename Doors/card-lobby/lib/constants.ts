@@ -310,6 +310,51 @@ export const GAME_CATALOG: GameDefinition[] = [
     ],
     enabled: true,
   },
+  /*
+   * THE SOLITAIRES, one catalogue entry per `.game` file under `games/`.
+   *
+   * They are all the same module (lib/games/patience/module.ts) reading a
+   * different file, which is the point of adopting csol's format: another
+   * patience is a text file plus four lines here. One seat, no stake - a
+   * solitaire is the caller against the pack, and the lobby's seat filling
+   * already leaves a one-seat table alone.
+   */
+  {
+    id: 'patience-klondike',
+    name: 'Klondike',
+    description: 'The solitaire everybody knows. Build the foundations up in suit.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-freecell',
+    name: 'Freecell',
+    description: 'Every card face up and four cells to think with. Nearly always winnable.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-yukon',
+    name: 'Yukon',
+    description: 'Klondike with no stock and any card movable, buried or not.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-spider1',
+    name: 'Spider (1 suit)',
+    description: 'Eight packs of spades. Build runs down and they leave the table.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
   {
     id: 'skitgubbe-tricks',
     name: 'Skitgubbe (Tricks)',

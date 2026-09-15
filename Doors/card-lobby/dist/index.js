@@ -305,11 +305,13 @@ class CardLobbyApp {
         });
         this.skitgubbe = new games_1.SkitgubbeGameModule(this);
         this.vandtia = new games_1.VandtiaGameModule(this);
+        this.patience = new games_1.PatienceGameModule(this);
         this.games = new games_1.GameRegistry([
             new games_1.HoldemGameModule(this),
             new games_1.UnoGameModule(this),
             this.skitgubbe,
             this.vandtia,
+            this.patience,
         ]);
         // Build overlay FIRST so overlayShade exists
         this.uiManager.buildOverlay();
@@ -1209,6 +1211,9 @@ class CardLobbyApp {
     }
     labelVandtiaButtons(hasGame, swapping, canTake) {
         this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
+    }
+    labelPatienceButtons(hasGame, canTurn) {
+        this.uiManager.labelPatienceButtons(hasGame, canTurn);
     }
     updateUnoActionButtons(table) {
         const gameState = this.loadUnoGameState(table);

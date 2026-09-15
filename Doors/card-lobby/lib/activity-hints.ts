@@ -24,7 +24,7 @@ export interface ActivityHintInput {
    * every existing caller keeps its behaviour; a game that registers with
    * the lobby passes its own kind (lib/games/types.ts).
    */
-  gameKind?: 'poker' | 'uno' | 'skitgubbe' | 'vandtia';
+  gameKind?: 'poker' | 'uno' | 'skitgubbe' | 'vandtia' | 'patience';
   /** The player's own id, to tell "your turn" from "waiting for". */
   userId: string | null;
   /** The live hand, when one is dealt. */
@@ -60,7 +60,10 @@ export function buildActivityHints(input: ActivityHintInput): string[] {
   lines.push(
     kind === 'uno'
       ? `{${UI_THEME.dim}-fg}Keys: D Draw  L Leave{/}`
-      : kind === 'vandtia'
+      : kind === 'patience'
+        // Two picks make a move: the pile a card leaves, then where it goes.
+        ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pile  X Home  C Stock  R Cancel  L Leave  D Deal{/}`
+        : kind === 'vandtia'
         // Three moves and the keys that make them.
         ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take pile  L Leave  D Deal{/}`
         : kind === 'skitgubbe'

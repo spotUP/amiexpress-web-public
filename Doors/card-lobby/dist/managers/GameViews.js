@@ -304,6 +304,56 @@ class GameViews {
         this.host.activityContent.setContent(activity.join('\n'));
     }
     /**
+     * PATIENCE in the four panels.
+     *
+     * A solitaire wants a whole board and this screen has four boxes, so the
+     * board is TEXT: one line per pile, numbered in the order the keys name
+     * them, with the cards that matter on each. A tableau shows its run, a
+     * foundation its top card, the stock and waste their counts. That reads at
+     * eighty columns and at forty, which card art for eleven piles does not.
+     */
+    renderPatienceGameView(table) {
+        const engine = this.host.patience.load(table);
+        if (!engine) {
+            this.host.flopContent.setContent('Press {cyan-fg}D{/} to deal.');
+            this.host.playersContent.setContent('');
+            this.host.handContent.setContent('');
+            this.host.cardButtons.clear();
+            this.host.tableCardButtons.clear();
+            return;
+        }
+        // The card widgets belong to the games that deal a hand; this board is
+        // drawn as text, and leaving them up would scatter cards over it.
+        this.host.cardButtons.clear();
+        this.host.tableCardButtons.clear();
+        const piles = this.host.patience.boardOrder(engine);
+        const picked = this.host.patience.selectedPileId;
+        const label = (pile) => `${pile.type === 'tableau' ? 'T' : pile.type === 'foundation' ? 'F'
+            : pile.type === 'cell' ? 'C' : pile.type === 'waste' ? 'W' : 'S'}${pile.index + 1}`;
+        const board = [];
+        const hand = [];
+        piles.forEach((pile, index) => {
+            const number = index + 1;
+            const marker = pile.id === picked ? '{yellow-bg}{black-fg}' : '{green-fg}';
+            const cards = pile.cards.length === 0
+                ? `{${constants_1.UI_THEME.dim}-fg}-{/}`
+                : pile.cards
+                    .slice(-6)
+                    .map((card) => (card.faceUp ? `${card.rank}${card.suit}` : '##'))
+                    .join(' ');
+            const hidden = pile.cards.length > 6 ? `{${constants_1.UI_THEME.dim}-fg}+${pile.cards.length - 6}{/} ` : '';
+            const line = `${marker}[${number}]{/} ${(0, lib_1.pad)(label(pile), 3)} ${hidden}${cards}`;
+            (pile.type === 'tableau' ? hand : board).push(line);
+        });
+        this.host.flopContent.setContent(board.join('\n'));
+        this.host.handContent.setContent(hand.join('\n'));
+        this.host.playersContent.setContent([
+            `{cyan-fg}${engine.state.title}{/}`,
+            `Moves ${engine.state.moves}`,
+            engine.state.won ? '{green-fg}Out!{/}' : '',
+        ].filter(Boolean).join('\n'));
+    }
+    /**
      * SKITGUBBE (vändtia) in the four panels.
      *
      * Three stacks per player and one pile in the middle, so the panels say:

@@ -11,7 +11,7 @@ import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
-import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule } from '../lib/games';
+import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule, type PatienceGameModule } from '../lib/games';
 
 /** What every game passes to the shared card renderer (managers/CardButtons.ts). */
 interface CardButtonArgs {
@@ -66,6 +66,7 @@ export interface GameViewHost {
   gameModuleFor(table: LobbyTable): TableGameModule | undefined;
   readonly skitgubbe: SkitgubbeGameModule;
   readonly vandtia: VandtiaGameModule;
+  readonly patience: PatienceGameModule;
   readonly cardButtons: {
     render(cards: Array<{ kind: 'standard' | 'uno'; card: unknown }>, options: CardButtonArgs): boolean;
     renderStandard(cards: unknown[], options: CardButtonArgs): boolean;
@@ -407,6 +408,62 @@ export class GameViews {
       activity.push('Waiting for the other players...');
     }
     this.host.activityContent.setContent(activity.join('\n'));
+  }
+
+  /**
+   * PATIENCE in the four panels.
+   *
+   * A solitaire wants a whole board and this screen has four boxes, so the
+   * board is TEXT: one line per pile, numbered in the order the keys name
+   * them, with the cards that matter on each. A tableau shows its run, a
+   * foundation its top card, the stock and waste their counts. That reads at
+   * eighty columns and at forty, which card art for eleven piles does not.
+   */
+  renderPatienceGameView(table: LobbyTable): void {
+    const engine = this.host.patience.load(table);
+    if (!engine) {
+      this.host.flopContent.setContent('Press {cyan-fg}D{/} to deal.');
+      this.host.playersContent.setContent('');
+      this.host.handContent.setContent('');
+      this.host.cardButtons.clear();
+      this.host.tableCardButtons.clear();
+      return;
+    }
+
+    // The card widgets belong to the games that deal a hand; this board is
+    // drawn as text, and leaving them up would scatter cards over it.
+    this.host.cardButtons.clear();
+    this.host.tableCardButtons.clear();
+
+    const piles = this.host.patience.boardOrder(engine);
+    const picked = this.host.patience.selectedPileId;
+    const label = (pile: { type: string; index: number }): string =>
+      `${pile.type === 'tableau' ? 'T' : pile.type === 'foundation' ? 'F'
+        : pile.type === 'cell' ? 'C' : pile.type === 'waste' ? 'W' : 'S'}${pile.index + 1}`;
+
+    const board: string[] = [];
+    const hand: string[] = [];
+    piles.forEach((pile, index) => {
+      const number = index + 1;
+      const marker = pile.id === picked ? '{yellow-bg}{black-fg}' : '{green-fg}';
+      const cards = pile.cards.length === 0
+        ? `{${UI_THEME.dim}-fg}-{/}`
+        : pile.cards
+          .slice(-6)
+          .map((card) => (card.faceUp ? `${card.rank}${card.suit}` : '##'))
+          .join(' ');
+      const hidden = pile.cards.length > 6 ? `{${UI_THEME.dim}-fg}+${pile.cards.length - 6}{/} ` : '';
+      const line = `${marker}[${number}]{/} ${pad(label(pile), 3)} ${hidden}${cards}`;
+      (pile.type === 'tableau' ? hand : board).push(line);
+    });
+
+    this.host.flopContent.setContent(board.join('\n'));
+    this.host.handContent.setContent(hand.join('\n'));
+    this.host.playersContent.setContent([
+      `{cyan-fg}${engine.state.title}{/}`,
+      `Moves ${engine.state.moves}`,
+      engine.state.won ? '{green-fg}Out!{/}' : '',
+    ].filter(Boolean).join('\n'));
   }
 
   /**

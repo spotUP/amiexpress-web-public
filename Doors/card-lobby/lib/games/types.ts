@@ -28,7 +28,7 @@
 import type { LobbyTable } from '../types';
 
 /** What the activity panel should say while this game is up. */
-export type GameHintKind = 'poker' | 'uno' | 'skitgubbe' | 'vandtia';
+export type GameHintKind = 'poker' | 'uno' | 'skitgubbe' | 'vandtia' | 'patience';
 
 /**
  * The painter. GameViews owns the four panels; a module only says which of
@@ -39,6 +39,7 @@ export interface TableGamePainter {
   renderUnoGameView(table: LobbyTable): void;
   renderSkitgubbeGameView(table: LobbyTable): void;
   renderVandtiaGameView(table: LobbyTable): void;
+  renderPatienceGameView(table: LobbyTable): void;
 }
 
 export interface TableGameModule {

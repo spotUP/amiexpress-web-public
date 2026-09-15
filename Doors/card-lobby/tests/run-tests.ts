@@ -25,6 +25,7 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './the-instructions-do-not-scroll-away.test',
   './a-patience-is-a-text-file.test',
   './a-patience-plays-by-its-file.test',
+  './a-solitaire-is-dealt-from-the-lobby.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

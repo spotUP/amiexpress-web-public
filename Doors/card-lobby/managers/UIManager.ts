@@ -1196,6 +1196,20 @@ export class UIManager {
     this.applyActionButtonPalette('quit');
   }
 
+  /** Patience: deal, send a card home, turn the stock, cancel a pick. */
+  labelPatienceButtons(hasGame: boolean, canTurn: boolean): void {
+    this.actionButtons.fold.hide();
+    this.actionButtons.check.setContent(hasGame ? 'HOME' : 'DEAL');
+    this.actionButtons.call.setContent(canTurn ? 'STOCK' : '-');
+    this.actionButtons.raise.setContent('CANCEL');
+    this.actionButtons.quit.setContent('QUIT');
+
+    this.applyActionButtonPalette('check');
+    this.applyActionButtonPalette('call');
+    this.applyActionButtonPalette('raise');
+    this.applyActionButtonPalette('quit');
+  }
+
   private applyUnoButtonPalette(
     buttonKey: ActionButtonKey,
     unoKey: 'play' | 'draw' | 'uno' | 'challenge' | 'quit',

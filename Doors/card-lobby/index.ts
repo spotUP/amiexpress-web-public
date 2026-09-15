@@ -62,6 +62,7 @@ import {
   UnoGameModule,
   SkitgubbeGameModule,
   VandtiaGameModule,
+  PatienceGameModule,
   type TableGameModule,
 } from './lib/games';
 import {
@@ -168,6 +169,8 @@ export class CardLobbyApp {
   /** Kept by name as well: the game modules own the caller's card selection. */
   public skitgubbe!: SkitgubbeGameModule;
   public vandtia!: VandtiaGameModule;
+  /** Every solitaire the `games/` directory holds, behind one module. */
+  public patience!: PatienceGameModule;
   /** The SDK's AI, shared by every game's bots. */
   public cardGameAI: CardGameAI | null = null;
   /**
@@ -455,11 +458,13 @@ export class CardLobbyApp {
     });
     this.skitgubbe = new SkitgubbeGameModule(this);
     this.vandtia = new VandtiaGameModule(this);
+    this.patience = new PatienceGameModule(this);
     this.games = new GameRegistry([
       new HoldemGameModule(this),
       new UnoGameModule(this),
       this.skitgubbe,
       this.vandtia,
+      this.patience,
     ]);
 
     // Build overlay FIRST so overlayShade exists
@@ -1487,6 +1492,10 @@ export class CardLobbyApp {
 
   public labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void {
     this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
+  }
+
+  public labelPatienceButtons(hasGame: boolean, canTurn: boolean): void {
+    this.uiManager.labelPatienceButtons(hasGame, canTurn);
   }
 
   public updateUnoActionButtons(table: LobbyTable): void {

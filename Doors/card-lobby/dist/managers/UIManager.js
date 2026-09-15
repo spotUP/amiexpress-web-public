@@ -1073,6 +1073,18 @@ class UIManager {
         this.applyActionButtonPalette('raise');
         this.applyActionButtonPalette('quit');
     }
+    /** Patience: deal, send a card home, turn the stock, cancel a pick. */
+    labelPatienceButtons(hasGame, canTurn) {
+        this.actionButtons.fold.hide();
+        this.actionButtons.check.setContent(hasGame ? 'HOME' : 'DEAL');
+        this.actionButtons.call.setContent(canTurn ? 'STOCK' : '-');
+        this.actionButtons.raise.setContent('CANCEL');
+        this.actionButtons.quit.setContent('QUIT');
+        this.applyActionButtonPalette('check');
+        this.applyActionButtonPalette('call');
+        this.applyActionButtonPalette('raise');
+        this.applyActionButtonPalette('quit');
+    }
     applyUnoButtonPalette(buttonKey, unoKey) {
         const button = this.actionButtons[buttonKey];
         const styleSet = constants_1.UNO_ACTION_BUTTON_STYLES[unoKey];
