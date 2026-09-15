@@ -170,6 +170,25 @@ describe('an art setting is a Studio slot', () => {
     expect(slot.lines).toBe(0);
   });
 
+  it('finds REQUESTS own art in the repo, not just a fixture', () => {
+    // THE REACHABILITY GATE. Every case above builds its own door; this one
+    // drives the folder the board actually ships, so a slot that works on a
+    // fixture and not on the real manifest fails here.
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'REQUESTS');
+
+    const slots = listDoorArtSections(repoDoor, 'REQ');
+
+    expect(slots.map((s) => s.section)).toEqual(
+      expect.arrayContaining(['setting:bulletinHeader', 'setting:bulletinTail']),
+    );
+    const header = slots.find((s) => s.section === 'setting:bulletinHeader')!;
+    expect(header.file).toBe('Bulletin_Header.txt');
+    expect(header.lines).toBe(8);
+    expect(header.missing).toBe(false);
+    // The twenty alternates that moved across from the classic Request door.
+    expect(header.choices!.length).toBeGreaterThanOrEqual(20);
+  });
+
   it('refuses to write through a value that escapes the door', () => {
     const dir = requestsDoor();
 
