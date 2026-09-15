@@ -13,6 +13,20 @@ import { displayScreen } from '../handlers/screen.handler';
 import { beginLogoff } from '../server/logoff';
 
 /**
+ * What an unset daily time limit resolves to, in seconds.
+ *
+ * One hour. NOT because express.e says so for a user record - it does not -
+ * but because it is what this board has effectively been giving every timed
+ * caller for as long as the -1 has been in the data, and a fix that silently
+ * changed how long people can stay online would be a different change from
+ * the one asked for.
+ *
+ * A caller whose ACCESS LEVEL grants ACS.OVERRIDE_TIMELIMIT never reaches
+ * this: express.e:557 checks the permission, not the number.
+ */
+export const DEFAULT_DAILY_TIME_LIMIT_SECONDS = 3600;
+
+/**
  * Update time used in session based on elapsed time since last update.
  * Based on express.e:525-554 (PROC updateTimeUsed)
  *
@@ -35,10 +49,28 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
     session.logonTime = currTime;
     session.lastTimeUpdate = currTime;
 
-    // express.e:7684 defaults timeLimit to 3600 (seconds = 60 minutes).
-    // Guard against 0 or negative values from DB (imported users, missing fields).
+    /*
+     * A STORED LIMIT OF ZERO OR LESS MEANS "NOBODY SET ONE".
+     *
+     * The citation this used to carry was wrong, and worth correcting rather
+     * than deleting: express.e:7660/7684/7740 set the GLOBAL `timeLimit` to
+     * 3600 when the sysop logs on at the LOCAL CONSOLE. They are not a
+     * default for a stored user record, and express.e has no coercion of this
+     * kind anywhere - a user's timeLimit is whatever the user file and the
+     * preset put there.
+     *
+     * We need one anyway, because this board's data has no other answer:
+     * every account carries -1, a sentinel from the old "negative means
+     * unlimited" convention that nothing honours any more (see the Time limit
+     * column in UsersPage.tsx, where it was removed). Left to arithmetic, -1
+     * reads as a limit already spent.
+     *
+     * So the rule is named rather than a literal buried in a branch, and the
+     * migration in database.ts writes the same number into the rows - so what
+     * a sysop reads in the admin is what the board actually uses.
+     */
     if (!session.user.timeLimit || session.user.timeLimit <= 0) {
-      session.user.timeLimit = 3600; // 1 hour default per express.e:7684
+      session.user.timeLimit = DEFAULT_DAILY_TIME_LIMIT_SECONDS;
     }
 
     // Initialize timeTotal from timeLimit (express.e:534)

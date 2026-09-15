@@ -534,6 +534,39 @@ console.log(`✓ Assigned slotnumber=${nextSlot} to ${u.username}`);
 console.log(`✓ Backfilled slotnumber for ${usersWithoutSlot.length} user(s)`);
       }
 
+      /*
+       * THE -1 THAT MEANT NOTHING (sysop, 2026-09-15: "fix the -1 properly").
+       *
+       * Every account on the live board carried `timelimit = -1` and
+       * `chatlimit = -1`, a sentinel from an old "negative means unlimited"
+       * convention that nothing honours any more. What actually happened was
+       * that `time-tracking.util.ts` coerced anything <= 0 to one hour, so
+       * the stored number said one thing, the board did another, and editing
+       * the field in the admin was the only way to find out which.
+       *
+       * This writes down what the board was already doing, so the two agree:
+       *
+       *   timelimit <= 0  ->  3600, the hour the coercion was giving out
+       *   chatlimit <  0  ->  0, which is what "no chat allowance" IS in
+       *                       express.e:548 - the chat clock only runs for a
+       *                       user with chatLimit > 0
+       *
+       * DELIBERATELY BEHAVIOUR-NEUTRAL. Nobody's session gets longer or
+       * shorter today; the point is that the field now means what it says, so
+       * a sysop who sets 600 in the admin gets ten minutes instead of having
+       * it quietly replaced. Unlimited stays where express.e puts it - the
+       * ACS.OVERRIDE_TIMELIMIT permission on the access level, which levels
+       * 30, 50, 60 and 255 grant on this board.
+       */
+      const nonsenseLimits = this.db
+        .prepare('SELECT COUNT(*) AS n FROM users WHERE timelimit <= 0 OR chatlimit < 0')
+        .get() as { n: number };
+      if (nonsenseLimits.n > 0) {
+        this.db.exec('UPDATE users SET timelimit = 3600 WHERE timelimit <= 0');
+        this.db.exec('UPDATE users SET chatlimit = 0 WHERE chatlimit < 0');
+console.log(`✓ Gave a real number to ${nonsenseLimits.n} account(s) whose time or chat limit was a sentinel`);
+      }
+
       // Check and add missing columns to system_config table
 console.log('Checking for missing columns in system_config table...');
       const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
