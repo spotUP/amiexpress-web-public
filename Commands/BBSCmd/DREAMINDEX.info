@@ -6,3 +6,4 @@ DESCRIPTION=DreamIndex file-index door (untested — batch-registered from Archi
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40

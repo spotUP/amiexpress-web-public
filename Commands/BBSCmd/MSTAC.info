@@ -6,3 +6,4 @@ DESCRIPTION=MasterSuite access-check door (untested — batch-registered from Ar
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40

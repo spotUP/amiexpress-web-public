@@ -6,3 +6,4 @@ DESCRIPTION=Mael new-user check door (untested — batch-registered from Archive
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40

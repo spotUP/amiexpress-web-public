@@ -1,8 +1,10 @@
 BBSCMD=TIP
-TYPE=TS
+TYPE=typescript
 LOCATION=Doors/tip-of-day
 DESCRIPTION=One tip per login: door spotlights, board facts, how-tos
 MULTINODE=YES
 PRIORITY=SAME
 MIN_COLUMNS=40
-ACCESS=0
+NAME=TIP
+DRACCESS=-1
+ACCESS=32767

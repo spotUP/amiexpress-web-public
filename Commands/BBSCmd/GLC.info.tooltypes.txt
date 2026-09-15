@@ -1,0 +1,10 @@
+# Tooltypes for GLC.info
+# Edit this file, then use a tool to rebuild the .info file
+
+LOCATION=Doors/glc/glcviewer
+PRIORITY=SAME
+TYPE=XIM
+MULTINODE=YES
+STACK=65536
+ACCESS=0
+C64_VIEWPORT=1

@@ -6,3 +6,4 @@ DESCRIPTION=Absolute Pool file-listing door (untested — batch-registered from 
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40

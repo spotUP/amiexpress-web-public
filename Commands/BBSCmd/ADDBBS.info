@@ -6,3 +6,4 @@ DESCRIPTION=AddBBS door (untested — batch-registered from Archives/DayDream fo
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40
