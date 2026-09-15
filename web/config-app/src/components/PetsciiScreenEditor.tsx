@@ -441,18 +441,34 @@ export function PetsciiScreenEditor({
         )}
         {!readOnly && (
           <>
+            {/*
+              * "Open a file into the editor", not "Upload a drawing".
+              *
+              * This loads bytes ONTO THE CANVAS and writes nothing; the
+              * dialog around it has an "Upload a drawing" that replaces the
+              * file on the board. Both were on screen at once, both called a
+              * drawing, doing opposite things: "this is weird in the petscii
+              * editor the bottom row has a duplicate upload a drawing button"
+              * (sysop, 2026-09-15). ScreenEditor already names the canvas-level
+              * one this way, so this is the wording that existed, not a new one.
+              *
+              * The control itself stays self-serving - it renders whether or
+              * not the page passes a handler - because that was the answer to
+              * "i dont see a way to upload a petscii screen in the petscii
+              * editor" (sysop, 2026-09-14) and neither mount site passes one.
+              */}
             <button
               type="button"
               className="inline-flex items-center gap-1 text-sm underline"
               onClick={() => uploadInput.current?.click()}
             >
-              <Upload size={14} /> Load a drawing
+              <Upload size={14} /> Open a file into the editor
             </button>
             <input
               ref={uploadInput}
               type="file"
               accept=".seq"
-              aria-label="Load a drawing"
+              aria-label="Open a file into the editor"
               className="hidden"
               onChange={async event => {
                 const chosen = event.target.files?.[0];

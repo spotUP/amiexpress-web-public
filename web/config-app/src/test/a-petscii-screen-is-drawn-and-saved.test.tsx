@@ -184,7 +184,11 @@ describe('a PETSCII screen is drawn and saved', () => {
     const bytes = writeSeq(drawn);
     const file = new File([bytes.slice().buffer], 'BBSTITLE.SEQ', { type: 'application/octet-stream' });
 
-    const input = screen.getByLabelText('Load a drawing') as HTMLInputElement;
+    // Named for its job, the way ScreenEditor names the same control: it
+    // loads onto the CANVAS and writes nothing. The dialog's board-level
+    // "Upload a drawing" sat beside it under the same name and the two read
+    // as one duplicated button (sysop, 2026-09-15).
+    const input = screen.getByLabelText('Open a file into the editor') as HTMLInputElement;
     await userEvent.upload(input, file);
 
     await userEvent.click(await screen.findByRole('button', { name: /Save/ }));

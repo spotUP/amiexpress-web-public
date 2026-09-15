@@ -206,10 +206,21 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
    * a rule.
    *
    * Answers true when it took the file, so a caller that has its own
-   * bookkeeping - the format picker closes itself - can tell.
+   * bookkeeping - the format picker closes itself - can tell. It takes a
+   * REFUSED svg too: the conversion only makes sense for a .rip target, and
+   * letting a non-rip slot fall through to the ordinary upload would write
+   * XML into a screen the board prints.
    */
   const convertIfSvg = (chosen: File, target: string): boolean => {
     if (!isSvg(chosen)) return false;
+    // The output is RIP drawing commands, so the target has to be a .rip.
+    // Without this, an SVG picked on the PETSCII title converted happily and
+    // offered to write vector commands into a file the board serves to C64
+    // callers as screen codes.
+    if (!target.toLowerCase().endsWith('.rip')) {
+      showError(`${chosen.name} converts to RIP, and ${target.split('/').pop()} is not a .rip. Add a .rip format to this screen and bring the SVG in there.`);
+      return true;
+    }
     importSvg.mutate({ chosen, target });
     return true;
   };
@@ -783,27 +794,40 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               />
               {/* RIP art is DRAWN in a vector program - RipScreenEditor says
                   so itself ("editable without being a drawing program") - so
-                  the way in is an export, not a canvas. */}
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 underline"
-                onClick={() => svgInput.current?.click()}
-                disabled={importSvg.isPending}
-              >
-                <Upload size={14} /> {importSvg.isPending ? 'Converting…' : 'Import SVG as RIP'}
-              </button>
-              <input
-                ref={svgInput}
-                type="file"
-                accept=".svg,image/svg+xml"
-                aria-label="Choose an SVG"
-                className="hidden"
-                onChange={event => {
-                  const chosen = event.target.files?.[0];
-                  event.target.value = '';
-                  if (chosen && path) importSvg.mutate({ chosen, target: path });
-                }}
-              />
+                  the way in is an export, not a canvas.
+
+                  ONLY ON A .rip. It writes RIP drawing commands to `path`,
+                  whatever `path` is, so on the PETSCII title it offered to
+                  put vector commands into a file the board serves to C64
+                  callers as screen codes - noise on the toolbar and a
+                  corrupted screen if anyone took it up (sysop, 2026-09-15:
+                  "the bottom row has ... svg and stuff"). An SVG meant for a
+                  .rip sibling goes through that sibling's own slot, which is
+                  what the add-a-format picker is for. */}
+              {path?.toLowerCase().endsWith('.rip') && (
+                <>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 underline"
+                    onClick={() => svgInput.current?.click()}
+                    disabled={importSvg.isPending}
+                  >
+                    <Upload size={14} /> {importSvg.isPending ? 'Converting…' : 'Import SVG as RIP'}
+                  </button>
+                  <input
+                    ref={svgInput}
+                    type="file"
+                    accept=".svg,image/svg+xml"
+                    aria-label="Choose an SVG"
+                    className="hidden"
+                    onChange={event => {
+                      const chosen = event.target.files?.[0];
+                      event.target.value = '';
+                      if (chosen && path) importSvg.mutate({ chosen, target: path });
+                    }}
+                  />
+                </>
+              )}
             </>
           )}
           {/* Through the API CLIENT, never an <a href>: these endpoints are
