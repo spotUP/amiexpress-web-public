@@ -519,7 +519,11 @@ export interface BBSSession {
     pageSize: number;
     eventName: "ansi-output" | "petscii-output";
     commands?: string[];
-    onComplete?: () => void;
+    /**
+     * What the pause is holding back. It MAY be async - the join's tail is -
+     * and whoever fires it must AWAIT it: see handlePaginatedScreenInput.
+     */
+    onComplete?: () => void | Promise<void>;
     kind?: 'bbs' | 'door' | 'doPause'; // 'bbs' = More prompt, 'doPause' = Pause/Space prompt, 'door' = door-owned
     /**
      * TP-5: the wire attribute page 1 went out with. Page 2 is the same
@@ -628,6 +632,12 @@ export interface BBSSession {
   logoffAfterComment?: boolean;
 
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
+  /**
+   * How many inline `~CC_` sentinels are awaiting a command right now.
+   * A door launched by one is finished by the walker that launched it, which
+   * arms the `~SP` boundary pause itself - see doorExitOwesThePause.
+   */
+  inlineScreenCommandDepth?: number;
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
   screenCommandResolver?: (() => void) | null;
   lastScreenCommandsHash?: string;

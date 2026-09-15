@@ -196,6 +196,36 @@ export function screenCatalogueName(screenName: string): string {
 }
 
 /**
+ * DOES A DOOR EXITING MID-SCREEN OWE THE `~SP` PAUSE ITSELF?
+ *
+ * express.e:5555-5563 runs a `~CC_` inline and then carries on along the same
+ * line to its `~SP`: one pause. Two ways a door can be running while a screen
+ * has segments parked:
+ *
+ *   * launched by the inline walker (`~CC_gl` in the logon screen). The
+ *     walker is awaiting the command; when the door returns it finishes the
+ *     segment and processNextScreenSegment arms the boundary pause. If the
+ *     door's exit ALSO armed one, the caller got two `Space To Resume` prompts
+ *     back to back - the sysop's "double prompt", and the board's own trace:
+ *     `site=door-exit` followed by `site=segment-resume` with no key between.
+ *
+ *   * launched by a command the caller typed (`J` joining a conference while
+ *     a bulletin is half-shown). Nobody is coming back to finish anything, so
+ *     the door's exit is the only place the pause can be armed - and without
+ *     it the rest of the screen was dropped (a-conference-bulletin-is-shown-
+ *     to-the-end) or drawn over the door's output with no pause (the global
+ *     last-callers list, 2026-09-15).
+ *
+ * So: the door's exit owes the pause exactly when segments remain AND no
+ * inline walker is going to arm it.
+ */
+export function doorExitOwesThePause(session: BBSSession): boolean {
+  const segmentsRemain = (session.screenSegments?.segments.length ?? 0) > 0;
+  const walkerWillArmIt = (session.inlineScreenCommandDepth ?? 0) > 0;
+  return segmentsRemain && !walkerWillArmIt;
+}
+
+/**
  * THE PAUSE A `~SP` BOUNDARY STANDS FOR.
  *
  * A boundary between two segments exists BECAUSE the screen had a `~SP`
@@ -710,7 +740,16 @@ async function walkInlineSentinels(
       // Save subState so any door launched here (68K or TS) can't
       // clobber it. Door executors set DOOR_RUNNING and may not
       // restore it on early exit.
-      const result = await processCommand(socket, session, cmdCode, cmdParams, true);
+      // This walker finishes the segment when the command returns, and arms
+      // the `~SP` boundary pause itself. Say so, so a door exiting in here
+      // does not arm a second one - see doorExitOwesThePause.
+      session.inlineScreenCommandDepth = (session.inlineScreenCommandDepth ?? 0) + 1;
+      let result: unknown;
+      try {
+        result = await processCommand(socket, session, cmdCode, cmdParams, true);
+      } finally {
+        session.inlineScreenCommandDepth = Math.max(0, (session.inlineScreenCommandDepth ?? 1) - 1);
+      }
       if (session.subState !== subStateBeforeInlineCmd) {
         session.subState = subStateBeforeInlineCmd;
       }
@@ -3363,7 +3402,7 @@ export function startPagination(
   lines: string[],
   eventName: 'ansi-output' | 'petscii-output' = 'ansi-output',
   commands?: string[],
-  onComplete?: () => void,
+  onComplete?: () => void | Promise<void>,
   /**
    * TP-5: the charset these lines were decoded from, when the caller read them
    * off disk. `file.handler.ts` passes none - its lists are composed - and
@@ -3457,7 +3496,7 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
-    if (paged.onComplete) paged.onComplete();
+    if (paged.onComplete) await paged.onComplete();
     // Process all remaining screen segments without pausing
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
       const segStateNS = session.screenSegments;
@@ -3537,7 +3576,21 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
       return true;
     }
 
-    if (paged.onComplete) paged.onComplete();
+    /*
+     * AWAITED, BECAUSE THE FLOW RESUMES THE MOMENT THIS RETURNS.
+     *
+     * `handleCommand` calls `advanceDisplayFlow` as soon as this function is
+     * done, and the continuation a pause is holding back may be async: the
+     * join's is. Fired and forgotten, `continueJoinAfterBull` emitted
+     * "Joining Conference", hit its `await` on the mail scan, and handed
+     * control back here - so the menu prompt was drawn INSIDE the join, above
+     * the conference's own new-mail listing, and again after it (sysop,
+     * 2026-09-15, joining conference 3).
+     *
+     * express.e:25181 `joinConf` BLOCKS; awaiting here is what that means in
+     * an async port. One keystroke, one continuation, run to the end.
+     */
+    if (paged.onComplete) await paged.onComplete();
 
     // Restore modem state before final return
     restoreModemState(socket, session);
@@ -3670,7 +3723,10 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
   // directly to the socket before that buffer drains, it arrives at the client first and
   // the subsequent flush (which may include a ~f clear-screen) wipes it.
   flushOutput(socket);
-  if (typeof segOnComplete === 'function') segOnComplete();
+  // Awaited for the same reason as the pause's own continuation above: a
+  // screen's owner may be async, and the display flow moves on the instant
+  // this returns.
+  if (typeof segOnComplete === 'function') await segOnComplete();
   return true;
 }
 
@@ -3746,7 +3802,7 @@ export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
  * @param socket - Socket.io socket for sending output
  * @param session - Current BBS session (for future enhancements)
  */
-export function doPause(socket: any, session: BBSSession, onComplete?: () => void): void {
+export function doPause(socket: any, session: BBSSession, onComplete?: () => void | Promise<void>): void {
 console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.subState})`);
   fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] doPause: CALLED, subState=${session.subState}\n`);
   // Express.e:5143-5144 - "\b\n(Pause)...Space To Resume:"

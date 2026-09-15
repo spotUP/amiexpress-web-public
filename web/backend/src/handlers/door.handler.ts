@@ -2140,29 +2140,14 @@ console.log(`[executeDoor] Door ${door.name} completed during segment processing
        * pauses the caller expects.
        */
       if (session.screenSegments.segments.length > 0) {
-        /*
-         * THE `~SP` AFTER THE DOOR IS STILL OWED.
-         *
-         * A segment boundary EXISTS because the screen had a `~SP` there -
-         * that is what split it. `~CC_gl ~SP` means run the door, then pause;
-         * express.e:5455-5461 stops at the `~SP` wherever it falls, and a
-         * command returning is not an exception to that.
-         *
-         * Rendering the next segment here instead spent the boundary without
-         * pausing, so the global last-callers list was drawn by the door and
-         * wiped by whatever the next segment cleared with. The sysop, on
-         * live, 2026-09-15: "global last callers is missing a pause prompt".
-         *
-         * So arm the pause the boundary stands for and stop. The caller's key
-         * reaches handlePaginatedScreenInput, which calls
-         * processNextScreenSegment for exactly this state - the same path
-         * every other `~SP` in the screen takes. Armed in the same shape as
-         * processNextScreenSegment's own boundary, so a door's pause and a
-         * plain one are indistinguishable to everything downstream.
-         */
+        // The `~SP` that made this boundary is still owed - unless the inline
+        // walker that launched the door arms it on its way out. One pause,
+        // never two: see doorExitOwesThePause and armSegmentBoundaryPause.
         try {
-          const { armSegmentBoundaryPause } = require('./screen.handler');
-          armSegmentBoundaryPause(socket, session, 'door-exit');
+          const { armSegmentBoundaryPause, doorExitOwesThePause } = require('./screen.handler');
+          // Not when the inline walker that launched us will arm it on its
+          // way out - that was two prompts back to back. See the helper.
+          if (doorExitOwesThePause(session)) armSegmentBoundaryPause(socket, session, 'door-exit');
         } catch (error) {
           // A screen that will not finish must not take the door's exit with
           // it - the caller is already back at the board either way.
@@ -2732,8 +2717,8 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
       // reaches handlePaginatedScreenInput, which drains the rest.
       if (session.screenSegments.segments.length > 0) {
         try {
-          const { armSegmentBoundaryPause } = require('./screen.handler');
-          armSegmentBoundaryPause(socket, session, 'door-exit-ts');
+          const { armSegmentBoundaryPause, doorExitOwesThePause } = require('./screen.handler');
+          if (doorExitOwesThePause(session)) armSegmentBoundaryPause(socket, session, 'door-exit-ts');
         } catch (error) {
 console.error('[executeTypeScriptDoor] Error arming the pause after the door:', error);
         }

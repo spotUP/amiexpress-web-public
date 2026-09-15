@@ -27,7 +27,7 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-import { armSegmentBoundaryPause } from '../../src/handlers/screen.handler';
+import { armSegmentBoundaryPause, doorExitOwesThePause } from '../../src/handlers/screen.handler';
 
 function aSocket() {
   const wire: string[] = [];
@@ -94,5 +94,33 @@ describe('a door inside a screen owes the pause that follows it', () => {
 
     expect(armSegmentBoundaryPause(socket as any, session, 'door-exit')).toBe(false);
     expect(socket.wire.join('')).not.toMatch(/Space To Resume/);
+  });
+});
+
+describe('whether the door exit owes the pause, or the walker does', () => {
+  it('owes it when a caller-typed command launched the door and pieces remain', () => {
+    // `J` joining a conference while a bulletin is half-shown: nobody is
+    // coming back to finish the screen but this exit.
+    const session: any = { screenSegments: { segments: ['piece 2'], eventName: 'ansi-output' } };
+    expect(doorExitOwesThePause(session)).toBe(true);
+  });
+
+  it('does NOT owe it when the inline walker launched the door', () => {
+    /*
+     * `~CC_gl ~SP`: the walker is awaiting the command and arms the boundary
+     * pause itself when the door returns. Arming here too gave the caller two
+     * `Space To Resume` prompts with no key between - the board's own trace
+     * on 2026-09-15: `site=door-exit` then `site=segment-resume`.
+     */
+    const session: any = {
+      screenSegments: { segments: ['piece 2'], eventName: 'ansi-output' },
+      inlineScreenCommandDepth: 1,
+    };
+    expect(doorExitOwesThePause(session)).toBe(false);
+  });
+
+  it('owes nothing when the screen is over', () => {
+    const session: any = { screenSegments: { segments: [], eventName: 'ansi-output' } };
+    expect(doorExitOwesThePause(session)).toBe(false);
   });
 });
