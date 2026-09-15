@@ -967,6 +967,56 @@ console.log(`[BatchScheduler] Found batch file: ${candidate}`);
 
 console.log(`[BatchScheduler] Logoff batches completed for node ${nodeId}`);
 }
+/*
+ * EVERY BATCH DOOR RUNS FAST, not a list of four somebody remembered.
+ *
+ * "raise it as much as we can without breaking it it goes for all batch doors"
+ * - the sysop, 2026-09-15, after a logoff took minutes.
+ *
+ * A batch door is not interactive by definition: no caller waits at a prompt,
+ * it does file I/O and exits. That is the shape the bench found safe to run
+ * very fast, and it is why this is a RULE rather than a list - a new batch door
+ * gets it without anyone remembering to add a line.
+ *
+ * WHY 25000 AND NOT MORE. `dev/scripts/bench-overclock.ts`
+ * (report-overclock.json, 324 doors): 294 safe at 100000x, 4 whose ceiling is
+ * 25000x, and NONE capped at or below 5000x - so the old 5000x floor was five
+ * times more cautious than the evidence asked, and 25000x is the highest figure
+ * no benched door fails at. 100000x is faster and breaks those four.
+ *
+ * WHAT IT ACTUALLY BUYS, measured on this board's own doors rather than taken
+ * from the bench: ByteKillHandler 10s -> 6s with byte-identical output.
+ * QuickNew does not move (16s either way) because its time is emulator STARTUP,
+ * not CPU - which is worth knowing before anyone reaches for this dial again to
+ * make QuickNew faster.
+ *
+ * The interactive default stays at 100x deliberately - see DoorLifecycleManager:
+ * a live binary variant the bench never saw (AquaScan.000) failed to START at
+ * 25000x, and a caller watching a door refuse to open is a worse trade than a
+ * batch job taking longer.
+ */
+export const BATCH_OVERCLOCK_FLOOR = 25000;
+
+/**
+ * A batch door that must run SLOWER than the floor, by name. Empty on purpose:
+ * nothing in the bench caps below 25000x, and an entry here should cite the run
+ * that justifies it rather than a hunch.
+ */
+export const BATCH_OVERCLOCK_CAPS: Record<string, number> = {};
+
+/**
+ * The factor a batch door runs at.
+ *
+ * A door's own `OVERCLOCK` tooltype may ask for MORE and is honoured; it cannot
+ * ask for less, because tooltypes were written for real hardware and being
+ * conservative there is exactly why these doors were slow.
+ */
+export function batchOverclockFor(doorName: string, fromInfo?: number): number {
+  const floored = Math.max(fromInfo ?? 0, BATCH_OVERCLOCK_FLOOR);
+  const cap = BATCH_OVERCLOCK_CAPS[doorName.toLowerCase()];
+  return cap === undefined ? floored : Math.min(floored, cap);
+}
+
 function runAmigaDoorViaRunner(
   doorPath: string,
   nodeId: number,
@@ -1038,16 +1088,7 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
   // Heavy-utility name overrides (last-resort floor): even if a door's
   // own .info ships a conservative OVERCLOCK, these names are known to
   // be safe to run very fast since they do pure file I/O, no input.
-  const HEAVY_BATCH_OVERRIDES: Record<string, number> = {
-    mtop: 5000,
-    multitop: 5000,
-    // ByteKillHandler walks the entire bytefile listing on logoff;
-    // QuickNew scans every NEW message base. Both timed out at the
-    // default 100x floor / 30s budget. Bench data (report-overclock.json)
-    // shows both safe at 100000x, so 5000x is conservative-safe.
-    bytekillhandler: 5000,
-    quicknew: 5000,
-  };
+  // The rule lives at module scope so it can be tested; see batchOverclockFor.
   let batchOverclock: number | undefined;
   try {
     const infoPath = doorPath + '.info';
@@ -1062,10 +1103,12 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
       }
     }
   } catch { /* fall through to default */ }
-  const heavyFloor = HEAVY_BATCH_OVERRIDES[path.basename(doorPath).toLowerCase()];
-  if (heavyFloor !== undefined) {
-    batchOverclock = Math.max(batchOverclock ?? 0, heavyFloor);
-  }
+  // The floor lifts every batch door; a cap, if one is ever justified, lowers
+  // that one door again. A door's own OVERCLOCK tooltype can ask for MORE and
+  // is honoured; it cannot ask for less, because the reason batch doors were
+  // slow in the first place was conservative tooltypes written for real
+  // hardware.
+  batchOverclock = batchOverclockFor(path.basename(doorPath), batchOverclock);
 
   return new Promise<void>((resolve) => {
     const runnerPath = path.join(appRootPath, 'web', 'backend', 'dist', 'scripts', 'run-amiga-door.js');
