@@ -209,6 +209,7 @@ function parseMissionPack(raw, source = 'mission pack') {
                 rollRoll: rawModifiers.rollRoll === true,
                 rotateLock: rawModifiers.rotateLock === true,
                 blind: rawModifiers.blind === true,
+                reverse: rawModifiers.reverse === true,
                 ...(rawRise !== undefined ? { riseEveryPieces: rawRise } : {}),
             },
             hint: typeof m.hint === 'string' ? m.hint : undefined,

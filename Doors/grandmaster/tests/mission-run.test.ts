@@ -176,7 +176,7 @@ export async function aPackIsReadWithItsDefaults(): Promise<void> {
   // its default here is a rule a pack can ask for and the engine will not read.
   assert.deepStrictEqual(m.modifiers, {
     big: false, hidden: undefined, hideNext: false, rollRoll: false,
-    rotateLock: false, blind: false,
+    rotateLock: false, blind: false, reverse: false,
   });
 }
 

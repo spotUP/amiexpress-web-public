@@ -743,7 +743,9 @@ class GameEngine {
             return false;
         // <->REV (item 11): left and right swap while it lasts (ars.c:238,
         // `if(isLRreverse[player]) move = 0 - move`).
-        if (this.state.lrReverseFrames > 0) {
+        // A MISSION can make the swap last the whole run rather than an item's
+        // few seconds (reference type 24).
+        if (this.state.lrReverseFrames > 0 || this.state.missionModifiers?.reverse) {
             direction = -direction;
         }
         const piece = this.state.currentPiece;
@@ -831,6 +833,17 @@ class GameEngine {
      * Soft drop (faster gravity)
      */
     softDrop() {
+        /*
+         * REVERSE swaps the two press states (gamestart.c:10036-10037), so under
+         * it the soft drop key does what the sonic drop key does. The swap lives
+         * here rather than in the key handler for the same reason the left/right
+         * one does: it is a rule of the run, and a rule the tests can reach.
+         */
+        if (this.state.missionModifiers?.reverse)
+            return this.doSonicDrop();
+        return this.doSoftDrop();
+    }
+    doSoftDrop() {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
         const piece = this.state.currentPiece;
@@ -900,6 +913,11 @@ class GameEngine {
      * both), false when it was a no-op - the same contract as softDrop().
      */
     sonicDrop() {
+        if (this.state.missionModifiers?.reverse)
+            return this.doSoftDrop();
+        return this.doSonicDrop();
+    }
+    doSonicDrop() {
         if (!this.state.currentPiece || this.state.status !== 'playing')
             return false;
         const piece = this.state.currentPiece;

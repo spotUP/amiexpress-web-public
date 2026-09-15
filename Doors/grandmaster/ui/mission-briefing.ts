@@ -122,6 +122,9 @@ export function missionConditions(mission: Mission): string[] {
   if (mission.modifiers.rotateLock) {
     conditions.push('ROTATELOCK: pieces arrive turned, and cannot be turned');
   }
+  if (mission.modifiers.reverse) {
+    conditions.push('REVERSE: left is right, and up is down');
+  }
   if (mission.modifiers.blind) {
     conditions.push('BLIND: the stack is not drawn - it is still there');
   }

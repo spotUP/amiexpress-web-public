@@ -297,6 +297,19 @@
         "lockDelay": 5
       },
       "hint": "Sixty pieces at 20G with no pause between them."
+    },
+    {
+      "id": "24",
+      "name": "EVERYTHING BACK",
+      "objective": "lines",
+      "norm": 6,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "reverse": true
+      },
+      "hint": "Six lines with left as right and up as down."
     }
   ]
 }

@@ -228,6 +228,7 @@ export declare class GameEngine {
      * Soft drop (faster gravity)
      */
     softDrop(): boolean;
+    private doSoftDrop;
     /**
      * Hard drop (instant lock)
      */
@@ -249,6 +250,7 @@ export declare class GameEngine {
      * both), false when it was a no-op - the same contract as softDrop().
      */
     sonicDrop(): boolean;
+    private doSonicDrop;
     /**
      * Hold current piece
      */

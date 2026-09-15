@@ -381,6 +381,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
     'and the rising floor');
   assert.ok(every.some((m) => (m.speed?.gravity ?? 0) >= 20),
     'a mission plays at 20G, which is what a speed of its own is for');
+  assert.ok(every.some((m) => m.modifiers.reverse), 'and one plays them backwards');
 }
 
 /**
@@ -559,4 +560,45 @@ export async function aMissionPlaysAtItsOwnSpeed(): Promise<void> {
   assert.strictEqual(partial.getState().gravity, 20);
   assert.strictEqual(partial.getState().lockDelay, modeLockDelay,
     "what the mission did not ask for is the mode's own");
+}
+
+/**
+ * REVERSE turns the controls around, both ways.
+ *
+ * Reference type 24 (`mission.c:1436-1442`) sets BOTH `isLRreverse` and
+ * `isUDreverse`: left is right (`ars.c:238`) and the two press states trade
+ * places (`gamestart.c:10036-10037`), so the soft drop key does what the
+ * sonic drop key did. The door already had the left/right half as a TGM item
+ * with a timer; the mission is the same rule for a whole run.
+ */
+export async function reverseSwapsBothAxesForTheWholeRun(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setMissionModifiers({ reverse: true });
+  engine.start();
+
+  const startX = engine.getState().currentPiece.x;
+  engine.move(1);
+  assert.strictEqual(engine.getState().currentPiece.x, startX - 1,
+    'right moves the piece left');
+  engine.move(-1);
+  assert.strictEqual(engine.getState().currentPiece.x, startX, 'and back again');
+
+  // Up and down swap: the soft drop key drops the piece all the way, and the
+  // sonic drop key nudges it one row.
+  const before = engine.getState().currentPiece.y;
+  engine.softDrop();
+  const afterSoft = engine.getState().currentPiece?.y ?? Infinity;
+  assert.ok(afterSoft - before > 1,
+    `the soft drop key sonic-drops under REVERSE (${before} -> ${afterSoft})`);
+
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  const plainStart = plain.getState().currentPiece.x;
+  plain.move(1);
+  assert.strictEqual(plain.getState().currentPiece.x, plainStart + 1,
+    'and an ordinary mission is untouched');
+  const plainY = plain.getState().currentPiece.y;
+  plain.softDrop();
+  assert.strictEqual(plain.getState().currentPiece.y, plainY + 1, 'one row, as always');
 }

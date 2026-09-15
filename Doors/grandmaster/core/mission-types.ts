@@ -106,6 +106,14 @@ export interface MissionModifiers {
    * to 20 when a pack leaves it at zero.
    */
   riseEveryPieces?: number;
+  /**
+   * REVERSE (reference type 24, `mission.c:1436-1442`): BOTH axes swap for
+   * the whole run. Left is right (`ars.c:238`, the same swap the `<->REV`
+   * item makes for a few seconds) and up is down (`gamestart.c:10036-10037`,
+   * where the two press states trade places), so the soft drop and the sonic
+   * drop change keys with each other.
+   */
+  reverse?: boolean;
 }
 
 export interface Mission {
