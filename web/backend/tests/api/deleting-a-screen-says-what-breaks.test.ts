@@ -93,3 +93,34 @@ it('still backs the deleted screen up', async () => {
 
   expect(fs.readFileSync(path.join(root, 'Screens/uprough.txt.backup'), 'latin1')).toBe('the logo\n');
 });
+
+describe('GET /references - what the sysop is shown before deciding', () => {
+  it('answers what pulls a screen in, without deleting anything', async () => {
+    write('Screens/uprough.txt', 'the logo\n');
+    write('Screens/BULL.TXT', 'header\n~SS_BBS:screens/uprough.txt\nfooter\n');
+
+    const res = await request(app()).get('/api/screens/references?path=Screens/uprough.txt');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.removable).toBe(1);
+    expect(res.body.data.references).toEqual([expect.objectContaining({ from: 'Screens/BULL.TXT' })]);
+    // The whole point of asking first.
+    expect(fs.existsSync(path.join(root, 'Screens/uprough.txt'))).toBe(true);
+  });
+
+  it('counts only the removable ones as removable', async () => {
+    write('Screens/uprough.txt', 'the logo\n');
+    write('Screens/C.TXT', '\x1b[34m| ~SS_BBS:screens/uprough.txt \x1b[34m|\n');
+
+    const res = await request(app()).get('/api/screens/references?path=Screens/uprough.txt');
+
+    expect(res.body.data.references).toHaveLength(1);
+    expect(res.body.data.removable).toBe(0);
+  });
+
+  it('refuses a path outside the board', async () => {
+    const res = await request(app()).get('/api/screens/references?path=../../../etc/passwd');
+
+    expect(res.status).toBe(400);
+  });
+});

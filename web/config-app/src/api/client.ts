@@ -445,8 +445,25 @@ class ApiClient {
     });
   }
 
-  async deleteScreenFile(filePath: string) {
-    return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' });
+  /**
+   * What pulls this screen in, asked BEFORE offering to delete it: a sysop
+   * confirming a delete needs to know what stops drawing because of it.
+   */
+  async getScreenReferences(filePath: string) {
+    return this.request<ApiResponse>(`${API_BASE}/screens/references?path=${encodeURIComponent(filePath)}`);
+  }
+
+  /**
+   * `fixReferences` drops the lines that exist only to include this screen,
+   * saving a revision of each file first. Lines where the include shares its
+   * row with art are never touched, whatever this is set to.
+   */
+  async deleteScreenFile(filePath: string, fixReferences = false) {
+    const fix = fixReferences ? '&fixReferences=1' : '';
+    return this.request<ApiResponse>(
+      `${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}${fix}`,
+      { method: 'DELETE' },
+    );
   }
 
   /** Directories a node's SCREENS tooltype can point at, as the board reports them. */

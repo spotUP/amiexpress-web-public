@@ -782,22 +782,58 @@ export function ScreenFilesPage() {
   };
 
   const removeFile = async (target: string) => {
-    // What a caller stops seeing matters more than the path, so ask with that.
+    /*
+     * WHAT BREAKS, ASKED BEFORE THE DELETE RATHER THAN REPORTED AFTER IT.
+     *
+     * A screen is pulled into others by `~SS_BBS:screens/<name>`, and deleting
+     * the target leaves them drawing nothing where the logo was - silently.
+     * The sysop is being asked to decide, so he gets the count and what can be
+     * tidied; the answer arriving with the DELETE would be a report, not a
+     * decision.
+     */
+    let refs: Array<{ from: string; line: number; removable: boolean }> = [];
+    try {
+      const found = await apiClient.getScreenReferences(target);
+      refs = found.data?.references ?? [];
+    } catch {
+      // A lookup failing must not block a delete; it only means the sysop
+      // decides with less in front of him.
+    }
+    const removable = refs.filter(r => r.removable).length;
+    const inline = refs.length - removable;
+    const screens = [...new Set(refs.map(r => r.from))];
+
+    const impact = refs.length === 0
+      ? 'Nothing else on the board includes it.'
+      : [
+        `${screens.length} ${screens.length === 1 ? 'screen includes' : 'screens include'} it: ${screens.slice(0, 4).join(', ')}${screens.length > 4 ? ` and ${screens.length - 4} more` : ''}.`,
+        removable > 0
+          ? `${removable} of those ${removable === 1 ? 'line exists' : 'lines exist'} only to include it and will be removed - each file keeps a revision you can restore.`
+          : '',
+        inline > 0
+          ? `${inline} ${inline === 1 ? 'is' : 'are'} inside a drawing and will be LEFT ALONE - those screens will draw a gap until you edit them.`
+          : '',
+      ].filter(Boolean).join(' ');
+
     const ok = await confirm({
       title: 'Delete this screen file?',
-      message: `${target} will be backed up beside itself, then removed.`,
-      confirmText: 'Delete',
+      message: `${target} will be backed up beside itself, then removed. ${impact}`,
+      confirmText: removable > 0 ? `Delete and tidy ${removable} ${removable === 1 ? 'line' : 'lines'}` : 'Delete',
     });
     if (!ok) return;
 
     setFileError(null);
 
     try {
-      const res = await apiClient.deleteScreenFile(target);
+      const res = await apiClient.deleteScreenFile(target, removable > 0);
       const lost: string[] = res.data?.stopsResolving ?? [];
-      showSuccess(lost.length
+      const fixed: Array<{ file: string }> = res.data?.fixed ?? [];
+      const tidied = fixed.length
+        ? ` Tidied ${fixed.length} ${fixed.length === 1 ? 'screen' : 'screens'}.`
+        : '';
+      showSuccess((lost.length
         ? `Deleted. These stop resolving: ${lost.join(', ')}`
-        : 'Deleted. Nothing stops resolving.');
+        : 'Deleted. Nothing stops resolving.') + tidied);
       setOpenFile(null);
       // Both queries: the index decides the tables, and the gallery is drawn
       // from the same answer.

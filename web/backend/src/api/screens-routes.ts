@@ -1216,6 +1216,30 @@ screensRouter.post('/repair-all', (req: Request, res: Response) => {
     + (refused.length ? `, refused ${refused.length}` : ''));
 });
 
+/**
+ * GET /api/screens/references?path=...
+ *
+ * What would break if this screen went: the screens that pull it in, the line
+ * each does it on, and whether that line can be removed on its own.
+ *
+ * Its own route because the DELETE answer arrives too late to decide with. A
+ * sysop is asked to confirm a delete BEFORE it happens, and "three screens
+ * include this, two of those lines can be tidied and one is inside a drawing"
+ * is the whole of what makes that a decision rather than a guess.
+ */
+screensRouter.get('/references', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const full = resolveScreenPath(String(req.query.path || ''));
+  if (!full) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+  const references = findScreenReferences(baseDir, path.relative(baseDir, full));
+  return sendOk(res, {
+    references,
+    removable: references.filter(r => r.removable).length,
+  });
+});
+
 screensRouter.delete('/file', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const rel = String(req.query.path || '');
