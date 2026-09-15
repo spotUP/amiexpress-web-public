@@ -606,7 +606,22 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
      * together hid a runtime file behind the art whenever the sysop asked to
      * see generated screens.
      */
-    return [screen, named.theme ?? '', reader?.screenType ?? '', named.generated ?? ''].join('|');
+    /*
+     * AND THE SCOPE, because a conference's screen is its OWN art.
+     *
+     * A node's screen is one drawing provisioned 41 times, and folding those
+     * is the entire point. A CONFERENCE's is not: `Conf1/bull20.txt` through
+     * `Conf5/bull20.txt` are five conferences' own bulletins, each naming its
+     * own conference in the logo. Keyed on the screen alone they came back as
+     * "CONF_BULL - 5 versions", which invites an artist to reconcile four
+     * conferences' art out of existence - found by running this grouping over
+     * an index of the live board, which is what that gate is for.
+     *
+     * So the id is part of the key for a conference and dropped for a node.
+     */
+    const scope = reader?.scope ?? '';
+    const within = scope === 'conf' ? String(reader?.id ?? '') : '';
+    return [screen, scope, within, named.theme ?? '', reader?.screenType ?? '', named.generated ?? ''].join('|');
   };
 
   const scopesOf = (copies: ScreenFileShape[]): number =>

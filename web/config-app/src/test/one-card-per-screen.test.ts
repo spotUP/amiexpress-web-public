@@ -75,6 +75,36 @@ it('does NOT fold bulletin twenty into the bulletin menu', () => {
   expect(items).toHaveLength(2);
 });
 
+it('keeps each conference own bulletin as its own card', () => {
+  // Five conferences each have their own `bull20`, naming their own
+  // conference in the logo. Folding them by screen name alone reported
+  // "CONF_BULL - 5 versions", which invites an artist to reconcile four
+  // conferences' art out of existence. Found by running the grouping over an
+  // index of the live board.
+  const items = build({
+    'Conf1/bull20.txt': { ...file('Conf1/bull20.txt', 'aaa', 'CONF_BULL', 1),
+      readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 1, via: 'resolved' }] },
+    'Conf2/bull20.txt': { ...file('Conf2/bull20.txt', 'bbb', 'CONF_BULL', 1),
+      readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 2, via: 'resolved' }] },
+  });
+
+  expect(items).toHaveLength(2);
+});
+
+it('still folds one screen provisioned across many NODES', () => {
+  // The other half of the same rule: a node's screen is one drawing
+  // provisioned per node, and folding those is the whole point.
+  const items = build({
+    'Node0/join.txt': { ...file('Node0/join.txt', 'aaa', 'JOIN', 1),
+      readBy: [{ screen: 'JOIN', scope: 'node', id: 0, via: 'resolved' }] },
+    'Node7/join.txt': { ...file('Node7/join.txt', 'bbb', 'JOIN', 1),
+      readBy: [{ screen: 'JOIN', scope: 'node', id: 7, via: 'resolved' }] },
+  });
+
+  expect(items).toHaveLength(1);
+  expect(items[0].versions).toBe(2);
+});
+
 it('leaves two DIFFERENT screens as two cards', () => {
   const items = build({
     'Screens/logoff.txt': file('Screens/logoff.txt', 'aaa', 'LOGOFF', 4),
