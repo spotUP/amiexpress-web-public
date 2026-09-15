@@ -86,34 +86,131 @@ class CardButtons {
         const draw = (size) => {
             const renderOptions = (0, card_style_1.toRenderOptions)({ ...chrome, size });
             return cards.map((entry) => {
+                /*
+                 * THE FACE IS THE CARD'S, not the row's. `faceDown` turns a whole
+                 * row over (the blind endgame), but a row can be MIXED: the six in
+                 * front of a Skitgubbe player are three faces and three backs, and
+                 * before this the three backs were drawn as whatever card object the
+                 * caller had faked to stand in for them - three Aces of Spades on
+                 * the sysop's screen (2026-09-15).
+                 */
+                const face = entry.face ?? (options.faceDown ? 'back' : 'front');
                 const lines = entry.kind === 'uno'
-                    ? cardEngine.renderUnoCardLines({ ...entry.card, face: options.faceDown ? 'back' : 'front' }, renderOptions)
-                    : cardEngine.renderCardLines({ ...entry.card, face: options.faceDown ? 'back' : 'front' }, renderOptions);
+                    ? cardEngine.renderUnoCardLines({ ...entry.card, face }, renderOptions)
+                    : cardEngine.renderCardLines({ ...entry.card, face }, renderOptions);
                 return lines.map((line) => (0, utils_1.ansiToBlessedTags)(line));
             });
         };
-        const fits = (candidate) => {
-            const cardWidth = (0, utils_1.stripBlessedTags)(candidate[0]?.[0] ?? '').length;
-            const cardHeight = candidate[0]?.length ?? 0;
+        /*
+         * A ROW OF CARDS IS ONE HEIGHT. The engine draws a BACK shorter than a
+         * face - three rows shorter at full size - so a mixed row (the three
+         * face up and three face down in front of a Skitgubbe player) came out
+         * ragged, the backs ending a row above their neighbours. Pad to the
+         * tallest and widest in the row; measuring one card and trusting it for
+         * the rest is the same mistake FULL_CARD_ROWS makes.
+         */
+        const square = (candidate) => {
+            const widths = candidate.map((art) => (0, utils_1.stripBlessedTags)(art[0] ?? '').length);
+            const height = Math.max(0, ...candidate.map((art) => art.length));
+            const cardWidth = Math.max(0, ...widths);
+            return candidate.map((art, index) => {
+                const pad = ' '.repeat(Math.max(0, cardWidth - (widths[index] ?? 0)));
+                const padded = art.map((line) => line + pad);
+                /*
+                 * A short card grows by REPEATING its last row, not by blank ones: a
+                 * back is short because its hatching ran out, and one more row of
+                 * hatching is what a taller back looks like. Blank padding just moves
+                 * the ragged edge into the card.
+                 */
+                const filler = padded[padded.length - 1] ?? ' '.repeat(cardWidth);
+                while (padded.length < height)
+                    padded.push(filler);
+                return padded;
+            });
+        };
+        /*
+         * A CARD IS NEVER NARROWER THAN ELEVEN COLUMNS. `mini` is a SHORTER
+         * card, not a thinner one, so six cards laid out with a column of air
+         * between them want 72 columns and the hand panel's inside is 57 - and
+         * six is exactly what a Skitgubbe player has in front of them. The old
+         * chooser had one shape, a grid with air between the cards, and when
+         * that did not fit it gave up and left the panel to the text fallback:
+         * a condensed hand drawn to no particular height, clipped by the panel,
+         * with the face-down cards face up. That is what "V ... just flickers
+         * broken cards" was (sysop, 2026-09-15) - not a flicker, the fallback.
+         *
+         * So there are two shapes now. A hand held in the fingers OVERLAPS, and
+         * the second shape says so: one row, each card sitting `stride` columns
+         * along from the last, which is what the SDK's own condensed hand layout
+         * has always drawn in text. Three columns is the floor - a card showing
+         * less than its edge and its rank is not a card you can read - and the
+         * grid is still tried first at every size, so nothing that fits today
+         * changes shape.
+         */
+        const MIN_STRIDE = 3;
+        const measure = (candidate) => ({
+            cardWidth: (0, utils_1.stripBlessedTags)(candidate[0]?.[0] ?? '').length,
+            cardHeight: candidate[0]?.length ?? 0,
+        });
+        /** Cards side by side with a column between them, wrapping into rows. */
+        const grid = (candidate) => {
+            const { cardWidth, cardHeight } = measure(candidate);
             if (cardWidth === 0 || cardHeight === 0)
                 return null;
             const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
             const cardRows = Math.ceil(cards.length / perRow);
             if (cardRows * cardHeight + LIFT_ROWS > rows)
                 return null;
-            return { perRow, cardRows, height: cardHeight };
+            return { perRow, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
         };
-        let art = draw(chrome.size);
-        let layout = fits(art);
-        if (!layout && chrome.size === 'full') {
-            art = draw('mini'); // a smaller card beats no card at all
-            layout = fits(art);
+        /** One row, each card overlapping the one before it. */
+        const fan = (candidate) => {
+            const { cardWidth, cardHeight } = measure(candidate);
+            if (cardWidth === 0 || cardHeight === 0)
+                return null;
+            if (cards.length < 2)
+                return null;
+            if (cardHeight + LIFT_ROWS > rows)
+                return null;
+            const stride = Math.floor((width - cardWidth) / (cards.length - 1));
+            if (stride < MIN_STRIDE)
+                return null;
+            return {
+                perRow: cards.length,
+                stride: Math.min(stride, cardWidth + 1),
+                cardRows: 1,
+                height: cardHeight,
+                cardWidth,
+            };
+        };
+        // Biggest card first, and air before overlap.
+        const sizes = chrome.size === 'full' ? ['full', 'mini'] : ['mini'];
+        const drawn = new Map();
+        const artFor = (size) => {
+            if (!drawn.has(size))
+                drawn.set(size, square(draw(size)));
+            return drawn.get(size);
+        };
+        let art = null;
+        let layout = null;
+        for (const shape of [grid, fan]) {
+            for (const size of sizes) {
+                const candidate = artFor(size);
+                const found = shape(candidate);
+                if (found) {
+                    art = candidate;
+                    layout = found;
+                    break;
+                }
+            }
+            if (layout)
+                break;
         }
-        if (!layout) {
+        if (!layout || !art) {
             this.clear();
             return false;
         }
-        const cardWidth = (0, utils_1.stripBlessedTags)(art[0][0]).length;
+        const cardWidth = layout.cardWidth;
         const cardHeight = layout.height;
         /*
          * A full-size card is TEN rows and the hand panel's inside is ten, so a
@@ -141,7 +238,7 @@ class CardButtons {
             button.height = buttonHeight;
             // Everything sits one row down, and the picked card rises into the gap.
             button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
-            button.left = column * (cardWidth + 1);
+            button.left = column * layout.stride;
             const showLabel = withLabels && options.labels !== false;
             button.setContent(showLabel
                 ? [
@@ -169,12 +266,25 @@ class CardButtons {
         for (let index = cards.length; index < this.buttons.length; index += 1) {
             this.buttons[index].hide();
         }
+        /*
+         * In a fan each card is drawn over the one before it, so the card the
+         * caller has picked - the whole point of the lift - would be the one
+         * half covered. It comes to the front instead, and the lift then shows
+         * a whole card standing proud of the row.
+         */
+        if (layout.stride <= cardWidth && options.selected !== null
+            && options.selected >= 0 && options.selected < cards.length) {
+            this.buttons[options.selected].setFront?.();
+        }
         // Only repaint when something actually changed - a table refresh runs
         // every few seconds and the cards are usually the same ones.
         const key = `${cards.map((entry) => entry.kind === 'uno'
             ? `${entry.card.color}${entry.card.value}`
             : `${entry.card.rank}${entry.card.suit}`).join(',')}|${options.selected}`
-            + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`;
+            + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
+            // The shape as well: the same cards in a resized panel are a different
+            // picture, and skipping that repaint leaves a fan at the old stride.
+            + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`;
         if (key !== this.lastKey) {
             this.lastKey = key;
             this.host.screen.render();

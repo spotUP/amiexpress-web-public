@@ -29,6 +29,9 @@ interface CardButtonArgs {
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
 
+/** The stand-in for a card the caller is not allowed to see. */
+const HIDDEN_CARD = { rank: 'A', suit: 'S' } as const;
+
 export interface GameViewHost {
   readonly uiManager: UIManager;
   readonly currentProfile: PlayerProfile | null;
@@ -508,7 +511,10 @@ export class GameViews {
      * the table. the upper panel shows stack and pile" (sysop, 2026-09-15).
      */
     const showingTable = this.host.vandtia.handView === 'table';
-    const faceDownBacks = (me?.faceDown ?? []).map(() => ({ rank: 'A', suit: 'S' }));
+    // A card nobody may see. Only its BACK is ever drawn, so which card it
+    // claims to be does not matter - but it has to be a card, because the
+    // text fallback below draws whatever it is handed.
+    const faceDownBacks = (me?.faceDown ?? []).map(() => HIDDEN_CARD);
     const own = [...(me?.faceUp ?? []), ...faceDownBacks];
     const inPlay = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
     const showing = showingTable ? own : inPlay;
@@ -541,7 +547,23 @@ export class GameViews {
     // The caller's own cards, as widgets: clickable, focusable, and lit when
     // picked. The six in front of them are shown rather than played from -
     // the moment they become playable they are what `cardsInPlay` returns.
-    this.host.cardButtons.renderStandard(showing as any, {
+    /*
+     * THE SIX IN FRONT OF YOU ARE THREE FACES AND THREE BACKS, so the row is
+     * built card by card rather than turned over as one: `faceDown` is a
+     * property of the ROW and would hide the three that are face up. Before
+     * this the backs were drawn with the stand-in card object they are faked
+     * from, which put three Aces of Spades on the table (2026-09-15).
+     */
+    const entries = showingTable
+      ? [
+        ...(me?.faceUp ?? []).map((card) => ({ kind: 'standard' as const, card: card as any })),
+        ...(me?.faceDown ?? []).map(() => ({
+          kind: 'standard' as const, card: HIDDEN_CARD as any, face: 'back' as const,
+        })),
+      ]
+      : (showing as any[]).map((card) => ({ kind: 'standard' as const, card }));
+
+    this.host.cardButtons.render(entries, {
       selected: showingTable ? null
         : swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
       playable: showingTable ? []
