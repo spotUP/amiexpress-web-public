@@ -36,7 +36,10 @@ import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { doorCategoryAt } from '../doors/door-category';
 import { getSystemTime } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
-import { LoggedOnSubState as LoggedOnSubStateImport } from '../constants/bbs-states';
+import {
+  LoggedOnSubState as LoggedOnSubStateImport,
+  BBSState as BBSStateImport,
+} from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
 import { mintLaunchToken, revokeLaunchToken } from '../doors/door-launch-token';
@@ -1682,9 +1685,45 @@ function padString(str: string, length: number): string {
  *   interactive prompt state that owns the next input.
  * - 'menu': normal completion — return to menu.
  */
-export type PostDoorAction = 'chat' | 'segments' | 'pause' | 'interactive' | 'menu';
+export type PostDoorAction = 'leaving' | 'chat' | 'segments' | 'pause' | 'interactive' | 'menu';
+
+/**
+ * IS THE CALLER ON HIS WAY OUT?
+ *
+ * express.e has one flag for this - `reqState:=REQ_STATE_LOGOFF` - and
+ * `checkOnlineStatus()` (express.e:467-477) turns it into
+ * `RESULT_NO_CARRIER` for every loop that asks. Nothing draws a menu after
+ * that, because every caller of checkOnlineStatus bails instead.
+ *
+ * This port had no equivalent at the door-exit sites, so a door that exits
+ * during the logoff sequence repainted the main menu at somebody who is
+ * already leaving. The sysop's logoff, live 2026-09-15, drew it twice:
+ *
+ *   Door exit: CARDLOBBY   -> menu
+ *   Door exit: LOGOFF1     -> menu
+ *
+ * `LOGOFF1` is not incidental - it IS express.e:8230-8231,
+ * `StringF(tempstr,'LOGOFF\d',node)` / `processSysCommand(tempstr)`, which
+ * real AmiExpress runs deep inside the logoff sequence, AFTER `clearUser()`
+ * at 8182. There is no menu to return to at that point by construction.
+ *
+ * Imported directly rather than through the `../index` alias for the same
+ * reason postDoorMenuAction does it: this has to answer before dependency
+ * injection has run, and under jest, where `../index` drags the whole BBS in.
+ */
+export function theCallerIsLeaving(session: BBSSession): boolean {
+  return session.subState === LoggedOnSubStateImport.LOGOFF
+    || session.state === BBSStateImport.LOGGING_OFF
+    || session.state === BBSStateImport.HANGUP;
+}
 
 export function postDoorMenuAction(session: BBSSession): PostDoorAction {
+  // FIRST, because it outranks every other reason to paint or not paint: the
+  // others ask what is on the screen, this one asks whether anyone is still
+  // looking at it.
+  if (theCallerIsLeaving(session)) {
+    return 'leaving';
+  }
   if (session.inChat) {
     return 'chat';
   }
@@ -1738,7 +1777,12 @@ export async function applyPostDoorMenuAction(
   displayMainMenuFn: (socket: any, session: BBSSession) => Promise<void> | void = displayMainMenu
 ): Promise<void> {
   const postAction = postDoorMenuAction(session);
-  if (postAction === 'chat') {
+  if (postAction === 'leaving') {
+    // The logoff sequence owns the screen from here. Repainting the menu -
+    // and, worse, setting subState back to DISPLAY_MENU - puts a caller who
+    // has already gone back into the command loop.
+    console.log('[executeAmigaDoor] caller is logging off - skipping displayMainMenu');
+  } else if (postAction === 'chat') {
     // Important 4: the sysop accepted the page DURING the post-door
     // page-wait — session.inChat is now true and chat.handler.ts's
     // enterChatMode already owns the screen (and chat-mode-input.util.ts
@@ -2740,7 +2784,8 @@ console.error('[executeTypeScriptDoor] Error arming the pause after the door:', 
     // login prompt to appear inside /chat/ when the livechat door exits (e.g.
     // after a transient socket disconnect that reaches this cleanup path).
     const isChatOnly = (session as any).chatOnly === true || session.tempData?.chatOnly === true;
-    if (session.state === BBSState.LOGGEDON && session.user && !wasInDisplayFlow && !isChatOnly) {
+    if (session.state === BBSState.LOGGEDON && session.user && !wasInDisplayFlow && !isChatOnly
+        && !theCallerIsLeaving(session)) {
       await displayMainMenu(socket, session);
     } else if (wasInDisplayFlow) {
       // Restore original subState for display flow to continue
@@ -2800,7 +2845,8 @@ console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err)
 
     // Only display menu if user is logged in (and not chatOnly — see note above)
     const isChatOnlyErr = (session as any).chatOnly === true || session.tempData?.chatOnly === true;
-    if (session.state === BBSState.LOGGEDON && session.user && !isChatOnlyErr) {
+    if (session.state === BBSState.LOGGEDON && session.user && !isChatOnlyErr
+        && !theCallerIsLeaving(session)) {
       await displayMainMenu(socket, session);
     }
   }
@@ -3658,9 +3704,11 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     } catch {
       /* ignore */
     }
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    if (session.state === BBSState.LOGGEDON && session.user) {
-      await displayMainMenu(socket, session);
+    if (!theCallerIsLeaving(session)) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      if (session.state === BBSState.LOGGEDON && session.user) {
+        await displayMainMenu(socket, session);
+      }
     }
   }
 }
