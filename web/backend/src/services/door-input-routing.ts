@@ -33,7 +33,19 @@ export interface DoorInputRoute {
   toBbs: boolean;
   /** Nothing is listening; the caller emits door:input so a client may. */
   toDoorInputEvent: boolean;
+  /**
+   * The adapter's WINDOW should move, and nobody else sees this key.
+   *
+   * Only a door that declared `C64_VIEWPORT` reaches this: its frame is a
+   * positioned UI the 40-column fold cannot save, so the caller is shown a
+   * window on it and the cursor keys move the window. Everywhere else a
+   * cursor key belongs to the door and is left alone.
+   */
+  pan: PanDirection | null;
 }
+
+/** Which way the window moves. */
+export type PanDirection = 'left' | 'right' | 'home';
 
 export interface DoorInputState {
   /** A door is running (inDoorManager, or the DOOR_RUNNING substate). */
@@ -48,6 +60,11 @@ export interface DoorInputState {
   hasCommandListener: boolean;
   /** A BBS-owned pause (doPause) is on screen underneath the door. */
   bbsPauseActive: boolean;
+  /**
+   * This door's frames are shown through the adapter's WINDOW (C64_VIEWPORT),
+   * so the cursor keys pan it instead of reaching the door.
+   */
+  viewportPan?: boolean;
 }
 
 /**
@@ -62,6 +79,27 @@ export function isPauseKey(input: string): boolean {
   return input === ' ' || input === '\r' || input === '\n' || code === 13 || code === 10;
 }
 
+/**
+ * The C64's own cursor keys, and HOME.
+ *
+ * PETSCII, not ANSI: these arrive as single bytes from a C64 terminal
+ * ($1D right, $9D left, $13 HOME). The ANSI arrow sequences are accepted too,
+ * because a 40-column session can be an ANSI terminal that simply asked for
+ * forty columns.
+ */
+export function panKeyOf(input: string): PanDirection | null {
+  if (!input) return null;
+  if (input === '\x1b[C' || input === '\x1bOC') return 'right';
+  if (input === '\x1b[D' || input === '\x1bOD') return 'left';
+  if (input === '\x1b[H' || input === '\x1bOH') return 'home';
+  const code = input.charCodeAt(0);
+  if (input.length !== 1) return null;
+  if (code === 0x1d) return 'right';
+  if (code === 0x9d) return 'left';
+  if (code === 0x13) return 'home';
+  return null;
+}
+
 /** Decide where a keystroke goes. Pure, so both transports can be tested. */
 export function routeDoorInput(input: string, state: DoorInputState): DoorInputRoute {
   const route: DoorInputRoute = {
@@ -69,6 +107,7 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
     toDoorHandler: false,
     toBbs: false,
     toDoorInputEvent: false,
+    pan: null,
   };
 
   if (!state.doorActive) {
@@ -81,6 +120,22 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
   if (state.bbsPauseActive && isPauseKey(input)) {
     route.toBbs = true;
     return route;
+  }
+
+  /*
+   * A WINDOWED door's cursor keys move the window, and reach nothing else.
+   *
+   * This is the only place a key is taken from a running door, and it is
+   * earned: the door declared C64_VIEWPORT, which says its screen cannot be
+   * folded to forty columns, so half of what it draws is off the caller's
+   * screen until they pan. A door that can be folded never gets here.
+   */
+  if (state.viewportPan) {
+    const pan = panKeyOf(input);
+    if (pan) {
+      route.pan = pan;
+      return route;
+    }
   }
 
   // Both, when both are there. A prompt waiting on 'command' and a running

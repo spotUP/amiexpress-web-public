@@ -295,6 +295,26 @@ export function doorMarkerColumns(door: MinColumnsDoorShape | null | undefined):
   return Number.isFinite(n) && n > 0 && n <= 4 ? n : 0;
 }
 
+/**
+ * Does this door say its screens cannot be REDUCED at all?
+ *
+ * `C64_VIEWPORT=1`, read exactly where `C64_ADAPT` and `C64_DROP_OLDEST` are.
+ * A positioned full-screen UI - an editor, a map, a game board - has no
+ * 40-column fold that keeps it usable, so the caller gets a 40-column WINDOW
+ * on the 80-column frame and pans it with the cursor keys (the adapter's
+ * rule 6, the plan's last resort). Nothing infers this: a door that can be
+ * folded should be, and this is the sysop saying it cannot.
+ */
+export function doorViewportsAt40(door: MinColumnsDoorShape | null | undefined): boolean {
+  if (!door) return false;
+  const raw =
+    (door as any).c64Viewport ??
+    door.toolTypes?.['C64_VIEWPORT'] ??
+    (door.doorInfo as any)?.c64Viewport ??
+    door.doorInfo?.toolTypes?.['C64_VIEWPORT'];
+  return /^(1|yes|true)$/i.test(String(raw ?? '').trim());
+}
+
 export function doorDropsOldestAt40(door: MinColumnsDoorShape | null | undefined): boolean {
   if (!door) return false;
   const raw =

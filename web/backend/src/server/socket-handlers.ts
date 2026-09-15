@@ -70,6 +70,15 @@ export { enableGameMode, disableGameMode } from '../services/game-mode.service';
 import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
 import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
+import { c64AdapterFor } from './c64-door-adapter';
+import { panKeyOf } from '../services/door-input-routing';
+
+/**
+ * How far one press of a cursor key moves a windowed door's view, in source
+ * columns. Kept in step with the telnet path's own constant - eight columns,
+ * because a whole screen at a time loses the context either side of the join.
+ */
+const VIEWPORT_PAN_COLUMNS = 8;
 
 /**
  * Convert special key names to their corresponding characters or escape sequences
@@ -708,6 +717,21 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
         }
       }
     } else if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+      /*
+       * A WINDOWED door's cursor keys move the window, not the door.
+       *
+       * Only a door that declared C64_VIEWPORT reaches this: its screen has
+       * no 40-column fold that keeps it usable, so half of what it draws is
+       * off the caller's screen until they pan. Same rule as telnet
+       * (services/door-input-routing.ts), asked here because the web path
+       * routes door keys itself.
+       */
+      const windowed = c64AdapterFor(socket);
+      if (windowed && !windowed.isDisposed() && windowed.isViewport()) {
+        const pan = panKeyOf(data);
+        if (pan === 'home') { windowed.panHome(); return; }
+        if (pan) { windowed.pan(pan === 'right' ? VIEWPORT_PAN_COLUMNS : -VIEWPORT_PAN_COLUMNS); return; }
+      }
       // Normal door input routing (no BBS pause active)
       if (session.doorInputHandler) {
         if (markDoorInput(session, data)) {

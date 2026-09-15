@@ -31,6 +31,15 @@ import {
 } from "./session-emitter-registry";
 import { sessionWantsPetscii } from "../utils/petscii-session-model";
 import { routeDoorInput } from "../services/door-input-routing";
+import { c64AdapterFor } from "./c64-door-adapter";
+
+/**
+ * How far one press of a cursor key moves the window.
+ *
+ * Eight columns: a whole screen at a time loses the context either side of
+ * the join, and one column at a time is a key a caller would hold down.
+ */
+const PAN_COLUMNS = 8;
 import { classifyTerminalInput, clearPauseHandler, commandPieces } from "./terminal-input";
 import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
@@ -329,13 +338,36 @@ console.log(
       // took no input. Web never had that, because socket.io delivers a
       // 'command' to every listener AND socket-handlers then calls the door's
       // handler. Telnet does both now too.
+      /*
+       * The adapter is installed on whatever the door handler calls `socket`,
+       * which on telnet is the connection EMITTER and on web the socket - so
+       * both are asked, and only a door that declared C64_VIEWPORT answers.
+       */
+      const viewportAdapter = () => {
+        for (const owner of [emitter, connection]) {
+          const adapter = c64AdapterFor(owner);
+          if (adapter && !adapter.isDisposed() && adapter.isViewport()) return adapter;
+        }
+        return null;
+      };
+
       const route = routeDoorInput(input, {
         doorActive: Boolean(session.inDoorManager)
           || session.subState === LoggedOnSubState.DOOR_RUNNING,
         hasDoorInputHandler: Boolean(session.doorInputHandler),
         hasCommandListener: emitter.listenerCount('command') > 0,
         bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
+        // A door shown through the adapter's WINDOW gives its cursor keys to
+        // the window (C64_VIEWPORT, the adapter's rule 6).
+        viewportPan: viewportAdapter() !== null,
       });
+
+      if (route.pan) {
+        const adapter = viewportAdapter();
+        if (route.pan === 'home') adapter?.panHome();
+        else adapter?.pan(route.pan === 'right' ? PAN_COLUMNS : -PAN_COLUMNS);
+        return;
+      }
 
       if (route.toCommandListeners) {
         // DoorManager's socket.once('command', ...) prompt, bridged: telnet

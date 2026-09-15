@@ -27,7 +27,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorDropsOldestAt40, doorDropsLastAt40, doorMarkerColumns, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorDropsOldestAt40, doorDropsLastAt40, doorViewportsAt40, doorMarkerColumns, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
 import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
@@ -3412,6 +3412,9 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
         dropOldest: doorDropsOldestAt40(door as any),
         dropLast: doorDropsLastAt40(door as any),
         markerColumns: doorMarkerColumns(door as any),
+        // C64_VIEWPORT: a positioned UI no fold can save. The caller gets a
+        // window on the wide frame and the cursor keys move it.
+        viewport: doorViewportsAt40(door as any),
       });
     }
 

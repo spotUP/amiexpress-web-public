@@ -158,6 +158,12 @@ export interface C64AdapterOptions {
   dropOldest?: boolean;
   /** The door declared C64_DROP_LAST: its ranked list may lose its lowest ranks to fit. */
   dropLast?: boolean;
+  /**
+   * The door declared C64_VIEWPORT: its frames are a positioned UI that
+   * cannot be reduced, so the caller gets a 40-column WINDOW onto the
+   * 80-column frame and pans it with the cursor keys (plan phase 5, rule 6).
+   */
+  viewport?: boolean;
 }
 
 /** The rule ladder's output for the frame as it stands, plus where the painted rows end. */
@@ -258,6 +264,15 @@ export class C64DoorFrameAdapter {
   private pageTop = 0;
   private paging = false;
   /**
+   * VIEWPORT (plan rule 6, the last resort). A door that declares
+   * `C64_VIEWPORT` is a positioned UI nothing can reduce - a full-screen
+   * editor, a map - so instead of folding its rows the adapter shows a
+   * 40-column WINDOW onto the 80-column frame and the caller moves it. This
+   * is the only rule the ladder never chooses for itself: it is worse than
+   * every other rule and better than a door the caller cannot open.
+   */
+  private viewportOffset = 0;
+  /**
    * What this door has shown about its lists; see AlignMemo in the ladder.
    * Seeded from `REDACTED` so a door that marks a row reserves the
    * room from its FIRST frame, before any marker has been drawn.
@@ -294,6 +309,8 @@ export class C64DoorFrameAdapter {
      * FIRST frame, because a door draws no marker until the caller moves.
      */
     markerColumns: number = 0,
+    /** C64_VIEWPORT: show a window on the wide frame instead of folding it. */
+    private readonly viewport: boolean = false,
   ) {
     if (markerColumns > 0) this.align.markerColumns = markerColumns;
   }
@@ -421,6 +438,47 @@ export class C64DoorFrameAdapter {
   }
 
   /** The window this adapter is showing, for tests and for the pause owner's logs. */
+  /**
+   * Is this door showing a WINDOW on its frame, rather than a folded one?
+   *
+   * The pan keys only mean anything here, and only here may they be taken
+   * away from the door - everywhere else a cursor key is the door's.
+   */
+  isViewport(): boolean {
+    return this.viewport;
+  }
+
+  /** Where the window starts, in source columns. */
+  windowOffset(): number {
+    return this.viewportOffset;
+  }
+
+  /**
+   * Move the window, and repaint if it actually moved.
+   *
+   * `columns` is signed; the rule clamps the result, so panning past either
+   * edge is a no-op rather than an error - which is what a caller holding the
+   * key down does.
+   */
+  pan(columns: number): boolean {
+    if (!this.viewport || this.disposed) return false;
+    const width = SOURCE_COLS;
+    const wanted = this.viewportOffset + columns;
+    const next = Math.max(0, Math.min(wanted, Math.max(0, width - this.cols)));
+    if (next === this.viewportOffset) return false;
+    this.viewportOffset = next;
+    // The view is memoised per write; a pan changes what the SAME frame looks
+    // like, so the memo has to go with it.
+    this.adaptedCache = null;
+    this.showPage();
+    return true;
+  }
+
+  /** Back to the left edge - the C64's HOME key. */
+  panHome(): boolean {
+    return this.pan(-this.viewportOffset);
+  }
+
   pageOffset(): number {
     return this.pageTop;
   }
@@ -532,6 +590,17 @@ export class C64DoorFrameAdapter {
         cols: this.cols,
         nextOrdinal: () => ++ordinal,
       }),
+      /*
+       * VIEWPORT: a door that declared C64_VIEWPORT pins every row to rule 6,
+       * so no row is folded and the caller sees a window instead. The offset
+       * is the adapter's, moved by the pan keys, and the rule clamps it.
+       */
+      ...(this.viewport
+        ? {
+          regions: [{ rows: [0, ROWS - 1] as [number, number], rule: 'viewport' as const }],
+          viewportOffset: this.viewportOffset,
+        }
+        : {}),
     });
     // The blank tail of a 25-row grid is not content. It still costs adapted
     // rows, which is exactly how adaptFrame comes to push painted rows off the
@@ -672,6 +741,7 @@ export function installC64DoorAdapter(
     opts.dropOldest === true,
     opts.dropLast === true,
     opts.markerColumns ?? 0,
+    opts.viewport === true,
   );
   adapter.target = socket;
   adapter.original = hadOwnEmit ? socket.emit : null;
