@@ -428,9 +428,29 @@ static void say(ui_screen *screen, int row, const char *text)
     ansi_text(&screen->buf, row, 3, text, screen->cols - 3);
 }
 
+/**
+ * The fewest request rows worth showing under the art.
+ *
+ * Below this the art has eaten the door: a caller came here to read a list,
+ * not to admire a logo with two lines under it.
+ */
+#define REQUESTS_DOOR_MIN_LIST_ROWS 6
+
 /* -------------------------------------------------------------------- door */
 
 static ui_screen screen;
+/**
+ * Rows of art standing where the masthead usually is.
+ *
+ * Read by the idle tick, which animates the masthead's rail on row 1 - and
+ * must not, when row 1 belongs to the art instead.
+ */
+static int art_rows_drawn;
+
+/* The bulletin's art, read once at startup: the door draws the header above
+   its own list too, not only into the bulletin it writes at exit. */
+static char bulletin_header_art[4096];
+static char bulletin_tail_art[2048];
 static ui_key_source keys;
 static const ui_theme *theme;
 static int pushback = -1;
@@ -460,6 +480,61 @@ static void draw_masthead(const char *title)
                           UI_TOKEN(UI_T_BAR), rail_tick);
 }
 
+/**
+ * The bulletin's own header art, above the list, when the screen can hold it.
+ *
+ * Sysop, 2026-09-15: "it would be nice if it was used in the global requests
+ * door as well", and then, of a screenshot of the plain list: "the door
+ * itself doesnt even show the art". The door and its bulletin should look
+ * like one thing.
+ *
+ * ADAPTIVE, because the art is whatever the sysop drew: his is 23 rows, which
+ * is a whole screen on a 24-row terminal and comfortable on the 30-row one he
+ * actually uses. So the art is drawn only when what is left underneath still
+ * holds a usable list; otherwise the themed masthead stays and nothing is
+ * lost but the decoration.
+ *
+ * NARROW CALLERS KEEP THE MASTHEAD too. The art is 80 columns of hard
+ * colours; on a 40-column C64 screen it would wrap into nonsense, while the
+ * masthead is themed and sized to the caller.
+ *
+ * Returns the first row BELOW the art - where the list starts - or 0 when the
+ * art was not drawn and the caller should fall back to the masthead.
+ */
+static int draw_list_art(void)
+{
+    const char *p = bulletin_header_art;
+    int row = 1;
+    int rows;
+
+    if (!wide) return 0;
+    if (bulletin_header_art[0] == '\0') return 0;
+
+    rows = requests_bulletin_art_rows(bulletin_header_art);
+    /* The list needs room to be a list: a caret, some requests, and the two
+       rows the status and footer own at the bottom. */
+    if (rows < 1 || rows + REQUESTS_DOOR_MIN_LIST_ROWS + 3 > screen.rows) return 0;
+
+    while (*p && row <= rows) {
+        const char *nl = strchr(p, '\n');
+        int len = nl ? (int)(nl - p) : (int)strlen(p);
+        char line[256];
+
+        if (len > (int)sizeof(line) - 1) len = (int)sizeof(line) - 1;
+        memcpy(line, p, (unsigned long)len);
+        line[len] = '\0';
+        /* RAW: the art carries its own colours, and ansi_text would spend the
+           theme's ink on every row and flatten it. */
+        ansi_text_raw(&screen.buf, row, 1, line, screen.cols);
+        row++;
+        if (!nl) break;
+        p = nl + 1;
+    }
+    /* Close the art's colours so the list below is drawn in the theme's. */
+    ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), UI_TOKEN(UI_T_GROUND), 0);
+    return row;
+}
+
 static void door_idle(void *ctx)
 {
     (void)ctx;
@@ -468,6 +543,13 @@ static void door_idle(void *ctx)
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
     if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
+    /*
+     * ROW 1 IS THE ART'S when the art is up, and the rail would scribble
+     * across the top line of the sysop's logo five times a second. The rail
+     * animates the MASTHEAD; where there is no masthead there is nothing here
+     * to animate. Still yield, or the poll loop spins hot on a 68K.
+     */
+    if (art_rows_drawn > 0) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
     rail_tick += UI_RAIL_STEP;
     /* The RAIL, not the row: the title does not move, and repainting it five
        times a second is what the caller sees as it blinking. */
@@ -554,8 +636,6 @@ static void draw_status(void)
 
 static int bulletin_dirty;
 
-static char bulletin_header_art[4096];
-static char bulletin_tail_art[2048];
 static char bulletin_text[16384];
 static requests_bulletin_row bulletin_rows[REQUESTS_BULLETIN_ROW_BUDGET];
 
@@ -939,6 +1019,18 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    /*
+     * The art, once, at startup - the door draws the header above its own
+     * list, not only into the bulletin it writes on the way out.
+     *
+     * Failure is not an error here: a board with no art file gets the themed
+     * masthead, which is what every door had before this. bulletin_write
+     * reads them again at exit, deliberately, so art uploaded DURING the
+     * session reaches the bulletin without the caller having to come back.
+     */
+    slurp(config.bulletin_header, bulletin_header_art, sizeof bulletin_header_art);
+    slurp(config.bulletin_tail, bulletin_tail_art, sizeof bulletin_tail_art);
+
     memset(&reqcfg, 0, sizeof reqcfg);
     reqcfg.host = config.host;
     reqcfg.port = config.port;
@@ -970,7 +1062,26 @@ int main(int argc, char **argv)
             static const char *const mine_hints[4] = { "Enter Detail", "D Done", "X Withdraw", "R Refresh" };
 
             ansi_clear(&screen.buf);
-            draw_masthead(current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title);
+            {
+                /*
+                 * The art heads the LIST, not the menu: the menu is six
+                 * choices and has nothing to be a header for, and the art
+                 * belongs where the requests are - which is the screen the
+                 * bulletin mirrors.
+                 */
+                int after = current_view == VIEW_MENU ? 0 : draw_list_art();
+                if (after > 0) {
+                    art_rows_drawn = after - 1;
+                    list.top = after + 1;
+                    list.height = screen.rows - list.top - 2;
+                    if (list.height < 1) list.height = 1;
+                } else {
+                    art_rows_drawn = 0;
+                    list.top = 3;
+                    list.height = screen.rows - 6;
+                    draw_masthead(current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title);
+                }
+            }
 
             if (current_view != VIEW_MENU && row_count == 0) {
                 say(&screen, 3, last_status > 0
