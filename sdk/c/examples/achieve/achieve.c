@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "achieve_rows.h"
+
 #include "aedoor.h"
 #include "ae_achieve.h"
 #include "ae_host.h"
@@ -49,21 +51,16 @@ static char session_storage[AE_SESSION_MIN_STORAGE];
    about it. A longer answer is truncated at a row boundary, and the screen
    says so. */
 #define LISTING_MAX 24576
-#define ROWS_MAX 256
-#define FIELDS_MAX 10
+#define ROWS_MAX ACHIEVE_ROWS_MAX
 
 static char listing[LISTING_MAX];
 static unsigned long listing_len;
 static int listing_truncated;
 
-/** One parsed row: pointers into `listing`, which stays put while it shows. */
-typedef struct {
-    const char *field[FIELDS_MAX];
-    int fields;
-} text_row;
-
-static text_row rows[ROWS_MAX];
-static int row_count;
+/* The rows themselves live in achieve_rows.c, where a host test can reach
+   them: they are half of the byte-parity acceptance (backlog 4.13) and a
+   second copy here would be the thing that drifts. */
+static achieve_rows parsed;
 
 /** What the caller is looking at. */
 typedef enum { VIEW_MENU, VIEW_BOARD, VIEW_GLOBAL, VIEW_CATALOG } view_id;
@@ -167,7 +164,7 @@ static int collect(void *ctx, const unsigned char *buf, unsigned long len)
  * GET one of the server's text listings.
  *
  * Returns the HTTP status, or a negative ae_http error. The body is left in
- * `listing` and parsed by split_rows().
+ * `listing` and parsed by achieve_rows_split().
  */
 static int fetch_text(const char *path_and_query)
 {
@@ -180,7 +177,7 @@ static int fetch_text(const char *path_and_query)
     listing_len = 0;
     listing[0] = '\0';
     listing_truncated = 0;
-    row_count = 0;
+    parsed.count = 0;
 
     if ((unsigned long)strlen(config.board_key) + 32 >= sizeof authorization) return -1;
     sprintf(authorization, "Authorization: Board %s\r\n", config.board_key);
@@ -199,119 +196,33 @@ static int fetch_text(const char *path_and_query)
     return response.status;
 }
 
-/**
- * Split the body into rows and fields, in place.
- *
- * The header line (`ACHIEVE|1|<revision>|<count>`) is consumed here: a door
- * shows rows, and the revision is the server's business. A conforming parser
- * IGNORES trailing fields it does not know, which is what makes the format
- * append-only - so this keeps the first FIELDS_MAX and drops the rest rather
- * than refusing a row that grew.
- */
-static void split_rows(void)
-{
-    char *p = listing;
-    int first_line = 1;
-
-    row_count = 0;
-    while (*p != '\0' && row_count < ROWS_MAX) {
-        char *line = p;
-        char *end = strchr(p, '\n');
-        int field = 0;
-
-        if (end != 0) {
-            *end = '\0';
-            p = end + 1;
-        } else {
-            p = line + strlen(line);
-        }
-        if (end != 0 && end > line && end[-1] == '\r') end[-1] = '\0';
-        if (line[0] == '\0') continue;
-
-        if (first_line) {
-            first_line = 0;
-            continue;   /* ACHIEVE|1|<revision>|<count> */
-        }
-
-        rows[row_count].field[field++] = line;
-        while (field < FIELDS_MAX) {
-            char *bar = strchr(line, '|');
-            if (bar == 0) break;
-            *bar = '\0';
-            line = bar + 1;
-            rows[row_count].field[field++] = line;
-        }
-        /* A row longer than FIELDS_MAX keeps its extra fields inside the
-           last one rather than losing the row. */
-        rows[row_count].fields = field;
-        row_count++;
-    }
-}
-
-static const char *field_of(int row, int index)
-{
-    if (row < 0 || row >= row_count) return "";
-    if (index < 0 || index >= rows[row].fields) return "";
-    return rows[row].field[index] != 0 ? rows[row].field[index] : "";
-}
-
 /* ------------------------------------------------------------------- rows */
 
 static char row_text[256];
 static view_id current_view = VIEW_MENU;
 static int compact_screen;
 
-/**
- * The menu, in the twin's own words.
- *
- * Doors/achieve/app.ts menuItems() writes these, and the two doors are meant
- * to be the same door: the labels are copied deliberately, and the account
- * row says where that flow lives rather than pretending to offer it.
+/*
+ * The row callbacks the widget asks for, over the formatters in
+ * achieve_rows.c. Nothing is formatted here: those strings have to equal the
+ * twin's byte for byte (backlog 4.13) and that is asserted against
+ * `tests/fixtures/achieve-rows.golden`, which only the library's copy feeds.
  */
 static const char *menu_row(void *context, int index)
 {
-    int wide = *(const int *)context;
-
-    switch (index) {
-        case 0: return wide ? "This board's scoreboard" : "Board scoreboard";
-        case 1: return wide ? "The global scoreboard" : "Global scoreboard";
-        case 2: return wide ? "The catalog, by family" : "Catalog";
-        case 3: return wide ? "Account: on the web terminal" : "Account: web only";
-        default: return wide ? "Leave the door" : "Leave";
-    }
+    return achieve_menu_row(index, *(const int *)context);
 }
 
-/** `<rank>|<handle>|<points>|<unlocks>` */
 static const char *board_row(void *context, int index)
 {
-    int wide = *(const int *)context;
-
-    if (index >= row_count) return "";
-    if (wide) {
-        sprintf(row_text, "%3s  %-16s %8s pts  %4s unlocked",
-                field_of(index, 0), field_of(index, 1),
-                field_of(index, 2), field_of(index, 3));
-    } else {
-        sprintf(row_text, "%2s %-16s %6s",
-                field_of(index, 0), field_of(index, 1), field_of(index, 2));
-    }
-    return row_text;
+    return achieve_board_row(&parsed, index, *(const int *)context,
+                             row_text, sizeof row_text);
 }
 
-/** `<id>|<family>|<tier>|<points>|<hidden>|<name>|<description>|...` */
 static const char *catalog_row(void *context, int index)
 {
-    int wide = *(const int *)context;
-
-    if (index >= row_count) return "";
-    if (wide) {
-        sprintf(row_text, "%-10s %-8s %-28s %4s pts",
-                field_of(index, 1), field_of(index, 2),
-                field_of(index, 5), field_of(index, 3));
-    } else {
-        sprintf(row_text, "%-24s %-6s", field_of(index, 5), field_of(index, 2));
-    }
-    return row_text;
+    return achieve_catalog_row(&parsed, index, *(const int *)context,
+                               row_text, sizeof row_text);
 }
 
 /* ------------------------------------------------------------------- input */
@@ -407,7 +318,7 @@ int main(int argc, char **argv)
                              : current_view == VIEW_GLOBAL ? "GLOBAL SCOREBOARD"
                              : "BOARD SCOREBOARD",
                              theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
-            if (current_view != VIEW_MENU && row_count == 0) {
+            if (current_view != VIEW_MENU && parsed.count == 0) {
                 say(&screen, theme, 3,
                     status > 0 ? "The server answered, and had nothing to show."
                                : "The server could not be reached.");
@@ -468,10 +379,10 @@ int main(int argc, char **argv)
                         list.selected == 0 ? config.board_id : "global",
                         ROWS_MAX);
                 status = fetch_text(query);
-                split_rows();
+                achieve_rows_split(listing, &parsed);
                 current_view = list.selected == 0 ? VIEW_BOARD : VIEW_GLOBAL;
                 list.row = board_row;
-                list.count = row_count;
+                list.count = parsed.count;
                 list.height = (wide ? 20 : 18);
                 ui_list_select(&list, 0);
                 full = 1;
@@ -479,10 +390,10 @@ int main(int argc, char **argv)
             }
             case 2:
                 status = fetch_text("/achievements/v1/catalog.txt");
-                split_rows();
+                achieve_rows_split(listing, &parsed);
                 current_view = VIEW_CATALOG;
                 list.row = catalog_row;
-                list.count = row_count;
+                list.count = parsed.count;
                 list.height = (wide ? 20 : 18);
                 ui_list_select(&list, 0);
                 full = 1;

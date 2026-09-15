@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -67,6 +67,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ae_dos
 	./build/test_texttv
 	./build/test_subs_scan
+	./build/test_achieve_rows
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -100,6 +101,10 @@ build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_tex
 
 # The join listing, which every caller sees and nobody asked for - so it is a
 # pure function in its own translation unit, the way texttv_parse.c is.
+build/test_achieve_rows: examples/achieve/achieve_rows.c tests/test_achieve_rows.c examples/achieve/achieve_rows.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I examples/achieve examples/achieve/achieve_rows.c tests/test_achieve_rows.c -o $@
+
 build/test_subs_scan: examples/subs/subs_scan.c tests/test_subs_scan.c examples/subs/subs_scan.h include/ae_msgbase.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/subs -I include examples/subs/subs_scan.c tests/test_subs_scan.c -o $@
@@ -254,9 +259,9 @@ build/amiga/theme-picker: examples/theme-picker/theme_picker.c build/amiga/libae
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
-build/amiga/achieve: examples/achieve/achieve.c build/amiga/libae.lib
+build/amiga/achieve: examples/achieve/achieve.c examples/achieve/achieve_rows.c examples/achieve/achieve_rows.h build/amiga/libae.lib
 	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/achieve examples/achieve/achieve.c examples/achieve/achieve_rows.c build/amiga/libae.lib -lauto -o $@
 
 # The global-requests door: reads and writes through ae_request, drawn with
 # the same widgets. Links the WHOLE library; make measure proves only what it
