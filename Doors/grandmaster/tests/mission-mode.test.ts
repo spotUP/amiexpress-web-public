@@ -303,3 +303,72 @@ export async function aRiseMovesTheStackUpAndBringsOneRowIn(): Promise<void> {
   assert.strictEqual(bottom.filter((c: any) => c.filled).length, 9, 'the new row has one hole');
   assert.strictEqual(bottom[3].filled, false, 'and the hole is where the rng put it');
 }
+
+/**
+ * The second shipped pack is REACHABLE, and so is a sysop's own.
+ *
+ * `listPacks` has read both since the day it landed and nothing called it:
+ * `startMission` loaded `starter.json` by name, so a pack written with the
+ * door's own editor could never be played, and a second shipped pack would
+ * have been dead content. This drives the store the way the door does.
+ */
+export async function everyShippedPackIsOfferedNotJustTheFirst(): Promise<void> {
+  const { listPacks, saveSysopPack } = await import('../core/mission-store');
+  const os: typeof import('os') = await import('os');
+  const doorRoot = path.join(__dirname, '..');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gm-packs-'));
+
+  const shipped = listPacks(doorRoot, dataDir);
+  assert.deepStrictEqual(shipped.problems, [], 'every shipped pack parses');
+  const names = shipped.packs.map((p) => p.pack.name);
+  assert.ok(names.includes('STARTER'), `STARTER is offered, got ${names.join(', ')}`);
+  assert.ok(names.includes('ORDERS & SPLITS'),
+    `the second shipped pack is offered too, got ${names.join(', ')}`);
+  assert.ok(shipped.packs.every((p) => p.origin === 'shipped'));
+
+  // And one the editor writes lands beside them.
+  saveSysopPack(dataDir, { name: 'BOARD PACK', missions: [{
+    id: '01', name: 'ONE', objective: 'lines', norm: 1,
+    timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+  }] });
+  const withSysop = listPacks(doorRoot, dataDir);
+  const sysop = withSysop.packs.find((p) => p.origin === 'sysop');
+  assert.ok(sysop, 'the pack the editor wrote is offered');
+  assert.strictEqual(sysop!.pack.name, 'BOARD PACK');
+}
+
+/**
+ * A pack is thirty missions, and the new objectives are in one that ships.
+ *
+ * HeborisCE packs are thirty entries (mission.c:47-171) and this door keeps
+ * that shape, so the objectives added on 2026-09-15 could not go into
+ * STARTER without pushing it past thirty. They are a pack of their own -
+ * and a judge nobody can reach from a pack is the failure this door has had
+ * twice already.
+ */
+export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<void> {
+  const { listPacks } = await import('../core/mission-store');
+  const os: typeof import('os') = await import('os');
+  const doorRoot = path.join(__dirname, '..');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gm-packs2-'));
+  const { packs } = listPacks(doorRoot, dataDir);
+
+  for (const stored of packs) {
+    assert.ok(stored.pack.missions.length <= 30,
+      `${stored.pack.name} has ${stored.pack.missions.length} missions; a pack is thirty`);
+  }
+
+  const every = packs.flatMap((p) => p.pack.missions);
+  const used = new Set(every.map((m) => m.objective));
+  for (const objective of [
+    'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
+    'splitDouble', 'splitTriple', 'splitDouble2',
+  ]) {
+    assert.ok(used.has(objective as any),
+      `${objective} is judged but no shipped mission asks for it`);
+  }
+  assert.ok(every.some((m) => m.strictness === 'atLeast'), 'the at-least grade is played');
+  assert.ok(every.some((m) => m.strictness === 'exactOrReset'), 'and the resetting one');
+  assert.ok(every.some((m) => m.ignoreSingles), "and COMBO's NOT1LINE");
+  assert.ok(every.some((m) => m.requireHold), 'and HOLD USE');
+}

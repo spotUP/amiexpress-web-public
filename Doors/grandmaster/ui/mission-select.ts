@@ -13,6 +13,7 @@ import type { Mission, MissionPack } from '../core/mission-types';
 import type { MissionProgress } from '../core/mission-progress';
 
 import { T } from '../door-theme';
+import type { StoredPack } from '../core/mission-store';
 /** mm:ss for a clear time. */
 export function formatClearTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
@@ -141,6 +142,105 @@ export async function showMissionSelect(
     if (canEdit) {
       (list as any).key(['e'], () => close('edit'));
     }
+
+    list.focus();
+    screen.render();
+  });
+}
+
+/**
+ * Which pack? Asked only when there is more than one.
+ *
+ * The door shipped one pack and loaded it by name, so a SECOND shipped pack -
+ * and every pack a sysop wrote with the editor, which `saveSysopPack` has
+ * been writing to the data directory since the day it landed - could not be
+ * reached from the door at all. A list is what makes them reachable.
+ *
+ * A pack that would not parse is not offered; its reason is shown under the
+ * list, because a sysop halfway through writing one needs to be told why it
+ * is missing rather than left guessing.
+ */
+export function showPackSelect(
+  screen: Screen,
+  packs: StoredPack[],
+  problems: string[],
+): Promise<StoredPack | null> {
+  return new Promise((resolve) => {
+    const rows = packs.map((stored) => {
+      const where = stored.origin === 'sysop' ? 'this board' : 'shipped';
+      const count = String(stored.pack.missions.length).padStart(2);
+      return `${stored.pack.name.padEnd(22).slice(0, 22)}  ${count}  {${T.dim}-fg}${where}{/${T.dim}-fg}`;
+    });
+
+    const box = createBox({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 46,
+      height: Math.min(rows.length, 10) + (problems.length > 0 ? 6 : 5),
+      border: { type: 'line' },
+      label: ' MISSION PACKS ',
+      style: { bg: T.ground, border: { fg: T.chrome } },
+      fixed: true,
+      tags: true,
+    } as any);
+
+    const keys = createBox({
+      border: undefined,
+      parent: box,
+      bottom: 0,
+      left: 1,
+      width: 42,
+      height: 1,
+      tags: true,
+      style: { fg: T.dim },
+      content: `{${T.accent}-fg}ENTER{/${T.accent}-fg} open  {${T.accent}-fg}ESC{/${T.accent}-fg} back`,
+    } as any);
+
+    const trouble = problems.length > 0 ? createBox({
+      border: undefined,
+      parent: box,
+      bottom: 1,
+      left: 1,
+      width: 42,
+      height: 1,
+      tags: true,
+      style: { fg: T.alert },
+      content: `${problems.length} pack(s) would not load`,
+    } as any) : null;
+
+    const list = createList({
+      parent: box,
+      top: 1,
+      left: 1,
+      width: 42,
+      height: Math.min(rows.length, 10) + 2,
+      keys: true,
+      vi: true,
+      mouse: true,
+      tags: true,
+      scrollable: true,
+      alwaysScroll: true,
+      style: {
+        selected: { bg: T.selectionBg, fg: T.selectionInk },
+        item: { fg: T.ink },
+      },
+      items: rows,
+    } as any);
+
+    const close = (chosen: StoredPack | null) => {
+      list.destroy();
+      trouble?.destroy();
+      keys.destroy();
+      box.destroy();
+      screen.render();
+      resolve(chosen);
+    };
+
+    (list as any).key(['enter', 'return'], () => {
+      close(packs[(list as any).selected ?? 0] ?? null);
+    });
+    (list as any).key(['escape', 'q'], () => close(null));
 
     list.focus();
     screen.render();

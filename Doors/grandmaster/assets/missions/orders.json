@@ -1,0 +1,184 @@
+{
+  "name": "ORDERS & SPLITS",
+  "missions": [
+    {
+      "id": "01",
+      "name": "TWO OR MORE",
+      "objective": "double",
+      "norm": 4,
+      "strictness": "atLeast",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two lines at once, four times - a bigger clear counts too."
+    },
+    {
+      "id": "02",
+      "name": "DOUBLES ONLY",
+      "objective": "double",
+      "norm": 3,
+      "strictness": "exactOrReset",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Three doubles in a row. Any other clear starts you over."
+    },
+    {
+      "id": "03",
+      "name": "NO SINGLES",
+      "objective": "combo",
+      "norm": 3,
+      "ignoreSingles": true,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 2,
+      "modifiers": {},
+      "hint": "A three-combo where singles do not count towards it."
+    },
+    {
+      "id": "04",
+      "name": "HALF A CYCLE",
+      "objective": "cycle",
+      "norm": 2,
+      "timeLimitSeconds": 90,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two different clear sizes inside ninety seconds."
+    },
+    {
+      "id": "05",
+      "name": "THE I LINE",
+      "objective": "blockOrder",
+      "norm": 6,
+      "requiredPiece": "I",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Six lines, every one of them cleared by an I piece."
+    },
+    {
+      "id": "06",
+      "name": "T FOR ONE",
+      "objective": "singleOrder",
+      "norm": 4,
+      "requiredPiece": "T",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 2,
+      "modifiers": {},
+      "hint": "Four single lines, each one cleared by a T piece."
+    },
+    {
+      "id": "07",
+      "name": "CORNER PAIR",
+      "objective": "doubleOrder",
+      "norm": 3,
+      "requiredPiece": "LJ",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Three doubles, each cleared by an L or a J."
+    },
+    {
+      "id": "08",
+      "name": "HELD AND USED",
+      "objective": "doubleOrder",
+      "norm": 2,
+      "requiredPiece": "O",
+      "requireHold": true,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two doubles with an O piece - and it must come out of hold."
+    },
+    {
+      "id": "09",
+      "name": "ANYTHING BUT I",
+      "objective": "reTripleOrder",
+      "norm": 2,
+      "requiredPiece": "I",
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 4,
+      "modifiers": {},
+      "hint": "Two triples, and the I piece is the one that does not count."
+    },
+    {
+      "id": "10",
+      "name": "THREE BY S OR Z",
+      "objective": "tripleOrder",
+      "norm": 2,
+      "requiredPiece": "SZ",
+      "timeLimitSeconds": 0,
+      "startLevel": 100,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two triples cleared by an S or a Z."
+    },
+    {
+      "id": "11",
+      "name": "MIND THE GAP",
+      "objective": "splitDouble",
+      "norm": 2,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two lines at once with at least one row left between them."
+    },
+    {
+      "id": "12",
+      "name": "TWO ROWS APART",
+      "objective": "splitDouble2",
+      "norm": 2,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Two lines at once with exactly two rows left between them."
+    },
+    {
+      "id": "13",
+      "name": "SPLIT THREE",
+      "objective": "splitTriple",
+      "norm": 1,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Three lines at once that are not all touching."
+    },
+    {
+      "id": "14",
+      "name": "THE T TRIPLE",
+      "objective": "tspinDouble",
+      "norm": 2,
+      "timeLimitSeconds": 0,
+      "startLevel": 200,
+      "garbageRows": 2,
+      "modifiers": {},
+      "hint": "Two T-spins of two lines or more. A triple counts."
+    },
+    {
+      "id": "15",
+      "name": "HELD I, BLIND",
+      "objective": "blockOrder",
+      "norm": 4,
+      "requiredPiece": "I",
+      "requireHold": true,
+      "timeLimitSeconds": 300,
+      "startLevel": 300,
+      "garbageRows": 4,
+      "modifiers": {
+        "hideNext": true
+      },
+      "hint": "Four lines by a held I piece, no preview, five minutes."
+    }
+  ]
+}

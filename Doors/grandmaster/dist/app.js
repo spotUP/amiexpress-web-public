@@ -107,7 +107,7 @@ const manual_1 = require("./ui/manual");
 const training_config_1 = require("./ui/training-config");
 const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
-const mission_pack_1 = require("./core/mission-pack");
+const mission_store_1 = require("./core/mission-store");
 const mission_run_1 = require("./core/mission-run");
 const mission_progress_1 = require("./core/mission-progress");
 const mission_select_1 = require("./ui/mission-select");
@@ -816,18 +816,35 @@ class GrandmasterApp {
      * mission that can never end (core/mission-pack.ts).
      */
     async startMission() {
-        let pack;
-        try {
-            // assets/, not data/: a pack is CONTENT that ships with the door, and
-            // data/ is gitignored runtime state (the database, high scores, the
-            // mission progress record). A pack put there would never have reached
-            // the board at all.
-            pack = (0, mission_pack_1.loadMissionPack)(path.join((0, settings_1.resolveDoorRoot)(__dirname), 'assets', 'missions', 'starter.json'));
-        }
-        catch (error) {
-            await this.showMessage('MISSIONS', `Could not load the mission pack:\n${error.message}`);
+        /*
+         * EVERY pack this board has, not one file by name.
+         *
+         * assets/ is CONTENT that ships with the door and data/missions/ is where
+         * the editor writes a sysop's own - and until now the door loaded
+         * `starter.json` by name, so a sysop could write a pack with the editor
+         * in this same door and never be offered it again. listPacks has existed
+         * for both since the day it landed; nothing called it.
+         */
+        const doorRoot = (0, settings_1.resolveDoorRoot)(__dirname);
+        const { packs, problems } = (0, mission_store_1.listPacks)(doorRoot, path.join(doorRoot, 'data'));
+        if (packs.length === 0) {
+            await this.showMessage('MISSIONS', problems.length > 0
+                ? `No mission pack would load:\n${problems.join('\n')}`
+                : 'This board has no mission packs.');
             return;
         }
+        let stored = packs[0];
+        if (packs.length > 1) {
+            // Only asked when there is a choice: one pack should not cost the
+            // player a dialog.
+            this.inputManager.suspend();
+            const chosen = await (0, mission_select_1.showPackSelect)(this.screen, packs, problems);
+            this.inputManager.resume();
+            if (!chosen)
+                return;
+            stored = chosen;
+        }
+        const pack = stored.pack;
         // Pick, read the briefing, and start - or go back to the pack. A player
         // who has just chosen from a one-line list has not yet been told the
         // clock, the starting speed, the garbage or the rule changes, and meets

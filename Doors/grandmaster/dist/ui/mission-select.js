@@ -11,6 +11,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.formatClearTime = formatClearTime;
 exports.missionRows = missionRows;
 exports.showMissionSelect = showMissionSelect;
+exports.showPackSelect = showPackSelect;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const door_theme_1 = require("../door-theme");
 /** mm:ss for a clear time. */
@@ -115,6 +116,93 @@ canEdit = false) {
         if (canEdit) {
             list.key(['e'], () => close('edit'));
         }
+        list.focus();
+        screen.render();
+    });
+}
+/**
+ * Which pack? Asked only when there is more than one.
+ *
+ * The door shipped one pack and loaded it by name, so a SECOND shipped pack -
+ * and every pack a sysop wrote with the editor, which `saveSysopPack` has
+ * been writing to the data directory since the day it landed - could not be
+ * reached from the door at all. A list is what makes them reachable.
+ *
+ * A pack that would not parse is not offered; its reason is shown under the
+ * list, because a sysop halfway through writing one needs to be told why it
+ * is missing rather than left guessing.
+ */
+function showPackSelect(screen, packs, problems) {
+    return new Promise((resolve) => {
+        const rows = packs.map((stored) => {
+            const where = stored.origin === 'sysop' ? 'this board' : 'shipped';
+            const count = String(stored.pack.missions.length).padStart(2);
+            return `${stored.pack.name.padEnd(22).slice(0, 22)}  ${count}  {${door_theme_1.T.dim}-fg}${where}{/${door_theme_1.T.dim}-fg}`;
+        });
+        const box = (0, blessed_helpers_1.createBox)({
+            parent: screen,
+            top: 'center',
+            left: 'center',
+            width: 46,
+            height: Math.min(rows.length, 10) + (problems.length > 0 ? 6 : 5),
+            border: { type: 'line' },
+            label: ' MISSION PACKS ',
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
+            fixed: true,
+            tags: true,
+        });
+        const keys = (0, blessed_helpers_1.createBox)({
+            border: undefined,
+            parent: box,
+            bottom: 0,
+            left: 1,
+            width: 42,
+            height: 1,
+            tags: true,
+            style: { fg: door_theme_1.T.dim },
+            content: `{${door_theme_1.T.accent}-fg}ENTER{/${door_theme_1.T.accent}-fg} open  {${door_theme_1.T.accent}-fg}ESC{/${door_theme_1.T.accent}-fg} back`,
+        });
+        const trouble = problems.length > 0 ? (0, blessed_helpers_1.createBox)({
+            border: undefined,
+            parent: box,
+            bottom: 1,
+            left: 1,
+            width: 42,
+            height: 1,
+            tags: true,
+            style: { fg: door_theme_1.T.alert },
+            content: `${problems.length} pack(s) would not load`,
+        }) : null;
+        const list = (0, blessed_helpers_1.createList)({
+            parent: box,
+            top: 1,
+            left: 1,
+            width: 42,
+            height: Math.min(rows.length, 10) + 2,
+            keys: true,
+            vi: true,
+            mouse: true,
+            tags: true,
+            scrollable: true,
+            alwaysScroll: true,
+            style: {
+                selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk },
+                item: { fg: door_theme_1.T.ink },
+            },
+            items: rows,
+        });
+        const close = (chosen) => {
+            list.destroy();
+            trouble?.destroy();
+            keys.destroy();
+            box.destroy();
+            screen.render();
+            resolve(chosen);
+        };
+        list.key(['enter', 'return'], () => {
+            close(packs[list.selected ?? 0] ?? null);
+        });
+        list.key(['escape', 'q'], () => close(null));
         list.focus();
         screen.render();
     });

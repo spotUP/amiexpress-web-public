@@ -86,9 +86,21 @@ function listPacks(doorRoot, dataDir) {
             problems.push(`${path.basename(file)}: ${error.message}`);
         }
     };
-    const shipped = path.join(doorRoot, 'assets', 'missions', 'starter.json');
-    if (fs.existsSync(shipped))
-        read(shipped, 'shipped');
+    /*
+     * EVERY pack that ships, not just starter.json.
+     *
+     * A pack is thirty missions, as HeborisCE's are (mission.c:47-171 reads
+     * packs of thirty), so a door with more than thirty missions to offer has
+     * more than one pack - and reading only the first name meant a second one
+     * could ship with the door and never be offered to anybody.
+     */
+    const shippedDir = path.join(doorRoot, 'assets', 'missions');
+    if (fs.existsSync(shippedDir)) {
+        for (const entry of fs.readdirSync(shippedDir).sort()) {
+            if (entry.toLowerCase().endsWith('.json'))
+                read(path.join(shippedDir, entry), 'shipped');
+        }
+    }
     const dir = sysopPackDir(dataDir);
     if (fs.existsSync(dir)) {
         for (const entry of fs.readdirSync(dir).sort()) {
