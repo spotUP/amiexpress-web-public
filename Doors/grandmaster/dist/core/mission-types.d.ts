@@ -18,11 +18,12 @@
  * never be completed.
  */
 import type { HiddenMode, PieceType } from './types';
+import type { EraserPattern } from './eraser';
 /**
  * The objectives this engine can judge, each with the reference type it comes
  * from (mission_info.c's `mission_name_editor` list).
  */
-export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive", "blockOrder", "singleOrder", "doubleOrder", "tripleOrder", "reTripleOrder", "splitDouble", "splitTriple", "splitDouble2", "square", "goldSquare"];
+export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive", "blockOrder", "singleOrder", "doubleOrder", "tripleOrder", "reTripleOrder", "splitDouble", "splitTriple", "splitDouble2", "square", "goldSquare", "eraser", "eraserHeboris"];
 /**
  * A piece an ORDER mission asks for - the reference's `mission_opt_3`, where
  * 0..6 name one piece, 7 is "L or J" and 8 is "S or Z" (mission.c:354-362).
@@ -175,6 +176,12 @@ export interface Mission {
      * can ask for 20G and nothing else.
      */
     speed?: MissionSpeed;
+    /**
+     * ERASER only: how many rows are marked at once and the band they appear
+     * in (the reference's `mission_opt_3` / `opt_1` / `opt_2`). See
+     * `core/eraser.ts`.
+     */
+    eraser?: EraserPattern;
     /** Rows of garbage the field starts with (mission_erase, positive side). */
     garbageRows: number;
     modifiers: MissionModifiers;

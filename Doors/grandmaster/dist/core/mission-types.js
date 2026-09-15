@@ -52,5 +52,8 @@ exports.MISSION_OBJECTIVES = [
     // A free-standing 4x4 block of locked pieces (mission.c:1451-1455).
     'square', // "SQUARE"
     'goldSquare', // "GOLD SQUARE" - all sixteen cells one colour
+    // Rows the field marks, cleared by the piece that sits IN them.
+    'eraser', // "ERASER"
+    'eraserHeboris', // "ERASER HEBORIS" - only a four-line clear may claim one
 ];
 //# sourceMappingURL=mission-types.js.map

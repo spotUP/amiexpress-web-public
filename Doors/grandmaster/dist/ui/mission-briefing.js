@@ -82,6 +82,10 @@ function missionObjectiveText(mission) {
             + `pieces, ${times(norm)}.`;
         case 'goldSquare': return `Build a four-by-four block of pieces, all of `
             + `one colour, ${times(norm)}.`;
+        case 'eraser': return `Clear ${norm} marked row${norm === 1 ? '' : 's'} - `
+            + 'the piece has to be IN the row it clears.';
+        case 'eraserHeboris': return `Clear ${norm} marked row${norm === 1 ? '' : 's'} `
+            + 'with four-line clears only.';
         default: return 'Play.';
     }
 }

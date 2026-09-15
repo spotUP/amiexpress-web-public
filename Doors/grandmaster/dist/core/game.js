@@ -21,6 +21,8 @@ const hidden_1 = require("./hidden");
 const up_key_lock_1 = require("./up-key-lock");
 const board_writes_1 = require("./board-writes");
 const square_1 = require("./square");
+const eraser_1 = require("./eraser");
+const game_result_1 = require("./game-result");
 const credit_roll_rules_1 = require("./credit-roll-rules");
 const tspin_1 = require("./tspin");
 const garbage_1 = require("./garbage");
@@ -77,6 +79,9 @@ class GameEngine {
         this.nextPieceId = 1;
         /** SQUARE mode: the scan runs after every lock (reference types 40/41). */
         this.squareMode = false;
+        /** ERASER: the pattern a mission asked for, and how many it still needs. */
+        this.eraserPattern = null;
+        this.eraserRemaining = 0;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -238,6 +243,7 @@ class GameEngine {
             currentPiece: null,
             holdPiece: null,
             canHold: true,
+            markedRows: [],
             nextQueue: this.pieceManager.fillQueue(this.settings.previewCount),
             level: this.startLevel,
             lines: 0,
@@ -343,6 +349,20 @@ class GameEngine {
      */
     setSquareMode(on) {
         this.squareMode = on;
+    }
+    /**
+     * Mark rows for an ERASER mission, and keep them marked.
+     *
+     * `remaining` is the norm: the reference never marks more rows than the
+     * mission still needs (mission.c:1484-1487), and marks a fresh set when
+     * every marked row has been cleared.
+     */
+    setEraserPattern(pattern, remaining) {
+        this.eraserPattern = pattern;
+        this.eraserRemaining = remaining;
+        this.state.markedRows = pattern
+            ? (0, eraser_1.chooseMarkedRows)(pattern, remaining, this.state.board.height)
+            : [];
     }
     setMissionSpeed(speed) {
         this.missionSpeed = speed ?? null;
@@ -1410,6 +1430,24 @@ class GameEngine {
          * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
          * seconds - so the clock a player keeps is their own piece count.
          */
+        /*
+         * ERASER: a marked row is claimed when the piece that just locked SAT IN
+         * it and it was cleared (mission.c:905-947) - clearing it with a piece
+         * that landed somewhere else is not the shot the mission asked for. The
+         * engine does the matching because it also owns the marks and draws
+         * them; the judge is only told how many were claimed.
+         */
+        let markedRowsCleared = 0;
+        if (this.state.markedRows.length > 0) {
+            const claim = (0, eraser_1.claimMarkedRows)(this.state.markedRows, lockedCells.map((cell) => cell.y), clearedLines);
+            markedRowsCleared = claim.claimed.length;
+            this.state.markedRows = claim.remaining;
+            this.eraserRemaining = Math.max(0, this.eraserRemaining - markedRowsCleared);
+            // Every marked row gone and the norm not met: a fresh pattern appears.
+            if (this.state.markedRows.length === 0 && this.eraserPattern && this.eraserRemaining > 0) {
+                this.state.markedRows = (0, eraser_1.chooseMarkedRows)(this.eraserPattern, this.eraserRemaining, this.state.board.height);
+            }
+        }
         // SQUARE: the scan runs after the clears, so a square that was just
         // broken up by a line clear does not count (gamestart.c:8678-8683).
         const square = this.squareMode ? (0, square_1.makeSquares)(this.state.board) : 0;
@@ -1442,6 +1480,7 @@ class GameEngine {
             cameFromHold: this.currentCameFromHold,
             clearedRows: [...clearedLines].sort((a, b) => a - b),
             square,
+            markedRowsCleared,
         });
     }
     /**
@@ -1534,26 +1573,14 @@ class GameEngine {
      * Get game result
      */
     getResult() {
-        const time = this.state.endTime && this.state.startTime
-            ? this.state.endTime - this.state.startTime
-            : null;
         const finesseStats = this.finesseEvaluator.getStats();
-        return {
-            mode: this.state.mode,
-            score: this.state.score,
-            level: this.state.level,
-            lines: this.state.lines,
-            linesCleared: this.state.lines,
-            grade: this.state.grade,
-            time,
-            combo: this.state.combo,
+        return (0, game_result_1.buildResult)(this.state, {
             tetrisCount: this.tetrisCount,
             tSpinCount: this.tSpinCount,
-            perfectClears: this.perfectClearCount,
-            completed: this.state.status === 'complete',
-            finesseRate: 1 - finesseStats.errorRate,
+            perfectClearCount: this.perfectClearCount,
             finesseErrors: finesseStats.finesseErrors,
-        };
+            finesseErrorRate: finesseStats.errorRate,
+        });
     }
     /**
      * Get bone block probability for current grade

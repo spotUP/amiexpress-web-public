@@ -9,6 +9,7 @@ import { type Replay } from '../server/replay-manager';
 import { type Medal } from './medals';
 import type { LockEvent } from './mission-run';
 import type { MissionModifiers, MissionSpeed } from './mission-types';
+import { type EraserPattern } from './eraser';
 import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
@@ -82,6 +83,9 @@ export declare class GameEngine {
     private nextPieceId;
     /** SQUARE mode: the scan runs after every lock (reference types 40/41). */
     private squareMode;
+    /** ERASER: the pattern a mission asked for, and how many it still needs. */
+    private eraserPattern;
+    private eraserRemaining;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -178,6 +182,14 @@ export declare class GameEngine {
      * a scan every lock is not free, and no other mode is judged on it.
      */
     setSquareMode(on: boolean): void;
+    /**
+     * Mark rows for an ERASER mission, and keep them marked.
+     *
+     * `remaining` is the norm: the reference never marks more rows than the
+     * mission still needs (mission.c:1484-1487), and marks a fresh set when
+     * every marked row has been cleared.
+     */
+    setEraserPattern(pattern: EraserPattern | null, remaining: number): void;
     setMissionSpeed(speed: MissionSpeed | null): void;
     /** The mode's curve, with the mission's own timings on top of it. */
     private speedParams;

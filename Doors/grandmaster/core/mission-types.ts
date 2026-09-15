@@ -19,6 +19,7 @@
  */
 
 import type { HiddenMode, PieceType } from './types';
+import type { EraserPattern } from './eraser';
 
 /**
  * The objectives this engine can judge, each with the reference type it comes
@@ -52,6 +53,9 @@ export const MISSION_OBJECTIVES = [
   // A free-standing 4x4 block of locked pieces (mission.c:1451-1455).
   'square',       // "SQUARE"
   'goldSquare',   // "GOLD SQUARE" - all sixteen cells one colour
+  // Rows the field marks, cleared by the piece that sits IN them.
+  'eraser',        // "ERASER"
+  'eraserHeboris', // "ERASER HEBORIS" - only a four-line clear may claim one
 ] as const;
 
 /**
@@ -210,6 +214,12 @@ export interface Mission {
    * can ask for 20G and nothing else.
    */
   speed?: MissionSpeed;
+  /**
+   * ERASER only: how many rows are marked at once and the band they appear
+   * in (the reference's `mission_opt_3` / `opt_1` / `opt_2`). See
+   * `core/eraser.ts`.
+   */
+  eraser?: EraserPattern;
   /** Rows of garbage the field starts with (mission_erase, positive side). */
   garbageRows: number;
   modifiers: MissionModifiers;

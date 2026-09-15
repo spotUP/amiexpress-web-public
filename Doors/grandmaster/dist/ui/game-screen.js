@@ -1334,6 +1334,7 @@ class GameScreen {
             : null;
         // COLOR repaints the stack as a rolling rainbow (core/color-wash.ts).
         const washed = state.missionModifiers?.color === true;
+        const marked = new Set(state.markedRows ?? []);
         // Update connected blocks cache if enabled
         // One character per block on a square-celled screen, two on a terminal.
         const cols = (0, block_width_1.blockCols)(this.screen.width);
@@ -1414,6 +1415,11 @@ class GameScreen {
                 // live piece and its ghost are drawn above this, which is what makes
                 // the mode playable at all.
                 const xrayHides = xrayColumn !== null && x !== xrayColumn;
+                // ERASER: a marked row wears a rule where it is still empty, so the
+                // player can see which rows the mission is asking for.
+                if (char === '  ' && !cell.filled && marked.has(y) && !isMasterRoll) {
+                    char = `{${door_theme_1.T.alert}-fg}--{/${door_theme_1.T.alert}-fg}`;
+                }
                 if (char === '  ' && cell.filled && (blind || xrayHides || (0, hidden_1.isCellHidden)(cell)) && !isMasterRoll) {
                     char = '  ';
                 }

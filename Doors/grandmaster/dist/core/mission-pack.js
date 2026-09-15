@@ -16,6 +16,7 @@ exports.MissionPackError = void 0;
 exports.parseMissionPack = parseMissionPack;
 exports.loadMissionPack = loadMissionPack;
 const mission_types_1 = require("./mission-types");
+const eraser_1 = require("./eraser");
 /** The GRADE forms an "erase exactly N" objective can be counted in. */
 const STRICTNESS = [
     'exact', 'atLeast', 'exactOrReset',
@@ -26,6 +27,8 @@ const STRICT_OBJECTIVES = [
     // though that door's editor labels the slot "NO OPTION".
     'single', 'double', 'triple', 'tetris', 'b2bTetris', 'doubleOrder',
 ];
+/** The two objectives that mark rows (reference types 7 and 39). */
+const ERASER_OBJECTIVES = ['eraser', 'eraserHeboris'];
 /** The ORDER family: every one of them is about a named piece. */
 const ORDER_OBJECTIVES = [
     'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
@@ -173,6 +176,39 @@ function parseMissionPack(raw, source = 'mission pack') {
             }
             speed = timings;
         }
+        /*
+         * ERASER's pattern: how many rows are marked at once, and the band they
+         * appear in. Only the two ERASER objectives read it, and they cannot be
+         * judged without it - a mission that marks no rows can never be cleared.
+         */
+        const rawEraser = m.eraser;
+        let eraser;
+        if (rawEraser !== undefined) {
+            for (const field of ['lines', 'min', 'max']) {
+                const value = rawEraser[field];
+                if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+                    fail(where, `eraser.${field} must be a whole number of rows, got ${JSON.stringify(value)}`);
+                }
+            }
+            const lines = rawEraser.lines;
+            if (lines < 1 || lines > eraser_1.MAX_MARKED_ROWS) {
+                fail(where, `eraser.lines must be between 1 and ${eraser_1.MAX_MARKED_ROWS}`);
+            }
+            if (rawEraser.min > rawEraser.max) {
+                fail(where, 'eraser.min is below eraser.max on the field: min must not exceed max');
+            }
+            eraser = {
+                lines,
+                min: rawEraser.min,
+                max: rawEraser.max,
+            };
+        }
+        if (ERASER_OBJECTIVES.includes(objective) && eraser === undefined) {
+            fail(where, `objective "${objective}" needs an eraser pattern to mark rows with`);
+        }
+        if (eraser !== undefined && !ERASER_OBJECTIVES.includes(objective)) {
+            fail(where, `objective "${objective}" does not take an eraser pattern`);
+        }
         const rawModifiers = (m.modifiers ?? {});
         const hidden = rawModifiers.hidden;
         if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -195,6 +231,7 @@ function parseMissionPack(raw, source = 'mission pack') {
             ...(requiredPiece !== undefined ? { requiredPiece } : {}),
             ...(requireHold !== undefined ? { requireHold: requireHold } : {}),
             ...(speed !== undefined ? { speed } : {}),
+            ...(eraser !== undefined ? { eraser } : {}),
             id,
             name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
             objective,

@@ -899,6 +899,8 @@ class GrandmasterApp {
             this.gameEngine.setMissionSpeed(mission.speed ?? null);
             // The square scan costs a pass over the board every lock, so only the
             // two objectives judged on it ask for it.
+            // ERASER marks rows, and re-marks them as they are claimed.
+            this.gameEngine.setEraserPattern(mission.eraser ?? null, mission.norm);
             this.gameEngine.setSquareMode(mission.objective === 'square' || mission.objective === 'goldSquare');
             this.gameEngine.onLock((event) => { missionRun.onLock(event); });
             if (mission.garbageRows > 0)

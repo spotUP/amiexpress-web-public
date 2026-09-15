@@ -268,6 +268,12 @@ export interface GameState {
    * here (the old inline copy named three of them).
    */
   missionModifiers?: MissionModifiers;
+  /**
+   * ERASER's marked rows (the reference's `eraser_lines`): the rows this
+   * mission wants cleared BY A PIECE SITTING IN THEM. Empty in every other
+   * run, and the screen draws whatever is here.
+   */
+  markedRows: number[];
   lrReverseFrames: number;
   boostFrames: number;
 }

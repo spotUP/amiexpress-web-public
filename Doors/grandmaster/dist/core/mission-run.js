@@ -178,6 +178,18 @@ class MissionRun {
             if (rows.length === wantedCount && gapOk)
                 this.current++;
         }
+        else if (objective === 'eraser' || objective === 'eraserHeboris') {
+            /*
+             * ERASER counts the MARKED rows this piece claimed. The engine does the
+             * marking and the matching, because it also draws them; the judge's
+             * question is only how many were claimed - and, for ERASER HEBORIS,
+             * whether the clear was a four-liner, since only a Heboris may claim a
+             * marked row there (mission.c:905-906).
+             */
+            if (objective === 'eraser' || event.lineCount >= 4) {
+                this.current += event.markedRowsCleared;
+            }
+        }
         else if (objective === 'square') {
             // Any square counts (gamestart.c:8678: `>= 1`).
             if (event.square >= 1)

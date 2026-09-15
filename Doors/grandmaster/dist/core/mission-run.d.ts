@@ -69,6 +69,12 @@ export interface LockEvent {
      * mission asked for the scan.
      */
     square: 0 | 1 | 2;
+    /**
+     * How many MARKED rows this lock claimed: rows the ERASER mission had
+     * marked, that the locked piece sat in, and that were cleared
+     * (`mission.c:905-947`). Always 0 unless the mission marks rows.
+     */
+    markedRowsCleared: number;
 }
 export type MissionOutcome = 'playing' | 'cleared' | 'failed';
 export interface MissionProgress {

@@ -72,6 +72,12 @@ export interface LockEvent {
    * mission asked for the scan.
    */
   square: 0 | 1 | 2;
+  /**
+   * How many MARKED rows this lock claimed: rows the ERASER mission had
+   * marked, that the locked piece sat in, and that were cleared
+   * (`mission.c:905-947`). Always 0 unless the mission marks rows.
+   */
+  markedRowsCleared: number;
 }
 
 /**
@@ -237,6 +243,17 @@ export class MissionRun {
       const gap = gapBetween(rows);
       const gapOk = objective === 'splitDouble2' ? gap === 2 : gap !== 0;
       if (rows.length === wantedCount && gapOk) this.current++;
+    } else if (objective === 'eraser' || objective === 'eraserHeboris') {
+      /*
+       * ERASER counts the MARKED rows this piece claimed. The engine does the
+       * marking and the matching, because it also draws them; the judge's
+       * question is only how many were claimed - and, for ERASER HEBORIS,
+       * whether the clear was a four-liner, since only a Heboris may claim a
+       * marked row there (mission.c:905-906).
+       */
+      if (objective === 'eraser' || event.lineCount >= 4) {
+        this.current += event.markedRowsCleared;
+      }
     } else if (objective === 'square') {
       // Any square counts (gamestart.c:8678: `>= 1`).
       if (event.square >= 1) this.current++;

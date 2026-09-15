@@ -325,6 +325,8 @@ export async function everyShippedPackIsOfferedNotJustTheFirst(): Promise<void> 
   assert.ok(names.includes('STARTER'), `STARTER is offered, got ${names.join(', ')}`);
   assert.ok(names.includes('ORDERS & SPLITS'),
     `the second shipped pack is offered too, got ${names.join(', ')}`);
+  assert.ok(names.includes('ERASER & SQUARE'),
+    `and the third, got ${names.join(', ')}`);
   assert.ok(shipped.packs.every((p) => p.origin === 'shipped'));
 
   // And one the editor writes lands beside them.
@@ -364,7 +366,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   for (const objective of [
     'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
     'splitDouble', 'splitTriple', 'splitDouble2',
-    'square', 'goldSquare',
+    'square', 'goldSquare', 'eraser', 'eraserHeboris',
   ]) {
     assert.ok(used.has(objective as any),
       `${objective} is judged but no shipped mission asks for it`);
@@ -875,4 +877,71 @@ export async function aSquareBuiltInPlayClearsTheMission(): Promise<void> {
 
   assert.strictEqual(run.getProgress().outcome, 'cleared',
     'the fourth piece closed the square, and the mission with it');
+}
+
+/**
+ * ERASER: the row has to be cleared BY A PIECE SITTING IN IT.
+ *
+ * `mission.c:905-947` walks the four cells of the piece that just locked, and
+ * a marked row only counts when the piece was in it and the row is being
+ * erased. That is the whole difficulty of the mode - the rows are easy to
+ * clear and hard to clear the way it asks.
+ */
+export async function anEraserRowCountsOnlyWhenThePieceWasInIt(): Promise<void> {
+  const { claimMarkedRows, chooseMarkedRows } = await import('../core/eraser');
+
+  // The piece sat in row 20 and rows 20 and 21 both cleared: one claim.
+  const both = claimMarkedRows([20, 21], [19, 20], [20, 21]);
+  assert.deepStrictEqual(both.claimed, [20], 'only the row the piece was in');
+  assert.deepStrictEqual(both.remaining, [21], 'and the other stays marked');
+
+  // A marked row cleared by a piece that landed elsewhere claims nothing.
+  const elsewhere = claimMarkedRows([20], [10, 11], [20]);
+  assert.deepStrictEqual(elsewhere.claimed, []);
+  assert.deepStrictEqual(elsewhere.remaining, [20], 'still marked');
+
+  // The pattern never marks more rows than the mission still needs, and
+  // never more than the reference's four.
+  const capped = chooseMarkedRows({ lines: 4, min: 18, max: 23 }, 2, 24);
+  assert.strictEqual(capped.length, 2, 'two left to do, two rows marked');
+  const four = chooseMarkedRows({ lines: 9, min: 0, max: 23 }, 9, 24);
+  assert.strictEqual(four.length, 4, 'four is the reference cap');
+  // Every row is inside the band, and no row is marked twice.
+  for (const row of four) assert.ok(row >= 0 && row <= 23);
+  assert.strictEqual(new Set(four).size, four.length, 'no duplicates');
+
+  // A band narrower than the ask marks what it can rather than spinning.
+  const narrow = chooseMarkedRows({ lines: 4, min: 22, max: 23 }, 4, 24);
+  assert.strictEqual(narrow.length, 2, 'two rows in the band, two rows marked');
+}
+
+/** And the engine claims them through a real lock, then marks a fresh set. */
+export async function theEngineClaimsMarkedRowsAndMarksMore(): Promise<void> {
+  const mission: Mission = {
+    id: 'er', name: 'ERASER', objective: 'eraser', norm: 2,
+    eraser: { lines: 1, min: 23, max: 23 },
+    timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+  };
+  const run = new MissionRun(mission);
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.onLock((event: LockEvent) => { run.onLock(event); });
+  engine.start();
+  engine.setEraserPattern(mission.eraser!, mission.norm);
+
+  assert.deepStrictEqual(engine.getState().markedRows, [23],
+    'the bottom row is marked, because the band says so');
+
+  // Fill the bottom row bar one column and drop a piece into the gap: the
+  // piece is IN the row it clears.
+  const board = engine.getState().board;
+  const bottom = board.height - 1;
+  for (let x = 0; x < board.width - 2; x++) {
+    board.grid[bottom][x] = { filled: true, color: 'J', locked: true, item: null };
+  }
+  engine.getState().currentPiece = { type: 'O', rotation: 0, x: board.width - 3, y: 0 };
+  engine.hardDrop();
+
+  assert.strictEqual(run.getProgress().current, 1, 'the marked row was claimed');
+  assert.deepStrictEqual(engine.getState().markedRows, [23],
+    'and a fresh set is marked, because the norm is not met');
 }
