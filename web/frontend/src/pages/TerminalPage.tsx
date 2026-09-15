@@ -4,6 +4,7 @@ import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 import {
   visibleHeight,
   visibleTop,
+  handheldHeight,
   keptFontSize,
   gridSizeFor,
   DEFAULT_LINE_HEIGHT_RATIO,
@@ -249,10 +250,8 @@ export function TerminalPage(): JSX.Element {
         width: band?.clientWidth || page?.clientWidth || window.innerWidth,
         height: band?.clientHeight
           // Minus the band the browser's own chrome sits over, where a
-          // browser overlays rather than insets - see visibleTop.
-          || (visibleHeight(window)
-            - visibleTop(window)
-            - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0)),
+          // browser overlays rather than insets - see handheldHeight.
+          || handheldHeight(window, isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0),
       };
     } else {
       // Desktop fit-to-window. The PAGE's content box, not the terminal's

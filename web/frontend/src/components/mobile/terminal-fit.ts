@@ -194,6 +194,28 @@ export function visibleTop(view: ViewportLike): number {
 }
 
 /** The same reasoning horizontally. */
+/**
+ * The height a handheld can actually draw into.
+ *
+ * Three subtractions, and the middle one is the Android bug from the
+ * 2026-09-06 beta: one user lost the top of the screen while others on the
+ * same phone model did not, because they were on different BROWSERS. A
+ * browser that INSETS its chrome shrinks the visual viewport and leaves
+ * `offsetTop` at 0; one that OVERLAYS it pushes the visible band DOWN
+ * instead. Sizing to `visibleHeight` alone is correct for the first and
+ * draws the top rows underneath the bar on the second.
+ *
+ * Extracted from TerminalPage so the case can be proved against a fake
+ * viewport rather than against a phone - which matters, because the phone
+ * that showed it is not always to hand.
+ *
+ * Never negative: a keyboard taller than the viewport would otherwise ask
+ * for a grid of negative height, and the fit would divide by it.
+ */
+export function handheldHeight(view: ViewportLike, onscreenInputHeight = 0): number {
+  return Math.max(0, visibleHeight(view) - visibleTop(view) - onscreenInputHeight);
+}
+
 export function visibleWidth(view: ViewportLike): number {
   const visual = view.visualViewport?.width;
   if (typeof visual !== 'number' || !Number.isFinite(visual) || visual <= 0) {

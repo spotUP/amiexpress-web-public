@@ -15,6 +15,7 @@ import {
   fitFontSize,
   visibleHeight,
   visibleTop,
+  handheldHeight,
   visibleWidth,
   keptFontSize,
   gridSizeFor,
@@ -322,5 +323,50 @@ describe('the rounding the model uses', () => {
     // 80 columns of 4.875 is 390 - measured on a phone with three device
     // pixels per CSS pixel, so xterm is not snapping columns to those either.
     expect(gridSizeFor(9.75, 80, 25, AMIGA).width).toBe(390);
+  });
+});
+
+/**
+ * The Android that lost the top of its screen.
+ *
+ * Reported in the 2026-09-06 beta: one user lost the top rows while others on
+ * the same game did not, and they were on different BROWSERS. The height maths
+ * used to live inline in TerminalPage, so the only way to check it was a
+ * phone. It is a function now, and these are the two browsers side by side.
+ */
+describe('the height a handheld can draw into', () => {
+  const OVERLAY = {
+    innerHeight: 844,
+    visualViewport: { height: 750, width: 390, offsetTop: 94 },
+  };
+  const INSET = {
+    innerHeight: 844,
+    visualViewport: { height: 750, width: 390, offsetTop: 0 },
+  };
+
+  it('gives up the band an OVERLAYING browser draws its chrome over', () => {
+    // 750 visible, of which the top 94 is under the bar.
+    expect(handheldHeight(OVERLAY)).toBe(656);
+  });
+
+  it('gives up nothing extra on a browser that INSETS its chrome', () => {
+    // The visual viewport already shrank; subtracting again would waste 94px
+    // on every browser that was never broken.
+    expect(handheldHeight(INSET)).toBe(750);
+  });
+
+  it('subtracts the on-screen input on top of both', () => {
+    expect(handheldHeight(OVERLAY, 260)).toBe(396);
+    expect(handheldHeight(INSET, 260)).toBe(490);
+  });
+
+  it('never returns a negative height, however tall the keyboard', () => {
+    // A grid of negative height would be divided by in the fit.
+    expect(handheldHeight(OVERLAY, 5000)).toBe(0);
+    expect(handheldHeight(INSET, 99999)).toBe(0);
+  });
+
+  it('is the plain visible height where there is no visualViewport at all', () => {
+    expect(handheldHeight({ innerHeight: 844 })).toBe(844);
   });
 });
