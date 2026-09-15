@@ -69,11 +69,13 @@ export async function aSolitaireHasNoHandAndNoPlayers(): Promise<void> {
   } finally { app.screen?.destroy?.(); }
 }
 
-export async function theTitleFollowsThePhaseOfTheGame(): Promise<void> {
+export async function theTitleFollowsWhatTheCallerIsLookingAt(): Promise<void> {
   /*
-   * Skitgubbe's board panel holds two different things: your own table while
-   * swapping, the pile once play starts. A fixed label would be wrong half
-   * the game, which is the failure this whole change is about.
+   * Skitgubbe's LOWER panel holds two different things - the caller's hand
+   * and the six cards in front of them - and `V` flips between them, so the
+   * title has to follow the switch. The upper panel is the middle of the
+   * table and says so whatever the phase ("the upper panel shows stack and
+   * pile", sysop 2026-09-15).
    */
   const app = await openApp();
   try {
@@ -95,14 +97,19 @@ export async function theTitleFollowsThePhaseOfTheGame(): Promise<void> {
     await app.persistState();
     await app.dealHand();
 
-    const swapping = app.vandtia.panelTitles(app.findTableById(120));
-    assert.ok(/table/i.test(swapping.board ?? ''), `the swap shows your table: ${swapping.board}`);
+    const before = app.vandtia.panelTitles(app.findTableById(120));
+    assert.ok(/pile/i.test(before.board ?? ''), `the upper panel is the table's: ${before.board}`);
+    assert.ok(/hand/i.test(before.hand ?? ''), `and the lower one is yours: ${before.hand}`);
 
-    // Ready up, and the same panel is the pile.
-    app.vandtia.primaryAction();
-    await new Promise((r) => setTimeout(r, 400));
-    const playing = app.vandtia.panelTitles(app.findTableById(120));
-    assert.ok(/pile/i.test(playing.board ?? ''), `play shows the pile: ${playing.board}`);
+    // V flips the lower panel to the cards in front of you, and back.
+    app.vandtia.toggleView();
+    const flipped = app.vandtia.panelTitles(app.findTableById(120));
+    assert.ok(/front of you/i.test(flipped.hand ?? ''), `V shows your table: ${flipped.hand}`);
+    assert.ok(/pile/i.test(flipped.board ?? ''), 'and the upper panel has not moved');
+
+    app.vandtia.toggleView();
+    assert.ok(/hand/i.test(app.vandtia.panelTitles(app.findTableById(120)).hand ?? ''),
+      'V again comes back to the hand');
   } finally { app.screen?.destroy?.(); }
 }
 

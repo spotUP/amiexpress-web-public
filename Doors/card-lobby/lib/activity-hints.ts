@@ -65,7 +65,7 @@ export function buildActivityHints(input: ActivityHintInput): string[] {
         ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pile  X Home  C Stock  R Cancel  L Leave  D Deal{/}`
         : kind === 'vandtia'
         // Three moves and the keys that make them.
-        ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take pile  L Leave  D Deal{/}`
+        ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pick  X Play  C Take  V Flip  L Leave  D Deal{/}`
         : kind === 'skitgubbe'
         // Two moves: play the card you picked, or take the one in front of
         // you. The keys are the door's existing ones - X is "do the main

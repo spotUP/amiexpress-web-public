@@ -484,7 +484,8 @@ export class GameViews {
       this.host.flopContent.setContent('Waiting for a game to start...');
       this.host.playersContent.setContent('No Skitgubbe game.');
       this.host.handContent.setContent('Press {cyan-fg}D{/} to deal.');
-      this.host.activityContent.setContent('');
+      this.host.cardButtons.clear();
+      this.host.tableCardButtons.clear();
       return;
     }
 
@@ -494,82 +495,63 @@ export class GameViews {
     const onTurn = loaded.engine.currentPlayerId();
     const swapping = state.phase === 'swap';
 
-    // The pile shows its top card - that is the only one that matters - and
-    // the hand panel shows whatever this caller is playing from.
-    const showing = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
-    const top = loaded.engine.topOfPile();
-    const blind = !swapping && loaded.engine.sourceFor(meId) === 'faceDown';
+    /*
+     * TWO PANELS, TWO JOBS.
+     *
+     * The upper one is the middle of the table - the pile and the stock -
+     * and stays that way whatever the phase. The lower one is the caller's,
+     * and they have two lots of cards: the hand, and the six in front of
+     * them. `V` flips the lower panel between those two
+     * (VandtiaGameModule.handView), so the table cards are not on screen
+     * until they are asked for - or until the hand runs out and they BECOME
+     * the cards being played. "add V to flip between my hand and my cards on
+     * the table. the upper panel shows stack and pile" (sysop, 2026-09-15).
+     */
+    const showingTable = this.host.vandtia.handView === 'table';
+    const faceDownBacks = (me?.faceDown ?? []).map(() => ({ rank: 'A', suit: 'S' }));
+    const own = [...(me?.faceUp ?? []), ...faceDownBacks];
+    const inPlay = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
+    const showing = showingTable ? own : inPlay;
+    const blind = !showingTable && !swapping && loaded.engine.sourceFor(meId) === 'faceDown';
 
-    // The hand only: the board panel is painted below, by whichever of the
-    // two rows this phase calls for.
+    // The text fallback for both panels; the widgets below cover it when the
+    // panel can hold card art.
     this.host.renderBoardAndHand([] as any, showing as any, 'auto', 'auto', true);
 
     /*
-     * THE CALLER'S OWN TABLE, in the board panel. Three cards face up in
-     * front of you and three face down under them are half of this game -
-     * they are what you swap with before play and what you are left holding
-     * at the end - and drawing only the hand made the swap impossible to
-     * perform: "i dont see any table cards i see just 3 cards" (sysop,
-     * 2026-09-15). Numbered from 4, which is the key that picks them.
+     * The top THREE of the pile, not the top one: a player who will not beat
+     * the top card takes only that card, so what lies under it is the next
+     * player's problem and worth reading before deciding.
      */
-    /*
-     * THE BOARD PANEL SHOWS WHAT MATTERS NOW.
-     *
-     * While swapping, that is the caller's OWN table - you cannot trade with
-     * a card you cannot see. Once play starts it is THE PILE, and the top
-     * THREE of it rather than the top one: a player who will not beat the
-     * top card takes only that card, so what lies under it is the next
-     * player's problem and worth reading before you decide ("i need to see
-     * the pile in skitgubbe as well... the top 3 cards", sysop 2026-09-15).
-     *
-     * The caller's own table cards do not disappear when play starts: the
-     * hand panel draws whatever they are playing FROM, so the face-up three
-     * arrive there the moment the hand runs out, which is when they matter.
-     */
-    if (swapping && me) {
-      const drewTable = this.host.tableCardButtons.renderStandard(me.faceUp as any, {
-        selected: null,
-        playable: me.faceUp.map((_, index) => index),
-        labelFrom: 4,
-        onPick: (index: number) => this.host.vandtia.selectCard(3 + index),
-        onFocus: (index: number) => this.host.vandtia.selectCard(3 + index),
-      });
-      if (!drewTable) {
-        this.host.flopContent.setContent(
-          `{${UI_THEME.accent}-fg}Your table{/}\n`
-          + `Up:   ${me.faceUp.map((card, i) => `${i + 4}:${card.rank}${card.suit}`).join('  ')}\n`
-          + `Down: ${me.faceDown.length} face down`,
-        );
-      }
-    } else {
-      const top3 = state.pile.slice(-3);
-      const drewPile = this.host.tableCardButtons.renderStandard(top3 as any, {
-        selected: null,
-        playable: [],
-        labels: false,
-        onPick: () => { /* the pile is read, not picked */ },
-      });
-      if (!drewPile) {
-        this.host.flopContent.setContent(top3.length > 0
-          ? `{${UI_THEME.accent}-fg}Pile{/} (${state.pile.length})\n`
-            + top3.map((card) => `${card.rank}${card.suit}`).join('  ')
-          : 'The pile is empty - lead anything.');
-      }
+    const top3 = state.pile.slice(-3);
+    const drewPile = this.host.tableCardButtons.renderStandard(top3 as any, {
+      selected: null,
+      playable: [],
+      labels: false,
+      onPick: () => { /* the pile is read, not picked */ },
+    });
+    if (!drewPile) {
+      this.host.flopContent.setContent(top3.length > 0
+        ? `{${UI_THEME.accent}-fg}Pile{/} ${state.pile.length}   `
+          + `{${UI_THEME.dim}-fg}Stock ${state.stock.length}{/}\n`
+          + top3.map((card) => `${card.rank}${card.suit}`).join('  ')
+        : `The pile is empty - lead anything.\n{${UI_THEME.dim}-fg}Stock ${state.stock.length}{/}`);
     }
 
-    /*
-     * ...and then the same cards as WIDGETS, so they can be clicked and
-     * tabbed to. It falls back to the text the line above drew when the
-     * panel is too small for full-size cards, which is why both run.
-     */
+    // The caller's own cards, as widgets: clickable, focusable, and lit when
+    // picked. The six in front of them are shown rather than played from -
+    // the moment they become playable they are what `cardsInPlay` returns.
     this.host.cardButtons.renderStandard(showing as any, {
-      selected: swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
-      playable: swapping
-        ? (me?.hand ?? []).map((_, index) => index)
-        : loaded.engine.legalPlays(meId),
+      selected: showingTable ? null
+        : swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
+      playable: showingTable ? []
+        : swapping ? (me?.hand ?? []).map((_, index) => index)
+          : loaded.engine.legalPlays(meId),
       faceDown: blind,
-      onFocus: (index: number) => this.host.vandtia.selectCard(index),
+      labels: !showingTable,
+      onFocus: (index: number) => { if (!showingTable) this.host.vandtia.selectCard(index); },
       onPick: (index: number) => {
+        if (showingTable) return;
         this.host.vandtia.selectCard(index);
         // A click is the whole move at a table: pick it and play it. During
         // the swap it only picks, because the second half of a swap is the
@@ -580,12 +562,6 @@ export class GameViews {
       },
     });
 
-    /*
-     * TIGHT. These panels are seven rows on an 80x25 board, and the first
-     * draft spent four of them on prose - which pushed the player rows and
-     * the key legend below the fold, where the sysop could not see either
-     * (screenshot, 2026-09-15). Everything here earns its line.
-     */
     const lines: string[] = [];
     lines.push(swapping
       ? `{cyan-fg}SWAP{/}  Stock ${state.stock.length}`

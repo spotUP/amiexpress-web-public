@@ -126,7 +126,20 @@ export function attachKeyBindings(host: KeyBindingHost): void {
      * The number keys below are a shortcut to the first ten cards, not the
      * only way in - a hand can be longer than ten (2026-09-15).
      */
-    host.screen.key(['left', 'h'], () => {
+    /*
+   * V: the caller's other cards. A game with two lots of them says what the
+   * alternative is (lib/games/types.ts, `toggleView`); games with one ignore
+   * the key.
+   */
+  host.screen.key(['v'], () => {
+    if (host.modalActive || host.viewMode !== 'table') return;
+    const table = host.currentProfile?.currentTableId
+      ? host.findTableById(host.currentProfile.currentTableId)
+      : null;
+    host.gameModuleFor(table)?.toggleView?.();
+  });
+
+  host.screen.key(['left', 'h'], () => {
       if (host.modalActive || host.viewMode !== 'table') return;
       const table = host.currentProfile?.currentTableId
         ? host.findTableById(host.currentProfile.currentTableId)

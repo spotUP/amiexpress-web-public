@@ -98,6 +98,16 @@ export interface TableGameModule {
   updateActionButtons?(table: LobbyTable): void;
 
   /**
+   * `V`: show the other thing.
+   *
+   * A game can have more on the table than one panel holds - in Skitgubbe
+   * your own three face-up cards and the pile both matter, at different
+   * moments - and guessing which the caller wants is a guess. So the door
+   * shows whichever suits the phase and this key changes its mind.
+   */
+  toggleView?(): void;
+
+  /**
    * What the table's panels are called while this game is up.
    *
    * They were named for poker and never renamed, so a Skitgubbe swap

@@ -20,6 +20,14 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const utils_1 = require("../../utils");
 const engine_1 = require("./engine");
 class VandtiaGameModule {
+    toggleView() {
+        this.handView = this.handView === 'hand' ? 'table' : 'hand';
+        this.selectedCardIndex = null; // the numbers now mean other cards
+        this.host.pushNotice(this.handView === 'table'
+            ? 'Showing the cards in front of you. V shows your hand.'
+            : 'Showing your hand. V shows the cards in front of you.');
+        this.host.updateAllPanels();
+    }
     constructor(host) {
         this.host = host;
         this.ids = ['skitgubbe'];
@@ -29,6 +37,18 @@ class VandtiaGameModule {
         this.selectedCardIndex = null;
         /** During the swap: the hand card waiting for a table card to change with. */
         this.selectedHandIndex = null;
+        /**
+         * WHICH OF THE CALLER'S CARDS the hand panel shows.
+         *
+         * The upper panel is the middle of the table - the pile and the stock -
+         * and stays that way; the lower one is yours, and you have two lots: the
+         * cards in your hand and the six in front of you. `V` flips between them
+         * ("add V to flip between my hand and my cards on the table. the upper
+         * panel shows stack and pile", sysop 2026-09-15), which also answers the
+         * complaint it came from: the table cards are not on screen at all until
+         * you ask for them, or until they become the cards you are playing.
+         */
+        this.handView = 'hand';
     }
     // ------------------------------------------------------------------
     // State
@@ -376,10 +396,13 @@ class VandtiaGameModule {
         const meId = this.host.currentProfile?.userId;
         const source = loaded && meId ? loaded.engine.sourceFor(meId) : 'hand';
         return {
-            board: swapping ? 'Your table' : 'The pile',
+            // The middle of the table, always.
+            board: 'Pile and stock',
             players: 'Players',
-            hand: swapping ? 'Your hand' : source === 'faceUp' ? 'Your table cards'
-                : source === 'faceDown' ? 'Face down' : 'Your hand',
+            hand: this.handView === 'table' ? 'In front of you'
+                : swapping ? 'Your hand'
+                    : source === 'faceUp' ? 'Your table cards'
+                        : source === 'faceDown' ? 'Face down' : 'Your hand',
         };
     }
     /**
@@ -403,7 +426,7 @@ class VandtiaGameModule {
             return [
                 me.ready
                     ? '{cyan-fg}Ready.{/} Waiting for the others...'
-                    : '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} when ready',
+                    : '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}V{/} flip  {cyan-fg}X{/} ready',
                 `Hand ${me.hand.map((card, i) => (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
                     + ':' + label(card)).join('  ')}`,
                 `Tbl  ${me.faceUp.map((card, i) => `{green-fg}${i + 4}{/}:` + label(card)).join('  ')}`,
@@ -428,7 +451,8 @@ class VandtiaGameModule {
             return [`{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile`];
         }
         return [
-            `Play ${keys}  {cyan-fg}X{/} plays it${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`,
+            `Play ${keys}  {cyan-fg}X{/} plays${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`
+                + `  {cyan-fg}V{/} ${this.handView === 'table' ? 'hand' : 'my table'}`,
             top ? `On the pile: ${label(top)}${where}` : `Lead anything${where}`,
         ];
     }
