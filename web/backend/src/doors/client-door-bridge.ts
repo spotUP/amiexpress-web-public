@@ -6,6 +6,7 @@
 import { Socket } from 'socket.io';
 import { debugLog } from '../utils/debug-log';
 import { newMotionThrottle, shouldForwardInput } from './input-motion-throttle';
+import { repeatReachesDoor } from '../services/game-mode.service';
 import type { BBSSession } from '../index';
 
 // Import SDK protocol types
@@ -288,8 +289,18 @@ console.log(`[ClientDoorBridge] mouse-click received:`, data);
     (doorSession as any).mouseHoverHandler = mouseHoverHandler;
 
     // Game mode key event handlers (for smooth key repeat without OS delay)
-    const keyDownHandler = (data: { key: string; code: string }) => {
+    const keyDownHandler = (data: { key: string; code: string; repeat?: boolean }) => {
       if (!doorSession.active) return;
+      /*
+       * The browser's auto-repeat of a HELD key comes through this same
+       * event. A door in APPLICATION repeat wants one delivery per press for
+       * anything that is not steering - the card lobby's `V` turned its panel
+       * over once per repeat and landed back where it started (sysop,
+       * 2026-09-15). `repeatReachesDoor` owns that decision, for this path
+       * and for the byte path in socket-handlers alike.
+       */
+      if (data.repeat === true
+        && !repeatReachesDoor(doorSession.bbsSession.doorKeyRepeatMode, data.key)) return;
       // Send key-down as INPUT with special format so door can track held keys
       this.sendMessage(doorSession, {
         type: MessageType.INPUT,

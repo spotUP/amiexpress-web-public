@@ -158,7 +158,7 @@ export function classifyKey(ev: KeyLike, state: TerminalKeyState): TerminalKeyAc
 export type KeyRepeatMode = 'game' | 'application';
 
 /**
- * Keys that never auto-repeat, whatever the mode.
+ * Keys that never auto-repeat, whatever the door.
  *
  * Movement and action keys in an arcade door: the door polls the held-key
  * state instead, so a synthetic repeat would double every press.
@@ -169,28 +169,18 @@ const NEVER_REPEAT = new Set([
   'Escape', 'Enter', 'Tab',
 ]);
 
-/** Keys that STEER: a list scrolls, a cursor walks, a hand of twenty is read. */
-const NAVIGATION = new Set([
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'PageUp', 'PageDown', 'Home', 'End', 'Backspace', 'Delete',
-]);
-
 /**
  * May this key repeat while it is held?
  *
- * "pressing v flicks back directly" (sysop, 2026-09-15). V turns the card
- * lobby's lower panel over; a press held past the 400ms repeat delay sent the
- * key again, and again, so the panel turned an even number of times and
- * landed back where it started. The same repeat throws a second card now that
- * a repeated card key plays the card it picked.
- *
- * So: in APPLICATION mode - a door whose screen is a list or a table - a key
- * is a COMMAND and gets one delivery per press, and only the keys that STEER
- * repeat. That is what application mode's slower rate was always for. GAME
- * mode is untouched: an arcade door is built on these repeats.
+ * Only the long-standing never-repeat list lives here. WHETHER A REPEAT
+ * REACHES THE DOOR is decided on the SERVER, in
+ * `web/backend/src/services/game-mode.service.ts` (`repeatReachesDoor`),
+ * because the browser's copy of a rule only arrives when the caller reloads:
+ * the sysop held `V` with a tab carrying the previous night's bundle and the
+ * repeats came through anyway (2026-09-15). One rule, in the place a stale
+ * client cannot opt out of - and so this file does not keep a second copy of
+ * the navigation-key list to drift from it.
  */
-export function mayAutoRepeat(key: string, mode: KeyRepeatMode): boolean {
-  if (NEVER_REPEAT.has(key)) return false;
-  if (mode === 'application') return NAVIGATION.has(key);
-  return true;
+export function mayAutoRepeat(key: string): boolean {
+  return !NEVER_REPEAT.has(key);
 }

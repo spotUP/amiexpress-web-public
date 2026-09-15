@@ -67,6 +67,7 @@ const DISCONNECT_GRACE_MS = 15000;
 // Re-exported here for backwards compatibility with handlers that already
 // import from socket-handlers.
 export { enableGameMode, disableGameMode } from '../services/game-mode.service';
+import { repeatReachesDoor } from '../services/game-mode.service';
 import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
 import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
@@ -568,6 +569,14 @@ console.log('[socket-handlers] keys:state received:', data);
       }
     } else if (session.inDoorManager && session.doorInputHandler) {
       // SDK doors: send directly to input handler (no repeat, they handle their own)
+      //
+      // ...except the browser's own auto-repeat, which arrives here as another
+      // key-down carrying `repeat: true`. A door in APPLICATION repeat asked
+      // for a menu, where a key is a command: one press, one delivery. See
+      // `repeatReachesDoor` for the whole argument (2026-09-15).
+      if (data.repeat === true && !repeatReachesDoor(session.doorKeyRepeatMode, data.key)) {
+        return;
+      }
       const base = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
       if (base) {
         // Alt is ESC before the key, which is how a terminal has always

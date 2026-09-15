@@ -63,11 +63,23 @@ describe('what the browser is told when game mode goes on', () => {
     expect(socket.emitted).toContainEqual(['key-repeat-mode', 'application']);
   });
 
-  it('puts the arcade rate back when the door exits', () => {
+  it('puts the arcade rate back when the door exits, and KEEPS the mode', () => {
+    /*
+     * The emitted rate goes back to arcade for whatever runs next - the
+     * board's own prompts never saw anything else - but the SESSION keeps
+     * what the door declared. 9d4df0f5a changed that deliberately and this
+     * assertion was left behind asserting the old contract, so main has been
+     * one test red since: a HYBRID door launches its client half and its
+     * server half in one breath, something disables game mode in between, and
+     * clearing the mode there left the second enable with nothing to say -
+     * CARDLOBBY ran at the arcade rate with `KEY_REPEAT=application` in its
+     * icon, doing nothing. Every launch route sets the field afresh, so a
+     * stale value cannot survive into the next door.
+     */
     const socket = makeSocket();
     const session: any = { doorKeyRepeatMode: 'application', keyState: {} };
     disableGameMode(socket as any, session);
     expect(socket.emitted).toContainEqual(['key-repeat-mode', 'game']);
-    expect(session.doorKeyRepeatMode).toBeUndefined();
+    expect(session.doorKeyRepeatMode).toBe('application');
   });
 });

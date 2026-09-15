@@ -53,6 +53,46 @@ export function declaredKeyRepeatMode(door: unknown): KeyRepeatMode {
 }
 
 /**
+ * Keys that STEER: a list scrolls, a cursor walks, a hand of twenty is read
+ * left to right. These are the only ones worth repeating in a door whose
+ * screen is a table.
+ */
+const NAVIGATION_KEYS = new Set([
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'PageUp', 'PageDown', 'Home', 'End', 'Backspace', 'Delete',
+]);
+
+/**
+ * SHOULD THIS AUTO-REPEAT REACH THE DOOR?
+ *
+ * "pressing v flicks back directly" (sysop, 2026-09-15). The browser repeats
+ * a held key - after 400ms, then every 30ms in `game` mode and every 120ms in
+ * `application` - and both of the paths a key takes to a door pass those
+ * repeats straight through: the byte path in `socket-handlers.ts` and the
+ * client-door bridge, neither of which looked at `repeat`. V turns the card
+ * lobby's lower panel over, so a press held half a second turned it over
+ * several times and left it where it started.
+ *
+ * The rule is HERE, on the server, and not in the browser, for one reason:
+ * the browser's copy of it only arrives when the caller reloads. The sysop
+ * held V with a tab that still had last night's JavaScript, and the repeats
+ * came through at exactly 129ms apart - the application rate - with a fix
+ * sitting in a bundle his tab had not fetched. A rule that a stale client can
+ * opt out of is not a rule.
+ *
+ * In `application` mode a key is a COMMAND and gets one delivery per press;
+ * only the keys that steer repeat. `game` mode is untouched - an arcade
+ * door's movement is built ON these repeats.
+ */
+export function repeatReachesDoor(
+  mode: KeyRepeatMode | undefined,
+  key: string,
+): boolean {
+  if ((mode ?? 'game') !== 'application') return true;
+  return NAVIGATION_KEYS.has(key);
+}
+
+/**
  * Tell the browser which repeat to use for the door now running.
  *
  * One emitter for every route into game mode - a client door, a hybrid

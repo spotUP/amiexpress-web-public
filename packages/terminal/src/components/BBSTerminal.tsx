@@ -325,6 +325,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * WHICH keys may repeat at all.
    */
   const keyRepeatModeRef = useRef<'game' | 'application'>('game');
+  /** How long a key must be held before the repeat starts; see the two delays. */
+  const keyRepeatDelayRef = useRef<number>(400);
   const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1503,9 +1505,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
     // Typing keys have initial delay before repeat for single character typing
     // Delay is long enough for comfortable typing while still responsive for games
-    // How long a key must be HELD before the synthetic repeat starts. Shared
-    // by both modes: it is the typing guard, not the movement rate.
-    const KEY_REPEAT_DELAY = 400;  // Initial delay before repeat starts (ms) - safe for typing
+    /*
+     * How long a key must be HELD before the synthetic repeat starts.
+     *
+     * NOT shared by the two modes, and the sysop found out why: "doorman has
+     * sound now but sometimes skips two in the menu", and the card lobby
+     * "jumps 2 rows". Neither is the repeat RATE - it is this delay. A tap
+     * that happens to last over 400ms is read as a hold, fires one repeat,
+     * and the selection moves twice for one press. At the arcade rate that
+     * was "two ore more entries"; at the menu rate it is exactly two, which
+     * is what a single extra repeat looks like.
+     *
+     * An arcade door wants the old number: a held direction should engage
+     * quickly, and a Sno-Bee that hesitates for half a second feels broken.
+     * A MENU wants what an operating system uses - X11 defaults to 660ms,
+     * Windows and macOS to about 500 - because there the cost of guessing
+     * wrong is a row nobody asked for.
+     *
+     * This works WITH `mayAutoRepeat`, which decides WHICH keys may repeat at
+     * all in application mode; this decides how long to wait before believing
+     * one of them is held.
+     */
+    const GAME_REPEAT_DELAY = 400;         // arcade: engage quickly
+    const APPLICATION_REPEAT_DELAY = 600;  // menu: a long tap is still a tap
     /*
      * TWO REPEAT MODES, chosen by the door - the sysop's distinction,
      * 2026-09-15: "game mode or application mode".
@@ -1534,7 +1556,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
        * the keys that STEER repeat; everything else is one press, one
        * delivery ("pressing v flicks back directly", sysop 2026-09-15).
        */
-      if (!mayAutoRepeat(key, keyRepeatModeRef.current)) {
+      if (!mayAutoRepeat(key)) {
         return;
       }
       // Physical identity: 'L'-down + 'l'-up (Shift released first) is one
@@ -1562,7 +1584,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       };
 
       // Start repeat after initial delay (allows single character typing)
-      keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
+      keyRepeatTimers.current[id] = setTimeout(repeatKey, keyRepeatDelayRef.current);
     };
 
     const stopKeyRepeat = (key: string) => {
@@ -2957,9 +2979,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * before this existed.
      */
     socket.on('key-repeat-mode', (mode: string) => {
-      keyRepeatModeRef.current = mode === 'application' ? 'application' : 'game';
-      keyRepeatRateRef.current = mode === 'game' ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;
-      console.log('[BBSTerminal] key repeat mode:', mode, keyRepeatRateRef.current + 'ms');
+      const game = mode !== 'application';
+      keyRepeatModeRef.current = game ? 'game' : 'application';
+      keyRepeatRateRef.current = game ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;
+      keyRepeatDelayRef.current = game ? GAME_REPEAT_DELAY : APPLICATION_REPEAT_DELAY;
+      console.log(
+        '[BBSTerminal] key repeat mode:', keyRepeatModeRef.current,
+        `${keyRepeatDelayRef.current}ms then ${keyRepeatRateRef.current}ms`,
+      );
     });
 
 
