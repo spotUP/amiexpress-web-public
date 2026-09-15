@@ -1437,6 +1437,32 @@ class UIManager {
      * lit up" (sysop, 2026-09-15). Each panel is asked whether the focused
      * widget is inside it, and coloured accordingly.
      */
+    /**
+     * Name the table's panels for the game that is up.
+     *
+     * The labels are set once when the panels are built, for poker, and every
+     * game since has played under them - a Skitgubbe swap happening beneath
+     * "FLOP - Board not dealt yet.", a solitaire's piles beneath "YOUR HAND"
+     * (the sysop's own screenshots, 2026-09-15). A panel whose title describes
+     * a different game is worse than an unlabelled one.
+     *
+     * A game says what it wants called what; anything it leaves out keeps the
+     * name it has, so poker needs no entry at all.
+     */
+    setPanelTitles(titles) {
+        const put = (panel, title, fallback) => {
+            if (!panel)
+                return;
+            const wanted = ` ${(title ?? fallback).toUpperCase()} `;
+            if (panel.__title === wanted)
+                return; // no repaint for no change
+            panel.__title = wanted;
+            panel.setLabel?.(wanted);
+        };
+        put(this.flopPanel, titles.board, 'FLOP');
+        put(this.playersPanel, titles.players, 'PLAYERS');
+        put(this.handPanel, titles.hand, 'YOUR HAND');
+    }
     highlightFocusedPanel() {
         /*
          * `getFocused()`, NOT `screen.focused`: in this blessed port `focused` is

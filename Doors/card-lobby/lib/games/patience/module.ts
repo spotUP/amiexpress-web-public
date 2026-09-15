@@ -338,6 +338,15 @@ export class PatienceGameModule implements TableGameModule {
     painter.renderPatienceGameView(table);
   }
 
+  /** A solitaire has no players and no hand: it has piles and columns. */
+  public panelTitles(table: LobbyTable): { board?: string; players?: string; hand?: string } {
+    return {
+      board: 'Foundations and stock',
+      players: this.definitionFor(table)?.title ?? 'Patience',
+      hand: 'Columns',
+    };
+  }
+
   public updateActionButtons(table: LobbyTable): void {
     const engine = this.load(table);
     const stock = engine?.pileOfType('stock');

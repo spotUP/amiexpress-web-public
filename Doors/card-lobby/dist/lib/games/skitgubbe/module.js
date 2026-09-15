@@ -282,6 +282,9 @@ class SkitgubbeGameModule {
     render(painter, table) {
         painter.renderSkitgubbeGameView(table);
     }
+    panelTitles() {
+        return { board: 'The trick', players: 'Players', hand: 'Your hand' };
+    }
     /** DEAL / PLAY and TAKE - the only two moves this game has. */
     updateActionButtons(table) {
         const loaded = this.load(table);

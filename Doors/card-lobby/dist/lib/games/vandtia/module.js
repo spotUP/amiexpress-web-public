@@ -369,6 +369,19 @@ class VandtiaGameModule {
     render(painter, table) {
         painter.renderVandtiaGameView(table);
     }
+    /** The board panel changes hands mid-game, and the title says so. */
+    panelTitles(table) {
+        const loaded = this.load(table);
+        const swapping = loaded?.engine.state.phase === 'swap';
+        const meId = this.host.currentProfile?.userId;
+        const source = loaded && meId ? loaded.engine.sourceFor(meId) : 'hand';
+        return {
+            board: swapping ? 'Your table' : 'The pile',
+            players: 'Players',
+            hand: swapping ? 'Your hand' : source === 'faceUp' ? 'Your table cards'
+                : source === 'faceDown' ? 'Face down' : 'Your hand',
+        };
+    }
     /**
      * The keys, for the activity panel - which is painted by one writer that
      * runs after `render()`, so a legend written into the widget directly does

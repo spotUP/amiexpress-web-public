@@ -335,6 +335,14 @@ class PatienceGameModule {
     render(painter, table) {
         painter.renderPatienceGameView(table);
     }
+    /** A solitaire has no players and no hand: it has piles and columns. */
+    panelTitles(table) {
+        return {
+            board: 'Foundations and stock',
+            players: this.definitionFor(table)?.title ?? 'Patience',
+            hand: 'Columns',
+        };
+    }
     updateActionButtons(table) {
         const engine = this.load(table);
         const stock = engine?.pileOfType('stock');

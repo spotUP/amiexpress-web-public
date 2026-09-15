@@ -98,6 +98,19 @@ export interface TableGameModule {
   updateActionButtons?(table: LobbyTable): void;
 
   /**
+   * What the table's panels are called while this game is up.
+   *
+   * They were named for poker and never renamed, so a Skitgubbe swap
+   * happened under "FLOP - Board not dealt yet." and a solitaire's piles
+   * under "YOUR HAND" (the sysop's own screenshots, 2026-09-15). A panel
+   * whose title describes a different game is worse than an unlabelled one:
+   * it tells the reader they are looking at something they are not.
+   *
+   * Anything a game leaves out keeps the name it has.
+   */
+  panelTitles?(table: LobbyTable): { board?: string; players?: string; hand?: string };
+
+  /**
    * What the caller should be told to press right now, for the activity
    * panel.
    *

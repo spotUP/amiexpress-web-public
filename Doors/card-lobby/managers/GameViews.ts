@@ -137,6 +137,9 @@ export class GameViews {
       // chain of "is this UNO?" (lib/games/types.ts).
       const module = this.host.gameModuleFor(table);
       if (module) {
+        // Name the panels before filling them, so a game never draws under
+        // another game's heading.
+        this.host.uiManager.setPanelTitles(module.panelTitles?.(table) ?? {});
         module.render(this, table);
       } else {
         this.renderPokerGameView(table);

@@ -31,6 +31,13 @@ class HoldemGameModule {
     secondaryAction() { this.host.triggerFold(); }
     tertiaryAction() { this.host.triggerRaise(); }
     updateActionButtons(table) { this.host.updatePokerActionButtons(table); }
+    /**
+     * "FLOP" was only ever right for the first three cards; the panel carries
+     * the turn and the river too. BOARD is the word for all of it.
+     */
+    panelTitles() {
+        return { board: 'Board', players: 'Players', hand: 'Your hand' };
+    }
 }
 exports.HoldemGameModule = HoldemGameModule;
 /** UNO and its house-rules variant. */
@@ -56,6 +63,9 @@ class UnoGameModule {
     /** At an UNO table Q is CHALLENGE, not quit. */
     quitAction() { this.host.triggerUnoChallenge(); return true; }
     updateActionButtons(table) { this.host.updateUnoActionButtons(table); }
+    panelTitles() {
+        return { board: 'Discard', players: 'Players', hand: 'Your hand' };
+    }
 }
 exports.UnoGameModule = UnoGameModule;
 class GameRegistry {

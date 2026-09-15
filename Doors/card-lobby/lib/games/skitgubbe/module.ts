@@ -330,6 +330,10 @@ export class SkitgubbeGameModule implements TableGameModule {
     painter.renderSkitgubbeGameView(table);
   }
 
+  public panelTitles(): { board?: string; players?: string; hand?: string } {
+    return { board: 'The trick', players: 'Players', hand: 'Your hand' };
+  }
+
   /** DEAL / PLAY and TAKE - the only two moves this game has. */
   public updateActionButtons(table: LobbyTable): void {
     const loaded = this.load(table);
