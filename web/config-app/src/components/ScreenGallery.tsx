@@ -245,7 +245,12 @@ function GalleryCard(
     <button
       ref={ref}
       type="button"
-      className="text-left border border-border hover:border-border-strong p-2 space-y-1"
+      /* `block w-full` because this button is no longer the grid item itself -
+         a wrapper holds it and the drift line below it. A button is
+         inline-block by default, so without these it shrink-wraps its content
+         and the card overflows its column, which is what broke the gallery
+         layout the moment the drift line was added. */
+      className="block w-full text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
       <div className={`relative h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
@@ -351,7 +356,11 @@ function DriftDisclosure({ item }: { item: GalleryItem }) {
       <button
         type="button"
         onClick={event => { event.stopPropagation(); setOpen(value => !value); }}
-        className="block w-full text-left truncate text-status-warn underline decoration-dotted"
+        /* `text-xs` explicitly: the card's own labels get it from the text
+           block INSIDE the button, and this line lives outside that button so
+           it inherits the page size instead - which made the drift line the
+           largest thing in the gallery. */
+        className="block w-full text-left truncate text-xs text-status-warn underline decoration-dotted"
         data-testid="drift"
       >
         {item.versions} versions
@@ -360,7 +369,7 @@ function DriftDisclosure({ item }: { item: GalleryItem }) {
           : ''}
       </button>
       {open && (
-        <ul className="mt-1 space-y-0.5 text-content-secondary">
+        <ul className="mt-1 space-y-0.5 text-xs text-content-secondary">
           {others.map(version => {
             const file = version[0];
             const where = version
@@ -410,7 +419,7 @@ export function ScreenGallery({ items, onOpen, isLoading = false, theme }: Scree
       className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
       {items.map(item => (
-        <div key={item.path} className="space-y-1">
+        <div key={item.path} className="min-w-0 space-y-1">
           <GalleryCard item={item} onOpen={onOpen} theme={theme} />
           {/* OUTSIDE the card's own <button>. A button inside a button is
               invalid HTML, and React says so - the drift control was briefly
