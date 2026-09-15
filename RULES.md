@@ -61,6 +61,35 @@ Type-check + tests + zero lint warnings required before commits. `tsc --noEmit` 
 - **Read the backend log first** when debugging anything BBS-side: `logs/backend.log`.
 - **No guessing on BBS behavior.** Match AmiExpress exactly; every change backed by `express.e` / disassembly / official docs. Stronger than the global "no guessing" — see Rule 1 below.
 
+### Session cost — read output, do not inhale it
+
+A long session is re-sent with every turn, so the expensive thing is not the
+work: it is everything the session is still holding while it works. Measured
+2026-09-16 on this project: 97% of a day's spend at >150k context, 89% from
+sessions running 8+ hours, 54% with four or more sessions in one tree.
+
+1. **Large output goes to a file, then gets grepped.** The scratchpad path is
+   in the environment; use it. `npm test > "$SP/t.log" 2>&1` then
+   `grep -nE '^(FAIL|Tests:)' "$SP/t.log"`. `docker logs` ALWAYS through a
+   grep with a pattern. To read code, `sed -n 'A,Bp'` or `grep -A/-B` - never
+   `cat` a 1000-line file to see one function, and never read a subagent's
+   transcript file.
+2. **`head` is for reading, never for evidence.** Counting proves absence;
+   capping invents it (`grep -c`, not `grep | head`).
+3. **Clear or compact at TASK boundaries.** Every landed commit here is one.
+   `handoff.md` and `thoughts/BOARD.md` exist so a fresh session can pick the
+   thread up - use them instead of carrying four tasks in one context.
+4. **Two parallel sessions in this tree, not four.** They share one limit, and
+   collisions cost tokens to find: one session's commit swept up another's 41
+   staged files on 2026-09-16, and `docker-entrypoint.sh` was being edited by
+   two at once the same night.
+5. **Search subagents run on a cheap model** (Sonnet/Haiku for "where does X
+   live"); Opus is for subagents that ANALYSE. One agent with a list beats
+   three on the same files.
+6. **Poll a deploy once with a long wait**, not every 30 seconds: every poll
+   that finishes wakes the session with its whole context attached. Verify by
+   `/health` revision (`pgrep` lies - it matches day-old waiter processes).
+
 ### Server Lifecycle
 
 Use `./dev/scripts/start-servers.sh` and `./dev/scripts/kill-servers.sh`. Rules:
