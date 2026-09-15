@@ -1,0 +1,39 @@
+theme {
+  name cp437
+  title "Code page 437 (DOS)"
+  utf8 0
+  heart   
+  spade   
+  diamond 
+  club    
+  width 6
+  height 4
+  empty {
+    top    ÚÄÄÄÄ¿
+    middle ³    ³
+    bottom ÀÄÄÄÄÙ
+    fg white
+    bg black
+  }
+  back {
+    top    ÚÄÄÄÄ¿
+    middle ³    ³
+    bottom ÀÄÄÄÄÙ
+    fg white
+    bg blue
+  }
+  red {
+    top    ÚÄÄÄÄ¿
+    middle ³    ³
+    bottom ÀÄÄÄÄÙ
+    fg red
+    bg white
+  }
+  black {
+    top    ÚÄÄÄÄ¿
+    middle ³    ³
+    bottom ÀÄÄÄÄÙ
+    fg black
+    bg white
+  }
+}

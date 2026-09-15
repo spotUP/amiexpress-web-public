@@ -66,6 +66,14 @@ export interface PlayerStats {
  * fit whatever panel the card lands in.
  */
 export interface CardPreferences {
+  /**
+   * Which DECK the cards are drawn from - a `.theme` file under the door's
+   * `themes/`, by name, or `built-in` for the engine's own drawing.
+   *
+   * A themed deck decides the card's whole shape, so the settings below
+   * (style, size) only apply to the built-in one.
+   */
+  deck?: string;
   /** 'ascii' suits every terminal; 'unicode' needs a client that can draw it. */
   style?: 'ascii' | 'unicode';
   /** The back of a face-down card. */

@@ -19,7 +19,7 @@ import { CardEngine } from '@amiexpress/bbs-door-sdk';
 import type { CardPreferences } from '../lib/types';
 import { UI_THEME } from '../lib/constants';
 import { ansiToBlessedTags } from '../lib/utils';
-import { resolveCardStyle, CARD_STYLE_CHOICES, toRenderOptions } from '../lib/card-style';
+import { resolveCardStyle, CARD_STYLE_CHOICES, deckChoices, toRenderOptions } from '../lib/card-style';
 
 const cardEngine = new CardEngine();
 
@@ -44,6 +44,15 @@ interface Setting {
 }
 
 const SETTINGS: Setting[] = [
+  {
+    /*
+     * FIRST, because it decides the rest: a themed deck carries its own
+     * frame, size and suit glyphs, so the settings under it only shape the
+     * built-in drawing. The names come from the files themselves.
+     */
+    key: 'deck', label: 'Deck',
+    names: { 'built-in': 'Built in' },
+  },
   {
     key: 'size', label: 'Card size',
     names: { auto: 'Fit the panel', full: 'Always big', mini: 'Always small' },
@@ -76,14 +85,24 @@ const SETTINGS: Setting[] = [
 ];
 
 /** The value a setting holds when the player has never touched it. */
-const defaultValue = (key: SettingKey): string => CARD_STYLE_CHOICES[key][0];
+const defaultValue = (key: SettingKey): string => choicesFor(key)[0];
 
 const valueOf = (preferences: CardPreferences, key: SettingKey): string =>
   (preferences[key] as string | undefined) ?? defaultValue(key);
 
 /** Step a setting one place along its ring, in either direction. */
+/**
+ * The values a setting cycles through.
+ *
+ * Every setting but one is a fixed list. The DECK is whatever `.theme` files
+ * the door ships, read from disk, so a board that draws its own gets it in
+ * this menu without a code change (lib/card-style.ts).
+ */
+const choicesFor = (key: SettingKey): readonly string[] =>
+  (key === 'deck' ? deckChoices() : CARD_STYLE_CHOICES[key]) as readonly string[];
+
 const cycle = (preferences: CardPreferences, key: SettingKey, step: number): void => {
-  const ring = CARD_STYLE_CHOICES[key] as readonly string[];
+  const ring = choicesFor(key);
   const at = ring.indexOf(valueOf(preferences, key));
   const next = ring[(at + step + ring.length) % ring.length];
   (preferences as Record<string, string>)[key] = next;

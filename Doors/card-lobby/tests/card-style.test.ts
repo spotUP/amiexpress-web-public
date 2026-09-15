@@ -233,23 +233,36 @@ export async function thePanelStaysOpenWhileSettingsChange(): Promise<void> {
       await new Promise((r) => setTimeout(r, 60));
     };
 
+    /*
+     * The rows in order. DECK is first now - it decides the rest, since a
+     * themed deck carries its own frame, size and glyphs - so reaching the
+     * card size takes one `down` that this test did not used to need.
+     */
+    await press('right');                 // deck
+    await press('down');
     await press('right');                 // card size
     await press('down');
     await press('right');                 // card faces
     await press('down'); await press('down'); await press('down');
     await press('right');                 // hand layout
 
-    assert.strictEqual(changes.length, 3, 'each key changed one setting');
+    assert.strictEqual(changes.length, 4, 'each key changed one setting');
     assert.strictEqual(settled, false, 'and the panel is still open');
-    assert.strictEqual(changes[0].size, 'full');
-    assert.strictEqual(changes[1].style, 'unicode');
-    assert.strictEqual(changes[2].layout, 'flat');
+    assert.ok(changes[0].deck && changes[0].deck !== 'built-in',
+      `the first row picks a deck the door ships: ${changes[0].deck}`);
+    assert.strictEqual(changes[1].size, 'full');
+    assert.strictEqual(changes[2].style, 'unicode');
+    assert.strictEqual(changes[3].layout, 'flat');
 
     await press('escape');
     const result = await Promise.race([
       closed,
       new Promise((_, reject) => setTimeout(() => reject(new Error('ESC did not close the panel')), 500)),
     ]);
-    assert.deepStrictEqual(result, { size: 'full', style: 'unicode', layout: 'flat' });
+    // ESC returns everything the panel changed, the deck included - it is a
+    // setting like the others, and the first row of them now.
+    assert.deepStrictEqual(result, {
+      deck: changes[0].deck, size: 'full', style: 'unicode', layout: 'flat',
+    });
   } finally { app.screen?.destroy?.(); }
 }
