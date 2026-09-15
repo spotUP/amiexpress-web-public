@@ -5,4 +5,3 @@ DESCRIPTION=Classic Galaga arcade game - shoot the alien invaders
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
-GAME_REPEAT=1

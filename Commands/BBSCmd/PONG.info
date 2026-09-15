@@ -4,4 +4,3 @@ LOCATION=Doors/ncurses-pong
 DESCRIPTION=Classic Pong game (ncurses port)
 MULTINODE=YES
 CATEGORY=Games/Arcade
-GAME_REPEAT=1

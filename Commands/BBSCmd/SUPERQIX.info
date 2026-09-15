@@ -5,4 +5,3 @@ DESCRIPTION=Super Qix arcade game - claim territory by drawing lines
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
-GAME_REPEAT=1

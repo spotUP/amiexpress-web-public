@@ -317,7 +317,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * How fast a HELD key repeats, in ms. Application by default; a door that
    * declares `GAME_REPEAT=1` gets the arcade rate. See `key-repeat-mode`.
    */
-  const keyRepeatRateRef = useRef<number>(120);  // Last keydown edge per physical key (repeat heartbeat)
+  const keyRepeatRateRef = useRef<number>(30);  // Last keydown edge per physical key (repeat heartbeat)
   const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
@@ -1510,10 +1510,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * arcade door and unusable in a menu. Doorman and the card lobby were
      * skipping two or more entries per press.
      *
-     * The server sends `key-repeat-mode`. APPLICATION IS THE DEFAULT and a
-     * door asks for the fast one with `GAME_REPEAT=1` on its icon - a card
-     * game is turn-based and wants the slow one, which is why this is not
-     * decided by category.
+     * The server sends `key-repeat-mode`. GAME IS THE DEFAULT, because it is
+     * what every client door has always had: grandmaster's DAS/ARR is driven
+     * BY these repeats, not around them, so a slow default detunes every
+     * real-time door silently. A door whose screen is a LIST opts out with
+     * `KEY_REPEAT=application` on its icon.
      */
     const GAME_REPEAT_RATE = 30;         // ~33/sec - arcade movement
     const APPLICATION_REPEAT_RATE = 120; // ~8/sec - a list you can steer
@@ -2948,8 +2949,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     /*
      * The door says which repeat it wants. Unknown or missing keeps the
-     * application rate, so a door that never declares one gets a menu that
-     * can be steered rather than an arcade cabinet.
+     * ARCADE rate, so a door that declares nothing behaves exactly as it did
+     * before this existed.
      */
     socket.on('key-repeat-mode', (mode: string) => {
       keyRepeatRateRef.current = mode === 'game' ? GAME_REPEAT_RATE : APPLICATION_REPEAT_RATE;

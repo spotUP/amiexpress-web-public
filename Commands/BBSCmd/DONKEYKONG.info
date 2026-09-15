@@ -5,4 +5,3 @@ DESCRIPTION=Classic Donkey Kong arcade game - rescue the princess
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
-GAME_REPEAT=1

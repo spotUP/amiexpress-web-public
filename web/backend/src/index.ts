@@ -423,6 +423,15 @@ export interface BBSSession {
   bbsApi?: any; // Active BBS API instance for doors (used to rebind socket on reconnect)
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)
+  /**
+   * Which synthetic key repeat the RUNNING door asked for.
+   *
+   * Set from the door's `KEY_REPEAT` tooltype when it launches, read by
+   * `services/game-mode.service.ts` when game mode is switched on. Absent
+   * means the arcade rate, which is what every client door had before this
+   * existed - see the note at `door.handler.ts`'s `key-repeat-mode` emit.
+   */
+  doorKeyRepeatMode?: 'game' | 'application';
   currentDoorType?: string; // Type of currently running door (XIM, AMI, TS, etc.)
   /**
    * Registered command of the door currently running (e.g. "GMASTER").

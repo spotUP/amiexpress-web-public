@@ -5,4 +5,3 @@ DESCRIPTION=Classic Pengo arcade game - push ice blocks to crush enemies
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
-GAME_REPEAT=1

@@ -32,6 +32,7 @@ import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
+import { declaredKeyRepeatMode, emitKeyRepeatMode } from '../services/game-mode.service';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { doorCategoryAt } from '../doors/door-category';
@@ -2331,6 +2332,17 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
   // Save original subState to check if we're in display flow (inline ~CC_ command)
   // Door execution changes subState to DOOR_RUNNING, so we need to remember the original
   const originalSubState = session.subState;
+
+  /*
+   * Which key repeat this door wants, recorded BEFORE any door code runs.
+   *
+   * A server door reaches game mode by calling `bbs.enableGameMode()` from
+   * inside itself, and BBSApi has no sight of the icon's tooltypes - so the
+   * answer has to be waiting on the session by the time it asks. DOORMAN is
+   * exactly that shape, and it is one of the two doors that wants the menu
+   * rate.
+   */
+  session.doorKeyRepeatMode = declaredKeyRepeatMode(door);
 
   try {
     // Build absolute path to door - handle both directory and file paths
@@ -4825,26 +4837,27 @@ console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
      * GAME REPEAT OR APPLICATION REPEAT - the sysop's distinction, 2026-09-15.
      *
      * Game mode itself stays on for every client door: it is what makes the
-     * browser send real key-down/key-up EDGES, and doors that time their own
-     * input need those (grandmaster's DAS/ARR is built on them). What must NOT
-     * be shared is the synthetic KEY REPEAT the browser runs between those
-     * edges - 30ms, ~33 a second, which is right for a Sno-Bee and unusable in
-     * a menu: "it skips two ore more entries", in doorman and the card lobby.
+     * browser send real key-down/key-up EDGES. What is chosen here is the
+     * synthetic KEY REPEAT the browser runs between those edges - 30ms, ~33 a
+     * second, right for a Sno-Bee and unusable in a menu: "it skips two ore
+     * more entries", in doorman and the card lobby.
      *
-     * APPLICATION IS THE DEFAULT, on his call. A door that wants arcade repeat
-     * says so with `GAME_REPEAT=1` on its icon; everything else - including a
-     * card game, which is turn-based and never needed 33 moves a second - gets
-     * a rate a list can be steered with.
+     * The mode is carried on the SESSION and emitted by
+     * `services/game-mode.service.ts`, because this is only ONE of the three
+     * ways a door reaches game mode - a hybrid RPC-only door and a server door
+     * calling `bbs.enableGameMode()` are the others, and doorman is the
+     * second kind. A flag read here alone would never have reached it.
      *
-     * A door-level FLAG rather than a door-level RATE, because "per door
-     * repeat rate sounds impractical" and it is: two modes is a thing a sysop
-     * can reason about, a number per door is a tuning job per door.
+     * Why GAME is the default, and why a door OPTS IN to the menu rate:
+     * see the note on `declaredKeyRepeatMode`.
+     *
+     * STILL OPEN, and not this: a door that has BOTH a menu and a game -
+     * pengo's front end is a list and its playfield is not, and one icon
+     * cannot say both. That wants the door switching mode at its own state
+     * transitions, which is a door-side change.
      */
-    const wantsGameRepeat = /^(1|yes|true)$/i.test(
-      String((door as any)?.toolTypes?.['GAME_REPEAT'] ?? '').trim()
-    );
-    socket.emit('key-repeat-mode', wantsGameRepeat ? 'game' : 'application');
-console.log(`[executeClientDoor] key-repeat-mode=${wantsGameRepeat ? 'game' : 'application'}`);
+    session.doorKeyRepeatMode = declaredKeyRepeatMode(door);
+    emitKeyRepeatMode(socket, session);
 
     // Set a no-op input handler to prevent BBS from echoing input
     // The actual input handling is done by the client-door-bridge
