@@ -93,6 +93,15 @@ export interface GalleryItem {
    * recognise as the same screen.
    */
   otherVersions?: unknown[];
+  /**
+   * The format the gallery was ASKED to draw and this screen does not have.
+   *
+   * The card falls back to whatever the screen resolves to, so without saying
+   * it a screen drawn in ANSI while PETSCII is selected looks exactly like one
+   * that HAS a PETSCII drawing - and an artist reading the gallery to find
+   * what is left to draw would be told the opposite of the truth.
+   */
+  missingFormat?: string;
   /** Scopes reading the version this card stands for. */
   scopes?: number;
   /** Scopes reading the OTHER versions of the same screen. */
@@ -283,6 +292,11 @@ function GalleryCard(
           </span>
         )}
 
+        {item.missingFormat && (
+          <span className="block truncate text-status-warn">
+            No {item.missingFormat} - showing what the board serves
+          </span>
+        )}
         {item.credit && (
           <span className="block truncate text-content-muted">{item.credit}</span>
         )}

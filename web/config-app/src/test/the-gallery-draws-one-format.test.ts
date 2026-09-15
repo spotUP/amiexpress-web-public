@@ -68,8 +68,55 @@ it('leaves a screen that has no such sibling on the file it had', () => {
   expect(join.format).toBe('ansi');
 });
 
+it('says the screen has no drawing in the chosen format', () => {
+  // The fallback is silent otherwise: a card drawn in ANSI while PETSCII is
+  // selected looks exactly like a screen that HAS PETSCII. "they need to say
+  // missing" (sysop, 2026-09-15).
+  const join = build('petscii').find(i => i.path.toUpperCase().includes('JOIN'))!;
+
+  expect(join.missingFormat).toBe('PETSCII');
+});
+
+it('says nothing when the screen does have that format', () => {
+  const menu = build('petscii').find(i => i.path.toUpperCase().includes('MENU'))!;
+
+  expect(menu.missingFormat).toBeUndefined();
+});
+
+it('says nothing when no format is chosen', () => {
+  const join = build().find(i => i.path.toUpperCase().includes('JOIN'))!;
+
+  expect(join.missingFormat).toBeUndefined();
+});
+
 it('still shows one card per screen whatever is chosen', () => {
   // The siblings are the same SCREEN. Choosing a format must not split MENU
   // into three cards, which is the thing the grouping work just removed.
   expect(build('petscii')).toHaveLength(build().length);
+});
+
+/**
+ * And the card SAYS it, not just the data.
+ *
+ * `missingFormat` reaching the item is half the job; the sysop's complaint was
+ * about what the gallery shows.
+ */
+it('draws the warning on the card', async () => {
+  const { render, screen } = await import('@testing-library/react');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { MemoryRouter } = await import('react-router-dom');
+  const { ScreenGallery } = await import('../components/ScreenGallery');
+  const React = await import('react');
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    React.createElement(MemoryRouter, null,
+      React.createElement(QueryClientProvider, { client },
+        React.createElement(ScreenGallery, {
+          items: [{ path: 'Screens/JOIN.TXT', label: 'JOIN', format: 'ansi', missingFormat: 'PETSCII' }],
+          onOpen: () => {},
+        }))),
+  );
+
+  expect(await screen.findByText(/No PETSCII/)).toBeInTheDocument();
 });

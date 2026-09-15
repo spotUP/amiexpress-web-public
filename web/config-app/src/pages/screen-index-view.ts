@@ -409,6 +409,15 @@ export function formatsPresent(
   return have;
 }
 
+/** What each format is CALLED on a card, so a chip and a warning agree. */
+export const FORMAT_LABEL: Record<string, string> = {
+  ansi: 'ANSI',
+  petscii: 'PETSCII',
+  rip: 'RIP',
+  teletext: 'Teletext',
+  teletextNative: 'Teletext',
+};
+
 /** The extension each drawable format is stored under. `.tti` is native
  *  teletext, which wins over `.ttx` once rendered. */
 const FORMAT_EXTENSIONS: Record<string, string[]> = {
@@ -713,10 +722,22 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
        * With a format chosen, the card shows that sibling - same screen, same
        * card, different drawing - and a screen without one keeps what it had.
        */
-      const drawnPath = opts.thumbnailFormat
-        ? siblingInFormat(file.relPath, index.files, opts.thumbnailFormat) ?? file.relPath
-        : file.relPath;
+      const wantedSibling = opts.thumbnailFormat
+        ? siblingInFormat(file.relPath, index.files, opts.thumbnailFormat)
+        : null;
+      const drawnPath = wantedSibling ?? file.relPath;
       const drawn = drawnPath === file.relPath ? file : index.files?.[drawnPath] ?? file;
+      /*
+       * THE FALLBACK HAS TO SAY SO.
+       *
+       * Without this a card drawn in ANSI while PETSCII is selected looks
+       * exactly like a screen that HAS a PETSCII drawing - the artist reading
+       * the gallery to find what is left to draw would be told the opposite of
+       * the truth ("they need to say missing", sysop 2026-09-15).
+       */
+      const missingFormat = opts.thumbnailFormat && !wantedSibling
+        ? FORMAT_LABEL[opts.thumbnailFormat] ?? opts.thumbnailFormat
+        : undefined;
 
       return {
         path: drawnPath,
@@ -743,6 +764,7 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         // every PETSCII card in the gallery was ("the petscii previews dont
         // display correctly in the admin ui", sysop).
         format: drawn.format,
+        ...(missingFormat ? { missingFormat } : {}),
         formats: formatsPresent(file.relPath, index.files),
         ...(opts.ownedBy
           ? {
