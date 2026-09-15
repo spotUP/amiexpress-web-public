@@ -654,6 +654,32 @@ console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
    * does, so the file written is the file read.
    */
   if (program.includes('quicknew/quicknew')) {
+    /*
+     * THE REAL 68K DOOR FIRST, ALWAYS.
+     *
+     * "replacing quicknew with a typescript alternative doesnt help our project
+     * get full compatibility" - the sysop, 2026-09-15, and they are right. The
+     * generator below was written because the binary the batch line names had
+     * been deleted from Doors/ as corpus junk (6a6dcc475), so the line resolved
+     * to nothing and the screen showed 00 files for months. It is a fix at the
+     * wrong layer: it renders what it thinks QuickNew renders, which is not the
+     * same thing as what QuickNew renders. Measured on the restored binary the
+     * same day: the real door emits lines up to 94 columns because it prints
+     * the config's templates verbatim, and the generator folds them to 80 -
+     * so the two disagree about the screen the moment a template is long.
+     *
+     * The binary is back (GOD-QN22, V2.2 by Calypso/GOD and REbEL/QTX, with its
+     * asm source and .Doc beside it). When it is there it runs, through the
+     * ordinary door path below, with its stdout redirected exactly as the Amiga
+     * invoked it. The generator stays only for a board that does not have the
+     * binary - a shareware door nobody is obliged to ship - and says so rather
+     * than pretending to be the door.
+     */
+    const realDoor = resolveExecutable(resolveAssign(program));
+    if (realDoor) {
+console.log(`[BatchScheduler] QuickNew: running the real 68K door at ${realDoor}`);
+      // Fall through to the ordinary 68K path.
+    } else {
     const args = resolvedArgs;
     if (args.length >= 2) {
       const configPath = resolveExistingAncestors(resolveAssign(args[0].replace(/^"|"$/g, '')));
@@ -665,12 +691,25 @@ console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
       }
 console.log(`[BatchScheduler] QuickNew: generating from ${configPath}, ${daysBack} days, into ${outputPath}`);
       const { generateQuickNewFromConfig } = require('../utils/quicknew-generator');
-      await generateQuickNewFromConfig(configPath, daysBack, outputPath);
+      /*
+       * SAY WHICH IT WAS. `generateQuickNewFromConfig` answers null when it
+       * could not read the config, and this logged "screen regenerated" either
+       * way - so `bbs:screens/quicknew2.txt` sat unchanged since May while
+       * every logoff reported success. The batch line for it names
+       * `quicknew.config`, the volume has `QuickNew.Config1`, and nothing
+       * connected the two because the failure announced itself as a success.
+       */
+      const written = await generateQuickNewFromConfig(configPath, daysBack, outputPath);
+      if (written) {
 console.log('[BatchScheduler] QuickNew: screen regenerated');
+      } else {
+console.error(`[BatchScheduler] QuickNew: NOT regenerated - could not read ${configPath}`);
+      }
     } else {
 console.error('[BatchScheduler] QuickNew: the batch line needs <config> <days>');
     }
     return;
+    }
   }
 
   const rawProg = resolveAssign(parts[0]);
