@@ -32,6 +32,7 @@ import { BlockGlowManager } from '../effects/block-glow';
 import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { ConnectedBlockRenderer } from '../effects/connected-blocks';
 import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden';
+import { xrayVisibleColumn } from '../core/xray';
 import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden, MissionRun } from '../core/mission-run';
 
@@ -1467,6 +1468,10 @@ export class GameScreen {
     const invisibleManager = (this.engine as any).invisiblePieceManager;
     const isMasterRoll = state.creditRollActive;
     const blind = state.missionModifiers?.blind === true;
+    // X-RAY lights one column of the stack at a time (core/xray.ts).
+    const xrayColumn = state.missionModifiers?.xray === true
+      ? xrayVisibleColumn(Date.now(), board.width)
+      : null;
 
     // Update connected blocks cache if enabled
     // One character per block on a square-celled screen, two on a terminal.
@@ -1555,7 +1560,8 @@ export class GameScreen {
         // `view.c:1647`), while HIDDEN fades each block on its own timer. The
         // live piece and its ghost are drawn above this, which is what makes
         // the mode playable at all.
-        if (char === '  ' && cell.filled && (blind || isCellHidden(cell)) && !isMasterRoll) {
+        const xrayHides = xrayColumn !== null && x !== xrayColumn;
+        if (char === '  ' && cell.filled && (blind || xrayHides || isCellHidden(cell)) && !isMasterRoll) {
           char = '  ';
         } else if (char === '  ' && cell.filled) {
           // Check line clear animation fade

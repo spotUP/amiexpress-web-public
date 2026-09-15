@@ -99,3 +99,21 @@ export function collectItemFromLines(board: Board, rows: number[]): number | nul
   }
   return found;
 }
+
+/**
+ * Flip the stack left to right.
+ *
+ * MIRROR (reference type 15, `mission.c:1362-1366`). The reference animates
+ * it a column at a time (`gamestart.c:9039`+) and fires it after EVERY piece
+ * in MISSION mode (`gamestart.c:9055`); the flip itself is this, and the
+ * animation is the part a terminal cannot afford - a door repainting over a
+ * modem would spend the whole run drawing the transition.
+ *
+ * The live piece is NOT mirrored: the reference flips the field, and a piece
+ * in the air keeps the column the player put it in.
+ */
+export function mirrorBoard(board: Board): void {
+  for (let y = 0; y < board.height; y++) {
+    board.grid[y].reverse();
+  }
+}

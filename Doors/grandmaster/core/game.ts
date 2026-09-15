@@ -34,7 +34,7 @@ import { lockedByUpKey } from './up-key-lock';
 import type { LockEvent } from './mission-run';
 import type { MissionModifiers, MissionSpeed } from './mission-types';
 import {
-  placePieceWithTimestamp, stampItemOnPiece, collectItemFromLines,
+  placePieceWithTimestamp, stampItemOnPiece, collectItemFromLines, mirrorBoard,
 } from './board-writes';
 import { detectTSpin } from './tspin';
 import { riseGarbageRow, seedGarbageRows } from './garbage';
@@ -1596,6 +1596,13 @@ export class GameEngine {
      * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
      * seconds - so the clock a player keeps is their own piece count.
      */
+    // MIRROR flips the stack after EVERY piece in MISSION mode
+    // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
+    // is what makes it a mode rather than an effect.
+    if (this.state.missionModifiers?.mirror) {
+      mirrorBoard(this.state.board);
+    }
+
     const rise = this.state.missionModifiers?.riseEveryPieces ?? 0;
     if (rise > 0 && this.state.piecesPlaced > 0 && this.state.piecesPlaced % rise === 0) {
       riseGarbageRow(this.state.board);

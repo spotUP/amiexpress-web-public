@@ -1379,6 +1379,12 @@ class GameEngine {
          * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
          * seconds - so the clock a player keeps is their own piece count.
          */
+        // MIRROR flips the stack after EVERY piece in MISSION mode
+        // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
+        // is what makes it a mode rather than an effect.
+        if (this.state.missionModifiers?.mirror) {
+            (0, board_writes_1.mirrorBoard)(this.state.board);
+        }
         const rise = this.state.missionModifiers?.riseEveryPieces ?? 0;
         if (rise > 0 && this.state.piecesPlaced > 0 && this.state.piecesPlaced % rise === 0) {
             (0, garbage_1.riseGarbageRow)(this.state.board);

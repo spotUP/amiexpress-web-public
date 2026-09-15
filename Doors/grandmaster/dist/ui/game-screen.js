@@ -18,6 +18,7 @@ const block_glow_1 = require("../effects/block-glow");
 const line_clear_animation_1 = require("../effects/line-clear-animation");
 const connected_blocks_1 = require("../effects/connected-blocks");
 const hidden_1 = require("../core/hidden");
+const xray_1 = require("../core/xray");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
 const door_theme_1 = require("../door-theme");
@@ -1325,6 +1326,10 @@ class GameScreen {
         const invisibleManager = this.engine.invisiblePieceManager;
         const isMasterRoll = state.creditRollActive;
         const blind = state.missionModifiers?.blind === true;
+        // X-RAY lights one column of the stack at a time (core/xray.ts).
+        const xrayColumn = state.missionModifiers?.xray === true
+            ? (0, xray_1.xrayVisibleColumn)(Date.now(), board.width)
+            : null;
         // Update connected blocks cache if enabled
         // One character per block on a square-celled screen, two on a terminal.
         const cols = (0, block_width_1.blockCols)(this.screen.width);
@@ -1404,7 +1409,8 @@ class GameScreen {
                 // `view.c:1647`), while HIDDEN fades each block on its own timer. The
                 // live piece and its ghost are drawn above this, which is what makes
                 // the mode playable at all.
-                if (char === '  ' && cell.filled && (blind || (0, hidden_1.isCellHidden)(cell)) && !isMasterRoll) {
+                const xrayHides = xrayColumn !== null && x !== xrayColumn;
+                if (char === '  ' && cell.filled && (blind || xrayHides || (0, hidden_1.isCellHidden)(cell)) && !isMasterRoll) {
                     char = '  ';
                 }
                 else if (char === '  ' && cell.filled) {

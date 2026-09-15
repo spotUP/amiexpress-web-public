@@ -382,6 +382,8 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   assert.ok(every.some((m) => (m.speed?.gravity ?? 0) >= 20),
     'a mission plays at 20G, which is what a speed of its own is for');
   assert.ok(every.some((m) => m.modifiers.reverse), 'and one plays them backwards');
+  assert.ok(every.some((m) => m.modifiers.xray), 'X-RAY is played');
+  assert.ok(every.some((m) => m.modifiers.mirror), 'and MIRROR');
 }
 
 /**
@@ -601,4 +603,70 @@ export async function reverseSwapsBothAxesForTheWholeRun(): Promise<void> {
   const plainY = plain.getState().currentPiece.y;
   plain.softDrop();
   assert.strictEqual(plain.getState().currentPiece.y, plainY + 1, 'one row, as always');
+}
+
+/**
+ * MIRROR flips the stack after every piece.
+ *
+ * Reference type 15 (`mission.c:1362-1366`), and in MISSION mode the flip
+ * fires after EVERY piece rather than on a timer (`gamestart.c:9055`). The
+ * reference animates it column by column; a door repainting over a modem
+ * cannot afford that, so the flip is instant and the animation is the
+ * written exemption.
+ */
+export async function mirrorFlipsTheStackAfterEveryPiece(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setMissionModifiers({ mirror: true });
+  engine.start();
+
+  // An unmistakable stack: one cell in the leftmost column, nothing else.
+  const board = engine.getState().board;
+  const row = board.height - 1;
+  board.grid[row][0] = { filled: true, color: 'I', locked: true, item: null };
+  assert.ok(board.grid[row][0].filled && !board.grid[row][board.width - 1].filled);
+
+  engine.hardDrop();
+
+  const after = engine.getState().board;
+  assert.ok(after.grid[row][after.width - 1].filled,
+    'the cell that was on the left is on the right');
+  assert.ok(!after.grid[row][0].filled, 'and is no longer where it was');
+
+  // A mission that did not ask for it keeps its stack where it is.
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  const plainBoard = plain.getState().board;
+  plainBoard.grid[row][0] = { filled: true, color: 'I', locked: true, item: null };
+  plain.hardDrop();
+  assert.ok(plain.getState().board.grid[row][0].filled, 'nothing flipped');
+}
+
+/**
+ * X-RAY lights one column at a time, and rests between sweeps.
+ *
+ * The cadence is `core/xray.ts`'s: the reference's 36-frame cycle kept in
+ * time, because a door cannot count the terminal's frames.
+ */
+export async function xrayLightsOneColumnAtATime(): Promise<void> {
+  const { xrayVisibleColumn, XRAY_CYCLE_MS, XRAY_FRAMES } = await import('../core/xray');
+
+  // Through one whole cycle, frame by frame in the reference's own units:
+  // every column comes up exactly once, in order, and the rest is dark.
+  const seen: number[] = [];
+  for (let frame = 0; frame < XRAY_FRAMES; frame++) {
+    seen.push(xrayVisibleColumn((frame * XRAY_CYCLE_MS) / XRAY_FRAMES, 10));
+  }
+  const lit = seen.filter((c) => c >= 0);
+  assert.deepStrictEqual(lit, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    'one sweep of ten columns, in order');
+  assert.ok(seen.filter((c) => c === -1).length > lit.length,
+    'and more of the cycle is dark than is lit, as the reference has it');
+
+  // A narrower field sweeps in fewer steps and rests for longer.
+  const narrow = [];
+  for (let frame = 0; frame < XRAY_FRAMES; frame++) {
+    narrow.push(xrayVisibleColumn((frame * XRAY_CYCLE_MS) / XRAY_FRAMES, 4));
+  }
+  assert.deepStrictEqual(narrow.filter((c) => c >= 0), [0, 1, 2, 3]);
 }

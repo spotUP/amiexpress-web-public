@@ -122,6 +122,12 @@ export function missionConditions(mission: Mission): string[] {
   if (mission.modifiers.rotateLock) {
     conditions.push('ROTATELOCK: pieces arrive turned, and cannot be turned');
   }
+  if (mission.modifiers.xray) {
+    conditions.push('X-RAY: one column of the stack is lit at a time');
+  }
+  if (mission.modifiers.mirror) {
+    conditions.push('MIRROR: the stack flips left to right after every piece');
+  }
   if (mission.modifiers.reverse) {
     conditions.push('REVERSE: left is right, and up is down');
   }

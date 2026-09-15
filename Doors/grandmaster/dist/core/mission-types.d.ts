@@ -83,6 +83,19 @@ export interface MissionModifiers {
      * drop change keys with each other.
      */
     reverse?: boolean;
+    /**
+     * X-RAY (reference type 12, `mission.c:1334-1341`): the stack is drawn ONE
+     * COLUMN AT A TIME, sweeping, with darkness between sweeps. See
+     * `core/xray.ts` for the cadence and why it is kept in time rather than in
+     * frames.
+     */
+    xray?: boolean;
+    /**
+     * MIRROR (reference type 15, `mission.c:1362-1366`): the stack is flipped
+     * left to right - and in MISSION mode it flips after EVERY piece
+     * (`gamestart.c:9055`, the `gameMode == 8` clause), not on a timer.
+     */
+    mirror?: boolean;
 }
 export interface Mission {
     /** Stable id, used for the cleared-missions record. */

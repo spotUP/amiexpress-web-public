@@ -310,6 +310,32 @@
         "reverse": true
       },
       "hint": "Six lines with left as right and up as down."
+    },
+    {
+      "id": "25",
+      "name": "ONE COLUMN",
+      "objective": "lines",
+      "norm": 6,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 2,
+      "modifiers": {
+        "xray": true
+      },
+      "hint": "Six lines while the stack is lit one column at a time."
+    },
+    {
+      "id": "26",
+      "name": "THE MIRROR",
+      "objective": "lines",
+      "norm": 8,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "mirror": true
+      },
+      "hint": "Eight lines. The stack flips left to right after every piece."
     }
   ]
 }
