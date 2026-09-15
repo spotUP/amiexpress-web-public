@@ -24,6 +24,7 @@ function lock(over: Partial<LockEvent> = {}): LockEvent {
   const base: LockEvent = {
     lineCount: 0, tSpin: false, tSpinFull: false,
     allClear: false, combo: 0, comboIgnoringSingles: 0, piecesPlaced: 1, level: 0,
+    pieceType: 'I', cameFromHold: false, clearedRows: [],
   };
   const event = { ...base, ...over };
   // A 3-corner T-Spin is a T-Spin: a test that sets one without the other is
@@ -386,4 +387,117 @@ export async function anOptionOnTheWrongObjectiveIsRefused(): Promise<void> {
     { name: 'x', missions: [{ id: '01', name: 'X', objective: 'double', norm: 2,
       strictness: 'sometimes', timeLimitSeconds: 0, startLevel: 0, garbageRows: 0,
       modifiers: {} }] }, 'test'), MissionPackError, 'and the value is checked');
+}
+
+/**
+ * The ORDER family: the clear has to be made BY the named piece.
+ *
+ * `mission.c:989-1116`. Five objectives, one question - which piece locked -
+ * which the engine knew and the lock event did not carry.
+ */
+export async function anOrderMissionCountsOnlyTheNamedPiece(): Promise<void> {
+  const single = new MissionRun(mission('singleOrder', { norm: 2, requiredPiece: 'T' }));
+  single.onLock(lock({ lineCount: 1, pieceType: 'I' }));
+  assert.strictEqual(single.getProgress().current, 0, 'the I did not answer the ask');
+  single.onLock(lock({ lineCount: 2, pieceType: 'T' }));
+  assert.strictEqual(single.getProgress().current, 0, 'and a double is not a single');
+  single.onLock(lock({ lineCount: 1, pieceType: 'T' }));
+  single.onLock(lock({ lineCount: 1, pieceType: 'T' }));
+  assert.strictEqual(single.getProgress().outcome, 'cleared');
+
+  // BLOCKORDER counts LINES, not clears (mission.c:989-1000).
+  const block = new MissionRun(mission('blockOrder', { norm: 4, requiredPiece: 'I' }));
+  block.onLock(lock({ lineCount: 4, pieceType: 'I' }));
+  assert.strictEqual(block.getProgress().outcome, 'cleared', 'four lines in one go');
+
+  // A PAIR: 7 is "L or J", 8 is "S or Z" (mission.c:354-362).
+  const pair = new MissionRun(mission('tripleOrder', { norm: 2, requiredPiece: 'LJ' }));
+  pair.onLock(lock({ lineCount: 3, pieceType: 'L' }));
+  pair.onLock(lock({ lineCount: 3, pieceType: 'J' }));
+  assert.strictEqual(pair.getProgress().outcome, 'cleared', 'either of the pair');
+}
+
+/**
+ * RE TRIPLE ORDER is the one that counts everything EXCEPT the named piece -
+ * and with a pair named, the reference counts every triple instead
+ * (mission.c:1044-1048).
+ */
+export async function reTripleOrderCountsEverythingButThePiece(): Promise<void> {
+  const not = new MissionRun(mission('reTripleOrder', { norm: 1, requiredPiece: 'I' }));
+  not.onLock(lock({ lineCount: 3, pieceType: 'I' }));
+  assert.strictEqual(not.getProgress().current, 0, 'the named piece is the one that does NOT count');
+  not.onLock(lock({ lineCount: 3, pieceType: 'L' }));
+  assert.strictEqual(not.getProgress().outcome, 'cleared');
+
+  const pair = new MissionRun(mission('reTripleOrder', { norm: 1, requiredPiece: 'SZ' }));
+  pair.onLock(lock({ lineCount: 3, pieceType: 'S' }));
+  assert.strictEqual(pair.getProgress().outcome, 'cleared',
+    'with a pair named the reference counts every triple, S and Z included');
+}
+
+/** HOLD USE (mission_opt_2): the piece has to have been held first. */
+export async function anOrderMissionCanInsistThePieceWasHeld(): Promise<void> {
+  const run = new MissionRun(mission('doubleOrder', {
+    norm: 1, requiredPiece: 'O', requireHold: true,
+  }));
+  run.onLock(lock({ lineCount: 2, pieceType: 'O', cameFromHold: false }));
+  assert.strictEqual(run.getProgress().current, 0, 'the right piece, straight from the queue');
+  run.onLock(lock({ lineCount: 2, pieceType: 'O', cameFromHold: true }));
+  assert.strictEqual(run.getProgress().outcome, 'cleared');
+}
+
+/**
+ * The SPLIT family is about the GAP, which a line COUNT cannot answer.
+ *
+ * `mission.c:1053-1098` walks the field and counts the uncleared rows lying
+ * between the cleared ones: SPLIT DOUBLE and SPLIT TRIPLE want any gap at
+ * all, SPLIT DOUBLE2 wants exactly two rows.
+ */
+export async function theSplitFamilyReadsTheRowsNotTheCount(): Promise<void> {
+  const sd = new MissionRun(mission('splitDouble', { norm: 1 }));
+  sd.onLock(lock({ lineCount: 2, clearedRows: [18, 19] }));
+  assert.strictEqual(sd.getProgress().current, 0, 'two touching rows are an ordinary double');
+  sd.onLock(lock({ lineCount: 2, clearedRows: [17, 19] }));
+  assert.strictEqual(sd.getProgress().outcome, 'cleared', 'one row left between them');
+
+  const st = new MissionRun(mission('splitTriple', { norm: 1 }));
+  st.onLock(lock({ lineCount: 3, clearedRows: [17, 18, 19] }));
+  assert.strictEqual(st.getProgress().current, 0);
+  st.onLock(lock({ lineCount: 3, clearedRows: [15, 17, 19] }));
+  assert.strictEqual(st.getProgress().outcome, 'cleared');
+
+  const two = new MissionRun(mission('splitDouble2', { norm: 1 }));
+  two.onLock(lock({ lineCount: 2, clearedRows: [17, 19] }));
+  assert.strictEqual(two.getProgress().current, 0, 'one row between is not two');
+  two.onLock(lock({ lineCount: 2, clearedRows: [16, 19] }));
+  assert.strictEqual(two.getProgress().outcome, 'cleared', 'exactly two rows between');
+}
+
+/** An ORDER mission with no piece named is not a mission this engine judges. */
+export async function anOrderMissionWithoutAPieceIsRefused(): Promise<void> {
+  const missing = {
+    name: 'x', missions: [{
+      id: '01', name: 'ORDER', objective: 'tripleOrder', norm: 2,
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.throws(() => parseMissionPack(missing, 'test'), MissionPackError,
+    'the objective is ABOUT a piece; without one it cannot be judged');
+
+  const wrongPiece = {
+    name: 'x', missions: [{
+      id: '01', name: 'ORDER', objective: 'tripleOrder', norm: 2, requiredPiece: 'Q',
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.throws(() => parseMissionPack(wrongPiece, 'test'), MissionPackError);
+
+  const notAnOrder = {
+    name: 'x', missions: [{
+      id: '01', name: 'LINES', objective: 'lines', norm: 2, requiredPiece: 'T',
+      timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+    }],
+  };
+  assert.throws(() => parseMissionPack(notAnOrder, 'test'), MissionPackError,
+    'and an objective that cannot read it says so');
 }

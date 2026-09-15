@@ -8,6 +8,7 @@
  * screen - is what lets every objective be tested without a terminal.
  */
 import type { Mission } from './mission-types';
+import type { PieceType } from './types';
 /**
  * Is the NEXT preview hidden - by the item's timer, or because a mission
  * switched it off for the whole run? Both renderers ask this rather than
@@ -49,6 +50,19 @@ export interface LockEvent {
     piecesPlaced: number;
     /** The run's level after this lock. */
     level: number;
+    /** Which piece locked. The ORDER objectives are about the piece itself. */
+    pieceType: PieceType;
+    /**
+     * It came out of HOLD (the reference's `dhold2` + `hold_used >= 2`,
+     * `mission.c:996`). An ORDER mission can insist on that.
+     */
+    cameFromHold: boolean;
+    /**
+     * Which ROWS this lock cleared, top-down. The SPLIT objectives are about
+     * the gap between them, so a count cannot answer them
+     * (`mission.c:1053-1098`).
+     */
+    clearedRows: number[];
 }
 export type MissionOutcome = 'playing' | 'cleared' | 'failed';
 export interface MissionProgress {

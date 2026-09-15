@@ -17,12 +17,17 @@
  * loader rejects the rest by name instead of accepting a mission that can
  * never be completed.
  */
-import type { HiddenMode } from './types';
+import type { HiddenMode, PieceType } from './types';
 /**
  * The objectives this engine can judge, each with the reference type it comes
  * from (mission_info.c's `mission_name_editor` list).
  */
-export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive"];
+export declare const MISSION_OBJECTIVES: readonly ["lines", "single", "double", "triple", "tetris", "cycle", "tspin", "tspinDouble", "combo", "allClear", "pieces", "level", "b2bTetris", "survive", "blockOrder", "singleOrder", "doubleOrder", "tripleOrder", "reTripleOrder", "splitDouble", "splitTriple", "splitDouble2"];
+/**
+ * A piece an ORDER mission asks for - the reference's `mission_opt_3`, where
+ * 0..6 name one piece, 7 is "L or J" and 8 is "S or Z" (mission.c:354-362).
+ */
+export type RequiredPiece = PieceType | 'LJ' | 'SZ';
 export type MissionObjective = typeof MISSION_OBJECTIVES[number];
 /** Rules a mission can switch on for its run. */
 export interface MissionModifiers {
@@ -65,6 +70,16 @@ export interface Mission {
      * a lock that clears nothing still breaks both (`gamestart.c:10159`).
      */
     ignoreSingles?: boolean;
+    /**
+     * ORDER family only: which piece the clear has to be made by
+     * (`mission_opt_3`). 'LJ' and 'SZ' are the reference's two pairs.
+     */
+    requiredPiece?: RequiredPiece;
+    /**
+     * ORDER family only (`mission_opt_2`, HOLD USE): the piece must have come
+     * out of hold.
+     */
+    requireHold?: boolean;
     /** The clock (mission_time). 0 = no limit; 'survive' needs one. */
     timeLimitSeconds: number;
     /** Starting speed (mission_lv). */

@@ -39,5 +39,15 @@ exports.MISSION_OBJECTIVES = [
     'level', // "Clear %d stage(s)!" - this door counts levels
     'b2bTetris', // HEBORIS: "%d times! Do not erase 3 or less lines!"
     'survive', // "Do not top out!" - outlast the clock
+    // The ORDER family: a clear made BY a named piece (mission.c:989-1116).
+    'blockOrder', // "BLOCKORDER" - lines cleared by that piece
+    'singleOrder', // "SINGLE ORDER"
+    'doubleOrder', // "DOUBLE ORDER"
+    'tripleOrder', // "TRIPLE ORDER"
+    'reTripleOrder', // "RE TRIPLE ORDER" - a triple by anything BUT that piece
+    // The SPLIT family: a clear whose rows are not touching (mission.c:1053).
+    'splitDouble', // "SPLIT DOUBLE"
+    'splitTriple', // "SPLIT TRIPLE"
+    'splitDouble2', // "SPLIT DOUBLE2" - the gap is exactly two rows
 ];
 //# sourceMappingURL=mission-types.js.map

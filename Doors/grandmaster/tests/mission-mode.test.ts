@@ -101,6 +101,76 @@ export async function everyLockIsReportedWithWhatTheJudgeNeeds(): Promise<void> 
   assert.strictEqual(event.allClear, false);
   assert.strictEqual(event.piecesPlaced, 1, 'the piece count is the engine\'s own');
   assert.strictEqual(typeof event.level, 'number');
+  // The fields the ORDER and SPLIT families are judged on have to come from
+  // the REAL engine, not only from a hand-built event in the judge's tests.
+  assert.ok(['I', 'O', 'T', 'S', 'Z', 'J', 'L'].includes(event.pieceType),
+    `the locked piece is named, got ${String(event.pieceType)}`);
+  assert.strictEqual(event.cameFromHold, false, 'straight from the queue');
+  assert.deepStrictEqual(event.clearedRows, [], 'nothing cleared, no rows');
+  assert.strictEqual(event.tSpinFull, false);
+  assert.strictEqual(event.comboIgnoringSingles, 0);
+}
+
+/**
+ * The engine names the piece it locked, and says when it came out of hold.
+ *
+ * A judge reading `pieceType` is only as good as the engine filling it in -
+ * and `cameFromHold` is engine state that nothing else in the door reads, so
+ * this is the only thing standing between the ORDER family and a field that
+ * is always false.
+ */
+export async function theEngineReportsThePieceAndWhetherItWasHeld(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  const events: LockEvent[] = [];
+  engine.onLock((event: LockEvent) => events.push(event));
+  engine.start();
+
+  /** A lock is followed by ARE: wait for the next piece the way the loop does. */
+  const nextPiece = (): any => {
+    for (let f = 0; f < 60 && !engine.getState().currentPiece; f++) engine.update(50);
+    const piece = engine.getState().currentPiece;
+    assert.ok(piece, 'a piece spawned after the lock');
+    return piece;
+  };
+
+  // Hold the live piece: the first hold spawns a fresh one, so the piece that
+  // locks came from the QUEUE.
+  const first = engine.getState().currentPiece.type;
+  engine.hold();
+  const second = engine.getState().currentPiece.type;
+  assert.strictEqual(engine.getState().holdPiece, first, 'the first piece is held');
+  engine.hardDrop();
+  assert.strictEqual(events[0].pieceType, second, 'the piece that locked is the one reported');
+  assert.strictEqual(events[0].cameFromHold, false,
+    'it came from the queue, not from hold');
+
+  // The next piece swaps the held one back in: THAT one came from hold.
+  nextPiece();
+  engine.hold();
+  assert.strictEqual(engine.getState().currentPiece.type, first, 'the held piece is back');
+  engine.hardDrop();
+  assert.strictEqual(events[1].pieceType, first);
+  assert.strictEqual(events[1].cameFromHold, true, 'and it is reported as held');
+}
+
+/** And it reports WHICH rows cleared, which is all the SPLIT family has. */
+export async function theEngineReportsWhichRowsCleared(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  const events: LockEvent[] = [];
+  engine.onLock((event: LockEvent) => events.push(event));
+  engine.start();
+
+  const board = engine.getState().board;
+  const bottom = board.height - 1;
+  for (let x = 0; x < 6; x++) {
+    board.grid[bottom][x] = { filled: true, color: 'I', locked: true, item: null };
+  }
+  engine.getState().currentPiece = { type: 'I', rotation: 0, x: 6, y: bottom - 1 };
+  engine.hardDrop();
+
+  assert.strictEqual(events[0].lineCount, 1);
+  assert.deepStrictEqual(events[0].clearedRows, [bottom],
+    'the row index, not just how many');
 }
 
 export async function aClearedLineReachesTheRunThroughTheEngine(): Promise<void> {

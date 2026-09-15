@@ -32,6 +32,7 @@ import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-gr
 import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
 import { lockedByUpKey } from './up-key-lock';
 import type { LockEvent } from './mission-run';
+import { detectTSpin } from './tspin';
 import { riseGarbageRow, seedGarbageRows } from './garbage';
 import {
   practiceGoalReached, practiceGoalTarget,
@@ -103,6 +104,12 @@ export class GameEngine {
    * MISSION's COMBO objective reads this one when its NOT1LINE option is set.
    */
   private comboIgnoringSingles: number = 0;
+  /**
+   * The live piece came OUT of hold (the reference's `dhold2` +
+   * `hold_used >= 2`, mission.c:989-1000). The ORDER objectives can ask for
+   * a piece that was held, so the judge has to be told.
+   */
+  private currentCameFromHold: boolean = false;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -419,6 +426,7 @@ export class GameEngine {
     // A restarted engine starts both combo counters at zero, like the state
     // object it is about to play with.
     this.comboIgnoringSingles = 0;
+    this.currentCameFromHold = false;
     this.sectionManager.reset();
     this.gradeManager.reset();  // Reset grade to 9
     this.gradeManager.setStartTime(this.state.startTime);  // Set GM flag timer
@@ -475,6 +483,9 @@ export class GameEngine {
   }
 
   private spawnPiece(): void {
+    // Straight from the queue: whatever the last piece did, this one has not
+    // been held.
+    this.currentCameFromHold = false;
     const pieceType = this.state.nextQueue.shift()!;
     this.state.nextQueue.push(this.pieceManager.getRandomPiece());
 
@@ -1025,6 +1036,7 @@ export class GameEngine {
       const heldType = this.state.holdPiece;
       this.state.holdPiece = currentType;
 
+      this.currentCameFromHold = true;
       const spawnPos = this.pieceManager.getSpawnPosition(heldType, this.state.board.width);
       // Held pieces lose bone block status when swapped back
       this.state.currentPiece = {
@@ -1131,98 +1143,14 @@ export class GameEngine {
    * - 3-corner check must pass
    */
   private detectTSpin(): 'full' | 'mini' | 'none' {
-    const piece = this.state.currentPiece;
-
-    // Must be a T-piece
-    if (!piece || piece.type !== 'T') return 'none';
-
-    // HeborisCE: tspin_flag must be set (rotation without subsequent horizontal move)
-    // and rotationCount > 0 (statusc[player * 10 + 5] > 0 in HeborisCE)
-    if (this.state.tSpinFlag === 0 || this.state.rotationCount === 0) return 'none';
-
-    // Also check lastMove for compatibility
-    if (this.state.lastMove !== 'rotate') return 'none';
-
-    // Get the center position of the T-piece
-    // T-piece center is at [1,1] in its 3x3 bounding box
-    const centerX = piece.x + 1;
-    const centerY = piece.y + 1;
-
-    // Check the 4 corners around the center
-    const corners = [
-      { x: centerX - 1, y: centerY - 1 },  // Top-left
-      { x: centerX + 1, y: centerY - 1 },  // Top-right
-      { x: centerX - 1, y: centerY + 1 },  // Bottom-left
-      { x: centerX + 1, y: centerY + 1 },  // Bottom-right
-    ];
-
-    // Count filled corners
-    let filledCorners = 0;
-    const board = this.state.board;
-
-    for (let i = 0; i < corners.length; i++) {
-      const corner = corners[i];
-      let cx = corner.x;
-      let cy = corner.y;
-      
-      // TGM3/HeborisCE ARS: if T is up-facing (flat side down), 
-      // the detection area shifts for specific corners
-      if (this.settings.rotationSystem === 'ARS' && piece.rotation === 2) {
-          // HeborisCE gamestart.c: if(rt == 2) tmp_y = tmp_y + 1;
-          cy += 1;
-      }
-
-      // Out of bounds counts as filled
-      if (cx < 0 || cx >= board.width ||
-          cy < 0 || cy >= board.height) {
-        filledCorners++;
-        continue;
-      }
-
-      // Check if cell is filled
-      if (board.grid[cy][cx].filled) {
-        filledCorners++;
-      }
-    }
-
-    // 3-corner rule: at least 3 corners must be filled
-    if (filledCorners >= 3) {
-      // Check if it's a mini T-Spin (T facing away from wall)
-      // Full T-Spin: both front corners filled
-      // Mini T-Spin: only back corners filled
-
-      // Determine front corners based on rotation
-      let frontCorners: typeof corners;
-      switch (piece.rotation) {
-        case 0: // T facing up
-          frontCorners = [corners[0], corners[1]];  // Top corners
-          break;
-        case 1: // T facing right
-          frontCorners = [corners[1], corners[3]];  // Right corners
-          break;
-        case 2: // T facing down
-          frontCorners = [corners[2], corners[3]];  // Bottom corners
-          break;
-        case 3: // T facing left
-          frontCorners = [corners[0], corners[2]];  // Left corners
-          break;
-      }
-
-      // Count front corners filled
-      let frontFilled = 0;
-      for (const corner of frontCorners) {
-        if (corner.x < 0 || corner.x >= board.width ||
-            corner.y < 0 || corner.y >= board.height ||
-            board.grid[corner.y][corner.x].filled) {
-          frontFilled++;
-        }
-      }
-
-      // Full T-Spin if both front corners filled, otherwise Mini
-      return frontFilled >= 2 ? 'full' : 'mini';
-    }
-
-    return 'none';
+    return detectTSpin({
+      piece: this.state.currentPiece,
+      board: this.state.board,
+      tSpinFlag: this.state.tSpinFlag,
+      rotationCount: this.state.rotationCount,
+      lastMove: this.state.lastMove,
+      rotationSystem: this.settings.rotationSystem,
+    });
   }
 
   /**
@@ -1592,6 +1520,9 @@ export class GameEngine {
       comboIgnoringSingles: this.comboIgnoringSingles,
       piecesPlaced: this.state.piecesPlaced,
       level: this.state.level,
+      pieceType: piece.type,
+      cameFromHold: this.currentCameFromHold,
+      clearedRows: [...clearedLines].sort((a, b) => a - b),
     });
   }
 

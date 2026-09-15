@@ -11,7 +11,10 @@
  * loaded and left for a player to discover.
  */
 
-import { MISSION_OBJECTIVES, type Mission, type MissionObjective, type MissionPack } from './mission-types';
+import {
+  MISSION_OBJECTIVES, type Mission, type MissionObjective, type MissionPack,
+  type RequiredPiece,
+} from './mission-types';
 import type { HiddenMode } from './types';
 
 /** The GRADE forms an "erase exactly N" objective can be counted in. */
@@ -21,7 +24,19 @@ const STRICTNESS: ReadonlyArray<NonNullable<Mission['strictness']>> = [
 
 /** The objectives that read it (mission.c:841-866 - DOUBLE and TRIPLE). */
 const STRICT_OBJECTIVES: ReadonlyArray<MissionObjective> = [
-  'single', 'double', 'triple', 'tetris', 'b2bTetris',
+  // DOUBLE ORDER is here because mission.c:1019 reads opt_1 for it too, even
+  // though that door's editor labels the slot "NO OPTION".
+  'single', 'double', 'triple', 'tetris', 'b2bTetris', 'doubleOrder',
+];
+
+/** The ORDER family: every one of them is about a named piece. */
+const ORDER_OBJECTIVES: ReadonlyArray<MissionObjective> = [
+  'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
+];
+
+/** What `requiredPiece` may say (mission.c:354-362). */
+const REQUIRED_PIECES: ReadonlyArray<RequiredPiece> = [
+  'I', 'O', 'T', 'S', 'Z', 'J', 'L', 'LJ', 'SZ',
 ];
 
 const HIDDEN_MODES: readonly HiddenMode[] = ['OFF', 'SLOW', 'FAST', 'FASTEST'];
@@ -115,6 +130,33 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       fail(where, `objective "${objective}" does not take ignoreSingles`);
     }
 
+    /*
+     * The ORDER family is ABOUT the piece, so a pack that does not name one
+     * is not a mission this engine can judge - the same reasoning that
+     * refuses an unknown objective. 'LJ' and 'SZ' on RE TRIPLE ORDER are the
+     * reference's own special case: there they count every triple
+     * (mission.c:1044-1048), and that is worth writing down rather than
+     * discovering in play.
+     */
+    const requiredPiece = m.requiredPiece as RequiredPiece | undefined;
+    if (requiredPiece !== undefined && !REQUIRED_PIECES.includes(requiredPiece)) {
+      fail(where, `requiredPiece must be one of ${REQUIRED_PIECES.join(', ')}`);
+    }
+    if (ORDER_OBJECTIVES.includes(objective) && requiredPiece === undefined) {
+      fail(where, `objective "${objective}" needs a requiredPiece to be about`);
+    }
+    if (requiredPiece !== undefined && !ORDER_OBJECTIVES.includes(objective)) {
+      fail(where, `objective "${objective}" does not take a requiredPiece`);
+    }
+
+    const requireHold = m.requireHold;
+    if (requireHold !== undefined && typeof requireHold !== 'boolean') {
+      fail(where, 'requireHold must be true or false');
+    }
+    if (requireHold !== undefined && !ORDER_OBJECTIVES.includes(objective)) {
+      fail(where, `objective "${objective}" does not take requireHold`);
+    }
+
     const rawModifiers = (m.modifiers ?? {}) as Record<string, unknown>;
     const hidden = rawModifiers.hidden as HiddenMode | undefined;
     if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -124,6 +166,8 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
     return {
       ...(strictness !== undefined ? { strictness } : {}),
       ...(ignoreSingles !== undefined ? { ignoreSingles: ignoreSingles as boolean } : {}),
+      ...(requiredPiece !== undefined ? { requiredPiece } : {}),
+      ...(requireHold !== undefined ? { requireHold: requireHold as boolean } : {}),
       id,
       name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
       objective,

@@ -18,7 +18,7 @@
  * never be completed.
  */
 
-import type { HiddenMode } from './types';
+import type { HiddenMode, PieceType } from './types';
 
 /**
  * The objectives this engine can judge, each with the reference type it comes
@@ -39,7 +39,23 @@ export const MISSION_OBJECTIVES = [
   'level',        // "Clear %d stage(s)!" - this door counts levels
   'b2bTetris',    // HEBORIS: "%d times! Do not erase 3 or less lines!"
   'survive',      // "Do not top out!" - outlast the clock
+  // The ORDER family: a clear made BY a named piece (mission.c:989-1116).
+  'blockOrder',   // "BLOCKORDER" - lines cleared by that piece
+  'singleOrder',  // "SINGLE ORDER"
+  'doubleOrder',  // "DOUBLE ORDER"
+  'tripleOrder',  // "TRIPLE ORDER"
+  'reTripleOrder',// "RE TRIPLE ORDER" - a triple by anything BUT that piece
+  // The SPLIT family: a clear whose rows are not touching (mission.c:1053).
+  'splitDouble',  // "SPLIT DOUBLE"
+  'splitTriple',  // "SPLIT TRIPLE"
+  'splitDouble2', // "SPLIT DOUBLE2" - the gap is exactly two rows
 ] as const;
+
+/**
+ * A piece an ORDER mission asks for - the reference's `mission_opt_3`, where
+ * 0..6 name one piece, 7 is "L or J" and 8 is "S or Z" (mission.c:354-362).
+ */
+export type RequiredPiece = PieceType | 'LJ' | 'SZ';
 
 export type MissionObjective = typeof MISSION_OBJECTIVES[number];
 
@@ -85,6 +101,16 @@ export interface Mission {
    * a lock that clears nothing still breaks both (`gamestart.c:10159`).
    */
   ignoreSingles?: boolean;
+  /**
+   * ORDER family only: which piece the clear has to be made by
+   * (`mission_opt_3`). 'LJ' and 'SZ' are the reference's two pairs.
+   */
+  requiredPiece?: RequiredPiece;
+  /**
+   * ORDER family only (`mission_opt_2`, HOLD USE): the piece must have come
+   * out of hold.
+   */
+  requireHold?: boolean;
   /** The clock (mission_time). 0 = no limit; 'survive' needs one. */
   timeLimitSeconds: number;
   /** Starting speed (mission_lv). */

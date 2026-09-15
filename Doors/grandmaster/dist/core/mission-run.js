@@ -19,6 +19,43 @@ exports.nextIsHidden = nextIsHidden;
 function nextIsHidden(state) {
     return state.hideNextFrames > 0 || state.missionModifiers?.hideNext === true;
 }
+/**
+ * Does the locked piece answer what the mission asked for?
+ *
+ * The reference's `mission_opt_3` is 0..6 for one piece, 7 for "L or J" and
+ * 8 for "S or Z" (`mission.c:354-362`).
+ */
+function pieceMatches(required, piece) {
+    if (required === undefined)
+        return true;
+    if (required === 'LJ')
+        return piece === 'L' || piece === 'J';
+    if (required === 'SZ')
+        return piece === 'S' || piece === 'Z';
+    return required === piece;
+}
+/**
+ * The UNCLEARED rows lying between the cleared ones.
+ *
+ * The reference walks the field top-down and counts the rows it passes
+ * between the first cleared row and the last (`mission.c:1053-1066`); with
+ * the row indices to hand that is the span minus the rows that cleared.
+ */
+function gapBetween(rows) {
+    if (rows.length < 2)
+        return 0;
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    return last - first - (rows.length - 1);
+}
+/** The ORDER family, and how each counts a lock (mission.c:989-1116). */
+const ORDER_CLEAR = {
+    blockOrder: 'any',
+    singleOrder: 1,
+    doubleOrder: 2,
+    tripleOrder: 3,
+    reTripleOrder: 3,
+};
 /** Line counts that count toward each "exactly N lines" objective. */
 const EXACT_CLEAR = {
     single: 1, double: 2, triple: 3, tetris: 4,
@@ -104,6 +141,43 @@ class MissionRun {
             if (event.tSpinFull && event.lineCount >= 2)
                 this.current++;
         }
+        else if (ORDER_CLEAR[objective] !== undefined) {
+            /*
+             * The ORDER family (mission.c:989-1116). Each wants a clear of its own
+             * size made BY a named piece - and RE TRIPLE ORDER wants a triple made
+             * by any piece EXCEPT it, unless the pack named a pair, in which case
+             * the reference counts every triple (mission.c:1044-1048).
+             */
+            const want = ORDER_CLEAR[objective];
+            const required = this.mission.requiredPiece;
+            const sizeOk = want === 'any'
+                ? event.lineCount > 0
+                : (objective === 'doubleOrder' && this.mission.strictness === 'atLeast'
+                    ? event.lineCount >= want
+                    : event.lineCount === want);
+            const held = !this.mission.requireHold || event.cameFromHold;
+            const isPair = required === 'LJ' || required === 'SZ';
+            const pieceOk = objective === 'reTripleOrder'
+                ? (isPair ? true : !pieceMatches(required, event.pieceType))
+                : pieceMatches(required, event.pieceType);
+            if (sizeOk && pieceOk && held) {
+                // BLOCKORDER counts the LINES; the rest count the clears.
+                this.current += want === 'any' ? event.lineCount : 1;
+            }
+        }
+        else if (objective === 'splitDouble' || objective === 'splitTriple'
+            || objective === 'splitDouble2') {
+            /*
+             * The SPLIT family (mission.c:1053-1098): a clear whose rows are not
+             * all touching. SPLIT DOUBLE2 wants the gap to be exactly two.
+             */
+            const rows = event.clearedRows;
+            const wantedCount = objective === 'splitTriple' ? 3 : 2;
+            const gap = gapBetween(rows);
+            const gapOk = objective === 'splitDouble2' ? gap === 2 : gap !== 0;
+            if (rows.length === wantedCount && gapOk)
+                this.current++;
+        }
         else if (objective === 'combo') {
             // "Do %d combo(s)" - the highest combo reached, not a running total.
             // With NOT1LINE it is the counter singles do not advance that is read.
@@ -169,6 +243,23 @@ class MissionRun {
                 return `COMBO ${norm}  BEST ${this.current}`;
             case 'level':
                 return `REACH LEVEL ${norm}  ${this.current}/${norm}`;
+            case 'blockOrder':
+            case 'singleOrder':
+            case 'doubleOrder':
+            case 'tripleOrder': {
+                const piece = this.mission.requiredPiece ?? '?';
+                const held = this.mission.requireHold ? ' HELD' : '';
+                return `${objective.toUpperCase()} ${piece}${held}  ${this.current}/${norm}`;
+            }
+            case 'reTripleOrder': {
+                const piece = this.mission.requiredPiece ?? '?';
+                const anyPiece = piece === 'LJ' || piece === 'SZ';
+                return anyPiece
+                    ? `TRIPLES  ${this.current}/${norm}`
+                    : `TRIPLE NOT ${piece}  ${this.current}/${norm}`;
+            }
+            case 'splitDouble2':
+                return `SPLIT DOUBLE GAP 2  ${this.current}/${norm}`;
             default: {
                 // 'atLeast' is a different mission from 'exact' and the player has to
                 // be told which one they are playing: "DOUBLE 4" and "DOUBLE 4+" are

@@ -13,7 +13,6 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Mission, MissionPack } from '../core/mission-types';
 import type { MissionClear } from '../core/mission-progress';
-/** One sentence saying what the player has to do. */
 export declare function missionObjectiveText(mission: Mission): string;
 /** Every rule this mission changes, in the order a player meets them. */
 export declare function missionConditions(mission: Mission): string[];

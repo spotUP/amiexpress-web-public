@@ -21,6 +21,24 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const mission_select_1 = require("./mission-select");
 const door_theme_1 = require("../door-theme");
 /** One sentence saying what the player has to do. */
+/**
+ * "with the T piece", and whether it has to have been held.
+ *
+ * The ORDER family is about the piece, so the briefing has to name it - a
+ * player told only "clear two lines" will wonder why the clear did not count
+ * (the reference's mission_opt_3 and its HOLD USE flag, mission.c:354-362).
+ */
+function by(mission) {
+    const piece = mission.requiredPiece;
+    if (!piece)
+        return '';
+    const named = piece === 'LJ' ? 'L or J piece'
+        : piece === 'SZ' ? 'S or Z piece'
+            : `${piece} piece`;
+    return mission.requireHold
+        ? ` with the ${named}, held first`
+        : ` with the ${named}`;
+}
 function missionObjectiveText(mission) {
     const { objective, norm, timeLimitSeconds } = mission;
     const times = (n) => (n === 1 ? 'once' : `${n} times`);
@@ -40,6 +58,26 @@ function missionObjectiveText(mission) {
         case 'b2bTetris': return `Clear four lines at once ${times(norm)} in a row. `
             + 'A smaller clear resets the count.';
         case 'survive': return `Stay alive for ${timeLimitSeconds} seconds.`;
+        case 'blockOrder': return `Clear ${norm} lines${by(mission)}.`;
+        case 'singleOrder': return `Clear exactly one line${by(mission)}, ${times(norm)}.`;
+        case 'doubleOrder': return mission.strictness === 'atLeast'
+            ? `Clear two lines or more at once${by(mission)}, ${times(norm)}.`
+            : `Clear two lines at once${by(mission)}, ${times(norm)}.`;
+        case 'tripleOrder': return `Clear three lines at once${by(mission)}, ${times(norm)}.`;
+        case 'reTripleOrder': {
+            const piece = mission.requiredPiece;
+            // 'LJ' and 'SZ' here are the reference's own special case: with a pair
+            // named, every triple counts (mission.c:1044-1048).
+            return piece === 'LJ' || piece === 'SZ'
+                ? `Clear three lines at once, ${times(norm)}. Any piece.`
+                : `Clear three lines at once with ANY piece but the ${piece}, ${times(norm)}.`;
+        }
+        case 'splitDouble': return `Clear two lines at once with at least one row `
+            + `left between them, ${times(norm)}.`;
+        case 'splitTriple': return `Clear three lines at once with a row left `
+            + `between them, ${times(norm)}.`;
+        case 'splitDouble2': return `Clear two lines at once with exactly two rows `
+            + `left between them, ${times(norm)}.`;
         default: return 'Play.';
     }
 }

@@ -56,6 +56,12 @@ export declare class GameEngine {
      * MISSION's COMBO objective reads this one when its NOT1LINE option is set.
      */
     private comboIgnoringSingles;
+    /**
+     * The live piece came OUT of hold (the reference's `dhold2` +
+     * `hold_used >= 2`, mission.c:989-1000). The ORDER objectives can ask for
+     * a piece that was held, so the judge has to be told.
+     */
+    private currentCameFromHold;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
