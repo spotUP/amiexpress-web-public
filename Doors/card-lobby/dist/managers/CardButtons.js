@@ -31,15 +31,23 @@ class CardButtons {
     constructor(host) {
         this.host = host;
         this.buttons = [];
+        /** The cards lying UNDER the ones above: drawn, never picked, never focused. */
+        this.unders = [];
         this.lastKey = '';
     }
     /** The widgets Tab should walk, left to right. */
     focusables() {
         return this.buttons.filter((button) => !button.hidden);
     }
+    /** The cards lying under the ones above - drawn only, in the same order. */
+    underlays() {
+        return this.unders.filter((under) => !under.hidden);
+    }
     clear() {
         for (const button of this.buttons)
             button.hide();
+        for (const under of this.unders)
+            under.hide();
         this.lastKey = '';
         this.host.fallback.show();
     }
@@ -83,9 +91,9 @@ class CardButtons {
          * first build did on the sysop's own screen.
          */
         const chrome = (0, card_style_1.resolveCardStyle)(this.host.cardPreferences, rows - LIFT_ROWS, this.host.unicodeCapable);
-        const draw = (size) => {
+        const drawOne = (entry, size) => {
             const renderOptions = (0, card_style_1.toRenderOptions)({ ...chrome, size });
-            return cards.map((entry) => {
+            {
                 /*
                  * THE FACE IS THE CARD'S, not the row's. `faceDown` turns a whole
                  * row over (the blind endgame), but a row can be MIXED: the six in
@@ -95,12 +103,14 @@ class CardButtons {
                  * the sysop's screen (2026-09-15).
                  */
                 const face = entry.face ?? (options.faceDown ? 'back' : 'front');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const lines = entry.kind === 'uno'
                     ? cardEngine.renderUnoCardLines({ ...entry.card, face }, renderOptions)
                     : cardEngine.renderCardLines({ ...entry.card, face }, renderOptions);
                 return lines.map((line) => (0, utils_1.ansiToBlessedTags)(line));
-            });
+            }
         };
+        const draw = (size) => cards.map((entry) => drawOne(entry, size));
         /*
          * A ROW OF CARDS IS ONE HEIGHT. The engine draws a BACK shorter than a
          * face - three rows shorter at full size - so a mixed row (the three
@@ -148,12 +158,24 @@ class CardButtons {
          * changes shape.
          */
         const MIN_STRIDE = 3;
+        /*
+         * How far the card on top sits down and to the right of the one under
+         * it. Two columns and one row is enough to show a corner of the card
+         * below, which is what says "there is something under this" - and it is
+         * all the room a 57-column panel can spare for three piles.
+         */
+        const STACK_X = 2;
+        const STACK_Y = 1;
+        const stacked = cards.some((entry) => entry.under);
+        const slotX = stacked ? STACK_X : 0;
+        const slotY = stacked ? STACK_Y : 0;
         const measure = (candidate) => ({
-            cardWidth: (0, utils_1.stripBlessedTags)(candidate[0]?.[0] ?? '').length,
-            cardHeight: candidate[0]?.length ?? 0,
+            // The SLOT, which is the card plus the corner of whatever is under it.
+            cardWidth: (0, utils_1.stripBlessedTags)(candidate[0]?.[0] ?? '').length + slotX,
+            cardHeight: (candidate[0]?.length ?? 0) + slotY,
         });
         /** Cards side by side with a column between them, wrapping into rows. */
-        const grid = (candidate) => {
+        const grid = (candidate, size) => {
             const { cardWidth, cardHeight } = measure(candidate);
             if (cardWidth === 0 || cardHeight === 0)
                 return null;
@@ -161,10 +183,10 @@ class CardButtons {
             const cardRows = Math.ceil(cards.length / perRow);
             if (cardRows * cardHeight + LIFT_ROWS > rows)
                 return null;
-            return { perRow, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
+            return { perRow, size, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
         };
         /** One row, each card overlapping the one before it. */
-        const fan = (candidate) => {
+        const fan = (candidate, size) => {
             const { cardWidth, cardHeight } = measure(candidate);
             if (cardWidth === 0 || cardHeight === 0)
                 return null;
@@ -177,6 +199,7 @@ class CardButtons {
                 return null;
             return {
                 perRow: cards.length,
+                size,
                 stride: Math.min(stride, cardWidth + 1),
                 cardRows: 1,
                 height: cardHeight,
@@ -196,7 +219,7 @@ class CardButtons {
         for (const shape of [grid, fan]) {
             for (const size of sizes) {
                 const candidate = artFor(size);
-                const found = shape(candidate);
+                const found = shape(candidate, size);
                 if (found) {
                     art = candidate;
                     layout = found;
@@ -210,8 +233,16 @@ class CardButtons {
             this.clear();
             return false;
         }
-        const cardWidth = layout.cardWidth;
-        const cardHeight = layout.height;
+        // The slot holds the card plus the corner of what is under it; the
+        // widgets themselves are the size of the card art.
+        const slotWidth = layout.cardWidth;
+        const cardWidth = slotWidth - slotX;
+        const cardHeight = layout.height - slotY;
+        const underArt = stacked
+            ? cards.map((entry) => (entry.under
+                ? square([drawOne(entry.under, layout.size)])[0]
+                : null))
+            : cards.map(() => null);
         /*
          * A full-size card is TEN rows and the hand panel's inside is ten, so a
          * number printed under each card does not fit - it was the difference
@@ -225,6 +256,8 @@ class CardButtons {
         const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
         this.host.fallback.hide();
         this.ensure(cards.length);
+        if (stacked)
+            this.ensureUnders(cards.length);
         cards.forEach((_, index) => {
             const button = this.buttons[index];
             const row = Math.floor(index / perRow);
@@ -233,12 +266,34 @@ class CardButtons {
             const playable = options.playable.includes(index);
             const number = (options.labelFrom ?? 1) + index;
             const label = number === 10 ? '0' : String(number);
+            const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
+            const slotLeft = column * layout.stride;
+            /*
+             * The card UNDER this one, at the slot's own corner: the card on top
+             * is then offset down and right, so the one below shows through at the
+             * top left the way a pile does.
+             */
+            const beneath = underArt[index];
+            const underButton = this.unders[index];
+            if (beneath && underButton) {
+                underButton.show();
+                underButton.width = cardWidth;
+                underButton.height = cardHeight;
+                underButton.top = slotTop;
+                underButton.left = slotLeft;
+                underButton.setContent(beneath.join('\n'));
+                // Behind everything, whatever order the widgets were made in.
+                underButton.setBack?.();
+            }
+            else if (underButton) {
+                underButton.hide();
+            }
             button.show();
             button.width = cardWidth;
             button.height = buttonHeight;
             // Everything sits one row down, and the picked card rises into the gap.
-            button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
-            button.left = column * layout.stride;
+            button.top = slotTop + (beneath ? slotY : 0);
+            button.left = slotLeft + (beneath ? slotX : 0);
             const showLabel = withLabels && options.labels !== false;
             button.setContent(showLabel
                 ? [
@@ -266,6 +321,9 @@ class CardButtons {
         for (let index = cards.length; index < this.buttons.length; index += 1) {
             this.buttons[index].hide();
         }
+        for (let index = cards.length; index < this.unders.length; index += 1) {
+            this.unders[index].hide();
+        }
         /*
          * In a fan each card is drawn over the one before it, so the card the
          * caller has picked - the whole point of the lift - would be the one
@@ -284,12 +342,35 @@ class CardButtons {
             + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
             // The shape as well: the same cards in a resized panel are a different
             // picture, and skipping that repaint leaves a fan at the old stride.
-            + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`;
+            + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`
+            + `|${cards.map((entry) => (entry.under
+                ? `${entry.under.card.rank ?? entry.under.card.color}${entry.under.face ?? ''}`
+                : '-')).join(',')}`;
         if (key !== this.lastKey) {
             this.lastKey = key;
             this.host.screen.render();
         }
         return true;
+    }
+    /** The widgets for the cards underneath, made once and reused. */
+    ensureUnders(count) {
+        while (this.unders.length < count) {
+            this.unders.push((0, blessed_helpers_1.createBox)({
+                parent: this.host.panel,
+                border: undefined,
+                top: 1,
+                left: 1,
+                width: 9,
+                height: 7,
+                tags: true,
+                mouse: false,
+                keys: false,
+                clickable: false,
+                focusable: false,
+                hidden: true,
+                style: { bg: constants_1.UI_THEME.windowBg },
+            }));
+        }
     }
     ensure(count) {
         while (this.buttons.length < count) {

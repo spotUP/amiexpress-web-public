@@ -58,9 +58,24 @@ export interface CardButtonOptionsBase {
  * with a different call. "this goes for all card games dont [do] changes for
  * only one game" (sysop, 2026-09-15).
  */
-export type PlayableCard =
+export type DrawnCard =
   | { kind: 'standard'; card: Card; face?: 'front' | 'back' }
   | { kind: 'uno'; card: { color: string; value: string }; face?: 'front' | 'back' };
+
+/**
+ * A card, and whatever lies UNDER it.
+ *
+ * Cards on a table are not always side by side. In Skitgubbe each player has
+ * three PILES in front of them - a blind card face down with an open one
+ * lying on top of it - and drawing those as six cards in a row says the
+ * wrong thing about the game: "there is 3 cards in front of me, backside up,
+ * they are blind and on top of those there are 3 cards that are open, you
+ * put 6 open cards next to each other" (sysop, 2026-09-15). `under` is that
+ * pile: it is drawn first, up and to the left, so its corner shows behind
+ * the card on top - and it is drawn, not implied, so when the open card is
+ * played what is left is a card, still face down.
+ */
+export type PlayableCard = DrawnCard & { under?: DrawnCard };
 
 export interface CardButtonOptions extends CardButtonOptionsBase {
   /** The card the caller has picked, drawn lit. */
@@ -85,6 +100,8 @@ export interface CardButtonOptions extends CardButtonOptionsBase {
 interface Layout {
   /** Cards in a row before it wraps. */
   perRow: number;
+  /** The card size this layout was measured at. */
+  size: 'full' | 'mini';
   /** Columns from one card's left edge to the next: overlapping when < width. */
   stride: number;
   cardRows: number;
@@ -94,6 +111,8 @@ interface Layout {
 
 export class CardButtons {
   private buttons: Box[] = [];
+  /** The cards lying UNDER the ones above: drawn, never picked, never focused. */
+  private unders: Box[] = [];
   private lastKey = '';
 
   constructor(private readonly host: CardButtonHost) {}
@@ -103,8 +122,14 @@ export class CardButtons {
     return this.buttons.filter((button) => !button.hidden);
   }
 
+  /** The cards lying under the ones above - drawn only, in the same order. */
+  public underlays(): Box[] {
+    return this.unders.filter((under) => !under.hidden);
+  }
+
   public clear(): void {
     for (const button of this.buttons) button.hide();
+    for (const under of this.unders) under.hide();
     this.lastKey = '';
     this.host.fallback.show();
   }
@@ -158,9 +183,9 @@ export class CardButtons {
       this.host.unicodeCapable,
     );
 
-    const draw = (size: 'full' | 'mini'): string[][] => {
+    const drawOne = (entry: DrawnCard, size: 'full' | 'mini'): string[] => {
       const renderOptions = toRenderOptions({ ...chrome, size }) as never;
-      return cards.map((entry) => {
+      {
         /*
          * THE FACE IS THE CARD'S, not the row's. `faceDown` turns a whole
          * row over (the blind endgame), but a row can be MIXED: the six in
@@ -170,12 +195,16 @@ export class CardButtons {
          * the sysop's screen (2026-09-15).
          */
         const face = entry.face ?? (options.faceDown ? 'back' : 'front');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lines = entry.kind === 'uno'
           ? cardEngine.renderUnoCardLines({ ...(entry.card as any), face }, renderOptions)
           : cardEngine.renderCardLines({ ...(entry.card as any), face }, renderOptions);
         return (lines as string[]).map((line: string) => ansiToBlessedTags(line));
-      });
+      }
     };
+
+    const draw = (size: 'full' | 'mini'): string[][] =>
+      cards.map((entry) => drawOne(entry, size));
 
     /*
      * A ROW OF CARDS IS ONE HEIGHT. The engine draws a BACK shorter than a
@@ -225,23 +254,36 @@ export class CardButtons {
      */
     const MIN_STRIDE = 3;
 
+    /*
+     * How far the card on top sits down and to the right of the one under
+     * it. Two columns and one row is enough to show a corner of the card
+     * below, which is what says "there is something under this" - and it is
+     * all the room a 57-column panel can spare for three piles.
+     */
+    const STACK_X = 2;
+    const STACK_Y = 1;
+    const stacked = cards.some((entry) => entry.under);
+    const slotX = stacked ? STACK_X : 0;
+    const slotY = stacked ? STACK_Y : 0;
+
     const measure = (candidate: string[][]): { cardWidth: number; cardHeight: number } => ({
-      cardWidth: stripBlessedTags(candidate[0]?.[0] ?? '').length,
-      cardHeight: candidate[0]?.length ?? 0,
+      // The SLOT, which is the card plus the corner of whatever is under it.
+      cardWidth: stripBlessedTags(candidate[0]?.[0] ?? '').length + slotX,
+      cardHeight: (candidate[0]?.length ?? 0) + slotY,
     });
 
     /** Cards side by side with a column between them, wrapping into rows. */
-    const grid = (candidate: string[][]): Layout | null => {
+    const grid = (candidate: string[][], size: 'full' | 'mini'): Layout | null => {
       const { cardWidth, cardHeight } = measure(candidate);
       if (cardWidth === 0 || cardHeight === 0) return null;
       const perRow = Math.max(1, Math.floor(width / (cardWidth + 1)));
       const cardRows = Math.ceil(cards.length / perRow);
       if (cardRows * cardHeight + LIFT_ROWS > rows) return null;
-      return { perRow, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
+      return { perRow, size, stride: cardWidth + 1, cardRows, height: cardHeight, cardWidth };
     };
 
     /** One row, each card overlapping the one before it. */
-    const fan = (candidate: string[][]): Layout | null => {
+    const fan = (candidate: string[][], size: 'full' | 'mini'): Layout | null => {
       const { cardWidth, cardHeight } = measure(candidate);
       if (cardWidth === 0 || cardHeight === 0) return null;
       if (cards.length < 2) return null;
@@ -250,6 +292,7 @@ export class CardButtons {
       if (stride < MIN_STRIDE) return null;
       return {
         perRow: cards.length,
+        size,
         stride: Math.min(stride, cardWidth + 1),
         cardRows: 1,
         height: cardHeight,
@@ -270,7 +313,7 @@ export class CardButtons {
     for (const shape of [grid, fan]) {
       for (const size of sizes) {
         const candidate = artFor(size);
-        const found = shape(candidate);
+        const found = shape(candidate, size);
         if (found) { art = candidate; layout = found; break; }
       }
       if (layout) break;
@@ -280,8 +323,16 @@ export class CardButtons {
       return false;
     }
 
-    const cardWidth = layout.cardWidth;
-    const cardHeight = layout.height;
+    // The slot holds the card plus the corner of what is under it; the
+    // widgets themselves are the size of the card art.
+    const slotWidth = layout.cardWidth;
+    const cardWidth = slotWidth - slotX;
+    const cardHeight = layout.height - slotY;
+    const underArt = stacked
+      ? cards.map((entry) => (entry.under
+        ? square([drawOne(entry.under, layout!.size)])[0]
+        : null))
+      : cards.map(() => null);
 
     /*
      * A full-size card is TEN rows and the hand panel's inside is ten, so a
@@ -297,6 +348,7 @@ export class CardButtons {
 
     this.host.fallback.hide();
     this.ensure(cards.length);
+    if (stacked) this.ensureUnders(cards.length);
 
     cards.forEach((_, index) => {
       const button = this.buttons[index];
@@ -307,12 +359,35 @@ export class CardButtons {
       const number = (options.labelFrom ?? 1) + index;
       const label = number === 10 ? '0' : String(number);
 
+      const slotTop = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
+      const slotLeft = column * layout!.stride;
+
+      /*
+       * The card UNDER this one, at the slot's own corner: the card on top
+       * is then offset down and right, so the one below shows through at the
+       * top left the way a pile does.
+       */
+      const beneath = underArt[index];
+      const underButton = this.unders[index];
+      if (beneath && underButton) {
+        underButton.show();
+        underButton.width = cardWidth;
+        underButton.height = cardHeight;
+        underButton.top = slotTop;
+        underButton.left = slotLeft;
+        underButton.setContent(beneath.join('\n'));
+        // Behind everything, whatever order the widgets were made in.
+        (underButton as any).setBack?.();
+      } else if (underButton) {
+        underButton.hide();
+      }
+
       button.show();
       button.width = cardWidth;
       button.height = buttonHeight;
       // Everything sits one row down, and the picked card rises into the gap.
-      button.top = row * buttonHeight + (picked ? 0 : LIFT_ROWS);
-      button.left = column * layout!.stride;
+      button.top = slotTop + (beneath ? slotY : 0);
+      button.left = slotLeft + (beneath ? slotX : 0);
       const showLabel = withLabels && options.labels !== false;
       button.setContent(showLabel
         ? [
@@ -341,6 +416,9 @@ export class CardButtons {
     for (let index = cards.length; index < this.buttons.length; index += 1) {
       this.buttons[index].hide();
     }
+    for (let index = cards.length; index < this.unders.length; index += 1) {
+      this.unders[index].hide();
+    }
 
     /*
      * In a fan each card is drawn over the one before it, so the card the
@@ -361,12 +439,36 @@ export class CardButtons {
       + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
       // The shape as well: the same cards in a resized panel are a different
       // picture, and skipping that repaint leaves a fan at the old stride.
-      + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`;
+      + `|${cardWidth}x${cardHeight}@${layout.stride}/${layout.perRow}`
+      + `|${cards.map((entry) => (entry.under
+        ? `${(entry.under.card as any).rank ?? (entry.under.card as any).color}${entry.under.face ?? ''}`
+        : '-')).join(',')}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
       this.host.screen.render();
     }
     return true;
+  }
+
+  /** The widgets for the cards underneath, made once and reused. */
+  private ensureUnders(count: number): void {
+    while (this.unders.length < count) {
+      this.unders.push(createBox({
+        parent: this.host.panel,
+        border: undefined,
+        top: 1,
+        left: 1,
+        width: 9,
+        height: 7,
+        tags: true,
+        mouse: false,
+        keys: false,
+        clickable: false,
+        focusable: false,
+        hidden: true,
+        style: { bg: UI_THEME.windowBg },
+      }) as Box);
+    }
   }
 
   private ensure(count: number): void {

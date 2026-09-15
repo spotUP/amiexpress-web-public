@@ -32,6 +32,33 @@ import { UI_THEME } from '../lib/constants';
 /** The stand-in for a card the caller is not allowed to see. */
 const HIDDEN_CARD = { rank: 'A', suit: 'S' } as const;
 
+/** A card nobody may look at: only its back is ever drawn. */
+const blind = () => ({ kind: 'standard' as const, card: HIDDEN_CARD as any, face: 'back' as const });
+
+/**
+ * The piles in front of a Skitgubbe player, one per blind card.
+ *
+ * Paired by position: the open card sits on the blind one it was dealt onto.
+ * Play the open card and the pile is a back on its own - which is exactly
+ * what it is, since the blind cards are played last of all.
+ */
+function tableStacks(me: any): any[] {
+  const faceUp = me?.faceUp ?? [];
+  const faceDown = me?.faceDown ?? [];
+  const piles = Math.max(faceUp.length, faceDown.length);
+  const stacks: any[] = [];
+  for (let index = 0; index < piles; index += 1) {
+    const open = faceUp[index];
+    const hidden = faceDown[index];
+    if (open) {
+      stacks.push({ kind: 'standard' as const, card: open, ...(hidden ? { under: blind() } : {}) });
+    } else if (hidden) {
+      stacks.push(blind());
+    }
+  }
+  return stacks;
+}
+
 export interface GameViewHost {
   readonly uiManager: UIManager;
   readonly currentProfile: PlayerProfile | null;
@@ -548,19 +575,15 @@ export class GameViews {
     // picked. The six in front of them are shown rather than played from -
     // the moment they become playable they are what `cardsInPlay` returns.
     /*
-     * THE SIX IN FRONT OF YOU ARE THREE FACES AND THREE BACKS, so the row is
-     * built card by card rather than turned over as one: `faceDown` is a
-     * property of the ROW and would hide the three that are face up. Before
-     * this the backs were drawn with the stand-in card object they are faked
-     * from, which put three Aces of Spades on the table (2026-09-15).
+     * THREE PILES, NOT SIX CARDS. "there is 3 cards in front of me, backside
+     * up, they are blind and on top of those there are 3 cards that are
+     * open, you put 6 open cards next to each other" (sysop, 2026-09-15).
+     * Each pile is a blind card with an open one lying on it, and the blind
+     * ones are the LAST cards you play - so when the open card goes, the
+     * pile is still there with its back showing.
      */
     const entries = showingTable
-      ? [
-        ...(me?.faceUp ?? []).map((card) => ({ kind: 'standard' as const, card: card as any })),
-        ...(me?.faceDown ?? []).map(() => ({
-          kind: 'standard' as const, card: HIDDEN_CARD as any, face: 'back' as const,
-        })),
-      ]
+      ? tableStacks(me)
       : (showing as any[]).map((card) => ({ kind: 'standard' as const, card }));
 
     this.host.cardButtons.render(entries, {

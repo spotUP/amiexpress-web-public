@@ -55,6 +55,30 @@ const SIX = [
   { rank: '7', suit: 'C' }, { rank: 'J', suit: 'H' }, { rank: '4', suit: 'S' },
 ];
 
+/** Seated at a Skitgubbe table with bots, dealt, and past the swap. */
+async function seatedAndPlaying(app: any, id: number): Promise<void> {
+  const me = app.currentProfile.userId;
+  const table: any = {
+    id, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+    smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+    minPlayers: 2, maxPlayers: 3, status: 'open',
+    createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+    autoStart: false, isPrivate: false, observers: [],
+    players: [{
+      userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+      role: 'player', joinedAt: Date.now(), isBot: false,
+    }],
+  };
+  app.syncBotsForTable(table);
+  app.lobby.tables.unshift(table);
+  app.currentProfile.currentTableId = id;
+  app.currentProfile.status = 'table';
+  await app.persistState();
+  await app.dealHand();
+  app.vandtia.primaryAction();                 // ready: the play starts
+  await new Promise((r) => setTimeout(r, 600));
+}
+
 const lines = (button: any): string[] => String(button.getContent()).split('\n');
 
 export async function sixCardsAreDrawnRatherThanDeclined(): Promise<void> {
@@ -129,30 +153,16 @@ export async function aRowOfFacesAndBacksIsOneHeight(): Promise<void> {
   } finally { app.screen?.destroy?.(); }
 }
 
-export async function theCardsInFrontOfYouAreThreeFacesAndThreeBacks(): Promise<void> {
-  // Through the door: deal, start the play, and turn the panel over with V.
+export async function theCardsInFrontOfYouAreThreePilesNotSixCards(): Promise<void> {
+  /*
+   * "there is 3 cards in front of me, backside up, they are blind and on top
+   * of those there are 3 cards that are open, you put 6 open cards next to
+   * each other" (sysop, 2026-09-15). Three PILES: a blind card with an open
+   * one lying on it, and the blind ones are played last of all.
+   */
   const app = await openApp();
   try {
-    const me = app.currentProfile.userId;
-    const table: any = {
-      id: 96, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
-      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
-      minPlayers: 2, maxPlayers: 3, status: 'open',
-      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
-      autoStart: false, isPrivate: false, observers: [],
-      players: [{
-        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
-        role: 'player', joinedAt: Date.now(), isBot: false,
-      }],
-    };
-    app.syncBotsForTable(table);
-    app.lobby.tables.unshift(table);
-    app.currentProfile.currentTableId = 96;
-    app.currentProfile.status = 'table';
-    await app.persistState();
-    await app.dealHand();
-    app.vandtia.primaryAction();                 // ready: the play starts
-    await new Promise((r) => setTimeout(r, 600));
+    await seatedAndPlaying(app, 96);
     app.applyViewMode('table');
     app.updateAllPanels();
 
@@ -160,18 +170,51 @@ export async function theCardsInFrontOfYouAreThreeFacesAndThreeBacks(): Promise<
     (app.screen as any)._handleKey('v', { name: 'v', full: 'v', ch: 'v' });
     assert.strictEqual(app.vandtia.handView, 'table', 'V turns the panel over');
 
-    const buttons = app.cardButtons.focusables();
-    assert.strictEqual(buttons.length, 6,
-      'three face up and three face down, all drawn as widgets');
+    const open = app.cardButtons.focusables();
+    const blind = app.cardButtons.underlays();
+    assert.strictEqual(open.length, 3, 'three open cards, not six cards in a row');
+    assert.strictEqual(blind.length, 3, 'and a blind card under each of them');
     assert.strictEqual(app.uiManager.handContent.hidden, true,
       'the clipped text fallback is not what the caller gets');
 
-    const backs = buttons.slice(3).map((button: any) => button.getContent());
-    assert.strictEqual(new Set(backs).size, 1, 'the three face-down cards are backs');
-
-    for (const face of buttons.slice(0, 3)) {
-      assert.notStrictEqual((face as any).getContent(), backs[0],
-        'and the three face up are faces, not more backs');
+    for (let pile = 0; pile < 3; pile += 1) {
+      assert.ok(Number(blind[pile].left) < Number(open[pile].left),
+        'the blind card shows at the left of the one lying on it');
+      assert.ok(Number(blind[pile].top) < Number(open[pile].top),
+        'and above it, so the caller can see there is something under there');
     }
+
+    const backs = blind.map((card: any) => card.getContent());
+    assert.strictEqual(new Set(backs).size, 1, 'a blind card is a back, whatever it is');
+    for (const card of open) {
+      assert.notStrictEqual((card as any).getContent(), backs[0],
+        'and the cards on top are faces');
+    }
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aPileWhoseOpenCardIsGoneIsStillABlindCard(): Promise<void> {
+  // The open card is played before the blind one under it, so a pile spends
+  // the rest of the game as a back on its own.
+  const app = await openApp();
+  try {
+    await seatedAndPlaying(app, 97);
+    const table = app.findTableById(97);
+    const loaded = app.vandtia.load(table);
+    const me = loaded.engine.state.players.find((p: any) => p.id === app.currentProfile.userId);
+    me.faceUp = [];                                   // the three open ones are gone
+    table.hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+
+    app.vandtia.handView = 'table';
+    app.applyViewMode('table');
+    app.updateAllPanels();
+
+    const open = app.cardButtons.focusables();
+    assert.strictEqual(open.length, 3, 'the three piles are still there');
+    assert.strictEqual(app.cardButtons.underlays().length, 0,
+      'with nothing left lying on them');
+    const faces = open.map((card: any) => card.getContent());
+    assert.strictEqual(new Set(faces).size, 1, 'and all three are backs');
   } finally { app.screen?.destroy?.(); }
 }
