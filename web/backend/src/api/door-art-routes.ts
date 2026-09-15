@@ -71,7 +71,14 @@ export function createDoorArtRouter(opts: { getDoors?: () => ArtDoor[] } = {}): 
   const handleError = (res: Response, error: unknown) => {
 console.error('Door art API error:', error);
     const message = error instanceof Error ? error.message : 'An error occurred';
+    // A value that names something outside the door is the CALLER's mistake,
+    // not the board's: it arrives from a settings form and must read as 400,
+    // or a traversal attempt looks to the admin exactly like a broken server.
+    const badValue = message.includes('outside this door')
+                  || message.includes('not a file inside')
+                  || message.includes('link out of');
     const statusCode = message.includes('not found') || message.includes('No door') ? 404
+                     : badValue ? 400
                      : message.includes('at most') || message.includes('must be') ? 400
                      : 500;
     res.status(statusCode).json({
