@@ -41,7 +41,7 @@ class CardButtons {
         for (const button of this.buttons)
             button.hide();
         this.lastKey = '';
-        this.host.handContent.show();
+        this.host.fallback.show();
     }
     /**
      * Draw the hand as buttons.
@@ -54,7 +54,7 @@ class CardButtons {
         return this.render(cards.map((card) => ({ kind: 'standard', card })), options);
     }
     render(cards, options) {
-        const panel = this.host.handPanel;
+        const panel = this.host.panel;
         const rows = Math.max(0, (Number(panel.height) || 0) - 2);
         const width = Math.max(0, (Number(panel.width) || 0) - 2);
         /*
@@ -126,7 +126,7 @@ class CardButtons {
         const perRow = layout.perRow;
         const withLabels = layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
         const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
-        this.host.handContent.hide();
+        this.host.fallback.hide();
         this.ensure(cards.length);
         cards.forEach((_, index) => {
             const button = this.buttons[index];
@@ -134,7 +134,8 @@ class CardButtons {
             const column = index % perRow;
             const picked = index === options.selected;
             const playable = options.playable.includes(index);
-            const label = index === 9 ? '0' : String(index + 1);
+            const number = (options.labelFrom ?? 1) + index;
+            const label = number === 10 ? '0' : String(number);
             button.show();
             button.width = cardWidth;
             button.height = buttonHeight;
@@ -155,8 +156,11 @@ class CardButtons {
             // leave the hand, and a stale closure would play the wrong card.
             button.removeAllListeners('click');
             button.removeAllListeners('press');
+            button.removeAllListeners('focus');
             button.on('click', () => options.onPick(index));
             button.on('press', () => options.onPick(index));
+            if (options.onFocus)
+                button.on('focus', () => options.onFocus?.(index));
         });
         for (let index = cards.length; index < this.buttons.length; index += 1) {
             this.buttons[index].hide();
@@ -176,7 +180,7 @@ class CardButtons {
     ensure(count) {
         while (this.buttons.length < count) {
             this.buttons.push((0, blessed_helpers_1.createBox)({
-                parent: this.host.handPanel,
+                parent: this.host.panel,
                 border: undefined,
                 top: 1,
                 left: 1,

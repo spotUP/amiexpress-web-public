@@ -22,6 +22,8 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './vandtia-engine.test',
   './vandtia-table.test',
   './a-card-is-a-thing-you-can-click.test',
+  './the-instructions-do-not-scroll-away.test',
+  './a-patience-is-a-text-file.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

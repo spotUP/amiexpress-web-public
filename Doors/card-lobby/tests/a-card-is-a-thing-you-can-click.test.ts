@@ -55,6 +55,9 @@ function sizeHandPanel(app: any, width: number, height: number): void {
   app.uiManager.handPanel.height = height;
 }
 
+/** The text box the widgets hide, and show again when they stand down. */
+const handText = (app: any): any => app.uiManager.handContent;
+
 const HAND = [
   { rank: '9', suit: 'S' },
   { rank: 'K', suit: 'H' },
@@ -125,7 +128,7 @@ export async function aPanelTooSmallForCardsFallsBackToText(): Promise<void> {
 
     assert.strictEqual(drawn, false, 'the buttons decline a panel they do not fit');
     assert.strictEqual(app.cardButtons.focusables().length, 0, 'and leave nothing behind');
-    assert.strictEqual(app.uiManager.handContent.hidden, false,
+    assert.strictEqual(handText(app).hidden, false,
       'the text list is visible again');
   } finally { app.screen?.destroy?.(); }
 }

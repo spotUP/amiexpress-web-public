@@ -276,7 +276,33 @@ class CardLobbyApp {
          * brings its own. Nothing else in this file asks which game a table is
          * playing any more.
          */
-        this.cardButtons = new CardButtons_1.CardButtons(this.uiManager);
+        /*
+         * TWO ROWS OF CARDS, so two sets of widgets: the caller's hand in the
+         * hand panel, and - for a game like Skitgubbe, where three cards lie
+         * face up in front of you all game - their own table in the board panel.
+         * "i dont see any table cards i see just 3 cards" (sysop, 2026-09-15):
+         * you cannot swap with a card that is not on screen.
+         */
+        const uiManagerRef = this.uiManager;
+        /*
+         * Every field is a GETTER: the panels do not exist yet at this point -
+         * `buildTablePanels` runs later - so a reference captured here would be
+         * undefined for the life of the door.
+         */
+        this.cardButtons = new CardButtons_1.CardButtons({
+            get panel() { return uiManagerRef.handPanel; },
+            get fallback() { return uiManagerRef.handContent; },
+            get screen() { return uiManagerRef.screen; },
+            get cardPreferences() { return uiManagerRef.cardPreferences; },
+            get unicodeCapable() { return uiManagerRef.unicodeCapable; },
+        });
+        this.tableCardButtons = new CardButtons_1.CardButtons({
+            get panel() { return uiManagerRef.flopPanel; },
+            get fallback() { return uiManagerRef.flopContent; },
+            get screen() { return uiManagerRef.screen; },
+            get cardPreferences() { return uiManagerRef.cardPreferences; },
+            get unicodeCapable() { return uiManagerRef.unicodeCapable; },
+        });
         this.skitgubbe = new games_1.SkitgubbeGameModule(this);
         this.vandtia = new games_1.VandtiaGameModule(this);
         this.games = new games_1.GameRegistry([
@@ -829,7 +855,9 @@ class CardLobbyApp {
         ];
         // One painter owns the panel: it wraps to the panel's own width and holds
         // the reader's scroll position (UIManager.paintActivity).
-        this.uiManager.setActivityBody(lines);
+        // A game's instructions are pinned: they are written first and must not
+        // scroll away under the event feed (managers/UIManager.ts).
+        this.uiManager.setActivityBody(lines, gameLines.length > 0);
     }
     updateAllPanels() {
         if (this.viewMode === 'table' && !this.currentProfile?.currentTableId) {
@@ -1204,11 +1232,14 @@ class CardLobbyApp {
         this.screen.render();
     }
     cycleFocus(direction) {
+        // Whatever this ends up focusing, the panel borders are repainted at the
+        // end of it - see `finishFocusCycle`.
         const focusOrder = this.viewMode === 'table'
             ? [
                 // The cards first: at a table they are what a caller wants to reach,
                 // and Tab used to walk two text panels and stop.
                 ...this.cardButtons.focusables(),
+                ...this.tableCardButtons.focusables(),
                 this.playersContent,
                 this.activityContent,
                 this.actionButtons.fold,
@@ -1237,6 +1268,9 @@ class CardLobbyApp {
         const next = ring[nextIndex];
         if (next?.focus) {
             next.focus();
+            // ...and say so: the bordered panel is not what took the focus, so the
+            // border has to be lit by hand (UIManager.highlightFocusedPanel).
+            this.uiManager.highlightFocusedPanel();
             this.screen.render();
         }
     }

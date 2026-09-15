@@ -175,6 +175,8 @@ export class CardLobbyApp {
    * something to click and Tab has somewhere to land (managers/CardButtons.ts).
    */
   public cardButtons!: CardButtons;
+  /** The cards lying in front of the caller - their own table row. */
+  public tableCardButtons!: CardButtons;
   private terminalMode!: TerminalModeSwitch;
   /** The board's theme, resolved once: tags, and the palette behind them. */
   private styles!: ThemeStyles;
@@ -424,7 +426,33 @@ export class CardLobbyApp {
      * brings its own. Nothing else in this file asks which game a table is
      * playing any more.
      */
-    this.cardButtons = new CardButtons(this.uiManager);
+    /*
+     * TWO ROWS OF CARDS, so two sets of widgets: the caller's hand in the
+     * hand panel, and - for a game like Skitgubbe, where three cards lie
+     * face up in front of you all game - their own table in the board panel.
+     * "i dont see any table cards i see just 3 cards" (sysop, 2026-09-15):
+     * you cannot swap with a card that is not on screen.
+     */
+    const uiManagerRef = this.uiManager;
+    /*
+     * Every field is a GETTER: the panels do not exist yet at this point -
+     * `buildTablePanels` runs later - so a reference captured here would be
+     * undefined for the life of the door.
+     */
+    this.cardButtons = new CardButtons({
+      get panel() { return uiManagerRef.handPanel; },
+      get fallback() { return uiManagerRef.handContent; },
+      get screen() { return uiManagerRef.screen; },
+      get cardPreferences() { return uiManagerRef.cardPreferences; },
+      get unicodeCapable() { return uiManagerRef.unicodeCapable; },
+    });
+    this.tableCardButtons = new CardButtons({
+      get panel() { return uiManagerRef.flopPanel; },
+      get fallback() { return uiManagerRef.flopContent; },
+      get screen() { return uiManagerRef.screen; },
+      get cardPreferences() { return uiManagerRef.cardPreferences; },
+      get unicodeCapable() { return uiManagerRef.unicodeCapable; },
+    });
     this.skitgubbe = new SkitgubbeGameModule(this);
     this.vandtia = new VandtiaGameModule(this);
     this.games = new GameRegistry([
@@ -1080,7 +1108,9 @@ export class CardLobbyApp {
 
     // One painter owns the panel: it wraps to the panel's own width and holds
     // the reader's scroll position (UIManager.paintActivity).
-    this.uiManager.setActivityBody(lines);
+    // A game's instructions are pinned: they are written first and must not
+    // scroll away under the event feed (managers/UIManager.ts).
+    this.uiManager.setActivityBody(lines, gameLines.length > 0);
   }
 
   public updateAllPanels(): void {
@@ -1483,11 +1513,14 @@ export class CardLobbyApp {
   }
 
   public cycleFocus(direction: 1 | -1): void {
+    // Whatever this ends up focusing, the panel borders are repainted at the
+    // end of it - see `finishFocusCycle`.
     const focusOrder: Array<any> = this.viewMode === 'table'
       ? [
         // The cards first: at a table they are what a caller wants to reach,
         // and Tab used to walk two text panels and stop.
         ...this.cardButtons.focusables(),
+        ...this.tableCardButtons.focusables(),
         this.playersContent,
         this.activityContent,
         this.actionButtons.fold,
@@ -1519,6 +1552,9 @@ export class CardLobbyApp {
     const next = ring[nextIndex];
     if (next?.focus) {
       next.focus();
+      // ...and say so: the bordered panel is not what took the focus, so the
+      // border has to be lit by hand (UIManager.highlightFocusedPanel).
+      this.uiManager.highlightFocusedPanel();
       this.screen.render();
     }
   }

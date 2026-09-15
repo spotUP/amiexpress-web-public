@@ -30,11 +30,18 @@ import { UI_THEME } from '../lib/constants';
 const cardEngine = new CardEngine();
 
 export interface CardButtonHost {
-  readonly handPanel: Box;
-  readonly handContent: Box;
+  /** The panel the cards are drawn inside. */
+  readonly panel: Box;
+  /** The text box to fall back to, and to hide while widgets are up. */
+  readonly fallback: Box;
   readonly screen: { render(): void };
   readonly cardPreferences: CardPreferences | undefined;
   readonly unicodeCapable: boolean;
+}
+
+export interface CardButtonOptionsBase {
+  /** What the number under each card says: 1-based by default. */
+  labelFrom?: number;
 }
 
 /**
@@ -49,7 +56,7 @@ export type PlayableCard =
   | { kind: 'standard'; card: Card }
   | { kind: 'uno'; card: { color: string; value: string } };
 
-export interface CardButtonOptions {
+export interface CardButtonOptions extends CardButtonOptionsBase {
   /** The card the caller has picked, drawn lit. */
   selected: number | null;
   /** Which cards the rules will accept right now; the rest are dimmed. */
@@ -58,6 +65,14 @@ export interface CardButtonOptions {
   faceDown?: boolean;
   /** A click, or ENTER while focused. */
   onPick(index: number): void;
+  /**
+   * Tab landed on this card.
+   *
+   * Focus IS selection here: moving to a card lifts it, which is the only
+   * way a caller can tell that Tab did anything ("i cant tab between the
+   * panels and the borders dont lit up", sysop 2026-09-15).
+   */
+  onFocus?(index: number): void;
 }
 
 export class CardButtons {
@@ -74,7 +89,7 @@ export class CardButtons {
   public clear(): void {
     for (const button of this.buttons) button.hide();
     this.lastKey = '';
-    this.host.handContent.show();
+    this.host.fallback.show();
   }
 
   /**
@@ -89,7 +104,7 @@ export class CardButtons {
   }
 
   public render(cards: PlayableCard[], options: CardButtonOptions): boolean {
-    const panel = this.host.handPanel;
+    const panel = this.host.panel;
     const rows = Math.max(0, (Number(panel.height) || 0) - 2);
     const width = Math.max(0, (Number(panel.width) || 0) - 2);
 
@@ -178,7 +193,7 @@ export class CardButtons {
     const withLabels = layout.cardRows * (cardHeight + 1) + LIFT_ROWS <= rows;
     const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
 
-    this.host.handContent.hide();
+    this.host.fallback.hide();
     this.ensure(cards.length);
 
     cards.forEach((_, index) => {
@@ -187,7 +202,8 @@ export class CardButtons {
       const column = index % perRow;
       const picked = index === options.selected;
       const playable = options.playable.includes(index);
-      const label = index === 9 ? '0' : String(index + 1);
+      const number = (options.labelFrom ?? 1) + index;
+      const label = number === 10 ? '0' : String(number);
 
       button.show();
       button.width = cardWidth;
@@ -210,8 +226,10 @@ export class CardButtons {
       // leave the hand, and a stale closure would play the wrong card.
       (button as any).removeAllListeners('click');
       (button as any).removeAllListeners('press');
+      (button as any).removeAllListeners('focus');
       (button as any).on('click', () => options.onPick(index));
       (button as any).on('press', () => options.onPick(index));
+      if (options.onFocus) (button as any).on('focus', () => options.onFocus?.(index));
     });
 
     for (let index = cards.length; index < this.buttons.length; index += 1) {
@@ -234,7 +252,7 @@ export class CardButtons {
   private ensure(count: number): void {
     while (this.buttons.length < count) {
       this.buttons.push(createBox({
-        parent: this.host.handPanel,
+        parent: this.host.panel,
         border: undefined,
         top: 1,
         left: 1,

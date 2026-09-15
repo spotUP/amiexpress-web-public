@@ -227,6 +227,7 @@ class GameViews {
             this.host.cardButtons.render(player.hand.map((card) => ({ kind: 'uno', card })), {
                 selected: selectedIndex,
                 playable: playableIndices,
+                onFocus: (index) => this.host.selectUnoCard(index),
                 onPick: (index) => this.host.selectUnoCard(index),
             });
         }
@@ -332,6 +333,31 @@ class GameViews {
         const blind = !swapping && loaded.engine.sourceFor(meId) === 'faceDown';
         this.host.renderBoardAndHand((top ? [top] : []), showing, 'auto', 'auto', true);
         /*
+         * THE CALLER'S OWN TABLE, in the board panel. Three cards face up in
+         * front of you and three face down under them are half of this game -
+         * they are what you swap with before play and what you are left holding
+         * at the end - and drawing only the hand made the swap impossible to
+         * perform: "i dont see any table cards i see just 3 cards" (sysop,
+         * 2026-09-15). Numbered from 4, which is the key that picks them.
+         */
+        if (me) {
+            const faceDownBacks = me.faceDown.map(() => ({ rank: 'A', suit: 'S' }));
+            const drewTable = this.host.tableCardButtons.renderStandard([...me.faceUp, ...(swapping ? [] : faceDownBacks)], {
+                selected: null,
+                playable: swapping ? me.faceUp.map((_, index) => index) : [],
+                labelFrom: 4,
+                onPick: (index) => {
+                    if (swapping)
+                        this.host.vandtia.selectCard(3 + index);
+                },
+            });
+            if (!drewTable) {
+                this.host.flopContent.setContent(`{${constants_1.UI_THEME.accent}-fg}Your table{/}\n`
+                    + `Up:   ${me.faceUp.map((card, i) => `${i + 4}:${card.rank}${card.suit}`).join('  ')}\n`
+                    + `Down: ${me.faceDown.length} face down`);
+            }
+        }
+        /*
          * ...and then the same cards as WIDGETS, so they can be clicked and
          * tabbed to. It falls back to the text the line above drew when the
          * panel is too small for full-size cards, which is why both run.
@@ -342,6 +368,7 @@ class GameViews {
                 ? (me?.hand ?? []).map((_, index) => index)
                 : loaded.engine.legalPlays(meId),
             faceDown: blind,
+            onFocus: (index) => this.host.vandtia.selectCard(index),
             onPick: (index) => {
                 this.host.vandtia.selectCard(index);
                 // A click is the whole move at a table: pick it and play it. During

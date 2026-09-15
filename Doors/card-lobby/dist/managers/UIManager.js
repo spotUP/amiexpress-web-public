@@ -1406,9 +1406,65 @@ class UIManager {
         this.paintActivity();
     }
     /** The door's own lines: hints for the moment, then the event log. */
-    setActivityBody(lines) {
+    /**
+     * @param pinTop keep the panel scrolled to the FIRST line rather than
+     *        following the newest event.
+     *
+     * The log follows the bottom, which is right for a feed and wrong for
+     * instructions: a game's "what to press" is written at the top, and in a
+     * three-row panel the events pushed it out of sight entirely. The sysop
+     * asked "what am i supposed to do here?" at a table whose legend was
+     * correct, generated, and two rows above the visible area (2026-09-15).
+     */
+    /**
+     * Light the border of whichever panel holds the focus.
+     *
+     * The bordered PANEL is not what takes focus - the scrollable content
+     * inside it is - so blessed's own focus style never reaches the border and
+     * Tab moved invisibly: "i cant tab between the panels and the borders dont
+     * lit up" (sysop, 2026-09-15). Each panel is asked whether the focused
+     * widget is inside it, and coloured accordingly.
+     */
+    highlightFocusedPanel() {
+        /*
+         * `getFocused()`, NOT `screen.focused`: in this blessed port `focused` is
+         * the boolean every Element carries about itself, so comparing widgets
+         * against it never matches. The same trap cost the door its Tab key once
+         * already - see the comment in `cycleFocus` (2026-09-02).
+         */
+        const focused = this.screen.getFocused?.() ?? null;
+        // Loosely typed on purpose: the content widgets are ScrollableText and
+        // Log, not Box, and all this needs of them is identity.
+        const pairs = [
+            [this.flopPanel, this.flopContent],
+            [this.playersPanel, this.playersContent],
+            [this.handPanel, this.handContent],
+            [this.activityPanel, this.activityContent],
+            [this.chatPanel, this.chatContent],
+        ];
+        for (const [panel, content] of pairs) {
+            if (!panel?.style?.border)
+                continue;
+            const holdsFocus = Boolean(focused) && (focused === content
+                || focused === panel
+                || (typeof focused?.hasAncestor === 'function' && focused.hasAncestor(panel))
+                || focused?.parent === panel);
+            /*
+             * A FRESH OBJECT, not a field on the old one. The panels were built
+             * with `style: { border: UI_THEME.windowBorder }` - they share that
+             * token by reference, so writing `panel.style.border.fg` rewrote the
+             * THEME and every border in the door changed colour together, which
+             * is a worse bug than the one this is fixing.
+             */
+            panel.style.border = {
+                ...panel.style.border,
+                fg: holdsFocus ? constants_1.UI_THEME.focusBorder.fg : constants_1.UI_THEME.windowBorder.fg,
+            };
+        }
+    }
+    setActivityBody(lines, pinTop = false) {
         this.activityBody = lines;
-        this.paintActivity();
+        this.paintActivity(pinTop);
     }
     /**
      * Paint header + body into the activity log, wrapped to the panel's own
@@ -1418,7 +1474,7 @@ class UIManager {
      * width and breaks wherever it runs out, which is how the panel came to
      * show "D Dea" on one row and "l" on the next.
      */
-    paintActivity() {
+    paintActivity(pinTop = false) {
         if (!this.activityContent)
             return;
         const coords = this.activityContent._getCoords?.();
@@ -1438,7 +1494,7 @@ class UIManager {
         const wasAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
         this.activityContent.setContent(wrapped.join('\n'));
         const newHeight = this.activityContent.getScrollHeight();
-        this.activityContent.setScroll(wasAtBottom ? newHeight : Math.min(previousScroll, newHeight));
+        this.activityContent.setScroll(pinTop ? 0 : wasAtBottom ? newHeight : Math.min(previousScroll, newHeight));
     }
     /**
      * Hide all UI elements (for browser mode)

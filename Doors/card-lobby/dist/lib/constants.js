@@ -88,6 +88,14 @@ exports.UI_THEME = {
     topBar: { fg: 'white', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
     statusBar: { fg: 'white', bg: 'blue' },
     windowBorder: { fg: 'cyan' },
+    /**
+     * The border of the panel that holds the focus.
+     *
+     * A second colour, because a focused panel that looks the same as an
+     * unfocused one makes Tab invisible. It follows the theme's alternate
+     * accent so a themed board keeps its own palette.
+     */
+    focusBorder: { fg: 'yellow' },
     windowBg: 'black',
     ink: 'white',
     dim: 'gray',
@@ -135,6 +143,7 @@ function applyTheme(theme) {
     exports.UI_THEME.topBar = { fg: t.ground, bg: t.accent, item: { fg: t.ground }, selected: { fg: t.ground } };
     exports.UI_THEME.statusBar = { fg: t.ground, bg: t.accent };
     exports.UI_THEME.windowBorder = { fg: t.accent };
+    exports.UI_THEME.focusBorder = { fg: t.accentAlt ?? t.accent };
     exports.UI_THEME.windowBg = t.ground;
     exports.UI_THEME.ink = t.ink;
     exports.UI_THEME.dim = t.dim;
