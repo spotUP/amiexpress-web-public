@@ -384,6 +384,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   assert.ok(every.some((m) => m.modifiers.reverse), 'and one plays them backwards');
   assert.ok(every.some((m) => m.modifiers.xray), 'X-RAY is played');
   assert.ok(every.some((m) => m.modifiers.mirror), 'and MIRROR');
+  assert.ok(every.some((m) => m.modifiers.color), 'and COLOR');
 }
 
 /**
@@ -669,4 +670,39 @@ export async function xrayLightsOneColumnAtATime(): Promise<void> {
     narrow.push(xrayVisibleColumn((frame * XRAY_CYCLE_MS) / XRAY_FRAMES, 4));
   }
   assert.deepStrictEqual(narrow.filter((c) => c >= 0), [0, 1, 2, 3]);
+}
+
+/**
+ * COLOR washes the stack in a rolling rainbow.
+ *
+ * Reference type 13 (`view.c:1621-1626`): the bands run diagonally, because
+ * the column term is mirrored about the middle of the field and the row term
+ * counts up from the floor, and the whole thing rolls with a counter. The
+ * palette and the per-frame roll are this door's (`core/color-wash.ts` says
+ * why); the SHAPE is the reference's, and that is what is pinned.
+ */
+export async function colourWashRollsDiagonallyAndInTime(): Promise<void> {
+  const { washColour, WASH_STEP_MS } = await import('../core/color-wash');
+
+  // Mirrored about the middle: column 0 and column 9 wash the same.
+  assert.strictEqual(washColour(0, 10, 10, 0), washColour(9, 10, 10, 0),
+    'the column term folds about the middle of the field');
+  assert.strictEqual(washColour(1, 10, 10, 0), washColour(8, 10, 10, 0));
+
+  // DIAGONAL, which is the whole look of it: the band is
+  // ((20 - row) + column) * 4, so one column across and one row DOWN cancel
+  // out and land on the same colour.
+  assert.strictEqual(washColour(1, 11, 10, 0), washColour(0, 10, 10, 0),
+    'a step right and a step down is the same band');
+  assert.strictEqual(washColour(2, 12, 10, 0), washColour(1, 11, 10, 0));
+  assert.notStrictEqual(washColour(1, 10, 10, 0), washColour(0, 10, 10, 0),
+    'while a step across alone is not');
+
+  // And it ROLLS: the same cell is a different colour a few steps later, and
+  // comes back round.
+  const start = washColour(3, 12, 10, 0);
+  const moved = washColour(3, 12, 10, WASH_STEP_MS * 1);
+  assert.notStrictEqual(start, moved, 'one step of the roll changes the cell');
+  const wrapped = washColour(3, 12, 10, WASH_STEP_MS * 7);
+  assert.strictEqual(start, wrapped, 'seven steps is a whole turn of the wash');
 }

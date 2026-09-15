@@ -230,6 +230,7 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
         reverse: rawModifiers.reverse === true,
         xray: rawModifiers.xray === true,
         mirror: rawModifiers.mirror === true,
+        color: rawModifiers.color === true,
         ...(rawRise !== undefined ? { riseEveryPieces: rawRise as number } : {}),
       },
       hint: typeof m.hint === 'string' ? m.hint : undefined,

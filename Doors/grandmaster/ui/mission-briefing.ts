@@ -125,6 +125,9 @@ export function missionConditions(mission: Mission): string[] {
   if (mission.modifiers.xray) {
     conditions.push('X-RAY: one column of the stack is lit at a time');
   }
+  if (mission.modifiers.color) {
+    conditions.push('COLOR: the stack is a rolling rainbow, not its own colours');
+  }
   if (mission.modifiers.mirror) {
     conditions.push('MIRROR: the stack flips left to right after every piece');
   }

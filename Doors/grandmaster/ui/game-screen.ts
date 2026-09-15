@@ -33,6 +33,8 @@ import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { ConnectedBlockRenderer } from '../effects/connected-blocks';
 import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden';
 import { xrayVisibleColumn } from '../core/xray';
+import { washColour } from '../core/color-wash';
+import { blockChar, fadedBlockChar, pieceColorName } from './block-glyphs';
 import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden, MissionRun } from '../core/mission-run';
 
@@ -1472,6 +1474,8 @@ export class GameScreen {
     const xrayColumn = state.missionModifiers?.xray === true
       ? xrayVisibleColumn(Date.now(), board.width)
       : null;
+    // COLOR repaints the stack as a rolling rainbow (core/color-wash.ts).
+    const washed = state.missionModifiers?.color === true;
 
     // Update connected blocks cache if enabled
     // One character per block on a square-celled screen, two on a terminal.
@@ -1588,12 +1592,17 @@ export class GameScreen {
             }
           } else if (!isMasterRoll) {
             // Get base character (connected blocks or simple blocks)
-            const pieceColor = this.getPieceColorName(cell.color as PieceType);
+            const washColor = washed
+              ? washColour(x, y, board.width, now)
+              : (cell.color as PieceType);
+            const pieceColor = this.getPieceColorName(washColor);
 
             if (this.state.settings.connectedBlocks && cols === 2) {
               char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
             } else {
-              char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+              // washColor is the cell's own colour unless COLOR is on, so the
+              // two branches paint the same block in the same hue.
+              char = this.getBlockChar(washColor, rotationSystem);
             }
 
             // Apply block glow overlay if active
@@ -1657,40 +1666,14 @@ export class GameScreen {
     this.boardBox.setContent(content);
   }
 
-  /**
-   * Get ANSI block character for piece type
-   */
+  /** See ui/block-glyphs.ts: the palette and the two characters. */
   private getBlockChar(type: PieceType | null, rotationSystem: string): string {
-    const gameState = this.engine.getState();
-    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
-    
-    // Handle garbage blocks (type is null)
-    if (type === null) {
-      return '{gray-fg}██{/gray-fg}';
-    }
-
-    const color = colors[type] || 'white';
-    
-    // TGM3 Shirase: Bone blocks at level 1000+
-    if (gameState.mode === 'death' && gameState.level >= 1000) {
-      return '{white-fg}[]{/white-fg}';
-    }
-    
-    return `{${color}-fg}██{/${color}-fg}`;
+    const state = this.engine.getState();
+    return blockChar(type, rotationSystem, state.mode, state.level);
   }
 
-  /**
-   * Get faded block character for credit roll
-   */
   private getFadedBlockChar(type: PieceType, intensity: 'medium' | 'faint', rotationSystem: string): string {
-    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
-    const color = colors[type] || 'white';
-
-    if (intensity === 'medium') {
-      return `{${color}-fg}▒▒{/${color}-fg}`;
-    } else {
-      return `{${color}-fg}░░{/${color}-fg}`;
-    }
+    return fadedBlockChar(type, intensity, rotationSystem);
   }
 
   private addHardDropTrail(): void {
@@ -1796,9 +1779,7 @@ export class GameScreen {
    * Get color name for piece type (for visual effects)
    */
   private getPieceColorName(type: PieceType): string {
-    const rotationSystem = this.state.settings.rotationSystem;
-    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
-    return colors[type] || 'white';
+    return pieceColorName(type, this.state.settings.rotationSystem);
   }
 
   /**

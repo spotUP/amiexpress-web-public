@@ -212,6 +212,7 @@ function parseMissionPack(raw, source = 'mission pack') {
                 reverse: rawModifiers.reverse === true,
                 xray: rawModifiers.xray === true,
                 mirror: rawModifiers.mirror === true,
+                color: rawModifiers.color === true,
                 ...(rawRise !== undefined ? { riseEveryPieces: rawRise } : {}),
             },
             hint: typeof m.hint === 'string' ? m.hint : undefined,

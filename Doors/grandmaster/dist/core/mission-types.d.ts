@@ -96,6 +96,12 @@ export interface MissionModifiers {
      * (`gamestart.c:9055`, the `gameMode == 8` clause), not on a timer.
      */
     mirror?: boolean;
+    /**
+     * COLOR (reference type 13, `mission.c:1344-1350`): the stack is drawn as a
+     * rolling rainbow instead of in each piece's own colour, so the shape of
+     * what you built is all you have. See `core/color-wash.ts`.
+     */
+    color?: boolean;
 }
 export interface Mission {
     /** Stable id, used for the cleared-missions record. */

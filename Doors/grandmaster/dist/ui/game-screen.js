@@ -19,6 +19,8 @@ const line_clear_animation_1 = require("../effects/line-clear-animation");
 const connected_blocks_1 = require("../effects/connected-blocks");
 const hidden_1 = require("../core/hidden");
 const xray_1 = require("../core/xray");
+const color_wash_1 = require("../core/color-wash");
+const block_glyphs_1 = require("./block-glyphs");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
 const door_theme_1 = require("../door-theme");
@@ -1330,6 +1332,8 @@ class GameScreen {
         const xrayColumn = state.missionModifiers?.xray === true
             ? (0, xray_1.xrayVisibleColumn)(Date.now(), board.width)
             : null;
+        // COLOR repaints the stack as a rolling rainbow (core/color-wash.ts).
+        const washed = state.missionModifiers?.color === true;
         // Update connected blocks cache if enabled
         // One character per block on a square-celled screen, two on a terminal.
         const cols = (0, block_width_1.blockCols)(this.screen.width);
@@ -1442,12 +1446,17 @@ class GameScreen {
                     }
                     else if (!isMasterRoll) {
                         // Get base character (connected blocks or simple blocks)
-                        const pieceColor = this.getPieceColorName(cell.color);
+                        const washColor = washed
+                            ? (0, color_wash_1.washColour)(x, y, board.width, now)
+                            : cell.color;
+                        const pieceColor = this.getPieceColorName(washColor);
                         if (this.state.settings.connectedBlocks && cols === 2) {
                             char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
                         }
                         else {
-                            char = this.getBlockChar(cell.color, rotationSystem);
+                            // washColor is the cell's own colour unless COLOR is on, so the
+                            // two branches paint the same block in the same hue.
+                            char = this.getBlockChar(washColor, rotationSystem);
                         }
                         // Apply block glow overlay if active
                         const glowIntensity = this.glowManager.getGlowIntensity(x, y);
@@ -1497,35 +1506,13 @@ class GameScreen {
         }
         this.boardBox.setContent(content);
     }
-    /**
-     * Get ANSI block character for piece type
-     */
+    /** See ui/block-glyphs.ts: the palette and the two characters. */
     getBlockChar(type, rotationSystem) {
-        const gameState = this.engine.getState();
-        const colors = rotationSystem === 'ARS' ? pieces_1.ARS_COLORS : pieces_1.PIECE_COLORS;
-        // Handle garbage blocks (type is null)
-        if (type === null) {
-            return '{gray-fg}██{/gray-fg}';
-        }
-        const color = colors[type] || 'white';
-        // TGM3 Shirase: Bone blocks at level 1000+
-        if (gameState.mode === 'death' && gameState.level >= 1000) {
-            return '{white-fg}[]{/white-fg}';
-        }
-        return `{${color}-fg}██{/${color}-fg}`;
+        const state = this.engine.getState();
+        return (0, block_glyphs_1.blockChar)(type, rotationSystem, state.mode, state.level);
     }
-    /**
-     * Get faded block character for credit roll
-     */
     getFadedBlockChar(type, intensity, rotationSystem) {
-        const colors = rotationSystem === 'ARS' ? pieces_1.ARS_COLORS : pieces_1.PIECE_COLORS;
-        const color = colors[type] || 'white';
-        if (intensity === 'medium') {
-            return `{${color}-fg}▒▒{/${color}-fg}`;
-        }
-        else {
-            return `{${color}-fg}░░{/${color}-fg}`;
-        }
+        return (0, block_glyphs_1.fadedBlockChar)(type, intensity, rotationSystem);
     }
     addHardDropTrail() {
         const state = this.engine.getState();
@@ -1613,9 +1600,7 @@ class GameScreen {
      * Get color name for piece type (for visual effects)
      */
     getPieceColorName(type) {
-        const rotationSystem = this.state.settings.rotationSystem;
-        const colors = rotationSystem === 'ARS' ? pieces_1.ARS_COLORS : pieces_1.PIECE_COLORS;
-        return colors[type] || 'white';
+        return (0, block_glyphs_1.pieceColorName)(type, this.state.settings.rotationSystem);
     }
     /**
      * Apply glow effect to block character

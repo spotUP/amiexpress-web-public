@@ -336,6 +336,19 @@
         "mirror": true
       },
       "hint": "Eight lines. The stack flips left to right after every piece."
+    },
+    {
+      "id": "27",
+      "name": "ALL ONE COLOUR",
+      "objective": "lines",
+      "norm": 6,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 3,
+      "modifiers": {
+        "color": true
+      },
+      "hint": "Six lines with the stack washed in a rolling rainbow."
     }
   ]
 }

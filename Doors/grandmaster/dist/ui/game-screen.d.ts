@@ -217,13 +217,8 @@ export declare class GameScreen {
      * Render board with pieces
      */
     private renderBoard;
-    /**
-     * Get ANSI block character for piece type
-     */
+    /** See ui/block-glyphs.ts: the palette and the two characters. */
     private getBlockChar;
-    /**
-     * Get faded block character for credit roll
-     */
     private getFadedBlockChar;
     private addHardDropTrail;
     /**
