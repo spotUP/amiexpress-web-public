@@ -270,6 +270,14 @@ dedupe_case_twins() {
         [ -f "$dir/$entry" ] || continue
         case "$entry" in
             *.txt|*.TXT|*.ans|*.ANS|*.seq|*.SEQ|*.rip|*.RIP|*.gr|*.GR) ;;
+            # A FILE LISTING IS A TWIN TOO, and it has no extension, so the
+            # rule above skipped it every time. This board carries `DIR1` AND
+            # `Dir1` in Conf3, Conf4 and Conf5 - one of each pair stale, the
+            # board serving whichever it resolves first, and QuickNew's config
+            # pointing at the lowercase one while the uploads went to the other
+            # (2026-09-15). Listings are AmiExpress's own `DIR<n>`, so the
+            # pattern is exact rather than "anything without a dot".
+            DIR[0-9]*|Dir[0-9]*|dir[0-9]*) ;;
             *) prev_lower=""; prev_path=""; continue ;;
         esac
         lower=$(printf '%s' "$entry" | tr 'A-Z' 'a-z')
