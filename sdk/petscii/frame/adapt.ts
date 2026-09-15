@@ -93,7 +93,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnParts, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'leader' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stack' | 'stat';
+export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'leader' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stack' | 'stat' | 'viewport';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -113,6 +113,16 @@ export interface AdaptOptions {
   cols?: number;
   rows?: number;
   regions?: RegionPin[];
+  /**
+   * Where the VIEWPORT rule's window starts, in source columns.
+   *
+   * Only the `viewport` rule reads it, and only a pin or an explicit caller
+   * can select that rule - the ladder never chooses it (see `viewportRow`).
+   * The adapter owns this number per door session and moves it with the pan
+   * keys; a frame adapted without one shows the left edge, which is what a
+   * caller sees before they have panned anywhere.
+   */
+  viewportOffset?: number;
   /**
    * Consulted at each source row BEFORE the ladder, and free to answer with a
    * whole BLOCK: the rows to emit, and how many source rows they replace.
@@ -343,6 +353,50 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
  * slice no rung hands the gate an over-wide row, so the gate's truncation mark
  * is spent only on a real defect.
  */
+/**
+ * A WINDOW onto the row, `offset` columns from its left edge.
+ *
+ * Rule 6 of the ladder, and the one for output no other rule can honestly
+ * reduce: a positioned full-screen UI - an editor, a dashboard, a game board -
+ * whose columns mean something in their own right. Reflowing such a frame
+ * destroys it and cropping it hides half of it for ever; a window hides half
+ * of it REVERSIBLY, and the caller pans. The plan's words for the result are
+ * the right ones: "navigable, not pretty".
+ *
+ * THE LADDER NEVER CHOOSES THIS. `chooseRule` cannot return it and
+ * `classifiedRule` cannot either: every other rule is a lossless-ish
+ * rearrangement the caller can read in one screen, while this one is a
+ * promise that the rest of the row still exists somewhere the caller must
+ * travel to. That is a decision about the DOOR, made by a pin or by the
+ * adapter that knows the session has pan keys - never by a row that happens
+ * to look wide.
+ *
+ * The offset is clamped so a window can never sit entirely past the content:
+ * panning right on a short row parks at the last full screen rather than
+ * emptying it, which is what stops a caller from panning into nothing and
+ * believing the door has died.
+ */
+export function viewportRow(cells: Row, cols: number, offset: number): RuleResult {
+  const start = clampOffset(cells.length, cols, offset);
+  return {
+    rows: [padRow(cells.slice(start, start + cols), cols)],
+    applied: 'viewport',
+    // A cursor left of the window sits at its left edge, one right of it at
+    // the right: the caller is told which way their cursor went, rather than
+    // being shown a cursor at a column that is not on screen.
+    map: (x) => ({ row: 0, x: clampCol(cols, x - start) }),
+  };
+}
+
+/**
+ * The furthest left a window may start: never past the last screenful of
+ * content, and never negative.
+ */
+export function clampOffset(width: number, cols: number, offset: number): number {
+  if (!Number.isFinite(offset)) return 0;
+  return Math.max(0, Math.min(Math.floor(offset), Math.max(0, width - cols)));
+}
+
 export function cropRow(cells: Row, cols: number): RuleResult {
   return {
     rows: [padRow(cells.slice(0, cols), cols)],
@@ -1540,15 +1594,18 @@ export function fitRow(cells: Cell[], cols: number): Cell[] {
   return out;
 }
 
-export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
-  const result = applyRuleUnfitted(rule, cells, cols);
+export function applyRule(rule: AdaptRule, cells: Row, cols: number, offset = 0): RuleResult {
+  const result = applyRuleUnfitted(rule, cells, cols, offset);
   return result.rows.every((r) => r.length <= cols)
     ? result
     : { ...result, rows: result.rows.map((r) => fitRow(r, cols)) };
 }
 
-function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResult {
+function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number, offset = 0): RuleResult {
   switch (rule) {
+    // Rule 6. Selected only by a pin or by an adapter that knows the session
+    // can pan - never by the ladder, which is why it is not in `chooseRule`.
+    case 'viewport': return viewportRow(cells, cols, offset);
     // A pinned 'banner' on a row that is not one falls through to the rule the
     // row would have had without the pin, exactly as a pinned 'record' does.
     case 'banner': return bannerRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
@@ -1799,7 +1856,7 @@ export function adaptRows(src: Frame, opts: AdaptOptions = {}): AdaptResult {
       continue;
     }
 
-    const result = applyRule(ruleFor(y, cells, cols, opts.regions), cells, cols);
+    const result = applyRule(ruleFor(y, cells, cols, opts.regions), cells, cols, opts.viewportOffset ?? 0);
     const first = rows.length;
     for (const r of result.rows) rows.push({ cells: r, source: y, rule: result.applied });
     if (y === src.cursor.y) {
