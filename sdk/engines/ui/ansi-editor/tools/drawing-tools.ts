@@ -772,6 +772,27 @@ export function pasteSelection(state: EditorState, x: number, y: number, region:
 /**
  * Get tool handler by name
  */
+/**
+ * Typing is not a canvas edit.
+ *
+ * 'text' sits in the DrawingTool union because the editor's tool row lists
+ * it beside the nine canvas tools, but the host puts characters at the
+ * cursor itself - there is no drag, no shape and no stroke to record. This
+ * used to fall back to `drawTool`, so any route that DID dispatch through
+ * here painted while the artist believed they were typing, and pushed undo
+ * states for strokes nobody asked for.
+ *
+ * A handler that does nothing keeps the dispatcher total, which is what the
+ * widget relies on when it cancels the current tool without checking which
+ * one it is.
+ */
+export const textTool: ToolHandler = {
+  onStart(): void {},
+  onMove(): void {},
+  onEnd(): void {},
+  onCancel(): void {},
+};
+
 export function getToolHandler(tool: DrawingTool): ToolHandler {
   switch (tool) {
     case 'draw':
@@ -793,8 +814,8 @@ export function getToolHandler(tool: DrawingTool): ToolHandler {
     case 'select':
       return selectTool;
     case 'text':
-      // Text tool is handled differently (switches to text mode)
-      return drawTool; // Fallback
+      // Typing is the host's job, not the canvas's - see textTool.
+      return textTool;
     default:
       return drawTool;
   }

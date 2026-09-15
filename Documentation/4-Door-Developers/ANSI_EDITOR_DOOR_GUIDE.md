@@ -297,11 +297,12 @@ All ANSI files are stored in this directory by default. The directory is automat
 **Door won't start:**
 - Check that BBSCmd.info has ANSI-EDIT entry
 - Verify TYPE=TS and PRELOADER=YES are set
-- Ensure web/backend/src/doors/ansi-editor.ts exists
+- Check the door is registered: `Commands/BBSCmd/ANSI-EDIT.info`
 - Check logs for import errors
 
 **Files not showing:**
-- Verify data/ansi-art/ directory exists
+- The door browses the BOARD's screen directories (`Screens`,
+  `Conf01/Screens`, ...), not a private art folder
 - Check file extensions (.ans, .asc, .xb)
 - Ensure files have correct permissions
 
@@ -312,7 +313,7 @@ All ANSI files are stored in this directory by default. The directory is automat
 
 **Save fails:**
 - Check disk space
-- Verify write permissions on data/ansi-art/
+- Verify write permissions on the screen directory being edited
 - Ensure filename is valid (no special chars)
 
 **TypeScript errors:**
@@ -323,33 +324,73 @@ All ANSI files are stored in this directory by default. The directory is automat
 
 ## Code Example - Custom Door Using ANSI Editor
 
+**Which editor to use.** There are two ANSI editors in the SDK, and only one
+of them is hosted by any door on this board:
+
+- **The `ANSIEditor` widget** (`@amiexpress/bbs-door-sdk/engines/ui/blessed`) -
+  what ANSI-EDIT, SPRITED and the mail composer all construct. Menu bar,
+  toolbar, sidebar, draw mode, transparency, host menus, in-door theme
+  switching. **Use this one.**
+- The library under `engines/ui/ansi-editor/` - the canvas, the ten drawing
+  tools and the file formats the widget is built ON. Import from it when you
+  want the pieces without a UI (`Canvas.drawLine`, `FileOps`, the SAUCE
+  record). Its own `showANSIEditor()` shell is not hosted by anything here.
+
+A door is a package that depends on the SDK by name, so it imports
+`@amiexpress/bbs-door-sdk/...`. A relative path up into `sdk/` does not
+resolve from `Doors/<yours>/`.
+
 ```typescript
-import type { BBSSession } from '../types';
-import { showANSIEditor } from '../../../../sdk/engines/ui/ansi-editor';
+import { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
-export default async function myCustomDoor(session: BBSSession): Promise<void> {
-  const initialContent = `{cyan-fg}Welcome to My Door!{/cyan-fg}\n\nEdit this ANSI art...`;
+export async function myCustomDoor(screen: Screen, initialContent: string) {
+  return new Promise<void>((resolve) => {
+    const editor = new ANSIEditor({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      title: 'My Custom Editor',
+      initialContent,
+      initialMode: 'draw',
+      showLineNumbers: false,
+      showMenuBar: true,
+      showToolbar: true,
+      showSidebar: true,
+      showStatusBar: true,
 
-  const result = await showANSIEditor(session, {
-    title: 'My Custom Editor',
-    initialContent,
-    maxLines: 500,
-    maxLineLength: 80,
-    showLineNumbers: true,
-    toolbar: true,
-    statusBar: true,
-    onSave: async (content: string) => {
-      // Save to your custom location
-      session.writeLine('Saved!');
-      return true; // Return true for success
-    }
+      // Save: the door owns WHERE the art goes. Return true on success and
+      // the editor clears its modified flag; return false and it keeps it,
+      // so the artist is warned again on exit.
+      onSave: async (content: string) => {
+        await writeMyArtSomewhere(content);
+        return true;
+      },
+
+      onExit: () => {
+        editor.destroy();
+        screen.render();
+        resolve();
+      },
+    });
+
+    editor.focus();
+    screen.render();
   });
-
-  if (result) {
-    session.writeLine(`Editor returned ${result.length} characters`);
-  }
 }
 ```
+
+Two options worth knowing before you copy this:
+
+- `canvasWidth` / `canvasHeight` size the draw-mode canvas (default 80x25).
+  A door editing something that is not a screen - a sprite, a logo slot -
+  passes its own size rather than cropping an 80x25 canvas afterwards.
+- `transparentBackground` makes an erased cell a HOLE instead of a black
+  space, and `showTransparencyGuide` marks those holes with a dim dot.
+  That pair is what makes the widget usable as a sprite editor;
+  `getCoreCanvas()` hands the host live `Cell[][]` with the flags intact.
 
 ## Credits
 
