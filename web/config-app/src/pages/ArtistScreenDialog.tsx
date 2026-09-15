@@ -650,6 +650,9 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
             /* A blank 40x25 C64 screen. Empty content IS the blank screen -
                the editor builds one when it is handed nothing. */
             content=""
+            /* This dialog's own "Upload a drawing" is right below, so the
+               editor must not put a second one in its toolbar. */
+            hostOffersUpload
             filePath={path}
             mci={[]}
             onSave={async bytes => {
@@ -682,6 +685,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               filePath={path ?? undefined}
               mci={file?.mci ?? []}
               readOnly={!mine}
+              /* "Upload a drawing" is in this dialog's own strip below. */
+              hostOffersUpload
               onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
               onCancel={onClose}
               saving={save.isPending || writeBytes.isPending}

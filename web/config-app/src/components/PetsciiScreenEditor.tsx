@@ -76,6 +76,24 @@ export interface PetsciiScreenEditorProps {
    * the control rendered only when a handler was passed.
    */
   onLoadFile?: (file: File) => void;
+  /**
+   * The HOST already offers a way to bring a file in, so this editor must not
+   * offer a second one.
+   *
+   * Both were on screen in ArtistScreenDialog - the toolbar's loader and the
+   * dialog's "Upload a drawing" - and renaming them was not enough: "still
+   * broken" (sysop, 2026-09-15), because two controls is two controls whatever
+   * they are called.
+   *
+   * It is a prop rather than an unconditional removal because the two mount
+   * sites genuinely differ. ScreenFilesPage HIDES its own Replace button while
+   * this editor is open (`!editingPetscii`, ScreenFilesPage.tsx), so there the
+   * toolbar loader is the only way in - which is what "i dont see a way to
+   * upload a petscii screen in the petscii editor" (sysop, 2026-09-14) was
+   * about. ArtistScreenDialog keeps its upload visible, so there it is a
+   * duplicate. The host knows which it is; the editor cannot.
+   */
+  hostOffersUpload?: boolean;
   saving?: boolean;
   /**
    * Show the art and its codes; change nothing. One component in two modes
@@ -88,7 +106,7 @@ export interface PetsciiScreenEditorProps {
 }
 
 export function PetsciiScreenEditor({
-  content, filePath, mci = [], onSave, onCancel, onDownload, onLoadFile,
+  content, filePath, mci = [], onSave, onCancel, onDownload, onLoadFile, hostOffersUpload = false,
   saving = false, readOnly = false,
 }: PetsciiScreenEditorProps) {
   const [surface, setSurface] = useState<PetsciiSurface>(() =>
@@ -439,7 +457,7 @@ export function PetsciiScreenEditor({
             <Download size={14} /> Download
           </button>
         )}
-        {!readOnly && (
+        {!readOnly && !hostOffersUpload && (
           <>
             {/*
               * "Open a file into the editor", not "Upload a drawing".

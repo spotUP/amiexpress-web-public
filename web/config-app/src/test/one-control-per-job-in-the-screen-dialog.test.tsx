@@ -121,12 +121,14 @@ describe('the controls on a PETSCII screen', () => {
     client = new QueryClient({ defaultOptions: QUERY_DEFAULTS });
   });
 
-  it('names the canvas loader and the board upload differently', async () => {
+  it('offers exactly one way to bring a file in', async () => {
     openOn('Themes/skope/Node/BBSTITLE.SEQ');
 
-    // One of each, and neither is called the same thing as the other.
-    expect(await screen.findByLabelText('Open a file into the editor')).toBeTruthy();
+    // The dialog's own, and ONLY that one. Renaming the editor's toolbar
+    // loader was not enough - "still broken" (sysop, 2026-09-15) - because two
+    // controls is two controls whatever they are called.
     expect(await screen.findByLabelText('Upload a drawing')).toBeTruthy();
+    expect(screen.queryByLabelText('Open a file into the editor')).toBeNull();
     expect(screen.queryByText('Load a drawing')).toBeNull();
   });
 

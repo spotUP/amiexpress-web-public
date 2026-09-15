@@ -189,9 +189,21 @@ describe('a PETSCII screen is drawn and saved', () => {
     // "Upload a drawing" sat beside it under the same name and the two read
     // as one duplicated button (sysop, 2026-09-15).
     const input = screen.getByLabelText('Open a file into the editor') as HTMLInputElement;
+    // Still self-serving by default: ScreenFilesPage hides its own Replace
+    // button while this editor is open, so there this IS the way in.
     await userEvent.upload(input, file);
 
     await userEvent.click(await screen.findByRole('button', { name: /Save/ }));
     expect(savedScreen(onSave).state.screen[3 * 40 + 3]).toBe(0x05);
+  });
+
+  it('stands down when the host already offers an upload', async () => {
+    // ArtistScreenDialog keeps "Upload a drawing" on screen beside the editor,
+    // and two controls for one job read as a bug: "this is weird in the petscii
+    // editor the bottom row has a duplicate upload a drawing button" (sysop,
+    // 2026-09-15). The host knows which site it is; the editor cannot.
+    render(<PetsciiScreenEditor content={BLANK_SEQ} onSave={vi.fn()} hostOffersUpload />);
+
+    expect(screen.queryByLabelText('Open a file into the editor')).toBeNull();
   });
 });
