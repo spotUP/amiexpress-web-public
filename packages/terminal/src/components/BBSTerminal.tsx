@@ -2525,6 +2525,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
     });
 
+    /*
+     * THE OTHER DIRECTION, and the canvas needs it as much as it needs the
+     * mount.
+     *
+     * Canvas mode was a one-way door: `petscii-mode` put the session on the
+     * canvas and only a FRESH session took it off again (token login, a
+     * failed restore, a reconnect that gave up). A RESTORED session is a
+     * continuation and keeps its surface - which is right for a PETSCII
+     * caller whose socket blinked, and wrong the moment the board asks the
+     * graphics prompt again and the caller answers anything else. The board
+     * then sends ANSI and the canvas paints it as Commodore glyphs.
+     *
+     * The sysop, 2026-09-15, after a deploy restarted the board under him:
+     * "i pressed aq in the ansi prompt and got broken petscii now after a
+     * petscii session". The server's own log for that session says PETSCII
+     * NO and names the .txt file it served; only the browser had not been
+     * told.
+     *
+     * `clearPetsciiSession` is the same teardown the fresh-session paths
+     * use. The xterm surface keeps whatever the board draws next - the
+     * prompt, the title screen - so there is nothing to repaint here.
+     */
+
+    socket.on('petscii-off', () => {
+      if (surfaceRef.current !== 'canvas') return;
+      console.log('[Terminal] PETSCII mode off - back to the xterm surface');
+      clearPetsciiSession();
+      term.reset();
+      fitTerminal();
+    });
     socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
       console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide

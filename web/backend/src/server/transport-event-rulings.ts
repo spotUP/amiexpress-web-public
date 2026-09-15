@@ -1309,6 +1309,18 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "canvas to mount and needs no shape: a real C64 IS the screen, and its " +
     "width is settled by the port it called.",
   },
+  "petscii-off": {
+    kind: "web-only",
+    note:
+    "The other direction of the same switch, emitted beside petscii-mode at " +
+    "handlers/command-handler/pre-login.ts whenever the graphics answer is " +
+    "NOT PETSCII. Browser consumer: packages/terminal/src/components/" +
+    "BBSTerminal.tsx, which drops back to xterm. Without it the canvas was a " +
+    "one-way door: a browser that had been in a PETSCII session and reached " +
+    "the graphics prompt again - what a reconnect after a deploy does - kept " +
+    "painting the board's ANSI bytes as Commodore glyphs (sysop, " +
+    "2026-09-15). A byte transport has no canvas and ignores it.",
+  },
   "petscii-palette": {
     kind: "web-only",
     note:

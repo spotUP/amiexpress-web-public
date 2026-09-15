@@ -291,6 +291,30 @@ console.log('[RIP] RIP requested on a transport with no rasteriser - falling bac
     session.screenHeight = 24;
   }
 
+  /*
+   * THE MODE SWITCH HAS TO WORK IN BOTH DIRECTIONS.
+   *
+   * `petscii-mode` is what mounts the browser's C64 canvas, and until now it
+   * was the ONLY mode signal on the wire: nothing ever said "this session is
+   * not PETSCII". A browser that had been in a PETSCII session and then
+   * reached the graphics prompt again - which is what a reconnect after a
+   * deploy does, the socket restored and the prompt re-asked - kept the
+   * canvas and drew the board's ANSI bytes as Commodore glyphs.
+   *
+   * The sysop's report, 2026-09-15, with a screenshot of BBSTITLE as a wall
+   * of accented letters: "i pressed aq in the ansi prompt and got broken
+   * petscii now after a petscii session". The board was right about
+   * everything - the log reads `PETSCII mode: NO` and it served
+   * `Node1/BBSTITLE.txt` - and the browser was still painting on the canvas.
+   *
+   * So every answer that is NOT PETSCII says so, and the browser leaves the
+   * canvas. A byte transport has no canvas and ignores it, the same way it
+   * ignores `petscii-mode`.
+   */
+  if (!session.petsciiMode) {
+    socket.emit?.('petscii-off', { cols: session.screenWidth, rows: session.screenHeight });
+  }
+
   // express.e:29545 quickFlag - skip bulletins during login
   if (hasQ) {
     session.quickFlag = true;

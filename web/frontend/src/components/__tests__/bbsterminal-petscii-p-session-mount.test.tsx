@@ -45,6 +45,12 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     writeln() {}
     input() {}
     focus() {}
+    // The real Terminal has both, and the component calls them: `blur` when
+    // the canvas takes focus, `reset` when a mode change hands the surface
+    // back (teletext, and leaving PETSCII). A double without them turns a
+    // working path into a TypeError the component swallows.
+    blur() {}
+    reset() {}
     refresh() {}
     resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
     clearSelection() {}
@@ -344,6 +350,40 @@ describe("answering 'P8' at the graphics prompt", () => {
     // A 40-column machine would have wrapped this into two rows of at most
     // 40 distinct x positions; 74 of them means one wide row.
     expect(columnsTouched.size).toBe(74);
+    expect(escaped).toEqual([]);
+  });
+});
+
+/**
+ * LEAVING the canvas, which used to be impossible without a fresh session.
+ *
+ * The sysop, 2026-09-15: "i pressed aq in the ansi prompt and got broken
+ * petscii now after a petscii session". His socket had been restored after a
+ * deploy - a restored session is a continuation and keeps its surface - and
+ * the graphics prompt came round again. He answered ANSI, the board sent
+ * ANSI, and the canvas painted it as Commodore glyphs.
+ */
+describe('the board saying a session is NOT petscii', () => {
+  const canvasOf = (container: HTMLElement) => container.querySelector('canvas');
+
+  it('takes the canvas down again', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    act(() => {
+      socket.fire('terminal-resize', { cols: 40, rows: 25 });
+      socket.fire('petscii-mode', { cols: 40, rows: 25, palette: 'vic' });
+    });
+    await waitFor(() => { expect(canvasOf(container)).not.toBeNull(); });
+
+    act(() => { socket.fire('petscii-off', { cols: 80, rows: 24 }); });
+
+    await waitFor(() => { expect(canvasOf(container)).toBeNull(); });
+    expect(escaped).toEqual([]);
+  });
+
+  it('is harmless on a session that was never on the canvas', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    act(() => { socket.fire('petscii-off', { cols: 80, rows: 24 }); });
+    await waitFor(() => { expect(canvasOf(container)).toBeNull(); });
     expect(escaped).toEqual([]);
   });
 });
