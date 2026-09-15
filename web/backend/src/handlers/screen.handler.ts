@@ -269,13 +269,51 @@ export function armSegmentBoundaryPause(
    * `doorExitOwesThePause` only knew about the INLINE walker as an owner, so
    * the segment runner - a second one - was invisible to it.
    *
-   * An installed `doPause` gate IS this boundary's pause: a gate is cleared
-   * the instant it is answered (handlePaginationInput), so finding one here
-   * means the prompt is on the caller's screen right now, unanswered. Arming a
-   * second is the duplicate. Returning true is what the first arm returned -
-   * the caller stops and waits, which is what it must do either way.
+   * AN INSTALLED GATE - OF ANY KIND - IS THIS BOUNDARY'S PAUSE: a gate is
+   * cleared the instant it is answered (handlePaginationInput), so finding one
+   * here means the prompt is on the caller's screen right now, unanswered.
+   * Arming a second is the duplicate. Returning true is what the first arm
+   * returned - the caller stops and waits, which is what it must do either way.
+   *
+   * THIS ONCE READ `kind === 'doPause'`, AND THE OTHER KIND COST A SCREEN.
+   *
+   * A `bbs` gate is a screen the caller is halfway through: it holds the rest
+   * of its `lines`, its queued `commands` and its `onComplete`. Arming here
+   * ASSIGNS `session.paginatedScreen`, so every one of those was thrown away
+   * and replaced by a gate whose content is `['']` - the caller lost every
+   * page after the one in front of him, and the commands that screen was
+   * going to run never ran.
+   *
+   * It is also already covered. Answering a `bbs` gate leads back here by
+   * itself: the pagination-finished branch below (`if (!hasMore)`) checks
+   * `session.screenSegments` and calls `processNextScreenSegment`, which arms
+   * the next boundary. So there was never a boundary to protect by arming
+   * over it - only a screen to destroy.
+   *
+   * The sysop's upload, live 2026-09-15:
+   *
+   *   site=door-exit lastScreenHadPause=Y paginated=Y segments=1
+   *                  subState=process_command
+   *
+   * `door-exit` rather than `door-exit-already-armed` is the proof the gate
+   * walked over was not a `doPause` one, and he met `FileName 1: ace To
+   * Resume:` - a filename prompt written across the tail of a `Space To
+   * Resume:` that should never have been printed.
+   *
+   * WHAT COUNTS AS A GATE HERE IS ONE WITH SOMETHING LEFT TO SHOW, and that
+   * qualifier is load-bearing rather than defensive. A `bbs` gate whose pages
+   * are all spent (`nextIndex` at the end of `lines`) is not a screen anyone
+   * is still reading - it is an answered prompt waiting to be cleared - and
+   * suppressing on it WOULD lose the prompt the boundary genuinely owes
+   * (`a-boundary-owes-exactly-one-pause`, "does not swallow a pause while a
+   * More(y/n/ns) gate is up"). So the test is what the caller can still see:
+   * pages pending, or a `doPause` gate, whose one blank line is never
+   * "pending" by that measure and so is named outright.
    */
-  if (session.paginatedScreen?.kind === 'doPause') {
+  const gate = session.paginatedScreen;
+  const theCallerIsStillReadingIt = !!gate
+    && (gate.kind === 'doPause' || gate.nextIndex < gate.lines.length);
+  if (theCallerIsStillReadingIt) {
     tracePause(`${site}-already-armed`, session);
     return true;
   }

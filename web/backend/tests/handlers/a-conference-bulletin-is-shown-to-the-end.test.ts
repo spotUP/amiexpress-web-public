@@ -66,7 +66,12 @@ describe('a screen with a ~SP left half-shown', () => {
     const code = LOOP.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
     const guard = code.slice(code.indexOf('session.screenSegments'));
 
-    expect(guard).toMatch(/pauseDisplayFlow\(socket, session\)/);
+    // Matched up to the second argument, not to the closing paren: the call
+    // carries a `site` label for PAUSE-TRACE now (`'segments-pending'`), and
+    // pinning the exact arity made this fail on a comment-free change to the
+    // instrumentation while the behaviour it guards was untouched. What the
+    // test is for is that the loop hands this screen to pauseDisplayFlow.
+    expect(guard).toMatch(/pauseDisplayFlow\(socket, session[,)]/);
     expect(guard.slice(0, guard.indexOf('}'))).toMatch(/return;/);
   });
 
