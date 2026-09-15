@@ -1,4 +1,22 @@
 import * as fs from 'fs';
+/*
+ * A BATCH SCRIPT IS AMIGA-CASED AND LINUX IS NOT, and the sysop writes the
+ * batch script. "the entire bbs is supposed to be case insensitive" and "you
+ * never know what sysops puts in the batch scripts" - the sysop, 2026-09-15.
+ *
+ * Every path in this file that comes from a batch line, a door's name or a
+ * config goes through `amigafs`, which resolves existing ancestors
+ * case-insensitively and only creates what genuinely is not there. Raw `fs`
+ * stays for paths WE construct - the runner's own script, the debug log -
+ * where the spelling is ours and cannot drift.
+ *
+ * The bug that prompted the sweep: `>bbs:screens/quicknew.txt` with a
+ * `Screens` directory on the volume. Raw `fs.mkdirSync` would have created a
+ * SECOND lowercase `screens/`, written the door's output into it, and left the
+ * board reading the old file for ever - the "two quicknew files" this repo has
+ * seen before.
+ */
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
@@ -26,12 +44,15 @@ import { processMci as processMciTokenizer, type MciDispatchMap } from '../utils
  */
 function getDoorTypeFromInfo(doorPath: string): string {
   const infoPath = doorPath + '.info';
-  if (!fs.existsSync(infoPath)) {
+  // `QuickNew.info`, `QUICKNEW.INFO` - a door brought over from a real Amiga
+  // can be spelled either way, and getting this wrong silently downgrades the
+  // door to the SIM default.
+  if (!amigafs.existsSync(infoPath)) {
     return 'SIM'; // Default for doors without .info files
   }
 
   try {
-    const buffer = fs.readFileSync(infoPath);
+    const buffer = amigafs.readFileSync(infoPath) as Buffer;
     const parser = new InfoFileParser();
     const parsed = parser.parse(buffer);
 
@@ -368,8 +389,8 @@ console.warn(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
           try {
             const resolved = resolveAssign(redirectPath);
             const dir = path.dirname(resolved);
-            fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(resolved, output, 'utf-8');
+            amigafs.mkdirSync(dir, { recursive: true });
+            amigafs.writeFileSync(resolved, output, 'utf-8');
           } catch (err) {
 console.error('[BatchScheduler] Failed to write output:', err);
           }
@@ -546,8 +567,8 @@ console.log('[BatchScheduler] Running TypeScript SAmiLog');
         const options = { noAnsi: wMatch[1].toUpperCase().includes('N') };
         const fullPath = resolveAssign(wMatch[2]);
         const content = samilog.generateWeeklyStats(options);
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        fs.writeFileSync(fullPath, content, 'latin1');
+        amigafs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        amigafs.writeFileSync(fullPath, content, 'latin1');
         continue;
       }
 
@@ -606,8 +627,8 @@ console.log('[BatchScheduler] SAmiLog output to CONSOLE');
         }
 
         const content = samilog.generateBulletin(count, options);
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        fs.writeFileSync(fullPath, content, 'latin1');
+        amigafs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        amigafs.writeFileSync(fullPath, content, 'latin1');
 console.log(`[BatchScheduler] SAmiLog bulletin written to ${rawPath}`);
         continue;
       }
@@ -797,11 +818,12 @@ export function runBatchFileQueued(batchPath: string, nodeId: number): Promise<v
 }
 
 export async function runBatchFile(batchPath: string, nodeId: number): Promise<void> {
-  if (!fs.existsSync(batchPath)) {
+  // `batch1` or `Batch1` - the file is the sysop's, and so is its spelling.
+  if (!amigafs.existsSync(batchPath)) {
     return;
   }
 
-  const contents = fs.readFileSync(batchPath, 'utf-8');
+  const contents = amigafs.readFileSync(batchPath, 'utf-8') as string;
   const lines = contents.split(/\r?\n/);
 
   /*
@@ -921,7 +943,7 @@ console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${d
   ];
 
   for (const candidate of candidates) {
-    if (!fs.existsSync(candidate)) continue;
+    if (!amigafs.existsSync(candidate)) continue;
 console.log(`[BatchScheduler] Found batch file: ${candidate}`);
     // Through the queue: this mirror and the LOGOFF<n> sys-command must never
     // run emulators side by side.
@@ -1189,8 +1211,25 @@ console.warn(`[BatchScheduler] Runner output:\n${trimmed}`);
       if (redirectPath) {
         const resolved = resolveAssign(redirectPath);
         try {
-          fs.mkdirSync(path.dirname(resolved), { recursive: true });
-          fs.writeFileSync(resolved, output, 'utf8');
+          /*
+           * THROUGH amigafs, BECAUSE A BATCH LINE IS AMIGA-CASED AND LINUX IS
+           * NOT.
+           *
+           * This board's batch line is `>bbs:screens/quicknew.txt` and the
+           * directory on the volume is `Screens`. Plain `fs` would take the
+           * spelling literally, `mkdirSync` would CREATE a second lowercase
+           * `screens/`, and the door's output would land in a directory the
+           * board never reads - while the screen resolver, which IS
+           * case-insensitive, went on showing the old file. That is the "two
+           * quicknew files" this repo has seen before.
+           *
+           * `amigafs.writeFileSync` and `mkdirSync` resolve existing ancestors
+           * case-insensitively and only create what genuinely does not exist,
+           * which is the same rule the door's own file handling uses.
+           */
+          const amigafs = require('../utils/amigafs');
+          amigafs.mkdirSync(path.dirname(resolved), { recursive: true });
+          amigafs.writeFileSync(resolved, output, 'utf8');
 console.log(`[BatchScheduler] Redirected output to ${resolved}`);
         } catch (err) {
 console.error('[BatchScheduler] Failed to write redirect file:', err);
