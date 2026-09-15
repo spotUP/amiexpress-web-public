@@ -86,6 +86,32 @@ export interface BBSSystemInfo {
 }
 
 /**
+ * The board's UI sound library, as the terminal actually implements it.
+ *
+ * Every name here exists in `packages/terminal/src/utils/media-handler.ts`'s
+ * `soundLibrary`. The union is closed on purpose: a typo becomes a type error
+ * rather than silence, which is the one bug a sound effect cannot report
+ * about itself. (An unknown name falls through MediaHandler's switch and
+ * plays nothing at all.)
+ */
+export type UiSound =
+  | 'click' | 'hover' | 'select' | 'menu-open' | 'menu-close' | 'menu-select'
+  | 'success' | 'error' | 'warning' | 'confirm' | 'cancel'
+  | 'notification' | 'message' | 'send' | 'typing'
+  | 'join' | 'leave' | 'mention'
+  | 'popup' | 'close' | 'minimize' | 'maximize' | 'dock'
+  | 'default';
+
+/**
+ * Shortest gap between two plays of the SAME sound.
+ *
+ * A held cursor key steps a list about eight times a second (120ms), so this
+ * sits just under one step: every deliberate move is heard, and a burst
+ * cannot stack two copies of one blip into a buzz.
+ */
+const UI_SOUND_MIN_GAP_MS = 60;
+
+/**
  * Main BBS API class
  * Provides all functions that doors need to interact with the BBS
  */
@@ -103,6 +129,9 @@ export class BBSApi {
   // output in many small Buffer chunks, so charset/color/reverse state must
   // persist across calls instead of resetting on every chunk (audit B2).
   private petsciiConverter?: PetsciiStreamConverter;
+
+  /** When each UI sound last went out; see playUiSound. */
+  private lastUiSoundAt: Map<UiSound, number> = new Map();
 
   constructor(socket: Socket, session: BBSSession) {
     this.socket = socket;
@@ -318,6 +347,44 @@ export class BBSApi {
    */
   get deliversKeyEvents(): boolean {
     return this.connectionType === 'web';
+  }
+
+  /**
+   * The board's own UI sounds, as heard by this caller.
+   *
+   * WHY THIS EXISTS, 2026-09-15. The sysop, twice: "doorman is solid but
+   * silent". It is - it has no audio code at all, and neither does any other
+   * server-rendered door, because there was no way for one to make a sound.
+   * `ArcadeSfx` is not that way: it crosses to a door's own CLIENT bundle,
+   * so a door without one (doorman, and every blessed utility) had nothing.
+   *
+   * This is the BOARD's channel, which the terminal has always had and
+   * nothing on the server ever used: `audio:play-sfx` lands in
+   * `packages/terminal/src/utils/media-handler.ts`, whose library is chrome -
+   * click, select, error, join, mention - and which is GATED BY THE CALLER'S
+   * UI-SOUNDS SETTING. That gate is the reason this belongs here rather than
+   * in a door: a door must not be able to ignore it.
+   *
+   * Silent by construction where nothing can listen: a telnet or SSH caller
+   * has no MediaHandler, and the emit lands nowhere, which is correct rather
+   * than an error to guard against.
+   */
+  playUiSound(sound: UiSound): void {
+    /*
+     * A held cursor key steps a list about eight times a second and every
+     * step asks for a sound. These are short synth blips; overlapping them
+     * turns navigation into a buzz, so the same sound cannot restart inside
+     * one blip's own length.
+     *
+     * Per SOUND, not global: a move and the select that ends it are two
+     * different noises and must not silence each other.
+     */
+    const now = Date.now();
+    const last = this.lastUiSoundAt.get(sound);
+    if (last !== undefined && now - last < UI_SOUND_MIN_GAP_MS) return;
+    this.lastUiSoundAt.set(sound, now);
+
+    this.socket.emit('audio:play-sfx', { type: 'library', soundId: sound });
   }
 
   /**

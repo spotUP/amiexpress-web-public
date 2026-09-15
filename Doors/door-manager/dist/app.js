@@ -81,6 +81,20 @@ const repo_client_1 = require("./repo-client");
 // identically on macOS dev machines and the Linux container on the live
 // server, so no LHA_BIN path probing is needed here anymore.
 const PROJECT_ROOT = (0, ViewManager_1.resolveBbsRoot)(__dirname);
+/**
+ * The board's UI sounds, for a door that has no client bundle to make its own.
+ *
+ * The sysop, twice on 2026-09-15: "doorman is solid but silent". It was, and
+ * not by accident - a server-rendered door had no way to make a sound at all
+ * until `bbs.playUiSound` landed. `?.` throughout because an older host will
+ * not have the method and a silent door is the correct fallback.
+ *
+ * The caller's own UI-sounds setting gates this on the browser side, so there
+ * is nothing to ask here; a telnet caller simply has nobody listening.
+ */
+function sound(bbs, name) {
+    bbs?.playUiSound?.(name);
+}
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 // The require.cache service getters moved to doorman-services.ts when app.ts
 // reached the 2000-line ceiling.
@@ -242,6 +256,7 @@ class InstalledView extends ViewManager_1.BaseView {
         this.layout.focusList();
         this.layout.render();
         this.layout.doorList.on('select item', this._onSelectItem = () => {
+            sound(this.bbs, 'click');
             this.updateInfo();
             this.updateFooter();
             this.layout.render();
@@ -249,7 +264,10 @@ class InstalledView extends ViewManager_1.BaseView {
         // ENTER runs the door. Bound to blessed's own 'select' event rather than
         // keys.key(['enter']): List emits 'select' for Enter itself, and a
         // separate key binding would fire alongside it.
-        this.layout.doorList.on('select', this._onRun = () => this.doRun());
+        this.layout.doorList.on('select', this._onRun = () => {
+            sound(this.bbs, 'menu-select');
+            this.doRun();
+        });
         this.keys.key(['tab'], () => {
             this.vm.push(new RepoView(this.layout, this.bbs));
         });
@@ -787,6 +805,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.focusList();
         this.layout.render();
         this.layout.doorList.on('select item', this._onSelectItem = () => {
+            sound(this.bbs, 'click');
             this.updateInfo();
             this.updateFooter();
             this.layout.render();

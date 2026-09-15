@@ -16,6 +16,8 @@ const TEST_MODULES = [
   './hazards.test',
   './attract.test',
   './render.test',
+  // Sprite colours: a wheel drawn in the road's own black is a hole.
+  './sprite-colours.test',
   './layout.test',
   './highscore-name.test',
   './sfx.test',

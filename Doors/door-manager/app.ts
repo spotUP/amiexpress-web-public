@@ -76,6 +76,22 @@ const PROJECT_ROOT = resolveBbsRoot(__dirname);
 
 interface DoorSession { socket: any; user: any; bbsSession: any; bbs: any; params: string[] }
 
+/**
+ * The board's UI sounds, for a door that has no client bundle to make its own.
+ *
+ * The sysop, twice on 2026-09-15: "doorman is solid but silent". It was, and
+ * not by accident - a server-rendered door had no way to make a sound at all
+ * until `bbs.playUiSound` landed. `?.` throughout because an older host will
+ * not have the method and a silent door is the correct fallback.
+ *
+ * The caller's own UI-sounds setting gates this on the browser side, so there
+ * is nothing to ask here; a telnet caller simply has nobody listening.
+ */
+function sound(bbs: any, name: string): void {
+  bbs?.playUiSound?.(name);
+}
+
+
 interface DoorInfo {
   id: string; command: string; name: string; description: string;
   type: string; size: number; accessLevel: number; location: string;
@@ -259,13 +275,17 @@ class InstalledView extends BaseView {
     this.layout.render();
 
     (this.layout.doorList as any).on('select item', this._onSelectItem = () => {
+      sound(this.bbs, 'click');
       this.updateInfo(); this.updateFooter(); this.layout.render();
     });
 
     // ENTER runs the door. Bound to blessed's own 'select' event rather than
     // keys.key(['enter']): List emits 'select' for Enter itself, and a
     // separate key binding would fire alongside it.
-    (this.layout.doorList as any).on('select', this._onRun = () => this.doRun());
+    (this.layout.doorList as any).on('select', this._onRun = () => {
+      sound(this.bbs, 'menu-select');
+      this.doRun();
+    });
 
     this.keys.key(['tab'], () => {
       this.vm.push(new RepoView(this.layout, this.bbs));
@@ -805,6 +825,7 @@ class RepoView extends BaseView {
     this.layout.render();
 
     (this.layout.doorList as any).on('select item', this._onSelectItem = () => {
+      sound(this.bbs, 'click');
       this.updateInfo(); this.updateFooter(); this.layout.render();
     });
     (this.layout.doorList as any).on('focus', this._onListFocus = () => {
