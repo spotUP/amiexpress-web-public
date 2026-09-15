@@ -26,6 +26,7 @@ import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { DoorArtDialog } from './DoorArtDialog';
+import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
@@ -405,6 +406,10 @@ export function ScreenFilesPage() {
       sections: Array<{
         file: string; section: string; label: string; lines: number;
         maxLines: number; maxLineLength: number;
+        // A slot backed by a whole FILE the door's setting names, rather than
+        // a section of its config: it can be missing, and it has alternates.
+        missing?: boolean;
+        choices?: Array<{ file: string; lines: number }>;
       }>;
     }>,
   });
@@ -1271,7 +1276,18 @@ export function ScreenFilesPage() {
                 <span className="font-mono">{door.command}</span>
                 <span className="text-content-secondary"> — {door.name}</span>
               </p>
-              {door.sections.map(section => (
+              {door.sections.map(section => settingKeyOf(section.section) !== null ? (
+                <DoorArtSlot
+                  key={`${section.file}#${section.section}`}
+                  command={door.command}
+                  slot={section}
+                  onOpen={slot => setOpenArt({
+                    command: door.command, doorName: door.name,
+                    file: slot.file, section: slot.section, label: slot.label,
+                    maxLines: slot.maxLines, maxLineLength: slot.maxLineLength,
+                  })}
+                />
+              ) : (
                 <div key={`${section.file}#${section.section}`} className="flex flex-wrap items-center gap-2 pl-2">
                   <span className="text-content-primary">{section.label}</span>
                   <span className="font-mono text-xs text-content-secondary">
