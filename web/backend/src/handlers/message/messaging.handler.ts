@@ -13,7 +13,7 @@ import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { finalizeCommand } from '../../utils/command-response.util';
-import { emitText, emitPrompt } from '../../utils/output.util';
+import { emitText, emitPrompt, clearTheScreen } from '../../utils/output.util';
 import { getAllMessageIds, readMessageFile, markMessageReceived, unmarkMessageReceived, readAttachList } from '../../utils/message-file.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { config } from '../../config';
@@ -368,7 +368,7 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   // If flag not set, just emit \r\n to separate from previous content
   const SCRNCLR_FLAG = 8; // UserFlags.SCRNCLR
   if ((session.user?.userFlags || 0) & SCRNCLR_FLAG) {
-    socket.emit('ansi-output', '\x0c'); // sendCLS() = ASCII 12 (form feed)
+    emitText(socket, clearTheScreen(socket)); // sendCLS(); 0x0C does not clear xterm.js
   } else {
     emitText(socket, '\r\n');
   }
@@ -524,7 +524,7 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
     // express.e:8897-8951: same header as normal displayMessage (nonStopMail only skips pause)
     const SCRNCLR_FLAG = 8;
     if ((session.user?.userFlags || 0) & SCRNCLR_FLAG) {
-      socket.emit('ansi-output', '\x0c');
+      emitText(socket, clearTheScreen(socket)); // sendCLS(); see display-file-commands
     } else {
       emitText(socket, '\r\n');
     }

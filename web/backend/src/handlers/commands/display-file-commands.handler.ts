@@ -42,14 +42,28 @@ import { config } from '../../config';
 function checkScreenClear(socket: any, session: BBSSession): boolean {
   const userFlags = session.user?.userFlags || 0;
   if (userFlags & UserFlags.SCRNCLR) {
-    // sendCLS() - express.e:5224-5228 sends ASCII 12 (form feed)
-    socket.emit('ansi-output', '\x0c');
+    /*
+     * sendCLS() - express.e:5224-5228 sends ASCII 12 (form feed).
+     *
+     * A real Amiga terminal CLEARS on a form feed. xterm.js does not - it
+     * treats 0x0C as a line feed - so every `checkScreenClear()` this port
+     * makes, at every site express.e calls it (the menu at express.e:28585
+     * included), has been asking for a clear that never happened. The board
+     * was right and the wire was wrong.
+     *
+     * The `~f` MCI sentinel already knew this (`mci-dispatch.ts:420` maps it
+     * to the ANSI clear, or 0x93 for PETSCII); sendCLS never got the same
+     * treatment. `clearTheScreen` is that mapping, in one place.
+     */
+    emitText(socket, clearTheScreen(socket));
     return true;
   }
   return false;
 }
 import { formatBytesCompact } from '../../utils/byte-format.util';
 import { formatDateSlash } from '../../utils/date-format.util';
+
+import { emitText, clearTheScreen } from '../../utils/output.util';
 
 import type { BBSSession } from '../../index';
 import { reportBulletinRead } from '../../achievements/sites';

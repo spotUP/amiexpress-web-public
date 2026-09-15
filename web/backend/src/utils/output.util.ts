@@ -76,6 +76,30 @@ export function emitText(socket: Socket, text: string): void {
  * An unset flag erases, which is what every existing site here assumes
  * (`flag-pause.util`, `screen.handler`'s pause cleanup).
  */
+/**
+ * Clear the screen, in whatever the caller's terminal speaks.
+ *
+ * express.e does NOT do this before an upload - `uploadDesc` opens with
+ * `cleanItUp()` (express.e:17656), which cleans the node's WORK DIRECTORY, not
+ * the screen - and I cited that twice as a reason the mess was not a bug. The
+ * sysop overruled it, 2026-09-15: "clear. the. fucking. screen. before.
+ * drawing. the. upload. stuff."
+ *
+ * He is right about the board he runs. Real AmiExpress scrolls its output up a
+ * terminal that holds nothing but that output; this one draws over full-screen
+ * ANSI art that stays where it is, so "don't clear" inherits a background
+ * express.e never had to share a screen with. Erasing each row as it is
+ * written (see `eraseRestOfLine`) fixed the welded tails and still left the art
+ * between and above the lines.
+ *
+ * PETSCII gets 0x93, its own CLEAR, rather than an ANSI sequence it would draw
+ * as glyphs - the same ternary `mci-pre-passes.ts:611` already uses.
+ */
+export function clearTheScreen(socket: Socket): string {
+  const session = (socket as any)?.session;
+  return session?.petsciiMode ? '\x93' : ANSI.CLEAR_SCREEN;
+}
+
 export function eraseRestOfLine(socket: Socket): string {
   const session = (socket as any)?.session;
   if (session && session.ansiEnabled === false) return '';
