@@ -59,6 +59,11 @@ export interface Cell {
      * into `flds`), so it cannot be counted into another one.
      */
     squared?: boolean;
+    /**
+     * A PLATINUM block from a TARGET stage: the thing the stage is about. The
+     * stage is cleared when none is left (`tomoyo.c:334-352`).
+     */
+    platinum?: boolean;
 }
 export interface Board {
     width: number;

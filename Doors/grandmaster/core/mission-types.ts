@@ -56,6 +56,8 @@ export const MISSION_OBJECTIVES = [
   // Rows the field marks, cleared by the piece that sits IN them.
   'eraser',        // "ERASER"
   'eraserHeboris', // "ERASER HEBORIS" - only a four-line clear may claim one
+  // A stage laid out in advance, cleared of its platinum blocks.
+  'target',        // "TARGET"
 ] as const;
 
 /**
@@ -220,6 +222,11 @@ export interface Mission {
    * `core/eraser.ts`.
    */
   eraser?: EraserPattern;
+  /**
+   * TARGET only: which of the shipped stages this mission plays (the
+   * reference's MINSTAGE / MAXSTAGE / RANDTGT, `mission.c:244-330`).
+   */
+  stages?: { min: number; max: number; random?: boolean };
   /** Rows of garbage the field starts with (mission_erase, positive side). */
   garbageRows: number;
   modifiers: MissionModifiers;

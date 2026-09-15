@@ -209,6 +209,38 @@ function parseMissionPack(raw, source = 'mission pack') {
         if (eraser !== undefined && !ERASER_OBJECTIVES.includes(objective)) {
             fail(where, `objective "${objective}" does not take an eraser pattern`);
         }
+        /*
+         * TARGET's stage band. The objective IS the stages, so a TARGET mission
+         * without one cannot be judged - the same reasoning that refuses an
+         * ORDER mission with no piece.
+         */
+        const rawStages = m.stages;
+        let stages;
+        if (rawStages !== undefined) {
+            for (const field of ['min', 'max']) {
+                const value = rawStages[field];
+                if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+                    fail(where, `stages.${field} must be a whole stage number, got ${JSON.stringify(value)}`);
+                }
+            }
+            if (rawStages.min > rawStages.max) {
+                fail(where, 'stages.min must not be past stages.max');
+            }
+            if (rawStages.random !== undefined && typeof rawStages.random !== 'boolean') {
+                fail(where, 'stages.random must be true or false');
+            }
+            stages = {
+                min: rawStages.min,
+                max: rawStages.max,
+                ...(rawStages.random !== undefined ? { random: rawStages.random } : {}),
+            };
+        }
+        if (objective === 'target' && stages === undefined) {
+            fail(where, 'objective "target" needs a stages band to play');
+        }
+        if (stages !== undefined && objective !== 'target') {
+            fail(where, `objective "${objective}" does not take a stages band`);
+        }
         const rawModifiers = (m.modifiers ?? {});
         const hidden = rawModifiers.hidden;
         if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -232,6 +264,7 @@ function parseMissionPack(raw, source = 'mission pack') {
             ...(requireHold !== undefined ? { requireHold: requireHold } : {}),
             ...(speed !== undefined ? { speed } : {}),
             ...(eraser !== undefined ? { eraser } : {}),
+            ...(stages !== undefined ? { stages } : {}),
             id,
             name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
             objective,

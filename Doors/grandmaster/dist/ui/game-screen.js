@@ -21,6 +21,7 @@ const hidden_1 = require("../core/hidden");
 const xray_1 = require("../core/xray");
 const color_wash_1 = require("../core/color-wash");
 const block_glyphs_1 = require("./block-glyphs");
+const preview_panes_1 = require("./preview-panes");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
 const door_theme_1 = require("../door-theme");
@@ -1452,11 +1453,19 @@ class GameScreen {
                     }
                     else if (!isMasterRoll) {
                         // Get base character (connected blocks or simple blocks)
+                        // A PLATINUM block is what a TARGET stage is about, so it is
+                        // drawn as itself and not as a piece colour.
+                        if (cell.platinum) {
+                            char = `{${door_theme_1.T.ink}-fg}▓▓{/${door_theme_1.T.ink}-fg}`;
+                        }
                         const washColor = washed
                             ? (0, color_wash_1.washColour)(x, y, board.width, now)
                             : cell.color;
                         const pieceColor = this.getPieceColorName(washColor);
-                        if (this.state.settings.connectedBlocks && cols === 2) {
+                        if (cell.platinum) {
+                            // already drawn above
+                        }
+                        else if (this.state.settings.connectedBlocks && cols === 2) {
                             char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
                         }
                         else {
@@ -1580,21 +1589,8 @@ class GameScreen {
      * Get mini piece preview
      */
     getMiniPiece(type, rotationSystem) {
-        const cols = (0, block_width_1.blockCols)(this.screen.width);
-        const block = (0, block_width_1.fitCell)(this.getBlockChar(type, rotationSystem), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
-        // Indents are counted in CELLS, not characters, so a preview keeps its
-        // shape on a screen where a block is one character wide.
-        const p = (cells) => ' '.repeat(cells * cols);
-        const patterns = {
-            I: `${p(1)}${block}${block}${block}${block}`,
-            O: `${p(2)}${block}${block}\n${p(2)}${block}${block}`,
-            T: `${p(3)}${block}\n${p(2)}${block}${block}${block}`,
-            S: `${p(3)}${block}${block}\n${p(2)}${block}${block}`,
-            Z: `${p(2)}${block}${block}\n${p(3)}${block}${block}`,
-            J: `${p(2)}${block}\n${p(2)}${block}${block}${block}`,
-            L: `${p(4)}${block}\n${p(2)}${block}${block}${block}`,
-        };
-        return patterns[type] || '';
+        const state = this.engine.getState();
+        return (0, preview_panes_1.miniPiece)(type, rotationSystem, this.screen, state.mode, state.level);
     }
     /**
      * Calculate credit roll opacity based on block age

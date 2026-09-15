@@ -55,5 +55,7 @@ exports.MISSION_OBJECTIVES = [
     // Rows the field marks, cleared by the piece that sits IN them.
     'eraser', // "ERASER"
     'eraserHeboris', // "ERASER HEBORIS" - only a four-line clear may claim one
+    // A stage laid out in advance, cleared of its platinum blocks.
+    'target', // "TARGET"
 ];
 //# sourceMappingURL=mission-types.js.map

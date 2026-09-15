@@ -20,9 +20,11 @@ const devil_grade_1 = require("./devil-grade");
 const hidden_1 = require("./hidden");
 const up_key_lock_1 = require("./up-key-lock");
 const board_writes_1 = require("./board-writes");
-const square_1 = require("./square");
 const eraser_1 = require("./eraser");
 const game_result_1 = require("./game-result");
+const stage_1 = require("./stage");
+const mission_hooks_1 = require("./mission-hooks");
+const item_effects_1 = require("./item-effects");
 const credit_roll_rules_1 = require("./credit-roll-rules");
 const tspin_1 = require("./tspin");
 const garbage_1 = require("./garbage");
@@ -82,6 +84,9 @@ class GameEngine {
         /** ERASER: the pattern a mission asked for, and how many it still needs. */
         this.eraserPattern = null;
         this.eraserRemaining = 0;
+        /** TARGET: the stages this mission plays, and which one is up. */
+        this.stages = [];
+        this.stageIndex = 0;
         this.perfectClearCount = 0;
         // Game loop
         this.lastUpdate = 0;
@@ -363,6 +368,23 @@ class GameEngine {
         this.state.markedRows = pattern
             ? (0, eraser_1.chooseMarkedRows)(pattern, remaining, this.state.board.height)
             : [];
+    }
+    /**
+     * Play a TARGET mission's stages, starting with the first.
+     *
+     * A stage is cleared when no platinum block is left (tomoyo.c:334-352);
+     * the field is then wiped and the next stage laid out, which is the
+     * reference's status-25 wipe (mission.c:882-902).
+     */
+    setStages(stages) {
+        this.stages = stages;
+        this.stageIndex = 0;
+        if (stages.length > 0)
+            (0, stage_1.applyStage)(this.state.board, stages[0]);
+    }
+    /** The stage on the board, for the screen and for the tests. */
+    getStage() {
+        return this.stages[this.stageIndex] ?? null;
     }
     setMissionSpeed(speed) {
         this.missionSpeed = speed ?? null;
@@ -1430,37 +1452,26 @@ class GameEngine {
          * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
          * seconds - so the clock a player keeps is their own piece count.
          */
-        /*
-         * ERASER: a marked row is claimed when the piece that just locked SAT IN
-         * it and it was cleared (mission.c:905-947) - clearing it with a piece
-         * that landed somewhere else is not the shot the mission asked for. The
-         * engine does the matching because it also owns the marks and draws
-         * them; the judge is only told how many were claimed.
-         */
-        let markedRowsCleared = 0;
-        if (this.state.markedRows.length > 0) {
-            const claim = (0, eraser_1.claimMarkedRows)(this.state.markedRows, lockedCells.map((cell) => cell.y), clearedLines);
-            markedRowsCleared = claim.claimed.length;
-            this.state.markedRows = claim.remaining;
-            this.eraserRemaining = Math.max(0, this.eraserRemaining - markedRowsCleared);
-            // Every marked row gone and the norm not met: a fresh pattern appears.
-            if (this.state.markedRows.length === 0 && this.eraserPattern && this.eraserRemaining > 0) {
-                this.state.markedRows = (0, eraser_1.chooseMarkedRows)(this.eraserPattern, this.eraserRemaining, this.state.board.height);
-            }
-        }
-        // SQUARE: the scan runs after the clears, so a square that was just
-        // broken up by a line clear does not count (gamestart.c:8678-8683).
-        const square = this.squareMode ? (0, square_1.makeSquares)(this.state.board) : 0;
-        // MIRROR flips the stack after EVERY piece in MISSION mode
-        // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
-        // is what makes it a mode rather than an effect.
-        if (this.state.missionModifiers?.mirror) {
-            (0, board_writes_1.mirrorBoard)(this.state.board);
-        }
-        const rise = this.state.missionModifiers?.riseEveryPieces ?? 0;
-        if (rise > 0 && this.state.piecesPlaced > 0 && this.state.piecesPlaced % rise === 0) {
-            (0, garbage_1.riseGarbageRow)(this.state.board);
-        }
+        // Everything a MISSION does to the board once the clears are settled -
+        // ERASER's claims, TARGET's next stage, SQUARE's scan, MIRROR, the
+        // rising floor - in the order they happen (core/mission-hooks.ts).
+        const hooks = (0, mission_hooks_1.afterLock)({
+            board: this.state.board,
+            modifiers: this.state.missionModifiers,
+            occupiedRows: lockedCells.map((cell) => cell.y),
+            clearedRows: clearedLines,
+            piecesPlaced: this.state.piecesPlaced,
+            markedRows: this.state.markedRows,
+            eraserPattern: this.eraserPattern,
+            eraserRemaining: this.eraserRemaining,
+            stages: this.stages,
+            stageIndex: this.stageIndex,
+            squareMode: this.squareMode,
+        });
+        this.state.markedRows = hooks.markedRows;
+        this.eraserRemaining = hooks.eraserRemaining;
+        this.stageIndex = hooks.stageIndex;
+        const { markedRowsCleared, stageCleared, square } = hooks;
         // Report the lock. Everything a MISSION judges comes from here, which is
         // why it is the LAST thing lockPiece does: lines are cleared, the combo
         // and the level are settled, and the board is in the state the player
@@ -1481,6 +1492,7 @@ class GameEngine {
             clearedRows: [...clearedLines].sort((a, b) => a - b),
             square,
             markedRowsCleared,
+            stageCleared,
         });
     }
     /**
@@ -1620,27 +1632,12 @@ class GameEngine {
      * items vs. enemy-targeted "attack" items - see SELF_TARGET_ITEMS).
      */
     processCollectedItem(itemId) {
-        this.state.itemBanner = { name: items_1.ITEM_NAMES[itemId] ?? `ITEM ${itemId}`, ttl: 90 };
-        if ((0, items_1.isSelfTargetItem)(itemId)) {
-            const result = (0, items_1.applySelfItem)(itemId, this.state.board);
-            if (result.clearRows && result.clearRows.length > 0) {
-                (0, board_1.clearLines)(this.state.board, result.clearRows);
-            }
-            return;
-        }
-        // Enemy-targeted (attack) item - HARD (25) and EXCHG (24) included.
-        // GameEngine has no notion of an opponent; the caller (VersusScreen)
-        // resolves a target engine and applies core/items.ts's applyEnemyItem.
-        if (this.onItemCollectedCallback) {
-            this.onItemCollectedCallback(itemId);
-            return;
-        }
-        // Nobody is listening, which is single player: the reference's own
-        // fallback applies the attack to the collector (gamestart.c:14358-14365,
-        // "enemy = 1 - player", falling back to "enemy = player"). Without this
-        // an item outside versus was collected, named on the HUD, and then did
-        // nothing at all.
-        this.applyItemEffectResult((0, items_1.applyEnemyItem)(itemId, this.state.board, this.state.board));
+        (0, item_effects_1.collectItem)(itemId, this.state, this.state.board, {
+            toOpponent: this.onItemCollectedCallback
+                ? (id) => this.onItemCollectedCallback(id)
+                : undefined,
+            applyResult: (result) => this.applyItemEffectResult(result),
+        });
     }
     /**
      * Force the next spawned piece to carry a specific item id, bypassing the

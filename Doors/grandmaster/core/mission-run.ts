@@ -78,6 +78,12 @@ export interface LockEvent {
    * (`mission.c:905-947`). Always 0 unless the mission marks rows.
    */
   markedRowsCleared: number;
+  /**
+   * This lock emptied a TARGET stage of its platinum blocks, so the stage is
+   * cleared and the next one is on the board (`mission.c:882-902`). False in
+   * every other run.
+   */
+  stageCleared: boolean;
 }
 
 /**
@@ -254,6 +260,9 @@ export class MissionRun {
       if (objective === 'eraser' || event.lineCount >= 4) {
         this.current += event.markedRowsCleared;
       }
+    } else if (objective === 'target') {
+      // One stage cleared, one count: the norm is stages (mission.c:882-902).
+      if (event.stageCleared) this.current++;
     } else if (objective === 'square') {
       // Any square counts (gamestart.c:8678: `>= 1`).
       if (event.square >= 1) this.current++;

@@ -35,6 +35,7 @@ import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden'
 import { xrayVisibleColumn } from '../core/xray';
 import { washColour } from '../core/color-wash';
 import { blockChar, fadedBlockChar, pieceColorName } from './block-glyphs';
+import { miniPiece } from './preview-panes';
 import { lockedByUpKey } from '../core/up-key-lock';
 import { nextIsHidden, MissionRun } from '../core/mission-run';
 
@@ -1598,12 +1599,19 @@ export class GameScreen {
             }
           } else if (!isMasterRoll) {
             // Get base character (connected blocks or simple blocks)
+            // A PLATINUM block is what a TARGET stage is about, so it is
+            // drawn as itself and not as a piece colour.
+            if (cell.platinum) {
+              char = `{${T.ink}-fg}▓▓{/${T.ink}-fg}`;
+            }
             const washColor = washed
               ? washColour(x, y, board.width, now)
               : (cell.color as PieceType);
             const pieceColor = this.getPieceColorName(washColor);
 
-            if (this.state.settings.connectedBlocks && cols === 2) {
+            if (cell.platinum) {
+              // already drawn above
+            } else if (this.state.settings.connectedBlocks && cols === 2) {
               char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
             } else {
               // washColor is the cell's own colour unless COLOR is on, so the
@@ -1753,24 +1761,8 @@ export class GameScreen {
    * Get mini piece preview
    */
   private getMiniPiece(type: PieceType, rotationSystem: string): string {
-    const cols = blockCols(this.screen.width);
-    const block = fitCell(
-      this.getBlockChar(type, rotationSystem), cols,
-      cellsCanCarryBackground(this.screen),
-    );
-    // Indents are counted in CELLS, not characters, so a preview keeps its
-    // shape on a screen where a block is one character wide.
-    const p = (cells: number) => ' '.repeat(cells * cols);
-    const patterns: Record<PieceType, string> = {
-      I: `${p(1)}${block}${block}${block}${block}`,
-      O: `${p(2)}${block}${block}\n${p(2)}${block}${block}`,
-      T: `${p(3)}${block}\n${p(2)}${block}${block}${block}`,
-      S: `${p(3)}${block}${block}\n${p(2)}${block}${block}`,
-      Z: `${p(2)}${block}${block}\n${p(3)}${block}${block}`,
-      J: `${p(2)}${block}\n${p(2)}${block}${block}${block}`,
-      L: `${p(4)}${block}\n${p(2)}${block}${block}${block}`,
-    };
-    return patterns[type] || '';
+    const state = this.engine.getState();
+    return miniPiece(type, rotationSystem, this.screen, state.mode, state.level);
   }
 
   /**

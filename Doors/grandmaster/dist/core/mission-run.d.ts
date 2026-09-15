@@ -75,6 +75,12 @@ export interface LockEvent {
      * (`mission.c:905-947`). Always 0 unless the mission marks rows.
      */
     markedRowsCleared: number;
+    /**
+     * This lock emptied a TARGET stage of its platinum blocks, so the stage is
+     * cleared and the next one is on the board (`mission.c:882-902`). False in
+     * every other run.
+     */
+    stageCleared: boolean;
 }
 export type MissionOutcome = 'playing' | 'cleared' | 'failed';
 export interface MissionProgress {

@@ -325,7 +325,7 @@ export async function everyShippedPackIsOfferedNotJustTheFirst(): Promise<void> 
   assert.ok(names.includes('STARTER'), `STARTER is offered, got ${names.join(', ')}`);
   assert.ok(names.includes('ORDERS & SPLITS'),
     `the second shipped pack is offered too, got ${names.join(', ')}`);
-  assert.ok(names.includes('ERASER & SQUARE'),
+  assert.ok(names.includes('TARGET, ERASER & SQUARE'),
     `and the third, got ${names.join(', ')}`);
   assert.ok(shipped.packs.every((p) => p.origin === 'shipped'));
 
@@ -366,7 +366,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   for (const objective of [
     'blockOrder', 'singleOrder', 'doubleOrder', 'tripleOrder', 'reTripleOrder',
     'splitDouble', 'splitTriple', 'splitDouble2',
-    'square', 'goldSquare', 'eraser', 'eraserHeboris',
+    'square', 'goldSquare', 'eraser', 'eraserHeboris', 'target',
   ]) {
     assert.ok(used.has(objective as any),
       `${objective} is judged but no shipped mission asks for it`);
@@ -944,4 +944,79 @@ export async function theEngineClaimsMarkedRowsAndMarksMore(): Promise<void> {
   assert.strictEqual(run.getProgress().current, 1, 'the marked row was claimed');
   assert.deepStrictEqual(engine.getState().markedRows, [23],
     'and a fresh set is marked, because the norm is not met');
+}
+
+/**
+ * TARGET: the stage is cleared when its bright blocks are gone.
+ *
+ * Reference type 6 (`mission.c:882-902`, counted at `tomoyo.c:334-352`). The
+ * 173 stages are the reference's own, converted into assets/stages by
+ * dev/scripts/convert-heboris-stages.py - so the first thing to prove is that
+ * the conversion produced stages this engine can lay out and finish.
+ */
+export async function aTargetStageIsClearedWhenItsPlatinumIsGone(): Promise<void> {
+  const { loadStages, applyStage, platinumLeft, stageOrder } = await import('../core/stage');
+
+  const stages = loadStages(path.join(__dirname, '..', 'assets', 'stages', 'stages.json'));
+  assert.strictEqual(stages.length, 173, 'every shipped stage converted');
+  for (const stage of stages) {
+    assert.strictEqual(stage.rows.length, 21, `${stage.id} is 21 rows`);
+    for (const row of stage.rows) assert.strictEqual(row.length, 10, `${stage.id} is 10 wide`);
+  }
+
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.start();
+  const board = engine.getState().board;
+
+  applyStage(board, stages[0]);
+  assert.ok(platinumLeft(board) > 0, 'the first stage has blocks to clear');
+  assert.ok(stages.every((s: any) => {
+    applyStage(board, s);
+    return platinumLeft(board) > 0;
+  }), 'and so does every one of them - a stage with none is already cleared');
+
+  // The order a mission plays: in sequence, or drawn from the band.
+  const inOrder = stageOrder(stages, 0, 4, 3);
+  assert.deepStrictEqual(inOrder.map((s: any) => s.id), ['000', '001', '002']);
+  const wrapped = stageOrder(stages, 0, 1, 3);
+  assert.deepStrictEqual(wrapped.map((s: any) => s.id), ['000', '001', '000'],
+    'a band shorter than the norm comes round again');
+  const drawn = stageOrder(stages, 0, 9, 4, () => 0.5);
+  assert.strictEqual(drawn.length, 4);
+  assert.ok(drawn.every((s: any) => Number(s.id) >= 0 && Number(s.id) <= 9),
+    'a random draw stays inside the band');
+}
+
+/** And the engine clears a stage, then lays out the next one. */
+export async function clearingAStageAdvancesToTheNext(): Promise<void> {
+  const { loadStages } = await import('../core/stage');
+  const stages = loadStages(path.join(__dirname, '..', 'assets', 'stages', 'stages.json'));
+
+  const mission: Mission = {
+    id: 'tg', name: 'TARGET', objective: 'target', norm: 2,
+    stages: { min: 0, max: 1 },
+    timeLimitSeconds: 0, startLevel: 0, garbageRows: 0, modifiers: {},
+  };
+  const run = new MissionRun(mission);
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.onLock((event: LockEvent) => { run.onLock(event); });
+  engine.start();
+  engine.setStages([stages[0], stages[1]]);
+
+  assert.strictEqual(engine.getStage().id, '000', 'the first stage is on the board');
+
+  // Take the platinum off by hand - what is being proved here is the
+  // ADVANCE, not a player's ability to clear stage 0.
+  const board = engine.getState().board;
+  for (let y = 0; y < board.height; y++) {
+    for (let x = 0; x < board.width; x++) {
+      if (board.grid[y][x].platinum) {
+        board.grid[y][x] = { filled: false, color: null, locked: false };
+      }
+    }
+  }
+  engine.hardDrop();
+
+  assert.strictEqual(run.getProgress().current, 1, 'the stage counted');
+  assert.strictEqual(engine.getStage().id, '001', 'and the next one is up');
 }

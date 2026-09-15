@@ -103,6 +103,7 @@ import { showTrainingConfig } from './ui/training-config';
 import * as path from 'path';
 import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import { listPacks } from './core/mission-store';
+import { loadStages, stageOrder } from './core/stage';
 import { MissionRun } from './core/mission-run';
 import { MissionProgress } from './core/mission-progress';
 import type { Mission, MissionPack } from './core/mission-types';
@@ -1002,6 +1003,30 @@ export class GrandmasterApp {
       this.gameEngine.setMissionSpeed(mission.speed ?? null);
       // The square scan costs a pass over the board every lock, so only the
       // two objectives judged on it ask for it.
+      /*
+       * TARGET plays STAGES: a field laid out in advance whose bright blocks
+       * have to go. The stages are content that ships with the door
+       * (assets/stages/stages.json, the reference's own 173, converted by
+       * dev/scripts/convert-heboris-stages.py), so a board missing the file
+       * has no TARGET missions rather than a door that will not start.
+       */
+      if (mission.objective === 'target' && mission.stages) {
+        try {
+          const all = loadStages(
+            path.join(resolveDoorRoot(__dirname), 'assets', 'stages', 'stages.json')
+          );
+          this.gameEngine.setStages(stageOrder(
+            all, mission.stages.min, mission.stages.max, mission.norm,
+            mission.stages.random ? Math.random : null,
+          ));
+        } catch (error) {
+          await this.showMessage(
+            'MISSIONS', `This mission needs the stage file:\n${(error as Error).message}`
+          );
+          return;
+        }
+      }
+
       // ERASER marks rows, and re-marks them as they are claimed.
       this.gameEngine.setEraserPattern(mission.eraser ?? null, mission.norm);
       this.gameEngine.setSquareMode(

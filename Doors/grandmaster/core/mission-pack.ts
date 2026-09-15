@@ -227,6 +227,39 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       fail(where, `objective "${objective}" does not take an eraser pattern`);
     }
 
+    /*
+     * TARGET's stage band. The objective IS the stages, so a TARGET mission
+     * without one cannot be judged - the same reasoning that refuses an
+     * ORDER mission with no piece.
+     */
+    const rawStages = m.stages as Record<string, unknown> | undefined;
+    let stages: Mission['stages'];
+    if (rawStages !== undefined) {
+      for (const field of ['min', 'max'] as const) {
+        const value = rawStages[field];
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+          fail(where, `stages.${field} must be a whole stage number, got ${JSON.stringify(value)}`);
+        }
+      }
+      if ((rawStages.min as number) > (rawStages.max as number)) {
+        fail(where, 'stages.min must not be past stages.max');
+      }
+      if (rawStages.random !== undefined && typeof rawStages.random !== 'boolean') {
+        fail(where, 'stages.random must be true or false');
+      }
+      stages = {
+        min: rawStages.min as number,
+        max: rawStages.max as number,
+        ...(rawStages.random !== undefined ? { random: rawStages.random as boolean } : {}),
+      };
+    }
+    if (objective === 'target' && stages === undefined) {
+      fail(where, 'objective "target" needs a stages band to play');
+    }
+    if (stages !== undefined && objective !== 'target') {
+      fail(where, `objective "${objective}" does not take a stages band`);
+    }
+
     const rawModifiers = (m.modifiers ?? {}) as Record<string, unknown>;
     const hidden = rawModifiers.hidden as HiddenMode | undefined;
     if (hidden !== undefined && !HIDDEN_MODES.includes(hidden)) {
@@ -252,6 +285,7 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
       ...(requireHold !== undefined ? { requireHold: requireHold as boolean } : {}),
       ...(speed !== undefined ? { speed } : {}),
       ...(eraser !== undefined ? { eraser } : {}),
+      ...(stages !== undefined ? { stages } : {}),
       id,
       name: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : `MISSION ${id}`,
       objective,

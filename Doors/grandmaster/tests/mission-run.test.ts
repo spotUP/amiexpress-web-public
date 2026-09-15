@@ -181,20 +181,29 @@ export async function aPackIsReadWithItsDefaults(): Promise<void> {
 }
 
 export async function aPackWithAnUnjudgeableObjectiveIsRefused(): Promise<void> {
-  // The reference has 42 objective types and this engine judges most of them
-  // now, but not TARGET - which loads a stage file and wants a platinum cell
-  // kind the board does not have. A pack asking for one it cannot judge is
-  // not a mission that plays oddly; it is one that can never be completed.
+  // The reference has 42 objective types and this engine judges all of the
+  // ones that are OBJECTIVES now. `DEVIL 1200` is not one of them: it is a
+  // line count played at a speed, which a pack asks for with `speed`. A pack
+  // naming something this engine cannot judge is not a mission that plays
+  // oddly; it is one that can never be completed.
   assert.throws(
-    () => parseMissionPack({ missions: [{ objective: 'target', norm: 1 }] }, 'pack.json'),
-    (error: Error) => error instanceof MissionPackError && /target/.test(error.message)
-      && /pack.json #1/.test(error.message)
+    () => parseMissionPack({ missions: [{ objective: 'devil1200', norm: 1 }] }, 'pack.json'),
+    (error: Error) => error instanceof MissionPackError && /devil1200/.test(error.message)
+      && /can judge/.test(error.message) && /pack.json #1/.test(error.message)
   );
-  // And the one that USED to stand here is judged now, so it loads.
+
+  // The two that used to stand here are judged now, and load - a retired
+  // example should be retired by asserting the opposite, not by deletion.
   assert.strictEqual(
     parseMissionPack({ missions: [{ objective: 'goldSquare', norm: 1 }] }, 'pack.json')
       .missions[0].objective,
     'goldSquare',
+  );
+  assert.strictEqual(
+    parseMissionPack(
+      { missions: [{ objective: 'target', norm: 1, stages: { min: 0, max: 4 } }] }, 'pack.json'
+    ).missions[0].objective,
+    'target',
   );
 }
 

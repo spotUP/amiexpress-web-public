@@ -86,6 +86,8 @@ function missionObjectiveText(mission) {
             + 'the piece has to be IN the row it clears.';
         case 'eraserHeboris': return `Clear ${norm} marked row${norm === 1 ? '' : 's'} `
             + 'with four-line clears only.';
+        case 'target': return `Clear ${times(norm)} the bright blocks off a `
+            + 'stage that is already on the field.';
         default: return 'Play.';
     }
 }

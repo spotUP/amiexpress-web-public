@@ -10,6 +10,7 @@ import { type Medal } from './medals';
 import type { LockEvent } from './mission-run';
 import type { MissionModifiers, MissionSpeed } from './mission-types';
 import { type EraserPattern } from './eraser';
+import { type Stage } from './stage';
 import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
@@ -86,6 +87,9 @@ export declare class GameEngine {
     /** ERASER: the pattern a mission asked for, and how many it still needs. */
     private eraserPattern;
     private eraserRemaining;
+    /** TARGET: the stages this mission plays, and which one is up. */
+    private stages;
+    private stageIndex;
     private perfectClearCount;
     private lastUpdate;
     private frameAccumulator;
@@ -190,6 +194,16 @@ export declare class GameEngine {
      * every marked row has been cleared.
      */
     setEraserPattern(pattern: EraserPattern | null, remaining: number): void;
+    /**
+     * Play a TARGET mission's stages, starting with the first.
+     *
+     * A stage is cleared when no platinum block is left (tomoyo.c:334-352);
+     * the field is then wiped and the next stage laid out, which is the
+     * reference's status-25 wipe (mission.c:882-902).
+     */
+    setStages(stages: Stage[]): void;
+    /** The stage on the board, for the screen and for the tests. */
+    getStage(): Stage | null;
     setMissionSpeed(speed: MissionSpeed | null): void;
     /** The mode's curve, with the mission's own timings on top of it. */
     private speedParams;

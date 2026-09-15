@@ -1,5 +1,5 @@
 {
-  "name": "ERASER & SQUARE",
+  "name": "TARGET, ERASER & SQUARE",
   "missions": [
     {
       "id": "01",
@@ -66,6 +66,52 @@
         "hideNext": true
       },
       "hint": "Two marked rows with no preview of what is coming."
+    },
+    {
+      "id": "05",
+      "name": "FIRST TARGETS",
+      "objective": "target",
+      "norm": 3,
+      "stages": {
+        "min": 0,
+        "max": 9
+      },
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Clear the bright blocks off three of the opening stages."
+    },
+    {
+      "id": "06",
+      "name": "TARGET TEN",
+      "objective": "target",
+      "norm": 5,
+      "stages": {
+        "min": 10,
+        "max": 29
+      },
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Five stages from further in, in the order they were written."
+    },
+    {
+      "id": "07",
+      "name": "PICK A STAGE",
+      "objective": "target",
+      "norm": 4,
+      "stages": {
+        "min": 30,
+        "max": 90,
+        "random": true
+      },
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {},
+      "hint": "Four stages, drawn at random from the middle of the set."
     }
   ]
 }

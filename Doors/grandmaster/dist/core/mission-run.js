@@ -190,6 +190,11 @@ class MissionRun {
                 this.current += event.markedRowsCleared;
             }
         }
+        else if (objective === 'target') {
+            // One stage cleared, one count: the norm is stages (mission.c:882-902).
+            if (event.stageCleared)
+                this.current++;
+        }
         else if (objective === 'square') {
             // Any square counts (gamestart.c:8678: `>= 1`).
             if (event.square >= 1)

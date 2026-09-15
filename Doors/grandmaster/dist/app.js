@@ -108,6 +108,7 @@ const training_config_1 = require("./ui/training-config");
 const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const mission_store_1 = require("./core/mission-store");
+const stage_1 = require("./core/stage");
 const mission_run_1 = require("./core/mission-run");
 const mission_progress_1 = require("./core/mission-progress");
 const mission_select_1 = require("./ui/mission-select");
@@ -899,6 +900,23 @@ class GrandmasterApp {
             this.gameEngine.setMissionSpeed(mission.speed ?? null);
             // The square scan costs a pass over the board every lock, so only the
             // two objectives judged on it ask for it.
+            /*
+             * TARGET plays STAGES: a field laid out in advance whose bright blocks
+             * have to go. The stages are content that ships with the door
+             * (assets/stages/stages.json, the reference's own 173, converted by
+             * dev/scripts/convert-heboris-stages.py), so a board missing the file
+             * has no TARGET missions rather than a door that will not start.
+             */
+            if (mission.objective === 'target' && mission.stages) {
+                try {
+                    const all = (0, stage_1.loadStages)(path.join((0, settings_1.resolveDoorRoot)(__dirname), 'assets', 'stages', 'stages.json'));
+                    this.gameEngine.setStages((0, stage_1.stageOrder)(all, mission.stages.min, mission.stages.max, mission.norm, mission.stages.random ? Math.random : null));
+                }
+                catch (error) {
+                    await this.showMessage('MISSIONS', `This mission needs the stage file:\n${error.message}`);
+                    return;
+                }
+            }
             // ERASER marks rows, and re-marks them as they are claimed.
             this.gameEngine.setEraserPattern(mission.eraser ?? null, mission.norm);
             this.gameEngine.setSquareMode(mission.objective === 'square' || mission.objective === 'goldSquare');

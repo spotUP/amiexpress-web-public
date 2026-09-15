@@ -39,6 +39,9 @@ import {
 import { makeSquares, type SquareResult } from './square';
 import { chooseMarkedRows, claimMarkedRows, type EraserPattern } from './eraser';
 import { buildResult } from './game-result';
+import { applyStage, type Stage } from './stage';
+import { afterLock } from './mission-hooks';
+import { collectItem } from './item-effects';
 import {
   boneBlockChance, startCreditRoll, completeCreditRoll,
 } from './credit-roll-rules';
@@ -142,6 +145,9 @@ export class GameEngine {
   /** ERASER: the pattern a mission asked for, and how many it still needs. */
   private eraserPattern: EraserPattern | null = null;
   private eraserRemaining = 0;
+  /** TARGET: the stages this mission plays, and which one is up. */
+  private stages: Stage[] = [];
+  private stageIndex = 0;
   private perfectClearCount: number = 0;
 
   // Game loop
@@ -460,6 +466,24 @@ export class GameEngine {
     this.state.markedRows = pattern
       ? chooseMarkedRows(pattern, remaining, this.state.board.height)
       : [];
+  }
+
+  /**
+   * Play a TARGET mission's stages, starting with the first.
+   *
+   * A stage is cleared when no platinum block is left (tomoyo.c:334-352);
+   * the field is then wiped and the next stage laid out, which is the
+   * reference's status-25 wipe (mission.c:882-902).
+   */
+  setStages(stages: Stage[]): void {
+    this.stages = stages;
+    this.stageIndex = 0;
+    if (stages.length > 0) applyStage(this.state.board, stages[0]);
+  }
+
+  /** The stage on the board, for the screen and for the tests. */
+  getStage(): Stage | null {
+    return this.stages[this.stageIndex] ?? null;
   }
 
   setMissionSpeed(speed: MissionSpeed | null): void {
@@ -1649,44 +1673,26 @@ export class GameEngine {
      * and gamestart.c:9134-9139): one row every N pieces LOCKED, not every N
      * seconds - so the clock a player keeps is their own piece count.
      */
-    /*
-     * ERASER: a marked row is claimed when the piece that just locked SAT IN
-     * it and it was cleared (mission.c:905-947) - clearing it with a piece
-     * that landed somewhere else is not the shot the mission asked for. The
-     * engine does the matching because it also owns the marks and draws
-     * them; the judge is only told how many were claimed.
-     */
-    let markedRowsCleared = 0;
-    if (this.state.markedRows.length > 0) {
-      const claim = claimMarkedRows(
-        this.state.markedRows, lockedCells.map((cell) => cell.y), clearedLines
-      );
-      markedRowsCleared = claim.claimed.length;
-      this.state.markedRows = claim.remaining;
-      this.eraserRemaining = Math.max(0, this.eraserRemaining - markedRowsCleared);
-      // Every marked row gone and the norm not met: a fresh pattern appears.
-      if (this.state.markedRows.length === 0 && this.eraserPattern && this.eraserRemaining > 0) {
-        this.state.markedRows = chooseMarkedRows(
-          this.eraserPattern, this.eraserRemaining, this.state.board.height
-        );
-      }
-    }
-
-    // SQUARE: the scan runs after the clears, so a square that was just
-    // broken up by a line clear does not count (gamestart.c:8678-8683).
-    const square: SquareResult = this.squareMode ? makeSquares(this.state.board) : 0;
-
-    // MIRROR flips the stack after EVERY piece in MISSION mode
-    // (gamestart.c:9055, the `gameMode == 8` clause) - not on a timer, which
-    // is what makes it a mode rather than an effect.
-    if (this.state.missionModifiers?.mirror) {
-      mirrorBoard(this.state.board);
-    }
-
-    const rise = this.state.missionModifiers?.riseEveryPieces ?? 0;
-    if (rise > 0 && this.state.piecesPlaced > 0 && this.state.piecesPlaced % rise === 0) {
-      riseGarbageRow(this.state.board);
-    }
+    // Everything a MISSION does to the board once the clears are settled -
+    // ERASER's claims, TARGET's next stage, SQUARE's scan, MIRROR, the
+    // rising floor - in the order they happen (core/mission-hooks.ts).
+    const hooks = afterLock({
+      board: this.state.board,
+      modifiers: this.state.missionModifiers,
+      occupiedRows: lockedCells.map((cell) => cell.y),
+      clearedRows: clearedLines,
+      piecesPlaced: this.state.piecesPlaced,
+      markedRows: this.state.markedRows,
+      eraserPattern: this.eraserPattern,
+      eraserRemaining: this.eraserRemaining,
+      stages: this.stages,
+      stageIndex: this.stageIndex,
+      squareMode: this.squareMode,
+    });
+    this.state.markedRows = hooks.markedRows;
+    this.eraserRemaining = hooks.eraserRemaining;
+    this.stageIndex = hooks.stageIndex;
+    const { markedRowsCleared, stageCleared, square } = hooks;
 
     // Report the lock. Everything a MISSION judges comes from here, which is
     // why it is the LAST thing lockPiece does: lines are cleared, the combo
@@ -1708,6 +1714,7 @@ export class GameEngine {
       clearedRows: [...clearedLines].sort((a, b) => a - b),
       square,
       markedRowsCleared,
+      stageCleared,
     });
   }
 
@@ -1873,30 +1880,12 @@ export class GameEngine {
    * items vs. enemy-targeted "attack" items - see SELF_TARGET_ITEMS).
    */
   private processCollectedItem(itemId: number): void {
-    this.state.itemBanner = { name: ITEM_NAMES[itemId] ?? `ITEM ${itemId}`, ttl: 90 };
-
-    if (isSelfTargetItem(itemId)) {
-      const result = applySelfItem(itemId, this.state.board);
-      if (result.clearRows && result.clearRows.length > 0) {
-        clearLines(this.state.board, result.clearRows);
-      }
-      return;
-    }
-
-    // Enemy-targeted (attack) item - HARD (25) and EXCHG (24) included.
-    // GameEngine has no notion of an opponent; the caller (VersusScreen)
-    // resolves a target engine and applies core/items.ts's applyEnemyItem.
-    if (this.onItemCollectedCallback) {
-      this.onItemCollectedCallback(itemId);
-      return;
-    }
-
-    // Nobody is listening, which is single player: the reference's own
-    // fallback applies the attack to the collector (gamestart.c:14358-14365,
-    // "enemy = 1 - player", falling back to "enemy = player"). Without this
-    // an item outside versus was collected, named on the HUD, and then did
-    // nothing at all.
-    this.applyItemEffectResult(applyEnemyItem(itemId, this.state.board, this.state.board));
+    collectItem(itemId, this.state, this.state.board, {
+      toOpponent: this.onItemCollectedCallback
+        ? (id: number) => this.onItemCollectedCallback!(id)
+        : undefined,
+      applyResult: (result) => this.applyItemEffectResult(result),
+    });
   }
 
   /**
