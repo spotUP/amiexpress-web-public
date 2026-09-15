@@ -1696,7 +1696,39 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     return null;
   })();
 
+  /*
+   * A THEME THAT CANNOT DRESS A C64 DOES NOT GET TO SHADOW THE BOARD'S .SEQ.
+   *
+   * The sysop, 2026-09-15, after the generated PETSCII defaults shipped: "the
+   * mainmenu is 80 cols". The board's own log named the file it served -
+   * `Themes/607080/Conf/2/Menu.txt` - and the reason is the search ORDER: a
+   * theme's directory is searched before the board's, and this board's active
+   * theme was made on the live volume, so it has no `.seq` for anything. Its
+   * ANSI copy answered first and `Conf2/Menu.seq`, sitting one location
+   * further down, was never reached.
+   *
+   * A theme owns ART (screens/theme-validation.ts says as much, and warns a
+   * theme that claims 40 columns with no `.seq` in it). Art it does not have
+   * is not art it owns: where the theme has no PETSCII copy and the board
+   * does, the board's is served. A theme WITH a `.seq` still wins, and a
+   * screen NOBODY has in PETSCII still falls to the theme's ANSI, reflowed as
+   * before - this rule only fires when there is something better underneath.
+   */
+  const petsciiCandidateIn = (dir: string): string | null => {
+    const found = findSecurityScreen(path.join(dir, screenBaseNoExt), userSecLevel, null, false, false, true, false, { hollow });
+    return found && isPetsciiSeqFile(found) ? found : null;
+  };
+  const boardHasPetsciiCopy = servesPetsciiArt(session) && !isAssignPath
+    && searchLocations.some((l) => !l.themed && petsciiCandidateIn(l.dir) !== null);
+
   for (const location of searchLocations) {
+    if (location.themed && boardHasPetsciiCopy && petsciiCandidateIn(location.dir) === null) {
+      screenDebug(
+        `[loadScreenFile]  skipping ${location.desc}: it has no .seq for ${screenName}`
+        + ' and the board does - a theme owns art, and this art it does not have',
+      );
+      continue;
+    }
     if (location.themed && boardProgramSignature !== null) {
       /*
        * SAME CODES, DIFFERENT PIXELS: the theme wins. That is a restyle, and
