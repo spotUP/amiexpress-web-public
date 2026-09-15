@@ -176,7 +176,7 @@ export class LeaderboardScreen {
       width: panelWidth,
       height: personalHeight,
       border: { type: 'line' },
-      style: { border: { fg: 'magenta' } },
+      style: { border: { fg: T.accentAlt } },
       label: ' Your Best ',
       content: personalContent,
       fixed: true,

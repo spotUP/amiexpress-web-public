@@ -1640,7 +1640,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' REPLAYS ',
                 tags: true,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1653,7 +1653,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.selectionInk, bg: door_theme_1.T.selectionBg } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1680,7 +1680,7 @@ class GrandmasterApp {
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 content: `\n {${door_theme_1.T.ink}-fg}${message}{/${door_theme_1.T.ink}-fg}`,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
             this.screen.render();
             const dismiss = () => {
@@ -1711,7 +1711,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' SPEED ',
                 tags: true,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1724,7 +1724,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.selectionInk, bg: door_theme_1.T.selectionBg } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1763,7 +1763,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' PUZZLE ',
                 tags: true,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1776,7 +1776,7 @@ class GrandmasterApp {
                 mouse: true,
                 tags: true,
                 items: labels,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.ground, bg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, selected: { fg: door_theme_1.T.selectionInk, bg: door_theme_1.T.selectionBg } },
             });
             const done = (choice) => {
                 box.destroy();
@@ -1818,7 +1818,7 @@ class GrandmasterApp {
                 height: layout.height,
                 label: ' TETRIS ATTACK ',
                 tags: true,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
             const list = (0, blessed_helpers_1.createList)({
                 parent: box,
@@ -1834,7 +1834,7 @@ class GrandmasterApp {
                 style: {
                     fg: door_theme_1.T.ink,
                     bg: door_theme_1.T.ground,
-                    selected: { fg: door_theme_1.T.ground, bg: 'magenta' },
+                    selected: { fg: door_theme_1.T.selectionInk, bg: door_theme_1.T.selectionBg },
                 },
             });
             const done = (choice) => {
@@ -2327,7 +2327,7 @@ class GrandmasterApp {
             height: 16,
             border: { type: 'line' },
             label: ' WATCH A GAME ',
-            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             fixed: true,
         });
         const items = running.length > 0
@@ -2344,7 +2344,7 @@ class GrandmasterApp {
             keys: true,
             vi: true,
             mouse: true,
-            style: { selected: { bg: 'magenta', fg: door_theme_1.T.ground }, item: { fg: door_theme_1.T.ink } },
+            style: { selected: { bg: door_theme_1.T.selectionBg, fg: door_theme_1.T.selectionInk }, item: { fg: door_theme_1.T.ink } },
         });
         list.focus();
         this.screen.render();
@@ -2973,7 +2973,7 @@ class GrandmasterApp {
                 height: `100%-11`,
                 label: ' Spectators ',
                 border: { type: 'line' },
-                style: { border: { fg: 'magenta' }, bg: door_theme_1.T.ground },
+                style: { border: { fg: door_theme_1.T.accentAlt }, bg: door_theme_1.T.ground },
                 fixed: true,
             });
             const footer = (0, blessed_helpers_1.createBox)({
@@ -3194,7 +3194,7 @@ class GrandmasterApp {
         });
         client.on('chat', (data) => {
             if (data.isAction) {
-                addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}* ${data.name} ${data.text}{/${door_theme_1.T.accentAlt}-fg}`);
             }
             else if (data.isGameMessage) {
                 addChatMessage(`{${door_theme_1.T.accent}-fg}[GAME] ${data.text}{/${door_theme_1.T.accent}-fg}`);
@@ -3207,16 +3207,16 @@ class GrandmasterApp {
             updateSpectatorList();
         });
         client.on('spectator:joined', (name) => {
-            addChatMessage(`{magenta-fg}*** ${name} is spectating{/magenta-fg}`);
+            addChatMessage(`{${door_theme_1.T.accentAlt}-fg}*** ${name} is spectating{/${door_theme_1.T.accentAlt}-fg}`);
             updateSpectatorList();
         });
         client.on('spectator:left', (name) => {
-            addChatMessage(`{magenta-fg}*** ${name} stopped spectating{/magenta-fg}`);
+            addChatMessage(`{${door_theme_1.T.accentAlt}-fg}*** ${name} stopped spectating{/${door_theme_1.T.accentAlt}-fg}`);
             updateSpectatorList();
         });
         client.on('spectator:chat', (data) => {
             if (data.isAction) {
-                addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}* ${data.name} ${data.text}{/${door_theme_1.T.accentAlt}-fg}`);
             }
             else {
                 addChatMessage(`[SPEC] <${data.name}> ${data.text}`);
@@ -3349,7 +3349,7 @@ class GrandmasterApp {
             height: 15,
             border: { type: 'line' },
             label: ' Select Bot Difficulty ',
-            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             fixed: true,
         });
         const difficultyBox = (0, blessed_helpers_1.createList)({

@@ -345,7 +345,7 @@ class VersusScreen {
             width: sideWidth,
             height: 10,
             border: { type: 'line' },
-            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             label: ' HOLD ',
             fixed: true,
             focusable: false,

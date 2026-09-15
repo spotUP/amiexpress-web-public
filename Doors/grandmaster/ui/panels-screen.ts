@@ -227,7 +227,7 @@ export class PanelsScreen {
           height: 1,
           border: undefined,
           tags: true,
-          style: { fg: 'magenta', bg: T.ground },
+          style: { fg: T.accentAlt, bg: T.ground },
           content,
         }));
       };
@@ -257,7 +257,7 @@ export class PanelsScreen {
           // content.
           border: undefined,
           tags: true,
-          style: { fg: 'magenta', bg: T.ground },
+          style: { fg: T.accentAlt, bg: T.ground },
           content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
         }));
       }
@@ -272,7 +272,7 @@ export class PanelsScreen {
         height: layout.board.height + 2,
         label: ' TETRIS ATTACK ',
         tags: true,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
     }
 
@@ -328,7 +328,7 @@ export class PanelsScreen {
       border: this.hudFramed ? { type: 'line' } : undefined,
       label: this.hudFramed ? ' STATS ' : undefined,
       tags: true,
-      style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
     });
   }
 

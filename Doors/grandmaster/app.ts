@@ -1864,7 +1864,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' REPLAYS ',
         tags: true,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
 
       const list = createList({
@@ -1878,7 +1878,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.selectionInk, bg: T.selectionBg } },
       });
 
       const done = (choice: number | null) => {
@@ -1909,7 +1909,7 @@ export class GrandmasterApp {
         label: ' TETRIS ATTACK ',
         tags: true,
         content: `\n {${T.ink}-fg}${message}{/${T.ink}-fg}`,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
       this.screen.render();
 
@@ -1943,7 +1943,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' SPEED ',
         tags: true,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
 
       const list = createList({
@@ -1957,7 +1957,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.selectionInk, bg: T.selectionBg } },
       });
 
       const done = (choice: ClassicDifficulty | null) => {
@@ -2003,7 +2003,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' PUZZLE ',
         tags: true,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
 
       const list = createList({
@@ -2017,7 +2017,7 @@ export class GrandmasterApp {
         mouse: true,
         tags: true,
         items: labels,
-        style: { fg: T.ink, bg: T.ground, selected: { fg: T.ground, bg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, selected: { fg: T.selectionInk, bg: T.selectionBg } },
       });
 
       const done = (choice: number | null) => {
@@ -2064,7 +2064,7 @@ export class GrandmasterApp {
         height: layout.height,
         label: ' TETRIS ATTACK ',
         tags: true,
-        style: { fg: T.ink, bg: T.ground, border: { fg: 'magenta' } },
+        style: { fg: T.ink, bg: T.ground, border: { fg: T.accentAlt } },
       });
 
       const list = createList({
@@ -2081,7 +2081,7 @@ export class GrandmasterApp {
         style: {
           fg: T.ink,
           bg: T.ground,
-          selected: { fg: T.ground, bg: 'magenta' },
+          selected: { fg: T.selectionInk, bg: T.selectionBg },
         },
       });
 
@@ -2663,7 +2663,7 @@ export class GrandmasterApp {
       height: 16,
       border: { type: 'line' },
       label: ' WATCH A GAME ',
-      style: { bg: T.ground, border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: T.accentAlt } },
       fixed: true,
     });
 
@@ -2683,7 +2683,7 @@ export class GrandmasterApp {
       keys: true,
       vi: true,
       mouse: true,
-      style: { selected: { bg: 'magenta', fg: T.ground }, item: { fg: T.ink } },
+      style: { selected: { bg: T.selectionBg, fg: T.selectionInk }, item: { fg: T.ink } },
     });
     list.focus();
     this.screen.render();
@@ -3400,7 +3400,7 @@ export class GrandmasterApp {
         height: `100%-11`,
         label: ' Spectators ',
         border: { type: 'line' },
-        style: { border: { fg: 'magenta' }, bg: T.ground },
+        style: { border: { fg: T.accentAlt }, bg: T.ground },
         fixed: true,
       });
 
@@ -3629,7 +3629,7 @@ export class GrandmasterApp {
 
     client.on('chat', (data: any) => {
       if (data.isAction) {
-        addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+        addChatMessage(`{${T.accentAlt}-fg}* ${data.name} ${data.text}{/${T.accentAlt}-fg}`);
       } else if (data.isGameMessage) {
         addChatMessage(`{${T.accent}-fg}[GAME] ${data.text}{/${T.accent}-fg}`);
       } else {
@@ -3642,18 +3642,18 @@ export class GrandmasterApp {
     });
 
     client.on('spectator:joined', (name: string) => {
-      addChatMessage(`{magenta-fg}*** ${name} is spectating{/magenta-fg}`);
+      addChatMessage(`{${T.accentAlt}-fg}*** ${name} is spectating{/${T.accentAlt}-fg}`);
       updateSpectatorList();
     });
 
     client.on('spectator:left', (name: string) => {
-      addChatMessage(`{magenta-fg}*** ${name} stopped spectating{/magenta-fg}`);
+      addChatMessage(`{${T.accentAlt}-fg}*** ${name} stopped spectating{/${T.accentAlt}-fg}`);
       updateSpectatorList();
     });
 
     client.on('spectator:chat', (data: any) => {
       if (data.isAction) {
-        addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+        addChatMessage(`{${T.accentAlt}-fg}* ${data.name} ${data.text}{/${T.accentAlt}-fg}`);
       } else {
         addChatMessage(`[SPEC] <${data.name}> ${data.text}`);
       }
@@ -3808,7 +3808,7 @@ export class GrandmasterApp {
       height: 15,
       border: { type: 'line' },
       label: ' Select Bot Difficulty ',
-      style: { bg: T.ground, border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: T.accentAlt } },
       fixed: true,
     });
 

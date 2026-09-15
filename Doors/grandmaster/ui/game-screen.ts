@@ -615,7 +615,7 @@ export class GameScreen {
       width: 14,
       height: 6,
       border: { type: 'line' },
-      style: { bg: T.ground, border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: T.accentAlt } },
       label: ' HOLD ',
       fixed: true,
       focusable: false,
@@ -1311,7 +1311,7 @@ export class GameScreen {
     if (!isRainbowMode) {
         if (this.boardBox?.style?.border) this.boardBox.style.border.fg = T.ink;
         if (this.nextBox?.style?.border) this.nextBox.style.border.fg = T.chrome;
-        if (this.holdBox?.style?.border) this.holdBox.style.border.fg = 'magenta';
+        if (this.holdBox?.style?.border) this.holdBox.style.border.fg = T.accentAlt;
         if (this.gradeBox?.style?.border) this.gradeBox.style.border.fg = T.accent;
         if (this.statsBox?.style?.border) this.statsBox.style.border.fg = T.ok;
         if (this.sectionBox?.style?.border) this.sectionBox.style.border.fg = T.chrome;

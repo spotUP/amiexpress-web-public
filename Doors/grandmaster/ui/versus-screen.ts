@@ -429,7 +429,7 @@ export class VersusScreen {
       width: sideWidth,
       height: 10,
       border: { type: 'line' },
-      style: { bg: T.ground, border: { fg: 'magenta' } },
+      style: { bg: T.ground, border: { fg: T.accentAlt } },
       label: ' HOLD ',
       fixed: true,
       focusable: false,

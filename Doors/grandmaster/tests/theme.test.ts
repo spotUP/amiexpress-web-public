@@ -105,6 +105,15 @@ export async function classicIsExactlyTheDoorThatWasThereBefore(): Promise<void>
     assert.strictEqual(borderOf(g.game.gradeBox), 'yellow', 'GRADE was yellow');
     assert.strictEqual(borderOf(g.game.statsBox), 'green', 'STATS was green');
     assert.strictEqual(borderOf(g.game.boardBox), 'white', 'the well was white');
+    // DELIBERATELY CHANGED 2026-09-15, on the sysop's word: the HOLD panel
+    // was the one border painted magenta, which no classic token IS. The
+    // whole magenta CHROME family - this panel, the Panels-mode dialogs, the
+    // spectate and bot-difficulty lists, the leaderboard's own box - takes
+    // accentAlt now, so it is cyan under classic and follows every other
+    // theme. The magenta that MEANS something stays: an m-grade, a big
+    // combo, the T-SPIN flash.
+    assert.strictEqual(borderOf(g.game.holdBox), 'cyan',
+      'HOLD joined the theme: accentAlt, which is cyan under classic');
   } finally { g.destroy(); }
 }
 
@@ -134,6 +143,8 @@ export async function aThemeReachesTheMenuAndTheHud(): Promise<void> {
       assert.strictEqual(borderOf(g.game.gradeBox), phosphor.tokens.accent);
       assert.strictEqual(borderOf(g.game.statsBox), phosphor.tokens.ok);
       assert.strictEqual(borderOf(g.game.boardBox), phosphor.tokens.ink);
+      assert.strictEqual(borderOf(g.game.holdBox), phosphor.tokens.accentAlt,
+        'the last magenta border in the HUD follows the theme too');
     } finally { g.destroy(); }
   } finally { backToClassic(); }
 }
@@ -257,4 +268,34 @@ export async function theMenuItemsStayLiteralBecauseTheyAreBuiltBeforeTheThemeIs
         + 'theme was loaded first - make it a function before tokenising it');
     }
   } finally { backToClassic(); }
+}
+
+/**
+ * The magenta that is left is the magenta that MEANS something.
+ *
+ * Sysop, 2026-09-15, asked whether Panels mode should join the theme: yes.
+ * So every magenta that was CHROME - a dialog border, a selected row, the
+ * HOLD panel - is a token now, and what remains is the game's own language:
+ * an m-grade is magenta in TGM, a combo of five or more is magenta, and the
+ * T-SPIN flash is magenta. Those do not move with a theme any more than a
+ * piece colour does.
+ */
+export async function theOnlyMagentaLeftIsGameArt(): Promise<void> {
+  const fs: typeof import('fs') = await import('fs');
+  const path: typeof import('path') = await import('path');
+  const root = path.join(__dirname, '..');
+  const chromeFiles = [
+    'app.ts', 'ui/panels-screen.ts', 'ui/leaderboard-screen.ts',
+    'ui/game-screen.ts', 'ui/versus-screen.ts',
+  ];
+  // A border or a selection is chrome; a grade, a combo and the T-SPIN
+  // flash are not. This looks for the first kind only.
+  const chromeShape = /(border:\s*\{[^}]*|selected:\s*\{[^}]*|fg:\s*|bg:\s*)'magenta'/;
+  for (const file of chromeFiles) {
+    const src = fs.readFileSync(path.join(root, file), 'utf8');
+    for (const [i, line] of src.split('\n').entries()) {
+      assert.ok(!chromeShape.test(line),
+        `${file}:${i + 1} still paints chrome magenta, which no theme can reach: ${line.trim()}`);
+    }
+  }
 }

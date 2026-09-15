@@ -526,7 +526,7 @@ class GameScreen {
             width: 14,
             height: 6,
             border: { type: 'line' },
-            style: { bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             label: ' HOLD ',
             fixed: true,
             focusable: false,
@@ -1177,7 +1177,7 @@ class GameScreen {
             if (this.nextBox?.style?.border)
                 this.nextBox.style.border.fg = door_theme_1.T.chrome;
             if (this.holdBox?.style?.border)
-                this.holdBox.style.border.fg = 'magenta';
+                this.holdBox.style.border.fg = door_theme_1.T.accentAlt;
             if (this.gradeBox?.style?.border)
                 this.gradeBox.style.border.fg = door_theme_1.T.accent;
             if (this.statsBox?.style?.border)

@@ -152,7 +152,7 @@ class LeaderboardScreen {
             width: panelWidth,
             height: personalHeight,
             border: { type: 'line' },
-            style: { border: { fg: 'magenta' } },
+            style: { border: { fg: door_theme_1.T.accentAlt } },
             label: ' Your Best ',
             content: personalContent,
             fixed: true,

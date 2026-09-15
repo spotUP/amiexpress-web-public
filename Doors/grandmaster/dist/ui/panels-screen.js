@@ -129,7 +129,7 @@ class PanelsScreen {
                     height: 1,
                     border: undefined,
                     tags: true,
-                    style: { fg: 'magenta', bg: door_theme_1.T.ground },
+                    style: { fg: door_theme_1.T.accentAlt, bg: door_theme_1.T.ground },
                     content,
                 }));
             };
@@ -159,7 +159,7 @@ class PanelsScreen {
                     // content.
                     border: undefined,
                     tags: true,
-                    style: { fg: 'magenta', bg: door_theme_1.T.ground },
+                    style: { fg: door_theme_1.T.accentAlt, bg: door_theme_1.T.ground },
                     content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
                 }));
             }
@@ -173,7 +173,7 @@ class PanelsScreen {
                 height: layout.board.height + 2,
                 label: ' TETRIS ATTACK ',
                 tags: true,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
             });
         }
         this.boardBox = (0, bbs_door_sdk_1.createBox)({
@@ -226,7 +226,7 @@ class PanelsScreen {
             border: this.hudFramed ? { type: 'line' } : undefined,
             label: this.hudFramed ? ' STATS ' : undefined,
             tags: true,
-            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: 'magenta' } },
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
         });
     }
     /** The single input character for this frame. */
