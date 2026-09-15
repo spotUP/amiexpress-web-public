@@ -27,10 +27,15 @@ describe('Upload abort at filename input (E-14, express.e:17668-17670)', () => {
   );
 
   test('UPLOAD_FILENAME_INPUT branch contains A/a abort check', () => {
-    const block = src.match(
-      /subState === LoggedOnSubState\.UPLOAD_FILENAME_INPUT[\s\S]{0,1500}/
-    );
-    expect(block).not.toBeNull();
+    // Sliced to the BRANCH, not to a character count. The window was 1500
+    // characters, which silently measured "how much comment sits above the
+    // abort check" - adding the express.e:2335 control-key note pushed the
+    // check past the end and failed a test about code that had not changed.
+    // A branch ends where the next subState branch begins.
+    const start = src.indexOf('subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT');
+    expect(start).toBeGreaterThan(-1);
+    const next = src.indexOf('if (session.subState === LoggedOnSubState.', start + 10);
+    const block: string[] = [src.slice(start, next > -1 ? next : undefined)];
     expect(block![0]).toMatch(
       /\(\s*input === ['"]A['"]\s*\|\|\s*input === ['"]a['"]\s*\)\s*&&\s*input\.length === 1/
     );
@@ -51,10 +56,15 @@ describe('Upload abort at filename input (E-14, express.e:17668-17670)', () => {
   });
 
   test('cites express.e:17668-17670 for the abort branch', () => {
-    const block = src.match(
-      /subState === LoggedOnSubState\.UPLOAD_FILENAME_INPUT[\s\S]{0,1500}/
-    );
-    expect(block).not.toBeNull();
+    // Sliced to the BRANCH, not to a character count. The window was 1500
+    // characters, which silently measured "how much comment sits above the
+    // abort check" - adding the express.e:2335 control-key note pushed the
+    // check past the end and failed a test about code that had not changed.
+    // A branch ends where the next subState branch begins.
+    const start = src.indexOf('subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT');
+    expect(start).toBeGreaterThan(-1);
+    const next = src.indexOf('if (session.subState === LoggedOnSubState.', start + 10);
+    const block: string[] = [src.slice(start, next > -1 ? next : undefined)];
     expect(block![0]).toMatch(/express\.e:17668-17670/);
   });
 });

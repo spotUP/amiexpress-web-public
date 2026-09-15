@@ -3222,7 +3222,33 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
 
   // Handle upload filename input (express.e:17658-17687)
   if (session.subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT) {
-    const input = data.trim();
+    /*
+     * A CONTROL CHARACTER IS NOT INPUT - express.e:2335.
+     *
+     * `lineInput` accumulates a keystroke only `IF (ch>31)`. Ctrl+C is
+     * discarded where it lands: it is not added to the buffer, and it does
+     * not end the line, because the REPEAT only exits on `ch=13`, an abort
+     * or a timeout (express.e:2355). The caller sees the prompt sit there.
+     *
+     * This handler ran `data.trim()` and trusted it. JavaScript's `trim`
+     * removes WHITESPACE, and 0x03 is not whitespace - so Ctrl+C survived as
+     * a one-character filename nobody could see, passed validation, and the
+     * upload walked on to the description prompt with no file named. The
+     * sysop, 2026-09-15: "if i press ctrl+c on the upload prompt it continues
+     * to the next step without any data".
+     *
+     * Enter still submits, including the blank line that starts the transfer
+     * (express.e:17673) - that is what `submitted` separates from a stray
+     * control key. `A` alone is still the abort (express.e:17668); express.e
+     * gives Ctrl+C no meaning here and neither does this.
+     */
+    const raw = data ?? '';
+    const submitted = raw === '' || raw.includes('\r') || raw.includes('\n');
+    const printable = raw.replace(/[^\x20-\x7e]/g, '');
+    if (!submitted && printable === '') {
+      return;   // the prompt stays where it is, waiting
+    }
+    const input = printable.trim();
 
     // Check for abort (A or a alone) - express.e:17668-17670
     // express.e: aePuts('\b\n'); RETURN RESULT_FAILURE -> caller cleanItUp + return -> main loop redisplays menu
