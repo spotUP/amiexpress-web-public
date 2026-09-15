@@ -67,6 +67,22 @@ export interface CustomMsgbaseDoor {
   /** DOORTYPE from the icon's TYPE tooltype; XIM unless it says otherwise. */
   type: string;
   accessLevel: number;
+  /**
+   * THE WHOLE ICON, because four fields were not enough.
+   *
+   * The width gate reads `MIN_COLUMNS` / `C64_ADAPT` / `C64_VIEWPORT` off the
+   * door's registration (`utils/door-min-columns.util.ts`), and it is
+   * DEFAULT-CLOSED: a door that declares nothing gates at 80 columns. This
+   * object IS the registration for a message-base door - there is no
+   * `Commands/BBSCmd` entry behind it - so dropping the tooltypes here meant
+   * `Conf1/MSGBASE.DEF.info`'s own `MIN_COLUMNS=40` never reached the gate,
+   * and every message command in a CUSTOM conference was refused for a
+   * 40-column caller. Silently, because the dispatcher had armed the
+   * internal-command fall-through: "pressing e does nothing in petscii mode"
+   * (sysop, 2026-09-16), with the board's log showing the launch and then the
+   * menu, one line apart.
+   */
+  toolTypes: Record<string, string>;
 }
 
 /**
@@ -115,6 +131,7 @@ export function customMsgbaseDoor(
     name: MSGBASE_DEF,
     type: (tooltypes.get('TYPE') || 'XIM').toUpperCase(),
     accessLevel: Number.isFinite(level) ? level : 0,
+    toolTypes: Object.fromEntries(tooltypes),
   };
 }
 
@@ -189,6 +206,9 @@ console.warn('[customMsgbase] could not load read pointers:', error);
       type: door.type,
       path: door.path,
       accessLevel: door.accessLevel,
+      // The icon's own tooltypes, so the width gate can read what this
+      // conference declared about columns. See CustomMsgbaseDoor.toolTypes.
+      toolTypes: door.toolTypes,
       enabled: true,
       parameters: [],
     });

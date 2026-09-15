@@ -29,6 +29,7 @@ import * as path from 'path';
 interface Launch {
   path: string;
   command: string;
+  toolTypes?: Record<string, string>;
   param1: unknown;
   param2: unknown;
   cmd: unknown;
@@ -49,6 +50,7 @@ jest.mock('../../src/handlers/door.handler', () => ({
     launches.push({
       path: door.path,
       command: door.command,
+      toolTypes: door.toolTypes,
       param1: session.customMsgParam1,
       param2: session.customMsgParam2,
       cmd: session.customMsgCmd,
@@ -96,7 +98,7 @@ beforeAll(() => {
   // Conference 1: a message base that is a door.
   fs.writeFileSync(
     path.join(root, 'Conf1', 'MSGBASE.DEF.info'),
-    `LOCATION=BBS:${DOOR}\nTYPE=XIM\nACCESS=10\n`,
+    `LOCATION=BBS:${DOOR}\nTYPE=XIM\nACCESS=10\nMIN_COLUMNS=40\n`,
     'utf8',
   );
   // Conference 3 lives somewhere that is not `Conf3`, which is the whole
@@ -268,5 +270,38 @@ describe('the conference a door is asking about', () => {
     // A door asking with no conference anywhere would otherwise be handed
     // NaN and build a path out of it.
     expect(doorConference({})).toBe(1);
+  });
+});
+
+/**
+ * THE ICON IS THE REGISTRATION, so everything on it has to travel.
+ *
+ * The width gate is default-closed: a door that declares nothing gates at 80
+ * columns (`utils/door-min-columns.util.ts`). A message-base door has no
+ * `Commands/BBSCmd` entry behind it - the object this service builds IS its
+ * registration - so when that object carried only path/name/type/access, the
+ * conference's own `MIN_COLUMNS=40` never reached the gate and every message
+ * command in a CUSTOM conference was refused for a 40-column caller.
+ *
+ * Silently, which is why it took a sysop to find it: the dispatcher had armed
+ * the internal-command fall-through, so the refusal printed nothing at all.
+ * "pressing e does nothing in petscii mode" (2026-09-16); the board's log
+ * showed `Executing door: MSGBASE.DEF` and the menu prompt one line apart.
+ */
+describe('what the launch tells the width gate', () => {
+  it('carries the icon\'s own tooltypes, MIN_COLUMNS among them', async () => {
+    custom.set(1, true);
+
+    await runCustomMsgbaseCommand({} as any, aSession(1), MailFunction.CREATE, 1, 'E');
+
+    expect(launches).toHaveLength(1);
+    // RED before the fix: toolTypes was undefined, so the gate read the
+    // default 80 and refused the door for a C64.
+    expect(launches[0].toolTypes).toMatchObject({ MIN_COLUMNS: '40', TYPE: 'XIM' });
+  });
+
+  it('gives the finder the same tooltypes', () => {
+    custom.set(1, true);
+    expect(customMsgbaseDoor(root, 1)?.toolTypes).toMatchObject({ MIN_COLUMNS: '40' });
   });
 });
