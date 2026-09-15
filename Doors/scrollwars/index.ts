@@ -10,6 +10,8 @@ import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-
 import { DockablePanel, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { StatusBarSection, StatusBarOptions } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createTerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
+import { footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { T, CURRENT, applyTheme } from './door-theme';
 
 /** Door metadata */
 export const metadata = {
@@ -269,6 +271,11 @@ const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
   const { socket, bbsSession, user, bbs } = ctx;
+
+  // Before any panel is built: T and CURRENT are live bindings, so the styles
+  // below read the caller's theme rather than the classic default.
+  applyTheme(bbs);
+
   const lineIndex = allocateLineIndex();
 
   if (lineIndex === null) {
@@ -309,7 +316,7 @@ door.onStart(async (ctx: DoorContext) => {
     title: ' Users ',
     width: '25%',
     height: '100%-1',
-    border: { type: 'line', fg: 'cyan' },
+    border: { type: 'line', fg: T.accent },
   });
 
   const userPanel = createBox({
@@ -325,7 +332,7 @@ door.onStart(async (ctx: DoorContext) => {
     left: '25%',
     width: '75%',
     height: '100%-1',
-    border: { type: 'line', fg: 'cyan' },
+    border: { type: 'line', fg: T.accent },
   });
 
   const chatPanel = createBox({
@@ -338,8 +345,7 @@ door.onStart(async (ctx: DoorContext) => {
   const statusBar = new StatusBar({
     parent: screen,
     position: 'bottom',
-    fg: 'cyan',
-    bg: 'blue',
+    ...footerStyle(CURRENT),
     focusable: false, mouse: false, clickable: false,
   } as StatusBarOptions);
 

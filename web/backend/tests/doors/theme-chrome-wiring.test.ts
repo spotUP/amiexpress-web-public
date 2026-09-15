@@ -33,6 +33,14 @@ const THEME_IMPORT = /bbs-door-sdk\/engines\/ui\/theme/;
  * Adding a door here without one is how this test stops meaning anything.
  */
 const EXEMPT: Record<string, string> = {
+  scrollwars:
+    'It already has a real footer and no row to put another one in. Its ' +
+    'StatusBar carries live sections - users online, which line you are, your ' +
+    'name, and a key hint that shortens itself when the name is long - which ' +
+    'the generic hint row cannot express, and its two panels are 100%-1 tall, ' +
+    'so the only spare row is the one the StatusBar is in. It takes the ' +
+    "theme's COLOURS in full and the SDK's own footerStyle() for that bar " +
+    '(2026-09-15).',
   dopewars:
     'Both of its bars already carry live game state and neither has a row to ' +
     'spare. Row 0 is the status line - day, location, HP, cash, debt, updated ' +
