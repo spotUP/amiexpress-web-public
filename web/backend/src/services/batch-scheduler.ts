@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
-import { findCaseInsensitive } from '../utils/amigafs';
+import { findCaseInsensitive, resolveExistingAncestors } from '../utils/amigafs';
 
 import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
 
@@ -643,16 +643,25 @@ console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
    *
    * Config path and days come from the line; the output path from its
    * stdout redirect, exactly as the Amiga door was invoked.
+   *
+   * The line spells them the Amiga way - `doors:quicknew/quicknew.config1`,
+   * `bbs:screens/quicknew.txt` - and the volume spells them
+   * `Doors/QuickNew/QuickNew.Config1` and `Screens/`. On Linux those are
+   * different files: an earlier run minted a lowercase `screens/` beside
+   * `Screens/` (two 0-byte quicknew files, found on the live volume
+   * 2026-09-15), and the loader's case-insensitive walk can then land on
+   * either. Resolve through the existing directories the way the loader
+   * does, so the file written is the file read.
    */
   if (program.includes('quicknew/quicknew')) {
     const args = resolvedArgs;
     if (args.length >= 2) {
-      const configPath = resolveAssign(args[0].replace(/^"|"$/g, ''));
+      const configPath = resolveExistingAncestors(resolveAssign(args[0].replace(/^"|"$/g, '')));
       const daysBack = parseInt(args[1], 10) || 7;
-      let outputPath = resolveAssign('bbs:screens/quicknew.txt');
+      let outputPath = resolveExistingAncestors(resolveAssign('bbs:screens/quicknew.txt'));
       if (redirect) {
         const resolved = resolveAssign(redirect);
-        if (resolved) outputPath = resolved;
+        if (resolved) outputPath = resolveExistingAncestors(resolved);
       }
 console.log(`[BatchScheduler] QuickNew: generating from ${configPath}, ${daysBack} days, into ${outputPath}`);
       const { generateQuickNewFromConfig } = require('../utils/quicknew-generator');
