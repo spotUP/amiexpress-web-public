@@ -277,23 +277,7 @@ function GalleryCard(
             {item.detail}
           </span>
         )}
-        {(item.versions ?? 1) > 1 && (
-          /*
-           * DRIFT, said once and quietly.
-           *
-           * This card stands for the version the most scopes read; the others
-           * are the same screen edited somewhere else and never reconciled.
-           * Without this line the grouping would simply HIDE them, and a node
-           * serving different art would have no explanation anywhere - which
-           * is the failure this board keeps finding.
-           */
-          <span className="block truncate text-status-warn" data-testid="drift">
-            {item.versions} versions
-            {item.scopes !== undefined && item.otherScopes !== undefined
-              ? ` - serving ${item.scopes} of ${item.scopes + item.otherScopes} scopes`
-              : ''}
-          </span>
-        )}
+
         {item.credit && (
           <span className="block truncate text-content-muted">{item.credit}</span>
         )}
@@ -340,6 +324,61 @@ function GalleryCard(
   );
 }
 
+/**
+ * DRIFT, said once and quietly - and openable.
+ *
+ * This card stands for the version the most scopes read; the others are the
+ * same screen edited somewhere else and never reconciled. Without this line
+ * the grouping would simply HIDE them, and a node serving different art would
+ * have no explanation anywhere in the admin, which is the failure this board
+ * keeps finding - leaderboards frozen by a theme copy nobody could see,
+ * quicknew serving last week's files.
+ *
+ * Opening it WRITES NOTHING. It names the other versions and where they are
+ * read, and that is all: reconciling a screen rewrites files an artist did not
+ * open, and a rewrite that happens because somebody looked at a card is not
+ * something the revision store can make anybody comfortable about.
+ */
+function DriftDisclosure({ item }: { item: GalleryItem }) {
+  const [open, setOpen] = useState(false);
+  const others = (item.otherVersions ?? []) as Array<Array<{
+    relPath?: string;
+    readBy?: Array<{ scopeName?: string }>;
+  }>>;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={event => { event.stopPropagation(); setOpen(value => !value); }}
+        className="block w-full text-left truncate text-status-warn underline decoration-dotted"
+        data-testid="drift"
+      >
+        {item.versions} versions
+        {item.scopes !== undefined && item.otherScopes !== undefined
+          ? ` - serving ${item.scopes} of ${item.scopes + item.otherScopes} scopes`
+          : ''}
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-0.5 text-content-secondary">
+          {others.map(version => {
+            const file = version[0];
+            const where = version
+              .flatMap(copy => copy.readBy?.map(reader => reader.scopeName) ?? [])
+              .filter(Boolean);
+            return (
+              <li key={file?.relPath ?? Math.random()} className="truncate">
+                <span className="font-mono">{file?.relPath}</span>
+                {where.length > 0 && <span> - {where.join(', ')}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
 export function ScreenGallery({ items, onOpen, isLoading = false, theme }: ScreenGalleryProps) {
   // The index is one request for the whole board - 891 files with their
   // readers, their SAUCE and their problems - so the page has a real wait
@@ -371,7 +410,13 @@ export function ScreenGallery({ items, onOpen, isLoading = false, theme }: Scree
       className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
       {items.map(item => (
-        <GalleryCard key={item.path} item={item} onOpen={onOpen} theme={theme} />
+        <div key={item.path} className="space-y-1">
+          <GalleryCard item={item} onOpen={onOpen} theme={theme} />
+          {/* OUTSIDE the card's own <button>. A button inside a button is
+              invalid HTML, and React says so - the drift control was briefly
+              nested and every query for it matched two elements. */}
+          {(item.versions ?? 1) > 1 && <DriftDisclosure item={item} />}
+        </div>
       ))}
     </div>
   );
