@@ -87,3 +87,56 @@ export async function error403OutOfScopeThrowsTypedError(): Promise<void> {
     return true;
   });
 }
+
+export async function fileStatsPassesTheConference(): Promise<void> {
+  const { client, seen } = stubClient(() => okText('Conference 2: 41 files, 8.1 MB.'));
+  const result = await client.fileStats(2);
+  assert.strictEqual(result.text, 'Conference 2: 41 files, 8.1 MB.');
+  assert.strictEqual(seen[0].url, '/api/bot/v1/files/stats');
+  assert.deepStrictEqual(seen[0].params, { conf: '2' });
+}
+
+export async function fileSearchPassesTermConfAndLimit(): Promise<void> {
+  const { client, seen } = stubClient(() => okText('DEMO.LHA (12 KB): a demo'));
+  await client.fileSearch('demo', 3, 7);
+  assert.strictEqual(seen[0].url, '/api/bot/v1/files/search');
+  assert.deepStrictEqual(seen[0].params, { conf: '3', q: 'demo', limit: '7' });
+}
+
+export async function fileSearchDefaultsToConferenceOne(): Promise<void> {
+  const { client, seen } = stubClient(() => okText('nothing'));
+  await client.fileSearch('demo');
+  assert.strictEqual(seen[0].params?.conf, '1');
+}
+
+export async function conferencesHitsTheConferenceList(): Promise<void> {
+  const { client, seen } = stubClient(() => okText('1: Amiga Chat\n2: Staff'));
+  const result = await client.conferences();
+  assert.ok(result.text.includes('Amiga Chat'));
+  assert.strictEqual(seen[0].url, '/api/bot/v1/conferences');
+}
+
+export async function doorsHitsThePublicDoorList(): Promise<void> {
+  const { client, seen } = stubClient(() => okText('SUBS, DOORMAN, WHIP'));
+  await client.doors();
+  assert.strictEqual(seen[0].url, '/api/bot/v1/doors');
+}
+
+export async function theBotCannotReachPrivilegedDoorEndpoints(): Promise<void> {
+  // doors/keys and doors/data are privileged: the plan puts them out of scope
+  // and nothing on this client may address them. A method that appears here
+  // later is a review failure, so this asserts on the client's own surface.
+  const names = Object.getOwnPropertyNames(BoardApiClient.prototype);
+  assert.ok(!names.some((n) => /key|secret|doorData/i.test(n)), 'no privileged door reader');
+}
+
+export async function anOutOfScopeDomainStillRaises(): Promise<void> {
+  // A token without the `files` domain must surface as an error, not as an
+  // empty card that reads like an empty conference.
+  const { client } = stubClient(() => ({ status: 403, data: { success: false, message: 'domain not allowed' } }));
+  await assert.rejects(() => client.fileStats(1), (err: unknown) => {
+    assert.ok(err instanceof BoardApiError);
+    assert.strictEqual((err as BoardApiError).status, 403);
+    return true;
+  });
+}

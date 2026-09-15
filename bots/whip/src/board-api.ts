@@ -114,4 +114,31 @@ export class BoardApiClient {
   userSearch(q: string, limit = 5): Promise<BoardText> {
     return this.get<BoardText>('/api/bot/v1/users/search', { q, limit: String(limit) });
   }
+
+  /** How many files a conference holds, and how many bytes. */
+  fileStats(conf = 1): Promise<BoardText> {
+    return this.get<BoardText>('/api/bot/v1/files/stats', { conf: String(conf) });
+  }
+
+  /** Files in a conference matching a term. */
+  fileSearch(q: string, conf = 1, limit = 5): Promise<BoardText> {
+    return this.get<BoardText>('/api/bot/v1/files/search', {
+      conf: String(conf),
+      q,
+      limit: String(limit),
+    });
+  }
+
+  /** The conferences this bot's token may see. */
+  conferences(): Promise<BoardText> {
+    return this.get<BoardText>('/api/bot/v1/conferences');
+  }
+
+  /**
+   * The board's doors, public metadata only. `doors/keys` and `doors/data`
+   * are privileged and deliberately unreachable from here.
+   */
+  doors(): Promise<BoardText> {
+    return this.get<BoardText>('/api/bot/v1/doors');
+  }
 }

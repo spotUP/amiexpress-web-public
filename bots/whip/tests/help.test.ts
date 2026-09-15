@@ -19,7 +19,7 @@ export async function helpMentionsEverySubcommand(): Promise<void> {
 
 export async function helpMentionsBoardReads(): Promise<void> {
   const text = buildHelpText();
-  for (const sub of ['board', 'online', 'new', 'top', 'finduser']) {
+  for (const sub of ['board', 'online', 'new', 'top', 'finduser', 'files', 'confs', 'doors', 'mystats']) {
     assert.ok(text.includes(sub), `mentions /whip ${sub}`);
   }
 }

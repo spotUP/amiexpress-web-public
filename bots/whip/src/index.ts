@@ -165,7 +165,15 @@ const whipCommand = new SlashCommandBuilder()
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('finduser').setDescription('Look up a BBS user by handle')
       .addStringOption((opt) => opt.setName('name').setDescription('Handle').setRequired(true))
-  );
+  )
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
+    sub.setName('files').setDescription('File totals for a conference, or files matching a term')
+      .addStringOption((opt) => opt.setName('find').setDescription('Search term').setRequired(false))
+      .addIntegerOption((opt) => opt.setName('conf').setDescription('Conference number').setRequired(false))
+  )
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('confs').setDescription('Conferences on the board'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('doors').setDescription('Doors on the board'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('mystats').setDescription('Your own board card (only you see it)'));
 
 export async function registerCommands(botToken: string, guildId: string, clientId: string): Promise<void> {
   const rest = new REST({ version: '10' }).setToken(botToken);
@@ -326,7 +334,7 @@ export function buildHelpText(): string {
     '',
     '**Change the board.** `/whip task-new` and `/whip project-new` open forms. On a task: Complete, Move, Delete buttons. Or in text: `/whip task-complete`, `/whip task-move`, `/whip task-edit`, `/whip task-delete`, `/whip project-delete`.',
     '',
-    '**Ask about the board.** `/whip board` — the board card. `/whip online` — who is on. `/whip new` — latest traffic. `/whip top` — top callers. `/whip finduser name:<handle>` — look a caller up.',
+    '**Ask about the board.** `/whip board` — the board card. `/whip online` — who is on. `/whip new` — latest traffic. `/whip top` — top callers. `/whip finduser name:<handle>` — look a caller up. `/whip files` — what a conference holds (`find:` to search). `/whip confs` — conferences. `/whip doors` — doors. `/whip mystats` — your own card, shown only to you.',
     '',
     '**Follow along.** The feed channel posts completions, new projects, and achievements as they happen in the door.',
     '',
@@ -485,6 +493,65 @@ async function handleWhip(
           if (!exact.text.startsWith('No user called')) return exact;
           return b.userSearch(name, 5);
         }, board);
+        break;
+      }
+
+      case 'files': {
+        /*
+         * The plan's batch 2 called this `newfiles`, "latest uploads". The
+         * bot-data API cannot answer that: `getFileEntries` takes `limit` and
+         * `search` and nothing else (services/bot-data/types.ts:59), so there
+         * is no way to order by upload date, and adding one is a backend
+         * change the plan puts outside these command batches. What the
+         * endpoints DO answer is how much a conference holds and what matches
+         * a term, so that is what this says it does.
+         */
+        const find = (interaction.options.getString('find') ?? '').trim();
+        const conf = interaction.options.getInteger('conf') ?? 1;
+        if (find) {
+          await boardEmbed(interaction, `Files matching "${find}" in conference ${conf}`,
+            (b) => b.fileSearch(find, conf, 5), board);
+        } else {
+          await boardEmbed(interaction, `Files in conference ${conf}`, (b) => b.fileStats(conf), board);
+        }
+        break;
+      }
+
+      case 'confs': {
+        await boardEmbed(interaction, 'Conferences', (b) => b.conferences(), board);
+        break;
+      }
+
+      case 'doors': {
+        await boardEmbed(interaction, 'Doors', (b) => b.doors(), board);
+        break;
+      }
+
+      case 'mystats': {
+        /*
+         * The identity payoff: `/link` already proves who the asker is, so
+         * this needs no `user:` option - and must not have one, or it becomes
+         * a way to read somebody else's card. The reply is ephemeral because
+         * a caller's own stats are nobody else's business in a public channel.
+         *
+         * linkStatus answers with a user id and no handle, and the board card
+         * is looked up BY handle, so the bot's own user list bridges the two.
+         */
+        if (!needBoard(interaction, board)) break;
+        const linked = await requireLinkedUser(interaction, api);
+        if (!linked) break;
+        const users = await api.listUsers();
+        const me = users.find((u) => u.userId === linked.userId);
+        if (!me) {
+          await interaction.editReply({
+            content: 'Your account is linked, but the board does not list it. Tell the sysop.',
+          });
+          break;
+        }
+        const card = await board.userLookup(me.handle);
+        const embed = new EmbedBuilder().setTitle(`${me.handle} on the board`);
+        embed.setDescription(formatBoardText(card));
+        await interaction.editReply({ embeds: [embed] });
         break;
       }
       case 'task': {
