@@ -127,7 +127,8 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
  *
  * `AchieveTop.txt` is rewritten every fifteen minutes by
  * `achievements/bulletin.ts`, `quicknew.txt` by whichever door the sysop's
- * batch redirects into it, `CallersLog` and `lastc.txt` as callers come and
+ * batch redirects into it, `bull9.txt` by the REQUESTS door whenever a caller
+ * adds or changes a request, `CallersLog` and `lastc.txt` as callers come and
  * go. They live in screen directories and end in `.txt`, so nothing about
  * their shape says they are not art - but drawing one is drawing something
  * that is overwritten before the artist has closed the editor.
@@ -138,7 +139,17 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
  * offers SLOTS for screens whose file does not exist yet, so it has nothing to
  * classify - only the name).
  */
-export const BOARD_WRITTEN_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|.*\.log)$/i;
+/*
+ * `bull9.txt` is here by NAME for quicknew's reason, and it earned the entry
+ * the hard way. It was written by the classic `Request v2.1` door and is now
+ * written by ours (`sdk/c/examples/requests/requests_bulletin.c`), but its
+ * CONTENT is the sysop's own art with no marker in it - from the outside it
+ * is indistinguishable from the hand-drawn bulletins beside it, which is
+ * exactly what this file used to say about it. A door whose `Bulletin`
+ * setting names some other file loses the marking, the same caveat quicknew
+ * carries.
+ */
+export const BOARD_WRITTEN_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|bull9\.txt|.*\.log)$/i;
 
 /** True when the board writes this file for itself, so no artist should draw it. */
 export function isBoardWritten(fileName: string): boolean {

@@ -118,9 +118,16 @@ describe('what the manager calls generated', () => {
  *
  * "Many auto generated bulletin screens are shown in the screen gallery they
  * should not." On this board bulletins 1 to 6 are rewritten at every start -
- * five by MultiTop-II and one by a last-callers generator - while bull9 is
- * hand-drawn and has not changed since January. The names say nothing; the
- * content says everything.
+ * five by MultiTop-II and one by a last-callers generator. For those the
+ * names say nothing and the content says everything.
+ *
+ * `bull9.txt` is the exception that needs the other rule. It IS generated -
+ * the REQUESTS door writes it between the sysop's header and tail art - but
+ * the art is the sysop's own and carries no marker, so nothing in the bytes
+ * gives it away. It is caught by name instead (screen-tables'
+ * BOARD_WRITTEN_NAME). This test used to assert the opposite, on the strength
+ * of the file having sat unchanged since January; it had sat unchanged
+ * because the door that wrote it had been unwired, not because it was art.
  */
 describe('bulletins written by a door', () => {
   test('a MultiTop stats bulletin is runtime, not art', () => {
@@ -139,11 +146,20 @@ describe('bulletins written by a door', () => {
     expect(index.files['Bulletins/bull6.txt']?.generated).toBe('runtime');
   });
 
-  test('hand-drawn art in the same directory is left alone', () => {
+  test('the requests bulletin is runtime even though its art is the sysop own', () => {
+    // The same bytes the test below calls art. Only the NAME separates them.
     write('Bulletins/bull9.txt', '  _______\n _\\______   \\ ____\n');
 
     const index = buildScreenIndex(root);
 
-    expect(index.files['Bulletins/bull9.txt']?.generated).toBeUndefined();
+    expect(index.files['Bulletins/bull9.txt']?.generated).toBe('runtime');
+  });
+
+  test('hand-drawn art in the same directory is left alone', () => {
+    write('Bulletins/bull10.txt', '  _______\n _\\______   \\ ____\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Bulletins/bull10.txt']?.generated).toBeUndefined();
   });
 });

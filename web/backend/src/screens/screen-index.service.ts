@@ -502,6 +502,11 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * WINS the global screen walk - so the leaderboards froze at the moment the
  * theme was made (measured on the live board, 2026-09-08).
  *
+ * `bull9.txt` is here because the door that writes it changed hands: the
+ * classic `Request v2.1` door wrote it, our own REQUESTS door writes it now,
+ * and in between it sat frozen for five days looking exactly like art. Its
+ * content is the sysop's own, unmarked, so only the name can catch it.
+ *
  * `quicknew.txt` is here for the same reason, found by auditing the whole
  * class after that bug rather than waiting for it to bite twice: the batch
  * jobs redirect a door's stdout over it every run (see command.handler's
@@ -515,12 +520,14 @@ const RUNTIME_NAME = BOARD_WRITTEN_NAME;   // the one copy, in screen-tables
  * Signatures of the tools that WRITE screens on this board.
  *
  * Bulletins 1 to 6 are rewritten every boot - five by MultiTop-II, whose own
- * header is in the art, and one by a last-callers generator. bull9 is
- * hand-drawn and untouched since January. A designer opening the gallery
- * should see the second kind, not the first.
+ * header is in the art, and one by a last-callers generator. A designer
+ * opening the gallery should see art, not output.
  *
- * Content, not names: `bull6.txt` looks exactly like `bull9.txt` from the
- * outside, and the file names carry no hint at all.
+ * Content, not names: `bull6.txt` looks exactly like a hand-drawn bulletin
+ * from the outside, and the file names carry no hint at all. `bull9.txt` is
+ * the case that proves the limit of that - the REQUESTS door writes it
+ * between the sysop's own header and tail art, so there is no marker to find
+ * and it is caught by NAME in RUNTIME_NAME above.
  */
 const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
   { marker: /MultiTop/i, tool: 'MultiTop-II' },
