@@ -128,6 +128,10 @@ export type {
   QualityChangeEvent,
 } from './media';
 export { CardEngine, buildStandardDeck, buildUnoDeck, shuffleCards } from './engines/cards/card-engine';
+export { parseCardTheme, renderThemedCardLines } from './engines/cards/card-theme';
+export type {
+  CardTheme, ThemeLayout, ThemeText, ThemeAlign, ThemeTextFormat,
+} from './engines/cards/card-theme';
 export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';

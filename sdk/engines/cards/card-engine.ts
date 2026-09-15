@@ -15,6 +15,8 @@
  * ```
  */
 
+import { renderThemedCardLines, type CardTheme } from './card-theme';
+
 export type Rank =
   | "2"
   | "3"
@@ -47,6 +49,14 @@ export type BackStyle = "lined" | "dotted" | "classic" | "shiny";
 export type ColorMode = "none" | "ansi";
 
 export interface RenderOptions {
+  /**
+   * A deck drawn by an artist rather than by this file.
+   *
+   * When present it decides the card's shape entirely - frame, size, suit
+   * glyphs and where the rank sits - and `style`/`size` no longer apply,
+   * because the theme already said. See engines/cards/card-theme.ts.
+   */
+  theme?: CardTheme;
   style?: CardStyle;
   size?: CardSize;
   face?: CardFace;
@@ -909,6 +919,17 @@ const renderUnoFaceLines = (card: UnoCard, style: CardStyle, size: CardSize): st
  * Pass `{ face: "back" }` (optionally with `backStyle`) to render a backside.
  */
 export function renderCardLines(card: Card, options?: RenderOptions): string[] {
+  // A theme is the whole answer: it carries the frame, the size and the
+  // glyphs, so nothing below has anything left to decide.
+  if (options?.theme) {
+    const face = card.face ?? options.face ?? DEFAULT_FACE;
+    return renderThemedCardLines(
+      { rank: card.rank, suit: String(card.suit) },
+      options.theme,
+      { face: face === 'back' ? 'back' : 'front' },
+    );
+  }
+
   const style = options?.style ?? DEFAULT_STYLE;
   const size = options?.size ?? DEFAULT_SIZE;
   const face = card.face ?? options?.face ?? DEFAULT_FACE;
