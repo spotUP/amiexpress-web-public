@@ -198,6 +198,36 @@ static int fetch_text(const char *path_and_query)
 
 /* ------------------------------------------------------------------- rows */
 
+/* ------------------------------------------------------------- masthead rail
+
+   The rail slides while the door waits for a key. A 68K door has no timers,
+   so the frames come from the idle hook (ui_key.h) - the same shape THEMEC,
+   SUBS and TEXTTV use, and the same two constants decide the speed for all
+   of them (ui_chrome.h). `screen` and `theme` are main's, so the hook is
+   handed them rather than reaching for globals that do not exist here. */
+static int rail_tick;
+static const char *masthead_title = "ACHIEVEMENTS";
+static ui_screen *rail_screen;
+static const ui_theme *rail_theme;
+
+static void door_idle(void *ctx)
+{
+    (void)ctx;
+    if (rail_screen == 0 || rail_theme == 0) return;
+    if (!ui_masthead_rail_animates(rail_theme->rail)) {
+        ae_delay_ticks(UI_RAIL_TICK_DELAY);
+        return;
+    }
+    rail_tick += UI_RAIL_STEP;
+    /* The RAIL, not the row: the title does not move, and repainting it is
+       what a caller sees as it blinking. */
+    ui_masthead_rail_tick(&rail_screen->buf, 1, 1, rail_screen->cols,
+                          masthead_title, rail_theme->rail,
+                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), rail_tick);
+    ui_screen_flush(rail_screen);
+    ae_delay_ticks(UI_RAIL_TICK_DELAY);
+}
+
 static char row_text[256];
 static view_id current_view = VIEW_MENU;
 static int compact_screen;
@@ -274,7 +304,11 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = 0;
+    /* The rail animates here too now (sysop, 2026-09-15: "fix the rail in
+       achievec"); it is the hook's only job, and it needs main's screen. */
+    rail_screen = &screen;
+    rail_theme = theme;
+    keys.idle = door_idle;
     keys.flush = 0;
     keys.ctx = 0;
 
@@ -312,12 +346,17 @@ int main(int argc, char **argv)
 
         if (full) {
             ansi_clear(&screen.buf);
-            ui_masthead_draw(&screen.buf, 1, 1, screen.cols,
-                             current_view == VIEW_MENU ? "ACHIEVEMENTS"
+            /* The title the idle hook will keep animating under, and the
+               rail drawn AT its current offset - starting the row over at
+               tick zero would snap the branding back a step every time the
+               caller changed view. */
+            masthead_title = current_view == VIEW_MENU ? "ACHIEVEMENTS"
                              : current_view == VIEW_CATALOG ? "THE CATALOG"
                              : current_view == VIEW_GLOBAL ? "GLOBAL SCOREBOARD"
-                             : "BOARD SCOREBOARD",
-                             theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+                             : "BOARD SCOREBOARD";
+            ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+                                  theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                                  UI_TOKEN(UI_T_BAR), rail_tick);
             if (current_view != VIEW_MENU && parsed.count == 0) {
                 say(&screen, theme, 3,
                     status > 0 ? "The server answered, and had nothing to show."
@@ -400,8 +439,10 @@ int main(int argc, char **argv)
                 break;
             case 3:
                 ansi_clear(&screen.buf);
-                ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "ACHIEVEMENTS",
-                                 theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+                masthead_title = "ACHIEVEMENTS";
+                ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+                                      theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                                      UI_TOKEN(UI_T_BAR), rail_tick);
                 say(&screen, theme, 3,
                     wide ? "Linking your account needs the web terminal:"
                          : "Linking needs the web terminal:");

@@ -467,13 +467,15 @@ static void door_idle(void *ctx)
        identical row five times a second and the title flickers under it
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
-    if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(10); return; }
-    rail_tick++;
-    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+    if (!ui_masthead_rail_animates(theme->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
+    rail_tick += UI_RAIL_STEP;
+    /* The RAIL, not the row: the title does not move, and repainting it five
+       times a second is what the caller sees as it blinking. */
+    ui_masthead_rail_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
                           theme->rail, UI_TOKEN(UI_T_BAR_INK),
                           UI_TOKEN(UI_T_BAR), rail_tick);
     ui_screen_flush(&screen);
-    ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
+    ae_delay_ticks(UI_RAIL_TICK_DELAY);
 }
 
 /* The widgets that paint and then block (ui_input, ui_confirm, ui_doc) only
