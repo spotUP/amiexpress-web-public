@@ -1,3 +1,7 @@
+// The shared list of screens the board writes for itself. See
+// BOARD_WRITTEN_NAME below for why it is a JSON file and who else reads it.
+import BOARD_WRITTEN from './board-written-screens.json';
+
 /**
  * WHAT a screen is, and WHERE it comes from - the tables, with no I/O.
  *
@@ -125,31 +129,41 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
 /**
  * Files the BOARD writes, by name.
  *
- * `AchieveTop.txt` is rewritten every fifteen minutes by
- * `achievements/bulletin.ts`, `quicknew.txt` by whichever door the sysop's
- * batch redirects into it, `bull9.txt` by the REQUESTS door whenever a caller
- * adds or changes a request, `CallersLog` and `lastc.txt` as callers come and
- * go. They live in screen directories and end in `.txt`, so nothing about
- * their shape says they are not art - but drawing one is drawing something
- * that is overwritten before the artist has closed the editor.
+ * They live in screen directories and end in `.txt`, so nothing about their
+ * shape says they are not art - but drawing one is drawing something that is
+ * overwritten before the artist has closed the editor. Each entry's reason
+ * for being one is in `board-written-screens.json`, beside the pattern it
+ * justifies.
  *
- * It lives HERE, in the table with no I/O, because two readers need it and a
- * second copy is how they would come to disagree: the screen index (which
- * marks the FILES it finds `runtime`) and the studio's theme checklist (which
- * offers SLOTS for screens whose file does not exist yet, so it has nothing to
- * classify - only the name).
+ * THE PATTERNS ARE NOT HERE. They are in that JSON file, because this list
+ * has THREE readers and only one of them is this module: the screen index
+ * (which marks the FILES it finds `runtime`), the studio's theme checklist
+ * (which offers SLOTS for screens whose file does not exist yet, so it has
+ * only the name to go on) - and `docker-entrypoint.sh`, which greps the same
+ * keys to decide what the image must not copy over the board's own output. A
+ * deploy was reverting `Screens/quicknew.txt` to the image's committed copy
+ * every time, and the sysop spent twenty minutes reading a stale screen as
+ * fresh output (2026-09-15).
+ *
+ * JSON rather than a text file, and imported rather than read, because the
+ * third reader is a BROWSER: `web/config-app/vite.config.ts` aliases
+ * `@bbs/screens` at this directory, so this module is bundled by vite and has
+ * no filesystem. That keeps the property the header above claims - a table
+ * with no I/O - which a `readFileSync` here would have quietly broken, along
+ * with the admin build.
  */
-/*
- * `bull9.txt` is here by NAME for quicknew's reason, and it earned the entry
- * the hard way. It was written by the classic `Request v2.1` door and is now
- * written by ours (`sdk/c/examples/requests/requests_bulletin.c`), but its
- * CONTENT is the sysop's own art with no marker in it - from the outside it
- * is indistinguishable from the hand-drawn bulletins beside it, which is
- * exactly what this file used to say about it. A door whose `Bulletin`
- * setting names some other file loses the marking, the same caveat quicknew
- * carries.
+
+/**
+ * Every pattern in the shared file, in order. `_comment` is prose for human
+ * readers of the JSON and is not one.
  */
-export const BOARD_WRITTEN_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|bull9\.txt|.*\.log)$/i;
+export const BOARD_WRITTEN_PATTERNS: string[] =
+  Object.keys(BOARD_WRITTEN).filter((key) => key !== '_comment');
+
+export const BOARD_WRITTEN_NAME = new RegExp(
+  `^(${BOARD_WRITTEN_PATTERNS.join('|')})$`,
+  'i',
+);
 
 /** True when the board writes this file for itself, so no artist should draw it. */
 export function isBoardWritten(fileName: string): boolean {
