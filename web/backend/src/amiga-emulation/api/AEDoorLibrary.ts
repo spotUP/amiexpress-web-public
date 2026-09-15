@@ -1878,20 +1878,6 @@ console.warn(
         // reaches. The board's own inactivity timer is what disconnects an
         // idle caller, and it owns that decision, not this loop.
         const deadline = Date.now() + waitBudgetMs(command);
-        // Console-level, once per wait: which ports this pump polls. On
-        // 2026-09-15 a door sat silent in here for minutes after the XIM IO
-        // handler had answered its JH_HK - the reply went to a port this loop
-        // was not reading, and nothing said which was which.
-        // Test doubles stand in for ExecLibrary without the diagnostic; the
-        // wait must not depend on a log line.
-        const describeReplyPort = (): string =>
-          typeof this.execLibrary.describePort === 'function' ? this.execLibrary.describePort(state.replyPortAddr) : '';
-console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} bbsPort=0x${state.bbsPortAddr.toString(16)} replyPort=0x${state.replyPortAddr.toString(16)} msg=0x${state.messageAddr.toString(16)} polling ${describeReplyPort()}`);
-        // And every two seconds while it waits: which instance's registry it
-        // polls and what that registry holds. Run #4 (2026-09-15 08:02) showed
-        // replyMsg delivering to "0x126f00" and this loop never seeing it;
-        // the address alone cannot say whether both sides mean the same port.
-        let lastStillWaiting = Date.now();
         // This loop OWNS the pump while it runs. The XIM processor it calls
         // below drains its own handler promises with deasync too, and two
         // pumps must not nest - see api/pump-owner.ts. Registered here, read
@@ -1916,10 +1902,6 @@ console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} bbsPort=0x${stat
           if (msgAddr !== 0) {
             replied = true;
             return false;
-          }
-          if (Date.now() - lastStillWaiting >= 2000) {
-            lastStillWaiting = Date.now();
-console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} still waiting after ${iterations} iterations: ${describeReplyPort()}`);
           }
           return Date.now() < deadline;
         }));
@@ -1953,8 +1935,6 @@ console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} still waiting af
           `(${asyncWait ? 'async' : 'sync'} wait)` +
           (this.sessionTornDownUnderThisWait(state) ? ' - wait ended: session torn down / abandoned' : ' - wait ended: budget')
         );
-      } else if (asyncWait) {
-console.log(`[AEDoorLibrary] waitForReply(async) cmd=${command} replied after ${iterations} iterations`);
       }
       if (profile) {
         const elapsed = Date.now() - started;
