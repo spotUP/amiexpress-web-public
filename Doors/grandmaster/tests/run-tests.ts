@@ -16,6 +16,8 @@
 const TEST_MODULES = ['./versus-layout.test',
   // The theme migration: classic untouched, every other theme followed.
   './theme.test',
+  // The logo: one block, one colour, aligned as drawn.
+  './menu-title.test',
   // TETRIS ATTACK (Panel de Pon). The panels engine is proved against
   // panel-attack's own fixtures; see tests/panels/prng.test.ts.
   './panels/prng.test',

@@ -125,9 +125,9 @@ class MenuScreen {
                 width: compact ? this.screen.width : 76,
                 height: compact ? 1 : 4,
                 border: { type: 'none' },
-                content: compact ? '{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}' : this.getTitleArt(),
+                content: compact ? 'GRANDMASTER' : this.getTitleArt(),
                 align: 'center',
-                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground },
+                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground, bold: true },
             });
             /*
              * THE BOARD'S CHROME, not just its colours.
@@ -340,10 +340,24 @@ class MenuScreen {
      */
     getTitleArt() {
         const p = '    '; // 4-char pad to center 68-char art in 76-char box
-        return `{bold}{yellow-fg}${p} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____
+        /*
+         * PLAIN TEXT, no tags. The colour and the weight come from the box's
+         * own style, and they have to: a tag on the FIRST line only - which is
+         * how this art was written - coloured that line alone, because the
+         * attribute does not survive the newline, and it also made `align:
+         * center` measure that line against a different length from the other
+         * three, so the top rule of the logo sat two columns right of the
+         * letters under it (sysop, 2026-09-15, "the top row of the logo is
+         * offset"). One style for four lines is one alignment for four lines.
+         */
+        // The trailing space is LOAD-BEARING: `align: center` pads each line
+        // by half its own slack, so a top rule one character shorter than the
+        // letters under it lands one column further right than the art draws
+        // it. Four lines of equal length centre as one block.
+        return `${p} _____ _____ _____ _____ ____  _____ _____ _____ _____ _____ _____ 
 ${p}|   __|  _  |  _  |   | |    \\|     |  _  |   __|_   _|   __| __  |
 ${p}|  |  |     |     |\\    |  |  | | | |     |__   | | | |   __|    -|
-${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-fg}{/bold}`;
+${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|`;
     }
     /**
      * Get mode description for selected index
