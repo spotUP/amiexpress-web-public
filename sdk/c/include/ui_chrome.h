@@ -160,17 +160,25 @@ void ui_masthead_rail_tick(ansi_buf *b, int row, int left, int cols,
 /**
  * How far the rail travels per frame, in cells.
  *
- * What a caller SEES is cells per second, not frames per second, and the rail
- * had always moved exactly one cell per frame - so at eight frames a second a
- * slash still took ten seconds to cross eighty columns. The sysop, after the
- * frame rate had already been doubled: "it still animates slow".
+ * ONE. The sysop looked at two and at three and chose one: "looks like shit
+ * with 2 steps". A multi-cell step is the only way to make the rail cross the
+ * row faster, and it reads as the pattern JUMPING rather than sliding, which
+ * is worse than slow.
  *
- * Three cells a frame costs NOTHING extra - the same one frame, the same
- * hundred bytes, the window simply starts three cells further along the same
- * stream - and it is the difference between a mark crossing the screen in ten
- * seconds and in three.
+ * So the rail's speed is the frame rate, and the frame rate has a ceiling
+ * that is not ours: the emulator pays about 45ms per XIM message, so a door
+ * asking for fifty frames a second measures 10.8 and one asking for sixteen
+ * measures 10.2. Nothing here can beat that - measured, not assumed, by
+ * building at delay 1 and delay 3 and reading the frames off the wire.
+ *
+ *     step 1   10.8 fps   ~11 cells/s   817 bytes/s   chosen
+ *     step 2   10.3 fps   ~21 cells/s   780 bytes/s
+ *     step 3   10.2 fps   ~31 cells/s   774 bytes/s
+ *
+ * If the rail ever needs to be genuinely faster AND smooth, the thing to
+ * attack is the 45ms, not this number.
  */
-#define UI_RAIL_STEP 3
+#define UI_RAIL_STEP 1
 
 /**
  * The status line: left text, right text, and the gap between them filled.
