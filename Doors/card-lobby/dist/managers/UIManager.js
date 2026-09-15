@@ -1061,6 +1061,18 @@ class UIManager {
         this.applyActionButtonPalette('raise');
         this.applyActionButtonPalette('quit');
     }
+    /** Skitgubbe (vandtia): a swap to finish, or a card to play and a pile to take. */
+    labelVandtiaButtons(hasGame, swapping, canTake) {
+        this.actionButtons.fold.hide();
+        this.actionButtons.check.setContent(!hasGame ? 'DEAL' : swapping ? 'READY' : 'PLAY');
+        this.actionButtons.call.setContent(canTake ? 'TAKE' : '-');
+        this.actionButtons.raise.setContent('-');
+        this.actionButtons.quit.setContent('QUIT');
+        this.applyActionButtonPalette('check');
+        this.applyActionButtonPalette('call');
+        this.applyActionButtonPalette('raise');
+        this.applyActionButtonPalette('quit');
+    }
     applyUnoButtonPalette(buttonKey, unoKey) {
         const button = this.actionButtons[buttonKey];
         const styleSet = constants_1.UNO_ACTION_BUTTON_STYLES[unoKey];

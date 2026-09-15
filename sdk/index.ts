@@ -187,6 +187,7 @@ export { CardGameAI } from './engines/cards/ai/card-game-ai';
 export { PokerAIStrategy } from './engines/cards/ai/poker-ai-strategy';
 export { UnoAIStrategy } from './engines/cards/ai/uno-ai-strategy';
 export { SkitgubbeAIStrategy } from './engines/cards/ai/skitgubbe-ai-strategy';
+export { VandtiaAIStrategy } from './engines/cards/ai/vandtia-ai-strategy';
 export {
   getDifficultyConfig,
   applyThinkingDelay,
@@ -199,9 +200,11 @@ export type {
   PokerDecisionContext,
   UnoDecisionContext,
   SkitgubbeDecisionContext,
+  VandtiaDecisionContext,
   PokerAIDecision,
   UnoAIDecision,
   SkitgubbeAIDecision,
+  VandtiaAIDecision,
   DifficultyConfig,
   HandStrength,
   PotOdds,
@@ -213,6 +216,7 @@ export {
   PokerActionType,
   UnoActionType,
   SkitgubbeActionType,
+  VandtiaActionType,
 } from './engines/cards/ai/types';
 
 // UI Library - Blessed (full neo-blessed port without Node.js dependencies)

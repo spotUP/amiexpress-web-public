@@ -7,6 +7,7 @@
 
 export { CardGameAI } from './card-game-ai';
 export { SkitgubbeAIStrategy } from './skitgubbe-ai-strategy';
+export { VandtiaAIStrategy } from './vandtia-ai-strategy';
 export { getDifficultyConfig, applyThinkingDelay, shouldMakeMistake } from './difficulty-config';
 
 export type {
@@ -16,9 +17,11 @@ export type {
   PokerDecisionContext,
   UnoDecisionContext,
   SkitgubbeDecisionContext,
+  VandtiaDecisionContext,
   PokerAIDecision,
   UnoAIDecision,
   SkitgubbeAIDecision,
+  VandtiaAIDecision,
   DifficultyConfig,
   HandStrength,
   PotOdds,
@@ -31,4 +34,5 @@ export {
   PokerActionType,
   UnoActionType,
   SkitgubbeActionType,
+  VandtiaActionType,
 } from './types';

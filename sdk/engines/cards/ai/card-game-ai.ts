@@ -54,8 +54,9 @@ export class CardGameAI {
       );
     }
 
-    // Apply thinking delay for human-like behavior
-    await applyThinkingDelay(context.difficulty);
+    // Apply thinking delay for human-like behavior - at the pace the caller
+    // asks for, when it says.
+    await applyThinkingDelay(context.difficulty, context.thinkingDelayMs);
 
     // Delegate to game-specific strategy
     return strategy.makeDecision(context);

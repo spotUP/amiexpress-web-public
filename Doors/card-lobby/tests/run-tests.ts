@@ -19,6 +19,8 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './skitgubbe-engine.test',
   './skitgubbe-table.test',
   './a-long-hand-is-still-playable.test',
+  './vandtia-engine.test',
+  './vandtia-table.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

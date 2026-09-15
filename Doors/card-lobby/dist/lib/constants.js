@@ -260,12 +260,32 @@ exports.GAME_CATALOG = [
         enabled: true,
     },
     {
+        /*
+         * TWO GAMES SHARE THIS NAME, and this is the one the board means: also
+         * vandtia or finne, internationally Shithead. Three cards face down,
+         * three face up on top of them, three in hand; one pile you must equal
+         * or beat; a 2 goes on anything, a 10 turns the pile away, and so does
+         * four of a kind. Last player holding cards is the Skitgubbe.
+         * (The sysop's own rules, 2026-09-15.)
+         */
         id: 'skitgubbe',
         name: 'Skitgubbe',
+        description: 'Vandtia: equal or higher, or pick the pile up. Last one holding loses.',
+        minPlayers: 2,
+        maxPlayers: 4,
+        stakes: [
+            { label: 'Social', smallBlind: 0, bigBlind: 0, buyIn: 0 },
+        ],
+        enabled: true,
+    },
+    {
+        id: 'skitgubbe-tricks',
+        name: 'Skitgubbe (Tricks)',
         /*
-         * The Swedish "dirty old man": two phases with opposite goals. Win
-         * tricks to collect cards, then get rid of every one of them. The last
-         * player holding cards is the Skitgubbe.
+         * The OTHER Swedish Skitgubbe, the one pagat.com describes: two phases
+         * with opposite goals. Win tricks to collect cards, then get rid of
+         * every one of them. Kept because it is a real game and the lobby's
+         * registry makes a second one free.
          * https://www.pagat.com/beating/skitgubbe.html
          */
         description: 'Win tricks, then shed every card. Last one holding is the Skitgubbe.',

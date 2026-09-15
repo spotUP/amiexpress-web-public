@@ -87,7 +87,24 @@ export function getDifficultyConfig(difficulty: Difficulty): DifficultyConfig {
 /**
  * Apply thinking delay to make AI feel more human-like
  */
-export async function applyThinkingDelay(difficulty: Difficulty): Promise<void> {
+export async function applyThinkingDelay(
+  difficulty: Difficulty,
+  overrideMs?: number,
+): Promise<void> {
+  /*
+   * A pause before a bot moves is what makes it feel like an opponent rather
+   * than a function - but the right length depends on the GAME, not only on
+   * the difficulty. A poker bot acts a handful of times a hand and can afford
+   * two seconds; a shedding game runs to hundreds of plays, and the same two
+   * seconds turns a five-minute game into an afternoon. So a caller may say
+   * what a turn is worth here, and 0 means "no pause at all", which is what a
+   * test wants.
+   */
+  if (overrideMs !== undefined) {
+    if (overrideMs <= 0) return;
+    return new Promise((resolve) => setTimeout(resolve, overrideMs));
+  }
+
   const config = getDifficultyConfig(difficulty);
   const delay =
     config.thinkingDelay.min +

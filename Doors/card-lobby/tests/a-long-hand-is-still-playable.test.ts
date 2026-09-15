@@ -46,7 +46,7 @@ async function tableWithALongHand(app: any, id: number): Promise<any> {
   const me = app.currentProfile.userId;
 
   const table: any = {
-    id, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: '10',
+    id, gameId: 'skitgubbe-tricks', gameName: 'Skitgubbe (Tricks)', stakesLabel: '10',
     smallBlind: 0, bigBlind: 10, buyIn: 200, entryFee: 0,
     minPlayers: 2, maxPlayers: 2, status: 'in-progress',
     createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,

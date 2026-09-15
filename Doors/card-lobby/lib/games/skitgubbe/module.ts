@@ -38,7 +38,7 @@ export interface SkitgubbeHost {
 }
 
 export class SkitgubbeGameModule implements TableGameModule {
-  public readonly ids = ['skitgubbe'] as const;
+  public readonly ids = ['skitgubbe-tricks'] as const;
   /** Its snapshot is a SkitgubbeSnapshot; the poker engine must not touch it. */
   public readonly usesPokerEngine = false;
   public readonly hintKind: GameHintKind = 'skitgubbe';

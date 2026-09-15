@@ -1,0 +1,456 @@
+/**
+ * SKITGUBBE (vändtia) at a lobby table.
+ *
+ * The rules are in `engine.ts`; this seats people, drives the bots through
+ * the SDK's CardGameAI, keeps the position in `table.hand.snapshot` so every
+ * node sees the same game, and says who the Skitgubbe was.
+ *
+ * KEYS, which the panel also prints:
+ *   swap    1-3 pick a hand card, 4-6 the table card it changes places with,
+ *           X when you are happy with what is face up
+ *   playing 1-9/0 or the arrows pick a card, X plays it, C takes the pile
+ *
+ * Nothing is wagered here: "skitgubbe is a social game, it requires no buy
+ * in" (sysop, 2026-09-15).
+ */
+
+import type { CardGameAI } from '@amiexpress/bbs-door-sdk';
+import { Difficulty, VandtiaActionType } from '@amiexpress/bbs-door-sdk';
+import type { LobbyTable, PlayerProfile } from '../../types';
+import { isBotPlayer } from '../../utils';
+import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
+import { VandtiaEngine, cardId, type VandtiaSnapshot } from './engine';
+
+/** Plumbing only - no game logic. */
+export interface VandtiaHost {
+  readonly currentProfile: PlayerProfile | null;
+  readonly cardGameAI: CardGameAI | null;
+  findTableById(tableId: number): LobbyTable | undefined;
+  reloadState(): Promise<void>;
+  persistState(): Promise<void>;
+  pushNotice(message: string): void;
+  pushEvent(message: string): void;
+  updateTableStatus(table: LobbyTable): void;
+  clearTableHand(table: LobbyTable): void;
+  updateAllPanels(): void;
+  runAction(action: () => void | Promise<void>): void;
+  labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void;
+}
+
+export class VandtiaGameModule implements TableGameModule {
+  public readonly ids = ['skitgubbe'] as const;
+  public readonly usesPokerEngine = false;
+  public readonly hintKind: GameHintKind = 'vandtia';
+
+  /** The card the caller has picked out of whatever they are playing from. */
+  public selectedCardIndex: number | null = null;
+  /** During the swap: the hand card waiting for a table card to change with. */
+  public selectedHandIndex: number | null = null;
+
+  constructor(private readonly host: VandtiaHost) {}
+
+  // ------------------------------------------------------------------
+  // State
+  // ------------------------------------------------------------------
+
+  public load(table: LobbyTable): { engine: VandtiaEngine; beforeStacks: Record<string, number> } | null {
+    if (!table.hand) return null;
+    try {
+      const engine = VandtiaEngine.deserialize(table.hand.snapshot as unknown as VandtiaSnapshot);
+      return { engine, beforeStacks: table.hand.beforeStacks ?? {} };
+    } catch (error) {
+      this.host.pushNotice(`Failed to restore Skitgubbe: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    }
+  }
+
+  private save(
+    table: LobbyTable,
+    engine: VandtiaEngine,
+    beforeStacks: Record<string, number>,
+    startedAt?: number,
+  ): void {
+    table.hand = {
+      snapshot: engine.serialize() as any,
+      beforeStacks,
+      startedAt: startedAt ?? table.hand?.startedAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    table.updatedAt = Date.now();
+  }
+
+  private currentTable(): LobbyTable | null {
+    const tableId = this.host.currentProfile?.currentTableId;
+    return tableId ? this.host.findTableById(tableId) ?? null : null;
+  }
+
+  // ------------------------------------------------------------------
+  // Starting
+  // ------------------------------------------------------------------
+
+  public async start(table: LobbyTable): Promise<void> {
+    try {
+      await this.host.reloadState();
+      const fresh = this.host.findTableById(table.id);
+      if (!fresh) {
+        this.host.pushNotice('Table not found.');
+        return;
+      }
+      if (fresh.hand) {
+        this.host.pushNotice('Game already in progress.');
+        return;
+      }
+
+      const seated = fresh.players.filter((player) => player.role === 'player');
+      if (seated.length < 2) {
+        this.host.pushNotice('Skitgubbe needs at least two players.');
+        return;
+      }
+
+      const engine = new VandtiaEngine(
+        seated.map((p) => p.userId),
+        seated.map((p) => p.username),
+        seated.map((p) => isBotPlayer(p)),
+      );
+
+      this.selectedCardIndex = null;
+      this.selectedHandIndex = null;
+      this.save(fresh, engine, {}, Date.now());
+      this.host.updateTableStatus(fresh);
+      this.host.pushEvent(`Skitgubbe dealt at table #${fresh.id}. Swap, then play.`);
+      await this.host.persistState();
+      await this.advance(fresh);
+    } catch (error) {
+      const fresh = this.host.findTableById(table.id);
+      if (fresh) {
+        this.host.clearTableHand(fresh);
+        this.host.updateTableStatus(fresh);
+        await this.host.persistState();
+      }
+      this.host.pushNotice(`Game failed to start: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Driving the bots
+  // ------------------------------------------------------------------
+
+  public async advance(table: LobbyTable): Promise<void> {
+    const loaded = this.load(table);
+    if (!loaded) return;
+    const { engine, beforeStacks } = loaded;
+
+    // The swap happens all at once: every bot arranges its own table before
+    // anybody plays, and a human's swap is what the rest are waiting on.
+    if (engine.state.phase === 'swap') {
+      for (const player of engine.state.players) {
+        if (!player.isBot || player.ready) continue;
+        for (let attempt = 0; attempt < 6 && !player.ready; attempt += 1) {
+          await this.playBotSwap(engine, player.id);
+        }
+      }
+      this.save(table, engine, beforeStacks);
+      await this.host.persistState();
+      this.host.updateAllPanels();
+      // Somebody human has still to arrange their table.
+      if ((engine.state.phase as string) !== 'playing') return;
+    }
+
+    let guard = 0;
+    while (engine.state.phase === 'playing' && guard < 600) {
+      guard += 1;
+      const currentId = engine.currentPlayerId();
+      if (!currentId) break;
+      const player = engine.playerById(currentId);
+      if (!player?.isBot) break;
+
+      const moved = await this.playBotTurn(engine, currentId);
+      if (!moved) break;
+      this.host.pushEvent(engine.state.lastAction);
+    }
+
+    this.save(table, engine, beforeStacks);
+    await this.host.persistState();
+    this.host.updateAllPanels();
+
+    if (engine.state.phase === 'over') await this.finalize(table, engine);
+  }
+
+  private async playBotSwap(engine: VandtiaEngine, playerId: string): Promise<void> {
+    const decision = await this.decide(engine, playerId);
+    if (decision?.action === VandtiaActionType.SWAP
+      && typeof decision.handIndex === 'number' && typeof decision.faceUpIndex === 'number') {
+      engine.swap(playerId, decision.handIndex, decision.faceUpIndex);
+      return;
+    }
+    engine.finishSwap(playerId);
+  }
+
+  private async playBotTurn(engine: VandtiaEngine, playerId: string): Promise<boolean> {
+    const decision = await this.decide(engine, playerId);
+    if (decision?.action === VandtiaActionType.TAKE_PILE) {
+      return engine.takePile(playerId).success;
+    }
+    if (typeof decision?.cardIndex === 'number') {
+      const result = engine.playCard(playerId, decision.cardIndex);
+      if (result.success) return true;
+    }
+
+    // Whatever the strategy said, the position has the last word - a bot
+    // must never wedge a table.
+    const legal = engine.legalPlays(playerId);
+    if (legal.length > 0) return engine.playCard(playerId, legal[0]).success;
+    if (engine.state.pile.length > 0) return engine.takePile(playerId).success;
+    return false;
+  }
+
+  /**
+   * How long a bot appears to think here.
+   *
+   * The SDK's default is 0.8-2s, which is right for poker - a bot acts a
+   * handful of times a hand. This game runs to hundreds of plays, three
+   * quarters of them bots', so the same pause would turn one game into an
+   * afternoon. Long enough to watch a card land, short enough to play.
+   */
+  private static readonly BOT_PACE_MS = 350;
+
+  private async decide(engine: VandtiaEngine, playerId: string): Promise<any | null> {
+    if (!this.host.cardGameAI?.hasStrategy('vandtia')) return null;
+    return this.host.cardGameAI.makeDecision('vandtia', {
+      difficulty: Difficulty.MEDIUM,
+      playerId,
+      engine: engine as any,
+      thinkingDelayMs: VandtiaGameModule.BOT_PACE_MS,
+    }) as any;
+  }
+
+  // ------------------------------------------------------------------
+  // The caller's moves
+  // ------------------------------------------------------------------
+
+  /**
+   * A number key. Cards 1-3 are the hand and 4-6 the table while swapping;
+   * afterwards it simply picks from whatever pile is in play.
+   */
+  public selectCard(index: number): void {
+    const table = this.currentTable();
+    if (!table) return;
+    const loaded = this.load(table);
+    if (!loaded) return;
+
+    const userId = this.host.currentProfile?.userId;
+    const player = userId ? loaded.engine.playerById(userId) : undefined;
+    if (!player || !userId) return;
+
+    if (loaded.engine.state.phase === 'swap') {
+      this.handleSwapKey(table, loaded, userId, index);
+      return;
+    }
+
+    const cards = loaded.engine.cardsInPlay(userId);
+    if (index < 0 || index >= cards.length) return;
+    this.selectedCardIndex = index;
+    this.host.pushNotice(`Selected ${cardId(cards[index])}. X plays it.`);
+    this.host.updateAllPanels();
+  }
+
+  /** 1-3 picks a hand card, 4-6 the face-up card it changes places with. */
+  private handleSwapKey(
+    table: LobbyTable,
+    loaded: { engine: VandtiaEngine; beforeStacks: Record<string, number> },
+    userId: string,
+    index: number,
+  ): void {
+    const player = loaded.engine.playerById(userId);
+    if (!player) return;
+
+    if (index < 3) {
+      if (index >= player.hand.length) return;
+      this.selectedHandIndex = index;
+      this.host.pushNotice(`${cardId(player.hand[index])} picked - now 4, 5 or 6 for the table card.`);
+      this.host.updateAllPanels();
+      return;
+    }
+
+    const faceUpIndex = index - 3;
+    if (faceUpIndex >= player.faceUp.length) return;
+    if (this.selectedHandIndex === null) {
+      this.host.pushNotice('Pick a hand card first - 1, 2 or 3.');
+      return;
+    }
+
+    const result = loaded.engine.swap(userId, this.selectedHandIndex, faceUpIndex);
+    this.selectedHandIndex = null;
+    if (!result.success) {
+      this.host.pushNotice(result.message);
+      return;
+    }
+    this.save(table, loaded.engine, loaded.beforeStacks);
+    void this.host.persistState();
+    this.host.pushNotice(result.message);
+    this.host.updateAllPanels();
+  }
+
+  public moveSelection(delta: number): void {
+    const table = this.currentTable();
+    if (!table) return;
+    const loaded = this.load(table);
+    if (!loaded) return;
+
+    const userId = this.host.currentProfile?.userId;
+    if (!userId) return;
+
+    const cards = loaded.engine.state.phase === 'swap'
+      ? loaded.engine.playerById(userId)?.hand ?? []
+      : loaded.engine.cardsInPlay(userId);
+    if (cards.length === 0) return;
+
+    const size = cards.length;
+    const current = loaded.engine.state.phase === 'swap' ? this.selectedHandIndex : this.selectedCardIndex;
+    let next: number;
+    if (current === null) {
+      const legal = loaded.engine.legalPlays(userId);
+      next = legal.length > 0 && loaded.engine.state.phase !== 'swap'
+        ? legal[0]
+        : (delta >= 0 ? 0 : size - 1);
+    } else {
+      next = ((current + delta) % size + size) % size;
+    }
+
+    if (loaded.engine.state.phase === 'swap') this.selectedHandIndex = next;
+    else this.selectedCardIndex = next;
+
+    this.host.pushNotice(`${cardId(cards[next])} picked.`);
+    this.host.updateAllPanels();
+  }
+
+  /** X: finish swapping, or play the picked card. */
+  public primaryAction(): void {
+    const table = this.currentTable();
+    if (!table) return;
+
+    this.host.runAction(async () => {
+      await this.host.reloadState();
+      const fresh = this.host.findTableById(table.id);
+      if (!fresh) return;
+      const loaded = this.load(fresh);
+      if (!loaded) {
+        this.host.pushNotice('No game in progress. Press D to deal.');
+        return;
+      }
+      const userId = this.host.currentProfile?.userId;
+      if (!userId) return;
+
+      if (loaded.engine.state.phase === 'swap') {
+        const result = loaded.engine.finishSwap(userId);
+        if (!result.success) {
+          this.host.pushNotice(result.message);
+          return;
+        }
+        this.selectedHandIndex = null;
+        this.host.pushEvent(`${this.host.currentProfile?.username ?? 'Someone'} is ready.`);
+        this.save(fresh, loaded.engine, loaded.beforeStacks);
+        await this.host.persistState();
+        await this.advance(fresh);
+        return;
+      }
+
+      if (loaded.engine.currentPlayerId() !== userId) {
+        this.host.pushNotice('Not your turn.');
+        return;
+      }
+      if (this.selectedCardIndex === null) {
+        const blind = loaded.engine.sourceFor(userId) === 'faceDown';
+        this.host.pushNotice(blind
+          ? 'Pick one of your face-down cards - you will not know what it is until it lands.'
+          : 'Pick a card first - press its number, or use the arrows.');
+        return;
+      }
+
+      const result = loaded.engine.playCard(userId, this.selectedCardIndex);
+      if (!result.success) {
+        this.host.pushNotice(result.message);
+        return;
+      }
+      this.selectedCardIndex = null;
+      this.host.pushEvent(result.message);
+      this.save(fresh, loaded.engine, loaded.beforeStacks);
+      await this.host.persistState();
+      await this.advance(fresh);
+    });
+  }
+
+  /** C: take the pile, because nothing in your hand will go on it. */
+  public secondaryAction(): void {
+    const table = this.currentTable();
+    if (!table) return;
+
+    this.host.runAction(async () => {
+      await this.host.reloadState();
+      const fresh = this.host.findTableById(table.id);
+      if (!fresh) return;
+      const loaded = this.load(fresh);
+      if (!loaded) return;
+      const userId = this.host.currentProfile?.userId;
+      if (!userId) return;
+
+      const result = loaded.engine.takePile(userId);
+      if (!result.success) {
+        this.host.pushNotice(result.message);
+        return;
+      }
+      this.selectedCardIndex = null;
+      this.host.pushEvent(result.message);
+      this.save(fresh, loaded.engine, loaded.beforeStacks);
+      await this.host.persistState();
+      await this.advance(fresh);
+    });
+  }
+
+  public tertiaryAction(): void {
+    this.host.pushNotice('Skitgubbe: X plays the picked card, C takes the pile.');
+  }
+
+  public render(painter: TableGamePainter, table: LobbyTable): void {
+    painter.renderVandtiaGameView(table);
+  }
+
+  public updateActionButtons(table: LobbyTable): void {
+    const loaded = this.load(table);
+    const me = this.host.currentProfile?.userId;
+    const swapping = loaded?.engine.state.phase === 'swap';
+    const canTake = Boolean(loaded && me && !swapping && loaded.engine.state.pile.length > 0
+      && loaded.engine.currentPlayerId() === me);
+    this.host.labelVandtiaButtons(Boolean(loaded), Boolean(swapping), canTake);
+  }
+
+  // ------------------------------------------------------------------
+
+  /** Social game: the title is the only thing anybody loses. */
+  private async finalize(table: LobbyTable, engine: VandtiaEngine): Promise<void> {
+    const loserId = engine.state.loserId;
+    const loserName = engine.state.players.find((p) => p.id === loserId)?.name ?? 'Nobody';
+    this.host.pushEvent(`${loserName} is the Skitgubbe at table #${table.id}!`);
+
+    const me = this.host.currentProfile?.userId;
+    if (me && loserId === me) this.host.pushNotice('You are the Skitgubbe. Deal again?');
+    else if (me && loserId) this.host.pushNotice(`${loserName} is the Skitgubbe.`);
+
+    table.lastHand = {
+      board: engine.state.pile.map(cardId),
+      hands: Object.fromEntries(engine.state.players.map((p) => [p.id, p.hand.map(cardId)])),
+      pot: 0,
+      winners: engine.state.finishedOrder.map((id) => ({
+        userId: id,
+        username: engine.state.players.find((p) => p.id === id)?.name ?? id,
+        amount: 0,
+      })),
+      playedAt: Date.now(),
+    };
+
+    this.host.clearTableHand(table);
+    this.host.updateTableStatus(table);
+    await this.host.persistState();
+    this.host.updateAllPanels();
+  }
+}

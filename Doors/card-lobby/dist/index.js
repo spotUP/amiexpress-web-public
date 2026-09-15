@@ -266,6 +266,7 @@ class CardLobbyApp {
         ai.registerStrategy(new bbs_door_sdk_2.PokerAIStrategy());
         ai.registerStrategy(new bbs_door_sdk_2.UnoAIStrategy());
         ai.registerStrategy(new bbs_door_sdk_2.SkitgubbeAIStrategy());
+        ai.registerStrategy(new bbs_door_sdk_2.VandtiaAIStrategy());
         this.gameStateManager.setAI(ai);
         this.cardGameAI = ai;
         /*
@@ -275,10 +276,12 @@ class CardLobbyApp {
          * playing any more.
          */
         this.skitgubbe = new games_1.SkitgubbeGameModule(this);
+        this.vandtia = new games_1.VandtiaGameModule(this);
         this.games = new games_1.GameRegistry([
             new games_1.HoldemGameModule(this),
             new games_1.UnoGameModule(this),
             this.skitgubbe,
+            this.vandtia,
         ]);
         // Build overlay FIRST so overlayShade exists
         this.uiManager.buildOverlay();
@@ -1166,6 +1169,9 @@ class CardLobbyApp {
     }
     labelSkitgubbeButtons(hasGame, canTake) {
         this.uiManager.labelSkitgubbeButtons(hasGame, canTake);
+    }
+    labelVandtiaButtons(hasGame, swapping, canTake) {
+        this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
     }
     updateUnoActionButtons(table) {
         const gameState = this.loadUnoGameState(table);

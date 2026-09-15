@@ -45,7 +45,7 @@ async function openApp(): Promise<any> {
 async function seatedAtSkitgubbeTable(app: any, id: number): Promise<any> {
   const me = app.currentProfile.userId;
   const table: any = {
-    id, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+    id, gameId: 'skitgubbe-tricks', gameName: 'Skitgubbe (Tricks)', stakesLabel: 'Social',
     smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
     minPlayers: 2, maxPlayers: 3, status: 'open',
     createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
@@ -64,11 +64,22 @@ async function seatedAtSkitgubbeTable(app: any, id: number): Promise<any> {
 }
 
 export async function theLobbyOffersSkitgubbe(): Promise<void> {
+  /*
+   * TWO GAMES SHARE THE NAME. The board's "Skitgubbe" is the vandtia one the
+   * sysop plays; this trick-taking game keeps its own entry beside it, which
+   * is only affordable because the lobby has a registry rather than a chain
+   * of branches (lib/games/registry.ts).
+   */
   const { GAME_CATALOG } = await import('../lib/constants');
-  const game = GAME_CATALOG.find((entry) => entry.id === 'skitgubbe');
-  assert.ok(game, 'the catalogue has it');
-  assert.strictEqual(game?.enabled, true, 'and it is enabled, so a table can be created for it');
-  assert.ok((game?.maxPlayers ?? 0) >= 3, 'three-handed is the game it is best at');
+
+  const tricks = GAME_CATALOG.find((entry) => entry.id === 'skitgubbe-tricks');
+  assert.ok(tricks, 'the catalogue has the trick game');
+  assert.strictEqual(tricks?.enabled, true, 'and it is enabled, so a table can be created for it');
+  assert.ok((tricks?.maxPlayers ?? 0) >= 3, 'three-handed is the game it is best at');
+
+  const vandtia = GAME_CATALOG.find((entry) => entry.id === 'skitgubbe');
+  assert.strictEqual(vandtia?.name, 'Skitgubbe', 'and plain "Skitgubbe" is the one the board means');
+  assert.strictEqual(vandtia?.stakes[0].buyIn, 0, 'social, and free');
 }
 
 export async function theRegistryServesEveryEnabledGame(): Promise<void> {
@@ -85,7 +96,7 @@ export async function theRegistryServesEveryEnabledGame(): Promise<void> {
     // hard-coded list of UNO ids.
     assert.strictEqual(app.gameModuleFor({ gameId: 'holdem' }).usesPokerEngine, true);
     assert.strictEqual(app.gameModuleFor({ gameId: 'uno' }).usesPokerEngine, false);
-    assert.strictEqual(app.gameModuleFor({ gameId: 'skitgubbe' }).usesPokerEngine, false);
+    assert.strictEqual(app.gameModuleFor({ gameId: 'skitgubbe-tricks' }).usesPokerEngine, false);
   } finally { app.screen?.destroy?.(); }
 }
 

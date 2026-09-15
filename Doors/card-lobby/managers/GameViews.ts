@@ -11,7 +11,10 @@ import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
-import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule } from '../lib/games';
+import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule, type VandtiaCard } from '../lib/games';
+
+/** A card as the activity panel names it: "9S", "10H". */
+const cardLabel = (card: VandtiaCard): string => `${card.rank}${card.suit}`;
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
 
@@ -50,6 +53,7 @@ export interface GameViewHost {
   readonly screen: { render(): void };
   gameModuleFor(table: LobbyTable): TableGameModule | undefined;
   readonly skitgubbe: SkitgubbeGameModule;
+  readonly vandtia: VandtiaGameModule;
 }
 
 export class GameViews {
@@ -364,5 +368,95 @@ export class GameViews {
       activity.push('Waiting for the other players...');
     }
     this.host.activityContent.setContent(activity.join('\n'));
+  }
+
+  /**
+   * SKITGUBBE (vändtia) in the four panels.
+   *
+   * Three stacks per player and one pile in the middle, so the panels say:
+   * the pile where the board goes, whatever the caller is playing FROM where
+   * a hand goes, and - the part that is peculiar to this game - how many
+   * cards each player still has in each of their three places, because that
+   * is the whole state of the race.
+   */
+  renderVandtiaGameView(table: LobbyTable): void {
+    const loaded = this.host.vandtia.load(table);
+    if (!loaded) {
+      this.host.flopContent.setContent('Waiting for a game to start...');
+      this.host.playersContent.setContent('No Skitgubbe game.');
+      this.host.handContent.setContent('Press {cyan-fg}D{/} to deal.');
+      this.host.activityContent.setContent('');
+      return;
+    }
+
+    const state = loaded.engine.state;
+    const meId = this.host.currentProfile?.userId ?? '';
+    const me = state.players.find((player) => player.id === meId);
+    const onTurn = loaded.engine.currentPlayerId();
+    const swapping = state.phase === 'swap';
+
+    // The pile shows its top card - that is the only one that matters - and
+    // the hand panel shows whatever this caller is playing from.
+    const showing = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
+    const top = loaded.engine.topOfPile();
+    this.host.renderBoardAndHand(
+      (top ? [top] : []) as any,
+      showing as any,
+      'auto',
+      'auto',
+      true,
+    );
+
+    const lines: string[] = [];
+    lines.push(swapping
+      ? '{cyan-fg}Swap{/} - put your strength on the table'
+      : state.phase === 'playing'
+        ? '{cyan-fg}Playing{/} - equal or higher, or take the pile'
+        : '{cyan-fg}Game over{/}');
+    lines.push(`Pile: ${state.pile.length}   Stock: ${state.stock.length}   Burned: ${state.burned.length}`);
+    lines.push('');
+    lines.push(`{${UI_THEME.dim}-fg}       hand up down{/}`);
+
+    for (const player of state.players) {
+      const marker = player.id === onTurn && !swapping ? '{green-fg}>{/}' : ' ';
+      const name = `${player.name}${player.isBot ? '*' : ''}`.slice(0, 10);
+      const tag = player.out ? '  OUT' : swapping && player.ready ? ' redy' : '';
+      lines.push(`${marker} ${pad(name, 10)} ${pad(String(player.hand.length), 4)}`
+        + `${pad(String(player.faceUp.length), 3)}${pad(String(player.faceDown.length), 5)}${tag}`);
+    }
+    this.host.playersContent.setContent(lines.join('\n'));
+
+    const activity: string[] = [state.lastAction];
+    if (swapping && me) {
+      const picked = this.host.vandtia.selectedHandIndex;
+      activity.push('');
+      activity.push(`Hand:  ${me.hand.map((card, i) =>
+        (i === picked ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`)
+        + cardLabel(card)).join(' ')}`);
+      activity.push(`Table: ${me.faceUp.map((card, i) =>
+        `{green-fg}[${i + 4}]{/}` + cardLabel(card)).join(' ')}`);
+      activity.push(me.ready
+        ? 'Waiting for the others.'
+        : '1-3 picks a hand card, 4-6 the table card it swaps with. X when ready.');
+    } else if (state.phase === 'playing' && me && onTurn === meId) {
+      const source = loaded.engine.sourceFor(meId);
+      const legal = loaded.engine.legalPlays(meId);
+      const selected = this.host.vandtia.selectedCardIndex;
+      activity.push('');
+      if (source === 'faceDown') {
+        activity.push(`Face down - turn one blind: ${legal.map((i) =>
+          i === selected ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`).join(' ')}`);
+      } else {
+        activity.push(source === 'faceUp' ? 'Playing from the table now.' : '');
+        activity.push(legal.length > 0
+          ? `Playable: ${legal.map((i) =>
+            i === selected ? `{yellow-bg}{black-fg}[${i + 1}]{/}{/}` : `{green-fg}[${i + 1}]{/}`).join(' ')}`
+          : 'Nothing will go - C takes the pile.');
+      }
+    } else if (state.phase !== 'over') {
+      activity.push('');
+      activity.push('Waiting for the other players...');
+    }
+    this.host.activityContent.setContent(activity.filter((line) => line !== '').join('\n'));
   }
 }

@@ -47,6 +47,36 @@ export interface SkitgubbeEngine {
 }
 
 /**
+ * Generic Skitgubbe (vändtia) engine interface
+ *
+ * The other Swedish game of the same name - three face down, three face up,
+ * three in hand, and one pile you must equal or beat. Engine in the
+ * card-lobby door, same as the two above.
+ */
+export interface VandtiaEngine {
+  state: {
+    phase: 'swap' | 'playing' | 'over';
+    players: Array<{
+      id: string;
+      name: string;
+      hand: Array<{ rank: string; suit: string }>;
+      faceUp: Array<{ rank: string; suit: string }>;
+      faceDown: Array<{ rank: string; suit: string }>;
+      ready: boolean;
+      out: boolean;
+    }>;
+    pile: Array<{ rank: string; suit: string }>;
+    stock: Array<{ rank: string; suit: string }>;
+    currentIndex: number;
+  };
+  currentPlayerId(): string | null;
+  legalPlays(playerId: string): number[];
+  cardsInPlay(playerId: string): Array<{ rank: string; suit: string }>;
+  sourceFor(playerId: string): 'hand' | 'faceUp' | 'faceDown';
+  mustTakePile(playerId: string): boolean;
+}
+
+/**
  * AI difficulty levels
  */
 export enum Difficulty {
@@ -59,7 +89,7 @@ export enum Difficulty {
 /**
  * Game types supported by the AI system
  */
-export type GameType = 'poker' | 'uno' | 'skitgubbe';
+export type GameType = 'poker' | 'uno' | 'skitgubbe' | 'vandtia';
 
 /**
  * Base decision context shared by all games
@@ -67,6 +97,12 @@ export type GameType = 'poker' | 'uno' | 'skitgubbe';
 export interface BaseDecisionContext {
   difficulty: Difficulty;
   playerId: string;
+  /**
+   * How long this bot should appear to think, in milliseconds, instead of
+   * the difficulty's own range. 0 is no pause. A game with hundreds of plays
+   * per hand wants a much shorter one than a game with a handful.
+   */
+  thinkingDelayMs?: number;
 }
 
 /**
@@ -92,9 +128,20 @@ export interface SkitgubbeDecisionContext extends BaseDecisionContext {
 }
 
 /**
+ * Skitgubbe (vändtia) decision context
+ */
+export interface VandtiaDecisionContext extends BaseDecisionContext {
+  engine: VandtiaEngine;
+}
+
+/**
  * Union type for all decision contexts
  */
-export type DecisionContext = PokerDecisionContext | UnoDecisionContext | SkitgubbeDecisionContext;
+export type DecisionContext =
+  | PokerDecisionContext
+  | UnoDecisionContext
+  | SkitgubbeDecisionContext
+  | VandtiaDecisionContext;
 
 /**
  * Poker action types
@@ -162,9 +209,40 @@ export interface SkitgubbeAIDecision {
 }
 
 /**
+ * Skitgubbe (vändtia) action types
+ *
+ * Three moves: swap a hand card onto the table before play, play a card, or
+ * pick the pile up because nothing will go on it.
+ */
+export enum VandtiaActionType {
+  SWAP = 'swap',
+  FINISH_SWAP = 'finish-swap',
+  PLAY_CARD = 'play',
+  TAKE_PILE = 'take',
+}
+
+/**
+ * Skitgubbe (vändtia) AI decision
+ */
+export interface VandtiaAIDecision {
+  type: 'vandtia';
+  action: VandtiaActionType;
+  /** PLAY_CARD: an index into whichever pile the player is playing from. */
+  cardIndex?: number;
+  /** SWAP: which hand card, and which face-up card it changes places with. */
+  handIndex?: number;
+  faceUpIndex?: number;
+  reasoning?: string;
+}
+
+/**
  * Union type for all AI decisions
  */
-export type AIDecision = PokerAIDecision | UnoAIDecision | SkitgubbeAIDecision;
+export type AIDecision =
+  | PokerAIDecision
+  | UnoAIDecision
+  | SkitgubbeAIDecision
+  | VandtiaAIDecision;
 
 /**
  * Configuration for difficulty-based behavior

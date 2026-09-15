@@ -19,7 +19,7 @@ const engine_1 = require("./engine");
 class SkitgubbeGameModule {
     constructor(host) {
         this.host = host;
-        this.ids = ['skitgubbe'];
+        this.ids = ['skitgubbe-tricks'];
         /** Its snapshot is a SkitgubbeSnapshot; the poker engine must not touch it. */
         this.usesPokerEngine = false;
         this.hintKind = 'skitgubbe';

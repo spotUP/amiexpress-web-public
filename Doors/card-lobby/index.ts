@@ -49,6 +49,7 @@ import {
   PokerAIStrategy,
   UnoAIStrategy,
   SkitgubbeAIStrategy,
+  VandtiaAIStrategy,
 } from '@amiexpress/bbs-door-sdk';
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
@@ -59,6 +60,7 @@ import {
   HoldemGameModule,
   UnoGameModule,
   SkitgubbeGameModule,
+  VandtiaGameModule,
   type TableGameModule,
 } from './lib/games';
 import {
@@ -162,8 +164,9 @@ export class CardLobbyApp {
    * brings its own module, so adding it cost no branches here.
    */
   private games!: GameRegistry;
-  /** Kept by name as well: the Skitgubbe module owns the caller's selection. */
+  /** Kept by name as well: the game modules own the caller's card selection. */
   public skitgubbe!: SkitgubbeGameModule;
+  public vandtia!: VandtiaGameModule;
   /** The SDK's AI, shared by every game's bots. */
   public cardGameAI: CardGameAI | null = null;
   private terminalMode!: TerminalModeSwitch;
@@ -405,6 +408,7 @@ export class CardLobbyApp {
     ai.registerStrategy(new PokerAIStrategy());
     ai.registerStrategy(new UnoAIStrategy());
     ai.registerStrategy(new SkitgubbeAIStrategy());
+    ai.registerStrategy(new VandtiaAIStrategy());
     this.gameStateManager.setAI(ai);
     this.cardGameAI = ai;
 
@@ -415,10 +419,12 @@ export class CardLobbyApp {
      * playing any more.
      */
     this.skitgubbe = new SkitgubbeGameModule(this);
+    this.vandtia = new VandtiaGameModule(this);
     this.games = new GameRegistry([
       new HoldemGameModule(this),
       new UnoGameModule(this),
       this.skitgubbe,
+      this.vandtia,
     ]);
 
     // Build overlay FIRST so overlayShade exists
@@ -1432,6 +1438,10 @@ export class CardLobbyApp {
 
   public labelSkitgubbeButtons(hasGame: boolean, canTake: boolean): void {
     this.uiManager.labelSkitgubbeButtons(hasGame, canTake);
+  }
+
+  public labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void {
+    this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
   }
 
   public updateUnoActionButtons(table: LobbyTable): void {
