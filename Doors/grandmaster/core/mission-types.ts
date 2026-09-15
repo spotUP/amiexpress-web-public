@@ -133,6 +133,19 @@ export interface MissionModifiers {
    * what you built is all you have. See `core/color-wash.ts`.
    */
   color?: boolean;
+  /**
+   * OLD STYLE (reference type 22, `mission.c:1427-1434`): the game as the
+   * handheld played it. `heboGB=1` takes HOLD away (`gamestart.c:7645`), the
+   * back-to-back bonus with it ("old style has no back to back",
+   * `gamestart.c:10310`), refuses IRS and IHS, and shows the NEXT queue as
+   * plain blocks rather than the pieces themselves (`c_nblk[i] = 8`,
+   * `gamestart.c:3822`/`3868`, with `ishidenext = 2`).
+   *
+   * The SPEED that comes with it in the reference is a pack's to write, the
+   * way every mission speed is - `lvTableHeboGB` and its wait tables are in
+   * speed_old.c:281-299.
+   */
+  oldStyle?: boolean;
 }
 
 export interface Mission {

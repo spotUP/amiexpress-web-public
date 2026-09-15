@@ -349,6 +349,26 @@
         "color": true
       },
       "hint": "Six lines with the stack washed in a rolling rainbow."
+    },
+    {
+      "id": "28",
+      "name": "OLD STYLE",
+      "objective": "lines",
+      "norm": 10,
+      "timeLimitSeconds": 0,
+      "startLevel": 0,
+      "garbageRows": 0,
+      "modifiers": {
+        "oldStyle": true
+      },
+      "speed": {
+        "gravity": 0.0167,
+        "are": 0,
+        "lineClear": 60,
+        "lockDelay": 60,
+        "das": 15
+      },
+      "hint": "Ten lines the way the handheld played it: no hold, no preview."
     }
   ]
 }

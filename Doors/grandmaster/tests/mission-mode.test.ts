@@ -385,6 +385,7 @@ export async function theNewObjectivesAreReachableFromAShippedPack(): Promise<vo
   assert.ok(every.some((m) => m.modifiers.xray), 'X-RAY is played');
   assert.ok(every.some((m) => m.modifiers.mirror), 'and MIRROR');
   assert.ok(every.some((m) => m.modifiers.color), 'and COLOR');
+  assert.ok(every.some((m) => m.modifiers.oldStyle), 'and OLD STYLE');
 }
 
 /**
@@ -705,4 +706,59 @@ export async function colourWashRollsDiagonallyAndInTime(): Promise<void> {
   assert.notStrictEqual(start, moved, 'one step of the roll changes the cell');
   const wrapped = washColour(3, 12, 10, WASH_STEP_MS * 7);
   assert.strictEqual(start, wrapped, 'seven steps is a whole turn of the wash');
+}
+
+/**
+ * OLD STYLE takes the modern conveniences away.
+ *
+ * Reference type 22 (`mission.c:1427-1434`) sets `heboGB`, and that one flag
+ * is a ruleset: no hold (`gamestart.c:7645`), no initial rotation or hold,
+ * no back-to-back ("old stlye hass no back to back", `gamestart.c:10310`,
+ * in the reference's own spelling), and a NEXT queue of plain blocks
+ * (`c_nblk[i] = 8`). The speed that comes with it is the pack's to write,
+ * like every mission speed.
+ */
+export async function oldStyleHasNoHoldAndNoBackToBack(): Promise<void> {
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.setMissionModifiers({ oldStyle: true });
+  engine.start();
+
+  assert.strictEqual(engine.hold(), false, 'the handheld had no hold button');
+  assert.strictEqual(engine.getState().holdPiece, null, 'and nothing was held');
+  assert.strictEqual(engine.setIHS(), false, 'nor an initial hold');
+
+  // A tetris, then another: the second must not be scored as back-to-back.
+  const fillFor = (engine: any, gap: number) => {
+    const board = engine.getState().board;
+    const bottom = board.height - 1;
+    for (let y = bottom - 3; y <= bottom; y++) {
+      for (let x = 0; x < board.width; x++) {
+        if (x === gap) continue;
+        board.grid[y][x] = { filled: true, color: 'J', locked: true, item: null };
+      }
+    }
+    // A vertical I has its cells in column 2 of its 4x4 box (rotation 1), so
+    // the piece's x is two left of the column it will fill.
+    engine.getState().currentPiece = { type: 'I', rotation: 1, x: gap - 2, y: 0 };
+  };
+
+  fillFor(engine, 9);
+  engine.hardDrop();
+  assert.strictEqual(engine.getState().backToBack, false,
+    'a tetris does not even arm the chain under OLD STYLE');
+
+  // And an ordinary mission still arms it, so the flag is what turned it off.
+  const plain: any = new GameEngine('mission', settings, sounds);
+  plain.setMissionModifiers({ big: false });
+  plain.start();
+  fillFor(plain, 9);
+  plain.hardDrop();
+  assert.strictEqual(plain.getState().backToBack, true, 'the chain is armed as usual');
+
+  // And hold works for an ordinary mission - asked of a piece that is LIVE,
+  // since the piece above has just locked and the next one is still in ARE.
+  const holder: any = new GameEngine('mission', settings, sounds);
+  holder.setMissionModifiers({ big: false });
+  holder.start();
+  assert.strictEqual(holder.hold(), true, 'hold works when the mission allows it');
 }

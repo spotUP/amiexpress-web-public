@@ -1542,9 +1542,17 @@ class GameScreen {
             return;
         let content = '\n';
         const rotationSystem = this.state.settings.rotationSystem;
+        /*
+         * OLD STYLE shows a PLAIN BLOCK for each coming piece rather than the
+         * piece itself (`c_nblk[i] = 8`, gamestart.c:3822/3868): you are told
+         * that something is coming and nothing about what.
+         */
+        const plainNext = this.engine.getState().missionModifiers?.oldStyle === true;
         for (let i = 0; i < Math.min(3, queue.length); i++) {
             const piece = queue[i];
-            const mini = this.getMiniPiece(piece, rotationSystem);
+            const mini = plainNext
+                ? `{${door_theme_1.T.dim}-fg}[]{/${door_theme_1.T.dim}-fg}`
+                : this.getMiniPiece(piece, rotationSystem);
             content += mini + (i < 2 ? '\n\n' : '\n');
         }
         this.nextBox.setContent(content);

@@ -231,6 +231,7 @@ export function parseMissionPack(raw: unknown, source = 'mission pack'): Mission
         xray: rawModifiers.xray === true,
         mirror: rawModifiers.mirror === true,
         color: rawModifiers.color === true,
+        oldStyle: rawModifiers.oldStyle === true,
         ...(rawRise !== undefined ? { riseEveryPieces: rawRise as number } : {}),
       },
       hint: typeof m.hint === 'string' ? m.hint : undefined,

@@ -125,6 +125,9 @@ function missionConditions(mission) {
     if (mission.modifiers.xray) {
         conditions.push('X-RAY: one column of the stack is lit at a time');
     }
+    if (mission.modifiers.oldStyle) {
+        conditions.push('OLD STYLE: no hold, no back-to-back, and NEXT is a plain block');
+    }
     if (mission.modifiers.color) {
         conditions.push('COLOR: the stack is a rolling rainbow, not its own colours');
     }

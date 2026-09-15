@@ -1111,6 +1111,9 @@ export class GameEngine {
    * Hold current piece
    */
   hold(): boolean {
+    // OLD STYLE has no hold at all (gamestart.c:7645, doHold's early return
+    // on heboGB) - the handheld did not have the button.
+    if (this.state.missionModifiers?.oldStyle) return false;
     if (!this.state.currentPiece || !this.state.canHold || this.state.status !== 'playing') {
       return false;
     }
@@ -1153,6 +1156,11 @@ export class GameEngine {
    * Only works during ARE (when no piece is active)
    */
   setIRS(direction: -1 | 0 | 1): boolean {
+    // Neither ROTATELOCK nor OLD STYLE allows an initial rotation
+    // (gamestart.c:7359/7452/7488).
+    if (this.state.missionModifiers?.rotateLock || this.state.missionModifiers?.oldStyle) {
+      return false;
+    }
     // IRS only works when no current piece (during ARE)
     if (this.state.currentPiece !== null) {
       return false;
@@ -1173,6 +1181,8 @@ export class GameEngine {
    * Only works during ARE (when no piece is active)
    */
   setIHS(): boolean {
+    // No hold means no initial hold either.
+    if (this.state.missionModifiers?.oldStyle) return false;
     // IHS only works when no current piece (during ARE)
     if (this.state.currentPiece !== null) {
       return false;
@@ -1428,8 +1438,10 @@ export class GameEngine {
         else if (lineCount === 2) baseScore = 400;   // T-Spin Mini Double
       }
 
-      // Back-to-back bonus (T-Spins and Tetrises)
-      const isBackToBackAction = tSpin !== 'none' || lineCount === 4;
+      // Back-to-back bonus (T-Spins and Tetrises). "old stlye hass no back to
+      // back" - gamestart.c:10310, in the reference's own spelling.
+      const isBackToBackAction = !this.state.missionModifiers?.oldStyle
+        && (tSpin !== 'none' || lineCount === 4);
       if (isBackToBackAction && this.state.backToBack) {
         baseScore = Math.floor(baseScore * 1.5);  // 50% bonus
         // Increment B2B chain
