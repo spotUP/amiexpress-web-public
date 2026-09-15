@@ -252,6 +252,34 @@ export function armSegmentBoundaryPause(
   const segState = session.screenSegments;
   if (!segState || segState.segments.length === 0) return false;
 
+  /*
+   * ONE PROMPT PER BOUNDARY, whoever gets here first.
+   *
+   * A boundary is a place in the screen, not an event, so it owes exactly one
+   * `Space To Resume` no matter how many owners believe they must arm it. Two
+   * of them can reach this for the SAME boundary: a `~CC_` door in a segment
+   * arms one as it exits (`door-exit`), and `processNextScreenSegment`, which
+   * is the frame that ran that door, arms one the moment `runScreenCommands`
+   * returns (`segment-resume`). The board's own trace, live 2026-09-15:
+   *
+   *   site=door-exit      ... segments=3 subState=display_bull
+   *   site=segment-resume ... segments=3 subState=display_bull   (2ms later)
+   *
+   * and the caller saw two prompts stacked under the global last-callers list.
+   * `doorExitOwesThePause` only knew about the INLINE walker as an owner, so
+   * the segment runner - a second one - was invisible to it.
+   *
+   * An installed `doPause` gate IS this boundary's pause: a gate is cleared
+   * the instant it is answered (handlePaginationInput), so finding one here
+   * means the prompt is on the caller's screen right now, unanswered. Arming a
+   * second is the duplicate. Returning true is what the first arm returned -
+   * the caller stops and waits, which is what it must do either way.
+   */
+  if (session.paginatedScreen?.kind === 'doPause') {
+    tracePause(`${site}-already-armed`, session);
+    return true;
+  }
+
   session.paginatedScreen = {
     lines: [''],  // No additional content, just hold for a key
     nextIndex: 1,
