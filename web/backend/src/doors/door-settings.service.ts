@@ -163,6 +163,21 @@ export interface DoorSettingsManifest {
  */
 const BARE_FILE_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
+/*
+ * QuickNew's config is not the `[Section_END]` shape everything else here
+ * reads, and the number of editable templates is whatever the sysop
+ * configured - so one manifest entry expands into two sections per area,
+ * discovered from the file. See doors/quicknew-config.ts.
+ */
+import {
+  parseQuickNewBlocks,
+  quickNewSectionName,
+  parseQuickNewSectionName,
+  quickNewSectionLabel,
+  replaceQuickNewTemplate,
+  type QuickNewTemplate,
+} from './quicknew-config';
+
 const CfgRowSchema = z.object({
   section: z.string().min(1).max(32),
   row: z.number().int().min(0).max(9999).optional(),
@@ -171,7 +186,14 @@ const CfgRowSchema = z.object({
 
 const ArtSectionSchema = z.object({
   file: z.string().min(1).max(64).regex(BARE_FILE_RE),
-  section: z.string().min(1).max(32),
+  /**
+   * How the file is cut into sections. `markers` is the `[Name_END]` shape the
+   * empire cfg files use and stays the default, so no existing manifest
+   * changes. `quicknew` is discovered from the file instead - its blocks are
+   * however many areas the sysop configured - so `section` is absent there.
+   */
+  format: z.enum(['markers', 'quicknew']).optional(),
+  section: z.string().min(1).max(32).optional(),
   label: z.string().min(1).max(80),
   maxLines: z.number().int().min(1).max(100),
   maxLineLength: z.number().int().min(1).max(1000),
@@ -1121,8 +1143,10 @@ import {
 export interface DoorArtSection {
   /** Bare filename inside the door directory (e.g. `Bulls.CFG`). */
   file: string;
-  /** Section name without the marker suffix (`title` for `[Title_END]`). */
-  section: string;
+  /** How the file is cut up; `markers` when absent. */
+  format?: 'markers' | 'quicknew';
+  /** Section name without the marker suffix; absent for discovered formats. */
+  section?: string;
   /** What the Studio card says. */
   label: string;
   /** DOC limits (Bulls title: 20 lines, 200 chars per line). */
@@ -1202,8 +1226,10 @@ export function readDoorArtSections(
   artRoot?: string,
 ): DoorArtContent[] {
   return listDoorArtSections(doorDir, command).map((entry) => {
-    const file = loadArtFile(doorDir, entry.file);
-    const body = getSectionBody(file, entry.section);
+    const discovered = parseQuickNewSectionName(entry.section);
+    const body = discovered
+      ? quickNewBody(doorDir, entry.file, discovered)
+      : getSectionBody(loadArtFile(doorDir, entry.file), entry.section);
     if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
     const drawn = (alphabet: ArtAlphabet): boolean =>
       !!artRoot && !!command && readVariant(artRoot, command, entry.section, alphabet) !== null;
@@ -1232,25 +1258,61 @@ export interface DoorArtListing {
 /** Declared art sections with live line counts, without the bodies. */
 export function listDoorArtSections(doorDir: string, command?: string): DoorArtListing[] {
   const manifest = readArtManifest(doorDir, command);
-  return manifest.artSections.map((entry) => {
+  // flatMap, not map: a discovered format turns ONE manifest entry into two
+  // sections per configured area.
+  return manifest.artSections.flatMap((entry) => {
+    if (entry.format === 'quicknew') {
+      return quickNewListings(doorDir, entry);
+    }
     const file = loadArtFile(doorDir, entry.file);
-    const body = getSectionBody(file, entry.section);
+    const body = getSectionBody(file, entry.section!);
     if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
-    return {
+    return [{
       file: entry.file,
-      section: entry.section,
+      section: entry.section!,
       label: entry.label,
       lines: body.length,
       maxLines: entry.maxLines,
       maxLineLength: entry.maxLineLength,
-    };
+    }];
   });
+}
+
+/** Read QuickNew's config as one editable template per heading and stats line. */
+function quickNewText(doorDir: string, fileName: string): string {
+  return fs.readFileSync(path.join(doorDir, fileName), 'latin1');
+}
+
+function quickNewListings(doorDir: string, entry: DoorArtSection): DoorArtListing[] {
+  return parseQuickNewBlocks(quickNewText(doorDir, entry.file)).flatMap((block) =>
+    (['header', 'stats'] as QuickNewTemplate[]).map((which) => ({
+      file: entry.file,
+      section: quickNewSectionName(block.index, which),
+      label: quickNewSectionLabel(block, which),
+      // One line, and the door's own width. A second line would shift every
+      // area after it and re-point the headings at the wrong conferences.
+      lines: 1,
+      maxLines: 1,
+      maxLineLength: entry.maxLineLength,
+    }))
+  );
 }
 
 /**
  * Replace an art section body. Lines keep the file's own ending style;
  * validation follows the manifest limits (the door's DOC numbers).
  */
+/** One QuickNew template as a one-line body, or null when the block is gone. */
+function quickNewBody(
+  doorDir: string,
+  fileName: string,
+  at: { index: number; which: QuickNewTemplate }
+): string[] | null {
+  const block = parseQuickNewBlocks(quickNewText(doorDir, fileName)).find(b => b.index === at.index);
+  if (!block) return null;
+  return [at.which === 'header' ? block.header : block.stats];
+}
+
 export function writeDoorArtSection(
   doorDir: string,
   fileName: string,
@@ -1261,8 +1323,12 @@ export function writeDoorArtSection(
   // Scoped like the read and like a settings PUT: a request in one door's
   // name cannot rewrite the other door's logo just by naming its file.
   const manifest = readArtManifest(doorDir, command);
-  const entry = manifest.artSections.find(
-    (a) => a.file === fileName && a.section.toLowerCase() === section.toLowerCase()
+  const discovered = parseQuickNewSectionName(section);
+  const entry = manifest.artSections.find((a) =>
+    a.file === fileName &&
+    (discovered
+      ? a.format === 'quicknew'
+      : (a.section ?? '').toLowerCase() === section.toLowerCase())
   );
   if (!entry) throw new Error(`No art section ${section} in ${fileName} — the manifest must declare it`);
   const text = Buffer.from(contentBase64, 'base64').toString('latin1');
@@ -1277,15 +1343,27 @@ export function writeDoorArtSection(
     }
   }
   const full = path.join(doorDir, entry.file);
-  const file = loadArtFile(doorDir, entry.file);
-  if (!setSectionBody(file, entry.section, lines)) {
-    throw new Error(`${entry.file} has no [${entry.section}] section`);
-  }
   const temp = `${full}.tmp`;
-  fs.writeFileSync(temp, Buffer.from(serializeEmpireFile(file), 'latin1'));
-  fs.renameSync(temp, full);
-  return readDoorArtSections(doorDir).find(
-    (a) => a.file === entry.file && a.section.toLowerCase() === entry.section.toLowerCase()
+
+  if (discovered) {
+    // Line-for-line, so the preamble's form feed and colour prefixes - which
+    // nothing here understands - survive the sysop editing a heading.
+    const updated = replaceQuickNewTemplate(
+      quickNewText(doorDir, entry.file), discovered.index, discovered.which, lines[0] ?? ''
+    );
+    fs.writeFileSync(temp, Buffer.from(updated, 'latin1'));
+    fs.renameSync(temp, full);
+  } else {
+    const file = loadArtFile(doorDir, entry.file);
+    if (!setSectionBody(file, entry.section!, lines)) {
+      throw new Error(`${entry.file} has no [${entry.section}] section`);
+    }
+    fs.writeFileSync(temp, Buffer.from(serializeEmpireFile(file), 'latin1'));
+    fs.renameSync(temp, full);
+  }
+
+  return readDoorArtSections(doorDir, command).find(
+    (a) => a.file === entry.file && a.section.toLowerCase() === section.toLowerCase()
   )!;
 }
 
@@ -1298,7 +1376,11 @@ export function writeDoorArtSection(
 function artEntryFor(doorDir: string, command: string, fileName: string, section: string) {
   const manifest = readArtManifest(doorDir, command);
   const entry = manifest.artSections.find(
-    (a) => a.file === fileName && a.section.toLowerCase() === section.toLowerCase(),
+    (a) => a.file === fileName &&
+      ((a.section ?? '').toLowerCase() === section.toLowerCase() ||
+       // A discovered section names no entry of its own; the manifest entry
+       // that produced it is the one for the whole file.
+       (a.format === 'quicknew' && parseQuickNewSectionName(section) !== null)),
   );
   if (!entry) throw new Error(`No art section ${section} in ${fileName} - the manifest must declare it`);
   return entry;
@@ -1321,18 +1403,18 @@ export function readDoorArtVariant(
   alphabet: ArtAlphabet,
 ): DoorArtContent {
   const entry = artEntryFor(doorDir, command, fileName, section);
-  const lines = readVariant(artRoot, command, entry.section, alphabet) ?? [];
+  const lines = readVariant(artRoot, command, section, alphabet) ?? [];
   return {
     file: entry.file,
-    section: entry.section,
+    section,
     label: entry.label,
     content: Buffer.from(lines.join('\n'), 'latin1').toString('base64'),
     lines: lines.length,
     maxLines: entry.maxLines,
     maxLineLength: VARIANT_COLUMNS,
     variants: {
-      c64: readVariant(artRoot, command, entry.section, 'c64') !== null,
-      ttx: readVariant(artRoot, command, entry.section, 'ttx') !== null,
+      c64: readVariant(artRoot, command, section, 'c64') !== null,
+      ttx: readVariant(artRoot, command, section, 'ttx') !== null,
     },
   };
 }
@@ -1354,6 +1436,6 @@ export function writeDoorArtVariant(
   if (lines.length > entry.maxLines) {
     throw new Error(`${entry.label}: ${lines.length} lines, at most ${entry.maxLines}`);
   }
-  writeVariant(artRoot, command, entry.section, alphabet, lines);
+  writeVariant(artRoot, command, section, alphabet, lines);
   return readDoorArtVariant(doorDir, artRoot, command, fileName, section, alphabet);
 }

@@ -15,6 +15,7 @@
  * all as far out of reach as they were when this was sysop-only.
  */
 import { Router, Request, Response } from 'express';
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { config } from '../config';
@@ -91,12 +92,14 @@ console.error('Door art API error:', error);
   router.get('/', async (req: Request, res: Response) => {
     try {
       const out: Array<Record<string, unknown>> = [];
+      const seen = new Set<string>();
       for (const door of doors()) {
         try {
           const doorDir = doorDirectoryFor(config.get('dataDir'), door);
           if (!doorDir) continue;
           const sections = listDoorArtSections(doorDir, door.command);
           if (sections.length === 0) continue;
+          seen.add(door.command.toUpperCase());
           out.push({
             command: door.command,
             name: door.name || door.command,
@@ -106,6 +109,46 @@ console.error('Door art API error:', error);
           continue; // no manifest or no art: not an error, just absent
         }
       }
+
+      /*
+       * AND THE DOORS NOBODY TYPES.
+       *
+       * `getDoors()` is the list of registered COMMANDS, and art is not a
+       * command's property - it is a door directory's. QuickNew is a logoff
+       * batch utility with no `Commands/BBSCmd` icon at all, and its config
+       * holds the templates that ARE the new-files screen; without this it
+       * declared its art, the manifest was valid, the service listed it, and
+       * the Studio showed nothing, because the enumeration never reached it.
+       *
+       * So the registered doors are joined by any door DIRECTORY whose
+       * manifest declares art. Registered ones win - they carry the display
+       * name - and a directory with no manifest, or no art in it, is skipped
+       * exactly as before.
+       */
+      try {
+        const doorsRoot = path.join(config.get('dataDir'), 'Doors');
+        for (const entry of fs.readdirSync(doorsRoot, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          const doorDir = path.join(doorsRoot, entry.name);
+          if (!fs.existsSync(path.join(doorDir, 'door.settings.json'))) continue;
+          try {
+            const manifest = JSON.parse(
+              fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8')
+            ) as { command?: string };
+            const command = (manifest.command || entry.name).toUpperCase();
+            if (seen.has(command)) continue;
+            const sections = listDoorArtSections(doorDir, command);
+            if (sections.length === 0) continue;
+            seen.add(command);
+            out.push({ command, name: entry.name, sections });
+          } catch {
+            continue; // an unreadable manifest is not an error here either
+          }
+        }
+      } catch {
+        // no Doors directory: nothing to add
+      }
+
       sendResponse(res, out);
     } catch (error) {
       handleError(res, error);
