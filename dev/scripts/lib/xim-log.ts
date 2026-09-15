@@ -6,12 +6,15 @@
  * a log is appended to by a running board and the last line is routinely a
  * half-written one.
  *
- * DUPLICATION, STATED RATHER THAN HIDDEN: `xim-analyzer.ts` carries its own
- * private `loadMessages` over the same format. It is the older of the two and
- * it works, so it is not being rewritten from under a tool people rely on -
- * but there are now two readers of one format, and the next change to that
- * format has to touch both. The migration is: make XIMAnalyzer.loadMessages
- * call `loadXimLog` and delete its copy.
+ * THE ONLY READER (migration done 2026-09-15). `xim-analyzer.ts` used to
+ * carry a second private `loadMessages` over this same format; its own
+ * header said the migration was to point the analyzer here and delete the
+ * copy, and that is done - `XIMAnalyzer.loadMessages` is one line calling
+ * `loadXimLog` now. So the defaults below are the ANALYZER's defaults too,
+ * and a change to the format has one place to be made.
+ * Proof: `dev/scripts/lib/xim-one-reader.test.ts` drives the analyzer's
+ * public `analyze()` over a fixture carrying a SYSTEM line, a torn final
+ * line and two doors.
  */
 
 import * as fs from 'fs';

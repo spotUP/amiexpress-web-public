@@ -14,9 +14,8 @@
  *   npm run xim:analyze -- --file logs/xim-debug.json --verbose
  */
 
-import * as fs from 'fs';
-import * as readline from 'readline';
 import { XIMIssueKnowledgeBase, IssueRecord } from './xim-issue-knowledge-base';
+import { loadXimLog } from './lib/xim-log';
 
 export interface XIMLogEntry {
   timestamp: string;
@@ -532,37 +531,18 @@ export class XIMAnalyzer {
     return issues;
   }
 
+  /**
+   * ONE reader for this format.
+   *
+   * This used to be a second private copy of the JSONL walk that
+   * `lib/xim-log.ts` already owned - same skip-SYSTEM rule, same door
+   * filter, same swallow of a torn final line - so the next change to the
+   * format would have had to find both, and the header of xim-log.ts said
+   * so in as many words. `loadXimLog`'s defaults ARE these defaults:
+   * SYSTEM out unless asked for, a missing file read as no messages.
+   */
   private async loadMessages(logFile: string, doorFilter?: string): Promise<XIMLogEntry[]> {
-    if (!fs.existsSync(logFile)) {
-      return [];
-    }
-
-    const messages: XIMLogEntry[] = [];
-    const fileStream = fs.createReadStream(logFile);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      if (line.trim()) {
-        try {
-          const entry: XIMLogEntry = JSON.parse(line);
-
-          // Skip system messages
-          if (entry.door === 'SYSTEM') continue;
-
-          // Apply filter
-          if (doorFilter && entry.door !== doorFilter) continue;
-
-          messages.push(entry);
-        } catch (err) {
-          // Ignore invalid JSON
-        }
-      }
-    }
-
-    return messages;
+    return loadXimLog(logFile, doorFilter ? { door: doorFilter } : {});
   }
 }
 
