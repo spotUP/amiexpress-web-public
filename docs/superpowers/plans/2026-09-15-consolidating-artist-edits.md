@@ -18,6 +18,8 @@
   - Worst drift: `bull20.txt` 6 versions, `menu.txt` 4, `guestlogon.txt` 2 across 41 copies.
 - An artist must never be shown a screen that is only directives, and never be asked about MCI. The sysop keeps both (his words: "the sysop would be interested in the mci codes etc but artist dont even need to see them").
 - Never silently reconcile drift. `logoff.txt`'s three versions differ only in MCI - `~2SR_`, `~3SR_`, and a different assign spelling - and that difference decides WHICH SCREEN A CALLER OF A GIVEN SECURITY LEVEL GETS. `bull.txt`'s versions differ in which bulletins a node includes. Measured, both, on live.
+- SECURITY-LEVEL VARIANTS ARE THE SAME SCREEN TO AN ARTIST. The sysop, 2026-09-15: "if the security level differs doesn't matter to the artists, the board should take care of that, the artist should only edit one screen." So `Logon.txt` and `Logon100.txt` are one card, and the fan-out writes the level variants the same way it writes the per-node copies.
+- BUT THE GROUPING KEY IS NOT A REGEX ON THE FILENAME. `variantOf` (screen-index.service.ts:1017) only reads a level when it already knows the base screen name, and it refuses a level that is not a multiple of five because express.e only looks for those - which is why `BULL3.TXT` is a different screen and not level 3. A naive "strip the trailing digits" would fold `bull20.txt` (bulletin twenty) into `bull.txt` (the bulletin menu): both parse, 20 is a multiple of five, and the result is the artist editing the wrong drawing. Group by the screen the INDEX says a file serves, never by the basename.
 - The gallery is a vite bundle: no `fs`, no `path`, nothing that reaches the filesystem.
 - Admin tests run with the project's own vitest: `./node_modules/.bin/vitest run` from `web/config-app`.
 
@@ -75,6 +77,28 @@ it('puts the version most scopes read in front', () => {
   expect(card.otherVersions).toHaveLength(1);
 });
 
+it('folds a security-level variant into the same card', () => {
+  // The artist draws "the logon screen" once; which level a caller has is the
+  // board's business (sysop, 2026-09-15).
+  const index = { files: {
+    'Node0/Logon.txt': { ...file('Node0/Logon.txt', 'aaa', 40), readBy: [{ scope: 'Node0', via: 'resolved', serves: 'Logon' }] },
+    'Node0/Logon100.txt': { ...file('Node0/Logon100.txt', 'bbb', 1), readBy: [{ scope: 'Node0', via: 'resolved', serves: 'Logon', securityLevel: 100 }] },
+  } };
+
+  expect(buildGalleryItems(index as never, { showGenerated: false })).toHaveLength(1);
+});
+
+it('does NOT fold bulletin twenty into the bulletin menu', () => {
+  // `bull20` parses as `bull` at level 20 - 20 is a multiple of five - and it
+  // is nothing of the kind. The index knows; a basename regex does not.
+  const index = { files: {
+    'Screens/bull.txt': { ...file('Screens/bull.txt', 'aaa', 4), readBy: [{ scope: 'board', via: 'resolved', serves: 'BULL' }] },
+    'Conf3/bull20.txt': { ...file('Conf3/bull20.txt', 'bbb', 1), readBy: [{ scope: 'Conf3', via: 'resolved', serves: 'BULL20' }] },
+  } };
+
+  expect(buildGalleryItems(index as never, { showGenerated: false })).toHaveLength(2);
+});
+
 it('leaves two DIFFERENT screens as two cards', () => {
   const index = { files: {
     'Screens/logoff.txt': file('Screens/logoff.txt', 'aaa', 4),
@@ -127,7 +151,16 @@ In `buildGalleryItems`, after the existing `groups` array is built, fold the gro
   });
 ```
 
-`screenNameOf` is the file's basename lower-cased, and `itemFor` is whatever the function already builds per group - extract it rather than duplicating it.
+`itemFor` is whatever the function already builds per group - extract it rather than duplicating it.
+
+`screenNameOf` is NOT the basename. It is the screen the index says this file
+serves - `file.readBy?.[0]?.serves`, or the catalogue name the index matched -
+falling back to the basename only for a file the index could not place. The
+difference is not cosmetic: `Logon.txt` and `Logon100.txt` must fold together
+(the sysop's rule - a level variant is the same screen to an artist), while
+`bull20.txt` must NOT fold into `bull.txt`, and a basename regex gets the
+second one wrong because 20 is a multiple of five and `variantOf` would read it
+as a level. The index has already decided both; this reads its answer.
 
 - [ ] **Step 4: Run the tests**
 
