@@ -369,6 +369,56 @@ class VandtiaGameModule {
     render(painter, table) {
         painter.renderVandtiaGameView(table);
     }
+    /**
+     * The keys, for the activity panel - which is painted by one writer that
+     * runs after `render()`, so a legend written into the widget directly does
+     * not survive the frame (lib/games/types.ts).
+     */
+    activityLines(table) {
+        const loaded = this.load(table);
+        const meId = this.host.currentProfile?.userId;
+        if (!loaded || !meId)
+            return [];
+        const engine = loaded.engine;
+        const state = engine.state;
+        const me = engine.playerById(meId);
+        if (!me)
+            return ['Observing.'];
+        const label = (card) => `${card.rank}${card.suit}`;
+        if (state.phase === 'swap') {
+            const picked = this.selectedHandIndex;
+            return [
+                me.ready
+                    ? '{cyan-fg}Ready.{/} Waiting for the others...'
+                    : '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} when ready',
+                `Hand ${me.hand.map((card, i) => (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
+                    + ':' + label(card)).join('  ')}`,
+                `Tbl  ${me.faceUp.map((card, i) => `{green-fg}${i + 4}{/}:` + label(card)).join('  ')}`,
+            ];
+        }
+        if (state.phase === 'over')
+            return [];
+        if (engine.currentPlayerId() !== meId)
+            return ['Waiting for the other players...'];
+        const source = engine.sourceFor(meId);
+        const legal = engine.legalPlays(meId);
+        const keys = legal.map((i) => i === this.selectedCardIndex ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`).join(' ');
+        const top = engine.topOfPile();
+        if (source === 'faceDown') {
+            return [
+                `{cyan-fg}Blind.{/} Pick ${keys} and {cyan-fg}X{/} turns it over`,
+                top ? `On the pile: ${label(top)}` : 'The pile is empty - anything goes.',
+            ];
+        }
+        const where = source === 'faceUp' ? ' (your table cards)' : '';
+        if (legal.length === 0) {
+            return [`{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile`];
+        }
+        return [
+            `Play ${keys}  {cyan-fg}X{/} plays it${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`,
+            top ? `On the pile: ${label(top)}${where}` : `Lead anything${where}`,
+        ];
+    }
     updateActionButtons(table) {
         const loaded = this.load(table);
         const me = this.host.currentProfile?.userId;

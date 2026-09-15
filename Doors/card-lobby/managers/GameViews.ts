@@ -11,10 +11,8 @@ import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
-import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule, type VandtiaCard } from '../lib/games';
+import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type VandtiaGameModule } from '../lib/games';
 
-/** A card as the activity panel names it: "9S", "10H". */
-const cardLabel = (card: VandtiaCard): string => `${card.rank}${card.suit}`;
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
 
@@ -54,6 +52,15 @@ export interface GameViewHost {
   gameModuleFor(table: LobbyTable): TableGameModule | undefined;
   readonly skitgubbe: SkitgubbeGameModule;
   readonly vandtia: VandtiaGameModule;
+  readonly cardButtons: {
+    render(cards: unknown[], options: {
+      selected: number | null;
+      playable: number[];
+      faceDown?: boolean;
+      onPick(index: number): void;
+    }): boolean;
+    clear(): void;
+  };
 }
 
 export class GameViews {
@@ -399,6 +406,8 @@ export class GameViews {
     // the hand panel shows whatever this caller is playing from.
     const showing = swapping ? (me?.hand ?? []) : loaded.engine.cardsInPlay(meId);
     const top = loaded.engine.topOfPile();
+    const blind = !swapping && loaded.engine.sourceFor(meId) === 'faceDown';
+
     this.host.renderBoardAndHand(
       (top ? [top] : []) as any,
       showing as any,
@@ -406,6 +415,28 @@ export class GameViews {
       'auto',
       true,
     );
+
+    /*
+     * ...and then the same cards as WIDGETS, so they can be clicked and
+     * tabbed to. It falls back to the text the line above drew when the
+     * panel is too small for full-size cards, which is why both run.
+     */
+    this.host.cardButtons.render(showing as any, {
+      selected: swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
+      playable: swapping
+        ? (me?.hand ?? []).map((_, index) => index)
+        : loaded.engine.legalPlays(meId),
+      faceDown: blind,
+      onPick: (index: number) => {
+        this.host.vandtia.selectCard(index);
+        // A click is the whole move at a table: pick it and play it. During
+        // the swap it only picks, because the second half of a swap is the
+        // table card you trade it with.
+        if (!swapping && loaded.engine.currentPlayerId() === meId) {
+          this.host.vandtia.primaryAction();
+        }
+      },
+    });
 
     /*
      * TIGHT. These panels are seven rows on an 80x25 board, and the first
@@ -429,44 +460,11 @@ export class GameViews {
     this.host.playersContent.setContent(lines.join('\n'));
 
     /*
-     * WHAT TO PRESS, FIRST. The activity panel is two or three rows, so the
-     * instruction goes at the top and the running commentary underneath it -
-     * the other way round and the caller reads "Swap, then play." and has no
-     * idea which key does that.
+     * The activity panel is NOT written here. `updateActivityPanel` owns it
+     * and runs after this, so anything set on the widget from a renderer is
+     * wiped inside the same frame - which is what happened to this game's
+     * key legend twice (2026-09-15). The legend comes from
+     * `VandtiaGameModule.activityLines`, which that painter asks for.
      */
-    const activity: string[] = [];
-    if (swapping && me) {
-      const picked = this.host.vandtia.selectedHandIndex;
-      if (me.ready) {
-        activity.push('{cyan-fg}Ready.{/} Waiting for the others...');
-      } else {
-        activity.push('{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} ready');
-      }
-      activity.push(`Hand ${me.hand.map((card, i) =>
-        (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
-        + ':' + cardLabel(card)).join(' ')}`);
-      activity.push(`Tbl  ${me.faceUp.map((card, i) =>
-        `{green-fg}${i + 4}{/}:` + cardLabel(card)).join(' ')}`);
-    } else if (state.phase === 'playing' && me && onTurn === meId) {
-      const source = loaded.engine.sourceFor(meId);
-      const legal = loaded.engine.legalPlays(meId);
-      const selected = this.host.vandtia.selectedCardIndex;
-      const keys = legal.map((i) =>
-        i === selected ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`).join(' ');
-
-      if (source === 'faceDown') {
-        activity.push(`{cyan-fg}Blind.{/} Pick ${keys}, {cyan-fg}X{/} turns it`);
-      } else if (legal.length > 0) {
-        activity.push(`Play ${keys}  {cyan-fg}X{/} plays${state.pile.length > 0 ? '  {cyan-fg}C{/} takes pile' : ''}`);
-      } else {
-        activity.push('{yellow-fg}Nothing will go{/} - {cyan-fg}C{/} takes the pile');
-      }
-      if (source === 'faceUp') activity.push('{cyan-fg}Table cards now{/} - hand is empty');
-      activity.push(state.lastAction);
-    } else {
-      activity.push(state.lastAction);
-      if (state.phase !== 'over') activity.push('Waiting for the other players...');
-    }
-    this.host.activityContent.setContent(activity.filter((line) => line !== '').join('\n'));
   }
 }

@@ -21,6 +21,7 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './a-long-hand-is-still-playable.test',
   './vandtia-engine.test',
   './vandtia-table.test',
+  './a-card-is-a-thing-you-can-click.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

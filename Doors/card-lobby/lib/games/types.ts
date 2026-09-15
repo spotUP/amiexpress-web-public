@@ -95,4 +95,17 @@ export interface TableGameModule {
 
   /** Label the four action buttons for this game. */
   updateActionButtons?(table: LobbyTable): void;
+
+  /**
+   * What the caller should be told to press right now, for the activity
+   * panel.
+   *
+   * ONE writer owns that panel: `updateActivityPanel` paints hints and then
+   * the event log, and it runs after `render()` and again on every
+   * `pushEvent`. A game that writes its own legend straight into the widget
+   * has it wiped within the same frame - which is exactly what happened to
+   * Skitgubbe's "1-3 hand 4-6 table X ready" on the sysop's first two games
+   * (2026-09-15). So the game hands its lines to the painter instead.
+   */
+  activityLines?(table: LobbyTable): string[];
 }

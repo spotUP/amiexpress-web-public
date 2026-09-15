@@ -20,6 +20,7 @@ const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
 const KeyBindings_1 = require("./managers/KeyBindings");
+const CardButtons_1 = require("./managers/CardButtons");
 const games_1 = require("./lib/games");
 const lib_1 = require("./lib");
 const activity_hints_1 = require("./lib/activity-hints");
@@ -275,6 +276,7 @@ class CardLobbyApp {
          * brings its own. Nothing else in this file asks which game a table is
          * playing any more.
          */
+        this.cardButtons = new CardButtons_1.CardButtons(this.uiManager);
         this.skitgubbe = new games_1.SkitgubbeGameModule(this);
         this.vandtia = new games_1.VandtiaGameModule(this);
         this.games = new games_1.GameRegistry([
@@ -806,6 +808,9 @@ class CardLobbyApp {
         if (!table && this.currentProfile?.currentTableId) {
             table = this.findTableById(this.currentProfile.currentTableId) ?? null;
         }
+        // What the game itself wants said, above the generic hints. It is the
+        // only way a game's legend survives: this method paints the panel last.
+        const gameLines = table ? this.games.for(table)?.activityLines?.(table) ?? [] : [];
         const hintLines = (0, activity_hints_1.buildActivityHints)({
             viewMode: this.viewMode,
             table: table,
@@ -817,7 +822,11 @@ class CardLobbyApp {
         const eventLines = this.lobby.events.length > 0
             ? [...this.lobby.events].reverse().map((event) => event.message)
             : ['No activity yet.'];
-        const lines = hintLines.length > 0 ? [...hintLines, '', ...eventLines] : eventLines;
+        const lines = [
+            ...gameLines,
+            ...(hintLines.length > 0 ? [...hintLines, ''] : []),
+            ...eventLines,
+        ];
         // One painter owns the panel: it wraps to the panel's own width and holds
         // the reader's scroll position (UIManager.paintActivity).
         this.uiManager.setActivityBody(lines);
@@ -1197,6 +1206,9 @@ class CardLobbyApp {
     cycleFocus(direction) {
         const focusOrder = this.viewMode === 'table'
             ? [
+                // The cards first: at a table they are what a caller wants to reach,
+                // and Tab used to walk two text panels and stop.
+                ...this.cardButtons.focusables(),
                 this.playersContent,
                 this.activityContent,
                 this.actionButtons.fold,

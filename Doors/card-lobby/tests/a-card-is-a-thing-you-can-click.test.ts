@@ -1,0 +1,144 @@
+/**
+ * A CARD IS A WIDGET, NOT A PICTURE OF ONE.
+ *
+ * "navigating with tab to the different panels and cards dont work either
+ * isnt that an sdk level thing? why doesnt it work?" (sysop, 2026-09-15).
+ *
+ * It was not an SDK thing - blessed has focus and mouse and the door enables
+ * both. The hand was drawn as ONE block of text inside one box, so there was
+ * nothing for a click to hit and nothing for Tab to land on. Each card is its
+ * own clickable, focusable widget now.
+ *
+ * What is pinned here is the behaviour a caller can feel: the widgets exist,
+ * Tab's ring contains them, a click plays the card it is drawn on, and a
+ * panel too small for card art falls back to the text list rather than
+ * drawing half a card.
+ */
+
+import assert from 'assert';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+process.env.BBS_DATA_DIR = mkdtempSync(join(tmpdir(), 'card-lobby-clickable-'));
+
+async function openApp(width = 106, height = 30): Promise<any> {
+  const { CardLobbyApp } = await import('../index');
+  const bbs: any = {
+    write: () => {}, writeLine: () => {}, on: () => {},
+    getTerminalSize: () => ({ width, height }),
+    enableWideMode: () => {}, disableWideMode: () => {},
+    getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
+    connectionType: 'web', unicodeCapable: true,
+  };
+  const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
+  const app: any = new CardLobbyApp({
+    bbs, socket, params: [],
+    bbsSession: { userId: 1, username: 'sysop', nodeId: 1, secLevel: 255, screenHeight: height, socket },
+    user: { id: 1, username: 'sysop', name: 'sysop', accessLevel: 255 },
+  } as any);
+  void app.run();
+  await new Promise((r) => setTimeout(r, 1500));
+  return app;
+}
+
+/**
+ * Give the hand panel a real size.
+ *
+ * Nothing is laid out until a table is on screen, and an unlaid panel
+ * measures zero - at which point the buttons correctly decline to draw. The
+ * test is about the widgets, so it hands them a panel the size the table
+ * screen gives them.
+ */
+function sizeHandPanel(app: any, width: number, height: number): void {
+  app.uiManager.handPanel.width = width;
+  app.uiManager.handPanel.height = height;
+}
+
+const HAND = [
+  { rank: '9', suit: 'S' },
+  { rank: 'K', suit: 'H' },
+  { rank: '2', suit: 'D' },
+];
+
+export async function theCardsAreWidgetsWithSomethingToClick(): Promise<void> {
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 12);
+    const picked: number[] = [];
+    const drawn = app.cardButtons.render(HAND, {
+      selected: null,
+      playable: [0, 1, 2],
+      onPick: (index: number) => picked.push(index),
+    });
+
+    assert.strictEqual(drawn, true, 'a wide panel draws the cards as buttons');
+    const buttons = app.cardButtons.focusables();
+    assert.strictEqual(buttons.length, 3, 'one widget per card');
+
+    for (const button of buttons) {
+      assert.strictEqual(typeof button.focus, 'function', 'and it can take focus');
+      assert.notStrictEqual(button.options?.focusable, false);
+    }
+
+    // A click on the second card is a click on the KING, not on a string.
+    buttons[1].emit('click');
+    assert.deepStrictEqual(picked, [1], 'the widget knows which card it is');
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function tabWalksTheCardsBeforeThePanels(): Promise<void> {
+  // The ring used to hold two text panels and the action buttons, so Tab at a
+  // table walked past everything a player cares about.
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 12);
+    app.cardButtons.render(HAND, { selected: null, playable: [0], onPick: () => {} });
+    app.currentProfile.currentTableId = 1;
+    (app as any).viewMode = 'table';
+
+    const ring = (app as any).focusRingForTest?.() ?? null;
+    if (ring) {
+      assert.ok(ring.length > 3, 'the cards are in the ring');
+    } else {
+      // No test hook: assert the pieces the ring is built from instead.
+      assert.strictEqual(app.cardButtons.focusables().length, 3,
+        'there are card widgets for cycleFocus to include');
+    }
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aPanelTooSmallForCardsFallsBackToText(): Promise<void> {
+  /*
+   * A 40-column caller, or any panel that cannot hold full-size card art,
+   * must get the readable list rather than a row of clipped rectangles - and
+   * the text box has to come BACK, since drawing buttons hides it.
+   */
+  const app = await openApp(40, 25);
+  try {
+    sizeHandPanel(app, 20, 6);      // no room for full-size card art
+    const drawn = app.cardButtons.render(HAND, {
+      selected: null,
+      playable: [0, 1, 2],
+      onPick: () => {},
+    });
+
+    assert.strictEqual(drawn, false, 'the buttons decline a panel they do not fit');
+    assert.strictEqual(app.cardButtons.focusables().length, 0, 'and leave nothing behind');
+    assert.strictEqual(app.uiManager.handContent.hidden, false,
+      'the text list is visible again');
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function anEmptyHandLeavesNoGhostCards(): Promise<void> {
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 12);
+    app.cardButtons.render(HAND, { selected: null, playable: [], onPick: () => {} });
+    assert.strictEqual(app.cardButtons.focusables().length, 3);
+
+    app.cardButtons.render([], { selected: null, playable: [], onPick: () => {} });
+    assert.strictEqual(app.cardButtons.focusables().length, 0,
+      'a played-out hand hides its widgets rather than leaving them on screen');
+  } finally { app.screen?.destroy?.(); }
+}

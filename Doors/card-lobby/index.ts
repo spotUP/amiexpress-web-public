@@ -55,6 +55,7 @@ import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
 import { UnoGameEngine, type UnoGameSnapshot } from './lib/uno-engine';
 import { attachKeyBindings } from './managers/KeyBindings';
+import { CardButtons } from './managers/CardButtons';
 import {
   GameRegistry,
   HoldemGameModule,
@@ -169,6 +170,11 @@ export class CardLobbyApp {
   public vandtia!: VandtiaGameModule;
   /** The SDK's AI, shared by every game's bots. */
   public cardGameAI: CardGameAI | null = null;
+  /**
+   * The hand, as widgets rather than a block of text - so the mouse has
+   * something to click and Tab has somewhere to land (managers/CardButtons.ts).
+   */
+  public cardButtons!: CardButtons;
   private terminalMode!: TerminalModeSwitch;
   /** The board's theme, resolved once: tags, and the palette behind them. */
   private styles!: ThemeStyles;
@@ -418,6 +424,7 @@ export class CardLobbyApp {
      * brings its own. Nothing else in this file asks which game a table is
      * playing any more.
      */
+    this.cardButtons = new CardButtons(this.uiManager);
     this.skitgubbe = new SkitgubbeGameModule(this);
     this.vandtia = new VandtiaGameModule(this);
     this.games = new GameRegistry([
@@ -1049,6 +1056,10 @@ export class CardLobbyApp {
       table = this.findTableById(this.currentProfile.currentTableId) ?? null;
     }
 
+    // What the game itself wants said, above the generic hints. It is the
+    // only way a game's legend survives: this method paints the panel last.
+    const gameLines = table ? this.games.for(table)?.activityLines?.(table) ?? [] : [];
+
     const hintLines = buildActivityHints({
       viewMode: this.viewMode,
       table: table as any,
@@ -1061,7 +1072,11 @@ export class CardLobbyApp {
     const eventLines = this.lobby.events.length > 0
       ? [...this.lobby.events].reverse().map((event) => event.message)
       : ['No activity yet.'];
-    const lines = hintLines.length > 0 ? [...hintLines, '', ...eventLines] : eventLines;
+    const lines = [
+      ...gameLines,
+      ...(hintLines.length > 0 ? [...hintLines, ''] : []),
+      ...eventLines,
+    ];
 
     // One painter owns the panel: it wraps to the panel's own width and holds
     // the reader's scroll position (UIManager.paintActivity).
@@ -1470,6 +1485,9 @@ export class CardLobbyApp {
   public cycleFocus(direction: 1 | -1): void {
     const focusOrder: Array<any> = this.viewMode === 'table'
       ? [
+        // The cards first: at a table they are what a caller wants to reach,
+        // and Tab used to walk two text panels and stop.
+        ...this.cardButtons.focusables(),
         this.playersContent,
         this.activityContent,
         this.actionButtons.fold,

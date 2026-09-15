@@ -34,7 +34,7 @@ export interface LayoutMetrics {
 }
 
 export class UIManager {
-  private screen: Screen;
+  public screen: Screen;
   private desktop: Box;
   /** Varies the rail between nodes; two people should not watch one bar. */
   private nodeId: number;
