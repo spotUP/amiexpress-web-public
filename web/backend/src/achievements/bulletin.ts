@@ -25,6 +25,7 @@ import { config } from '../config';
 import { doorAchievementsApi } from './door-api';
 import type { DoorAchievementsApi } from './door-api';
 import type { LeaderboardRow } from './contract';
+import { isValidSlug } from '../screens/theme-registry';
 
 /** The screen name the login flow asks for; the file is `<name>.txt`. */
 export const ACHIEVE_BULLETIN_SCREEN = 'AchieveTop';
@@ -210,6 +211,22 @@ export function themedBulletins(baseDir: string): Array<{ slug: string; file: st
   }
   const found: Array<{ slug: string; file: string; header: string; tailer: string }> = [];
   for (const slug of slugs) {
+    /*
+     * A RETIRED THEME IS NOT A THEME.
+     *
+     * Deleting a theme in the admin MOVES its art aside rather than erasing
+     * it - `Themes/<slug>.removed-YYYYMMDD` (api/theme-routes.ts:414). This
+     * walked every directory under `Themes/` and wrote a fresh bulletin into
+     * any that had an `AchieveTop.txt`, so a theme the sysop had retired kept
+     * receiving regenerated leaderboards on every achievements cycle. Seen on
+     * the live board 2026-09-15: `Themes/ansiguy.removed-20260915/Board/
+     * AchieveTop.txt`, rewritten at 13:52, minutes after the retirement.
+     *
+     * `isValidSlug` is the rule the rest of the theme code already uses, and
+     * the retired name fails it on the dot - so this needs no new predicate,
+     * and it also skips any other stray directory that is not a theme.
+     */
+    if (!isValidSlug(slug)) continue;
     const dir = path.join(themesDir, slug, 'Board');
     const copy = path.join(dir, `${ACHIEVE_BULLETIN_SCREEN}.txt`);
     try {
