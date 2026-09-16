@@ -1588,3 +1588,57 @@ export function invalidateScreenFacts(): void {
   factsCache.clear();
   cachedByTheme.clear();
 }
+
+/**
+ * Build the index once, at boot, while the board is idle.
+ *
+ * `buildScreenIndex` is SYNCHRONOUS and costs seconds on a real board - 70+
+ * node directories, and the level walk asks for thousands of names. Left
+ * lazy, that cost lands on whoever asks for it first, which is the admin's
+ * Screens page; and because the build holds the event loop for its whole
+ * duration, a caller logging in at that moment waits for it too. Nothing in
+ * the build is per-caller, so paying it while no one is on costs nobody
+ * anything.
+ *
+ * Two deliberate delays, both about not making it worse than the lazy build:
+ *
+ * - The first attempt waits, rather than running inside the `listen`
+ *   callback, so the container answers `/health` before the loop goes away
+ *   for the length of a build. The deploy's boot smoke curls exactly that.
+ * - If a caller IS on the board, the warm defers instead of stalling them -
+ *   it is an optimisation, and an optimisation that freezes a live session
+ *   has lost its own argument. It simply tries again later.
+ *
+ * A failure is never fatal: an index that will not build is the next reader's
+ * problem to report, and the board serves screens either way.
+ */
+export function warmScreenIndex(
+  baseDir: string,
+  opts: { isBusy?: () => boolean; delayMs?: number; retryMs?: number } = {},
+): void {
+  const delayMs = opts.delayMs ?? 15_000;
+  const retryMs = opts.retryMs ?? 15_000;
+  const isBusy = opts.isBusy ?? (() => false);
+
+  const later = (fn: () => void, ms: number) => {
+    const timer = setTimeout(fn, ms);
+    // Never hold the process open for a warm-up.
+    if (typeof (timer as any).unref === 'function') (timer as any).unref();
+  };
+
+  const attempt = () => {
+    if (isBusy()) {
+      later(attempt, retryMs);
+      return;
+    }
+    const started = Date.now();
+    try {
+      getScreenIndex(baseDir);
+      console.log(`[SCREENS] index warmed in ${Date.now() - started}ms - the first reader will not wait for it`);
+    } catch (error) {
+      console.warn(`[SCREENS] index warm skipped: ${(error as Error).message}`);
+    }
+  };
+
+  later(attempt, delayMs);
+}

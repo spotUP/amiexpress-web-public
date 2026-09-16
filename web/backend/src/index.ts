@@ -92,6 +92,7 @@ import {
   socketToNodeId,
 } from "./server/session-manager";
 import { app } from "./server/app";
+import { warmScreenIndex } from "./screens/screen-index.service";
 import { TelnetServer, TelnetConnection } from "./server/telnet-server";
 import {
   attachWSTerminalServer,
@@ -1714,6 +1715,10 @@ console.log('[SETUP] SKIP_SERVER_START=1 - handlers wired, no listeners bound');
     server.listen(port, host, () => {
 console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
 console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
+      // Pay the index build now, while the board is empty, instead of making
+      // the admin's first Screens click (and any caller logging in during it)
+      // wait for it. Defers itself while anyone is connected.
+      warmScreenIndex(config.get('dataDir'), { isBusy: () => sessions.size > 0 });
     });
 
     // Raw WebSocket terminal endpoint at /ws/terminal — same pipeline
