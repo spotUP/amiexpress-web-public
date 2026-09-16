@@ -119,3 +119,63 @@ export async function everyGameThatPicksACardOffersAWayOut(): Promise<void> {
     }
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function aTableWaitingOnABotPlaysItself(): Promise<void> {
+  /*
+   * "skitgubbe says not my turn and the game doesnt advance" (sysop,
+   * 2026-09-16). The bots are pumped by `advance`, and the only caller was
+   * the tail of the player's own successful play - so any way of arriving at
+   * a bot's turn WITHOUT having just played (re-entering the door, a reload,
+   * a refused play, a rule that hands the turn round differently) left the
+   * table sitting on a bot for ever, answering every keypress with "Not your
+   * turn."
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 220, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 2, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 220;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();                     // ready
+    await new Promise((r) => setTimeout(r, 600));
+
+    // Put the turn on the bot, the way a reload or a re-entry leaves it,
+    // with nobody having just played.
+    const loaded = app.vandtia.load(app.findTableById(220));
+    const engine = loaded.engine;
+    const botIndex = engine.state.players.findIndex((p: any) => p.isBot);
+    if (botIndex < 0) return;                        // no bots, nothing to prove
+    engine.state.currentIndex = botIndex;
+    app.findTableById(220).hand.snapshot = engine.serialize();
+    await app.persistState();
+
+    const before = app.vandtia.load(app.findTableById(220)).engine.currentPlayerId();
+    assert.notStrictEqual(before, me, 'the bot holds the turn');
+
+    app.notices.length = 0;
+    await app.vandtia.primaryAction();               // the caller presses a key
+    await new Promise((r) => setTimeout(r, 500));
+
+    const after = app.vandtia.load(app.findTableById(220))?.engine;
+    const moved = !after || after.currentPlayerId() === me || after.state.phase !== 'playing';
+    assert.ok(moved,
+      `the table plays itself on rather than sitting there: turn=${after?.currentPlayerId()}`);
+    assert.ok(!app.notices.join(' ').includes('Not your turn'),
+      `and it does not just refuse: ${app.notices.join(' ')}`);
+  } finally { app.screen?.destroy?.(); }
+}

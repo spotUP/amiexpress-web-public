@@ -365,7 +365,26 @@ class VandtiaGameModule {
                 return;
             }
             if (loaded.engine.currentPlayerId() !== userId) {
-                this.host.pushNotice('Not your turn.');
+                /*
+                 * A BOT HOLDS THE TURN, SO PLAY IT - do not just say so.
+                 *
+                 * "skitgubbe says not my turn and the game doesnt advance" (sysop,
+                 * 2026-09-16). The bots are pumped by `advance`, and the only thing
+                 * that called it was the tail of the caller's own successful play. So
+                 * any way of arriving at a bot's turn WITHOUT having just played -
+                 * re-entering the door, a reload, a refresh, a play that was refused,
+                 * or a rule that hands the turn around differently than it used to -
+                 * left the table sitting on a bot for ever, answering every keypress
+                 * with "Not your turn."
+                 *
+                 * A table that is waiting on a bot is a table that should be moving.
+                 */
+                const onTurn = loaded.engine.playerById(loaded.engine.currentPlayerId() ?? '');
+                if (onTurn?.isBot) {
+                    await this.advance(fresh);
+                    return;
+                }
+                this.host.pushNotice(`Waiting for ${onTurn?.name ?? 'the next player'}.`);
                 return;
             }
             if (this.selectedCardIndex === null) {

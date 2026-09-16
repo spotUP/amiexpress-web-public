@@ -233,7 +233,15 @@ class SkitgubbeGameModule {
             if (!userId)
                 return;
             if (loaded.engine.currentPlayerId() !== userId) {
-                this.host.pushNotice('Not your turn.');
+                // A table waiting on a bot should be moving, not answering every
+                // keypress with "Not your turn." - see the vandtia module for the
+                // whole argument (sysop, 2026-09-16).
+                const onTurn = loaded.engine.playerById(loaded.engine.currentPlayerId() ?? '');
+                if (onTurn?.isBot) {
+                    await this.advance(fresh);
+                    return;
+                }
+                this.host.pushNotice(`Waiting for ${onTurn?.name ?? 'the next player'}.`);
                 return;
             }
             if (this.selectedCardIndex === null) {
