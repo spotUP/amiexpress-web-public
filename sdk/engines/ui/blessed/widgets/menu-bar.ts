@@ -4,6 +4,7 @@
  */
 
 import { Element } from '../core/element';
+import { snapToReadable } from '../core/contrast';
 import { activeTheme } from '../../theme/live.js';
 import { Box } from './box';
 import { DropdownMenu, DropdownMenuItem } from './dropdown-menu';
@@ -68,8 +69,19 @@ function barBackground(): string {
 }
 
 function barInk(): string {
-  // The ground, which is black in every theme the SDK ships.
-  return activeTheme().tokens.ground;
+  /*
+   * WHITE OR BLACK ON THE BAR, NEVER GREY.
+   *
+   * This used to return the theme's `ground` and trust it - "black in
+   * every theme the SDK ships", which stopped being true the moment a
+   * board themed its ground. The card lobby's came out grey on a pink
+   * bar: "texts drawn on bg colors needs to be white or black to look
+   * good never grey like here" (sysop, 2026-09-16).
+   *
+   * A ground with a hue of its own is still honoured; only the greys and
+   * the invisible are replaced (core/contrast.ts).
+   */
+  return snapToReadable(activeTheme().tokens.ground, barBackground());
 }
 
 /** The highlighted menu: the two swapped, so the eye goes to it. */
@@ -78,7 +90,8 @@ function hoverBackground(): string {
 }
 
 function hoverInk(): string {
-  return activeTheme().tokens.accent;
+  // Same rule for the highlighted menu, whose two colours are swapped.
+  return snapToReadable(activeTheme().tokens.accent, hoverBackground());
 }
 
 export class MenuBar extends Element {

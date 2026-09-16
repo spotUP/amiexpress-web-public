@@ -8,6 +8,7 @@
  */
 
 import { Element } from '../core/element';
+import { snapToReadable } from '../core/contrast';
 import { parseTags, textWidth, stripAnsi } from '../core/colors';
 import { wrapAnsiText as wrapAnsi } from '../core/wrap-text';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
@@ -258,21 +259,41 @@ export class List extends Element {
         // that gives `selected` a background but no foreground still gets
         // its own colours on the selected row, which is a real and
         // reasonable thing to want.
-        if (itemSelectedStyle.fg) {
+        /*
+         * THE HIGHLIGHT'S TEXT IS WHITE OR BLACK, NEVER GREY.
+         *
+         * "texts drawn on bg colors needs to be white or black to look
+         * good never grey", and "this goes for menus and list highlights
+         * and such" (sysop, 2026-09-16). A highlight is a coloured
+         * background by definition, so the row's text is snapped against
+         * it (core/contrast.ts): a grey or an invisible foreground
+         * becomes whichever of white or black stands out, and a colour
+         * with a hue of its own is kept.
+         *
+         * A style that sets a background and NO foreground gets one now.
+         * It used to leave the row's own colours in place on top of the
+         * highlight, which is the same unreadable row by another route.
+         */
+        const highlightBg = itemSelectedStyle.bg;
+        const highlightFg = highlightBg
+          ? snapToReadable(itemSelectedStyle.fg, highlightBg)
+          : itemSelectedStyle.fg;
+
+        if (highlightFg) {
           itemText = itemText.replace(/\{\/?[^}]*-fg\}/g, '');
         }
-        if (itemSelectedStyle.bg) {
+        if (highlightBg) {
           itemText = itemText.replace(/\{\/?[^}]*-bg\}/g, '');
         }
 
         // Apply selected style
-        if (itemSelectedStyle.fg) {
-          openTags += `{${itemSelectedStyle.fg}-fg}`;
-          closeTags = `{/${itemSelectedStyle.fg}-fg}` + closeTags;
+        if (highlightFg) {
+          openTags += `{${highlightFg}-fg}`;
+          closeTags = `{/${highlightFg}-fg}` + closeTags;
         }
-        if (itemSelectedStyle.bg) {
-          openTags += `{${itemSelectedStyle.bg}-bg}`;
-          closeTags = `{/${itemSelectedStyle.bg}-bg}` + closeTags;
+        if (highlightBg) {
+          openTags += `{${highlightBg}-bg}`;
+          closeTags = `{/${highlightBg}-bg}` + closeTags;
         }
         
         // Highlight active selection with BOLD when focused
