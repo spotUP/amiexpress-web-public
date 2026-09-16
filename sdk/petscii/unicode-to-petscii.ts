@@ -108,6 +108,14 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   ['ƒ', 0x46],
   ['♠', 0x2A], ['♥', 0x2A], ['♦', 0x2A], ['♣', 0x2A],
   ['→', 0x3E],
+  // ALMOST EQUAL TO, CP437's byte $F7: PETSCII has no wavy rule in either
+  // bank, and `=` is the mark it reads as. Four of them frame the `2F` in the
+  // GLC viewer's own style2/style4 art, which is where the C64 art scan found
+  // them (2026-09-16) - a C64 caller had been getting a wrong glyph there.
+  // Substituted rather than fixed in the art: the art is pinned byte-for-byte
+  // against the drawing the door's E source carries, and it is the ENCODER's
+  // job to answer for a character PETSCII does not have.
+  ['≈', 0x3D],
   ['\u00A0', 0x20],   // NO-BREAK SPACE (written escaped: invisible in source)
   // MACRON, the Amiga's byte $AF (latin1 is how a 68K door's output is decoded:
   // amiga-emulation/api/DosLibrary.ts:1222). Amiga BBS art draws a horizontal

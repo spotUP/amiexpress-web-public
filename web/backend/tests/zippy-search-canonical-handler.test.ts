@@ -67,10 +67,11 @@ describe('Z command uses canonical ZippySearchHandler (C-Z, express.e:26123-2621
       path.join(root, 'src', 'handlers', 'command-handler', 'command-execution.ts'),
       'utf8'
     );
-    const internalCmds = fs.readFileSync(
-      path.join(root, 'src', 'handlers', 'command-handler', 'internal-commands.ts'),
-      'utf8'
-    );
+    // `command-handler/internal-commands.ts` was checked here too, until it was
+    // deleted as dead: it was a SECOND copy of the dispatch switch that nothing
+    // imported, and the 2026-09-08 parity audit found fixes that had landed in
+    // it and never reached a caller. Asserting a require in a module no caller
+    // reaches is the kind of green this file exists to avoid.
 
     // command.handler.ts is in src/handlers/, so require './content/zippy-search.handler'
     expect(cmdHandler).toMatch(/require\(\s*['"]\.\/content\/zippy-search\.handler['"]\s*\)/);
@@ -80,8 +81,6 @@ describe('Z command uses canonical ZippySearchHandler (C-Z, express.e:26123-2621
     expect(cmdExec).toMatch(/require\(\s*['"]\.\.\/content\/zippy-search\.handler['"]\s*\)/);
     expect(cmdExec).not.toMatch(/require\(\s*['"]\.\.\/zippy-search\.handler['"]\s*\)/);
 
-    expect(internalCmds).toMatch(/require\(\s*['"]\.\.\/content\/zippy-search\.handler['"]\s*\)/);
-    expect(internalCmds).not.toMatch(/require\(\s*['"]\.\.\/zippy-search\.handler['"]\s*\)/);
   });
 
   test('legacy utility-commands handleZippySearchCommand forwards to canonical handler', () => {
