@@ -116,7 +116,19 @@ import * as outputUtil from '../../src/utils/output.util';
 import type { BBSSession } from '../../src/index';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
-const BBSTITLE = path.join(REPO_ROOT, 'Screens', 'BBSTITLE.txt');
+/*
+ * The TRACKED copy of the title screen, not `Screens/BBSTITLE.txt`.
+ *
+ * This pin needs the real screen and refuses to skip, which is right - but
+ * `Screens/BBSTITLE.txt` is NOT tracked by git. It is on this disk because
+ * this checkout IS the sysop's live board, so the assertion could only ever
+ * throw in CI, and it went red here the moment the sysop replaced his local
+ * screens from the live board (2026-09-16). The forty-one `Node<n>` copies
+ * ARE tracked and carry the same art - this file's own restore instructions
+ * above say so - so the pin reads one of those and means the same thing
+ * everywhere.
+ */
+const BBSTITLE = path.join(REPO_ROOT, 'Node1', 'BBSTITLE.txt');
 
 const tempDirs: string[] = [];
 
@@ -289,7 +301,7 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
     expect(Buffer.from(text, 'utf-8').length).toBe(8);
   });
 
-  it('BBSTITLE is 13894 bytes on the wire, not 14134', () => {
+  it('BBSTITLE is 13852 bytes on the wire, not 14092', () => {
     // Never a silent skip: say which file is wrong and why the pin cannot be
     // measured in this checkout. PRESENT IS NOT ENOUGH - on 2026-09-08 this
     // file was on disk at ZERO bytes (a screen killed mid-write; the intact
@@ -329,13 +341,19 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
     // the file's own 13894 text bytes (SAUCE stripped) must come back, byte
     // for byte.
     const restored = Buffer.from(wire.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
-    expect(restored.length).toBe(13894);
+    // 13852 since 1bcd126d8 took the blink codes out of the node title art
+    // (42 bytes of SGR 5 across the file); it read 13894 while the art still
+    // carried them.
+    expect(restored.length).toBe(13852);
     expect(Buffer.compare(restored, fileBytes)).toBe(0);
 
-    // The number the controller pinned this against: UTF-8 doubles all 240
-    // high bytes, and 14134 is what left this board before TP-5.
-    expect(Buffer.from(decoded.text, 'utf-8').length).toBe(14134);
-    expect(restored.length).not.toBe(14134);
+    // The number the controller pinned this against: UTF-8 doubles every high
+    // byte in the art, and that inflated count is what left this board before
+    // TP-5. 14092 against 13852 today - it read 14134 against 13894 while the
+    // node titles still carried their blink codes, and both moved by the same
+    // 42 bytes when 1bcd126d8 took them out.
+    expect(Buffer.from(decoded.text, 'utf-8').length).toBe(14092);
+    expect(restored.length).not.toBe(14092);
     let high = 0;
     for (const b of restored) if (b >= 0x80) high += 1;
     expect(high).toBe(240);
