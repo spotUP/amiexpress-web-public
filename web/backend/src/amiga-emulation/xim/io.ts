@@ -1597,6 +1597,7 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
       lineWrap: this.state.lineWrap,
       emit: (text) => { this.directEmit('ansi-output', text); },
       countRow: () => { this.state.lineCount += 1; },
+      resetRows: () => { this.state.lineCount = 0; },
       pauseDue: () => this.checkForPause(pendingMsg),
     };
   }

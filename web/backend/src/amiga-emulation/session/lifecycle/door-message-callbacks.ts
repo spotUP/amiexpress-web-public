@@ -574,20 +574,41 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
          * door had already been released from. Five seconds of nothing,
          * then a door out of step with its BBS.
          *
-         * The ordering the drain was written for (dRE!Wall's JH_WRITE
-         * landing before the file it follows) holds without it: a direct
-         * XIM door does not send its next message until this one is
-         * replied to - WaitPort hands it nothing until then - and the
-         * handler replies only after it has emitted. Under the legacy
-         * synchronous loop nothing else ever runs, so that mode keeps the
-         * drain below.
+         * THE DOOR STOPS UNTIL THE HANDLER IS DONE. The drain also kept the
+         * door from running ahead, and a door does run ahead: Bulls sends
+         * JH_SF, calls WaitPort ONCE, takes the nothing it gets for the
+         * reply and sends JH_SHUTDOWN six milliseconds later (live log,
+         * 2026-09-16 17:36:55). Without the drain it had exited and the
+         * menu prompt was on the screen before the bulletin and its pause
+         * arrived under it. So the emulator is paused here, the way the
+         * blocking commands above pause it before their handler runs, and
+         * restarted when the handler resolves - unless the handler stopped
+         * at a `More(y/n/ns)?` prompt, whose answer restarts it instead
+         * (completePauseInput). That keeps the order the drain gave
+         * dRE!Wall (JH_WRITE after its file) for every door, waiting or
+         * not. Under the legacy synchronous loop nothing else ever runs,
+         * so that mode keeps the drain below.
          */
-        handlePromise.then(logShutdown, (err) => {
-          console.warn(
-            `[DoorLifecycleManager] doorMessageCallback: async handler for cmd=${parsed.command} rejected:`,
-            err,
-          );
-        });
+        emulator.pause();
+        handlePromise.then(
+          () => {
+            logShutdown();
+            // isWaitingForLineInput covers every wait the handler can leave
+            // behind - the More prompt, a line, a hotkey - and each of those
+            // restarts the emulator itself when the caller answers.
+            const settled = getXimProtocol();
+            if (!(settled && settled.isWaitingForLineInput()) && emulator.isPaused()) {
+              emulator.resume();
+            }
+          },
+          (err) => {
+            console.warn(
+              `[DoorLifecycleManager] doorMessageCallback: async handler for cmd=${parsed.command} rejected:`,
+              err,
+            );
+            if (emulator.isPaused()) emulator.resume();
+          },
+        );
         return;
       }
       let done = false;

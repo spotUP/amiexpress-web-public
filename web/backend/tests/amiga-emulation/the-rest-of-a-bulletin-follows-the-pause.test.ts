@@ -30,6 +30,8 @@ import { XIMIOHandler } from '../../src/amiga-emulation/xim/io';
  * paging is what this suite is about (RULES.md, "The board is not a fixture").
  */
 const SAMILOG = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'board-screens', 'bulletins-bull6-samilog.txt'));
+/** The same bulletin as fitRows writes it on the live board: 23 rows, the top of the logo on the `~f` line. */
+const FITTED = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'board-screens', 'bulletins-bull6-samilog-fitted.txt'));
 const PROMPT = '(Pause)...More(y/n/ns)? ';
 /** The records bar, the second-to-last row of the bulletin (row 35 of 37). */
 const TAILER = 'The Records';
@@ -39,6 +41,7 @@ beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bull-follows-pause-'));
   fs.mkdirSync(path.join(tmpDir, 'Bulletins'), { recursive: true });
   fs.writeFileSync(path.join(tmpDir, 'Bulletins', 'bull6.txt'), SAMILOG);
+  fs.writeFileSync(path.join(tmpDir, 'Bulletins', 'fitted.txt'), FITTED);
   // Three screens' worth (57 rows): the bulletin, then its logo and table
   // again, so the pause has to ask twice and the records bar comes once.
   const encore = SAMILOG.toString('latin1').split('\n').slice(1, 21).join('\n');
@@ -54,7 +57,7 @@ interface Rig {
   resumes: () => number;
 }
 
-function rig(pauseLines: number): Rig {
+function rig(pauseLines: number, rowsAlreadyOnScreen = 0): Rig {
   const out: string[] = [];
   const replies: number[] = [];
   let pauses = 0;
@@ -69,7 +72,7 @@ function rig(pauseLines: number): Rig {
   const messageParser: any = { writeCommand: () => {}, writeMessageString: () => {}, writeData: () => {}, getCommandName: () => 'JH_SF' };
   const state: any = {
     registered: true, shuttingDown: false, nonStopText: false,
-    autoPauseEnabled: true, lineCount: 0, lineWrap: 0, pauseLines,
+    autoPauseEnabled: true, lineCount: rowsAlreadyOnScreen, lineWrap: 0, pauseLines,
     language: '', confAccess: '', carrierDropped: false, rawArrow: false, transfering: false, doorSilent: false,
   };
   const bbsSession: any = { bbsPath: tmpDir, dataDir: tmpDir, screenWidth: 80, screenHeight: pauseLines, user: { secLevel: 255 } };
@@ -198,5 +201,27 @@ describe('JH_SF on a file three screens tall', () => {
       expect(wireRows).toContain(row);
     }
     expect(rows(wire)).toBeGreaterThanOrEqual(fileRows.length);
+  });
+});
+
+describe('the row count, as express.e keeps it', () => {
+  it('a 23-row bulletin on a 24-row screen is not followed by a prompt, whatever the door printed first', async () => {
+    // Bulls sends two newlines before JH_SF (live log, 2026-09-16 17:36:55);
+    // the sysop's screenshot had the prompt under a bulletin that fit.
+    const r = rig(24, 2);
+    await r.handler.handleShowFile(msg('BBS:Bulletins/fitted.txt'));
+    const wire = r.out.join('');
+    expect(count(wire, PROMPT)).toBe(0);
+    expect(count(wire, TAILER)).toBe(1);
+    expect(r.replies).toEqual([0x1000]);
+    expect(r.pauses()).toBe(0);
+  });
+
+  it('the clear at the top of the file is where the count starts, so the first page is a full screen', async () => {
+    const r = rig(24);
+    await r.handler.handleShowFile(msg('BBS:Bulletins/bull6.txt'));
+    const wire = r.out.join('');
+    const firstPage = wire.slice(0, wire.indexOf(PROMPT));
+    expect(rows(firstPage)).toBe(24);
   });
 });

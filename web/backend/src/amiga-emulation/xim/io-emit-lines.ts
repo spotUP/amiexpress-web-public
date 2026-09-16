@@ -37,6 +37,13 @@ export interface LineSink {
   emit(text: string): void;
   /** One more row has gone out with a newline (express.e's lineCount++). */
   countRow(): void;
+  /**
+   * A clear-screen went out: the count starts over (express.e:1670-1674,
+   * aePuts zeroes lineCount when the string carries a form feed). Without
+   * this a 23-row bulletin that opens with `~f` paged at its LAST row on a
+   * 24-row screen - the clear counted as a row.
+   */
+  resetRows(): void;
   /** The row count has reached the screen: put the prompt up and stop here. */
   pauseDue(): boolean;
 }
@@ -95,6 +102,8 @@ export function emitPreparedLines(job: PreparedLines, sink: LineSink): EmitLines
 
       // express.e only increments lineCount and checks pause if a newline was emitted
       if (trackLines && endsInNewline) {
+        // `~f` arrives as ESC[2J from parseMciCodes; a door's own form feed as \f.
+        if (output.includes('\x1b[2J') || output.includes('\f')) sink.resetRows();
         sink.countRow();
         if (autoPause && sink.pauseDue()) {
           const remaining = [...segments.slice(s + 1), ...lines.slice(i + 1)];

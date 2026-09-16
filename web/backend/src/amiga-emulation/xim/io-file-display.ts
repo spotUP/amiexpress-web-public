@@ -171,6 +171,14 @@ async function displayResolvedFile(
     return;
   }
 
+  // express.e:6756 and :6770 - displayFile starts its row count at zero and
+  // turns a caller's earlier `ns` back off. The rows a door printed BEFORE
+  // asking for the file (Bulls sends two newlines first) do not count against
+  // the file's first page: with them counted, a bulletin that fits its 24-row
+  // screen was followed by a `More(y/n/ns)?` with nothing left to show.
+  self.state.lineCount = 0;
+  self.state.nonStopText = false;
+
   // Fast path: no MCI codes — emit synchronously and reply.
   // Doors like dRE!Wall use JH_SF for positional UI fragments; pausing mid-layout
   // breaks absolute cursor positioning and blocks the trap-sync drain for ~5s.
