@@ -18,7 +18,8 @@ import * as path from 'path';
 
 import {
   BOARD_PAUSE_ROWS, C64_ROWS, NARROW_CHROME_ROWS, NARROW_WIDTH,
-  compactActions, ellipsis, narrowColumns, narrowFooter, narrowListRows, narrowRow,
+  compactActions, ellipsis, narrowBody, narrowColumns, narrowFooter, narrowHeader,
+  narrowListRows, narrowRow, narrowSkeletonRow,
   printableWidth, renderNarrowScreen,
 } from '../../../../Doors/glc-viewer/src/narrow';
 
@@ -179,12 +180,19 @@ describe('the placeholder logo the door ships', () => {
     for (const row of rows) expect(printableWidth(row)).toBeLessThanOrEqual(NARROW_WIDTH);
   });
 
-  it('is drawn with REVERSE VIDEO, not a block glyph latin-1 cannot hold', () => {
-    // U+2588 is not a latin-1 byte and these files are read as latin-1. The
-    // C64 draws a solid cell by reversing a space, and the transducer already
-    // latches SGR 7 (`ansi-to-petscii.ts:331`).
-    expect(placeholder(1)).toContain('\x1b[7m');
+  it('is drawn with a PRINTABLE glyph, not reverse video and not a block', () => {
+    /*
+     * Three encodings were tried and only this one survives to a C64 screen:
+     *  - U+2588 is not a latin-1 byte, and these files are read as latin-1;
+     *  - reverse-video spaces transduce correctly (`12 20 20 92` on the wire,
+     *    `a0` in the PETSCII machine, which IS a solid cell) and still came
+     *    out blank on the board, alongside a title bar that lost its blue
+     *    background - something on that path normalises colour and reverse.
+     * A placeholder has to be visible on the board the sysop has.
+     */
+    expect(placeholder(1)).not.toContain('\x1b[7m');
     expect(placeholder(1)).not.toMatch(/[\u2580-\u259F]/);
+    expect(placeholder(1)).toContain('#');
   });
 });
 
@@ -214,5 +222,28 @@ describe('a name too long for its column', () => {
 
   it('marks the cut in the row a caller actually reads', () => {
     expect(narrowRow(LONG, false)).toContain('...');
+  });
+});
+
+describe('the narrow screen opens before the network too', () => {
+  it('draws its header without any data at all', () => {
+    const header = narrowHeader(['\x1b[36mLOGO'], false, false);
+    // Logo, title bar, column header, rule - and not a caller among them.
+    expect(header).toHaveLength(4);
+    expect(header.join('\n')).toContain('HANDLE');
+  });
+
+  it('has a placeholder row in the narrow table\'s own columns', () => {
+    expect(printableWidth(narrowSkeletonRow())).toBe(printableWidth(narrowRow(CALL, false)));
+    expect(narrowSkeletonRow()).toContain('.');
+  });
+
+  it('splits into a header and a body that rejoin as the whole screen', () => {
+    const whole = renderNarrowScreen(SCREEN);
+    const halves = [
+      ...narrowHeader(SCREEN.logo, SCREEN.showLocation, SCREEN.screenClear),
+      ...narrowBody(SCREEN),
+    ];
+    expect(halves).toEqual(whole);
   });
 });

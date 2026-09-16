@@ -146,29 +146,57 @@ export interface NarrowScreen {
 
 /** The whole screen, forty columns wide, in the order it goes out. */
 export function renderNarrowScreen(screen: NarrowScreen): string[] {
-  const lines: string[] = [];
-
-  // The clear rides on the first drawn line, as the wide screen sends it.
-  const head = screen.logo.length > 0 ? [...screen.logo] : [];
-  if (head.length > 0) {
-    head[0] = (screen.screenClear ? '\x0c' : '') + head[0];
-    for (const line of head) lines.push(line);
-  } else if (screen.screenClear) {
-    lines.push('\x0c');
-  }
-
-  lines.push(NARROW_BANNER);
-  lines.push(narrowColumns(screen.showLocation));
-  lines.push(NARROW_RULE);
-  for (const call of screen.calls) lines.push(narrowRow(call, screen.showLocation));
-  lines.push(NARROW_RULE);
-  for (const line of narrowFooter(screen.yesterday, screen.records)) lines.push(line);
-  lines.push(`${NARROW_RULE}${RESET}`);
-
-  return lines;
+  return [
+    ...narrowHeader(screen.logo, screen.showLocation, screen.screenClear),
+    ...narrowBody(screen),
+  ];
 }
 
 /** Printable columns of a line - CSI sequences take no space on screen. */
 export function printableWidth(line: string): number {
   return line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x0c/g, '').length;
+}
+
+/**
+ * The top of the narrow screen: everything that needs no data.
+ *
+ * Split out so a C64 caller sees the logo and the column header while the
+ * scenewall is still deciding, exactly as an 80-column caller does. It was
+ * drawn all at once at first, on the argument that twenty-five rows cannot
+ * afford to scroll - but the list SIZES ITSELF now, so it cannot scroll, and
+ * a caller looking at a blank screen for five seconds was the thing worth
+ * fixing (the sysop, 2026-09-16: "no logo no skeleton loaders").
+ */
+export function narrowHeader(logo: readonly string[], showLocation: boolean, screenClear: boolean): string[] {
+  const lines: string[] = [];
+  const head = [...logo];
+  if (head.length > 0) {
+    head[0] = (screenClear ? '\x0c' : '') + head[0];
+    for (const line of head) lines.push(line);
+  } else if (screenClear) {
+    lines.push('\x0c');
+  }
+  lines.push(NARROW_BANNER);
+  lines.push(narrowColumns(showLocation));
+  lines.push(NARROW_RULE);
+  return lines;
+}
+
+/** One placeholder row, in the narrow table's own columns. */
+export function narrowSkeletonRow(): string {
+  const dots = (width: number) => '.'.repeat(width);
+  return NAME_PEN + dots(NAME_COLUMNS)
+    + ' ' + SYSTEM_PEN + dots(SYSTEM_COLUMNS)
+    + ' ' + TIME_PEN + dots(ACTION_COLUMNS)
+    + ' ' + dots(TIME_COLUMNS);
+}
+
+/** The bottom: the rows, the rule under them, the totals. */
+export function narrowBody(screen: NarrowScreen): string[] {
+  const lines: string[] = [];
+  for (const call of screen.calls) lines.push(narrowRow(call, screen.showLocation));
+  lines.push(NARROW_RULE);
+  for (const line of narrowFooter(screen.yesterday, screen.records)) lines.push(line);
+  lines.push(`${NARROW_RULE}${RESET}`);
+  return lines;
 }

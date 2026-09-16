@@ -418,16 +418,17 @@ function drawHeader(socket, config, showLocation, callerColumns) {
         columns: callerColumns,
     };
     /*
-     * A FORTY-COLUMN CALLER IS DRAWN FOR, not cut down.
-     *
-     * The board's frame adapter cannot help here - it narrows the 68K wire and
-     * a TypeScript door's output never crosses it - so the whole screen is
-     * drawn once, at the end, in `src/narrow.ts`. Nothing goes out first,
-     * because a C64 has twenty-five rows and a header plus placeholders plus a
-     * list would scroll the header off before the caller read it.
+     * A FORTY-COLUMN CALLER IS DRAWN FOR, not cut down - the board's frame
+     * adapter narrows the 68K wire and a TypeScript door's output never crosses
+     * it. Its header goes out first for the same reason the wide one does: the
+     * list sizes itself now, so nothing it draws can scroll this off.
      */
-    if (base.columns <= narrow_1.NARROW_WIDTH)
+    if (base.columns <= narrow_1.NARROW_WIDTH) {
+        for (const line of (0, narrow_1.narrowHeader)(base.logo, base.showLocation, base.screenClear)) {
+            socket.emit('ansi-output', line + '\r\n');
+        }
         return base;
+    }
     for (const line of (0, render_1.renderGlcHeader)({ ...base, ...EMPTY_DATA })) {
         socket.emit('ansi-output', line + '\r\n');
     }
@@ -460,15 +461,23 @@ function drawData(socket, base, data, skeletonCount) {
         records: data.records,
     };
     if (base.columns <= narrow_1.NARROW_WIDTH) {
-        for (const line of (0, narrow_1.renderNarrowScreen)({
+        // The header is already on screen; the placeholders under it are walked
+        // back over and written on, exactly as the wide screen does it.
+        if (skeletonCount > 0)
+            socket.emit('ansi-output', (0, skeleton_1.rewind)(skeletonCount));
+        const body = (0, narrow_1.narrowBody)({
             logo: base.logo,
             showLocation: base.showLocation,
             screenClear: base.screenClear,
             calls: screen.calls,
             yesterday: screen.yesterday,
             records: screen.records,
-        })) {
-            socket.emit('ansi-output', line + '\r\n');
+        });
+        for (const line of body)
+            socket.emit('ansi-output', (0, skeleton_1.overwrite)(line) + '\r\n');
+        // A placeholder the shorter list did not reach is cleared, not left.
+        for (let i = body.length; i < skeletonCount; i++) {
+            socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
         }
         return;
     }
@@ -521,9 +530,11 @@ door.onStart(async (ctx) => {
         if (base.columns <= narrow_1.NARROW_WIDTH) {
             config.lines = Math.min(config.lines, (0, narrow_1.narrowListRows)(base.logo.length));
         }
-        // Placeholders belong to the wide screen: they hold a table's shape while
-        // the network answers, and the narrow screen has no table on the wire yet.
-        const placeholders = base.columns <= narrow_1.NARROW_WIDTH ? [] : (0, skeleton_1.skeletonRows)(config.lines);
+        // Both widths hold the table's shape while the network answers; only the
+        // row differs, because the narrow table's columns are its own.
+        const placeholders = base.columns <= narrow_1.NARROW_WIDTH
+            ? Array.from({ length: config.lines }, () => (0, narrow_1.narrowSkeletonRow)())
+            : (0, skeleton_1.skeletonRows)(config.lines);
         for (const row of placeholders)
             socket.emit('ansi-output', row + '\r\n');
         /*

@@ -66,4 +66,19 @@ export interface NarrowScreen {
 export declare function renderNarrowScreen(screen: NarrowScreen): string[];
 /** Printable columns of a line - CSI sequences take no space on screen. */
 export declare function printableWidth(line: string): number;
+/**
+ * The top of the narrow screen: everything that needs no data.
+ *
+ * Split out so a C64 caller sees the logo and the column header while the
+ * scenewall is still deciding, exactly as an 80-column caller does. It was
+ * drawn all at once at first, on the argument that twenty-five rows cannot
+ * afford to scroll - but the list SIZES ITSELF now, so it cannot scroll, and
+ * a caller looking at a blank screen for five seconds was the thing worth
+ * fixing (the sysop, 2026-09-16: "no logo no skeleton loaders").
+ */
+export declare function narrowHeader(logo: readonly string[], showLocation: boolean, screenClear: boolean): string[];
+/** One placeholder row, in the narrow table's own columns. */
+export declare function narrowSkeletonRow(): string;
+/** The bottom: the rows, the rule under them, the totals. */
+export declare function narrowBody(screen: NarrowScreen): string[];
 //# sourceMappingURL=narrow.d.ts.map
