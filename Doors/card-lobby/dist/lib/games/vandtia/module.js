@@ -446,9 +446,26 @@ class VandtiaGameModule {
         const swapping = loaded?.engine.state.phase === 'swap';
         const meId = this.host.currentProfile?.userId;
         const source = loaded && meId ? loaded.engine.sourceFor(meId) : 'hand';
+        /*
+         * THE COUNTS GO IN THE TITLE, because the panel is the only place they
+         * can survive.
+         *
+         * "pile and stock doesnt draw" (sysop, 2026-09-16). The pile and stock
+         * numbers lived in the panel's TEXT - and drawing the cards hides that
+         * text, by design: the widgets cover the fallback. So the moment a card
+         * landed, a panel named PILE AND STOCK stopped showing either number,
+         * and the stock - which is the clock this game is played against - was
+         * invisible for the whole hand.
+         *
+         * A title is drawn by the frame, not by the widgets, so it is there
+         * whether the cards draw or not.
+         */
+        const counts = loaded
+            ? `  ${loaded.engine.state.pile.length} / stock ${loaded.engine.state.stock.length}`
+            : '';
         return {
             // The middle of the table, always.
-            board: 'Pile and stock',
+            board: `Pile${counts}`,
             players: 'Players',
             hand: this.handView === 'table' ? 'In front of you'
                 : swapping ? 'Your hand'

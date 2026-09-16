@@ -182,3 +182,56 @@ export async function theUpperPanelNeverSpeaksForPoker(): Promise<void> {
     assert.ok(!panel().includes('Board not dealt yet'), 'and still no poker text');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function thePileAndStockCountsSurviveTheCards(): Promise<void> {
+  /*
+   * "pile and stock doesnt draw" (sysop, 2026-09-16). Both numbers lived in
+   * the panel's TEXT, and drawing the cards hides that text by design - the
+   * widgets cover the fallback. So the moment a card landed, a panel called
+   * PILE AND STOCK showed neither number, and the stock (the clock this game
+   * is played against) was invisible for the rest of the hand.
+   *
+   * A title is drawn by the frame rather than by the widgets, so it is there
+   * either way - which is what this asks.
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 205, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 2, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 205;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 600));
+    app.applyViewMode('table');
+
+    const loaded = app.vandtia.load(app.findTableById(205));
+    loaded.engine.state.pile = [
+      { rank: '7', suit: 'H' }, { rank: '9', suit: 'S' }, { rank: 'K', suit: 'D' },
+    ] as any;
+    const stock = loaded.engine.state.stock.length;
+    app.findTableById(205).hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+    app.updateAllPanels();
+
+    // The cards ARE drawn - which is exactly when the text went away.
+    assert.ok(app.tableCardButtons.focusables().length > 0, 'the pile draws as cards');
+
+    const title = String(app.vandtia.panelTitles(app.findTableById(205)).board);
+    assert.ok(/3/.test(title), `the title carries the pile count: ${title}`);
+    assert.ok(new RegExp(String(stock)).test(title), `and the stock: ${title}`);
+  } finally { app.screen?.destroy?.(); }
+}
