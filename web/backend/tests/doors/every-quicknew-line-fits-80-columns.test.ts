@@ -30,9 +30,17 @@ jest.mock('../../src/config', () => ({
 
 import { generateQuickNewFromConfig } from '../../src/utils/quicknew-generator';
 
+/*
+ * A FROZEN COPY of the reference-boardBBS config, not the one under Documentation.
+ *
+ * That file is not tracked by git - it is on this disk because this checkout
+ * IS the live board - so a committed test reading it is green here and
+ * impossible in CI (tests/repo/tracked-fixtures). The bytes matter to this
+ * suite (the long "Abandoned Applications" title is what used to run past 80),
+ * so they are frozen here rather than rebuilt approximately in the test.
+ */
 const REAL_CONFIG = path.join(
-  __dirname, '..', '..', '..', '..',
-  'Documentation', '7-Reference Sources', 'reference-boardBBS', 'Doors', 'QuickNew', 'QuickNew.Config1',
+  __dirname, '..', 'fixtures', 'doors', 'reference-board-quicknew.config1',
 );
 
 /** Columns a terminal would advance by: escapes are free. */

@@ -28,7 +28,16 @@ import {
 } from '../../src/screens/rip-document';
 
 const BOARD = path.resolve(__dirname, '../../../..');
-const UPTOWN = path.join(BOARD, '!ASCII-Art/rip/uPtOwN.svg');
+/*
+ * A FROZEN COPY of the sysop's logo, not the one on the board.
+ *
+ * `!ASCII-Art/rip/uPtOwN.svg` is not tracked by git - it is on this disk
+ * because this checkout IS the live board - so a committed test reading it is
+ * green here and impossible in CI (tests/repo/tracked-fixtures). The artwork
+ * is also the sysop's to redraw, and this suite is about the CONVERTER, not
+ * about whichever logo is current.
+ */
+const UPTOWN = path.join(__dirname, '..', 'fixtures', 'rip', 'uptown.svg');
 
 /** Every instruction the scene holds, decoded. */
 function instructions(text: string): Array<{ opcode: string; args: Array<number | string> }> {
