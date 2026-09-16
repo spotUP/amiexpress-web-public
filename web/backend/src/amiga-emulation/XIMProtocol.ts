@@ -20,6 +20,7 @@ import { Socket } from 'socket.io';
 import { XIMCommand, BBSSessionData, XIMState, XIMMessage, isCommandInfoRequestCommand } from './xim/types';
 import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
+import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
@@ -130,18 +131,14 @@ debugLog(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verifySt
     // Store iconLibrary for command .info file loading
     this.iconLibrary = iconLibrary;
 
-    // NOTE: Real reference-board BBS does NOT pre-load command .info files for doors
-    // AquaScan works fine without DOORUSE tooltypes on real BBS
-    // Disabling pre-load to match real AmiExpress behavior
-    // if (this.iconLibrary && this.doorCommand) {
-    //   this.preLoadCommandDiskObject();
-    // }
+    // Command .info files are NOT pre-loaded for doors: real AmiExpress does
+    // not, and AquaScan works without DOORUSE tooltypes (preLoadCommandDiskObject).
 
     const userLineLength =
       this.bbsSession?.user?.linesPerScreen ??
       this.bbsSession?.user?.lineLength ??
       this.bbsSession?.user?.pageLength;
-    const defaultLineLength = userLineLength && userLineLength > 0 ? userLineLength : 22;
+    const defaultLineLength = userLineLength && userLineLength > 0 ? userLineLength : DEFAULT_PAUSE_LINES;
     const wrapWidth = this.bbsSession?.lineWrap ?? 80;
 
     // Generate unique debug ID to track state object identity

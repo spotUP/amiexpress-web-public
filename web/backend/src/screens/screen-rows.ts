@@ -72,3 +72,18 @@ export function rowBudgetFor(height: number = SHORTEST_TERMINAL_ROWS): number {
  * cannot pick its own number - which is how the last two came to disagree.
  */
 export const GENERATED_SCREEN_ROWS = rowBudgetFor(SHORTEST_TERMINAL_ROWS);
+
+/**
+ * The usable content height assumed for a caller whose real terminal height
+ * is not known - a standard 25-row terminal less the row its prompt sits on.
+ *
+ * Distinct from SHORTEST_TERMINAL_ROWS: that is the height GENERATED screens
+ * are FITTED to (the shortest terminal, so a bulletin fits everyone); this is
+ * the height a door PAUSES at when it has nothing better to go on. A screen
+ * fitted to the former never pages at the latter (23 < 24). The door
+ * line-height fallbacks were an inconsistent mix of 22 (XIMProtocol), 23
+ * (flag-pause) and 24 (six door paths) before they were named here
+ * (2026-09-16) - so the same caller could page at a different row depending on
+ * which door path answered "how tall is your screen?".
+ */
+export const DEFAULT_PAUSE_LINES = 24;

@@ -4,6 +4,7 @@
 // 2025-11-20
 
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
+import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { petsciiColumnsOf, C64_COLUMNS } from '../xim/screen-width.util';
 import { config as appConfig } from '../../config';
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
@@ -645,7 +646,7 @@ debugLog(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
         const rawLineLen =
           (this.config.bbsSession as any)?.user?.linesPerScreen ??
           (this.config.bbsSession as any)?.user?.lineLength ??
-          24;
+          DEFAULT_PAUSE_LINES;
         // 0 collapses JoinCnf's banner via its fail-safe path; map to 9999
         // so equality-pagination never matches. See xim/system-commands.ts
         // handleRegister for full rationale (no-user → 29, user-with-0 → 9999).
@@ -1303,7 +1304,7 @@ debugLog(`[DoorMessageHandler]   DT_LINELENGTH: data=${data}`);
           const lineLen = this.config.bbsSession?.pauseLines ||
                           this.config.bbsSession?.user?.linesPerScreen ||
                           (this.config.bbsSession as any)?.user?.pageLength ||
-                          24;
+                          DEFAULT_PAUSE_LINES;
           this.writeStringToMessage(msgAddr, String(lineLen));
         } else {
           // Set line length from string
@@ -2084,7 +2085,7 @@ debugLog(`[DoorMessageHandler]   BB_SCRWIDTH: ${screenWidth}`);
             this.config.bbsSession?.pauseLines ||
               (this.config.bbsSession as any)?.user?.linesPerScreen ||
               (this.config.bbsSession as any)?.user?.pageLength ||
-              24,
+              DEFAULT_PAUSE_LINES,
           );
 debugLog(`[DoorMessageHandler]   BB_SCRHEIGHT: ${screenHeight}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, screenHeight);

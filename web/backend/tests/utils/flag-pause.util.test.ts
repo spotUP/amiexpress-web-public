@@ -244,16 +244,17 @@ describe('flag-pause.util', () => {
       expect(mockSocket.emit).toHaveBeenCalledWith('ansi-output', expect.stringContaining('Pause'));
     });
 
-    it('should use default 23 if no height specified', () => {
-      const session: any = {
-        user: {},
-        tempData: { lineCount: 22, nonStopDisplayFlag: false }
-      };
+    it('uses the shared default pause height when nothing is specified', () => {
+      // The no-info fallback was unified onto DEFAULT_PAUSE_LINES (24) on
+      // 2026-09-16 - it had been 23 here, 22 in XIMProtocol and 24 in six door
+      // paths, so the same caller paged at a different row per door path. At 24
+      // a lineCount of 23 does NOT pause, and 24 does.
+      const below: any = { user: {}, tempData: { lineCount: 22, nonStopDisplayFlag: false } };
+      flagPause(mockSocket, below, 1);
+      expect(mockSocket.emit).not.toHaveBeenCalledWith('ansi-output', expect.stringContaining('Pause'));
 
-      // Don't await - just verify pause is triggered
-      flagPause(mockSocket, session, 1);
-
-      // Should pause at 23 (default), so lineCount 22 + 1 = 23 triggers pause
+      const at: any = { user: {}, tempData: { lineCount: 23, nonStopDisplayFlag: false } };
+      flagPause(mockSocket, at, 1);
       expect(mockSocket.emit).toHaveBeenCalledWith('ansi-output', expect.stringContaining('Pause'));
     });
   });

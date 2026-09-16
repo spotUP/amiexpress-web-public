@@ -8,6 +8,7 @@
  */
 
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
+import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { Socket } from "socket.io";
 import { DoorConfig, TIMDoorCommand, TIMDoorConstants } from "../DoorTypes.js";
 import * as fs from "fs";
@@ -533,7 +534,7 @@ debugLog(`[TIMDoorHandler] Unknown PG_* command: ${msg.command}`);
         value = 80;
         break;
       case 9: // Lines per screen
-        value = user?.linesPerScreen || 24;
+        value = user?.linesPerScreen || DEFAULT_PAUSE_LINES;
         break;
       default:
         value = 0;

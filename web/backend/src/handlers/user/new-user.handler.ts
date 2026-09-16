@@ -14,6 +14,7 @@
 
 import { Socket } from 'socket.io';
 import { isNarrow, narrowClip } from '../../utils/table-format.util';
+import { autoLinesFor } from '../../utils/auto-lines.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
@@ -888,29 +889,6 @@ function promptForLines(socket: Socket, session: any) {
   }
   socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (0 or Enter for Auto): ');
   session.inputBuffer = '';
-}
-
-/**
- * The height "Auto" (0 or Enter) resolves to at signup.
- *
- * The line test prints 70..2 and asks for "the number you see at the top" -
- * which is the terminal's height minus the row the prompt sits on (24 on a
- * 25-row terminal). "Auto" must store that SAME number. It used to store 0,
- * and createUser's `data.linesPerScreen || defaultLines` then turned the 0
- * into the board default of 23 - one row short of the terminal, so the door's
- * `(Pause)...More(y/n/ns)?` landed under the last row of a bulletin built to
- * fit (the sysop, 2026-09-16, in the Bulls door). A concrete height also
- * keeps a 0 out of the `linesPerScreen` field, which several door paths read
- * through `??` (where 0 would survive and paginate every single line).
- *
- * The height comes from what the session already measured - the web client's
- * reported rows, or the telnet screen height - matching exactly what the user
- * would have typed off the line test. `- 1` reserves the prompt row; 24 is
- * the floor and the standard ANSI screen when nothing measured.
- */
-function autoLinesFor(session: any): number {
-  const measured = session.tempData?.termHeight || session.screenHeight || 0;
-  return measured > 1 ? measured - 1 : 24;
 }
 
 /**

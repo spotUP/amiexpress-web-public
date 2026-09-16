@@ -7,6 +7,7 @@
  */
 
 import * as path from 'path';
+import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { XIMMessage } from './types';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
@@ -48,7 +49,7 @@ debugLog(`[XIMIOHandler] PG_UD: Request type ${msg.data}`);
     case 9: // User line length (screen height in lines, NOT character width)
       // express.e:4462: doormsg.data:=userLineLen
       // userLineLen = number of lines on screen for pagination
-      resultData = bbsSession.pauseLines || bbsSession.user?.linesPerScreen || bbsSession.user?.pageLength || 24;
+      resultData = bbsSession.pauseLines || bbsSession.user?.linesPerScreen || bbsSession.user?.pageLength || DEFAULT_PAUSE_LINES;
       break;
     default:
       resultData = 0;

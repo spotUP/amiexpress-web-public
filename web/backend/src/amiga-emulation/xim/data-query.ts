@@ -6,6 +6,7 @@
  */
 
 import { conferenceSubdir } from '../../conferences/conference-paths';
+import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './types';
@@ -403,7 +404,7 @@ debugLog(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
                           (this.bbsSession as any)?.pauseLines ||
                           user?.linesPerScreen ||
                           (user as any)?.pageLength ||
-                          24;
+                          DEFAULT_PAUSE_LINES;
           // CRITICAL: Use writeMessageString to update BOTH embedded buffer AND strPtr
           // Some doors (like JoinCnf) read via strPtr, not the embedded buffer
           this.messageParser.writeMessageString(msg.msgAddr, lineLen.toString());

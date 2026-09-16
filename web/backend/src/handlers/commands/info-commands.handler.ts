@@ -10,6 +10,7 @@
 
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { settingsDoorsFor, type SettingsDoorEntry } from './w-settings-doors';
+import { autoLinesFor } from '../../utils/auto-lines.util';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -1226,7 +1227,11 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
     return;
   }
 
-  session.user.linesPerScreen = lines === 0 ? null : lines;
+  // 0/Auto resolves to the height the session measured, the same as the signup
+  // line test - not null. A stored null read back as the default 23 (one row
+  // short), so the runtime W command had the same off-by-one the signup Auto
+  // did (the sysop, 2026-09-16). See auto-lines.util.
+  session.user.linesPerScreen = lines > 0 ? lines : autoLinesFor(session);
   await db.updateUser(session.user.id, { linesPerScreen: session.user.linesPerScreen });
 
   _displayWCommandMenu(socket, session);

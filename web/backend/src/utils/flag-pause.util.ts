@@ -10,6 +10,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 // Session type - using any for now since BBSSession is defined in index.ts
 type Session = any;
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -45,7 +46,7 @@ export async function flagPause(
     session.user?.linesPerScreen ||
     session.user?.lineLength ||
     session.user?.pageLength ||
-    23;
+    DEFAULT_PAUSE_LINES;
   const userLineLen = Math.min(Math.max(rawLineLen, 10), 40);
 
   // Check if we need to pause
@@ -203,7 +204,7 @@ export async function checkForPause(
     session.user?.linesPerScreen ||
     session.user?.lineLength ||
     session.user?.pageLength ||
-    23;
+    DEFAULT_PAUSE_LINES;
   const userLineLen = Math.min(Math.max(rawLineLen, 10), 40);
 
   // Check if we need to pause (express.e:5191)

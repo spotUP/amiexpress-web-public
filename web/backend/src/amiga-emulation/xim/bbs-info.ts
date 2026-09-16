@@ -6,6 +6,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import * as fs from 'fs';
 import * as path from 'path';
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
@@ -396,7 +397,7 @@ debugLog(`  BB_SCRWIDTH: ${value}`);
           this.state.pauseLines ||
             (this.bbsSession as any)?.user?.linesPerScreen ||
             (this.bbsSession as any)?.user?.pageLength ||
-            24,
+            DEFAULT_PAUSE_LINES,
         );
 debugLog(`  BB_SCRHEIGHT: ${value}`);
         break;
