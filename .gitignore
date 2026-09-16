@@ -617,3 +617,6 @@ Node*/DORINFO*.DEF
 Doors/REQUESTS/REQUESTS.cfg
 # The achievements board key in plain text, same shape as REQUESTS.cfg above.
 Doors/ACHIEVEC/ACHIEVE.cfg
+
+# The last-callers page the door keeps for a slow scenewall; the board writes it, never the repo.
+Doors/glc-viewer/glc.lastgood.json
