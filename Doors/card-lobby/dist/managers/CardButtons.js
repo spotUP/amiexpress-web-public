@@ -175,6 +175,27 @@ class CardButtons {
          */
         const STACK_X = 2;
         const STACK_Y = 1;
+        /*
+         * A PILE STEPS FURTHER, so every card in it can be READ.
+         *
+         * "the last 3 has to be seen so i know when it's a good time to put down
+         * the last to create a 4 pair" (sysop, 2026-09-16) - four of a rank in a
+         * row turns the pile away, so the ranks under the top card are what the
+         * decision is made on. Two columns shows a card's left border and one
+         * cell of nothing; four reaches the rank itself, `10` included, which is
+         * the widest there is.
+         *
+         * The piles in FRONT of a player keep the tighter step: what shows there
+         * is a blind card, and there is nothing on it to read.
+         *
+         * And it steps SIDEWAYS ONLY - "can we overlap them side by side so the
+         * value is visible?" (sysop, 2026-09-16). A staircase spends a row per
+         * card and pushes the ranks apart diagonally, which reads as three
+         * separate cards rather than one pile; overlapping along a single row is
+         * how a hand is held, and every rank lines up to be read at once.
+         */
+        const PILE_STACK_X = 4;
+        const PILE_STACK_Y = 0;
         const stacked = cards.some((entry) => entry.under);
         const slotX = stacked ? STACK_X : 0;
         const slotY = stacked ? STACK_Y : 0;
@@ -237,15 +258,15 @@ class CardButtons {
             if (cardWidth === 0 || cardHeight === 0)
                 return null;
             const steps = cards.length - 1;
-            if (cardHeight + steps * STACK_Y + lift > rows)
+            if (cardHeight + steps * PILE_STACK_Y + lift > rows)
                 return null;
-            if (cardWidth + steps * STACK_X > width)
+            if (cardWidth + steps * PILE_STACK_X > width)
                 return null;
             return {
                 perRow: cards.length,
                 size,
-                stride: STACK_X,
-                stackY: STACK_Y,
+                stride: PILE_STACK_X,
+                stackY: PILE_STACK_Y,
                 cardRows: 1,
                 height: cardHeight,
                 cardWidth,

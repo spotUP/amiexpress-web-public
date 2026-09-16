@@ -219,20 +219,28 @@ export async function aPileWhoseOpenCardIsGoneIsStillABlindCard(): Promise<void>
   } finally { app.screen?.destroy?.(); }
 }
 
-export async function theDiscardPileIsAPileNotARowOfCards(): Promise<void> {
+export async function theDiscardPileOverlapsSoEveryValueReads(): Promise<void> {
   /*
    * "the pile have 3 cards side by side now, make them look like the pile in
-   * front of me but with all cards open" (sysop, 2026-09-15). The top three
-   * of the pile are three cards LYING ON EACH OTHER, the last one on top and
-   * every face showing - the same shape as the piles in front of a player,
-   * without the backs.
+   * front of me but with all cards open", then - once it was a staircase -
+   * "the last 3 has to be seen so i know when it's a good time to put down
+   * the last to create a 4 pair" and "can we overlap them side by side so the
+   * value is visible?" (sysop, 2026-09-16).
+   *
+   * Four of a rank in a row turns the pile away, so the ranks UNDER the top
+   * card are what the decision is made on. They overlap along one row, four
+   * columns apart - enough to reach the rank, `10` included - with the top
+   * card whole at the end.
    */
   const app = await openApp();
   try {
     app.uiManager.flopPanel.width = 59;
     app.uiManager.flopPanel.height = 12;
 
-    const drawn = app.tableCardButtons.renderStandard(SIX.slice(0, 3), {
+    const pile = [
+      { rank: '4', suit: 'C' }, { rank: '10', suit: 'H' }, { rank: '9', suit: 'S' },
+    ];
+    const drawn = app.tableCardButtons.renderStandard(pile, {
       selected: null, playable: [], labels: false, pile: true, onPick: () => {},
     });
     assert.strictEqual(drawn, true, 'the pile draws');
@@ -241,16 +249,32 @@ export async function theDiscardPileIsAPileNotARowOfCards(): Promise<void> {
     assert.strictEqual(cards.length, 3, 'three cards');
 
     for (let index = 1; index < cards.length; index += 1) {
-      const right = Number(cards[index].left) - Number(cards[index - 1].left);
-      const down = Number(cards[index].top) - Number(cards[index - 1].top);
-      assert.ok(right > 0 && right < Number(cards[0].width),
-        `each card lies on the last, a step to the right: ${right}`);
-      assert.ok(down > 0, `and a step down: ${down}`);
+      const step = Number(cards[index].left) - Number(cards[index - 1].left);
+      assert.ok(step > 0 && step < Number(cards[0].width),
+        `each card overlaps the last: step ${step}`);
+      assert.ok(step >= 4,
+        `and far enough along to read its rank, "10" included: step ${step}`);
+      assert.strictEqual(Number(cards[index].top), Number(cards[0].top),
+        'side by side - one row, not a staircase');
     }
 
-    // Every card in the pile is a face - none of them is turned over.
-    const contents = cards.map((card: any) => card.getContent());
-    assert.strictEqual(new Set(contents).size, 3, 'three different cards, all open');
+    /*
+     * Every rank is actually on screen, which is the whole point. Measured on
+     * the VISIBLE text: a blessed tag costs no columns, so slicing the raw
+     * content cuts through `{white-fg}` and counts markup as card.
+     */
+    const plain = (widget: any): string[] =>
+      lines(widget).map((row: string) => row.replace(/\{[^}]*\}/g, ''));
+
+    for (let index = 0; index < pile.length; index += 1) {
+      const step = Number(cards[1].left) - Number(cards[0].left);
+      const isTop = index === pile.length - 1;
+      const visible = plain(cards[index])
+        .map((row: string) => (isTop ? row : row.slice(0, step)))
+        .join('');
+      assert.ok(visible.includes(pile[index].rank),
+        `the ${pile[index].rank} can be read in the ${step} columns it shows: ${JSON.stringify(visible)}`);
+    }
   } finally { app.screen?.destroy?.(); }
 }
 
