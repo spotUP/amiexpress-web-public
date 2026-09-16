@@ -15,11 +15,8 @@ import { DoorConstants } from '../DoorTypes';
 import { BBSSessionData, XIMCommand, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
-import { AnsiUtil } from '../../utils/ansi.util';
 import { resolveAssignPath } from '../../utils/path-util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
-import { looksLikeAsciiArt, positionsCursorAbsolutely } from '../../utils/ascii-art.util';
-import { wrapLine } from './line-wrap.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
@@ -27,6 +24,7 @@ import { handleUserData as handleUserDataFn, handleUserString as handleUserStrin
 import { handleMCI as handleMCIFn } from './mci-handler';
 import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
 import { processRawText } from './io-ansi-util';
+import { emitPreparedLines, type LineSink, type PreparedLines } from './io-emit-lines';
 import {
   handleShowGFile as handleShowGFileFn,
   handleShowFile as handleShowFileFn,
@@ -94,6 +92,13 @@ export class XIMIOHandler {
    * between showPause() and the last page.
    */
   private adaptedPause: C64DoorFrameAdapter | null = null;
+  /**
+   * The lines of a message the line-count pause has not sent yet, and the
+   * door message they answer - held between the prompt and the answer (see
+   * io-emit-lines.ts); the reply that releases the door waits for the last of
+   * them.
+   */
+  private pausedRemainder: { job: PreparedLines; pendingMsg?: XIMMessage } | null = null;
 
   // ANSI sequence buffer for handling split escape sequences across JH_SM calls
   // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
@@ -224,11 +229,35 @@ export class XIMIOHandler {
       // Handle input during pause
       if (this.waitingForPause) {
         debugLog(`[XIMIOHandler] Pause active - received token: "${token.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`);
-        this.pauseInputBuffer += token;
-        // Check for completion (Enter or space typically resumes)
-        if (token === '\r' || token === '\n' || token === ' ') {
+        /*
+         * THE PROMPT READS A LINE, AND SHOWS IT BEING TYPED.
+         *
+         * express.e:5194 answers `More(y/n/ns)?` with lineInput, which
+         * echoes each character and ends on RETURN - the same rules
+         * server/terminal-input.ts's accumulatePause gives the board's own
+         * pause prompts: a SPACE on an empty line submits (the sysop,
+         * 2026-09-07, "make every pause prompt accept both SPACE and
+         * ENTER"), RETURN submits whatever was typed, BACKSPACE takes a
+         * character back. Before 2026-09-16 the typed characters were
+         * swallowed without an echo, so a caller who typed `y` saw nothing
+         * happen and reported "i can not press y/n/ns, only enter".
+         */
+        if (token === '\r' || token === '\n' || (token === ' ' && this.pauseInputBuffer === '')) {
           debugLog('[XIMIOHandler] Pause completion key received - calling completePauseInput()');
           this.completePauseInput();
+          continue;
+        }
+        if (token === '\b' || token === '\x7f') {
+          if (this.pauseInputBuffer.length > 0) {
+            this.pauseInputBuffer = this.pauseInputBuffer.slice(0, -1);
+            this.directEmit('ansi-output', '\b \b');
+          }
+          continue;
+        }
+        if (token.length === 1 && token >= ' ' && token <= '~' && this.pauseInputBuffer.length < 3) {
+          // express.e:5183 - `input[3]`: the answer is at most three characters.
+          this.pauseInputBuffer += token;
+          this.directEmit('ansi-output', token);
         }
         continue;
       }
@@ -1510,49 +1539,14 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // don't emit a reset, causing the color to persist into the following prompt.
     const containsAnsiSgr = /\x1b\[\d*(?:;\d+)*m/.test(normalized);
 
-    for (let i = 0; i < rawLines.length; i++) {
-      const line = rawLines[i];
-      const isLastLine = i === rawLines.length - 1;
-      const shouldAddLineBreak = !isLastLine || hasTrailingNewline;
-
-      const visibleLine = AnsiUtil.stripAnsiForPlainText(line);
-      // A door that moves the cursor to a row and column is PAINTING a
-      // screen, not printing a line, and has no lines to wrap. Breaking
-      // one moves everything after the break somewhere the door never
-      // asked for: DOORREPO's /help came out with every row cut short and
-      // its remainder starting the row below (screenshot, 2026-09-01).
-      //
-      // The door's own bytes were captured and replayed and render
-      // perfectly, and processRawText passes them through byte-identical -
-      // the break was inserted here. looksLikeAsciiArt() was the only
-      // exemption and asks whether the text LOOKS like art; a help row of
-      // ordinary words does not, so it was wrapped.
-      const lineLooksLikeArt = looksLikeAsciiArt(visibleLine);
-      const segments = (lineLooksLikeArt || positionsCursorAbsolutely(line))
-        ? [line]
-        : wrapLine(line, this.state.lineWrap);
-
-      for (let s = 0; s < segments.length; s++) {
-        const segment = segments[s];
-        const isLastSegment = s === segments.length - 1;
-        const endsInNewline = !isLastSegment || shouldAddLineBreak;
-        const suffix = endsInNewline ? newlineMode.lineSuffix : '';
-        const ansiReset = (containsAnsiSgr && isLastLine && isLastSegment && endsInNewline)
-          ? '\x1b[0m' : '';
-        const output = `${segment}${ansiReset}${suffix}`;
-
-        // Emit output BEFORE checking pause
-        this.directEmit('ansi-output', output);
-        bytesSent += output.length;
-
-        // express.e only increments lineCount and checks pause if a newline was emitted
-        if (trackLines && endsInNewline) {
-          this.state.lineCount += 1;
-          if (autoPause && this.checkForPause(pendingMsg)) {
-            return bytesSent;
-          }
-        }
-      }
+    const sent = emitPreparedLines(
+      { lines: rawLines, hasTrailingNewline, trackLines, autoPause, containsAnsiSgr },
+      this.lineSink(pendingMsg),
+    );
+    bytesSent += sent.bytes;
+    if (sent.paused) {
+      this.pausedRemainder = sent.remainder ? { job: sent.remainder, pendingMsg } : null;
+      return bytesSent;
     }
 
     // Handle @READUSERKEYS - trigger a pause after outputting all text
@@ -1595,6 +1589,16 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     }
 
     return bytesSent;
+  }
+
+  /** The wire and the row count, as emitPreparedLines sees them. */
+  private lineSink(pendingMsg?: XIMMessage): LineSink {
+    return {
+      lineWrap: this.state.lineWrap,
+      emit: (text) => { this.directEmit('ansi-output', text); },
+      countRow: () => { this.state.lineCount += 1; },
+      pauseDue: () => this.checkForPause(pendingMsg),
+    };
   }
 
   /**
@@ -1720,13 +1724,40 @@ debugLog('[XIMIOHandler] Pause acknowledged, resuming');
     this.waitingForPause = false;
     this.pauseReply = null;
     this.state.lineCount = 0;
-    
-    // Handle 'ns' (non-stop) input
-    if (this.pauseInputBuffer.toLowerCase().includes('ns')) {
+
+    /*
+     * express.e:5196-5197 - the answer is read by its first letters: `n`
+     * abandons the rest of the file (checkForPause returns RESULT_FAILURE
+     * and displayFile's loop EXITs), `ns` turns the pausing off for the
+     * rest of it, and anything else - `y`, an empty line, a stray key -
+     * goes on to the next page.
+     */
+    const answer = this.pauseInputBuffer.trim().toLowerCase();
+    this.pauseInputBuffer = '';
+    const nonStop = answer.startsWith('ns');
+    const abandon = answer.startsWith('n') && !nonStop;
+    if (nonStop) {
       this.state.nonStopText = true;
     }
-    
-    this.pauseInputBuffer = '';
+
+    // express.e:5199 erases the prompt (`[1A[K` after lineInput's RETURN
+    // moved down a row). This port never echoed the RETURN, so the cursor is
+    // still on the prompt's own row: back to its start, wipe it, and the next
+    // row of the file goes where the prompt was - the same sequence the
+    // board's own paginated screens use (screen.handler.ts).
+    this.directEmit('ansi-output', '\r\x1b[K');
+
+    const held = this.pausedRemainder;
+    this.pausedRemainder = null;
+    if (held && !abandon) {
+      const sent = emitPreparedLines(held.job, this.lineSink(held.pendingMsg));
+      if (sent.paused) {
+        // The next page is up and its prompt with it; the door's reply waits
+        // for that answer, and the emulator stays where checkForPause put it.
+        this.pausedRemainder = sent.remainder ? { job: sent.remainder, pendingMsg: held.pendingMsg } : null;
+        return;
+      }
+    }
 
     // Reply to the message that triggered the pause
     this.reply(msg, data);

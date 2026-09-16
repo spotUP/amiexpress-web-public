@@ -27,6 +27,7 @@
 
 import * as deasync from "deasync";
 import { isPumping } from '../../api/pump-owner';
+import { asyncWaitEnabled } from '../../api/wait-budget';
 import type { LibraryManager } from "../../LibraryManager.js";
 import type { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import type { XIMProtocol } from "../../XIMProtocol.js";
@@ -547,6 +548,48 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
       // true and we skip the drain entirely — avoiding the deasync.loopWhile
       // microtask-draining issue inside C++ trap callbacks where Node's
       // microtask queue does not drain reliably from native bindings.
+      const logShutdown = () => {
+        const currentXim = getXimProtocol();
+        if (currentXim && currentXim.isShuttingDown()) {
+          console.log(
+            `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
+          );
+        }
+      };
+      if (asyncWaitEnabled()) {
+        /*
+         * NO DRAIN UNDER THE ASYNC WAIT - the handler settles on the event
+         * loop, and the door waits for it the way a door waits for anything.
+         *
+         * This callback runs inside the door's PutMsg trap, and under the
+         * async wait the emulator's batch is itself a promise continuation
+         * (DoorLifecycleManager yields between batches with setImmediate).
+         * V8 runs microtasks only when it is not already inside one, so
+         * from here a deasync loop can spin for the whole deadline and the
+         * handler's first `await` never gets its turn: on the sysop's
+         * board, 2026-09-16, EVERY JH_SF of a file with an MCI code (the
+         * Super-AmiLog bulletin opens with `~f`) sat at "did not resolve
+         * within 5000ms", was replied to unread by the fall-through, and
+         * then drew - after which the pause's own reply hit a message the
+         * door had already been released from. Five seconds of nothing,
+         * then a door out of step with its BBS.
+         *
+         * The ordering the drain was written for (dRE!Wall's JH_WRITE
+         * landing before the file it follows) holds without it: a direct
+         * XIM door does not send its next message until this one is
+         * replied to - WaitPort hands it nothing until then - and the
+         * handler replies only after it has emitted. Under the legacy
+         * synchronous loop nothing else ever runs, so that mode keeps the
+         * drain below.
+         */
+        handlePromise.then(logShutdown, (err) => {
+          console.warn(
+            `[DoorLifecycleManager] doorMessageCallback: async handler for cmd=${parsed.command} rejected:`,
+            err,
+          );
+        });
+        return;
+      }
       let done = false;
       let handlerError: unknown = null;
       handlePromise.then(
@@ -573,12 +616,7 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
       // Post-handler bookkeeping (JH_SHUTDOWN check) — same shape as the
       // sync .then() path below, but executed inline now that the handler
       // has resolved (or timed out).
-      const currentXim = getXimProtocol();
-      if (currentXim && currentXim.isShuttingDown()) {
-        console.log(
-          `[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - flagged, continuing execution until natural exit`,
-        );
-      }
+      logShutdown();
     } else {
       // For native XIM doors: handlers call reply() themselves (wasReplyHandled=true),
       // so replyMsg below is skipped. For AEDoor-based doors (ctop / Conftop-II):

@@ -67,8 +67,11 @@ describe('the emitter uses it', () => {
   // A predicate nobody calls would leave the screenshot unchanged.
   const fs = require('fs');
   const path = require('path');
+  // The row loop moved out of io.ts on 2026-09-16 (io-emit-lines.ts), so the
+  // pause could hand back the lines it had not sent; the wrap and its
+  // exemption went with it.
   const source = fs.readFileSync(
-    path.resolve(__dirname, '../../src/amiga-emulation/xim/io.ts'), 'utf8'
+    path.resolve(__dirname, '../../src/amiga-emulation/xim/io-emit-lines.ts'), 'utf8'
   );
 
   it('asks before wrapping', () => {
@@ -86,7 +89,7 @@ describe('the emitter uses it', () => {
  * Task 10) so wrap-for-session.util.ts could reuse it as the one
  * cursor-control detector instead of keeping a second, drifted regex. This
  * function has another consumer, though: io.ts's own line-wrap safety net
- * (io.ts:~1455, `(lineLooksLikeArt || positionsCursorAbsolutely(line)) ?
+ * (io-emit-lines.ts, `(lineLooksLikeArt || positionsCursorAbsolutely(line)) ?
  * [line] : wrapLine(...)`), for EVERY session, ANSI or PETSCII.
  *
  * The widened match set changes that consumer's behavior too: a long line
