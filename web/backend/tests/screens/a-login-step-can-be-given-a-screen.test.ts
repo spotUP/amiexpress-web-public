@@ -81,7 +81,16 @@ describe('a step the board has no file for', () => {
     const after = await request(app()).get('/api/screens/login-sequence?node=1');
     const step = stepOf(after.body, 'BULL');
     expect(step.file).toBe('Screens/BULL.txt');
-    expect(step.items).toEqual([{ code: 'SS', target: 'BBS:Bulletins/bull6.txt', pause: false }]);
+    // A row also reports the file it SHOWS and whether the board writes that
+    // file for itself - the page draws the screen from one and warns from the
+    // other - so this is the row's shape, not only its code and target.
+    expect(step.items).toEqual([{
+      code: 'SS',
+      target: 'BBS:Bulletins/bull6.txt',
+      pause: false,
+      shows: 'Bulletins/bull6.txt',
+      generated: false,
+    }]);
   });
 
   it('refuses a path that is not where the board would read it', async () => {

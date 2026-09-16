@@ -17,7 +17,7 @@ import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { config } from '../config';
 import { screenSearchLocations } from '../screens/screen-resolution';
-import { getScreenFileName } from '../screens/screen-tables';
+import { getScreenFileName, isBoardWritten } from '../screens/screen-tables';
 import { screenDrawsNothing, screenIsProgram } from '../screens/screen-blankness';
 import { readThemeRegistry } from '../screens/theme-registry';
 import {
@@ -167,8 +167,12 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
     const file = resolution?.file ?? null;
     const full = file ? path.join(baseDir, file) : null;
 
-    /** A row, and the rows of the screen it shows when that screen is a program too. */
-    let items: Array<LoginItem & { nested?: { file: string; items: LoginItem[] } }> = [];
+    /** A row: what it shows, where that file is, and its rows when it is a program too. */
+    let items: Array<LoginItem & {
+      nested?: { file: string; items: LoginItem[] };
+      shows?: string;
+      generated?: boolean;
+    }> = [];
     let bytes = 0;
     let program = false;
     if (full && fs.existsSync(full)) {
@@ -179,7 +183,21 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
       items = readScreenProgram(content).items.map(item => {
         // One level down: the screen this row shows may be a program too.
         const nested = nestedFor(baseDir, item.target, nodeId);
-        return nested ? { ...item, nested } : item;
+        /*
+         * WHICH FILE THE ROW POINTS AT, and whether the board writes it.
+         *
+         * "ok but the content of bull6.txt is not visible nor editable? what
+         * am i gonna do with that?" (sysop, 2026-09-16). The page can show a
+         * screen once it knows its path - and must say when showing is all
+         * anyone can usefully do with it, because SAmiLog rewrites bull6
+         * every night and a hand-drawn edit is gone by morning.
+         */
+        const shows = includeFile(baseDir, item.target, nodeId);
+        return {
+          ...item,
+          ...(nested ? { nested } : {}),
+          ...(shows ? { shows, generated: isBoardWritten(path.basename(shows)) } : {}),
+        };
       });
       // Whether a THEME could change this step, or only the board can.
       program = screenIsProgram(content);

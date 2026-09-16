@@ -16,8 +16,9 @@
  * row identity here IS the order.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Save, Trash2 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { ScreenArt } from '../components/ScreenArt';
 import type { ApiResponse } from '../types';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
@@ -31,6 +32,10 @@ interface LoginItem {
   pause: boolean;
   /** The rows of the screen this row shows, when that screen is a program too. */
   nested?: { file: string; items: LoginItem[] } | null;
+  /** The file this row shows, relative to the board root. */
+  shows?: string | null;
+  /** True when the board writes that file for itself - a door's output, not art. */
+  generated?: boolean;
 }
 
 /** The other rung's copy, when this one is empty and that one is not. */
@@ -131,6 +136,38 @@ export function LoginSequencePage() {
   const unsaved = useRef<Record<string, LoginItem[] | undefined>>({});
   /** Rows of included screens, keyed by the file they belong to. */
   const [nested, setNested] = useState<Record<string, LoginItem[]>>({});
+  /**
+   * The screens the sysop has opened to LOOK at, and their bytes.
+   *
+   * "ok but the content of bull6.txt is not visible nor editable? what am i
+   * gonna do with that?" (2026-09-16). A row names a screen; this shows it,
+   * drawn by the same canvas the screen editor uses.
+   */
+  const [shown, setShown] = useState<Record<string, string | null>>({});
+
+  const toggleShow = async (file: string) => {
+    if (file in shown) {
+      setShown(prev => {
+        const next = { ...prev };
+        delete next[file];
+        return next;
+      });
+      return;
+    }
+    setShown(prev => ({ ...prev, [file]: null }));
+    try {
+      const answer = await apiClient.getScreenFile(file, theme);
+      const content = (answer as { data?: { content?: string } })?.data?.content ?? '';
+      setShown(prev => ({ ...prev, [file]: content }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setShown(prev => {
+        const next = { ...prev };
+        delete next[file];
+        return next;
+      });
+    }
+  };
   const [node, setNode] = useState(1);
   /*
    * WHICH BOARD IS BEING EDITED. A theme shadows the board's own screens, so
@@ -614,6 +651,16 @@ export function LoginSequencePage() {
                 >
                   <ArrowDown size={14} />
                 </button>
+                {item.shows && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    aria-label={`Show ${item.target}`}
+                    onClick={() => { void toggleShow(item.shows!); }}
+                  >
+                    {item.shows in shown ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn-secondary"
@@ -624,6 +671,30 @@ export function LoginSequencePage() {
                 </button>
               </div>
             ))}
+
+            {/*
+              WHAT THE ROW ACTUALLY DRAWS. A row names a screen; until now
+              that was all it did, and the sysop asked the fair question -
+              "the content of bull6.txt is not visible nor editable? what am
+              i gonna do with that?" Drawn by the same canvas the screen
+              editor uses, so a viewer and an editor cannot disagree.
+            */}
+            {items.map((item, index) => item.shows && item.shows in shown ? (
+              <div key={`${step.screen}:${index}:art`} className="ml-6 space-y-1">
+                <p className="text-xs text-content-secondary">
+                  <span className="font-mono">{item.shows}</span>
+                  {item.generated && (
+                    <span className="ml-2 text-status-warn">
+                      [BOARD-WRITTEN] a door rewrites this file - its numbers are
+                      output, and art drawn over them is gone at the next run.
+                    </span>
+                  )}
+                </p>
+                {shown[item.shows] === null
+                  ? <p className="text-xs text-content-muted">Reading {item.shows}...</p>
+                  : <ScreenArt content={shown[item.shows] as string} className="max-h-[60vh]" maxRows={30} />}
+              </div>
+            ) : null)}
 
             {/*
               ONE LEVEL DOWN. A screen a step shows can be a program itself -
