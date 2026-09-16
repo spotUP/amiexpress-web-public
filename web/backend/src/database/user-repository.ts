@@ -58,6 +58,19 @@ function fieldToColumn(field: string): string {
   return map[field] || field.toLowerCase();
 }
 
+/**
+ * The same rule, for the test that pins it against the schema.
+ *
+ * A field with no entry in the map falls through to `toLowerCase()`, so
+ * `dailyBytesDld` asks for a column called `dailybytesdld` - and nothing
+ * had ever added one, which broke the first login of every new day
+ * (2026-09-16). The writer's name and the schema's name have to agree, and
+ * only a test that can ask BOTH will notice when they stop.
+ */
+export function fieldToColumnForTest(field: string): string {
+  return fieldToColumn(field);
+}
+
 export class UserRepository extends BaseRepository<User> {
   constructor(db: any) {
     super(db);
@@ -228,6 +241,11 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       downloads: safeNumber(user.downloads, 0),
       bytesUpload: safeNumber(user.bytesupload, 0),
       bytesDownload: safeNumber(user.bytesdownload, 0),
+      // Zeroed when the day turns (express.e:535). Written by the
+      // login path since 02828601d and never read back until now, so
+      // the daily download allowance reset but never actually
+      // limited anything.
+      dailyBytesDld: safeNumber(user.dailybytesdld, 0),
       ratio: safeNumber(user.ratio, 0),
       ratioType: safeNumber(user.ratiotype, 0),
       timeTotal: safeNumber(user.timetotal, 0),

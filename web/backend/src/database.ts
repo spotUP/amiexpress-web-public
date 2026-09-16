@@ -370,6 +370,28 @@ console.log('Checking for missing columns in users table...');
       const tableInfo = this.db.prepare('PRAGMA table_info(users)').all() as any[];
       const columnNames = tableInfo.map(col => col.name);
 
+      if (!columnNames.includes('dailybytesdld')) {
+        /*
+         * THE DAY-TURN WROTE A COLUMN THAT DID NOT EXIST.
+         *
+         * express.e:535 zeroes the download allowance when the day
+         * turns, and `login-post.service` learned to do the same
+         * (02828601d) - `updateUser({ ..., dailyBytesDld: 0 })`. The
+         * column was never added, so the FIRST login of a new day
+         * died with "no such column: dailybytesdld" and the caller
+         * simply could not get on: reported as "why has my sysop
+         * login stopped working all of a sudden" (2026-09-16).
+         *
+         * It hid for as long as it did because nothing writes it
+         * until a day boundary is crossed - the one branch no test
+         * and no session covers unless it happens to be running at
+         * midnight. The live board's users table was one day-turn
+         * away from the same failure, for every caller.
+         */
+        this.db.exec('ALTER TABLE users ADD COLUMN dailybytesdld INTEGER DEFAULT 0');
+console.log('✓ Added dailybytesdld column');
+      }
+
       if (!columnNames.includes('availableforchat')) {
         this.db.exec('ALTER TABLE users ADD COLUMN availableforchat INTEGER DEFAULT 1');
 console.log('✓ Added availableforchat column');
