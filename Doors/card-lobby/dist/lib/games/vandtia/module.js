@@ -35,6 +35,7 @@ class VandtiaGameModule {
          */
         this.handView = this.handView === 'hand' ? 'table' : 'hand';
         this.selectedCardIndex = null; // the numbers now mean other cards
+        this.selectedCards = [];
         this.host.pushNotice(this.handView === 'table'
             ? 'Showing the cards in front of you. V shows your hand.'
             : 'Showing your hand. V shows the cards in front of you.');
@@ -47,6 +48,19 @@ class VandtiaGameModule {
         this.hintKind = 'vandtia';
         /** The card the caller has picked out of whatever they are playing from. */
         this.selectedCardIndex = null;
+        /**
+         * EVERY CARD THE CALLER HAS PICKED, when they are playing several at once.
+         *
+         * The house rule lets a hand put down several cards of the same value in
+         * one turn (sysop, 2026-09-16), so picking is a SET: a card key adds a card
+         * of the matching value to it, and a key pressed twice plays the lot.
+         * Picking a card of a different value starts again with that one, because
+         * that is what a caller changing their mind looks like.
+         *
+         * `selectedCardIndex` stays as the last one picked - the renderer lifts it
+         * and the keyboard reads it to know when a second press means "play".
+         */
+        this.selectedCards = [];
         /** During the swap: the hand card waiting for a table card to change with. */
         this.selectedHandIndex = null;
         /**
@@ -132,6 +146,7 @@ class VandtiaGameModule {
             }
             const engine = new engine_1.VandtiaEngine(seated.map((p) => p.userId), seated.map((p) => p.username), seated.map((p) => (0, utils_1.isBotPlayer)(p)));
             this.selectedCardIndex = null;
+            this.selectedCards = [];
             this.selectedHandIndex = null;
             this.save(fresh, engine, {}, Date.now());
             this.host.updateTableStatus(fresh);
@@ -249,6 +264,7 @@ class VandtiaGameModule {
         if (!result.success)
             return false;
         this.selectedCardIndex = null;
+        this.selectedCards = [];
         this.host.pushNotice('Nothing in your hand answers the pile, so you take it.');
         return true;
     }
@@ -474,8 +490,25 @@ class VandtiaGameModule {
         const cards = loaded.engine.cardsInPlay(userId);
         if (index < 0 || index >= cards.length)
             return;
+        /*
+         * A card of the SAME VALUE joins the pick; a different one replaces it.
+         * Blind cards are turned one at a time, so they never group - you cannot
+         * choose what you cannot see.
+         */
+        const blind = loaded.engine.sourceFor(userId) === 'faceDown';
+        const already = this.selectedCards.includes(index);
+        const sameValue = this.selectedCards.length > 0
+            && cards[this.selectedCards[0]]?.rank === cards[index].rank;
+        if (blind || this.selectedCards.length === 0 || !sameValue) {
+            this.selectedCards = [index];
+        }
+        else if (!already) {
+            this.selectedCards.push(index);
+        }
         this.selectedCardIndex = index;
-        this.host.pushNotice(`Selected ${(0, engine_1.cardId)(cards[index])} - press it again, or ENTER, to play.`);
+        this.host.pushNotice(this.selectedCards.length > 1
+            ? `${this.selectedCards.length} x ${cards[index].rank} picked - press again, or ENTER, to play them.`
+            : `Selected ${(0, engine_1.cardId)(cards[index])} - press it again, or ENTER, to play.`);
         this.host.updateAllPanels();
     }
     /** 1-3 picks a hand card, 4-6 the face-up card it changes places with. */
@@ -609,12 +642,16 @@ class VandtiaGameModule {
                     : 'Pick a card first - press its number, or use the arrows.');
                 return;
             }
-            const result = loaded.engine.playCard(userId, this.selectedCardIndex);
+            const playing = this.selectedCards.length > 0
+                ? this.selectedCards
+                : [this.selectedCardIndex];
+            const result = loaded.engine.playCards(userId, playing);
             if (!result.success) {
                 this.host.pushNotice((0, refusal_1.explainRefusal)(result.message, this.refusalAdvice(fresh)));
                 return;
             }
             this.selectedCardIndex = null;
+            this.selectedCards = [];
             this.host.pushEvent(result.message);
             this.save(fresh, loaded.engine, loaded.beforeStacks);
             /*
@@ -651,6 +688,7 @@ class VandtiaGameModule {
                 return;
             }
             this.selectedCardIndex = null;
+            this.selectedCards = [];
             this.host.pushEvent(result.message);
             this.save(fresh, loaded.engine, loaded.beforeStacks);
             await this.host.persistState();

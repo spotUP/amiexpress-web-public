@@ -295,3 +295,75 @@ export async function theDoorAsksForTheKeyRepeatOfAMenu(): Promise<void> {
   assert.strictEqual(declared!.split('=')[1].trim().toLowerCase(), 'application',
     'and it is the one for a door whose screen is a table, not an arcade door');
 }
+
+export async function twoCardsOfOneValueArePickedTogetherAndPlayedAtOnce(): Promise<void> {
+  /*
+   * The house rule, through the keys a caller actually presses: a card key
+   * picks, a key on a card of the SAME VALUE joins the pick, and pressing a
+   * picked card again plays the lot - "the user should be able to drop
+   * several cards of the same value on the cards on the table ... and get a
+   * new one from the deck so he always have 3 on hand" (sysop, 2026-09-16).
+   *
+   * THE PAIR IS TWO TWOS ON PURPOSE. A two gives the turn back, so the table
+   * does not move on after the play and the assertions read a settled game.
+   * A first cut used nines, and the bots - paced at zero for the tests - had
+   * played half a dozen turns and burned the pile by the time it looked; the
+   * test failed while the rule worked.
+   */
+  const app = await openApp();
+  try {
+    const table = await playing(app, 130);
+    const engine = app.vandtia.load(table).engine;
+    const me = app.currentProfile.userId;
+    if (engine.currentPlayerId() !== me) return;
+
+    engine.playerById(me).hand = [
+      { rank: '2', suit: 'H' }, { rank: '2', suit: 'S' }, { rank: 'K', suit: 'C' },
+    ] as any;
+    engine.state.pile = [{ rank: '4', suit: 'D' }] as any;
+    engine.state.stock = [{ rank: '7', suit: 'C' }, { rank: '8', suit: 'D' }] as any;
+    table.hand.snapshot = engine.serialize();
+    await app.persistState();
+
+    press(app, '1');
+    press(app, '2');
+    assert.deepStrictEqual(app.vandtia.selectedCards, [0, 1], 'both twos are picked');
+
+    press(app, '2');                                   // the second press plays them
+    await settle(() => (app.vandtia.load(app.findTableById(130))?.engine.state.pile.length ?? 0) >= 3);
+
+    const after = app.vandtia.load(app.findTableById(130)).engine;
+    const pile = after.state.pile.map((card: any) => `${card.rank}${card.suit}`);
+    assert.deepStrictEqual(pile, ['4D', '2H', '2S'], 'both twos went down in one move');
+    assert.strictEqual(after.playerById(me).hand.length, 3,
+      'and the hand is drawn back up to three');
+    assert.strictEqual(after.currentPlayerId(), me, 'a two hands the turn back');
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function pickingADifferentValueStartsTheGroupAgain(): Promise<void> {
+  // What a caller changing their mind looks like: the group is not a basket
+  // that keeps everything pressed.
+  const app = await openApp();
+  try {
+    const table = await playing(app, 131);
+    const engine = app.vandtia.load(table).engine;
+    const me = app.currentProfile.userId;
+    if (engine.currentPlayerId() !== me) return;
+
+    engine.playerById(me).hand = [
+      { rank: '9', suit: 'H' }, { rank: '9', suit: 'S' }, { rank: 'K', suit: 'C' },
+    ] as any;
+    engine.state.pile = [{ rank: '4', suit: 'D' }] as any;
+    table.hand.snapshot = engine.serialize();
+    await app.persistState();
+
+    press(app, '1');
+    press(app, '2');
+    assert.strictEqual(app.vandtia.selectedCards.length, 2, 'two nines picked');
+
+    press(app, '3');                                   // the king
+    assert.deepStrictEqual(app.vandtia.selectedCards, [2],
+      'a different value starts the pick again');
+  } finally { app.screen?.destroy?.(); }
+}

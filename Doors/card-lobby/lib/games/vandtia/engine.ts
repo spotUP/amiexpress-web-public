@@ -376,7 +376,28 @@ export class VandtiaEngine {
   // Playing
   // --------------------------------------------------------------------
 
-  public playCard(playerId: string, cardIndex: number): VandtiaResult {
+  /**
+   * PLAY SEVERAL CARDS OF THE SAME VALUE AT ONCE.
+   *
+   * "the user should be able to drop several cards of the same value... and
+   * get a new one from the deck so he always have 3 on hand", and it "applies
+   * in game as well" (sysop, 2026-09-16). A house rule, and a good one: three
+   * sevens are one decision, not three, and holding them back one at a time
+   * only slows the hand down.
+   *
+   * It is the same move as `playCard`, made with more cards, so it is the
+   * same code - `playCard` calls this with one index. What that buys is that
+   * every rule downstream keeps working without being taught about groups:
+   * the vandtia still burns, four of a rank across the pile still burns
+   * (and reaches it SOONER, since three at once can complete the run), a
+   * two still hands the turn back, and the refill still tops the hand up to
+   * three.
+   *
+   * Every card must be the same rank and every one must be legal on its own.
+   * A blind card is played singly - you cannot know what you are holding, so
+   * there is no group to choose.
+   */
+  public playCards(playerId: string, cardIndices: number[]): VandtiaResult {
     if (this.state.phase !== 'playing') return { success: false, message: 'Not playing yet.' };
     if (this.currentPlayerId() !== playerId) return { success: false, message: 'Not your turn.' };
 
@@ -384,19 +405,70 @@ export class VandtiaEngine {
     if (!player) return { success: false, message: 'You are not in this game.' };
 
     const source = this.sourceFor(playerId);
-    const pileOfCards = player[source];
-    const card = pileOfCards[cardIndex];
-    if (!card) return { success: false, message: 'No such card.' };
+    const from = player[source];
 
-    if (source !== 'faceDown' && !canPlayOn(card, this.state.pile)) {
-      const top = this.topOfPile();
-      return {
-        success: false,
-        message: top ? `${cardId(card)} does not answer ${cardId(top)}.` : `${cardId(card)} cannot be played.`,
-      };
+    // Highest index first, so removing one does not move the others.
+    const indices = [...new Set(cardIndices)].sort((a, b) => a - b);
+    if (indices.length === 0) return { success: false, message: 'No card chosen.' };
+
+    const chosen = indices.map((index) => from[index]);
+    if (chosen.some((card) => !card)) return { success: false, message: 'No such card.' };
+
+    if (indices.length > 1) {
+      if (source === 'faceDown') {
+        return { success: false, message: 'A blind card is turned one at a time.' };
+      }
+      const rank = chosen[0].rank;
+      if (chosen.some((card) => card.rank !== rank)) {
+        return { success: false, message: 'Cards played together must be the same value.' };
+      }
     }
 
-    pileOfCards.splice(cardIndex, 1);
+    if (source !== 'faceDown') {
+      const refused = chosen.find((card) => !canPlayOn(card, this.state.pile));
+      if (refused) {
+        const top = this.topOfPile();
+        return {
+          success: false,
+          message: top
+            ? `${cardId(refused)} does not answer ${cardId(top)}.`
+            : `${cardId(refused)} cannot be played.`,
+        };
+      }
+    }
+
+    return this.playChosen(player, source, indices, chosen);
+  }
+
+  /** One card is a group of one - the same move, the same code. */
+  public playCard(playerId: string, cardIndex: number): VandtiaResult {
+    return this.playCards(playerId, [cardIndex]);
+  }
+
+  /**
+   * The move itself, once the cards are known to be playable.
+   *
+   * Every rule downstream reads the pile rather than the cards that were
+   * just added, which is what lets one implementation serve a single card
+   * and a group: the vandtia burns because a ten is on the pile, four of a
+   * rank burns because the pile ends in four, and the refill tops the hand
+   * back up to three however many left it.
+   */
+  private playChosen(
+    player: VandtiaPlayer,
+    source: VandtiaSource,
+    indices: number[],
+    chosen: VandtiaCard[],
+  ): VandtiaResult {
+    const from = player[source];
+    const card = chosen[chosen.length - 1];          // the one that landed last
+    const many = chosen.length > 1;
+    const said = many
+      ? `${chosen.length} x ${card.rank}`
+      : cardId(card);
+
+    // Highest first, so removing one does not move the others.
+    [...indices].sort((a, b) => b - a).forEach((index) => from.splice(index, 1));
 
     // A blind card that does not fit: the player takes the pile and the card
     // with it. This is the only way to LOSE a turn by playing one.
@@ -408,22 +480,23 @@ export class VandtiaEngine {
       return { success: true, message: this.state.lastAction };
     }
 
-    this.state.pile.push(card);
-    this.state.lastAction = `${player.name} plays ${cardId(card)}.`;
+    this.state.pile.push(...chosen);
+    this.state.lastAction = `${player.name} plays ${said}.`;
     this.refill(player);
 
     // "Tio: Vänder bort hela högen" - and four of the same value in a row
-    // does it too. Either way the same player plays again.
+    // does it too, which a group can complete in one turn. Either way the
+    // same player plays again.
     const runBurns = this.topRunBurns();
     if (burnsThePile(card) || runBurns) {
       const burned = this.state.pile.length;
       const run = BURN_RUN[card.rank] ?? DEFAULT_BURN_RUN;
-      // Kept before the pile goes, for the door to show the card landing.
+      // Kept before the pile goes, for the door to show the cards landing.
       const turnedAway = [...this.state.pile];
       this.state.burned.push(...this.state.pile);
       this.state.pile = [];
       this.state.lastAction = burnsThePile(card)
-        ? `${player.name} plays the vändtia ${cardId(card)} and turns ${burned} cards away.`
+        ? `${player.name} plays the vändtia ${said} and turns ${burned} cards away.`
         : `${player.name} makes ${run} of a kind and turns ${burned} cards away.`;
 
       if (this.retireIfEmpty(player)) {
@@ -448,7 +521,7 @@ export class VandtiaEngine {
         this.advanceTurn(player);
       } else {
         this.checkForLoser();
-        this.state.lastAction = `${player.name} plays ${cardId(card)} and goes again.`;
+        this.state.lastAction = `${player.name} plays ${said} and goes again.`;
       }
       return { success: true, message: this.state.lastAction };
     }

@@ -686,7 +686,10 @@ export class GameViews {
           ? (this.host.vandtia.swapCursor.row === 'hand'
             ? this.host.vandtia.swapCursor.index
             : this.host.vandtia.selectedHandIndex)
-          : this.host.vandtia.selectedCardIndex,
+          // Every card of a picked group, so a group is visible as one.
+          : (this.host.vandtia.selectedCards.length > 0
+            ? this.host.vandtia.selectedCards
+            : this.host.vandtia.selectedCardIndex),
       playable: showingTable ? []
         : swapping ? (me?.hand ?? []).map((_, index) => index)
           : loaded.engine.legalPlays(meId),

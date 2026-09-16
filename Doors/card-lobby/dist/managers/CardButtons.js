@@ -394,7 +394,9 @@ class CardButtons {
             const button = this.buttons[index];
             const row = Math.floor(index / perRow);
             const column = index % perRow;
-            const picked = index === options.selected;
+            const picked = Array.isArray(options.selected)
+                ? options.selected.includes(index)
+                : index === options.selected;
             const playable = options.playable.includes(index);
             const number = (options.labelFrom ?? 1) + index;
             const label = number === 10 ? '0' : String(number);
@@ -483,15 +485,19 @@ class CardButtons {
          * half covered. It comes to the front instead, and the lift then shows
          * a whole card standing proud of the row.
          */
-        if (layout.stride <= cardWidth && options.selected !== null
-            && options.selected >= 0 && options.selected < cards.length) {
-            this.buttons[options.selected].setFront?.();
+        if (layout.stride <= cardWidth && options.selected !== null) {
+            const lifted = Array.isArray(options.selected) ? options.selected : [options.selected];
+            for (const index of lifted) {
+                if (index >= 0 && index < cards.length)
+                    this.buttons[index].setFront?.();
+            }
         }
         // Only repaint when something actually changed - a table refresh runs
         // every few seconds and the cards are usually the same ones.
         const key = `${cards.map((entry) => entry.kind === 'uno'
             ? `${entry.card.color}${entry.card.value}`
             : `${entry.card.rank}${entry.card.suit}`).join(',')}|${options.selected}`
+            + `|${Array.isArray(options.selected) ? options.selected.join('+') : options.selected}`
             + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
             // The shape as well: the same cards in a resized panel are a different
             // picture, and skipping that repaint leaves a fan at the old stride.

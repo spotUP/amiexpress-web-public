@@ -409,3 +409,77 @@ export async function testACardDrawnMidGameLandsInItsPlace(): Promise<void> {
   assert.deepStrictEqual(ids(engine.state.players[0].hand), ['5H', 'KC'],
     'the drawn card landed in order rather than on the end');
 }
+
+export async function testSeveralCardsOfOneValueGoDownTogether(): Promise<void> {
+  /*
+   * The board's house rule: "the user should be able to drop several cards of
+   * the same value ... and get a new one from the deck so he always have 3 on
+   * hand", and it "applies in game as well" (sysop, 2026-09-16).
+   */
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('4S'), currentIndex: 0, stock: cards('QD', 'QH') });
+  engine.state.players[0].hand = cards('7H', '7S', 'KC');
+
+  const result = engine.playCards('u1', [0, 1]);
+
+  assert.ok(result.success, result.message);
+  assert.deepStrictEqual(ids(engine.state.pile), ['4S', '7H', '7S'], 'both sevens are on the pile');
+  assert.strictEqual(engine.state.players[0].hand.length, 3,
+    'and the hand is back up to three from the stock');
+  assert.strictEqual(engine.currentPlayerId(), 'u2', 'play carries on');
+}
+
+export async function testCardsPlayedTogetherMustMatch(): Promise<void> {
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('4S'), currentIndex: 0, stock: [] });
+  engine.state.players[0].hand = cards('7H', '9S', 'KC');
+
+  const result = engine.playCards('u1', [0, 1]);
+
+  assert.strictEqual(result.success, false, 'a seven and a nine are not a group');
+  assert.ok(/same value/i.test(result.message), result.message);
+  assert.deepStrictEqual(ids(engine.state.pile), ['4S'], 'and nothing was played');
+}
+
+export async function testEveryCardOfAGroupMustAnswerThePile(): Promise<void> {
+  // They are the same rank, so if one answers the pile they all do - but a
+  // group that cannot go is refused as a whole, with nothing half-played.
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('KS'), currentIndex: 0, stock: [] });
+  engine.state.players[0].hand = cards('7H', '7S', 'KC');
+
+  const result = engine.playCards('u1', [0, 1]);
+
+  assert.strictEqual(result.success, false, 'sevens do not answer a king');
+  assert.strictEqual(engine.state.players[0].hand.length, 3, 'the hand is untouched');
+}
+
+export async function testAGroupCanCompleteFourOfAKindAndBurn(): Promise<void> {
+  // Three at once reaches the run sooner than one at a time - the rule did
+  // not have to be taught about groups, because it reads the PILE.
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('5S', '7D'), currentIndex: 0, stock: [] });
+  engine.state.players[0].hand = cards('7H', '7S', '7C');
+
+  const result = engine.playCards('u1', [0, 1, 2]);
+
+  assert.ok(result.success, result.message);
+  assert.strictEqual(engine.state.pile.length, 0, 'four sevens turned the pile away');
+  assert.strictEqual(engine.currentPlayerId(), 'u1', 'and the same player goes again');
+  assert.ok(result.burned, 'the door is told what went away, to show it landing');
+}
+
+export async function testABlindCardIsTurnedOneAtATime(): Promise<void> {
+  // You cannot choose a group you cannot see.
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('4S'), currentIndex: 0, stock: [] });
+  const me = engine.state.players[0];
+  me.hand = [];
+  me.faceUp = [];
+  me.faceDown = cards('7H', '7S', 'KC');
+
+  const result = engine.playCards('u1', [0, 1]);
+
+  assert.strictEqual(result.success, false, 'blind cards are turned singly');
+  assert.ok(/one at a time/i.test(result.message), result.message);
+}

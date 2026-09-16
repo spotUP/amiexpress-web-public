@@ -78,8 +78,15 @@ export type DrawnCard =
 export type PlayableCard = DrawnCard & { under?: DrawnCard };
 
 export interface CardButtonOptions extends CardButtonOptionsBase {
-  /** The card the caller has picked, drawn lit. */
-  selected: number | null;
+  /**
+   * The card the caller has picked, drawn lit - or the CARDS.
+   *
+   * A house rule lets a hand put several cards of the same value down in one
+   * turn (sysop, 2026-09-16), and a pick nobody can see is a pick nobody
+   * trusts: every card in the group lifts and lights, not just the last one
+   * touched. A single index still behaves exactly as it did.
+   */
+  selected: number | number[] | null;
   /** Which cards the rules will accept right now; the rest are dimmed. */
   playable: number[];
   /** Face down - draw the back, not the face. Used for the blind endgame. */
@@ -520,7 +527,9 @@ export class CardButtons {
       const button = this.buttons[index];
       const row = Math.floor(index / perRow);
       const column = index % perRow;
-      const picked = index === options.selected;
+      const picked = Array.isArray(options.selected)
+        ? options.selected.includes(index)
+        : index === options.selected;
       const playable = options.playable.includes(index);
       const number = (options.labelFrom ?? 1) + index;
       const label = number === 10 ? '0' : String(number);
@@ -612,9 +621,11 @@ export class CardButtons {
      * half covered. It comes to the front instead, and the lift then shows
      * a whole card standing proud of the row.
      */
-    if (layout.stride <= cardWidth && options.selected !== null
-        && options.selected >= 0 && options.selected < cards.length) {
-      (this.buttons[options.selected] as any).setFront?.();
+    if (layout.stride <= cardWidth && options.selected !== null) {
+      const lifted = Array.isArray(options.selected) ? options.selected : [options.selected];
+      for (const index of lifted) {
+        if (index >= 0 && index < cards.length) (this.buttons[index] as any).setFront?.();
+      }
     }
 
     // Only repaint when something actually changed - a table refresh runs
@@ -622,6 +633,7 @@ export class CardButtons {
     const key = `${cards.map((entry) => entry.kind === 'uno'
       ? `${(entry.card as any).color}${(entry.card as any).value}`
       : `${(entry.card as any).rank}${(entry.card as any).suit}`).join(',')}|${options.selected}`
+      + `|${Array.isArray(options.selected) ? options.selected.join('+') : options.selected}`
       + `|${options.playable.join(',')}|${options.faceDown ? 'b' : 'f'}|${withLabels ? 'L' : '-'}`
       // The shape as well: the same cards in a resized panel are a different
       // picture, and skipping that repaint leaves a fan at the old stride.
