@@ -104,8 +104,16 @@ function logoFor(request) {
      * The slot is in the Studio either way, so drawing one is a decision an
      * artist makes rather than something the door guesses at.
      */
-    if (request.columns <= exports.NARROW_COLUMNS)
-        return [];
+    if (request.columns <= exports.NARROW_COLUMNS) {
+        /*
+         * The door ships a placeholder so a C64 screen is not bare while nobody
+         * has drawn one: `art/style<N>.c64.ans`, five rows of reverse-video
+         * blocks spelling GLC. It is deliberately plain - it is there to be
+         * replaced in the Studio, and the variant above wins the moment it is.
+         */
+        const shipped = readLines(path.join(request.doorDir, 'art', `style${request.style}.c64.ans`));
+        return shipped ?? [];
+    }
     const named = request.values[key];
     if (typeof named === 'string' && named.length > 0) {
         // Inside the door's own folder, and nowhere else: the value is a setting

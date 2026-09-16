@@ -509,6 +509,18 @@ door.onStart(async (ctx) => {
          * calls' own column widths - and the real rows are written over them.
          */
         const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
+        /*
+         * A FORTY-COLUMN LIST SIZES ITSELF.
+         *
+         * `LINES` is one number for both widths, and twenty of them do not fit a
+         * C64's twenty-five rows beside the chrome and the board's own pause -
+         * the header scrolls off before the caller reads it. So the narrow screen
+         * asks the server for what is left under its logo instead, and the logo
+         * is known by now because the header decided it.
+         */
+        if (base.columns <= narrow_1.NARROW_WIDTH) {
+            config.lines = Math.min(config.lines, (0, narrow_1.narrowListRows)(base.logo.length));
+        }
         // Placeholders belong to the wide screen: they hold a table's shape while
         // the network answers, and the narrow screen has no table on the wire yet.
         const placeholders = base.columns <= narrow_1.NARROW_WIDTH ? [] : (0, skeleton_1.skeletonRows)(config.lines);

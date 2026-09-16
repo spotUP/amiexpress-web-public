@@ -76,10 +76,12 @@ describe('which logo a caller sees', () => {
 
   it('is the variant for the style being drawn, not another style\'s', () => {
     const bbsRoot = boardWithVariant(1, ['\x1b[35mSTYLE ONE ONLY']);
-    // Style 3 asked; only style 1 has a narrow drawing - and a narrow caller
-    // is never handed the wide one, so the answer is no logo rather than
-    // another style's.
-    expect(ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual([]);
+    // Style 3 asked; only style 1 has a narrow drawing. A narrow caller is
+    // never handed the WIDE one, so the answer is the door's own shipped
+    // placeholder - and never style 1's variant.
+    const drawn = ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } });
+    expect(drawn.join('\n')).not.toContain('STYLE ONE ONLY');
+    expect(drawn.join('')).toContain('\x1b[7m');   // the shipped placeholder
   });
 
   it('refuses a setting that points outside the door\'s own folder', () => {
@@ -131,8 +133,15 @@ describe('the shipped art', () => {
  * eight rows of a forty-column screen and pushed the list off the top.
  */
 describe('a forty-column caller and the wide drawing', () => {
-  it('is given no logo at all rather than one that cannot fit', () => {
-    expect(ask({ columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual([]);
+  it('is given the narrow placeholder rather than one that cannot fit', () => {
+    const drawn = ask({ columns: 40, values: { logo3: 'art/style3.ans' } });
+    // Never the wide art...
+    expect(drawn).not.toEqual(originalLogo(3));
+    // ...and never nothing, now that the door ships a C64 drawing of its own.
+    expect(drawn.length).toBeGreaterThan(0);
+    for (const line of drawn) {
+      expect(line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length).toBeLessThanOrEqual(40);
+    }
   });
 
   it('still gets the narrow one when an artist has drawn it', () => {
