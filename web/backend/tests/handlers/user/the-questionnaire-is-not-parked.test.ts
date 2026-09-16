@@ -32,15 +32,22 @@ const BOARD = path.resolve(__dirname, '../../../../..');
  * Every `Node<n>` directory that actually SERVES a caller.
  *
  * A provisioned node carries its own screens; Node42-45 and Node97 hold
- * three or eight files of drop-file and TempAns leftovers and have never
- * had a Logon.txt, so requiring a questionnaire in them would pin scratch
- * directories rather than the board.
+ * three or eight files of drop-file and TempAns leftovers, so requiring a
+ * questionnaire in them would pin scratch directories rather than the board.
+ *
+ * The marker is `logon20.txt`, not `Logon.txt`. The plain one was the marker
+ * until `93e12958a fix(screens): a screen that draws nothing is not shipped at
+ * all` deleted it board-wide - after which this filter matched NOTHING, every
+ * node dir dropped out, and the suite failed on an empty list instead of on
+ * the board (2026-09-16). `logon20.txt` is the security-level logon screen
+ * that remains, and it partitions exactly the same way: 41 provisioned nodes,
+ * 5 scratch ones.
  */
 function nodeDirs(): string[] {
   return fs
     .readdirSync(BOARD, { withFileTypes: true })
     .filter((e) => e.isDirectory() && /^Node\d+$/.test(e.name))
-    .filter((e) => fs.existsSync(path.join(BOARD, e.name, 'Logon.txt')))
+    .filter((e) => fs.existsSync(path.join(BOARD, e.name, 'logon20.txt')))
     .map((e) => e.name)
     .sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)));
 }

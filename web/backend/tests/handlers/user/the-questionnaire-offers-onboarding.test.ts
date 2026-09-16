@@ -80,12 +80,19 @@ const BOARD = path.resolve(__dirname, '../../../../..');
 /** The commands onboarding runs, in the order a caller meets the board. */
 const ONBOARDING = ['SCREENTHEME', 'THEME', 'COSYSOP', 'ACHIEVE'] as const;
 
-/** Every `Node<n>` that serves a caller - one with its own Logon.txt. */
+/**
+ * Every `Node<n>` that serves a caller - one with its own logon screen.
+ *
+ * `Logon.txt` was the marker until `93e12958a` deleted it board-wide; this
+ * filter then matched nothing and `nodeDirs()[0]` was `undefined`, which is
+ * the "path argument must be of type string" this suite failed with
+ * (2026-09-16). `logon20.txt` is the security-level screen that remains.
+ */
 const nodeDirs = (): string[] =>
   fs
     .readdirSync(BOARD, { withFileTypes: true })
     .filter((e) => e.isDirectory() && /^Node\d+$/.test(e.name))
-    .filter((e) => fs.existsSync(path.join(BOARD, e.name, 'Logon.txt')))
+    .filter((e) => fs.existsSync(path.join(BOARD, e.name, 'logon20.txt')))
     .map((e) => e.name);
 
 const scriptsOf = (dir: string): string[] =>
