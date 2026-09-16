@@ -20,6 +20,7 @@ import { Socket as SocketIOSocket } from 'socket.io';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import { renderGlcScreen } from './src/render';
 
 // Metadata
 export const metadata = {
@@ -30,7 +31,16 @@ export const metadata = {
   command: 'GLC',
 };
 
-const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+/**
+ * This door's own directory, found from the file rather than from the process.
+ *
+ * `process.cwd()` is the BACKEND when a door runs on this board, not the door
+ * - `tests/doors/doors-do-not-use-cwd.test.ts` exists because doors kept
+ * reading the backend's files by accident. `__dirname` is `src/` in
+ * development and `dist/` in production, so the door root is one level up
+ * from either.
+ */
+const DOOR_ROOT = path.resolve(__dirname, '..');
 
 interface GLCConfig {
   serverHost: string;
@@ -76,50 +86,11 @@ interface Records {
   thirdmostcalled: string;
 }
 
-const padStat = (value?: number | string, width = 3) => String(value ?? '').padStart(width);
-
 interface GLCData {
   calls: CallData[];
   yesterdayStats: DayStats;
   previousDayStats: DayStats;
   records: Records;
-}
-
-function stripAnsi(input: string): string {
-  return input.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-function truncateAnsi(input: string, maxCols: number): string {
-  let visible = 0;
-  let out = '';
-  let i = 0;
-
-  const line = input.replace(/\r?\n$/, '');
-
-  while (i < line.length) {
-    const ch = line[i];
-    if (ch === '\x1b' && line[i + 1] === '[') {
-      const end = line.indexOf('m', i);
-      if (end === -1) break;
-      out += line.slice(i, end + 1);
-      i = end + 1;
-      continue;
-    }
-
-    if (visible >= maxCols) break;
-
-    out += ch;
-    visible += 1;
-    i += 1;
-  }
-
-  return out;
-}
-
-function emitTrimmedLine(socket: SocketIOSocket, text: string, maxCols: number = 80): void {
-  const visibleLen = stripAnsi(text).replace(/\r?\n$/, '').length;
-  const payload = visibleLen > maxCols ? truncateAnsi(text, maxCols) : text.replace(/\r?\n$/, '');
-  socket.emit('ansi-output', `${payload}\r\n`);
 }
 
 function getStringField(source: any, candidates: string[], defaultValue: string = ''): string {
@@ -227,7 +198,9 @@ function normalizeGLCData(raw: any): GLCData {
  * Load GLC configuration
  */
 function loadConfig(): GLCConfig {
-  const configPath = path.join(PROJECT_ROOT, 'doors', 'glc-viewer', 'glcviewer.cfg');
+  // Beside the door, under its own name - the same file the 68K viewer reads
+  // from PROGDIR: (`FileManager Open: "PROGDIR:GLCViewer.cfg"`).
+  const configPath = path.join(DOOR_ROOT, 'GLCViewer.cfg');
 
   const config: GLCConfig = {
     serverHost: process.env.GLC_SERVER_HOST || 'scenewall.bbs.io',
@@ -391,148 +364,52 @@ async function fetchGLCData(config: GLCConfig, page: number = 1): Promise<string
 }
 
 /**
- * Format file size for display
- */
-function formatSize(kb: number): string {
-  if (kb < 0 || kb > 9999) {
-    const mb = Math.floor(kb / 1024);
-    if (mb > 999) {
-      const gb = Math.floor(mb / 1024);
-      const gbFrac = Math.floor(((mb % 1024) * 10) / 1024);
-      if (gb > 9) {
-        return `${gb}G`.padStart(4);
-      } else {
-        return `${gb}.${gbFrac}G`.padStart(4);
-      }
-    } else {
-      return `${mb}M`.padStart(4);
-    }
-  } else {
-    return kb.toString().padStart(4);
-  }
-}
-
-/**
- * Center a string
- */
-function centre(text: string, width: number): string {
-  const trimmed = text.trim();
-  if (trimmed.length >= width) {
-    return trimmed.substring(0, width);
-  }
-  const padding = Math.floor((width - trimmed.length) / 2);
-  return ' '.repeat(padding) + trimmed + ' '.repeat(width - padding - trimmed.length);
-}
-
-/**
  * Display GLC data with ANSI art
  */
-function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, showLocation: boolean): void {
-  const style = config.style;
+/**
+ * Draw the screen, through the renderer that is pinned to the E source.
+ *
+ * This function used to BE the renderer, and it drew an approximation: five
+ * literal spaces where `GLCViewer.e` writes `ESC[5C`, and a column header of
+ * its own invention. The art now comes from `src/art.generated.ts`, lifted out
+ * of the E source by `dev/extract-art.py` and compared against it on every
+ * test run, so what reaches a caller is what the 68K door put on the wire.
+ *
+ * All this does is map the door's normalised data onto the renderer's shapes
+ * and write the lines. `transmit()` in the original is
+ * `WriteStr(diface, textLine, LF)` - one line, one terminator.
+ */
+function displayData(
+  socket: SocketIOSocket,
+  data: GLCData,
+  config: GLCConfig,
+  showLocation: boolean,
+): void {
+  const lines = renderGlcScreen({
+    style: config.style,
+    screenClear: config.screenClear,
+    showLocation,
+    centreName: config.centreName,
+    calls: data.calls.map((call) => ({
+      Username: call.Username,
+      Location: call.location,
+      Bbsname: call.Bbsname,
+      Dateon: call.Dateon,
+      Timeon: call.TimeOn,
+      Timeoff: call.TimeOff,
+      Actions: call.Actions,
+      // Kilobytes on the wire; `transferField` does the rest.
+      Upload: String(call.Upload),
+      Download: String(call.Download),
+    })),
+    yesterday: data.yesterdayStats,
+    previousDay: data.previousDayStats,
+    records: data.records,
+  });
 
-  // Screen clear
-  if (config.screenClear) {
-    socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  for (const line of lines) {
+    socket.emit('ansi-output', line + '\r\n');
   }
-
-  // Header - Style 1 or 3
-  if (style === 1 || style === 3) {
-    socket.emit('ansi-output', '\x1b[0;40;37m   \x1b[35m   ___   ___________________________________   ___   __________________\r\n');
-    socket.emit('ansi-output', '\x1b[37m  \x1b[35m   /  /\\ / _   /  ___/__   __/  ___/ _   /  /\\ /  /\\ /  ___/ _  _/  ___/\\\r\n');
-    socket.emit('ansi-output', '\x1b[37m  \x1b[35m  /  /_//     /\\__  /\\_/  /\\/  /\\_/     /  /_//  /_//  ___/     )\\__  /\\/\r\n');
-    socket.emit('ansi-output', '\x1b[37m  \x1b[35m /_____/__/__/_____/ //__/ /_____/__/__/_____/_____/_____/__/__/_____/ /\r\n');
-    socket.emit('ansi-output', '\x1b[37m  \x1b[35m \\_____\\__\\__\\_____\\/ \\__\\/\\_____\\__\\__\\_____\\_____\\_____\\__\\__\\_____\\/\x1b[34mSdN\r\n');
-    socket.emit('ansi-output', '\x1b[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     \x1b[0m\r\n');
-    if (showLocation) {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mLOCATION             \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
-    } else {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mBBS                  \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
-    }
-  }
-
-  // Header - Style 2 or 4
-  if (style === 2 || style === 4) {
-    socket.emit('ansi-output', '\x1b[0;40;34m \x1b[35m  \x1b[37m \x1b[35m_______  \x1b[37m    .........  ........    ......\x1b[35m_______\x1b[37m      .........  ......\r\n');
-    socket.emit('ansi-output', '\x1b[35m   \x1b[37m \x1b[35m\\_     |___\x1b[37m   ....::::::::::.....  :::::: \x1b[35m\\_     l___\x1b[37m :::::.:::: ::: ::::\r\n');
-    socket.emit('ansi-output', '\x1b[35m   _/      | \x1b[37m \x1b[35m \\_\x1b[37m:::: :::::..... ::::: ::::::\x1b[35m_/       __/_\x1b[37m::::: .... ::: ::::\r\n');
-    socket.emit('ansi-output', '\x1b[35m   \\____  \x1b[37m \x1b[35ml \x1b[37m  \x1b[35m /\x1b[37m:::: :::::::::: ::::::::::::\x1b[35m\\____  \x1b[37m  \x1b[35ml\x1b[37m   \x1b[35m /\x1b[37m:::: :::::::: ::::\r\n');
-    socket.emit('ansi-output', '\x1b[35m   \x1b[37m     \x1b[35m\\______/\x1b[37m:::::.::::::::::::::::::::::     \x1b[35m\\______/\x1b[37m:::::::::::::: ::::\r\n');
-    socket.emit('ansi-output', '\x1b[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     \x1b[0m\r\n');
-    if (showLocation) {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mLOCATION             \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
-    } else {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mBBS                  \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
-    }
-  }
-
-  socket.emit('ansi-output', '\x1b[34m------------------v---------------------v-----v-----------v----------v----v----\r\n');
-
-  // Display callers
-  for (const call of data.calls) {
-    // E source line 260: \l\s[18] = left-aligned 18 chars
-    const username = call.Username.substring(0, 18).padEnd(18);
-    let locationOrBBS = showLocation ? call.location : call.Bbsname;
-
-    if (config.centreName) {
-      locationOrBBS = centre(locationOrBBS, 21);
-    } else {
-      // E source: \l\s[21] = left-aligned 21 chars
-      locationOrBBS = locationOrBBS.substring(0, 21).padEnd(21);
-    }
-
-    // E source: \l\s[5] = left-aligned 5 chars (MUST pad even if empty)
-    const dateon = call.Dateon.substring(0, 5).padEnd(5);
-    // E source: \l\s[5]-\l\s[5] = "TIMEON-TIMEOFF" (11 chars total)
-    const timeon = call.TimeOn.substring(0, 5).padEnd(5);
-    const timeoff = call.TimeOff.substring(0, 5).padEnd(5);
-    // E source: \l\s[10] = left-aligned 10 chars
-    const actions = call.Actions.substring(0, 10).padEnd(10);
-
-    const upload = formatSize(call.Upload);
-    const download = formatSize(call.Download);
-
-    // E source line 258-259: if too long, use 'LOTS'
-    const uploadDisplay = upload.length > 8 ? 'LOTS' : upload;
-    const downloadDisplay = download.length > 8 ? 'LOTS' : download;
-
-    // E source: \r\s[4] = right-aligned 4 chars (last 4 of formatted size)
-    const line = `\x1b[36m${username}\x1b[34m:\x1b[32m${locationOrBBS}\x1b[34m:\x1b[37m${dateon}\x1b[34m:\x1b[37m${timeon}-${timeoff}\x1b[34m:\x1b[36m${actions}\x1b[34m:\x1b[37m${uploadDisplay.padStart(4)}\x1b[34m:\x1b[37m${downloadDisplay.padStart(4)}`;
-    emitTrimmedLine(socket, line);
-  }
-
-  socket.emit('ansi-output', '\x1b[34m------------------^---------------------^-----^-----------^----------^----^----\r\n');
-
-  // Action legend
-  socket.emit('ansi-output', '\x1b[35m \x1b[1;33m[\x1b[0;36mD\x1b[1;33m]\x1b[0;35mOWNLOAD   \x1b[1;33m[\x1b[0;36md\x1b[1;33m]\x1b[0;35mOWNLOAD FAIL  \x1b[1;33m[\x1b[0;36mo\x1b[1;33m]\x1b[0;35mPERATOR PAGED!  \x1b[1;33m[\x1b[0;36mF\x1b[1;33m]\x1b[0;35mILE SCAN   \x1b[1;33m[\x1b[0;36mA\x1b[1;33m]\x1b[0;35mCCOUNT EDIT!\r\n');
-  socket.emit('ansi-output', ' \x1b[1;33m[\x1b[0;36mU\x1b[1;33m]\x1b[0;35mPLOAD \x1b[1;33m[\x1b[0;36mu\x1b[1;33m]\x1b[0;35mPLOAD FAIL    \x1b[1;33m[\x1b[0;36mO\x1b[1;33m]\x1b[0;35mPERATOR CHAT !  \x1b[1;33m[\x1b[0;36mH\x1b[1;33m]\x1b[0;35mACK TRY!   \x1b[1;33m[\x1b[0;36mL\x1b[1;33m]\x1b[0;35mOST CARRIER!\r\n');
-  socket.emit('ansi-output', ' \x1b[1;33m[\x1b[0;36m*\x1b[1;33m]\x1b[0;35mNEW-USER  \x1b[1;33m[\x1b[0;36mB\x1b[1;33m]\x1b[0;35mULLETINS      \x1b[1;33m[\x1b[0;36mE\x1b[1;33m]\x1b[0;35mX. RESTR. FILE\r\n');
-  socket.emit('ansi-output', '\x1b[34m-------------------------------------------------------------------------------\r\n');
-
-  // Statistics - Style 1 or 2 (side by side days)
-  if (style === 1 || style === 2) {
-    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.topcps,5)}\x1b[34m] \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.uploads,7)} \x1b[1;33mKB\x1b[0;34m] \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.downloads,7)} \x1b[1;33mKB\x1b[0;34m]`;
-    emitTrimmedLine(socket, stat1);
-
-    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls,3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.topcps,5)}\x1b[34m] \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.uploads,7)} \x1b[1;33mKB\x1b[0;34m] \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.downloads,7)} \x1b[1;33mKB\x1b[0;34m]`;
-    emitTrimmedLine(socket, stat2);
-
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.records.recordcalls,3)}\x1b[34m] \x1b[35mMOST CALLED SYSTEM \x1b[34m[\x1b[36m${padStat(data.records.calls,3)}\x1b[34m]\x1b[35m: \x1b[32m${data.records.mostcalled.substring(0, 21).padEnd(21)}`;
-    emitTrimmedLine(socket, records);
-  }
-
-  // Statistics - Style 3 or 4 (with top 3 systems)
-  if (style === 3 || style === 4) {
-    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m] \x1b[35mTOP 3 MOST \x1b[37m1\x1b[0;34m[\x1b[36m${padStat(data.records.calls,7)}\x1b[34m] \x1b[37m${data.records.mostcalled.substring(0, 20).padEnd(20)}`;
-    emitTrimmedLine(socket, stat1);
-
-    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls,3)}\x1b[34m] \x1b[37m2\x1b[0;34m[\x1b[36m${padStat(data.records.calls2,7)}\x1b[34m] \x1b[37m${data.records.secondmostcalled.substring(0, 20).padEnd(20)}`;
-    emitTrimmedLine(socket, stat2);
-
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.records.recordcalls,3)}\x1b[34m] \x1b[35mCALLED SYSTEMS \x1b[37m3\x1b[0;34m[\x1b[36m${padStat(data.records.calls3,7)}\x1b[34m] \x1b[37m${data.records.thirdmostcalled.substring(0, 20).padEnd(20)}`;
-    emitTrimmedLine(socket, records);
-  }
-
-  socket.emit('ansi-output', '\x1b[34m-------------------------------------------------------------------------------\x1b[0m\r\n');
 }
 
 /**
