@@ -565,9 +565,13 @@ class GameViews {
         this.host.cardButtons.render(entries, {
             selected: showingTable ? null
                 : swapping
-                    ? (this.host.vandtia.swapCursor.row === 'hand'
-                        ? this.host.vandtia.swapCursor.index
-                        : this.host.vandtia.selectedHandIndex)
+                    // A group being laid on a table card lights as a group, the same
+                    // way a group being played does.
+                    ? (this.host.vandtia.selectedHandCards.length > 1
+                        ? this.host.vandtia.selectedHandCards
+                        : this.host.vandtia.swapCursor.row === 'hand'
+                            ? this.host.vandtia.swapCursor.index
+                            : this.host.vandtia.selectedHandIndex)
                     // Every card of a picked group, so a group is visible as one.
                     : (this.host.vandtia.selectedCards.length > 0
                         ? this.host.vandtia.selectedCards

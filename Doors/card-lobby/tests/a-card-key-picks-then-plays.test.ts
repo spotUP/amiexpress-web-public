@@ -367,3 +367,123 @@ export async function pickingADifferentValueStartsTheGroupAgain(): Promise<void>
       'a different value starts the pick again');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function severalOfOneValueAreLaidOnATableCardWhileSwapping(): Promise<void> {
+  /*
+   * THE HOUSE RULE, IN THE PHASE IT WAS ASKED FOR. "the user should be able
+   * to drop several cards of the same value on the cards on the table when
+   * swapping cards and get a new one from the deck so he always have 3 on
+   * hand" (sysop, 2026-09-16).
+   *
+   * Same keys as the swap has always had - 1-3 then 4-6 - reading as a drop
+   * rather than an exchange because more than one hand card is picked.
+   */
+  const app = await openApp();
+  try {
+    await seated(app, 132);                        // dealt, still swapping
+    app.applyViewMode('table');
+    const table = app.findTableById(132);
+    const loaded = app.vandtia.load(table);
+    const me = loaded.engine.playerById(app.currentProfile.userId);
+    me.hand = [
+      { rank: '9', suit: 'C' }, { rank: '9', suit: 'D' }, { rank: 'K', suit: 'H' },
+    ] as any;
+    me.faceUp = [
+      { rank: '9', suit: 'H' }, { rank: '4', suit: 'S' }, { rank: '6', suit: 'D' },
+    ] as any;
+    loaded.engine.state.stock = [
+      { rank: '3', suit: 'C' }, { rank: '5', suit: 'D' }, { rank: '8', suit: 'H' },
+    ] as any;
+    table.hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+
+    press(app, '1');
+    press(app, '2');
+    assert.deepStrictEqual(app.vandtia.selectedHandCards, [0, 1], 'both nines are picked');
+
+    press(app, '4');                               // the nine on the table
+    await settle(() => (app.vandtia.load(app.findTableById(132))
+      ?.engine.playerById(app.currentProfile.userId).faceUp.length ?? 0) > 3);
+
+    const after = app.vandtia.load(app.findTableById(132))
+      .engine.playerById(app.currentProfile.userId);
+    assert.deepStrictEqual(
+      after.faceUp.map((card: any) => `${card.rank}${card.suit}`),
+      ['9H', '9C', '9D', '4S', '6D'],
+      'they lie with the card they reinforce',
+    );
+    assert.strictEqual(after.hand.length, 3, 'and the hand is back up to three');
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function onePickedCardIsStillAPlainSwap(): Promise<void> {
+  // The move this phase always had, unchanged: a caller who never uses the
+  // house rule presses exactly the keys they pressed before.
+  const app = await openApp();
+  try {
+    await seated(app, 133);
+    app.applyViewMode('table');
+    const table = app.findTableById(133);
+    const loaded = app.vandtia.load(table);
+    const me = loaded.engine.playerById(app.currentProfile.userId);
+    me.hand = [
+      { rank: '9', suit: 'C' }, { rank: '2', suit: 'D' }, { rank: 'K', suit: 'H' },
+    ] as any;
+    me.faceUp = [
+      { rank: '4', suit: 'S' }, { rank: '6', suit: 'D' }, { rank: '7', suit: 'C' },
+    ] as any;
+    table.hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+
+    press(app, '1');
+    press(app, '4');
+    await settle(() => (app.vandtia.load(app.findTableById(133))
+      ?.engine.playerById(app.currentProfile.userId).faceUp[0]?.rank ?? '') === '9');
+
+    const after = app.vandtia.load(app.findTableById(133))
+      .engine.playerById(app.currentProfile.userId);
+    assert.strictEqual(after.faceUp.length, 3, 'the row is still three cards');
+    assert.strictEqual(after.hand.length, 3, 'and so is the hand');
+    assert.strictEqual(after.faceUp[0].rank, '9', 'the nine changed places with the four');
+    assert.strictEqual(after.hand[0].rank, '4', 'which came back to the hand');
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function cardsOfAnotherValueAreRefusedWithAReason(): Promise<void> {
+  // "if i can't throw a card in any cardgame and try print an explanatory
+  // status message" (sysop, 2026-09-16) - the same courtesy here.
+  const app = await openApp();
+  try {
+    await seated(app, 134);
+    app.applyViewMode('table');
+    const table = app.findTableById(134);
+    const loaded = app.vandtia.load(table);
+    const me = loaded.engine.playerById(app.currentProfile.userId);
+    me.hand = [
+      { rank: '9', suit: 'C' }, { rank: '9', suit: 'D' }, { rank: 'K', suit: 'H' },
+    ] as any;
+    me.faceUp = [
+      { rank: '4', suit: 'S' }, { rank: '6', suit: 'D' }, { rank: '7', suit: 'C' },
+    ] as any;
+    table.hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+
+    press(app, '1');
+    press(app, '2');
+    press(app, '5');                               // a six: not a nine
+    await new Promise((r) => setTimeout(r, 200));
+
+    const after = app.vandtia.load(app.findTableById(134))
+      .engine.playerById(app.currentProfile.userId);
+    assert.deepStrictEqual(
+      after.faceUp.map((card: any) => `${card.rank}${card.suit}`),
+      ['4S', '6D', '7C'],
+      'nothing was laid down, and nothing was swapped either',
+    );
+    assert.deepStrictEqual(
+      after.hand.map((card: any) => `${card.rank}${card.suit}`),
+      ['9C', '9D', 'KH'],
+      'the nines are still in hand, waiting for a nine to lie on',
+    );
+  } finally { app.screen?.destroy?.(); }
+}

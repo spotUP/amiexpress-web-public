@@ -6,7 +6,10 @@
  * node sees the same game, and says who the Skitgubbe was.
  *
  * KEYS, which the panel also prints:
- *   swap    1-3 pick a hand card, 4-6 the table card it changes places with,
+ *   swap    1-3 pick a hand card, 4-6 the table card it changes places with;
+ *           several hand cards of ONE VALUE are LAID ON that table card
+ *           instead, and the hand draws back up to three - the sysop's house
+ *           rule, which `playCards` is the in-game half of
  *           X when you are happy with what is face up
  *   playing 1-9/0 or the arrows pick a card, X plays it, C takes the pile
  *
@@ -70,6 +73,20 @@ export class VandtiaGameModule implements TableGameModule {
   public selectedCards: number[] = [];
   /** During the swap: the hand card waiting for a table card to change with. */
   public selectedHandIndex: number | null = null;
+
+  /**
+   * During the swap: the hand cards waiting to be LAID ON a table card.
+   *
+   * The same house rule as `selectedCards`, in the phase before play - "the
+   * user should be able to drop several cards of the same value on the cards
+   * on the table when swapping cards and get a new one from the deck so he
+   * always have 3 on hand" (sysop, 2026-09-16).
+   *
+   * One card in the set is the swap this phase always had; two or more is the
+   * house rule, and the table key that follows tells them apart. So a caller
+   * who never uses the rule presses exactly the keys they pressed before.
+   */
+  public selectedHandCards: number[] = [];
 
   /**
    * WHICH OF THE CALLER'S CARDS the hand panel shows.
@@ -197,6 +214,7 @@ export class VandtiaGameModule implements TableGameModule {
       this.selectedCardIndex = null;
       this.selectedCards = [];
       this.selectedHandIndex = null;
+      this.selectedHandCards = [];
       this.save(fresh, engine, {}, Date.now());
       this.host.updateTableStatus(fresh);
       this.host.pushEvent(`Skitgubbe dealt at table #${fresh.id}. Swap, then play.`);
@@ -578,7 +596,18 @@ export class VandtiaGameModule implements TableGameModule {
     this.host.updateAllPanels();
   }
 
-  /** 1-3 picks a hand card, 4-6 the face-up card it changes places with. */
+  /**
+   * 1-3 picks a hand card, 4-6 the face-up card it changes places with - and
+   * a second hand card of the SAME VALUE makes it a drop instead of a swap.
+   *
+   * One gesture, two moves, told apart by how many cards are picked:
+   *
+   *   1 then 5      changes that hand card for that table card.
+   *   1, 2 then 5   LAYS both on it, the house rule, and draws back to three.
+   *
+   * The hand keys read exactly like the hand keys in the game proper, which
+   * is the point - a caller learns the rule once.
+   */
   private handleSwapKey(
     table: LobbyTable,
     loaded: { engine: VandtiaEngine; beforeStacks: Record<string, number> },
@@ -590,8 +619,17 @@ export class VandtiaGameModule implements TableGameModule {
 
     if (index < 3) {
       if (index >= player.hand.length) return;
+
+      const picked = this.selectedHandCards;
+      const sameValue = picked.length > 0
+        && player.hand[picked[0]]?.rank === player.hand[index].rank;
+      if (picked.length === 0 || !sameValue) this.selectedHandCards = [index];
+      else if (!picked.includes(index)) this.selectedHandCards.push(index);
+
       this.selectedHandIndex = index;
-      this.host.pushNotice(`${cardId(player.hand[index])} picked - now 4, 5 or 6 for the table card.`);
+      this.host.pushNotice(this.selectedHandCards.length > 1
+        ? `${this.selectedHandCards.length} x ${player.hand[index].rank} picked - 4, 5 or 6 lays them on that card.`
+        : `${cardId(player.hand[index])} picked - now 4, 5 or 6 for the table card.`);
       this.host.updateAllPanels();
       return;
     }
@@ -603,10 +641,14 @@ export class VandtiaGameModule implements TableGameModule {
       return;
     }
 
-    const result = loaded.engine.swap(userId, this.selectedHandIndex, faceUpIndex);
+    const laying = this.selectedHandCards;
+    const result = laying.length > 1
+      ? loaded.engine.dropOnTable(userId, laying, faceUpIndex)
+      : loaded.engine.swap(userId, this.selectedHandIndex, faceUpIndex);
     this.selectedHandIndex = null;
+    this.selectedHandCards = [];
     if (!result.success) {
-      this.host.pushNotice(result.message);
+      this.host.pushNotice(explainRefusal(result.message, null));
       return;
     }
     this.save(table, loaded.engine, loaded.beforeStacks);
@@ -672,6 +714,7 @@ export class VandtiaGameModule implements TableGameModule {
           return;
         }
         this.selectedHandIndex = null;
+        this.selectedHandCards = [];
         this.heldCard = null;
         this.swapCursor = { row: 'hand', index: 0 };
         // Play starts on the HAND, whatever the panel was showing while the
@@ -846,7 +889,14 @@ export class VandtiaGameModule implements TableGameModule {
     const label = (card: { rank: string; suit: string }): string => `${card.rank}${card.suit}`;
 
     if (state.phase === 'swap') {
-      const picked = this.selectedHandIndex;
+      // Every card of a group being laid down reads as picked, not just the
+      // last key pressed - the house rule is a set, so the legend shows a set.
+      const picked = this.selectedHandCards.length > 0
+        ? this.selectedHandCards
+        : this.selectedHandIndex === null ? [] : [this.selectedHandIndex];
+      const laying = this.selectedHandCards.length > 1
+        ? `${this.selectedHandCards.length} x ${me.hand[this.selectedHandCards[0]]?.rank ?? ''}`
+        : null;
       return [
         /*
          * THE WAY OUT COMES FIRST. "i am stuck in this view how do i exit?"
@@ -862,9 +912,11 @@ export class VandtiaGameModule implements TableGameModule {
             : '{cyan-fg}X{/} ready  {cyan-fg}L{/} leave  {cyan-fg}ENTER{/} hold',
         this.heldCard
           ? '{yellow-fg}Holding a card.{/} Arrows carry it between the rows.'
-          : 'Or swap with {cyan-fg}1-3{/} then {cyan-fg}4-6{/}, or drag a card.',
+          : laying
+            ? `{yellow-fg}${laying} picked.{/} {cyan-fg}4-6{/} lays them on that card.`
+            : 'Swap {cyan-fg}1-3{/}+{cyan-fg}4-6{/}, or lay several of one value.',
         `Hand ${me.hand.map((card, i) =>
-          (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
+          (picked.includes(i) ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
           + ':' + label(card)).join('  ')}`,
         `Tbl  ${me.faceUp.map((card, i) => `{green-fg}${i + 4}{/}:` + label(card)).join('  ')}`,
       ];

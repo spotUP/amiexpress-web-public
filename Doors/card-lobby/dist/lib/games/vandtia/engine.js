@@ -220,6 +220,64 @@ class VandtiaEngine {
         return { success: true, message: this.state.lastAction };
     }
     /**
+     * THE HOUSE RULE, WHILE ARRANGING: reinforce a table card with more of its
+     * own value, and draw back up to a hand of three.
+     *
+     * "the user should be able to drop several cards of the same value on the
+     * cards on the table when swapping cards and get a new one from the deck so
+     * he always have 3 on hand" (sysop, 2026-09-16), confirmed as a house rule
+     * that "applies in game as well" - the in-game half is `playCards`.
+     *
+     * WHAT IT IS FOR. A table card you have doubled or trebled is a card you can
+     * later put down as a group, and four of a rank turns the pile away - so
+     * this is how a caller builds a burn into the row before play starts.
+     *
+     * THE VALUE MUST MATCH THE CARD THEY LAND ON. They are dropped ON a card,
+     * not merely into the row, and matching keeps the move meaningful: cards of
+     * one value sit together where the caller put them. It costs a caller
+     * nothing, either - a rank that is not on the table yet can be swapped onto
+     * it first, in the move this phase already had, and reinforced after.
+     *
+     * The row GROWS. `faceUp` was three cards because three were dealt, never
+     * because three is a rule: play reads the row, and a row of five is five
+     * cards to get rid of before the blind ones - the price of the burn.
+     */
+    dropOnTable(playerId, handIndices, faceUpIndex) {
+        if (this.state.phase !== 'swap')
+            return { success: false, message: 'Play has started.' };
+        const player = this.playerById(playerId);
+        if (!player)
+            return { success: false, message: 'You are not in this game.' };
+        if (player.ready)
+            return { success: false, message: 'You are already done swapping.' };
+        const target = player.faceUp[faceUpIndex];
+        if (!target)
+            return { success: false, message: 'No such card.' };
+        const wanted = [...new Set(handIndices)];
+        if (wanted.length === 0)
+            return { success: false, message: 'Pick a card first.' };
+        const dropping = wanted.map((index) => player.hand[index]);
+        if (dropping.some((card) => !card))
+            return { success: false, message: 'No such card.' };
+        if (dropping.some((card) => card.rank !== target.rank)) {
+            return {
+                success: false,
+                message: `They go on a ${target.rank} - drop cards on a table card of their own value.`,
+            };
+        }
+        // Out of the hand highest index first, so the ones still to come do not
+        // shift under the splice.
+        for (const index of [...wanted].sort((a, b) => b - a))
+            player.hand.splice(index, 1);
+        player.faceUp.splice(faceUpIndex + 1, 0, ...dropping);
+        // And back up to three, which is the half of the rule that keeps the
+        // caller playing rather than paying for the reinforcement.
+        this.refill(player);
+        const many = dropping.length > 1 ? `${dropping.length} cards` : (0, exports.cardId)(dropping[0]);
+        this.state.lastAction = `${player.name} lays ${many} on the ${target.rank} on the table.`;
+        return { success: true, message: this.state.lastAction };
+    }
+    /**
      * Move a card along its own row while arranging.
      *
      * The two rows are a player's own business until the play starts, and

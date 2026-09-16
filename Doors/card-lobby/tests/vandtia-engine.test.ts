@@ -483,3 +483,84 @@ export async function testABlindCardIsTurnedOneAtATime(): Promise<void> {
   assert.strictEqual(result.success, false, 'blind cards are turned singly');
   assert.ok(/one at a time/i.test(result.message), result.message);
 }
+
+/*
+ * THE SAME HOUSE RULE, WHILE ARRANGING.
+ *
+ * "the user should be able to drop several cards of the same value on the
+ * cards on the table when swapping cards and get a new one from the deck so
+ * he always have 3 on hand" (sysop, 2026-09-16).
+ */
+
+export async function testSeveralOfOneValueGoOntoATableCardOfThatValue(): Promise<void> {
+  const engine = threeHanded();
+  const me = engine.state.players[0];
+  me.hand = cards('9C', '9D', 'KH');
+  me.faceUp = cards('9H', '4S', '6D');
+  engine.state.stock = cards('3C', '5D', '8H');
+
+  const result = engine.dropOnTable('u1', [0, 1], 0);
+
+  assert.ok(result.success, result.message);
+  assert.deepStrictEqual(ids(me.faceUp), ['9H', '9C', '9D', '4S', '6D'],
+    'they land beside the card they reinforce, not at the end of the row');
+  assert.strictEqual(me.hand.length, 3, 'and the hand is drawn back up to three');
+  assert.ok(!ids(me.hand).includes('9C'), 'the cards that went down are gone from it');
+}
+
+export async function testCardsOfAnotherValueDoNotGoOnThatCard(): Promise<void> {
+  // The point of the move is a row where one value sits together.
+  const engine = threeHanded();
+  const me = engine.state.players[0];
+  me.hand = cards('9C', '8D', 'KH');
+  me.faceUp = cards('9H', '4S', '6D');
+
+  const result = engine.dropOnTable('u1', [0, 1], 0);
+
+  assert.strictEqual(result.success, false, 'a nine and an eight are not a group');
+  assert.strictEqual(me.faceUp.length, 3, 'and nothing moved');
+  assert.strictEqual(me.hand.length, 3);
+}
+
+export async function testAReinforcedRowIsPlayedAsAGroupLater(): Promise<void> {
+  /*
+   * The reason to do it at all: the row built during the swap is the burn
+   * four cards later. This is the two halves of the house rule meeting.
+   */
+  const engine = threeHanded();
+  const me = engine.state.players[0];
+  me.hand = cards('7C', '7D', 'KH');
+  me.faceUp = cards('7H', '4S', '6D');
+  engine.state.stock = cards('3C', '5D');
+
+  assert.ok(engine.dropOnTable('u1', [0, 1], 0).success);
+  playing(engine);
+  position(engine, { pile: cards('5S', '7S'), currentIndex: 0, stock: [] });
+  me.hand = [];                                   // down to the table row
+
+  const played = engine.playCards('u1', [0, 1, 2]);
+
+  assert.ok(played.success, played.message);
+  assert.deepStrictEqual(ids(engine.state.pile), [],
+    'the three sevens built during the swap finish the run of four and burn the pile');
+}
+
+export async function testTheHandIsToppedUpOnlyAsFarAsTheStockGoes(): Promise<void> {
+  // A stock that has run out is not an error, it is the end of the game's
+  // draw pile - the hand is simply smaller.
+  const engine = threeHanded();
+  const me = engine.state.players[0];
+  me.hand = cards('9C', '9D', 'KH');
+  me.faceUp = cards('9H', '4S', '6D');
+  engine.state.stock = [];
+
+  assert.ok(engine.dropOnTable('u1', [0, 1], 0).success);
+  assert.deepStrictEqual(ids(me.hand), ['KH'], 'nothing left to draw, so one card in hand');
+}
+
+export async function testNothingIsLaidDownOncePlayHasStarted(): Promise<void> {
+  // In the game proper the same cards go on the PILE, which is `playCards`.
+  const engine = playing(threeHanded());
+  const result = engine.dropOnTable('u1', [0, 1], 0);
+  assert.strictEqual(result.success, false, 'the arranging phase is over');
+}
