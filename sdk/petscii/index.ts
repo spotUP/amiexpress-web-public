@@ -21,6 +21,10 @@ export {
   vicToSgrBackground,
 } from './c64-palette';
 export { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
+export {
+  screenTextInRect, rectFromCorners,
+  type PetsciiScreenState, type CellRect,
+} from './screen-text';
 export { writeSeq, writeSeqWithOffsets, type SeqWriteOptions, type SeqWriteResult } from './seq-writer';
 export * from './editor-surface';
 export {

@@ -28,7 +28,7 @@ import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 
@@ -380,6 +380,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
+  /*
+   * DRAG-TO-COPY ON THE PETSCII CANVAS.
+   *
+   * A PETSCII session is pixels: xterm is hidden and the whole screen is a
+   * `<canvas>`, so the browser has no text in it to select and the caller
+   * cannot copy a thing ("i cant copy text in petscii mode", the sysop,
+   * 2026-09-16). The canvas already reports the cell under the pointer, and
+   * the machine still holds the screen codes, so a drag is turned into a
+   * rectangle and read back as text here.
+   *
+   * The mouse is free to do this: a canvas session sends keystrokes to the
+   * board and nothing else - `onCellPointer` had no consumer at all - so
+   * selection cannot swallow input a door was waiting for.
+   *
+   * The anchor is a ref because a drag spans renders; the rectangle is state
+   * because the canvas paints it as a highlight.
+   */
+  const petsciiSelectAnchor = useRef<{ x: number; y: number } | null>(null);
+  const petsciiSelectionRef = useRef<CellRect | null>(null);
+  const [petsciiSelection, setPetsciiSelection] = useState<CellRect | null>(null);
+  const showPetsciiSelection = useCallback((rect: CellRect | null) => {
+    petsciiSelectionRef.current = rect;
+    setPetsciiSelection(rect);
+  }, []);
   const clearPetsciiSession = useCallback(() => {
     surfaceRef.current = 'xterm';
     petsciiMachineRef.current = null;
@@ -1056,6 +1080,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // session.
     const enqueuePetscii = (bytes: Uint8Array | number[]) => {
       if (bytes.length === 0) return;
+      // New output means the cells under any selection box are no longer the
+      // ones the caller drew it around, so the box goes rather than sit there
+      // outlining something else.
+      if (petsciiSelectionRef.current) showPetsciiSelection(null);
       try {
         petsciiMachineRef.current?.feed(bytes);
       } catch (e) {
@@ -3858,6 +3886,45 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               // function keys included), then the one input path.
               const text = petsciiInputToAscii(bytes);
               if (text) processInputKeyRef.current(text);
+            }}
+            highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'brush' as const }] : undefined}
+            onCellPointer={(event) => {
+              const held = (event.buttons & 1) !== 0;
+              if (event.type === 'down') {
+                if (!held) return;
+                petsciiSelectAnchor.current = { x: event.x, y: event.y };
+                showPetsciiSelection(rectFromCorners(petsciiSelectAnchor.current, petsciiSelectAnchor.current));
+                return;
+              }
+              const anchor = petsciiSelectAnchor.current;
+              if (!anchor) return;
+              if (event.type === 'move') {
+                if (held) showPetsciiSelection(rectFromCorners(anchor, { x: event.x, y: event.y }));
+                return;
+              }
+              // 'up': the drag is over.
+              const rect = rectFromCorners(anchor, { x: event.x, y: event.y });
+              petsciiSelectAnchor.current = null;
+              // A click is a click - it focuses the canvas and must not put a
+              // single character on the clipboard or leave a box on screen.
+              if (rect.w === 1 && rect.h === 1) {
+                showPetsciiSelection(null);
+                return;
+              }
+              const machine = petsciiMachineRef.current;
+              if (!machine) {
+                showPetsciiSelection(null);
+                return;
+              }
+              showPetsciiSelection(rect);
+              const selected = screenTextInRect(machine.state, rect);
+              if (!selected.trim()) return;
+              // mouseup is a user gesture, which is what the clipboard needs.
+              // A refusal (insecure origin, denied permission) must not break
+              // the session - the caller simply keeps their old clipboard.
+              navigator.clipboard?.writeText(selected).catch((err) => {
+                console.warn('[PETSCII] copy refused by the browser', err);
+              });
             }}
           />
         </div>
