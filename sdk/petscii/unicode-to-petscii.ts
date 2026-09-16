@@ -148,6 +148,26 @@ export const UNICODE_TO_PETSCII_BANK1_ONLY: ReadonlyMap<string, number> = new Ma
 ]);
 
 /**
+ * The mirror of the table above: glyphs bank 0 has and bank 1 does not.
+ *
+ * The two DIAGONALS. Screen codes $4D and $4E are `╲` and `╱` in the
+ * upper/graphics set (`petscii-unicode-map.ts`'s BANK0_UPPER_GRAPHICS, from
+ * the Unicode Consortium's C64IALT.TXT) and are the letters M and N in the
+ * shifted set - so emitting these bytes while encoding for bank 1 would print
+ * a word, not a line. `asciiToPetsciiByte` reaches this table only when
+ * `bank === 0`.
+ *
+ * Added 2026-09-16, from EALL/HT's `txt2petscii` (Traders Suite), which maps
+ * ASCII `\` and `/` onto exactly these two codes. Amiga ASCII art is built
+ * out of slashes, and until now a `\` had nowhere to go: it folded to `/`
+ * and every diagonal in a converted screen leaned the same way.
+ */
+export const UNICODE_TO_PETSCII_BANK0_ONLY: ReadonlyMap<string, number> = new Map<string, number>([
+  ['╲', 0xCD],                 // UPPER LEFT TO LOWER RIGHT DIAGONAL (sc $4D)
+  ['╱', 0xCE],                 // UPPER RIGHT TO LOWER LEFT DIAGONAL (sc $4E)
+]);
+
+/**
  * LATIN-1 HIGH BYTES ($A0-$FF) -> a character the table above (or
  * `asciiToPetsciiByte`'s own ASCII branches) can already resolve.
  *

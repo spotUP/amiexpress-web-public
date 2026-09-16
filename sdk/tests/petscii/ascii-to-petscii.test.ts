@@ -31,7 +31,7 @@ describe('asciiToPetsciiByte', () => {
   });
 
   it('keeps the deliberate punctuation mappings the transducer table had', () => {
-    expect(asciiToPetsciiByte(0x5C, 1).byte).toBe(0x2F); // backslash -> '/'
+    expect(asciiToPetsciiByte(0x5C, 1).byte).toBe(0x2F); // backslash -> '/' IN BANK 1
     expect(asciiToPetsciiByte(0x5F, 1).byte).toBe(0xA4); // _ -> PETSCII underline
     expect(asciiToPetsciiByte(0x7C, 1).byte).toBe(0xDD); // | -> vertical bar
     expect(asciiToPetsciiByte(0x7E, 1).byte).toBe(0x2D); // ~ -> '-'
@@ -156,5 +156,46 @@ describe('transducer byte-identity pins (captured before the extraction)', () =>
     expect(display.state.cursorX).toBe(5);
     expect(display.state.cursorY).toBe(9);
     expect(display.state.charsetBank).toBe(1);
+  });
+});
+
+/**
+ * THE TWO DIAGONALS, added 2026-09-16 from EALL/HT's `txt2petscii`.
+ *
+ * Amiga ASCII art is built out of slashes and PETSCII has no backslash - the
+ * pound sign lives at $5C. So a `\` used to fold to '/', and both sides of
+ * every peak, box and arrow in a converted screen came out leaning the same
+ * way. Bank 0 has the real strokes: screen codes $4D and $4E, `╲` and `╱`,
+ * which are $CD and $CE as PETSCII bytes (`petscii-unicode-map.ts`'s
+ * BANK0_UPPER_GRAPHICS, from the Unicode Consortium's C64IALT.TXT).
+ *
+ * Bank 1 cannot have them and must not be given them: those same screen codes
+ * are the letters M and N in the shifted set.
+ */
+describe('the diagonals a converted Amiga screen is made of', () => {
+  it('leans a backslash the way it was drawn, in the graphics bank', () => {
+    expect(asciiToPetsciiByte(0x5C, 0).byte).toBe(0xCD);
+  });
+
+  it('leaves the text bank folding it to a slash, because $CD is M there', () => {
+    expect(asciiToPetsciiByte(0x5C, 1).byte).toBe(0x2F);
+  });
+
+  it('takes the Unicode diagonals an artist would paste, in the graphics bank', () => {
+    expect(asciiToPetsciiByte('╲'.codePointAt(0)!, 0).byte).toBe(0xCD);
+    expect(asciiToPetsciiByte('╱'.codePointAt(0)!, 0).byte).toBe(0xCE);
+  });
+
+  it('never emits a diagonal into the text bank, where it would print a letter', () => {
+    // '?' is this table's honest answer for a glyph the bank does not have.
+    expect(asciiToPetsciiByte('╲'.codePointAt(0)!, 1).byte).toBe(0x3F);
+    expect(asciiToPetsciiByte('╱'.codePointAt(0)!, 1).byte).toBe(0x3F);
+  });
+
+  it('leaves the forward slash alone - PETSCII has one at $2F in both banks', () => {
+    // The full-cell diagonal is a different stroke, not a better '/', and
+    // switching it would redraw every slash in the art already on the board.
+    expect(asciiToPetsciiByte(0x2F, 0).byte).toBe(0x2F);
+    expect(asciiToPetsciiByte(0x2F, 1).byte).toBe(0x2F);
   });
 });

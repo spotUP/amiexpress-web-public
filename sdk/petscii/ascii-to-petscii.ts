@@ -23,6 +23,7 @@
 import {
   LATIN1_TO_PETSCII_FOLD,
   UNICODE_TO_PETSCII,
+  UNICODE_TO_PETSCII_BANK0_ONLY,
   UNICODE_TO_PETSCII_BANK1_ONLY,
 } from './unicode-to-petscii';
 
@@ -54,7 +55,21 @@ export function asciiToPetsciiByte(code: number, bank: 0 | 1): PetsciiByteMappin
   switch (code) {
     case 0x08: case 0x7F: return plain(0x14);      // BS / DEL -> PETSCII DELETE (retired backend table's case)
     case 0x40: case 0x5B: case 0x5D: return plain(code); // @ [ ]
-    case 0x5C: return plain(0x2F);                 // backslash: PETSCII has pound there -> '/'
+    /*
+     * BACKSLASH. PETSCII has the pound sign at $5C, so there is no backslash
+     * to pass through - but bank 0 has the DIAGONAL the character is drawing:
+     * screen code $4D, `╲`, which is $CD as a PETSCII byte.
+     *
+     * Bank 1 keeps the old fold to '/'. It has to: $CD is the letter M in the
+     * shifted set, and Amiga art converted into text-bank output would grow
+     * words in it.
+     *
+     * Before this, a `\` leaned the wrong way. Every diagonal in a converted
+     * screen came out as '/', so the two sides of a peak or a box became the
+     * same stroke. From EALL/HT's `txt2petscii`, which makes the same choice
+     * (2026-09-16).
+     */
+    case 0x5C: return plain(bank === 0 ? 0xCD : 0x2F);
     case 0x5E: return plain(0x5E);                 // ^ -> up-arrow glyph
     case 0x5F: return plain(0xA4);                 // _ -> lower one-eighth block (PETSCII underline)
     case 0x60: return plain(0x27);                 // ` -> '
@@ -67,7 +82,9 @@ export function asciiToPetsciiByte(code: number, bank: 0 | 1): PetsciiByteMappin
   // The shared table is bank-agnostic; the three fills whose screen code is a
   // different bitmap in bank 0 are only reachable when encoding for bank 1.
   const mapped = UNICODE_TO_PETSCII.get(glyph)
-    ?? (bank === 1 ? UNICODE_TO_PETSCII_BANK1_ONLY.get(glyph) : undefined);
+    ?? (bank === 1
+      ? UNICODE_TO_PETSCII_BANK1_ONLY.get(glyph)
+      : UNICODE_TO_PETSCII_BANK0_ONLY.get(glyph));
   if (mapped === undefined) {
     // A latin-1 high byte is what a 68K door WROTE (its output is decoded
     // latin1 out of the emulator), so the picture the caller was meant to see
