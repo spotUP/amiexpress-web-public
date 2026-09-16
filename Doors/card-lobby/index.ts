@@ -53,7 +53,8 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
-import { UnoGameEngine, type UnoGameSnapshot } from './lib/uno-engine';
+import { UnoGameEngine, unoColorName, unoCardName, type UnoGameSnapshot } from './lib/uno-engine';
+import { explainRefusal } from './lib/games/refusal';
 import { attachKeyBindings } from './managers/KeyBindings';
 import { CardButtons } from './managers/CardButtons';
 import {
@@ -1366,9 +1367,22 @@ export class CardLobbyApp {
       return;
     }
 
-    // Check if card is playable
+    /*
+     * WHY IT WILL NOT GO, AND WHAT WOULD. "Cannot play that card." told the
+     * caller nothing at all - not the rule, not the way out ("if i can't
+     * throw a card in any cardgame try print an explanatory status message",
+     * sysop 2026-09-16). UNO's rule is colour, or value, or a wild; the way
+     * out is the draw pile.
+     */
     if (!gameState.engine.canPlayCard(this.currentProfile.userId, card)) {
-      this.pushNotice('Cannot play that card.');
+      const state = gameState.engine.getGameState();
+      const top = state.discardPile[state.discardPile.length - 1];
+      const colour = unoColorName(state.currentColor);
+      this.pushNotice(explainRefusal(
+        `${unoCardName(card)} does not match ${colour} ${top ? unoCardName(top) : ''}`.trim(),
+        `Play a ${colour} card, another ${top ? String(top.value).toUpperCase() : 'match'}, `
+        + 'or a wild - or press D to draw.',
+      ));
       return;
     }
 

@@ -19,6 +19,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
+const refusal_1 = require("./lib/games/refusal");
 const KeyBindings_1 = require("./managers/KeyBindings");
 const CardButtons_1 = require("./managers/CardButtons");
 const games_1 = require("./lib/games");
@@ -1100,9 +1101,19 @@ class CardLobbyApp {
             this.pushNotice('Invalid card selection.');
             return;
         }
-        // Check if card is playable
+        /*
+         * WHY IT WILL NOT GO, AND WHAT WOULD. "Cannot play that card." told the
+         * caller nothing at all - not the rule, not the way out ("if i can't
+         * throw a card in any cardgame try print an explanatory status message",
+         * sysop 2026-09-16). UNO's rule is colour, or value, or a wild; the way
+         * out is the draw pile.
+         */
         if (!gameState.engine.canPlayCard(this.currentProfile.userId, card)) {
-            this.pushNotice('Cannot play that card.');
+            const state = gameState.engine.getGameState();
+            const top = state.discardPile[state.discardPile.length - 1];
+            const colour = (0, uno_engine_1.unoColorName)(state.currentColor);
+            this.pushNotice((0, refusal_1.explainRefusal)(`${(0, uno_engine_1.unoCardName)(card)} does not match ${colour} ${top ? (0, uno_engine_1.unoCardName)(top) : ''}`.trim(), `Play a ${colour} card, another ${top ? String(top.value).toUpperCase() : 'match'}, `
+                + 'or a wild - or press D to draw.'));
             return;
         }
         // If wild card, we'll prompt for color in handleUnoAction

@@ -17,6 +17,7 @@ import { isBotPlayer } from '../../utils';
 import { CHIP_NAME } from '../../constants';
 import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
 import { SkitgubbeEngine, cardId, type SkitgubbeSnapshot } from './engine';
+import { explainRefusal } from '../refusal';
 
 /** What the module needs from the door. Plumbing only - no game logic. */
 export interface SkitgubbeHost {
@@ -208,6 +209,11 @@ export class SkitgubbeGameModule implements TableGameModule {
     return this.selectedCardIndex;
   }
 
+  /** The move that is available when the picked card will not go. */
+  public refusalAdvice(): string | null {
+    return 'Pick another card with the arrows, or press C to take the card in front of you.';
+  }
+
   public selectCard(index: number): void {
     const table = this.currentTable();
     if (!table) return;
@@ -280,7 +286,7 @@ export class SkitgubbeGameModule implements TableGameModule {
 
       const result = loaded.engine.playCard(userId, this.selectedCardIndex);
       if (!result.success) {
-        this.host.pushNotice(result.message);
+        this.host.pushNotice(explainRefusal(result.message, this.refusalAdvice()));
         return;
       }
 

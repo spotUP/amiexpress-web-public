@@ -20,6 +20,7 @@ import type { LobbyTable, PlayerProfile } from '../../types';
 import { isBotPlayer } from '../../utils';
 import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
 import { VandtiaEngine, cardId, type VandtiaSnapshot } from './engine';
+import { explainRefusal } from '../refusal';
 
 /** Plumbing only - no game logic. */
 export interface VandtiaHost {
@@ -275,6 +276,21 @@ export class VandtiaGameModule implements TableGameModule {
     return this.selectedCardIndex;
   }
 
+  /**
+   * The way out of a refused card in this game.
+   *
+   * Taking the pile is always the answer - it is the rule for a player who
+   * cannot go ("Om en spelare inte kan lägga ett kort, måste denne ta upp
+   * hela högen") - but which cards WOULD go is worth saying while the pile is
+   * still small enough to want.
+   */
+  public refusalAdvice(table: LobbyTable): string | null {
+    const loaded = this.load(table);
+    const top = loaded?.engine.topOfPile();
+    if (!top) return 'The pile is empty - anything goes.';
+    return `Play ${cardId(top)} or higher, a 2, or a 10 - or press C to take the pile.`;
+  }
+
   public selectCard(index: number): void {
     const table = this.currentTable();
     if (!table) return;
@@ -412,7 +428,7 @@ export class VandtiaGameModule implements TableGameModule {
 
       const result = loaded.engine.playCard(userId, this.selectedCardIndex);
       if (!result.success) {
-        this.host.pushNotice(result.message);
+        this.host.pushNotice(explainRefusal(result.message, this.refusalAdvice(fresh)));
         return;
       }
       this.selectedCardIndex = null;

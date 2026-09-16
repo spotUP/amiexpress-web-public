@@ -16,6 +16,7 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const utils_1 = require("../../utils");
 const constants_1 = require("../../constants");
 const engine_1 = require("./engine");
+const refusal_1 = require("../refusal");
 class SkitgubbeGameModule {
     constructor(host) {
         this.host = host;
@@ -165,6 +166,10 @@ class SkitgubbeGameModule {
     selectedCard() {
         return this.selectedCardIndex;
     }
+    /** The move that is available when the picked card will not go. */
+    refusalAdvice() {
+        return 'Pick another card with the arrows, or press C to take the card in front of you.';
+    }
     selectCard(index) {
         const table = this.currentTable();
         if (!table)
@@ -237,7 +242,7 @@ class SkitgubbeGameModule {
             }
             const result = loaded.engine.playCard(userId, this.selectedCardIndex);
             if (!result.success) {
-                this.host.pushNotice(result.message);
+                this.host.pushNotice((0, refusal_1.explainRefusal)(result.message, this.refusalAdvice()));
                 return;
             }
             this.selectedCardIndex = null;

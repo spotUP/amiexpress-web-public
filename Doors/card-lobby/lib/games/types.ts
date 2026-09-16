@@ -96,6 +96,20 @@ export interface TableGameModule {
    */
   selectedCard?(table: LobbyTable): number | null;
 
+  /**
+   * WHAT TO DO WHEN THE CARD WILL NOT GO.
+   *
+   * "if i can't throw a card in any cardgame try print an explanatory status
+   * message" (sysop, 2026-09-16). The REASON belongs to the game's rules and
+   * comes back from its engine; this is the other half - the move that IS
+   * available, in this game, at this moment: take the pile, draw a card, put
+   * the card somewhere else. `explainRefusal` joins the two so every game
+   * refuses in the same shape.
+   *
+   * A game that leaves it out just shows the reason, as before.
+   */
+  refusalAdvice?(table: LobbyTable): string | null;
+
   /** Pad A, and the key that means "do the main thing" at this table. */
   primaryAction(): void;
 

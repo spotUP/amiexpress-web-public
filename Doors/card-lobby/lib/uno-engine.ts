@@ -8,6 +8,25 @@
 // ============================================================================
 
 export type UnoColor = 'R' | 'G' | 'B' | 'Y';  // Red, Green, Blue, Yellow
+
+/**
+ * A colour's name, for anything that has to say it out loud.
+ *
+ * The engine kept this privately and every other place that needed a word
+ * for 'R' wrote its own - which is how a refusal came to read "Cannot play
+ * that card." rather than naming the colour it had to match.
+ */
+export function unoColorName(color: string): string {
+  const names: Record<string, string> = { R: 'Red', G: 'Green', B: 'Blue', Y: 'Yellow', W: 'Wild' };
+  return names[color] || color;
+}
+
+/** A card said in full - "Red 7", "Blue SKIP", "Wild". */
+export function unoCardName(card: { color: string; value: string | number }): string {
+  const value = String(card.value).toUpperCase();
+  if (card.color === 'W') return value === 'WILD' ? 'Wild' : `Wild ${value}`;
+  return `${unoColorName(card.color)} ${value}`;
+}
 export type UnoValue = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' |
                        'Skip' | 'Reverse' | 'Draw2' | 'Wild' | 'Wild4' |
                        'HR1' | 'HR2' | 'HR3' | 'HR4' | 'HR5' |  // House Rules 1-5
@@ -743,13 +762,7 @@ export class UnoGameEngine {
   }
 
   private getColorName(color: UnoColor): string {
-    const names: Record<UnoColor, string> = {
-      'R': 'Red',
-      'G': 'Green',
-      'B': 'Blue',
-      'Y': 'Yellow',
-    };
-    return names[color] || color;
+    return unoColorName(color);
   }
 
   // ============================================================================

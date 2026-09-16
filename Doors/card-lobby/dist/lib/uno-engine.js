@@ -5,6 +5,26 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UnoGameEngine = void 0;
+exports.unoColorName = unoColorName;
+exports.unoCardName = unoCardName;
+/**
+ * A colour's name, for anything that has to say it out loud.
+ *
+ * The engine kept this privately and every other place that needed a word
+ * for 'R' wrote its own - which is how a refusal came to read "Cannot play
+ * that card." rather than naming the colour it had to match.
+ */
+function unoColorName(color) {
+    const names = { R: 'Red', G: 'Green', B: 'Blue', Y: 'Yellow', W: 'Wild' };
+    return names[color] || color;
+}
+/** A card said in full - "Red 7", "Blue SKIP", "Wild". */
+function unoCardName(card) {
+    const value = String(card.value).toUpperCase();
+    if (card.color === 'W')
+        return value === 'WILD' ? 'Wild' : `Wild ${value}`;
+    return `${unoColorName(card.color)} ${value}`;
+}
 // ============================================================================
 // CARD UTILITIES
 // ============================================================================
@@ -529,13 +549,7 @@ class UnoGameEngine {
         this.state.lastAction = 'Deck reshuffled';
     }
     getColorName(color) {
-        const names = {
-            'R': 'Red',
-            'G': 'Green',
-            'B': 'Blue',
-            'Y': 'Yellow',
-        };
-        return names[color] || color;
+        return unoColorName(color);
     }
     // ============================================================================
     // SERIALIZATION

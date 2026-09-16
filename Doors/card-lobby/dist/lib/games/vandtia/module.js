@@ -19,6 +19,7 @@ exports.VandtiaGameModule = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const utils_1 = require("../../utils");
 const engine_1 = require("./engine");
+const refusal_1 = require("../refusal");
 class VandtiaGameModule {
     toggleView() {
         this.handView = this.handView === 'hand' ? 'table' : 'hand';
@@ -230,6 +231,21 @@ class VandtiaGameModule {
             return null;
         return this.selectedCardIndex;
     }
+    /**
+     * The way out of a refused card in this game.
+     *
+     * Taking the pile is always the answer - it is the rule for a player who
+     * cannot go ("Om en spelare inte kan lägga ett kort, måste denne ta upp
+     * hela högen") - but which cards WOULD go is worth saying while the pile is
+     * still small enough to want.
+     */
+    refusalAdvice(table) {
+        const loaded = this.load(table);
+        const top = loaded?.engine.topOfPile();
+        if (!top)
+            return 'The pile is empty - anything goes.';
+        return `Play ${(0, engine_1.cardId)(top)} or higher, a 2, or a 10 - or press C to take the pile.`;
+    }
     selectCard(index) {
         const table = this.currentTable();
         if (!table)
@@ -361,7 +377,7 @@ class VandtiaGameModule {
             }
             const result = loaded.engine.playCard(userId, this.selectedCardIndex);
             if (!result.success) {
-                this.host.pushNotice(result.message);
+                this.host.pushNotice((0, refusal_1.explainRefusal)(result.message, this.refusalAdvice(fresh)));
                 return;
             }
             this.selectedCardIndex = null;
