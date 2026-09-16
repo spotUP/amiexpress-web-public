@@ -128,7 +128,9 @@ describe('the display mode a door is told', () => {
       ([name, value]) => typeof value === 'number' && name.startsWith('AEW_'),
     ) as Array<[string, number]>;
 
-    expect(own.length).toBeGreaterThan(3);
+    // Two is the least that can collide; the count itself is not the
+    // property (AEW_MSGQUERY was retired in 6ac4837ad and this pinned four).
+    expect(own.length).toBeGreaterThanOrEqual(2);
     const byValue = new Map<number, string>();
     for (const [name, value] of own) {
       expect(byValue.has(value)).toBe(false);
