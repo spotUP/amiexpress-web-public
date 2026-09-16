@@ -40,21 +40,6 @@ const SRC = path.join(__dirname, '..', '..', 'src');
  */
 const DEAD_CODE_WITH_NO_IMPORTERS: ReadonlyArray<{ file: string; why: string }> = [
   {
-    file: 'handlers/command-handler/index.ts',
-    why: 'No importer anywhere, and nothing imports the directory (every other '
-      + 'file in it is imported by name), so this index never resolves. Its '
-      + 'five setter requires - setMenuDependencies, setCommandExecution* - '
-      + 'name functions that no longer exist.',
-  },
-  {
-    file: 'handlers/operations/navigation-quick.handler.ts',
-    why: 'Orphan duplicate of the < and > conference commands. The live ones '
-      + 'are handlePreviousConferenceCommand / handleNextConferenceCommand in '
-      + 'commands/navigation-commands.handler, dispatched at '
-      + 'command.handler.ts:5095. This copy requires handleJoinConferenceCommand '
-      + 'from ./conference.handler, which does not have it.',
-  },
-  {
     file: 'amiga-emulation/xim/system-commands.ts',
     why: 'Its handleMCI is never dispatched - XIMProtocol.ts:956 routes JH_MCI '
       + 'to ioHandler.handleMCI (io.ts:1370 -> xim/mci-handler.ts), which is a '

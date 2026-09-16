@@ -52,7 +52,6 @@ const KNOWN_UNREACHABLE = new Map<string, string>([
   ['src/amiga-emulation/structures/UserStructures.ts', 'emulator: struct layouts, needs an XIM-level audit before deletion'],
   ['src/amiga-emulation/xim/host-service.ts', 'emulator: XIM host surface with no importer'],
 
-  ['src/doors/door-path.util.ts', 'one helper, reached only by the unreachable amiga-emulation/doorHandler.ts'],
   ['src/doors/door-repo-manifest.ts', 'reached only by tests; whether the door repo still wants a manifest builder is open'],
 
   // NOT OURS AND NOT ROT: a GENERATED mirror of amiexpress-doorserver's
