@@ -109,3 +109,38 @@ describe('the screen behind a row', () => {
     expect(screen.queryByLabelText('Show gl')).toBeNull();
   });
 });
+
+/**
+ * AND WHEN TWO STEPS SHOW THE SAME SCREEN, THE ROW SAYS SO.
+ *
+ * Months of "two samilogs, the first one cleared before I could read it",
+ * because bull6 was included by the logon screen and by the bulletin step at
+ * once. Each file was right on its own; only the walk knew.
+ */
+describe('a screen another step also shows', () => {
+  it('warns on the row, and names the other step', async () => {
+    get.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          node: 1,
+          steps: [{
+            screen: 'LOGON', label: 'Logon screen', note: '', skippedByQuickFlag: false,
+            file: 'Node1/logon20.txt', exists: true, bytes: 60, blankPause: false,
+            items: [{
+              code: 'SS', target: 'BBS:Bulletins/bull6.txt', pause: true,
+              shows: 'Bulletins/bull6.txt', generated: true,
+              alsoShownBy: ['Board bulletin'],
+            }],
+          }],
+          available: [],
+        },
+        timestamp: '',
+      },
+    });
+
+    render(<LoginSequencePage />);
+    expect(await screen.findByText(/\[TWICE\]/)).toBeTruthy();
+    expect(screen.getByText(/Board bulletin shows this same screen/)).toBeTruthy();
+  });
+});

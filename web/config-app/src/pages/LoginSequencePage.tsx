@@ -36,6 +36,8 @@ interface LoginItem {
   shows?: string | null;
   /** True when the board writes that file for itself - a door's output, not art. */
   generated?: boolean;
+  /** Other steps of the same walk that show this very file. */
+  alsoShownBy?: string[];
 }
 
 /** The other rung's copy, when this one is empty and that one is not. */
@@ -621,6 +623,13 @@ export function LoginSequencePage() {
                       <span className="ml-2 text-content-secondary font-sans">{describe(item.target)}</span>
                     )}
                   </span>
+                  {item.alsoShownBy && item.alsoShownBy.length > 0 && (
+                    <span className="text-xs text-status-warn">
+                      [TWICE] {item.alsoShownBy.join(' and ')} shows this same screen. A caller
+                      sees it, then sees it again - and if the file starts with a form feed the
+                      first copy is cleared before it can be read.
+                    </span>
+                  )}
                 </span>
                 <label className="text-xs text-content-secondary inline-flex items-center gap-1">
                   <input

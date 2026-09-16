@@ -258,6 +258,38 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
    * can see, while everyone else gets the board default; an editor that did
    * not say so let him remove a logo from a file nothing reads.
    */
+  /*
+   * THE SAME SCREEN, SHOWN TWICE IN ONE WALK.
+   *
+   * `bull6.txt` was included from the logon screen AND from `Screens/BULL.TXT`
+   * for months: a caller saw Super-AmiLog, watched it vanish - bull6 opens
+   * with `~f`, which is the clear - and saw it again with a pause. It was
+   * found and removed from the board's own logon screens on 2026-09-15
+   * (4614f3f93) and was still in every THEME's copy on 2026-09-16, so the
+   * sysop met it again the moment he wore one: "this is a long standing
+   * problem".
+   *
+   * Nothing could SEE it, which is why it lasted. The walk knows: a file that
+   * two steps both show is named on both of them.
+   */
+  const seenIn = new Map<string, string[]>();
+  for (const step of steps) {
+    for (const item of step.items) {
+      const file = (item as { shows?: string }).shows;
+      if (!file) continue;
+      const already = seenIn.get(file) ?? [];
+      if (!already.includes(step.label)) already.push(step.label);
+      seenIn.set(file, already);
+    }
+  }
+  for (const step of steps) {
+    for (const item of step.items as Array<{ shows?: string; alsoShownBy?: string[] }>) {
+      if (!item.shows) continue;
+      const others = (seenIn.get(item.shows) ?? []).filter(label => label !== step.label);
+      if (others.length > 0) item.alsoShownBy = others;
+    }
+  }
+
   const registry = readThemeRegistry(baseDir);
   sendOk(res, {
     node: nodeId,
