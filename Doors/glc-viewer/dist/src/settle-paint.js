@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SCRAMBLE_FRAME_MS = void 0;
+exports.SETTLE_FRAMES = exports.SCRAMBLE_FRAME_MS = void 0;
 exports.settleOnto = settleOnto;
 exports.waitingScramble = waitingScramble;
 /**
@@ -31,6 +31,20 @@ const scramble_1 = require("./scramble");
  * without noticing.
  */
 exports.SCRAMBLE_FRAME_MS = 125;
+/**
+ * HOW MANY FRAMES THE TABLE TAKES TO SETTLE - the whole reveal, not its speed.
+ *
+ * Ten frames at the shared cadence is a second and a quarter of watching a
+ * list one already has: "it can be snappier so we dont waste peoples time"
+ * (sysop, 2026-09-16). Five is a little over half a second, which still
+ * reads as a fade - each frame settles a fifth of the row, at random - and
+ * costs a caller half of what it did.
+ *
+ * The SPEED is `SCRAMBLE_FRAME_MS` and stays where it is: dropping frames
+ * shortens the reveal, dropping the gap would make the noise churn faster
+ * than the wait does and bring back the lurch at the join.
+ */
+exports.SETTLE_FRAMES = 5;
 /** One frame of every row, over the rows already on screen. */
 function paintFrame(wire, lines, onScreen) {
     if (onScreen > 0)
@@ -57,7 +71,7 @@ const wait = (ms) => new Promise((resolve) => {
  * placeholders its shorter list did not reach.
  */
 async function settleOnto(wire, lines, onScreen, options) {
-    const frames = Math.max(1, options.frames ?? 10);
+    const frames = Math.max(1, options.frames ?? exports.SETTLE_FRAMES);
     const frameMs = Math.max(0, options.frameMs ?? exports.SCRAMBLE_FRAME_MS);
     const random = options.random ?? Math.random;
     const sleep = options.sleep ?? wait;

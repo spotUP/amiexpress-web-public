@@ -372,6 +372,26 @@ describe('one cadence, either side of the answer', () => {
     expect(ratio).toBeLessThan(1.4);
   });
 
+  /*
+   * "it can be snappier so we dont waste peoples time" (sysop, 2026-09-16).
+   * Ten frames at the shared cadence was a second and a quarter of watching
+   * a list that is already on screen. The reveal is the caller's time, so
+   * it is bounded here - by the clock, not by a frame count, because either
+   * knob can put it back.
+   */
+  it('reveals in well under a second - the caller is waiting on this', async () => {
+    const HOLD = 500;
+    await runTheDoor({ screenWidth: 80, screenHeight: 25 }, HOLD);
+
+    const start = sent[0].at;
+    const answered = start + HOLD;
+    const last = sent[sent.length - 1].at;
+    const reveal = last - answered;
+
+    expect(reveal).toBeGreaterThan(0);
+    expect(reveal).toBeLessThan(800);
+  });
+
   it('is the one number both animations are built from', () => {
     const { SCRAMBLE_FRAME_MS, waitingScramble, settleOnto: settle } =
       require('../../../../Doors/glc-viewer/src/settle-paint');

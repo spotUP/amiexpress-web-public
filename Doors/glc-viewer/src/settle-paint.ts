@@ -30,6 +30,21 @@ import {
  */
 export const SCRAMBLE_FRAME_MS = 125;
 
+/**
+ * HOW MANY FRAMES THE TABLE TAKES TO SETTLE - the whole reveal, not its speed.
+ *
+ * Ten frames at the shared cadence is a second and a quarter of watching a
+ * list one already has: "it can be snappier so we dont waste peoples time"
+ * (sysop, 2026-09-16). Five is a little over half a second, which still
+ * reads as a fade - each frame settles a fifth of the row, at random - and
+ * costs a caller half of what it did.
+ *
+ * The SPEED is `SCRAMBLE_FRAME_MS` and stays where it is: dropping frames
+ * shortens the reveal, dropping the gap would make the noise churn faster
+ * than the wait does and bring back the lurch at the join.
+ */
+export const SETTLE_FRAMES = 5;
+
 /** Somewhere to write to - the door's socket, and nothing else about it. */
 export interface Wire {
   emit(event: string, payload: string): unknown;
@@ -38,7 +53,7 @@ export interface Wire {
 export interface SettleOptions {
   /** Off leaves the plain paint: one write per row, no frames. */
   animate: boolean;
-  /** How many frames the table takes to settle. More frames, slower fade. */
+  /** How many frames the table takes to settle. Defaults to SETTLE_FRAMES. */
   frames?: number;
   /** Milliseconds between frames. Without this the frames arrive together. */
   frameMs?: number;
@@ -84,7 +99,7 @@ export async function settleOnto(
   onScreen: number,
   options: SettleOptions,
 ): Promise<number> {
-  const frames = Math.max(1, options.frames ?? 10);
+  const frames = Math.max(1, options.frames ?? SETTLE_FRAMES);
   const frameMs = Math.max(0, options.frameMs ?? SCRAMBLE_FRAME_MS);
   const random = options.random ?? Math.random;
   const sleep = options.sleep ?? wait;
