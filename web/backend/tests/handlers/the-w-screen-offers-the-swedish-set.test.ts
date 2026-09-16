@@ -45,8 +45,33 @@ describe('W row 22', () => {
     expect(text).toMatch(/charset: \(session\.user\?\.petsciiCharset === 'swedish'/);
   });
 
+  /*
+   * REWRITTEN 2026-09-16. This used to assert that `user-repository.ts`
+   * contained one exact ternary, character for character - a test that a
+   * reformatting breaks and that a WRONG default would pass unchanged, as
+   * long as the wrong default was spelled the same way.
+   *
+   * The mapper is reachable, so ask it. `mapUserFromDb` is private, which
+   * is a visibility rule for callers rather than a claim that it cannot be
+   * tested; the row it takes is the shape node-postgres hands back.
+   */
   it('is standard unless the caller asked otherwise - $5C is the pound sign', () => {
-    const repo = src('database/user-repository.ts');
-    expect(repo).toMatch(/petsciiCharset: user\.petsciicharset === 'swedish' \? 'swedish' : 'standard'/);
+    const { UserRepository } = require('../../src/database/user-repository');
+    const map = (row: Record<string, unknown>) =>
+      (UserRepository.prototype as any).mapUserFromDb.call(
+        Object.create(UserRepository.prototype),
+        { id: 1, name: 'test', ...row },
+      ).petsciiCharset;
+
+    // The one value that opts in.
+    expect(map({ petsciicharset: 'swedish' })).toBe('swedish');
+
+    // Everything else is the standard set, because $5C is the POUND SIGN
+    // there and a board that guessed wrong would print it as a backslash.
+    expect(map({ petsciicharset: 'standard' })).toBe('standard');
+    expect(map({ petsciicharset: null })).toBe('standard');
+    expect(map({ petsciicharset: undefined })).toBe('standard');
+    expect(map({ petsciicharset: 'SWEDISH' })).toBe('standard');
+    expect(map({})).toBe('standard');
   });
 });

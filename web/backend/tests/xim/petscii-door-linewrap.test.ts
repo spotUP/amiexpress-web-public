@@ -70,10 +70,36 @@ describe('width consistency ruling: 80-column wrap, 40-column BB_SCRWIDTH', () =
     expect(doorScreenWidth({ petsciiMode: true, screenWidth: 40 })).toBe(40);
   });
 
-  it('a live-path bbsSession carries no lineWrap, so the XIM default of 80 applies', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../src/handlers/door.handler.ts'), 'utf8');
-    const block = src.slice(src.indexOf('async function executeAmigaDoor'), src.indexOf('async function executeMciDoor'));
-    expect(block).toContain('bbsSession: session');
-    expect(block).not.toContain('lineWrap:');
+  /*
+   * REWRITTEN 2026-09-16. This used to slice `door.handler.ts` between two
+   * function names and assert that the text in between said `bbsSession:
+   * session` and did not say `lineWrap:`. That passes or fails on a rename,
+   * on a reordering, and on any unrelated `lineWrap:` drifting into range -
+   * and it proves nothing about what the door actually wraps at.
+   *
+   * The consequence is what matters and it is directly observable:
+   * `XIMProtocol` resolves its wrap width from the session it is handed
+   * (`XIMProtocol.ts:145`, `?? 80`), and the live path hands it a session
+   * with no `lineWrap` on it. So ask XIMProtocol.
+   */
+  const ximWrapWidthFor = (bbsSession: any): number => {
+    const { XIMProtocol } = require('../../src/amiga-emulation/XIMProtocol');
+    const emulator: any = { writeMemory: () => {}, readString: () => '', allocateMemory: () => 0 };
+    const execLibrary: any = {};
+    const socket: any = { emit: () => true, on: () => {}, off: () => {} };
+    const protocol = new XIMProtocol(emulator, execLibrary, socket, 0, bbsSession);
+    return (protocol as any).state.lineWrap;
+  };
+
+  it('a session with no lineWrap wraps at 80, so words survive to the ladder', () => {
+    // The live 68K path hands executeAmigaDoor's XIM the BBS session itself,
+    // which carries a screenWidth but never a lineWrap.
+    expect(ximWrapWidthFor({ petsciiMode: true, screenWidth: 40 })).toBe(80);
+  });
+
+  it('a session that DOES carry lineWrap is still obeyed', () => {
+    // The `?? 80` is a default, not an override - a caller that sets the
+    // width on purpose (the probe harness does) must still get it.
+    expect(ximWrapWidthFor({ lineWrap: 40 })).toBe(40);
   });
 });

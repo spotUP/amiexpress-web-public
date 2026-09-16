@@ -28,10 +28,29 @@ describe('ascii-art.util.ts re-exports the SDK classifier', () => {
     expect(backend.positionsCursorAbsolutely).toBe(sdk.positionsCursorAbsolutely);
   });
 
-  it('holds no second implementation', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../src/utils/ascii-art.util.ts'), 'utf8');
-    expect(src).toContain("from '@amiexpress/bbs-door-sdk/petscii/frame'");
-    expect(src).not.toMatch(/punctuationRatio|longSpaceRuns|artChars/);
+  /*
+   * REWRITTEN 2026-09-16. This used to read `ascii-art.util.ts` and assert
+   * that its TEXT mentioned the SDK import and did not mention three of the
+   * classifier's internal variable names. Both halves are weak: the import
+   * line proves nothing about what is exported, and the three names are a
+   * guess at what a re-implementation would happen to call its locals.
+   *
+   * The property is identity, and the test above already has it for two
+   * functions. Stated over EVERY export it also catches the case the regex
+   * could not: a THIRD function added here and implemented locally.
+   */
+  it('re-exports the SDK and implements nothing of its own', () => {
+    const shared = Object.keys(backend).filter((name) => name in sdk);
+    // A re-export module with nothing in common with the SDK would pass an
+    // empty loop, so the count is part of the claim.
+    expect(shared.length).toBeGreaterThanOrEqual(2);
+
+    for (const name of Object.keys(backend)) {
+      const mine = (backend as Record<string, unknown>)[name];
+      if (typeof mine !== 'function') continue;
+      expect(name in sdk).toBe(true);
+      expect(mine).toBe((sdk as Record<string, unknown>)[name]);
+    }
   });
 
   it('still classifies every line of every captured door capture', () => {
