@@ -205,11 +205,32 @@ describe('handleReadBulletinCommand on real bulletin bytes', () => {
     expect(flat).toContain('are not violated.');
   });
 
-  it('sends the ASCII skip token for an 80-column ANSI table bulletin, not a smear', async () => {
+  /*
+   * REWRITTEN 2026-09-16. This used to assert the SKIP TOKEN, and it was
+   * right when it was written: the only alternatives then were a smear or a
+   * notice, and a notice is the honest one.
+   *
+   * The C64 adapter changed the answer. `adaptAnsiScreenToForty` rebuilds the
+   * frame and narrows it, so an 80-column TABLE - names and numbers, which is
+   * the shape `narrow` exists for - now reaches the caller as a 40-column
+   * table instead of not reaching them at all. The skip token survives for
+   * the one case the adapter declines: a screen with nothing on it.
+   *
+   * So the property is the same and the expected output is not: the table
+   * must arrive, must fit, and must not be a smear.
+   */
+  it('narrows an 80-column ANSI table bulletin to 40 columns, rather than skipping it', async () => {
     const out = await readBulletin(TABLE_BULLETIN, { petsciiMode: true, screenWidth: 40 });
 
-    expect(out).toContain(ANSI_ART_SKIPPED_NOTICE.trim());
-    // The table's own rows never reach the wire.
+    expect(out).not.toContain(ANSI_ART_SKIPPED_NOTICE.trim());
+    for (const row of contentRows(out)) {
+      expect(printableLength(row)).toBeLessThanOrEqual(40);
+    }
+    // The table is THERE - its first column survives the narrowing, which is
+    // what tells a caller which row is whose.
+    const flat = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+    expect(flat).toContain('sysop');
+    // ...and the 80-column header is gone, because it did not fit.
     expect(out).not.toContain('No# Username (Handle)');
   });
 
