@@ -142,8 +142,14 @@ function itemOf(text: string): LoginItem | undefined {
   };
 }
 
-/** Render an item as the line the loader will read. */
-function lineFor(item: LoginItem): string {
+/**
+ * Render an item as the line the loader will read.
+ *
+ * Exported because the admin page shows the sysop this exact line while he
+ * edits a row, and a second spelling of the format in the UI would drift
+ * from what is actually written to the board.
+ */
+export function lineFor(item: LoginItem): string {
   const code = item.code === 'SS' ? '~SS_' : item.code === 'CC' ? '~CC_' : '~SR_';
   return `${code}${item.target}${item.pause ? ' ~SP' : ''}`;
 }

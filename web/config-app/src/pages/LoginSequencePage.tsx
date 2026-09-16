@@ -69,6 +69,19 @@ const KNOWN: Record<string, string> = {
   'bull8.txt': 'Sport',
 };
 
+/**
+ * The line the loader will read, for the row the sysop is editing.
+ *
+ * The board's own `lineFor` (screens/login-sequence.ts) writes this; the copy
+ * here is what the page can show while a row is still being typed, before
+ * anything is saved. `the-row-shows-the-line-that-gets-written` pins the two
+ * against each other so the format cannot drift.
+ */
+export function mciLine(item: LoginItem): string {
+  const code = item.code === 'SS' ? '~SS_' : item.code === 'CC' ? '~CC_' : '~SR_';
+  return `${code}${item.target}${item.pause ? ' ~SP' : ''}`;
+}
+
 function describe(target: string): string | null {
   const name = target.split('/').pop()?.toLowerCase() ?? '';
   return KNOWN[name] ?? null;
@@ -84,6 +97,17 @@ export function LoginSequencePage() {
   const stepsRef = useRef<LoginStep[]>([]);
   const [available, setAvailable] = useState<Available[]>([]);
   const [drafts, setDrafts] = useState<Record<string, LoginItem[]>>({});
+  /*
+   * WHAT THE BOARD HAS NOT BEEN TOLD YET, per step.
+   *
+   * Every save ends in a reload, and the reload used to reseed every draft
+   * from the server - so a path being TYPED was taken back mid-word: the
+   * debounce fired after 700ms of thinking, the reload answered with the
+   * half-path that had just been saved, and the field snapped back under the
+   * sysop's hands. A step with an edit in flight keeps its own copy until the
+   * write that carries it returns.
+   */
+  const unsaved = useRef<Record<string, LoginItem[] | undefined>>({});
   const [node, setNode] = useState(1);
   /*
    * WHICH BOARD IS BEING EDITED. A theme shadows the board's own screens, so
@@ -134,7 +158,10 @@ export function LoginSequencePage() {
       // The board answers with the theme it RESOLVED, so a first load shows
       // the truth rather than a guess.
       if (!theme && payload.theme) setTheme(payload.theme);
-      setDrafts(Object.fromEntries(loaded.map(s => [s.screen, (s.items ?? []).map(i => ({ ...i }))])));
+      setDrafts(Object.fromEntries(loaded.map(s => [
+        s.screen,
+        unsaved.current[s.screen] ?? (s.items ?? []).map(i => ({ ...i })),
+      ])));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -156,6 +183,7 @@ export function LoginSequencePage() {
    * clicks while reordering a list would freeze the board four times.
    */
   const edit = (screen: string, next: LoginItem[]) => {
+    unsaved.current[screen] = next;
     setDrafts(prev => ({ ...prev, [screen]: next }));
     scheduleSave(screen, next);
   };
@@ -197,6 +225,9 @@ export function LoginSequencePage() {
         // the copy nothing reads, which is how a removed logo kept appearing.
         screen: step.screen, path: step.file, node, theme, items,
       });
+      // Only THIS list is written; anything typed since is still owed, and
+      // the reload below must not take it back.
+      if (unsaved.current[screen] === items) unsaved.current[screen] = undefined;
       setStatus(`${step.label} saved to ${step.file}`);
       // The sysop removed an include and asked where his toast was. An edit
       // that reaches the board says so out loud, not only in a line of text
@@ -221,7 +252,16 @@ export function LoginSequencePage() {
   const dirty = (step: LoginStep) =>
     JSON.stringify(drafts[step.screen] ?? []) !== JSON.stringify(step.items);
 
-  if (loading) return <SkeletonRows />;
+  /*
+   * SKELETONS ONLY WHEN THERE IS NOTHING YET.
+   *
+   * Every autosave ends in a reload, and `loading` covers a reload as well as
+   * the first fetch - so the whole editor was replaced by skeletons a second
+   * after each edit, and the field being typed into was destroyed mid-word
+   * (the row the sysop was editing came back as the board's copy). A refresh
+   * of a page already on screen is not a loading state.
+   */
+  if (loading && steps.length === 0) return <SkeletonRows />;
 
   return (
     <div className="space-y-4">
@@ -327,15 +367,50 @@ export function LoginSequencePage() {
 
             {items.map((item, index) => (
               <div
-                key={`${item.code}:${item.target}:${index}`}
-                className="flex items-center gap-2 text-sm text-content-primary border-b border-border py-1"
+                /*
+                 * KEYED BY POSITION, because the row is editable now. Keying
+                 * by content meant every keystroke in the target field gave
+                 * the row a new key: React threw the row away, built a fresh
+                 * one, and the field lost focus after one character. The
+                 * order IS the identity of a login sequence - the comment at
+                 * the top of this file says so - so the index is the key.
+                 */
+                key={`${step.screen}:${index}`}
+                className="flex items-start gap-2 text-sm text-content-primary border-b border-border py-1"
               >
-                <span className="text-content-muted w-8">{item.code}</span>
-                <span className="flex-1">
-                  {item.target}
-                  {describe(item.target) && (
-                    <span className="ml-2 text-xs text-content-secondary">{describe(item.target)}</span>
-                  )}
+                <select
+                  className="bg-surface-2 border border-border rounded px-1 py-1 text-xs text-content-primary"
+                  value={item.code}
+                  aria-label={`What row ${index + 1} of ${step.label} does`}
+                  onChange={e => {
+                    const next = [...items];
+                    next[index] = { ...item, code: e.target.value as LoginItem['code'] };
+                    edit(step.screen, next);
+                  }}
+                >
+                  <option value="SS">SS show</option>
+                  <option value="CC">CC run</option>
+                  <option value="SR">SR random</option>
+                </select>
+                <span className="flex-1 flex flex-col gap-0.5">
+                  <input
+                    type="text"
+                    className="w-full bg-surface-2 border border-border rounded px-2 py-1 text-sm text-content-primary"
+                    value={item.target}
+                    spellCheck={false}
+                    aria-label={`Row ${index + 1} of ${step.label}`}
+                    onChange={e => {
+                      const next = [...items];
+                      next[index] = { ...item, target: e.target.value };
+                      edit(step.screen, next);
+                    }}
+                  />
+                  <span className="text-xs text-content-muted font-mono">
+                    {mciLine(item)}
+                    {describe(item.target) && (
+                      <span className="ml-2 text-content-secondary font-sans">{describe(item.target)}</span>
+                    )}
+                  </span>
                 </span>
                 <label className="text-xs text-content-secondary inline-flex items-center gap-1">
                   <input

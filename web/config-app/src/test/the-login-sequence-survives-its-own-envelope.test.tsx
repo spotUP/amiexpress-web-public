@@ -41,11 +41,13 @@ beforeEach(() => fetchMock.mockClear());
 describe('the login sequence page', () => {
   it('reads the payload out of the envelope and renders the steps', async () => {
     render(<LoginSequencePage />);
-    // The screen's own name proves the payload was unwrapped: before the fix
-    // this render threw on steps.map and nothing reached the page at all.
     // The step's own include reaching the page is the proof: it can only be
-    // rendered from `steps`, which was `undefined` before the fix.
-    await waitFor(() => expect(screen.getByText('Screens/bull1')).toBeInTheDocument());
+    // rendered from `steps`, which was `undefined` before the fix. It reaches
+    // it as the VALUE OF A FIELD now, not as a label - a row of the sequence
+    // is editable since the sysop asked to type in it (2026-09-16).
+    await waitFor(() => expect(
+      (screen.getByLabelText(/^Row 1 of /) as HTMLInputElement).value
+    ).toBe('Screens/bull1'));
   });
 
   it('says so instead of white-screening when the answer carries no steps', async () => {
