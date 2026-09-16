@@ -27,6 +27,7 @@ import {
 import { wrapForSession } from '../../src/utils/wrap-for-session.util';
 import { doorScreenWidth } from '../../src/amiga-emulation/xim/screen-width.util';
 import { emitText } from '../../src/utils/ansi-buffer.util';
+import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -225,33 +226,84 @@ describe('applyWindowSizeReport (index.ts NAWS listener body)', () => {
 });
 
 describe('both reporters go through the one gate', () => {
-  // The bodies are driven above; these keep the telnet/SSH entry point
-  // delegating to them rather than growing a second unguarded write.
-  //
-  // The handlers moved from src/index.ts to src/server/transport-session.ts
-  // with plan TP-2 (thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md):
-  // index.ts starts real servers on import, so the entry point could not be
-  // driven by a test while it lived there. The pin follows the code.
-  const ENTRY_POINT = '../../src/server/transport-session.ts';
+  /*
+   * REWRITTEN 2026-09-16. These two used to read `transport-session.ts`,
+   * slice it at a string literal, and assert the text in between mentioned
+   * the gate and contained no `session.screenWidth =`. The slice depends on
+   * the exact spelling of an event registration, the regexes on the exact
+   * spelling of an assignment, and neither proves the handler RUNS the gate.
+   *
+   * It can be driven. `setupTelnetSSHHandler` is exported and starts no
+   * server on import - the comment inside it saying otherwise describes
+   * `index.ts`, which is where these handlers used to live (TP-2). So the
+   * test hands it a connection, fires the event a telnet client fires, and
+   * watches what happens to the session.
+   *
+   * The gate itself is STUBBED, deliberately: with it doing nothing, any
+   * geometry the session ends up with was written by the handler - which is
+   * the second unguarded write these tests exist to forbid. The gate's own
+   * behaviour is driven for real by the tests above.
+   */
+  const drive = (event: 'window-size' | 'terminal-type', payload: unknown[]) => {
+    jest.resetModules();
 
-  it('the transport entry point window-size assigns no geometry of its own', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, ENTRY_POINT), 'utf8');
-    const handler = src.slice(src.indexOf('connection.on("window-size"'));
-    const body = handler.slice(0, handler.indexOf('\n  });'));
-    expect(body).toContain('applyWindowSizeReport(connection.session, width, height)');
-    expect(body).not.toMatch(/session\.screenWidth\s*=/);
-    expect(body).not.toMatch(/session\.screenHeight\s*=/);
-    expect(body).not.toMatch(/session\.petsciiMode\s*=/);
+    const applyWindowSize = jest.fn(() => ({ geometryTaken: false, detectedFromSize: false }));
+    const applyTerminalType = jest.fn();
+    jest.doMock('../../src/amiga-emulation/xim/screen-width.util', () => ({
+      ...jest.requireActual('../../src/amiga-emulation/xim/screen-width.util'),
+      applyWindowSizeReport: applyWindowSize,
+      applyTerminalTypeReport: applyTerminalType,
+    }));
+
+    // A PETSCII session, which is the one a reported size must never move.
+    const session: any = {
+      id: 'geometry-drive', nodeId: 1,
+      petsciiMode: true, screenWidth: 40, screenHeight: 25,
+    };
+
+    const connection = new EventEmitter() as any;
+    connection.nodeId = 1;
+    connection.session = session;
+    connection.getRemoteAddress = () => '10.0.0.1';
+    connection.write = () => {};
+    connection.end = () => {};
+    connection.socket = { write: () => {} };
+
+    const deps: any = {
+      io: { sockets: { sockets: new Map() } },
+      sessions: new Map(),
+      nodeManager: { releaseSession: async () => undefined },
+      handleCommand: async () => undefined,
+    };
+
+    const { setupTelnetSSHHandler } = require('../../src/server/transport-session');
+    setupTelnetSSHHandler(connection, 'telnet', deps);
+    connection.emit(event, ...payload);
+
+    return { session, applyWindowSize, applyTerminalType };
+  };
+
+  it('hands a NAWS report to the gate, and writes no geometry of its own', () => {
+    const { session, applyWindowSize } = drive('window-size', [132, 50]);
+
+    expect(applyWindowSize).toHaveBeenCalledWith(session, 132, 50);
+    // The gate declined (that is what the stub says), so 132x50 must be
+    // nowhere on the session - a direct write would have put it there.
+    expect(session.screenWidth).toBe(40);
+    expect(session.screenHeight).toBe(25);
+    expect(session.petsciiMode).toBe(true);
   });
 
-  it('the transport entry point terminal-type (TTYPE) assigns no geometry of its own', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, ENTRY_POINT), 'utf8');
-    const handler = src.slice(src.indexOf('connection.on(\n    "terminal-type"'));
-    const body = handler.slice(0, handler.indexOf('\n  );'));
-    expect(body).toContain('applyTerminalTypeReport(connection.session, info)');
-    expect(body).not.toMatch(/session\.screenWidth\s*=/);
-    expect(body).not.toMatch(/session\.screenHeight\s*=/);
-    expect(body).not.toMatch(/session\.petsciiMode\s*=/);
+  it('hands a TTYPE report to the gate, and writes no geometry of its own', () => {
+    const info = { terminalType: 'ANSI', isC64: false, width: 80, height: 25 };
+    const { session, applyTerminalType } = drive('terminal-type', [info]);
+
+    expect(applyTerminalType).toHaveBeenCalledWith(session, info);
+    expect(session.screenWidth).toBe(40);
+    expect(session.screenHeight).toBe(25);
+    // An ANSI TTYPE on a PETSCII session is exactly the case that used to
+    // flip this flag behind the gate's back.
+    expect(session.petsciiMode).toBe(true);
   });
 
   it('index.ts no longer carries a copy of either handler', () => {
