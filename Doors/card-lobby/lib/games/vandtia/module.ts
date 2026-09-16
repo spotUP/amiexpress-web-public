@@ -19,7 +19,7 @@ import { Difficulty, VandtiaActionType } from '@amiexpress/bbs-door-sdk';
 import type { LobbyTable, PlayerProfile } from '../../types';
 import { isBotPlayer } from '../../utils';
 import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
-import { VandtiaEngine, cardId, type VandtiaSnapshot } from './engine';
+import { VandtiaEngine, cardId, type VandtiaSnapshot, type VandtiaCard } from './engine';
 import { explainRefusal } from '../refusal';
 import type { CardAnimator } from '../../../managers/CardAnimator';
 
@@ -69,6 +69,24 @@ export class VandtiaGameModule implements TableGameModule {
    * you ask for them, or until they become the cards you are playing.
    */
   public handView: 'hand' | 'table' = 'hand';
+
+  /**
+   * ARRANGING THE TWO ROWS BY HAND, while the swap is on.
+   *
+   * "in the swap card view it would be nice to press enter to hold a card and
+   * swap with the arrow keys, swap left right for the cards next to the card
+   * and up/down for table vs hand cards etc" (sysop, 2026-09-16).
+   *
+   * So the swap has a cursor and a held card, which is the same gesture as
+   * dragging one: ENTER picks the card under the cursor up, the arrows carry
+   * it - sideways along its own row, up or down between the hand and the
+   * table - and ENTER puts it down. The number keys still do what they did,
+   * because somebody who knows them should not have to learn this.
+   */
+  public swapCursor: { row: 'hand' | 'table'; index: number } = { row: 'hand', index: 0 };
+
+  /** The card the caller is carrying, if any. */
+  public heldCard: { row: 'hand' | 'table'; index: number } | null = null;
 
   public toggleView(): void {
     /*
@@ -364,6 +382,142 @@ export class VandtiaGameModule implements TableGameModule {
     return `Play ${cardId(top)} or higher, a 2, or a 10 - or press C to take the pile.`;
   }
 
+  /**
+   * ENTER while arranging: pick the card under the cursor up, or put it down.
+   *
+   * Returns whether it took the key, so the keyboard can leave ENTER alone in
+   * every other phase - there it plays the picked card.
+   */
+  public toggleHold(): boolean {
+    const table = this.currentTable();
+    const loaded = table ? this.load(table) : null;
+    if (!loaded || loaded.engine.state.phase !== 'swap') return false;
+
+    if (this.heldCard) {
+      this.heldCard = null;
+      this.host.pushNotice('Put down. ENTER picks a card up, the arrows carry it.');
+    } else {
+      const card = this.cardAt(loaded.engine, this.swapCursor);
+      if (!card) return true;
+      this.heldCard = { ...this.swapCursor };
+      this.host.pushNotice(`Holding ${cardId(card)}. Arrows to move it, ENTER to put it down.`);
+    }
+    this.host.updateAllPanels();
+    return true;
+  }
+
+  /** The card a cursor is over, if there is one. */
+  private cardAt(
+    engine: VandtiaEngine,
+    at: { row: 'hand' | 'table'; index: number },
+  ): VandtiaCard | undefined {
+    const me = this.host.currentProfile?.userId;
+    const player = me ? engine.playerById(me) : undefined;
+    if (!player) return undefined;
+    return (at.row === 'hand' ? player.hand : player.faceUp)[at.index];
+  }
+
+  /**
+   * An arrow while arranging: carry the held card, or walk the cursor.
+   *
+   * Sideways stays in the row and trades places with the neighbour; up and
+   * down cross between the hand and the table, which IS the swap this phase
+   * exists for. Returns whether it took the key.
+   */
+  public moveSwap(dx: number, dy: number): boolean {
+    const table = this.currentTable();
+    const loaded = table ? this.load(table) : null;
+    if (!loaded || loaded.engine.state.phase !== 'swap') return false;
+
+    const me = this.host.currentProfile?.userId;
+    const player = me ? loaded.engine.playerById(me) : undefined;
+    if (!player || !me) return true;
+
+    const rowOf = (row: 'hand' | 'table') => (row === 'hand' ? player.hand : player.faceUp);
+    const at = this.heldCard ?? this.swapCursor;
+    const target = { row: at.row, index: at.index };
+
+    if (dy !== 0) target.row = at.row === 'hand' ? 'table' : 'hand';
+    if (dx !== 0) target.index = at.index + dx;
+
+    // Off the end of a row, or onto a row that is shorter: nothing to do.
+    const into = rowOf(target.row);
+    if (target.index < 0 || target.index >= into.length) return true;
+
+    if (!this.heldCard) {
+      this.swapCursor = target;
+      this.host.updateAllPanels();
+      return true;
+    }
+
+    return this.carryTo(target);
+  }
+
+  /**
+   * Put the card being carried onto a place, wherever the gesture came from.
+   *
+   * The arrows work out a neighbour and land here; a mouse drop names the
+   * place directly and lands here too. ONE implementation, because "swap this
+   * card with that one" is one move however the caller expressed it - and two
+   * would drift the first time the rules changed.
+   *
+   * Across the rows is the game's own swap; along a row is an arrangement.
+   * Either way the hold follows the card, so a gesture can carry on.
+   */
+  public carryTo(target: { row: 'hand' | 'table'; index: number }): boolean {
+    const table = this.currentTable();
+    const loaded = table ? this.load(table) : null;
+    const me = this.host.currentProfile?.userId;
+    if (!loaded || !me || loaded.engine.state.phase !== 'swap') return false;
+
+    const from = this.heldCard;
+    if (!from) return true;
+    if (from.row === target.row && from.index === target.index) return true;
+
+    const result = target.row === from.row
+      ? loaded.engine.reorder(me, from.row === 'hand' ? 'hand' : 'faceUp', from.index, target.index)
+      : from.row === 'hand'
+        ? loaded.engine.swap(me, from.index, target.index)
+        : loaded.engine.swap(me, target.index, from.index);
+
+    if (!result.success) {
+      this.host.pushNotice(explainRefusal(result.message, null));
+      return true;
+    }
+
+    this.heldCard = target;
+    this.swapCursor = target;
+    this.save(table!, loaded.engine, loaded.beforeStacks);
+    void this.host.persistState();
+    this.host.updateAllPanels();
+    return true;
+  }
+
+  /**
+   * A card picked up with the mouse.
+   *
+   * The same hold the keyboard sets, so a drag that starts with the mouse can
+   * be finished with the arrows and the other way round.
+   */
+  public grabAt(row: 'hand' | 'table', index: number): void {
+    const table = this.currentTable();
+    const loaded = table ? this.load(table) : null;
+    if (!loaded || loaded.engine.state.phase !== 'swap') return;
+    if (!this.cardAt(loaded.engine, { row, index })) return;
+
+    this.heldCard = { row, index };
+    this.swapCursor = { row, index };
+    this.host.updateAllPanels();
+  }
+
+  /** A card dropped onto a place with the mouse. */
+  public dropOn(row: 'hand' | 'table', index: number): void {
+    if (!this.heldCard) return;
+    this.carryTo({ row, index });
+    this.heldCard = null;
+    this.host.updateAllPanels();
+  }
+
   public selectCard(index: number): void {
     const table = this.currentTable();
     if (!table) return;
@@ -480,6 +634,8 @@ export class VandtiaGameModule implements TableGameModule {
           return;
         }
         this.selectedHandIndex = null;
+        this.heldCard = null;
+        this.swapCursor = { row: 'hand', index: 0 };
         // Play starts on the HAND, whatever the panel was showing while the
         // cards were being arranged.
         this.handView = 'hand';
@@ -641,7 +797,12 @@ export class VandtiaGameModule implements TableGameModule {
       return [
         me.ready
           ? '{cyan-fg}Ready.{/} Waiting for the others...'
-          : '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}V{/} flip  {cyan-fg}X{/} ready',
+          : this.heldCard
+            // Carrying one: the arrows are the whole instruction.
+            ? '{yellow-fg}Holding a card.{/}  {cyan-fg}Arrows{/} move it  '
+              + '{cyan-fg}ENTER{/} put down  {cyan-fg}X{/} ready'
+            : '{cyan-fg}ENTER{/} hold  {cyan-fg}Arrows{/} move  '
+              + '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} ready',
         `Hand ${me.hand.map((card, i) =>
           (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
           + ':' + label(card)).join('  ')}`,

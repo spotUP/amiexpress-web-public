@@ -464,6 +464,16 @@ class GameViews {
             playable: swapping ? (me?.faceUp ?? []).map((_, index) => index) : [],
             labels: swapping,
             labelFrom: swapping ? 4 : 1,
+            /*
+             * While arranging, this row shows the cursor - and the card being
+             * carried, if it is up here. A held card is LIFTED, which is the same
+             * signal a picked card gives everywhere else in this door.
+             */
+            ...(swapping ? {
+                selected: this.host.vandtia.swapCursor.row === 'table'
+                    ? this.host.vandtia.swapCursor.index
+                    : null,
+            } : {}),
             // A PILE, not three cards: each one lying on the last, all faces up,
             // the top card on top. "make them look like the pile in front of me
             // but with all cards open" (sysop, 2026-09-15).
@@ -472,6 +482,11 @@ class GameViews {
                 if (swapping)
                     this.host.vandtia.selectCard(index + 3);
             },
+            // Drag and drop, during the swap: pick a card up here, drop it on
+            // either row. The same hold the keyboard sets, so a gesture can start
+            // with the mouse and finish with the arrows.
+            onGrab: swapping ? (index) => this.host.vandtia.grabAt('table', index) : undefined,
+            onDrop: swapping ? (index) => this.host.vandtia.dropOn('table', index) : undefined,
         });
         /*
          * THE PANEL'S TEXT IS ALWAYS THIS GAME'S, drawn or not.
@@ -511,7 +526,11 @@ class GameViews {
             : showing.map((card) => ({ kind: 'standard', card }));
         this.host.cardButtons.render(entries, {
             selected: showingTable ? null
-                : swapping ? this.host.vandtia.selectedHandIndex : this.host.vandtia.selectedCardIndex,
+                : swapping
+                    ? (this.host.vandtia.swapCursor.row === 'hand'
+                        ? this.host.vandtia.swapCursor.index
+                        : this.host.vandtia.selectedHandIndex)
+                    : this.host.vandtia.selectedCardIndex,
             playable: showingTable ? []
                 : swapping ? (me?.hand ?? []).map((_, index) => index)
                     : loaded.engine.legalPlays(meId),
@@ -519,6 +538,8 @@ class GameViews {
             labels: !showingTable,
             onFocus: (index) => { if (!showingTable)
                 this.host.vandtia.selectCard(index); },
+            onGrab: swapping ? (index) => this.host.vandtia.grabAt('hand', index) : undefined,
+            onDrop: swapping ? (index) => this.host.vandtia.dropOn('hand', index) : undefined,
             onPick: (index) => {
                 if (showingTable)
                     return;

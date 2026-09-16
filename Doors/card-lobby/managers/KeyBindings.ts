@@ -175,14 +175,21 @@ export function attachKeyBindings(host: KeyBindingHost): void {
    * arrow-key focus walk from moving the focus at the same time as the
    * selection - two things moving on one keystroke.
    */
-  const walk = (delta: number) => (): boolean | void => {
+  const walk = (dx: number, dy = 0) => (): boolean | void => {
     const module = atTable();
     if (!module) return;
-    module.moveSelection(delta);
+
+    // A game arranging two rows takes the arrows itself, in both directions
+    // (Skitgubbe's swap). Everything else walks its hand sideways.
+    if (module.moveSwap?.(dx, dy)) return true;
+    if (dy !== 0) return;                    // nothing else has an up or down
+    module.moveSelection(dx);
     return typeof module.selectedCard === 'function' ? true : undefined;
   };
   host.screen.key(['left', 'h'], walk(-1));
   host.screen.key(['right', 'l'], walk(1));
+  host.screen.key(['up', 'k'], walk(0, -1));
+  host.screen.key(['down', 'j'], walk(0, 1));
 
   /**
    * A CARD KEY PICKS, AND THE SAME KEY AGAIN PLAYS.
@@ -215,6 +222,10 @@ export function attachKeyBindings(host: KeyBindingHost): void {
     const module = atTable();
     const table = currentTable();
     if (!module || !table) return;
+
+    // A game may want ENTER for something other than playing: Skitgubbe's
+    // swap picks a card up with it.
+    if (module.toggleHold?.()) return true;
     const picked = module.selectedCard?.(table) ?? null;
     if (picked === null) return;
     module.primaryAction();

@@ -219,6 +219,39 @@ class VandtiaEngine {
         this.state.lastAction = `${player.name} swaps ${(0, exports.cardId)(handCard)} onto the table.`;
         return { success: true, message: this.state.lastAction };
     }
+    /**
+     * Move a card along its own row while arranging.
+     *
+     * The two rows are a player's own business until the play starts, and
+     * shuffling one is not a move in the game - but it is how a caller ARRANGES
+     * their cards, which is what the swap phase is for: "swap left right for
+     * the cards next to the card" (sysop, 2026-09-16).
+     *
+     * It lives in the engine rather than in the door because the row it edits
+     * is the engine's, and a door reaching into `player.hand` to reorder it
+     * would be a second place that decides what a hand is.
+     */
+    reorder(playerId, row, from, to) {
+        if (this.state.phase !== 'swap')
+            return { success: false, message: 'Play has started.' };
+        const player = this.playerById(playerId);
+        if (!player)
+            return { success: false, message: 'You are not in this game.' };
+        if (player.ready)
+            return { success: false, message: 'You are already done swapping.' };
+        const cards = player[row];
+        if (from < 0 || from >= cards.length)
+            return { success: false, message: 'No such card.' };
+        if (to < 0 || to >= cards.length)
+            return { success: false, message: 'There is nothing there.' };
+        if (from === to)
+            return { success: true, message: this.state.lastAction };
+        const moved = cards[from];
+        cards[from] = cards[to];
+        cards[to] = moved;
+        this.state.lastAction = `${player.name} moves ${(0, exports.cardId)(moved)}.`;
+        return { success: true, message: this.state.lastAction };
+    }
     /** Done swapping. Play starts when everybody is. */
     finishSwap(playerId) {
         if (this.state.phase !== 'swap')

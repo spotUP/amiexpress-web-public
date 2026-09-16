@@ -124,6 +124,26 @@ export interface TableGameModule {
    */
   refusalAdvice?(table: LobbyTable): string | null;
 
+  /**
+   * ENTER, when a game wants it for something other than playing a card.
+   *
+   * Skitgubbe's swap uses it to pick a card up and put it down - "press enter
+   * to hold a card and swap with the arrow keys" (sysop, 2026-09-16). Return
+   * true to say the key was taken; every other game leaves it alone and ENTER
+   * keeps meaning "play what is picked".
+   */
+  toggleHold?(): boolean;
+
+  /**
+   * An arrow in two dimensions, for a game whose screen has more than a row.
+   *
+   * `moveSelection` walks a hand sideways and is what the arrows normally do.
+   * A game with two rows to arrange takes this instead and says so by
+   * returning true - the swap carries a held card between the hand and the
+   * table with up and down.
+   */
+  moveSwap?(dx: number, dy: number): boolean;
+
   /** Pad A, and the key that means "do the main thing" at this table. */
   primaryAction(): void;
 

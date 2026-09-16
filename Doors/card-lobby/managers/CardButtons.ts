@@ -102,6 +102,20 @@ export interface CardButtonOptions extends CardButtonOptionsBase {
    * panels and the borders dont lit up", sysop 2026-09-15).
    */
   onFocus?(index: number): void;
+
+  /**
+   * DRAG AND DROP: the mouse went down on this card, and came up on that one.
+   *
+   * "clicking works nice now but drag n drop is an obvious feature in a card
+   * game as well" (sysop, 2026-09-16). A card is a widget, so the pair of
+   * events is already there to be listened to - `mousedown` on the card the
+   * gesture starts on, `mouseup` on the card it ends on.
+   *
+   * Offered by the shared renderer rather than wired per game, so every row
+   * of cards in the lobby can be dragged the day its game asks.
+   */
+  onGrab?(index: number): void;
+  onDrop?(index: number): void;
 }
 
 /** What one call to `render` settled on: the shape, and the card's size. */
@@ -525,9 +539,16 @@ export class CardButtons {
       (button as any).removeAllListeners('click');
       (button as any).removeAllListeners('press');
       (button as any).removeAllListeners('focus');
+      (button as any).removeAllListeners('mousedown');
+      (button as any).removeAllListeners('mouseup');
       (button as any).on('click', () => options.onPick(index));
       (button as any).on('press', () => options.onPick(index));
       if (options.onFocus) (button as any).on('focus', () => options.onFocus?.(index));
+      // The two halves of a drag. A plain click still reaches `onPick`: the
+      // widget emits `click` on mousedown as well, so a caller who never
+      // moves the mouse gets the behaviour they always had.
+      if (options.onGrab) (button as any).on('mousedown', () => options.onGrab?.(index));
+      if (options.onDrop) (button as any).on('mouseup', () => options.onDrop?.(index));
       // A row that cannot be picked from does not take the focus either.
       (button as any).options.focusable = options.labels !== false;
       (button as any).clickable = options.labels !== false;

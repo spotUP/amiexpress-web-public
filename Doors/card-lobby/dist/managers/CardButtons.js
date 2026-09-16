@@ -418,10 +418,19 @@ class CardButtons {
             button.removeAllListeners('click');
             button.removeAllListeners('press');
             button.removeAllListeners('focus');
+            button.removeAllListeners('mousedown');
+            button.removeAllListeners('mouseup');
             button.on('click', () => options.onPick(index));
             button.on('press', () => options.onPick(index));
             if (options.onFocus)
                 button.on('focus', () => options.onFocus?.(index));
+            // The two halves of a drag. A plain click still reaches `onPick`: the
+            // widget emits `click` on mousedown as well, so a caller who never
+            // moves the mouse gets the behaviour they always had.
+            if (options.onGrab)
+                button.on('mousedown', () => options.onGrab?.(index));
+            if (options.onDrop)
+                button.on('mouseup', () => options.onDrop?.(index));
             // A row that cannot be picked from does not take the focus either.
             button.options.focusable = options.labels !== false;
             button.clickable = options.labels !== false;
