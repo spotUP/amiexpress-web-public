@@ -28,9 +28,15 @@ const RESPONSE = JSON.stringify({
   },
 });
 
+/** The scenewall paths the door asked for during the last run. */
+const asked: string[] = [];
+
 /** Run the door with a stubbed scenewall and collect what it emitted. */
-async function runTheDoor(): Promise<string> {
+async function runTheDoor(
+  bbsSession: { screenWidth?: number; screenHeight?: number } = {},
+): Promise<string> {
   jest.resetModules();
+  asked.length = 0;
 
   /*
    * The SDK is stubbed, not loaded: importing it drags in Tone, which ships
@@ -55,7 +61,8 @@ async function runTheDoor(): Promise<string> {
   jest.doMock('http', () => {
     const { EventEmitter } = require('events');
     return {
-      request: (_options: unknown, callback: (res: unknown) => void) => {
+      request: (options: { path?: string }, callback: (res: unknown) => void) => {
+        if (options.path) asked.push(options.path);
         const response = new EventEmitter() as any;
         response.statusCode = 200;
         response.setEncoding = () => {};
@@ -78,12 +85,23 @@ async function runTheDoor(): Promise<string> {
     on: () => {}, off: () => {},
   };
 
-  const door = require(DOOR).default;
+  // The board's cfg names three styles and the door draws one at random
+  // when it reads it (`STYLE=1,4,3`). The first draw is pinned to the FIRST
+  // of them - style 1, which shares its logo with style 3 - so the
+  // assertions below have one logo to look for; the animation's own dice
+  // are restored as soon as the config is read.
+  const dice = jest.spyOn(Math, 'random').mockReturnValue(0);
+  let door: any;
+  try {
+    door = require(DOOR).default;
+  } finally {
+    dice.mockRestore();
+  }
   // `startHandlers` is where onStart() puts them (sdk/core/Door.ts:45). The
   // door registers exactly one.
   const handlers = (door as any).startHandlers as Array<(ctx: unknown) => Promise<void>>;
   expect(handlers).toHaveLength(1);
-  await handlers[0]({ socket, bbs: {}, user: { username: 'Spot' } });
+  await handlers[0]({ socket, bbs: {}, user: { username: 'Spot' }, bbsSession });
 
   return emitted.join('');
 }
@@ -160,5 +178,41 @@ describe('the fields the server really sends', () => {
   it('shows the one it went off on too', async () => {
     const drawn = await runTheDoor();
     expect(drawn).toContain('08:44');
+  });
+});
+
+/**
+ * The sysop's count, 2026-09-16: "i count it to only 18 rows high in total?"
+ *
+ * `LINES=AUTO` was summed for the wide screen - rows minus eighteen of chrome
+ * - before the narrow screen got its say, so a C64 reporting twenty-two rows
+ * asked the server for four callers and drew four, under a logo with room
+ * for eleven. AUTO now resolves per width; this is that, read off the count
+ * the door actually asks the scenewall for.
+ */
+describe('LINES=AUTO on a C64', () => {
+  const askedCount = (): number => {
+    expect(asked.length).toBeGreaterThan(0);
+    const count = /[?&]count=(\d+)/.exec(asked[0]);
+    expect(count).not.toBeNull();
+    return Number(count![1]);
+  };
+
+  it('fills the rows under the logo, not the wide screen\'s leftovers', async () => {
+    const { narrowListRows } = require('../../../../Doors/glc-viewer/src/narrow');
+    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+
+    await runTheDoor({ screenWidth: 40, screenHeight: 22 });
+
+    const count = askedCount();
+    expect(count).toBe(narrowListRows(5));   // the shipped C64 logo is five rows
+    expect(count).toBe(11);
+    expect(count).not.toBe(autoLines(22));   // the four the sysop counted
+  });
+
+  it('still sums the wide screen on eighty columns', async () => {
+    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    await runTheDoor({ screenWidth: 80, screenHeight: 24 });
+    expect(askedCount()).toBe(autoLines(24));
   });
 });

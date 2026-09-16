@@ -17,7 +17,7 @@
       "cfgKey": "SERVERPORT",
       "label": "Server port",
       "type": "string",
-      "default": "11541",
+      "default": "1541",
       "help": "The scenewall's port."
     },
     {
@@ -25,7 +25,7 @@
       "cfgKey": "TIMEOUT",
       "label": "Seconds to wait",
       "type": "string",
-      "default": "10",
+      "default": "5",
       "help": "Seconds to wait for the server. A caller waits this long at most; the screen is drawn either way."
     },
     {
@@ -57,7 +57,7 @@
       "cfgKey": "SCREENCLEAR",
       "label": "Clear the screen first",
       "type": "string",
-      "default": "YES",
+      "default": "NO",
       "help": "YES clears the caller's screen before the list. The clear rides on the first logo line, as the original sends it."
     },
     {
@@ -65,7 +65,7 @@
       "cfgKey": "STYLE",
       "label": "Style",
       "type": "string",
-      "default": "3",
+      "default": "1,4,3",
       "help": "1 to 4, or a comma-separated list for a random pick each call - the logos below are numbered to match."
     },
     {
@@ -73,7 +73,7 @@
       "cfgKey": "CENTRENAME",
       "label": "Centre the name column",
       "type": "string",
-      "default": "1",
+      "default": "0",
       "help": "1 centres the name column, padding it out to 21 characters a space at a time."
     },
     {

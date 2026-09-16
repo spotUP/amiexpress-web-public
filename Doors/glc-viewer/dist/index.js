@@ -580,8 +580,6 @@ door.onStart(async (ctx) => {
          * decides. The placeholder rows below it hold the table's shape - in the
          * calls' own column widths - and the real rows are written over them.
          */
-        if (config.lines === AUTO_LINES)
-            config.lines = (0, sizing_1.autoLines)(rowsOf(ctx));
         const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx));
         /*
          * A FORTY-COLUMN LIST SIZES ITSELF.
@@ -591,9 +589,19 @@ door.onStart(async (ctx) => {
          * the header scrolls off before the caller reads it. So the narrow screen
          * asks the server for what is left under its logo instead, and the logo
          * is known by now because the header decided it.
+         *
+         * `AUTO` resolves per width for the same reason. The wide sum subtracts
+         * eighteen rows of chrome, and a C64 reporting twenty-two rows would be
+         * left with four callers under a logo that leaves room for eleven - the
+         * sysop counted "only 18 rows high in total" (2026-09-16). The narrow
+         * screen has its own chrome, so it does its own sum.
          */
         if (base.columns <= narrow_1.NARROW_WIDTH) {
-            config.lines = Math.min(config.lines, (0, narrow_1.narrowListRows)(base.logo.length));
+            const fit = (0, narrow_1.narrowListRows)(base.logo.length);
+            config.lines = config.lines === AUTO_LINES ? fit : Math.min(config.lines, fit);
+        }
+        else if (config.lines === AUTO_LINES) {
+            config.lines = (0, sizing_1.autoLines)(rowsOf(ctx));
         }
         // Both widths hold the table's shape while the network answers; only the
         // row differs, because the narrow table's columns are its own.
