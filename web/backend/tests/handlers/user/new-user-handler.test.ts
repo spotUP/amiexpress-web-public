@@ -269,13 +269,42 @@ describe('New User Handler — registration steps', () => {
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_COMPUTER);
     });
 
-    it('empty input uses auto (0)', async () => {
+    it('Auto (Enter) stores the measured terminal height minus the prompt row, never 0', async () => {
+      // The bug (sysop, 2026-09-16): Auto stored 0, createUser turned 0 into
+      // the board default 23, and the Bulls door paged a bulletin built to
+      // fit. Auto must store the same number the line test shows at the top -
+      // the terminal height less the prompt row.
+      const socket = makeSocket();
+      const session = makeSession({
+        subState: LoggedOnSubState.NEW_USER_LINES,
+        tempData: { termHeight: 25 },
+      });
+
+      await handleLinesInput(socket, session, '');
+
+      expect(session.newUserData.linesPerScreen).toBe(24);
+      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_COMPUTER);
+    });
+
+    it('a typed 0 is Auto too, and resolves the same way', async () => {
+      const socket = makeSocket();
+      const session = makeSession({
+        subState: LoggedOnSubState.NEW_USER_LINES,
+        screenHeight: 25,
+      });
+
+      await handleLinesInput(socket, session, '0');
+
+      expect(session.newUserData.linesPerScreen).toBe(24);
+    });
+
+    it('Auto falls back to the standard 24 when the session measured nothing', async () => {
       const socket = makeSocket();
       const session = makeSession({ subState: LoggedOnSubState.NEW_USER_LINES });
 
       await handleLinesInput(socket, session, '');
 
-      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_COMPUTER);
+      expect(session.newUserData.linesPerScreen).toBe(24);
     });
   });
 
