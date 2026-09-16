@@ -101,12 +101,22 @@ export async function theTitleFollowsWhatTheCallerIsLookingAt(): Promise<void> {
      * (sysop, 2026-09-16). It goes back to being the pile once play starts,
      * which is what the rest of this test walks through.
      */
-    const before = app.vandtia.panelTitles(app.findTableById(120));
+    let before = app.vandtia.panelTitles(app.findTableById(120));
     assert.ok(/table cards/i.test(before.board ?? ''),
       `the upper panel holds the caller's table cards while swapping: ${before.board}`);
     assert.ok(/hand/i.test(before.hand ?? ''), `and the lower one is yours: ${before.hand}`);
 
+    /*
+     * Past the swap before touching V. During the swap both rows are already
+     * on screen, so V has nothing to flip to and deliberately refuses - see
+     * `theFlipCannotOutliveTheSwap`.
+     */
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 600));
+
     // V flips the lower panel to the cards in front of you, and back.
+    before = app.vandtia.panelTitles(app.findTableById(120));
     app.vandtia.toggleView();
     const flipped = app.vandtia.panelTitles(app.findTableById(120));
     assert.ok(/front of you/i.test(flipped.hand ?? ''), `V shows your table: ${flipped.hand}`);
@@ -311,5 +321,60 @@ export async function theSwapShowsBothRowsFaceUp(): Promise<void> {
       `the hand card went to the table: ${nowOnTable.join(' ')}`);
     assert.ok(nowInHand.includes(tableCard),
       `and the table card came to the hand: ${nowInHand.join(' ')}`);
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function theFlipCannotOutliveTheSwap(): Promise<void> {
+  /*
+   * "i switched view with v and swapped some card but i cant seem to start
+   * the game now?" (sysop, 2026-09-16). The game HAD started - the screen was
+   * showing the wrong row.
+   *
+   * `V` flips the lower panel between the caller's hand and the six cards in
+   * front of them. Pressed during the SWAP it was meaningless (both rows are
+   * already on screen then) but it still flipped, and `handView` survived
+   * into play: the lower panel showed the six in front of the caller instead
+   * of the hand they were meant to play from, and every key answered "Pick a
+   * card first."
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 207, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 3, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 207;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+
+    // V during the swap changes nothing, and says so.
+    app.notices.length = 0;
+    app.vandtia.toggleView();
+    assert.strictEqual(app.vandtia.handView, 'hand',
+      'the swap keeps the hand in the lower panel - both rows are up already');
+    assert.ok(/already on screen/i.test(app.notices.join(' ')),
+      `and the caller is told why: ${app.notices.join(' ')}`);
+
+    // Even if something flipped it, play starts on the hand.
+    app.vandtia.handView = 'table';
+    app.vandtia.primaryAction();                     // X: ready
+    await new Promise((r) => setTimeout(r, 600));
+
+    const engine = app.vandtia.load(app.findTableById(207))?.engine;
+    assert.ok(engine && engine.state.phase !== 'swap', 'the game started');
+    assert.strictEqual(app.vandtia.handView, 'hand',
+      'and the lower panel is the hand the caller plays from');
   } finally { app.screen?.destroy?.(); }
 }

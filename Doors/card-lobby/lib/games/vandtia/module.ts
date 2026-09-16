@@ -71,6 +71,22 @@ export class VandtiaGameModule implements TableGameModule {
   public handView: 'hand' | 'table' = 'hand';
 
   public toggleView(): void {
+    /*
+     * NOT DURING THE SWAP. Both rows are already on screen then - the hand
+     * below and the table cards above - so there is nothing to flip to, and
+     * flipping anyway left `handView` pointing at the table cards when play
+     * started: the lower panel showed the six in front of the caller instead
+     * of the hand they were meant to be playing from, and every key answered
+     * "Pick a card first". Reported as "i switched view with v and swapped
+     * some card but i cant seem to start the game now" (sysop, 2026-09-16) -
+     * the game HAD started; the screen was showing the wrong row.
+     */
+    const table = this.currentTable();
+    if (table && this.load(table)?.engine.state.phase === 'swap') {
+      this.host.pushNotice('Both your rows are already on screen - swap with 1-3 then 4-6.');
+      return;
+    }
+
     this.handView = this.handView === 'hand' ? 'table' : 'hand';
     this.selectedCardIndex = null;      // the numbers now mean other cards
     this.host.pushNotice(this.handView === 'table'
@@ -464,6 +480,9 @@ export class VandtiaGameModule implements TableGameModule {
           return;
         }
         this.selectedHandIndex = null;
+        // Play starts on the HAND, whatever the panel was showing while the
+        // cards were being arranged.
+        this.handView = 'hand';
         this.host.pushEvent(`${this.host.currentProfile?.username ?? 'Someone'} is ready.`);
         this.save(fresh, loaded.engine, loaded.beforeStacks);
         await this.host.persistState();
