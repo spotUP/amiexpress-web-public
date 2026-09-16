@@ -68,6 +68,14 @@ export function asciiToPetsciiByte(code: number, bank: 0 | 1): PetsciiByteMappin
      * screen came out as '/', so the two sides of a peak or a box became the
      * same stroke. From EALL/HT's `txt2petscii`, which makes the same choice
      * (2026-09-16).
+     *
+     * THE BOARD'S OWN SCREENS DO NOT REACH THIS. They are authored in bank 1
+     * (`editor-surface.ts`'s BOARD_CHARSET_BANK), and the sysop was asked
+     * directly on 2026-09-16 whether art screens should be allowed to opt
+     * into bank 0 to gain the diagonals: no - "only lowercase characters are
+     * allowed ... this should apply bbs wide" stands as written, and a
+     * converted screen keeps folding `\` to `/`. Do not reopen it here; it
+     * is a board rule, not a table one.
      */
     case 0x5C: return plain(bank === 0 ? 0xCD : 0x2F);
     case 0x5E: return plain(0x5E);                 // ^ -> up-arrow glyph

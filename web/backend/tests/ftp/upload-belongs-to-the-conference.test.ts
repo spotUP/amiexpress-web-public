@@ -106,14 +106,82 @@ describe('the FTP upload gate', () => {
     expect(refusal).toMatchObject({ code: 553 });
   });
 
-  it('describes the file by its own FILE_ID.DIZ, as a menu upload does', () => {
-    // The extraction itself is file-diz.util's, tested there; what this pins
-    // is that the FTP path calls it and keeps the placeholder as a fallback.
-    const src = fs.readFileSync(path.join(REPO, 'web/backend/src/ftp/ftp-auth.ts'), 'utf8');
-    const accept = src.slice(src.indexOf('async acceptUpload'));
-    expect(accept).toMatch(/extractAndReadDiz\(playpenPath, nodeWorkDir/);
-    expect(accept).toMatch(/description = dizLines\.join/);
-    expect(accept).toMatch(/areaForConference\(request\.conferenceId/);
-    expect(accept).not.toMatch(/areas\[0\]/);
+  /*
+   * REWRITTEN 2026-09-16. This used to slice `ftp-auth.ts` from the string
+   * "async acceptUpload" and assert four regexes over the text after it. It
+   * breaks on a rename, it passes on code that never runs, and - the part
+   * that matters - `areas[0]` returning somewhere wrong would still satisfy
+   * "the source does not contain areas[0]" if it were spelled another way.
+   *
+   * `boardFtpDeps()` hands out the real `acceptUpload`, so the test calls it
+   * with the collaborators stubbed and reads what it decided: the description
+   * it filed, and the area it filed against.
+   */
+  const acceptAnUpload = async (opts: { diz: string[] | null }) => {
+    jest.resetModules();
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftp-accept-'));
+    const filed: Array<Record<string, unknown>> = [];
+    const areaAsked: number[] = [];
+    const THE_CONFERENCE_AREA = { id: 77, name: 'Conference 7 Files', path: 'Conf7/Uploads' };
+
+    jest.doMock('../../src/utils/file-diz.util', () => ({
+      extractAndReadDiz: jest.fn(async () => opts.diz),
+    }));
+    jest.doMock('../../src/utils/file-test.util', () => ({
+      testFile: jest.fn(async () => 'SUCCESS'),
+      TestResult: { SUCCESS: 'SUCCESS', FAILURE: 'FAILURE', NONE: 'NONE' },
+    }));
+    jest.doMock('../../src/services/upload-filing.service', () => ({
+      ...jest.requireActual('../../src/services/upload-filing.service'),
+      areaForConference: jest.fn(async (conferenceId: number) => {
+        areaAsked.push(conferenceId);
+        return THE_CONFERENCE_AREA;
+      }),
+      fileUploadedFile: jest.fn(async (payload: Record<string, unknown>) => {
+        filed.push(payload);
+        return { orphaned: false, notices: [] };
+      }),
+    }));
+    jest.doMock('../../src/database', () => ({
+      db: { getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: true }) }) },
+    }));
+    jest.doMock('../../src/config', () => ({
+      config: { get: (key: string) => (key === 'dataDir' ? root : undefined) },
+    }));
+
+    const { boardFtpDeps } = require('../../src/ftp/ftp-auth');
+    const { Readable } = require('stream');
+
+    await boardFtpDeps().acceptUpload(
+      {
+        filename: 'ARTPACK.LHA',
+        nodeId: 1,
+        conferenceId: 7,
+        user: { username: 'Knut' },
+      },
+      Readable.from([Buffer.from('payload')]),
+    );
+
+    return { filed: filed[0], areaAsked, area: THE_CONFERENCE_AREA };
+  };
+
+  it('describes the file by its own FILE_ID.DIZ, as a menu upload does', async () => {
+    const { filed } = await acceptAnUpload({ diz: ['ARTPACK #7', 'twelve screens'] });
+    expect(filed.description).toBe('ARTPACK #7\ntwelve screens');
+  });
+
+  it('keeps the placeholder when the archive carries no DIZ', async () => {
+    // An FTP caller has no prompt to type a description at, so the fallback
+    // has to say something rather than nothing.
+    const { filed } = await acceptAnUpload({ diz: null });
+    expect(filed.description).toBe('Uploaded over FTP by Knut');
+  });
+
+  it('files it against the conference it was sent to, never the first area', async () => {
+    const { filed, areaAsked, area } = await acceptAnUpload({ diz: null });
+    expect(areaAsked).toEqual([7]);
+    expect(filed.fileArea).toEqual(area);
+    expect(filed.conferenceId).toBe(7);
   });
 });
