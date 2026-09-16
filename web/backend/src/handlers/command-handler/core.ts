@@ -7,6 +7,7 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import { getSystemTime } from '../../utils/date-time.util';
+import { ANSI_GRAPHICS_PROMPT } from "../../services/login-connect.service";
 import {
   acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN, backspaceEcho,
   recordPromptColumn, SAVE_CURSOR,
@@ -46,10 +47,13 @@ let SCREEN_MENU: string = "MENU";
  * own line, but the graphics question and the A/R/P/N prompt are merged
  * onto one line. The question comes last with a trailing space so the
  * input cursor sits right after it.
- * Kept identical to login-connect.service.ts's ANSI_GRAPHICS_PROMPT.
+ * THE STRING ITSELF LIVES IN `login-connect.service.ts`. This file used to
+ * carry its own copy, "kept identical" by a comment and by a test that read
+ * both files and compared the text - which is how a second source of truth
+ * always looks just before it drifts. The telnet and SSH servers already
+ * import the exported one; so does this now (2026-09-16).
  */
-const CONNECT_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLS]? ";
+const CONNECT_GRAPHICS_PROMPT = ANSI_GRAPHICS_PROMPT;
 
 /**
  * Command Handler - Main Entry Point

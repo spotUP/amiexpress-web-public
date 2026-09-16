@@ -196,27 +196,50 @@ describe('every live dispatcher uses the shared implementation (source pins)', (
     expect(src).not.toMatch(/tempData as any\)\.ripMode/);
   });
 
-  // Sysop addendum (2026-09-02): the graphics question and the A/R/P/N
-  // prompt are merged into one line; the C64 DEL invite keeps its own
-  // line so it still can't word-wrap mid-word on a real C64's 40-col
-  // screen. Source-pin the literal so it can't silently regress — this
-  // deliberately reads source text (not a runtime require of core.ts,
-  // which needs the same heavy dependency mocks as command.handler.ts)
-  // and unescapes the literal "\r\n" sequences before the lowercase
-  // check, so escape-sequence letters (backslash r / backslash n) don't
-  // false-positive it.
-  test('command-handler/core.ts CONNECT_GRAPHICS_PROMPT is two lines, DEL line <=40 cols, uppercase, DEL invite', () => {
-    const src = read('command-handler/core.ts');
-    const match = src.match(/CONNECT_GRAPHICS_PROMPT\s*=\s*\n?\s*"([^"]+)"/);
-    expect(match).not.toBeNull();
+  /*
+   * REWRITTEN 2026-09-16, and the CODE moved with it.
+   *
+   * This used to regex a string literal out of `core.ts` and check its shape,
+   * with a note explaining that it read source text because requiring the
+   * module needs heavy mocks. Both halves were treating a symptom: the reason
+   * the literal was in `core.ts` at all is that the file carried its OWN COPY
+   * of the prompt, "kept identical to login-connect.service.ts" by a comment.
+   *
+   * There is one string now. `core.ts` imports the exported
+   * `ANSI_GRAPHICS_PROMPT` that telnet and SSH already use, so the shape
+   * below is asserted against the real thing - no regex, no escape-sequence
+   * unescaping, and nothing left to drift.
+   */
+  test('the connect prompt is two lines, uppercase, and invites a C64 on its own line', () => {
+    const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
 
-    const rendered = match![1].replace(/\\r\\n/g, '\n');
-    expect(rendered).toContain('<DEL>');
-    expect(rendered).not.toMatch(/[a-z]/);
+    const lines = ANSI_GRAPHICS_PROMPT.split('\r\n').filter((l: string) => l.length > 0);
+    expect(lines).toHaveLength(2);
 
-    const lines = rendered.split('\n').filter((l: string) => l.length > 0);
-    expect(lines.length).toBe(2);
+    // The DEL invite keeps its own line so it cannot word-wrap mid-word on a
+    // real C64's forty columns (sysop addendum, 2026-09-02).
+    expect(lines[0]).toContain('<DEL>');
     expect(lines[0].length).toBeLessThanOrEqual(40);
-    expect(lines[lines.length - 1]).toMatch(/\? $/);
+
+    // Uppercase ASCII only: a power-on C64 is in the graphics set, where
+    // lowercase letters are graphics.
+    expect(ANSI_GRAPHICS_PROMPT).not.toMatch(/[a-z]/);
+
+    // The question comes last, with a trailing space, so the cursor sits
+    // after it rather than under it.
+    expect(ANSI_GRAPHICS_PROMPT.endsWith('? ')).toBe(true);
+  });
+
+  test('the command handler asks with that same string, not a copy of it', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const core = fs.readFileSync(
+      path.resolve(__dirname, '../../src/handlers/command-handler/core.ts'), 'utf8',
+    );
+    // The one thing a runtime check cannot make: that no SECOND copy of the
+    // text has been pasted back in. It is a claim about the file's contents,
+    // so it reads the file - and it is one line, not a shape.
+    expect(core).toContain('ANSI_GRAPHICS_PROMPT');
+    expect(core).not.toContain('COMMODORE 64: PRESS <DEL>');
   });
 });
