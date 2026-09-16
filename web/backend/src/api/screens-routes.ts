@@ -393,6 +393,39 @@ function resolutionFor(
 }
 
 /**
+ * The OTHER rung's copy of a screen, when this one has no includes and that
+ * one does.
+ *
+ * With a theme in play the board's own copy is the other rung; with no theme
+ * the board default's is already what was read, so there is nothing to
+ * offer. Reported as `{ theme, file, items }` so the page can name it and
+ * switch to it in one click.
+ */
+function otherCopyFor(
+  baseDir: string,
+  screen: string,
+  nodeId: number,
+  confId: number | undefined,
+  themeSlug: string | undefined,
+  itemsHere: number,
+): { theme: string; file: string; items: number } | null {
+  if (itemsHere > 0) return null;
+
+  // Only one direction is worth offering: a theme hides the board's copy.
+  if (!themeSlug) return null;
+
+  const board = resolutionFor(baseDir, screen, nodeId, confId, undefined);
+  const file = board?.file ?? null;
+  if (!file) return null;
+
+  const full = path.join(baseDir, file);
+  if (!fs.existsSync(full)) return null;
+
+  const items = readScreenProgram(fs.readFileSync(full).toString('latin1')).items.length;
+  return items > 0 ? { theme: 'default', file, items } : null;
+}
+
+/**
  * GET /api/screens/resolve?screen=&node=&conf=
  * Which directories express.e would search, in order, and which file won.
  *
@@ -497,6 +530,19 @@ screensRouter.get('/login-sequence', (req: Request, res: Response) => {
        * blank screen. The picker says so rather than leaving him to find out.
        */
       blankPause: Boolean(full && fs.existsSync(full)) && items.length === 0 && bytes < 8,
+      /*
+       * THE RUNG THE SYSOP IS NOT LOOKING AT, when it is the one with the
+       * content.
+       *
+       * A theme's copy shadows the board's, and a theme is usually pure art:
+       * every step then reads "Nothing included" while the board's own copy
+       * of that screen carries the whole login script. The sysop met exactly
+       * that and read the page as broken - a screenshot of six empty steps,
+       * 2026-09-16, with `Node1/logon20.txt` and its five includes one
+       * selection away. So a step that has nothing says where the something
+       * is, and the page offers the switch.
+       */
+      otherCopy: otherCopyFor(baseDir, step.screen, nodeId, confId, themeSlug, items.length),
     };
   });
 

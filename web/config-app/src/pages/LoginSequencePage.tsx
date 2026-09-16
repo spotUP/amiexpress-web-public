@@ -31,6 +31,13 @@ interface LoginItem {
   pause: boolean;
 }
 
+/** The other rung's copy, when this one is empty and that one is not. */
+interface OtherCopy {
+  theme: string;
+  file: string;
+  items: number;
+}
+
 interface LoginStep {
   screen: string;
   label: string;
@@ -43,6 +50,8 @@ interface LoginStep {
   blankPause: boolean;
   /** This step RUNS things, so the board owns it and no theme can change it. */
   program: boolean;
+  /** Where the content is, when it is not in the file above. */
+  otherCopy?: OtherCopy | null;
 }
 
 interface Available {
@@ -408,6 +417,23 @@ export function LoginSequencePage() {
               <p className="text-xs text-content-muted">
                 Nothing included. This screen is its own art, or it is empty.
               </p>
+            )}
+
+            {items.length === 0 && step.otherCopy && (
+              <div className="flex items-center gap-2 text-xs">
+                <p className="text-content-secondary">
+                  The board's own copy, <span className="font-mono">{step.otherCopy.file}</span>,
+                  has {step.otherCopy.items} {step.otherCopy.items === 1 ? 'step' : 'steps'} in it.
+                  A theme's copy shadows it only for callers wearing that theme.
+                </p>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setTheme(step.otherCopy!.theme)}
+                >
+                  Show the board's own screens
+                </button>
+              </div>
             )}
 
             {items.map((item, index) => (
