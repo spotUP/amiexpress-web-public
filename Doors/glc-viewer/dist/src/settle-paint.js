@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.SCRAMBLE_FRAME_MS = void 0;
 exports.settleOnto = settleOnto;
+exports.waitingScramble = waitingScramble;
 /**
  * Painting a table over its own placeholders, one settling frame at a time.
  *
@@ -15,6 +17,20 @@ exports.settleOnto = settleOnto;
  */
 const skeleton_1 = require("./skeleton");
 const scramble_1 = require("./scramble");
+/**
+ * HOW OFTEN A SCRAMBLED FRAME GOES OUT - one number for both animations.
+ *
+ * The waiting noise ran on a 125ms interval and the settling on 60ms
+ * frames, so the reveal churned at twice the speed of the wait and the
+ * change of pace read as a glitch: "when it switches from scrambling to the
+ * revealing scrambling it scrambles faster" (sysop, 2026-09-16). It is one
+ * animation to a caller - noise that resolves - so it is one cadence here.
+ *
+ * Eight frames a second: enough to read as movement, and forty columns of
+ * ten rows is under four hundred bytes a frame, which a 19200 line carries
+ * without noticing.
+ */
+exports.SCRAMBLE_FRAME_MS = 125;
 /** One frame of every row, over the rows already on screen. */
 function paintFrame(wire, lines, onScreen) {
     if (onScreen > 0)
@@ -42,7 +58,7 @@ const wait = (ms) => new Promise((resolve) => {
  */
 async function settleOnto(wire, lines, onScreen, options) {
     const frames = Math.max(1, options.frames ?? 10);
-    const frameMs = Math.max(0, options.frameMs ?? 60);
+    const frameMs = Math.max(0, options.frameMs ?? exports.SCRAMBLE_FRAME_MS);
     const random = options.random ?? Math.random;
     const sleep = options.sleep ?? wait;
     if (options.animate && lines.length > 0) {
@@ -73,5 +89,34 @@ async function settleOnto(wire, lines, onScreen, options) {
     // The last write is always the real table, whatever the frames did.
     paintFrame(wire, lines, onScreen);
     return lines.length;
+}
+/**
+ * NOISE WHILE THE SCENEWALL IS ASKED.
+ *
+ * The placeholder rows are redrawn as scrambled characters until the answer
+ * lands, so a caller can see the door is working rather than guessing at a
+ * still screen. Nothing settles during the wait - every frame is noise, and
+ * the settling happens once, onto the real rows, in `settleOnto`. The rows
+ * marked `still` (the rules, the legend) are drawn as themselves: the page's
+ * frame holds while the values inside it churn.
+ *
+ * Shares `paintFrame` and the cadence with the settling, because to a caller
+ * it is the same animation either side of the answer.
+ *
+ * Returns the stop function. The timer is unref'd - a door must not hold the
+ * process open - and stopping it is the CALLER's job in a `finally`, or a
+ * frame arriving after the table would overwrite it.
+ */
+function waitingScramble(wire, placeholders, still, options = {}) {
+    if (placeholders.length === 0)
+        return () => { };
+    const random = options.random ?? Math.random;
+    const masks = placeholders.map((row) => (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(row)));
+    const timer = setInterval(() => {
+        paintFrame(wire, placeholders.map((row, i) => (still[i] ? row : (0, scramble_1.scrambleFrame)(row, masks[i], random))), placeholders.length);
+    }, Math.max(0, options.frameMs ?? exports.SCRAMBLE_FRAME_MS));
+    if (typeof timer.unref === 'function')
+        timer.unref();
+    return () => clearInterval(timer);
 }
 //# sourceMappingURL=settle-paint.js.map

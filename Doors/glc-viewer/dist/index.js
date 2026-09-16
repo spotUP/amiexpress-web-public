@@ -62,7 +62,6 @@ const narrow_1 = require("./src/narrow");
 const sizing_1 = require("./src/sizing");
 const door_root_1 = require("./src/door-root");
 const settle_paint_1 = require("./src/settle-paint");
-const scramble_1 = require("./src/scramble");
 // Metadata
 exports.metadata = {
     name: 'Global Last Callers',
@@ -656,42 +655,19 @@ door.onStart(async (ctx) => {
          * door draws the LAST answer it got: yesterday's list beats a red line,
          * and a late answer is still written to the cache for the next caller.
          */
-        /*
-         * NOISE WHILE THE SCENEWALL IS ASKED.
-         *
-         * The placeholder rows are redrawn as scrambled characters until the
-         * answer lands, so a caller can see the door is working rather than
-         * guessing at a still screen. Nothing is settled during the wait - every
-         * frame is noise - and the settling happens once, onto the real rows, in
-         * `settleOnto`.
-         *
-         * Eight frames a second: enough to read as movement, and forty columns of
-         * ten rows is under four hundred bytes a frame, which a 19200 line
-         * carries without noticing. The timer is unref'd and always cleared - a
-         * door must not hold the process open, and a frame arriving after the
-         * table would overwrite it.
-         */
-        let waiting;
-        if (base.animate && placeholders.length > 0) {
-            const masks = placeholders.map((row) => (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(row)));
-            waiting = setInterval(() => {
-                socket.emit('ansi-output', (0, skeleton_1.rewind)(placeholders.length));
-                for (let i = 0; i < placeholders.length; i++) {
-                    const row = still[i] ? placeholders[i] : (0, scramble_1.scrambleFrame)(placeholders[i], masks[i], Math.random);
-                    socket.emit('ansi-output', (0, skeleton_1.overwrite)(row) + '\r\n');
-                }
-            }, 125);
-            if (typeof waiting.unref === 'function')
-                waiting.unref();
-        }
+        // Noise while the scenewall is asked, at the SAME cadence the settling
+        // uses - it is one animation to a caller, and two speeds read as a
+        // glitch at the join (`waitingScramble`, `SCRAMBLE_FRAME_MS`).
+        const stopWaiting = base.animate
+            ? (0, settle_paint_1.waitingScramble)(socket, placeholders, still)
+            : () => { };
         let body;
         let source;
         try {
             ({ body, source } = await (0, fetch_deadline_1.bodyForThisCall)(() => fetchGLCData(config), config.timeout, DOOR_ROOT));
         }
         finally {
-            if (waiting)
-                clearInterval(waiting);
+            stopWaiting();
         }
         if (!body) {
             // Nothing from the network and nothing kept: say so where the calls

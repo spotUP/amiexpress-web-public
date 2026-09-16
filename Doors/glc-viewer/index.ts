@@ -29,8 +29,7 @@ import {
 } from './src/narrow';
 import { autoLines } from './src/sizing';
 import { doorRootFrom } from './src/door-root';
-import { settleOnto } from './src/settle-paint';
-import { nothingSettled, scrambleFrame, visibleLength } from './src/scramble';
+import { settleOnto, waitingScramble } from './src/settle-paint';
 
 // Metadata
 export const metadata = {
@@ -750,33 +749,12 @@ door.onStart(async (ctx: DoorContext) => {
      * door draws the LAST answer it got: yesterday's list beats a red line,
      * and a late answer is still written to the cache for the next caller.
      */
-    /*
-     * NOISE WHILE THE SCENEWALL IS ASKED.
-     *
-     * The placeholder rows are redrawn as scrambled characters until the
-     * answer lands, so a caller can see the door is working rather than
-     * guessing at a still screen. Nothing is settled during the wait - every
-     * frame is noise - and the settling happens once, onto the real rows, in
-     * `settleOnto`.
-     *
-     * Eight frames a second: enough to read as movement, and forty columns of
-     * ten rows is under four hundred bytes a frame, which a 19200 line
-     * carries without noticing. The timer is unref'd and always cleared - a
-     * door must not hold the process open, and a frame arriving after the
-     * table would overwrite it.
-     */
-    let waiting: NodeJS.Timeout | undefined;
-    if (base.animate && placeholders.length > 0) {
-      const masks = placeholders.map((row) => nothingSettled(visibleLength(row)));
-      waiting = setInterval(() => {
-        socket.emit('ansi-output', rewind(placeholders.length));
-        for (let i = 0; i < placeholders.length; i++) {
-          const row = still[i] ? placeholders[i] : scrambleFrame(placeholders[i], masks[i], Math.random);
-          socket.emit('ansi-output', overwrite(row) + '\r\n');
-        }
-      }, 125);
-      if (typeof waiting.unref === 'function') waiting.unref();
-    }
+    // Noise while the scenewall is asked, at the SAME cadence the settling
+    // uses - it is one animation to a caller, and two speeds read as a
+    // glitch at the join (`waitingScramble`, `SCRAMBLE_FRAME_MS`).
+    const stopWaiting = base.animate
+      ? waitingScramble(socket, placeholders, still)
+      : () => {};
 
     let body: string | null;
     let source: 'network' | 'cache' | 'nothing';
@@ -787,7 +765,7 @@ door.onStart(async (ctx: DoorContext) => {
         DOOR_ROOT,
       ));
     } finally {
-      if (waiting) clearInterval(waiting);
+      stopWaiting();
     }
 
     if (!body) {

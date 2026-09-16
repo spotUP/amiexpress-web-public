@@ -31,12 +31,18 @@ const RESPONSE = JSON.stringify({
 /** The scenewall paths the door asked for during the last run. */
 const asked: string[] = [];
 
+/** Every `ansi-output` of the last run, with the millisecond it went out. */
+const sent: Array<{ payload: string; at: number }> = [];
+
 /** Run the door with a stubbed scenewall and collect what it emitted. */
 async function runTheDoor(
   bbsSession: { screenWidth?: number; screenHeight?: number; user?: { linesPerScreen?: number } } = {},
+  /** Hold the scenewall's answer back this long, so the wait can be watched. */
+  holdMs = 0,
 ): Promise<string> {
   jest.resetModules();
   asked.length = 0;
+  sent.length = 0;
 
   /*
    * The SDK is stubbed, not loaded: importing it drags in Tone, which ships
@@ -66,11 +72,12 @@ async function runTheDoor(
         const response = new EventEmitter() as any;
         response.statusCode = 200;
         response.setEncoding = () => {};
-        setImmediate(() => {
+        const answer = () => {
           callback(response);
           response.emit('data', RESPONSE);
           response.emit('end');
-        });
+        };
+        if (holdMs > 0) setTimeout(answer, holdMs); else setImmediate(answer);
         return { on: () => {}, end: () => {}, destroy: () => {}, setTimeout: () => {} };
       },
     };
@@ -79,7 +86,7 @@ async function runTheDoor(
   const emitted: string[] = [];
   const socket: any = {
     emit: (event: string, payload: string) => {
-      if (event === 'ansi-output') emitted.push(payload);
+      if (event === 'ansi-output') { emitted.push(payload); sent.push({ payload, at: Date.now() }); }
       return true;
     },
     on: () => {}, off: () => {},
@@ -299,5 +306,104 @@ describe('how tall the screen is', () => {
     const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, user: { linesPerScreen: 40 } });
     expect(askedCount()).toBe(autoLines(40));
+  });
+});
+
+/**
+ * The sysop, 2026-09-16: "when it switches from scrambling to the revealing
+ * scrambling it scrambles faster".
+ *
+ * It did: the waiting noise ran on a 125ms interval in the door and the
+ * settling on `settleOnto`'s own 60ms default, so the reveal churned at
+ * twice the speed and the join read as a glitch. Both come from
+ * `SCRAMBLE_FRAME_MS` now. This watches the REAL clock through the door -
+ * the gap between frames before the answer, against the gap after it.
+ */
+describe('one cadence, either side of the answer', () => {
+  /** A frame is a burst of rows after a walk back; time them by the walk. */
+  const frameTimes = (): number[] =>
+    sent.filter((w) => w.payload.startsWith('\x1b[A')).map((w) => w.at);
+
+  const gaps = (times: readonly number[]): number[] => {
+    const out: number[] = [];
+    for (let i = 1; i < times.length; i++) out.push(times[i] - times[i - 1]);
+    return out;
+  };
+
+  const median = (values: readonly number[]): number => {
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  };
+
+  it('waits and reveals at the same speed, so the join is not a lurch', async () => {
+    /*
+     * A literal, not the door's own constant: a test that takes its clock
+     * from the code under test cannot see that code change its speed. Half
+     * a second is several waiting frames at any cadence worth shipping, and
+     * still a fast test.
+     */
+    const HOLD = 500;
+    const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 }, HOLD);
+    expect(drawn).toContain('Spot');
+
+    /*
+     * The door's first write is the top of the screen, so the clock starts
+     * there: every frame before the hold expires is the WAIT, every frame
+     * after it is the SETTLING. Splitting on the answer's own arrival
+     * rather than on what a frame contains, because a settling frame is
+     * noise too - that is the whole point of it.
+     */
+    const start = sent[0].at;
+    const times = frameTimes();
+    const waiting = gaps(times.filter((t) => t - start < HOLD));
+    const settling = gaps(times.filter((t) => t - start > HOLD));
+    if (process.env.GLC_CADENCE_DEBUG) {
+      require('fs').writeFileSync(process.env.GLC_CADENCE_DEBUG, JSON.stringify({
+        frames: times.map((t) => t - start), waiting, settling,
+      }));
+    }
+
+    expect(waiting.length).toBeGreaterThanOrEqual(2);
+    expect(settling.length).toBeGreaterThanOrEqual(3);
+
+    // Same cadence, within the jitter a real timer gives a loaded machine.
+    const ratio = median(settling) / median(waiting);
+    expect(ratio).toBeGreaterThan(0.7);
+    expect(ratio).toBeLessThan(1.4);
+  });
+
+  it('is the one number both animations are built from', () => {
+    const { SCRAMBLE_FRAME_MS, waitingScramble, settleOnto: settle } =
+      require('../../../../Doors/glc-viewer/src/settle-paint');
+    expect(typeof SCRAMBLE_FRAME_MS).toBe('number');
+
+    // The settling's default gap IS that number.
+    const slept: number[] = [];
+    const wire = { emit: () => {} };
+    return settle(wire, ['\x1b[36mSpot'], 1, {
+      animate: true, frames: 3, sleep: async (ms: number) => { slept.push(ms); },
+    }).then(() => {
+      expect(slept.length).toBeGreaterThan(0);
+      for (const ms of slept) expect(ms).toBe(SCRAMBLE_FRAME_MS);
+
+      // And the waiting's interval is too - it stops when it is told to.
+      jest.useFakeTimers();
+      try {
+        const frames: string[] = [];
+        const stop = waitingScramble(
+          { emit: (_e: string, p: string) => { frames.push(p); } },
+          ['\x1b[36m......'],
+          [false],
+        );
+        jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 3 - 1);
+        const afterThree = frames.length;
+        expect(afterThree).toBeGreaterThanOrEqual(4); // two rows per frame, two frames
+        stop();
+        jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 5);
+        expect(frames).toHaveLength(afterThree);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 });
