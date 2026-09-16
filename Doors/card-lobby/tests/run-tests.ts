@@ -32,6 +32,7 @@ const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.te
   './a-key-reaches-the-door-once.test',
   './a-card-that-will-not-go-says-why.test',
   './the-cards-animate-in.test',
+  './stale-tables-are-cleared.test',
   // LAST on purpose: it judges where every module above it wrote.
   './a-test-file-gets-its-own-lobby.test',
 ];

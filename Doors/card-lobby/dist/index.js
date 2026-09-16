@@ -21,6 +21,7 @@ const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
 const KeyBindings_1 = require("./managers/KeyBindings");
 const CardAnimator_1 = require("./managers/CardAnimator");
+const stale_tables_1 = require("./lib/stale-tables");
 const UnoActions_1 = require("./managers/UnoActions");
 const CardButtons_1 = require("./managers/CardButtons");
 const games_1 = require("./lib/games");
@@ -496,6 +497,28 @@ class CardLobbyApp {
         const profile = profiles[userId] ?? (0, lib_1.initProfile)(this.session);
         profile.username = this.session.user.username;
         profiles[userId] = profile;
+        /*
+         * THE LOBBY FORGETS TABLES NOBODY IS AT.
+         *
+         * "stale games needs to be cleared from the lobby" (sysop, 2026-09-16).
+         * Nothing ever removed one, so they accumulated for as long as the board
+         * has been up - 120 of them in the lobby found on 2026-09-15 - and a
+         * caller looking for a game read past every table anyone had ever
+         * opened.
+         *
+         * Here, at the one place the lobby is read, so every session prunes and
+         * none of them has to remember to. The rules are in lib/stale-tables.ts;
+         * the caller's own table is never touched.
+         */
+        const pruned = (0, stale_tables_1.pruneStaleTables)(lobby.tables, {
+            now: Date.now(),
+            keepTableId: profile.currentTableId,
+        });
+        if (pruned.removed.length > 0) {
+            lobby.tables = pruned.kept;
+            const names = pruned.removed.map(stale_tables_1.describePruned).join(', ');
+            console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${names}`);
+        }
         this.lobby = lobby;
         this.profiles = profiles;
         this.currentProfile = profile;

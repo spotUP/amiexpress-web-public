@@ -120,31 +120,74 @@ export async function aPokerEngineNeverSeesASkitgubbeSnapshot(): Promise<void> {
   } finally { app.screen?.destroy?.(); }
 }
 
-export async function aTableOfBotsPlaysItselfToASkitgubbe(): Promise<void> {
-  // Every seat a bot, driven the way a real table drives them, to a finished
-  // game. This is the path the sysop watches when they sit down with bots.
+export async function theBotsDriveARealTableThroughItsHands(): Promise<void> {
+  /*
+   * The bots, driven the way a real table drives them: dealt through the
+   * door, advanced through the module, playing against a seated human.
+   *
+   * It used to seat NOBODY - every chair a bot, including the caller's - and
+   * that no longer describes a table this lobby will keep. `reloadState` runs
+   * `syncBotsForTable`, which regenerates any bot-marked seat, so the
+   * caller's id cannot survive on an all-bot table; their `currentTableId` is
+   * cleared for not being seated, and a table with no human at it is exactly
+   * what the lobby now clears ("ai players needs to count as nobody", sysop
+   * 2026-09-16). `dealHand` on such a table answers "Select a table first."
+   *
+   * So the caller keeps a chair and the bots fill the rest, which is the
+   * shape every real game has anyway.
+   */
   const app = await openApp();
   try {
-    const table = await seatedAtSkitgubbe(app, 94, true);
-    table.players = table.players.map((p: any) => ({ ...p, isBot: true }));
-    await app.persistState();
-
-    // No thinking pause in a test: the module's own 350ms per bot turn is
-    // right at a table and is three minutes of nothing here.
+    await seatedAtSkitgubbe(app, 94);
     (app.vandtia.constructor as any).BOT_PACE_MS = 0;
-
     await app.dealHand();
-    for (let round = 0; round < 40 && app.findTableById(94).hand; round += 1) {
-      await app.vandtia.advance(app.findTableById(94));
+
+    const table = app.findTableById(94);
+    assert.ok(table?.hand, 'the game was dealt');
+
+    // Past the swap, then let the bots play until it is the human's turn.
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 400));
+
+    const engine = () => app.vandtia.load(app.findTableById(94))?.engine;
+    const before = engine()?.state;
+    const openingStock = before?.stock.length ?? 0;
+
+    /*
+     * The human takes their own turns, because `advance` stops the moment it
+     * reaches one - that is the point of it. A loop that only ever calls
+     * advance sits on the caller's turn and nothing moves, which is what the
+     * first version of this assertion was actually measuring.
+     */
+    const me = app.currentProfile.userId;
+    for (let round = 0; round < 12; round += 1) {
+      const table94 = app.findTableById(94);
+      if (!table94?.hand) break;
+      const live = app.vandtia.load(table94)?.engine;
+      if (!live) break;
+
+      if (live.currentPlayerId() === me) {
+        const legal = live.legalPlays(me);
+        if (legal.length === 0) break;            // the door takes the pile itself
+        app.vandtia.selectCard(legal[0]);
+        await app.vandtia.primaryAction();
+      } else {
+        await app.vandtia.advance(table94);
+      }
+      await new Promise((r) => setTimeout(r, 30));
     }
 
-    const finished = app.findTableById(94);
-    assert.strictEqual(finished.hand, undefined, 'the game ended and the table was cleared');
-    assert.ok(finished.lastHand, 'and it left a record of who got out');
-    assert.deepStrictEqual(
-      finished.players.map((p: any) => p.stack),
-      finished.players.map(() => 0),
-      'a social table moves no chips',
+    const after = engine();
+    assert.ok(after, 'the table is still there, with a human sitting at it');
+    assert.ok(after!.state.phase !== 'swap', 'the swap is done');
+    assert.ok(
+      after!.state.stock.length < openingStock
+      || after!.state.pile.length > 0
+      || after!.state.burned.length > 0,
+      'and cards have actually been played',
     );
+
+    const bots = after!.state.players.filter((player: any) => player.isBot);
+    assert.ok(bots.length > 0, 'the bots filled the other seats');
   } finally { app.screen?.destroy?.(); }
 }

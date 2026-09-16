@@ -57,6 +57,7 @@ import { UnoGameEngine, unoColorName, unoCardName, type UnoGameSnapshot } from '
 import { explainRefusal } from './lib/games/refusal';
 import { attachKeyBindings } from './managers/KeyBindings';
 import { CardAnimator } from './managers/CardAnimator';
+import { pruneStaleTables, describePruned } from './lib/stale-tables';
 import { UnoActions } from './managers/UnoActions';
 import { CardButtons } from './managers/CardButtons';
 import {
@@ -679,6 +680,29 @@ export class CardLobbyApp {
     const profile = profiles[userId] ?? initProfile(this.session);
     profile.username = this.session.user.username;
     profiles[userId] = profile;
+
+    /*
+     * THE LOBBY FORGETS TABLES NOBODY IS AT.
+     *
+     * "stale games needs to be cleared from the lobby" (sysop, 2026-09-16).
+     * Nothing ever removed one, so they accumulated for as long as the board
+     * has been up - 120 of them in the lobby found on 2026-09-15 - and a
+     * caller looking for a game read past every table anyone had ever
+     * opened.
+     *
+     * Here, at the one place the lobby is read, so every session prunes and
+     * none of them has to remember to. The rules are in lib/stale-tables.ts;
+     * the caller's own table is never touched.
+     */
+    const pruned = pruneStaleTables(lobby.tables, {
+      now: Date.now(),
+      keepTableId: profile.currentTableId,
+    });
+    if (pruned.removed.length > 0) {
+      lobby.tables = pruned.kept;
+      const names = pruned.removed.map(describePruned).join(', ');
+console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${names}`);
+    }
 
     this.lobby = lobby;
     this.profiles = profiles;
