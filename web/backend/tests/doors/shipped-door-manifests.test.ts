@@ -118,6 +118,15 @@ describe('shipped door manifests', () => {
         // so the proof is the file the binary parses — every bound setting
         // must resolve in the shipped cfg, or the form edits into the void.
         for (const setting of manifest.settings) {
+          /*
+           * An ART slot is not cfg-bound and must not be: its value names a
+           * FILE inside the door's folder, the Studio writes the drawing, and
+           * the door reads it with `fs`. GLC-VIEWER is the first door here to
+           * declare both kinds - a flat cfg it shares with the 68K viewer AND
+           * four drawable logos (2026-09-16) - so the rule now says which
+           * settings it is about.
+           */
+          if (setting.art) continue;
           expect(cfgBindingResolves(doorDir, manifest, setting)).toBe(true);
         }
         return;
