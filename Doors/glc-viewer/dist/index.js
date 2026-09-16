@@ -58,6 +58,7 @@ const render_1 = require("./src/render");
 const logo_1 = require("./src/logo");
 const skeleton_1 = require("./src/skeleton");
 const fetch_deadline_1 = require("./src/fetch-deadline");
+const narrow_1 = require("./src/narrow");
 // Metadata
 exports.metadata = {
     name: 'Global Last Callers',
@@ -399,7 +400,19 @@ function drawHeader(socket, config, showLocation, callerColumns) {
             values: settingValues(),
             command: 'GLC',
         }),
+        columns: callerColumns,
     };
+    /*
+     * A FORTY-COLUMN CALLER IS DRAWN FOR, not cut down.
+     *
+     * The board's frame adapter cannot help here - it narrows the 68K wire and
+     * a TypeScript door's output never crosses it - so the whole screen is
+     * drawn once, at the end, in `src/narrow.ts`. Nothing goes out first,
+     * because a C64 has twenty-five rows and a header plus placeholders plus a
+     * list would scroll the header off before the caller read it.
+     */
+    if (base.columns <= narrow_1.NARROW_WIDTH)
+        return base;
     for (const line of (0, render_1.renderGlcHeader)({ ...base, ...EMPTY_DATA })) {
         socket.emit('ansi-output', line + '\r\n');
     }
@@ -431,6 +444,19 @@ function drawData(socket, base, data, skeletonCount) {
         previousDay: data.previousDayStats,
         records: data.records,
     };
+    if (base.columns <= narrow_1.NARROW_WIDTH) {
+        for (const line of (0, narrow_1.renderNarrowScreen)({
+            logo: base.logo,
+            showLocation: base.showLocation,
+            screenClear: base.screenClear,
+            calls: screen.calls,
+            yesterday: screen.yesterday,
+            records: screen.records,
+        })) {
+            socket.emit('ansi-output', line + '\r\n');
+        }
+        return;
+    }
     const rows = (0, render_1.renderGlcRows)(screen);
     if (skeletonCount > 0)
         socket.emit('ansi-output', (0, skeleton_1.rewind)(skeletonCount));
@@ -468,7 +494,9 @@ door.onStart(async (ctx) => {
          * calls' own column widths - and the real rows are written over them.
          */
         const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
-        const placeholders = (0, skeleton_1.skeletonRows)(config.lines);
+        // Placeholders belong to the wide screen: they hold a table's shape while
+        // the network answers, and the narrow screen has no table on the wire yet.
+        const placeholders = base.columns <= narrow_1.NARROW_WIDTH ? [] : (0, skeleton_1.skeletonRows)(config.lines);
         for (const row of placeholders)
             socket.emit('ansi-output', row + '\r\n');
         /*
