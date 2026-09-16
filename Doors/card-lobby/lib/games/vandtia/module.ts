@@ -202,7 +202,29 @@ export class VandtiaGameModule implements TableGameModule {
       const currentId = engine.currentPlayerId();
       if (!currentId) break;
       const player = engine.playerById(currentId);
-      if (!player?.isBot) break;
+
+      /*
+       * A TURN WITH NO CHOICE IN IT IS TAKEN FOR THE CALLER.
+       *
+       * "skitgubbe can autopick cards if i cant play any" (sysop,
+       * 2026-09-16). When nothing in hand will answer the pile the rules
+       * leave exactly one move - "Om en spelare inte kan lägga ett kort,
+       * måste denne ta upp hela högen" - so asking the caller to find `C`
+       * and press it is asking them to confirm a decision they were never
+       * given. The pile is taken and the table plays on.
+       *
+       * Only when there is NOTHING legal: a blind card always counts as a
+       * play (its gamble is the point), and a hand with one legal card is
+       * still a choice, because holding it and taking the pile can be the
+       * better play.
+       */
+      if (!player?.isBot) {
+        if (this.takePileWhenStuck(engine, currentId)) {
+          this.host.pushEvent(engine.state.lastAction);
+          continue;
+        }
+        break;
+      }
 
       const moved = await this.playBotTurn(engine, currentId);
       if (!moved) break;
@@ -228,6 +250,26 @@ export class VandtiaGameModule implements TableGameModule {
       return;
     }
     engine.finishSwap(playerId);
+  }
+
+  /**
+   * Take the pile for a caller who has no legal card, and say so.
+   *
+   * Returns whether it acted, so the loop knows the turn moved on. The engine
+   * decides what is legal; this never second-guesses it.
+   */
+  private takePileWhenStuck(engine: VandtiaEngine, playerId: string): boolean {
+    if (engine.state.phase !== 'playing') return false;
+    if (engine.currentPlayerId() !== playerId) return false;
+    if (engine.state.pile.length === 0) return false;
+    if (engine.legalPlays(playerId).length > 0) return false;
+
+    const result = engine.takePile(playerId);
+    if (!result.success) return false;
+
+    this.selectedCardIndex = null;
+    this.host.pushNotice('Nothing in your hand answers the pile, so you take it.');
+    return true;
   }
 
   private async playBotTurn(engine: VandtiaEngine, playerId: string): Promise<boolean> {

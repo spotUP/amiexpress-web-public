@@ -179,3 +179,116 @@ export async function aTableWaitingOnABotPlaysItself(): Promise<void> {
       `and it does not just refuse: ${app.notices.join(' ')}`);
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function aTurnWithNoChoiceInItIsTakenForYou(): Promise<void> {
+  /*
+   * "skitgubbe can autopick cards if i cant play any" (sysop, 2026-09-16).
+   * When nothing in hand answers the pile the rules leave exactly one move -
+   * "Om en spelare inte kan lägga ett kort, måste denne ta upp hela högen" -
+   * so asking the caller to find C and press it is asking them to confirm a
+   * decision they were never given.
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 230, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 2, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 230;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 600));
+
+    // A hand that cannot answer a king, and the stock empty so nothing is
+    // drawn back in to muddy the count.
+    const loaded = app.vandtia.load(app.findTableById(230));
+    const engine = loaded.engine;
+    engine.state.stock = [] as any;
+    engine.playerById(me).hand = [{ rank: '3', suit: 'C' }, { rank: '4', suit: 'D' }] as any;
+    engine.state.pile = [{ rank: 'K', suit: 'S' }, { rank: 'K', suit: 'H' }] as any;
+    engine.state.currentIndex = engine.state.players.findIndex((p: any) => p.id === me);
+    app.findTableById(230).hand.snapshot = engine.serialize();
+    await app.persistState();
+
+    assert.deepStrictEqual(
+      app.vandtia.load(app.findTableById(230)).engine.legalPlays(me), [],
+      'nothing in hand answers the pile',
+    );
+
+    app.notices.length = 0;
+    await app.vandtia.advance(app.findTableById(230));
+    await new Promise((r) => setTimeout(r, 300));
+
+    /*
+     * The pile went to the caller. NOT asserted by the pile being empty
+     * afterwards: taking it passes the turn, the bot leads the empty pile
+     * immediately, and by the time this reads the state there is a card on it
+     * again. What is true either way is where the kings went.
+     */
+    const after = app.vandtia.load(app.findTableById(230)).engine;
+    const mine = after.playerById(me).hand.map((card: any) => `${card.rank}${card.suit}`);
+    assert.ok(mine.includes('KS') && mine.includes('KH'),
+      `the pile was taken without being asked: ${mine.join(' ')}`);
+    assert.strictEqual(mine.length, 4, 'and all of it went into the hand');
+    assert.ok(/take it/i.test(app.notices.join(' ')),
+      `and the caller is told why: ${app.notices.join(' ')}`);
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aHandWithOneLegalCardIsStillTheCallersChoice(): Promise<void> {
+  // Holding a card and taking the pile can be the better play, so a turn
+  // with even one legal move is never taken for the caller.
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 231, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 2, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 231;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 600));
+
+    const loaded = app.vandtia.load(app.findTableById(231));
+    const engine = loaded.engine;
+    engine.state.stock = [] as any;
+    engine.playerById(me).hand = [{ rank: 'A', suit: 'C' }, { rank: '3', suit: 'D' }] as any;
+    engine.state.pile = [{ rank: 'K', suit: 'S' }] as any;
+    engine.state.currentIndex = engine.state.players.findIndex((p: any) => p.id === me);
+    app.findTableById(231).hand.snapshot = engine.serialize();
+    await app.persistState();
+
+    await app.vandtia.advance(app.findTableById(231));
+    await new Promise((r) => setTimeout(r, 200));
+
+    const after = app.vandtia.load(app.findTableById(231)).engine;
+    assert.strictEqual(after.state.pile.length, 1, 'the pile is left where it is');
+    assert.strictEqual(after.currentPlayerId(), me, 'and the turn is still the caller\'s');
+  } finally { app.screen?.destroy?.(); }
+}
