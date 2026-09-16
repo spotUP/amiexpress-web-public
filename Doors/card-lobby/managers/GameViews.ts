@@ -551,16 +551,40 @@ export class GameViews {
      * the top card takes only that card, so what lies under it is the next
      * player's problem and worth reading before deciding.
      */
-    const top3 = state.pile.slice(-3);
+    /*
+     * DURING THE SWAP, THE UPPER PANEL IS YOUR TABLE CARDS.
+     *
+     * "it's very hard to swap cards at the start of the skitgubbe game still
+     * i need to see both card rows with open side up and select witch cards
+     * two switch" (sysop, 2026-09-16). It was hard because the door asked for
+     * a card it never showed: the swap is 1-3 for a hand card and 4-6 for the
+     * table card it changes places with, and 4-6 pointed at three cards that
+     * were nowhere on screen - the upper panel was holding the pile, which
+     * during a swap is empty.
+     *
+     * So while the swap is on, the panel that has nothing to say lends itself
+     * to the half of the caller's cards that had nowhere to go. Both rows are
+     * face up, numbered the way the keys are, and either can be CLICKED -
+     * which is the part that makes it easy rather than merely possible.
+     */
+    const top3 = swapping ? (me?.faceUp ?? []) : state.pile.slice(-3);
     const drewPile = this.host.tableCardButtons.renderStandard(top3 as any, {
       selected: null,
-      playable: [],
-      labels: false,
+      /*
+       * DURING THE SWAP this row is the caller's OWN table cards, numbered
+       * 4-6 and pickable; the rest of the time it is the pile, which is read
+       * rather than picked.
+       */
+      playable: swapping ? (me?.faceUp ?? []).map((_, index) => index) : [],
+      labels: swapping,
+      labelFrom: swapping ? 4 : 1,
       // A PILE, not three cards: each one lying on the last, all faces up,
       // the top card on top. "make them look like the pile in front of me
       // but with all cards open" (sysop, 2026-09-15).
-      pile: true,
-      onPick: () => { /* the pile is read, not picked */ },
+      pile: !swapping,
+      onPick: (index: number) => {
+        if (swapping) this.host.vandtia.selectCard(index + 3);
+      },
     });
     /*
      * THE PANEL'S TEXT IS ALWAYS THIS GAME'S, drawn or not.
@@ -576,8 +600,8 @@ export class GameViews {
      * which half of the game the caller is in.
      */
     this.host.flopContent.setContent(swapping
-      ? `{${UI_THEME.accent}-fg}Arranging your cards.{/}\n`
-        + `{${UI_THEME.dim}-fg}The pile starts when everybody is ready.{/}`
+      ? `{${UI_THEME.accent}-fg}Swap any card you like.{/}\n`
+        + `{${UI_THEME.dim}-fg}Pick one of yours, then the table card it changes places with.{/}`
       : top3.length > 0
         ? `{${UI_THEME.accent}-fg}Pile{/} ${state.pile.length}   `
           + `{${UI_THEME.dim}-fg}Stock ${state.stock.length}{/}\n`

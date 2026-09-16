@@ -95,15 +95,24 @@ export async function theTitleFollowsWhatTheCallerIsLookingAt(): Promise<void> {
     await app.persistState();
     await app.dealHand();
 
+    /*
+     * During the SWAP the upper panel lends itself to the caller's own table
+     * cards - there is no pile yet, and the swap needs both rows on screen
+     * (sysop, 2026-09-16). It goes back to being the pile once play starts,
+     * which is what the rest of this test walks through.
+     */
     const before = app.vandtia.panelTitles(app.findTableById(120));
-    assert.ok(/pile/i.test(before.board ?? ''), `the upper panel is the table's: ${before.board}`);
+    assert.ok(/table cards/i.test(before.board ?? ''),
+      `the upper panel holds the caller's table cards while swapping: ${before.board}`);
     assert.ok(/hand/i.test(before.hand ?? ''), `and the lower one is yours: ${before.hand}`);
 
     // V flips the lower panel to the cards in front of you, and back.
     app.vandtia.toggleView();
     const flipped = app.vandtia.panelTitles(app.findTableById(120));
     assert.ok(/front of you/i.test(flipped.hand ?? ''), `V shows your table: ${flipped.hand}`);
-    assert.ok(/pile/i.test(flipped.board ?? ''), 'and the upper panel has not moved');
+    // The property is that V does not touch the upper panel - not what that
+    // panel happens to hold in this phase.
+    assert.strictEqual(flipped.board, before.board, 'and the upper panel has not moved');
 
     app.vandtia.toggleView();
     assert.ok(/hand/i.test(app.vandtia.panelTitles(app.findTableById(120)).hand ?? ''),
@@ -167,7 +176,7 @@ export async function theUpperPanelNeverSpeaksForPoker(): Promise<void> {
       `no poker text in a Skitgubbe panel: ${panel()}`);
     assert.ok(!panel().includes('lead anything'),
       `nothing is led during the swap: ${panel()}`);
-    assert.ok(/arrang/i.test(panel()), `it says what the caller is doing: ${panel()}`);
+    assert.ok(/swap/i.test(panel()), `it says what the caller is doing: ${panel()}`);
 
     // Once the play starts and a card is on the pile, it counts the pile.
     app.vandtia.primaryAction();
@@ -233,5 +242,74 @@ export async function thePileAndStockCountsSurviveTheCards(): Promise<void> {
     const title = String(app.vandtia.panelTitles(app.findTableById(205)).board);
     assert.ok(/3/.test(title), `the title carries the pile count: ${title}`);
     assert.ok(new RegExp(String(stock)).test(title), `and the stock: ${title}`);
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function theSwapShowsBothRowsFaceUp(): Promise<void> {
+  /*
+   * "it's very hard to swap cards at the start of the skitgubbe game still i
+   * need to see both card rows with open side up and select witch cards two
+   * switch" (sysop, 2026-09-16).
+   *
+   * It was hard because the door asked for a card it never showed. The swap
+   * is 1-3 for a hand card and 4-6 for the table card it changes places
+   * with - and 4-6 pointed at three cards that were nowhere on screen, since
+   * the upper panel was holding the pile, which during a swap is empty.
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 206, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 3, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 206;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    app.applyViewMode('table');
+    app.updateAllPanels();
+
+    const engine = app.vandtia.load(app.findTableById(206)).engine;
+    assert.strictEqual(engine.state.phase, 'swap', 'the swap comes first');
+
+    // BOTH rows, drawn as cards.
+    assert.strictEqual(app.tableCardButtons.focusables().length, 3,
+      'the three table cards are on screen');
+    assert.strictEqual(app.cardButtons.focusables().length, 3,
+      'and so is the hand');
+
+    // Numbered the way the keys are: 1-3 below, 4-6 above.
+    const labelsOf = (row: any) => row.focusables()
+      .map((card: any) => String(card.getContent()).replace(/\{[^}]*\}/g, ''))
+      .join(' ');
+    assert.ok(/\[4\]/.test(labelsOf(app.tableCardButtons)), 'the table cards are 4, 5 and 6');
+    assert.ok(/\[1\]/.test(labelsOf(app.cardButtons)), 'the hand is 1, 2 and 3');
+
+    // And a click does the same as the key - which is what makes it easy.
+    const mine = engine.playerById(me);
+    const handCard = `${mine.hand[0].rank}${mine.hand[0].suit}`;
+    const tableCard = `${mine.faceUp[0].rank}${mine.faceUp[0].suit}`;
+
+    app.cardButtons.focusables()[0].emit('click');
+    app.tableCardButtons.focusables()[0].emit('click');
+    await new Promise((r) => setTimeout(r, 200));
+
+    const after = app.vandtia.load(app.findTableById(206)).engine.playerById(me);
+    const nowInHand = after.hand.map((card: any) => `${card.rank}${card.suit}`);
+    const nowOnTable = after.faceUp.map((card: any) => `${card.rank}${card.suit}`);
+    assert.ok(nowOnTable.includes(handCard),
+      `the hand card went to the table: ${nowOnTable.join(' ')}`);
+    assert.ok(nowInHand.includes(tableCard),
+      `and the table card came to the hand: ${nowInHand.join(' ')}`);
   } finally { app.screen?.destroy?.(); }
 }

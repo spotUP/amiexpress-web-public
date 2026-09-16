@@ -518,11 +518,15 @@ class VandtiaGameModule {
             ? `  ${loaded.engine.state.pile.length} / stock ${loaded.engine.state.stock.length}`
             : '';
         return {
-            // The middle of the table, always.
-            board: `Pile${counts}`,
+            /*
+             * During the SWAP the upper panel is lending itself to the caller's own
+             * table cards - there is no pile yet - so it says so, with the keys
+             * that pick them. The rest of the time it is the middle of the table.
+             */
+            board: swapping ? 'Your table cards  4 5 6' : `Pile${counts}`,
             players: 'Players',
             hand: this.handView === 'table' ? 'In front of you'
-                : swapping ? 'Your hand'
+                : swapping ? 'Your hand  1 2 3'
                     : source === 'faceUp' ? 'Your table cards'
                         : source === 'faceDown' ? 'Face down' : 'Your hand',
         };
