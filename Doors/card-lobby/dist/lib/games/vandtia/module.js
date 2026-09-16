@@ -287,7 +287,9 @@ class VandtiaGameModule {
         return true;
     }
     async playBotTurn(engine, playerId) {
-        const decision = await this.decide(engine, playerId);
+        // The pause is the caller's window to throw in, so it is measured from
+        // the position as it stands right now.
+        const decision = await this.decide(engine, playerId, this.paceFor(engine));
         if (decision?.action === bbs_door_sdk_1.VandtiaActionType.TAKE_PILE) {
             return engine.takePile(playerId).success;
         }
@@ -304,6 +306,21 @@ class VandtiaGameModule {
         if (engine.state.pile.length > 0)
             return engine.takePile(playerId).success;
         return false;
+    }
+    /**
+     * How long the bot about to move should think.
+     *
+     * Long enough for the caller to throw in, when the caller has something to
+     * throw; the ordinary pace otherwise, because a game of this runs to
+     * hundreds of plays and a two-second pause on each of them is an evening.
+     */
+    paceFor(engine) {
+        const me = this.host.currentProfile?.userId;
+        if (!me)
+            return VandtiaGameModule.BOT_PACE_MS;
+        return engine.canThrowIn(me).length > 0
+            ? VandtiaGameModule.THROW_IN_WINDOW_MS
+            : VandtiaGameModule.BOT_PACE_MS;
     }
     async decide(engine, playerId, paceMs) {
         if (!this.host.cardGameAI?.hasStrategy('vandtia'))
@@ -490,6 +507,34 @@ class VandtiaGameModule {
         this.heldCard = null;
         this.host.updateAllPanels();
     }
+    /**
+     * Pick a card up WITHOUT repainting anything.
+     *
+     * "the cards on the table update before i drop my card when i drag and
+     * drop" (sysop, 2026-09-16). Taking hold of a card picked it the ordinary
+     * way - which pushes a notice and repaints every panel - so the screen
+     * changed the moment the button went down, before the caller had decided
+     * anything. A drag decides nothing until it is let go.
+     */
+    selectQuietly(index) {
+        const table = this.currentTable();
+        const loaded = table ? this.load(table) : null;
+        const userId = this.host.currentProfile?.userId;
+        if (!loaded || !userId)
+            return;
+        if (loaded.engine.state.phase === 'swap')
+            return;
+        const cards = loaded.engine.cardsInPlay(userId);
+        if (index < 0 || index >= cards.length)
+            return;
+        const sameValue = this.selectedCards.length > 0
+            && cards[this.selectedCards[0]]?.rank === cards[index].rank;
+        if (!sameValue)
+            this.selectedCards = [index];
+        else if (!this.selectedCards.includes(index))
+            this.selectedCards.push(index);
+        this.selectedCardIndex = index;
+    }
     selectCard(index) {
         const table = this.currentTable();
         if (!table)
@@ -670,12 +715,41 @@ class VandtiaGameModule {
                  *
                  * A table that is waiting on a bot is a table that should be moving.
                  */
+                /*
+                 * UNLESS THE CALLER IS THROWING A CARD IN. A card of the pile's own
+                 * value goes on out of turn - "so i have a chanse to throw in cards
+                 * of the same value that is on the pile" (sysop, 2026-09-16) - and
+                 * play carries on from whoever threw it.
+                 */
+                const picked = this.selectedCards.length > 0
+                    ? this.selectedCards
+                    : this.selectedCardIndex === null ? [] : [this.selectedCardIndex];
+                const throwable = loaded.engine.canThrowIn(userId);
+                if (picked.length > 0 && picked.every((index) => throwable.includes(index))) {
+                    const thrown = loaded.engine.playOutOfTurn(userId, picked);
+                    if (thrown.success) {
+                        this.selectedCardIndex = null;
+                        this.selectedCards = [];
+                        this.host.pushEvent(thrown.message);
+                        this.save(fresh, loaded.engine, loaded.beforeStacks);
+                        if (thrown.burned) {
+                            await this.host.cardAnimator.burn(thrown.burned.pile.map((card) => ({ kind: 'standard', card: card })));
+                        }
+                        await this.host.persistState();
+                        await this.advance(fresh);
+                        return;
+                    }
+                    this.host.pushNotice((0, refusal_1.explainRefusal)(thrown.message, null));
+                    return;
+                }
                 const onTurn = loaded.engine.playerById(loaded.engine.currentPlayerId() ?? '');
                 if (onTurn?.isBot) {
                     await this.advance(fresh);
                     return;
                 }
-                this.host.pushNotice(`Waiting for ${onTurn?.name ?? 'the next player'}.`);
+                this.host.pushNotice(throwable.length > 0
+                    ? `Waiting for ${onTurn?.name ?? 'the next player'} - or throw in a ${loaded.engine.topOfPile()?.rank ?? ''}.`
+                    : `Waiting for ${onTurn?.name ?? 'the next player'}.`);
                 return;
             }
             if (this.selectedCardIndex === null) {
@@ -747,8 +821,66 @@ class VandtiaGameModule {
      * lower panel and leaving the table. This is the flip; `secondaryAction`
      * is TAKE and `quitAction` leaves.
      */
+    /**
+     * Can the caller take a card off the stock and chance it?
+     *
+     * The engine owns the rule; this only asks, because the button, the legend
+     * and the action all have to agree about the same moment.
+     */
+    canDrawBlind() {
+        const table = this.currentTable();
+        const loaded = table ? this.load(table) : null;
+        const me = this.host.currentProfile?.userId;
+        if (!loaded || !me)
+            return false;
+        return loaded.engine.state.phase === 'playing'
+            && loaded.engine.currentPlayerId() === me
+            && loaded.engine.state.stock.length > 0
+            && loaded.engine.legalPlays(me).length === 0;
+    }
+    /**
+     * The third button: a chance off the stock when nothing will go, and the
+     * view flip the rest of the time.
+     *
+     * "when i cant make a move i should be able to pick a card from the deck on
+     * chanse, a blind card" (sysop, 2026-09-16). It sits here rather than on a
+     * key of its own because the moment it is possible is exactly the moment
+     * the button has nothing better to offer - and the button says DRAW then,
+     * so it is read rather than remembered. `V` still flips the view whenever
+     * the caller wants it.
+     */
     tertiaryAction() {
-        this.toggleView();
+        if (!this.canDrawBlind()) {
+            this.toggleView();
+            return;
+        }
+        const table = this.currentTable();
+        if (!table)
+            return;
+        this.host.runAction(async () => {
+            await this.host.reloadState();
+            const fresh = this.host.findTableById(table.id);
+            if (!fresh)
+                return;
+            const loaded = this.load(fresh);
+            const userId = this.host.currentProfile?.userId;
+            if (!loaded || !userId)
+                return;
+            const result = loaded.engine.drawAndPlay(userId);
+            if (!result.success) {
+                this.host.pushNotice((0, refusal_1.explainRefusal)(result.message, null));
+                return;
+            }
+            this.selectedCardIndex = null;
+            this.selectedCards = [];
+            this.host.pushEvent(result.message);
+            this.save(fresh, loaded.engine, loaded.beforeStacks);
+            if (result.burned) {
+                await this.host.cardAnimator.burn(result.burned.pile.map((card) => ({ kind: 'standard', card: card })));
+            }
+            await this.host.persistState();
+            await this.advance(fresh);
+        });
     }
     render(painter, table) {
         painter.renderVandtiaGameView(table);
@@ -868,12 +1000,34 @@ class VandtiaGameModule {
         }
         const where = source === 'faceUp' ? ' (your table cards)' : '';
         if (legal.length === 0) {
-            return [`{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile`];
+            return [
+                state.stock.length > 0
+                    ? `{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile, {cyan-fg}R{/} draws blind`
+                    : `{yellow-fg}Nothing will go{/}${where} - {cyan-fg}C{/} takes the pile`,
+                state.stock.length > 0
+                    ? `A drawn card is played unseen: it fits, or the pile is yours.`
+                    : 'The stock is empty.',
+            ];
         }
+        /*
+         * And the house rule, said out loud when the hand can use it - "if i have
+         * more cards of the same value i should be able to throw all of them on
+         * the table" (sysop, 2026-09-16). It works by picking each of them; the
+         * line only appears when there is a pair to pick, so it is a reminder at
+         * the moment it pays rather than one more thing on the screen.
+         */
+        const cards = engine.cardsInPlay(meId);
+        const counts = new Map();
+        for (const index of legal) {
+            counts.set(cards[index].rank, (counts.get(cards[index].rank) ?? 0) + 1);
+        }
+        const pair = [...counts.entries()].find(([, count]) => count > 1);
         return [
             `Pick ${keys}  {cyan-fg}ENTER{/} plays${state.pile.length > 0 ? `  {cyan-fg}C{/} takes pile` : ''}`
                 + `  {cyan-fg}V{/} ${this.handView === 'table' ? 'hand' : 'my table'}`,
-            top ? `On the pile: ${label(top)}${where}` : `Lead anything${where}`,
+            pair
+                ? `{yellow-fg}You hold ${pair[1]} x ${pair[0]}{/} - pick each of them to throw them together.`
+                : top ? `On the pile: ${label(top)}${where}` : `Lead anything${where}`,
         ];
     }
     updateActionButtons(table) {
@@ -882,7 +1036,7 @@ class VandtiaGameModule {
         const swapping = loaded?.engine.state.phase === 'swap';
         const canTake = Boolean(loaded && me && !swapping && loaded.engine.state.pile.length > 0
             && loaded.engine.currentPlayerId() === me);
-        this.host.labelVandtiaButtons(Boolean(loaded), Boolean(swapping), canTake);
+        this.host.labelVandtiaButtons(Boolean(loaded), Boolean(swapping), canTake, this.canDrawBlind());
     }
     // ------------------------------------------------------------------
     /** Social game: the title is the only thing anybody loses. */
@@ -938,4 +1092,15 @@ exports.VandtiaGameModule = VandtiaGameModule;
  * quarters of them bots', so the same pause would turn one game into an
  * afternoon. Long enough to watch a card land, short enough to play.
  */
-VandtiaGameModule.BOT_PACE_MS = 350;
+VandtiaGameModule.BOT_PACE_MS = 800;
+/**
+ * How long a bot waits when the CALLER is holding a card of the pile's own
+ * value.
+ *
+ * "the opponent instantly throws cards he should think before he does it so
+ * i have a chanse to throw in cards of the same value that is on the pile"
+ * (sysop, 2026-09-16). The throw-in is only a rule if there is time to use
+ * it, so the window is real time on the clock - longer than an ordinary
+ * pause, and only when there is something to throw.
+ */
+VandtiaGameModule.THROW_IN_WINDOW_MS = 2200;

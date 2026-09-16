@@ -615,6 +615,28 @@ function give(engine: VandtiaEngine, playerId: string, wanted: string[]): void {
   me.hand.push(...taken);
 }
 
+
+/**
+ * Take a named card out of the game, wherever it happens to be.
+ *
+ * `stock.splice(stock.findIndex(...), 1)` is a trap: a card that is NOT in
+ * the stock gives -1, and `splice(-1, 1)` quietly removes the LAST card
+ * instead. That is how a test asking for four nines built a pile of twos.
+ */
+function pull(engine: VandtiaEngine, match: (card: VandtiaCard) => boolean): VandtiaCard {
+  const zones: VandtiaCard[][] = [engine.state.stock, engine.state.pile, engine.state.burned];
+  for (const player of engine.state.players) zones.push(player.hand, player.faceUp, player.faceDown);
+  for (const zone of zones) {
+    const at = zone.findIndex(match);
+    if (at >= 0) return zone.splice(at, 1)[0];
+  }
+  throw new Error('no such card left in the game');
+}
+const pullId = (engine: VandtiaEngine, id: string): VandtiaCard =>
+  pull(engine, (card) => `${card.rank}${card.suit}` === id);
+const pullRank = (engine: VandtiaEngine, rank: string): VandtiaCard =>
+  pull(engine, (card) => card.rank === rank);
+
 export async function testNoCardIsEverCopiedOrLost(): Promise<void> {
   const engine = playing(threeHanded('conservation'));
 
@@ -649,9 +671,7 @@ export async function testAGroupPlayCopiesNothingEither(): Promise<void> {
   position(engine, { currentIndex: 0 });
   give(engine, 'u1', ['9H', '9S', '9C']);
   // A pile they all answer, taken from the stock so the count still holds.
-  engine.state.pile = engine.state.stock.splice(
-    engine.state.stock.findIndex((card) => card.rank === '4'), 1,
-  );
+  engine.state.pile = [pullRank(engine, '4')];
 
   const before = census(engine).length;
   assert.ok(engine.playCards('u1', [0, 1, 2]).success);
@@ -691,4 +711,133 @@ export async function testTheBlindCardsRunOutRatherThanGrowing(): Promise<void> 
         `${player.name} has ${player.faceDown.length} blind cards, more than the ${blindAtStart[seat]} dealt`);
     });
   }
+}
+
+/*
+ * JUMPING IN, AND TAKING A CHANCE OFF THE STOCK.
+ *
+ * "the opponent instantly throws cards he should think before he does it so i
+ * have a chanse to throw in cards of the same value that is on the pile" and
+ * "when i cant make a move i should be able to pick a card from the deck on
+ * chanse, a blind card" (sysop, 2026-09-16).
+ */
+
+export async function testACardOfThePilesOwnValueGoesOnOutOfTurn(): Promise<void> {
+  const engine = playing(threeHanded('throw-in'));
+  position(engine, { currentIndex: 0 });               // Ann to play, not Bo
+  give(engine, 'u2', ['9C']);
+  engine.state.pile = [pullRank(engine, '9')];
+
+  const result = engine.playOutOfTurn('u2', [0]);
+
+  assert.ok(result.success, result.message);
+  assert.ok(ids(engine.state.pile).includes('9C'), 'the nine went on out of turn');
+  assert.ok(/throws in/i.test(result.message), result.message);
+  assert.strictEqual(engine.currentPlayerId(), 'u3',
+    'and play carries on from the player who threw it in');
+}
+
+export async function testOnlyTheSameValueMayBeThrownIn(): Promise<void> {
+  // A higher card is an ordinary move and waits its turn.
+  const engine = playing(threeHanded('throw-in-higher'));
+  position(engine, { currentIndex: 0 });
+  give(engine, 'u2', ['KC']);
+  engine.state.pile = [pullRank(engine, '9')];
+
+  const result = engine.playOutOfTurn('u2', [0]);
+
+  assert.strictEqual(result.success, false, 'a king is not another nine');
+  assert.ok(/only another 9/i.test(result.message), result.message);
+  assert.strictEqual(engine.currentPlayerId(), 'u1', 'and the turn has not moved');
+}
+
+export async function testThePlayerOnTurnJustPlays(): Promise<void> {
+  const engine = playing(threeHanded('throw-in-self'));
+  position(engine, { currentIndex: 0 });
+  give(engine, 'u1', ['9C']);
+  engine.state.pile = [pullRank(engine, '9')];
+
+  const result = engine.playOutOfTurn('u1', [0]);
+  assert.strictEqual(result.success, false, 'the player on turn has an ordinary move');
+  assert.ok(/your turn/i.test(result.message), result.message);
+}
+
+export async function testAThrownInGroupCanCompleteTheBurn(): Promise<void> {
+  // The reason the rule matters: the fourth of a rank ends the pile.
+  const engine = playing(threeHanded('throw-in-burn'));
+  position(engine, { currentIndex: 0 });
+  give(engine, 'u2', ['9C', '9D']);
+  engine.state.pile = ['9H', '9S'].map((id) => pullId(engine, id));
+
+  const result = engine.playOutOfTurn('u2', [0, 1]);
+
+  assert.ok(result.success, result.message);
+  assert.strictEqual(engine.state.pile.length, 0, 'four nines turned the pile away');
+  assert.strictEqual(engine.currentPlayerId(), 'u2', 'and the thrower leads again');
+}
+
+export async function testABlindCardIsNeverThrownIn(): Promise<void> {
+  const engine = playing(threeHanded('throw-in-blind'));
+  position(engine, { currentIndex: 0 });
+  const bo = engine.state.players[1];
+  engine.state.stock.push(...bo.hand.splice(0, bo.hand.length));
+  engine.state.stock.push(...bo.faceUp.splice(0, bo.faceUp.length));
+  engine.state.pile = [pullRank(engine, '9')];
+
+  const result = engine.playOutOfTurn('u2', [0]);
+  assert.strictEqual(result.success, false, 'you cannot claim a value you have not seen');
+  assert.ok(/blind/i.test(result.message), result.message);
+}
+
+export async function testADrawnCardIsPlayedBlindWhenNothingGoes(): Promise<void> {
+  const engine = playing(threeHanded('draw-chance'));
+  position(engine, { currentIndex: 0 });
+  const me = engine.state.players[0];
+  // A hand that cannot answer a king, and a stock whose next card can.
+  engine.state.stock.push(...me.hand.splice(0, me.hand.length));
+  me.hand = [pullRank(engine, '3')];
+  engine.state.pile = [pullRank(engine, 'K')];
+  const ace = pullRank(engine, 'A');
+  engine.state.stock.push(ace);                        // the next one drawn
+
+  const before = census(engine).length;
+  const result = engine.drawAndPlay('u1');
+
+  assert.ok(result.success, result.message);
+  assert.ok(ids(engine.state.pile).includes('AS') || ids(engine.state.pile).some((id) => id.startsWith('A')),
+    `the drawn ace went on the pile: ${ids(engine.state.pile).join(' ')}`);
+  assert.strictEqual(census(engine).length, before, 'and no card was invented');
+}
+
+export async function testADrawnCardThatDoesNotFitCostsYouThePile(): Promise<void> {
+  // The gamble, lost: the card and the pile both come to you.
+  const engine = playing(threeHanded('draw-chance-bad'));
+  position(engine, { currentIndex: 0 });
+  const me = engine.state.players[0];
+  engine.state.stock.push(...me.hand.splice(0, me.hand.length));
+  me.hand = [pullRank(engine, '3')];
+  engine.state.pile = [pullRank(engine, 'K')];
+  const four = pullRank(engine, '4');
+  engine.state.stock.push(four);
+
+  const before = census(engine).length;
+  const result = engine.drawAndPlay('u1');
+
+  assert.ok(result.success, result.message);
+  assert.strictEqual(engine.state.pile.length, 0, 'the pile came to the player');
+  assert.ok(ids(me.hand).includes(`${four.rank}${four.suit}`), 'along with the card drawn');
+  assert.strictEqual(census(engine).length, before, 'and nothing was copied');
+  assert.strictEqual(engine.currentPlayerId(), 'u2', 'the turn passes on');
+}
+
+export async function testYouMayNotDrawWhenACardWillGo(): Promise<void> {
+  // Otherwise it is a way to duck a bad hand, not a chance taken.
+  const engine = playing(threeHanded('draw-refused'));
+  position(engine, { currentIndex: 0 });
+  give(engine, 'u1', ['AS']);
+  engine.state.pile = [pullRank(engine, '4')];
+
+  const result = engine.drawAndPlay('u1');
+  assert.strictEqual(result.success, false, 'the ace answers the four');
+  assert.ok(/will go/i.test(result.message), result.message);
 }

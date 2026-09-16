@@ -1192,7 +1192,7 @@ export class UIManager {
   }
 
   /** Skitgubbe (vandtia): a swap to finish, or a card to play and a pile to take. */
-  labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void {
+  labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean, canDraw = false): void {
     /*
      * EVERY ACTION HAS A BUTTON. "we need ui buttons as well for all card
      * game actions" (sysop, 2026-09-16): two slots read `-` through a whole
@@ -1203,7 +1203,9 @@ export class UIManager {
     this.actionButtons.fold.setContent('LEAVE');
     this.actionButtons.check.setContent(!hasGame ? 'DEAL' : swapping ? 'READY' : 'PLAY');
     this.actionButtons.call.setContent(canTake ? 'TAKE' : '-');
-    this.actionButtons.raise.setContent('FLIP');
+    // The third button is a chance off the stock the moment one is
+    // possible, and the view flip the rest of the time.
+    this.actionButtons.raise.setContent(canDraw ? 'DRAW' : 'FLIP');
     this.actionButtons.quit.setContent('QUIT');
 
     this.applyActionButtonPalette('fold');

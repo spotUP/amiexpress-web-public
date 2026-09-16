@@ -487,3 +487,36 @@ export async function cardsOfAnotherValueAreRefusedWithAReason(): Promise<void> 
     );
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function theThirdButtonIsStillTheViewFlipOtherwise(): Promise<void> {
+  const app = await openApp();
+  try {
+    const table = await playing(app, 144);
+    const engine = app.vandtia.load(table).engine;
+    const me = app.currentProfile.userId;
+    engine.state.currentIndex = engine.state.players.findIndex((p: any) => p.id === me);
+    engine.playerById(me).hand = [{ rank: 'A', suit: 'S' }] as any;
+    engine.state.pile = [{ rank: '4', suit: 'H' }] as any;
+    table.hand.snapshot = engine.serialize();
+    await app.persistState();
+    app.updateAllPanels();
+
+    assert.strictEqual(
+      String(app.uiManager.actionButtons.raise.getContent()).replace(/\{[^}]*\}/g, '').trim(),
+      'FLIP', 'an ace answers the four, so there is nothing to chance');
+
+    const before = app.vandtia.handView;
+    press(app, 'r');
+    await new Promise((r) => setTimeout(r, 150));
+    assert.notStrictEqual(app.vandtia.handView, before, 'it flips the view instead');
+  } finally { app.screen?.destroy?.(); }
+}
+
+/*
+ * THE THROW-IN AND THE BLIND DRAW are pinned in `vandtia-engine.test.ts`,
+ * where the position can be stood up exactly and nothing moves underneath
+ * the assertions. Two attempts to drive them through the keys here raced the
+ * bots - under test they are paced at zero, so the table had played on
+ * before the check ran, and the tests failed while the rules worked. A test
+ * that fails for its own reasons teaches the suite to be ignored.
+ */

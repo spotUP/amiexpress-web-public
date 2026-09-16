@@ -1177,8 +1177,8 @@ class CardLobbyApp {
     labelSkitgubbeButtons(hasGame, canTake) {
         this.uiManager.labelSkitgubbeButtons(hasGame, canTake);
     }
-    labelVandtiaButtons(hasGame, swapping, canTake) {
-        this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
+    labelVandtiaButtons(hasGame, swapping, canTake, canDraw = false) {
+        this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake, canDraw);
     }
     labelPatienceButtons(hasGame, canTurn) {
         this.uiManager.labelPatienceButtons(hasGame, canTurn);

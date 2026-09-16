@@ -502,6 +502,142 @@ export class VandtiaEngine {
     return this.playChosen(player, source, indices, chosen);
   }
 
+  /**
+   * JUMPING IN OUT OF TURN with a card of the pile's own value.
+   *
+   * "the opponent instantly throws cards he should think before he does it so
+   * i have a chanse to throw in cards of the same value that is on the pile"
+   * (sysop, 2026-09-16) - the house rule that makes the game a race as well
+   * as a turn order: whoever holds the fourth nine can drop it the moment the
+   * third one lands, whoever's turn it was.
+   *
+   * WHAT IT COSTS TO GET WRONG is why it is narrow: the value must MATCH the
+   * top of the pile exactly (not merely beat it - that is the ordinary move
+   * and it waits its turn), and a blind card can never be thrown in, because
+   * you cannot claim a value you have not seen.
+   *
+   * Play then carries on FROM the player who jumped in - the turn order is
+   * not restored, it is re-anchored, which is what makes jumping in worth
+   * something. And a group is allowed, so four of a rank can be completed in
+   * one throw: `playChosen` reads the pile afterwards, so the burn, the turn
+   * and the refill all follow on their own.
+   */
+  public playOutOfTurn(playerId: string, cardIndices: number[]): VandtiaResult {
+    if (this.state.phase !== 'playing') return { success: false, message: 'Not playing yet.' };
+    if (this.currentPlayerId() === playerId) {
+      return { success: false, message: 'It is your turn - play the card.' };
+    }
+
+    const player = this.playerById(playerId);
+    if (!player) return { success: false, message: 'You are not in this game.' };
+    if (player.out) return { success: false, message: 'You are out.' };
+
+    const top = this.topOfPile();
+    if (!top) return { success: false, message: 'There is nothing on the pile to match.' };
+
+    const source = this.sourceFor(playerId);
+    if (source === 'faceDown') {
+      return { success: false, message: 'A blind card cannot be thrown in - you cannot see it.' };
+    }
+
+    const from = player[source];
+    const indices = [...new Set(cardIndices)].sort((a, b) => a - b);
+    if (indices.length === 0) return { success: false, message: 'No card chosen.' };
+
+    const chosen = indices.map((index) => from[index]);
+    if (chosen.some((card) => !card)) return { success: false, message: 'No such card.' };
+    if (chosen.some((card) => card.rank !== top.rank)) {
+      return {
+        success: false,
+        message: `Only another ${top.rank} can be thrown in on ${cardId(top)}.`,
+      };
+    }
+
+    /*
+     * The turn becomes the thrower's BEFORE the card is played, and that is
+     * the whole of "play carries on from here": everything downstream - the
+     * vändtia keeping the turn, four of a rank keeping it, an ordinary card
+     * passing it on - is then the same rule it always was, reading from the
+     * same place. Re-anchoring afterwards instead would mean deciding the
+     * turn twice, and the second decision would be this method's own idea of
+     * what a burn does.
+     */
+    this.state.currentIndex = this.state.players.findIndex((seated) => seated.id === playerId);
+
+    const result = this.playChosen(player, source, indices, chosen);
+    if (result.success) {
+      this.state.lastAction = `${player.name} throws in ${chosen.length > 1
+        ? `${chosen.length} x ${top.rank}`
+        : cardId(chosen[0])} out of turn.`;
+      return { ...result, message: this.state.lastAction };
+    }
+    return result;
+  }
+
+  /** Does this player hold a card they could throw in right now? */
+  public canThrowIn(playerId: string): number[] {
+    if (this.state.phase !== 'playing') return [];
+    if (this.currentPlayerId() === playerId) return [];
+    const top = this.topOfPile();
+    if (!top) return [];
+    const player = this.playerById(playerId);
+    if (!player || player.out) return [];
+    if (this.sourceFor(playerId) === 'faceDown') return [];
+    return this.cardsInPlay(playerId)
+      .map((card, index) => (card.rank === top.rank ? index : -1))
+      .filter((index) => index >= 0);
+  }
+
+  /**
+   * TAKE A CARD OFF THE STOCK AND PLAY IT BLIND, rather than take the pile.
+   *
+   * "when i cant make a move i should be able to pick a card from the deck on
+   * chanse, a blind card" (sysop, 2026-09-16).
+   *
+   * The gamble is the point: the card is turned face up onto the pile without
+   * being looked at first. It fits and the turn passes on; it does not fit
+   * and the pile is yours - which is what taking the pile would have cost
+   * anyway, plus the card. So it is never worse than the move it replaces
+   * unless the draw is bad, and that is the caller's to risk.
+   *
+   * Only when NOTHING in front of you will go: with a card that answers the
+   * pile, this would be a way to duck a bad hand rather than a chance taken.
+   */
+  public drawAndPlay(playerId: string): VandtiaResult {
+    if (this.state.phase !== 'playing') return { success: false, message: 'Not playing yet.' };
+    if (this.currentPlayerId() !== playerId) return { success: false, message: 'Not your turn.' };
+    if (this.state.stock.length === 0) {
+      return { success: false, message: 'The stock is empty - there is nothing to draw.' };
+    }
+    if (this.legalPlays(playerId).length > 0) {
+      return { success: false, message: 'You have a card that will go - play it.' };
+    }
+
+    const player = this.playerById(playerId);
+    if (!player) return { success: false, message: 'You are not in this game.' };
+
+    const drawn = this.state.stock.pop() as VandtiaCard;
+    if (!canPlayOn(drawn, this.state.pile)) {
+      const taken = this.state.pile.length;
+      player.hand.push(drawn, ...this.state.pile);
+      this.state.pile = [];
+      this.state.lastAction =
+        `${player.name} draws ${cardId(drawn)} - it does not fit, and picks up ${taken}.`;
+      this.advanceTurn(player);
+      return { success: true, message: this.state.lastAction };
+    }
+
+    // It fits: it lands, and the rest of the rules - the burn, the vändtia,
+    // the turn - are the ones every played card goes through.
+    player.hand.push(drawn);
+    const result = this.playChosen(player, 'hand', [player.hand.length - 1], [drawn]);
+    if (result.success) {
+      this.state.lastAction = `${player.name} draws ${cardId(drawn)} and it goes.`;
+      return { ...result, message: this.state.lastAction };
+    }
+    return result;
+  }
+
   /** One card is a group of one - the same move, the same code. */
   public playCard(playerId: string, cardIndex: number): VandtiaResult {
     return this.playCards(playerId, [cardIndex]);

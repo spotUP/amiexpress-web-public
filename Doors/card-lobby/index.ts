@@ -1459,8 +1459,8 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
     this.uiManager.labelSkitgubbeButtons(hasGame, canTake);
   }
 
-  public labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void {
-    this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake);
+  public labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean, canDraw = false): void {
+    this.uiManager.labelVandtiaButtons(hasGame, swapping, canTake, canDraw);
   }
 
   public labelPatienceButtons(hasGame: boolean, canTurn: boolean): void {

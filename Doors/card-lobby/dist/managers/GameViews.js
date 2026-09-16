@@ -435,7 +435,15 @@ class GameViews {
     dragToPlay(table) {
         const moduleFor = () => this.host.gameModuleFor(table);
         return {
-            onGrab: (index) => { moduleFor()?.selectCard(index); },
+            onGrab: (index) => {
+                // Quietly where a game can: a drag must not change the screen until
+                // the caller lets go.
+                const module = moduleFor();
+                if (typeof module?.selectQuietly === 'function')
+                    module.selectQuietly(index);
+                else
+                    module?.selectCard(index);
+            },
             onDropAt: (x, y) => {
                 if (!this.host.tableCardButtons.covers(x, y))
                     return;

@@ -549,7 +549,13 @@ export class GameViews {
   } {
     const moduleFor = () => this.host.gameModuleFor(table);
     return {
-      onGrab: (index: number) => { moduleFor()?.selectCard(index); },
+      onGrab: (index: number) => {
+        // Quietly where a game can: a drag must not change the screen until
+        // the caller lets go.
+        const module: any = moduleFor();
+        if (typeof module?.selectQuietly === 'function') module.selectQuietly(index);
+        else module?.selectCard(index);
+      },
       onDropAt: (x: number, y: number) => {
         if (!this.host.tableCardButtons.covers(x, y)) return;
         moduleFor()?.primaryAction();
