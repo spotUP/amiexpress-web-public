@@ -66,20 +66,64 @@ describe('a dropped caller leaves the board', () => {
     expect(sessions.has('4')).toBe(false);
   });
 
-  it('the cleanup clears the maps BEFORE it runs the logoff paperwork', () => {
-    // The order is the whole fix: a door in a logoff batch must not be able
-    // to keep a departed caller on the board.
-    const fs = require('fs');
-    const path = require('path');
-    const src = fs.readFileSync(path.join(__dirname, '../../src/server/socket-handlers.ts'), 'utf8');
-    // Comments out: this file's own comments name the things being ordered.
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const body = code.slice(code.indexOf('async function finalizeDisconnectCleanup'));
-    const forget = body.indexOf('forgetSession(session, socketId, userId)');
-    const batches = body.indexOf('runLogoffBatches(');
-    const callersLogged = body.indexOf("callersLog(session.user.id");
-    expect(forget).toBeGreaterThan(-1);
-    expect(batches).toBeGreaterThan(forget);
-    expect(callersLogged).toBeGreaterThan(forget);
+  /*
+   * REWRITTEN 2026-09-16. This used to read `socket-handlers.ts`, strip its
+   * comments, slice from the function's name and compare the INDEX of three
+   * substrings. It passes on source that never runs, it breaks on a rename or
+   * a reformat, and it says nothing about what happens when the paperwork is
+   * slow - which is the whole bug.
+   *
+   * `finalizeDisconnectCleanup` is exported, so the test calls it and makes
+   * the paperwork ASK: at the moment the logoff batches and the callers log
+   * run, is this caller still on the board? That is the invariant, stated
+   * where it bit - /health counts the `sessions` map, and a door hanging
+   * inside a logoff batch used to hold a departed caller in it for ever.
+   */
+  it('has cleared the maps by the time the logoff paperwork runs', async () => {
+    jest.resetModules();
+
+    // What the paperwork saw when it ran. Recorded rather than asserted
+    // inside the mock, so a mock that never runs cannot pass silently.
+    const boardDuringPaperwork: Array<{ step: string; stillSeated: boolean }> = [];
+
+    const sessionManager = require('../../src/server/session-manager');
+    const stillSeated = () => sessionManager.sessions.has('7');
+
+    jest.doMock('../../src/server/database-helpers', () => ({
+      ...jest.requireActual('../../src/server/database-helpers'),
+      callersLog: jest.fn(async () => {
+        boardDuringPaperwork.push({ step: 'callersLog', stillSeated: stillSeated() });
+      }),
+    }));
+    jest.doMock('../../src/services/batch-scheduler', () => ({
+      ...jest.requireActual('../../src/services/batch-scheduler'),
+      logoffBatchesAlreadyRan: () => false,
+      runLogoffBatches: jest.fn(async () => {
+        boardDuringPaperwork.push({ step: 'runLogoffBatches', stillSeated: stillSeated() });
+      }),
+    }));
+
+    const handlers = require('../../src/server/socket-handlers');
+    const session: any = {
+      user: { id: '77', username: 'Knut', secLevel: 30 },
+      nodeId: 7, socketId: 'sock-7', state: 'LOGGEDON', connectionType: 'web',
+    };
+    sessionManager.setSession('sock-7', session);
+    sessionManager.socketToUser.set('sock-7', '77');
+    sessionManager.socketToNodeId.set('sock-7', 7);
+    expect(stillSeated()).toBe(true);
+
+    const socket: any = { id: 'sock-7', emit: () => true, on: () => {}, off: () => {} };
+    await handlers.finalizeDisconnectCleanup(socket, session, 'sock-7');
+
+    // Both pieces of paperwork ran...
+    expect(boardDuringPaperwork.map((s) => s.step)).toEqual(
+      expect.arrayContaining(['callersLog', 'runLogoffBatches']),
+    );
+    // ...and neither of them could see the caller on the board.
+    for (const { step, stillSeated: seated } of boardDuringPaperwork) {
+      expect({ step, seated }).toEqual({ step, seated: false });
+    }
+    expect(stillSeated()).toBe(false);
   });
 });
