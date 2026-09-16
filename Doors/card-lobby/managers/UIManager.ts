@@ -15,6 +15,7 @@ import { renderCardLines, stripBlessedTags, wrapTagged, padColumn } from '../lib
 import { resolveCardStyle, toRenderOptions, FULL_CARD_ROWS } from '../lib/card-style';
 import type { CardPreferences, LobbyTable } from '../lib/types';
 import type { UnoCard, UnoColor, UnoPlayer } from '../lib/uno-engine';
+import { toEngineUnoCard } from '../lib/uno-engine';
 
 const cardEngine = new CardEngine();
 
@@ -1401,16 +1402,9 @@ export class UIManager {
    * exist only in this door and have no engine equivalent; they keep a plain
    * face of their own.
    */
+  /** The door's card as the SDK spells it - shared, see lib/uno-engine.ts. */
   private toEngineUnoCard(card: UnoCard): { color: EngineUnoColor; value: EngineUnoValue } | null {
-    const values: Record<string, EngineUnoValue> = {
-      '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-      '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
-      'Skip': 'skip', 'Reverse': 'reverse', 'Draw2': 'draw2',
-      'Wild': 'wild', 'Wild4': 'wild4',
-    };
-    const value = values[card.value];
-    if (!value) return null;
-    return { color: card.color as EngineUnoColor, value };
+    return toEngineUnoCard(card) as { color: EngineUnoColor; value: EngineUnoValue } | null;
   }
 
   private renderUnoCardAscii(card: UnoCard): string {

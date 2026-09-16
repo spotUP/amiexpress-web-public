@@ -34,10 +34,34 @@ class CardButtons {
         /** The cards lying UNDER the ones above: drawn, never picked, never focused. */
         this.unders = [];
         this.lastKey = '';
+        /** The card currently under the pointer mid-drag, if any. */
+        this.dragging = null;
     }
     /** The widgets Tab should walk, left to right. */
     focusables() {
         return this.buttons.filter((button) => !button.hidden);
+    }
+    /**
+     * WHICH CARD IS AT THIS POINT ON THE SCREEN, if any.
+     *
+     * Cards overlap - a fan and a pile both draw them a few columns apart - so
+     * the LAST one to cover a cell is the one a caller means, the same way the
+     * eye reads it. `skip` leaves out the card being dragged, which is
+     * travelling under the pointer and would otherwise answer every question.
+     */
+    indexAt(x, y, skip) {
+        let found = null;
+        this.buttons.forEach((button, index) => {
+            if (button.hidden || index === skip)
+                return;
+            const left = Number(button.aleft);
+            const top = Number(button.atop);
+            const width = Number(button.width) || 0;
+            const height = Number(button.height) || 0;
+            if (x >= left && x < left + width && y >= top && y < top + height)
+                found = index;
+        });
+        return found;
     }
     /** The cards lying under the ones above - drawn only, in the same order. */
     underlays() {
@@ -427,8 +451,12 @@ class CardButtons {
             // The two halves of a drag. A plain click still reaches `onPick`: the
             // widget emits `click` on mousedown as well, so a caller who never
             // moves the mouse gets the behaviour they always had.
-            if (options.onGrab)
-                button.on('mousedown', () => options.onGrab?.(index));
+            if (options.onGrab) {
+                button.on('mousedown', (data) => {
+                    options.onGrab?.(index);
+                    this.beginDrag(index, data, options);
+                });
+            }
             if (options.onDrop)
                 button.on('mouseup', () => options.onDrop?.(index));
             // A row that cannot be picked from does not take the focus either.
@@ -476,6 +504,84 @@ class CardButtons {
             this.host.screen.render();
         }
         return true;
+    }
+    /**
+     * CARRY A CARD UNDER THE POINTER until the button comes up.
+     *
+     * "i dont see the card being dragged when in drag it i just see it moved
+     * when i drop it" (sysop, 2026-09-16) - the move happened, but nothing was
+     * ever drawn between the two ends of it.
+     *
+     * The card is moved by hand rather than through blessed's own
+     * `enableDrag`, for one reason: that claims the screen's exclusive routing,
+     * and then the card the gesture is aimed AT never receives its `mouseup`.
+     * Here the widget simply follows, the screen keeps routing normally, and
+     * where the drag ended is answered by coordinates (`onDropAt`).
+     */
+    beginDrag(index, data, options) {
+        const button = this.buttons[index];
+        const screen = this.host.screen;
+        if (!button || !screen?.on)
+            return;
+        const grab = {
+            dx: Number(data?.x ?? 0) - Number(button.aleft ?? 0),
+            dy: Number(data?.y ?? 0) - Number(button.atop ?? 0),
+            left: Number(button.left) || 0,
+            top: Number(button.top) || 0,
+        };
+        /*
+         * THE WHOLE CARD TRAVELS, not the part that still fits.
+         *
+         * "the whole card should be visible when dragging with mouse as well"
+         * (sysop, 2026-09-16). A widget is clipped to its parent, and the panel a
+         * card lives in is only a few rows taller than the card - so a card
+         * dragged towards the panel's edge lost its bottom, and one dragged
+         * towards the OTHER row disappeared at the border between them.
+         *
+         * So while it travels it belongs to the SCREEN: nothing clips it, it is
+         * drawn over everything, and it goes back to its own panel when the
+         * button comes up. The positions become screen coordinates for the
+         * duration, which is why the follow below works off `aleft`/`atop`
+         * rather than the panel's frame.
+         */
+        const home = button.parent;
+        const homeLeft = Number(home?.aleft ?? 0);
+        const homeTop = Number(home?.atop ?? 0);
+        const screenParent = this.host.screen;
+        if (home && typeof home.remove === 'function' && typeof screenParent.append === 'function') {
+            home.remove(button);
+            screenParent.append(button);
+            button.left = homeLeft + grab.left;
+            button.top = homeTop + grab.top;
+        }
+        // In front of its neighbours while it travels, or it slides UNDER the
+        // cards it is being dragged past.
+        button.setFront?.();
+        const follow = (event) => {
+            if (event?.action === 'mousemove') {
+                // Screen coordinates: while it travels the card is the screen's.
+                button.left = Number(event.x) - grab.dx;
+                button.top = Number(event.y) - grab.dy;
+                screen.render();
+                return;
+            }
+            if (event?.action !== 'mouseup')
+                return;
+            screen.removeListener?.('mouse', follow);
+            this.dragging = null;
+            // Home again, where the renderer had it. The caller's drop decides what
+            // the cards do next and re-renders from the real state.
+            if (home && typeof screenParent.remove === 'function') {
+                screenParent.remove(button);
+                home.append(button);
+            }
+            button.left = grab.left;
+            button.top = grab.top;
+            screen.render();
+            options.onDropAt?.(Number(event.x), Number(event.y));
+        };
+        this.dragging = index;
+        screen.on('mouse', follow);
     }
     /** The widgets for the cards underneath, made once and reused. */
     ensureUnders(count) {

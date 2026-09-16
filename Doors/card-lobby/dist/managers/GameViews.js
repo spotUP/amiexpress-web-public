@@ -9,6 +9,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameViews = void 0;
+const uno_engine_1 = require("../lib/uno-engine");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const lib_1 = require("../lib");
 const games_1 = require("../lib/games");
@@ -255,7 +256,18 @@ class GameViews {
              * only one game" (sysop, 2026-09-15). It falls back to the text the
              * line above drew whenever the panel cannot hold card art.
              */
-            this.host.cardButtons.render(player.hand.map((card) => ({ kind: 'uno', card })), {
+            /*
+             * TRANSLATED, exactly as the text path translates. These cards go to
+             * the SDK's renderer, which spells the action cards `skip`/`draw2`/
+             * `wild4`; handing it this engine's `Skip` drew "Gundef" on the card
+             * (sysop, 2026-09-16). A value the renderer cannot draw is left as it
+             * was rather than dropped - a card missing from a hand is worse than a
+             * card drawn plainly.
+             */
+            this.host.cardButtons.render(player.hand.map((card) => ({
+                kind: 'uno',
+                card: (0, uno_engine_1.toEngineUnoCard)(card) ?? card,
+            })), {
                 selected: selectedIndex,
                 playable: playableIndices,
                 onFocus: (index) => this.host.selectUnoCard(index),
@@ -393,6 +405,31 @@ class GameViews {
      * cards each player still has in each of their three places, because that
      * is the whole state of the race.
      */
+    /**
+     * Where a dragged card was let go - asked of BOTH rows.
+     *
+     * The row that owns the drag reports coordinates rather than an index,
+     * because the card being dragged travels under the pointer and would answer
+     * its own hit test. Whichever row has a card at that point takes the drop;
+     * a drag that ends over nothing simply puts the card down where it was.
+     */
+    dropSwapAt(from, x, y) {
+        const hand = this.host.cardButtons.indexAt(x, y, from === 'hand'
+            ? this.host.cardButtons.dragging ?? undefined
+            : undefined);
+        if (hand !== null) {
+            this.host.vandtia.dropOn('hand', hand);
+            return;
+        }
+        const table = this.host.tableCardButtons.indexAt(x, y, from === 'table'
+            ? this.host.tableCardButtons.dragging ?? undefined
+            : undefined);
+        if (table !== null) {
+            this.host.vandtia.dropOn('table', table);
+            return;
+        }
+        this.host.vandtia.releaseHeld();
+    }
     renderVandtiaGameView(table) {
         const loaded = this.host.vandtia.load(table);
         if (!loaded) {
@@ -487,6 +524,7 @@ class GameViews {
             // with the mouse and finish with the arrows.
             onGrab: swapping ? (index) => this.host.vandtia.grabAt('table', index) : undefined,
             onDrop: swapping ? (index) => this.host.vandtia.dropOn('table', index) : undefined,
+            onDropAt: swapping ? (x, y) => this.dropSwapAt('table', x, y) : undefined,
         });
         /*
          * THE PANEL'S TEXT IS ALWAYS THIS GAME'S, drawn or not.
@@ -540,6 +578,7 @@ class GameViews {
                 this.host.vandtia.selectCard(index); },
             onGrab: swapping ? (index) => this.host.vandtia.grabAt('hand', index) : undefined,
             onDrop: swapping ? (index) => this.host.vandtia.dropOn('hand', index) : undefined,
+            onDropAt: swapping ? (x, y) => this.dropSwapAt('hand', x, y) : undefined,
             onPick: (index) => {
                 if (showingTable)
                     return;

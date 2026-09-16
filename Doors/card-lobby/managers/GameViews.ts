@@ -8,6 +8,7 @@
  */
 
 import type { Box, Log, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { toEngineUnoCard } from '../lib/uno-engine';
 import { type PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoGameEngine } from '../lib/uno-engine';
 import { type LobbyTable, type PlayerProfile, isBotPlayer, pad, padColumn, mergeColumns, visibleWidth } from '../lib';
@@ -19,7 +20,7 @@ import { SUIT_NAMES, type TableGameModule, type SkitgubbeGameModule, type Vandti
  * new option - `pile`, and `face` before it - typechecked in CardButtons and
  * was rejected at the call site here for not existing.
  */
-import type { CardButtonOptions as CardButtonArgs, PlayableCard } from './CardButtons';
+import type { CardButtonOptions as CardButtonArgs, PlayableCard, CardButtons } from './CardButtons';
 
 import type { UIManager } from './UIManager';
 import { UI_THEME } from '../lib/constants';
@@ -92,16 +93,15 @@ export interface GameViewHost {
   readonly skitgubbe: SkitgubbeGameModule;
   readonly vandtia: VandtiaGameModule;
   readonly patience: PatienceGameModule;
-  readonly cardButtons: {
-    render(cards: PlayableCard[], options: CardButtonArgs): boolean;
-    renderStandard(cards: unknown[], options: CardButtonArgs): boolean;
-    clear(): void;
-  };
+  /*
+   * The renderer's OWN type, both times. Describing its shape here instead is
+   * how `pile`, `face` and now `indexAt` came to exist on CardButtons and be
+   * rejected at the call site: a second declaration of the same thing,
+   * checked against nothing. Third time this file has been bitten by it.
+   */
+  readonly cardButtons: CardButtons;
   /** The caller's own row of cards on the table, where a game has one. */
-  readonly tableCardButtons: {
-    renderStandard(cards: unknown[], options: CardButtonArgs): boolean;
-    clear(): void;
-  };
+  readonly tableCardButtons: CardButtons;
 }
 
 export class GameViews {
@@ -345,8 +345,19 @@ export class GameViews {
        * only one game" (sysop, 2026-09-15). It falls back to the text the
        * line above drew whenever the panel cannot hold card art.
        */
+      /*
+       * TRANSLATED, exactly as the text path translates. These cards go to
+       * the SDK's renderer, which spells the action cards `skip`/`draw2`/
+       * `wild4`; handing it this engine's `Skip` drew "Gundef" on the card
+       * (sysop, 2026-09-16). A value the renderer cannot draw is left as it
+       * was rather than dropped - a card missing from a hand is worse than a
+       * card drawn plainly.
+       */
       this.host.cardButtons.render(
-        player.hand.map((card: { color: string; value: string }) => ({ kind: 'uno' as const, card })),
+        player.hand.map((card: { color: string; value: string }) => ({
+          kind: 'uno' as const,
+          card: toEngineUnoCard(card) ?? card,
+        })),
         {
           selected: selectedIndex,
           playable: playableIndices,
@@ -503,6 +514,35 @@ export class GameViews {
    * cards each player still has in each of their three places, because that
    * is the whole state of the race.
    */
+
+  /**
+   * Where a dragged card was let go - asked of BOTH rows.
+   *
+   * The row that owns the drag reports coordinates rather than an index,
+   * because the card being dragged travels under the pointer and would answer
+   * its own hit test. Whichever row has a card at that point takes the drop;
+   * a drag that ends over nothing simply puts the card down where it was.
+   */
+  private dropSwapAt(from: 'hand' | 'table', x: number, y: number): void {
+    const hand = this.host.cardButtons.indexAt(x, y, from === 'hand'
+      ? this.host.cardButtons.dragging ?? undefined
+      : undefined);
+    if (hand !== null) {
+      this.host.vandtia.dropOn('hand', hand);
+      return;
+    }
+
+    const table = this.host.tableCardButtons.indexAt(x, y, from === 'table'
+      ? this.host.tableCardButtons.dragging ?? undefined
+      : undefined);
+    if (table !== null) {
+      this.host.vandtia.dropOn('table', table);
+      return;
+    }
+
+    this.host.vandtia.releaseHeld();
+  }
+
   renderVandtiaGameView(table: LobbyTable): void {
     const loaded = this.host.vandtia.load(table);
     if (!loaded) {
@@ -600,6 +640,7 @@ export class GameViews {
       // with the mouse and finish with the arrows.
       onGrab: swapping ? (index: number) => this.host.vandtia.grabAt('table', index) : undefined,
       onDrop: swapping ? (index: number) => this.host.vandtia.dropOn('table', index) : undefined,
+      onDropAt: swapping ? (x: number, y: number) => this.dropSwapAt('table', x, y) : undefined,
     });
     /*
      * THE PANEL'S TEXT IS ALWAYS THIS GAME'S, drawn or not.
@@ -654,6 +695,7 @@ export class GameViews {
       onFocus: (index: number) => { if (!showingTable) this.host.vandtia.selectCard(index); },
       onGrab: swapping ? (index: number) => this.host.vandtia.grabAt('hand', index) : undefined,
       onDrop: swapping ? (index: number) => this.host.vandtia.dropOn('hand', index) : undefined,
+      onDropAt: swapping ? (x: number, y: number) => this.dropSwapAt('hand', x, y) : undefined,
       onPick: (index: number) => {
         if (showingTable) return;
         this.host.vandtia.selectCard(index);

@@ -6,6 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UnoGameEngine = void 0;
 exports.unoColorName = unoColorName;
+exports.toEngineUnoCard = toEngineUnoCard;
 exports.unoCardName = unoCardName;
 /**
  * A colour's name, for anything that has to say it out loud.
@@ -17,6 +18,35 @@ exports.unoCardName = unoCardName;
 function unoColorName(color) {
     const names = { R: 'Red', G: 'Green', B: 'Blue', Y: 'Yellow', W: 'Wild' };
     return names[color] || color;
+}
+/**
+ * THE DOOR'S UNO CARD, AS THE SDK'S CARD ENGINE SPELLS IT.
+ *
+ * Two vocabularies: this engine says `Skip`, `Draw2`, `Wild4`; the SDK's
+ * renderer says `skip`, `draw2`, `wild4`. One translation between them, and
+ * it lives here beside the values it translates.
+ *
+ * It used to be a PRIVATE method on UIManager, which meant the text path
+ * translated and the WIDGET path did not - the widgets were handed a `Skip`
+ * the renderer had never heard of, looked up nothing, and drew "Gundef" on
+ * the card: "uno has card layout issues and one card says undefined" (sysop,
+ * 2026-09-16).
+ */
+function toEngineUnoCard(card) {
+    const values = {
+        '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
+        '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+        Skip: 'skip', Reverse: 'reverse', Draw2: 'draw2',
+        Wild: 'wild', Wild4: 'wild4',
+        // The engine's own spellings, so a card that has already been translated
+        // survives a second pass unharmed.
+        skip: 'skip', reverse: 'reverse', draw2: 'draw2',
+        wild: 'wild', wild4: 'wild4',
+    };
+    const value = values[card.value];
+    if (!value)
+        return null;
+    return { color: card.color, value };
 }
 /** A card said in full - "Red 7", "Blue SKIP", "Wild". */
 function unoCardName(card) {

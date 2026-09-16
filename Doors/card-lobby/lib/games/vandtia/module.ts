@@ -90,21 +90,16 @@ export class VandtiaGameModule implements TableGameModule {
 
   public toggleView(): void {
     /*
-     * NOT DURING THE SWAP. Both rows are already on screen then - the hand
-     * below and the table cards above - so there is nothing to flip to, and
-     * flipping anyway left `handView` pointing at the table cards when play
-     * started: the lower panel showed the six in front of the caller instead
-     * of the hand they were meant to be playing from, and every key answered
-     * "Pick a card first". Reported as "i switched view with v and swapped
-     * some card but i cant seem to start the game now" (sysop, 2026-09-16) -
-     * the game HAD started; the screen was showing the wrong row.
+     * IT WORKS IN EVERY PHASE, including the swap.
+     *
+     * It was refused during the swap for a while, because a flip left
+     * `handView` on the table cards when play started and the caller was
+     * shown the wrong row - "i cant seem to start the game now" (sysop,
+     * 2026-09-16). But refusing a key somebody reaches for is its own trap:
+     * "i cant switch to game view with V like before". The flip is reset when
+     * play starts instead, which fixes the original fault without taking the
+     * key away.
      */
-    const table = this.currentTable();
-    if (table && this.load(table)?.engine.state.phase === 'swap') {
-      this.host.pushNotice('Both your rows are already on screen - swap with 1-3 then 4-6.');
-      return;
-    }
-
     this.handView = this.handView === 'hand' ? 'table' : 'hand';
     this.selectedCardIndex = null;      // the numbers now mean other cards
     this.host.pushNotice(this.handView === 'table'
@@ -510,6 +505,13 @@ export class VandtiaGameModule implements TableGameModule {
     this.host.updateAllPanels();
   }
 
+  /** Let go of a card without moving it - a drag that ended over nothing. */
+  public releaseHeld(): void {
+    if (!this.heldCard) return;
+    this.heldCard = null;
+    this.host.updateAllPanels();
+  }
+
   /** A card dropped onto a place with the mouse. */
   public dropOn(row: 'hand' | 'table', index: number): void {
     if (!this.heldCard) return;
@@ -795,14 +797,21 @@ export class VandtiaGameModule implements TableGameModule {
     if (state.phase === 'swap') {
       const picked = this.selectedHandIndex;
       return [
+        /*
+         * THE WAY OUT COMES FIRST. "i am stuck in this view how do i exit?"
+         * (sysop, 2026-09-16) - the legend had grown to five pairs and the
+         * panel is about forty columns, so `X ready` and `L leave` were the
+         * two that fell off the end. A caller who cannot see how to leave a
+         * screen is stuck on it whatever else the line says.
+         */
         me.ready
-          ? '{cyan-fg}Ready.{/} Waiting for the others...'
+          ? '{cyan-fg}Ready.{/} Waiting for the others...  {cyan-fg}L{/} leave'
           : this.heldCard
-            // Carrying one: the arrows are the whole instruction.
-            ? '{yellow-fg}Holding a card.{/}  {cyan-fg}Arrows{/} move it  '
-              + '{cyan-fg}ENTER{/} put down  {cyan-fg}X{/} ready'
-            : '{cyan-fg}ENTER{/} hold  {cyan-fg}Arrows{/} move  '
-              + '{cyan-fg}1-3{/} hand  {cyan-fg}4-6{/} table  {cyan-fg}X{/} ready',
+            ? '{cyan-fg}X{/} ready  {cyan-fg}ENTER{/} drop  {cyan-fg}Arrows{/} move it'
+            : '{cyan-fg}X{/} ready  {cyan-fg}L{/} leave  {cyan-fg}ENTER{/} hold',
+        this.heldCard
+          ? '{yellow-fg}Holding a card.{/} Arrows carry it between the rows.'
+          : 'Or swap with {cyan-fg}1-3{/} then {cyan-fg}4-6{/}, or drag a card.',
         `Hand ${me.hand.map((card, i) =>
           (i === picked ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`)
           + ':' + label(card)).join('  ')}`,

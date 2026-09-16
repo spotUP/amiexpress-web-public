@@ -359,15 +359,16 @@ export async function theFlipCannotOutliveTheSwap(): Promise<void> {
     await app.dealHand();
     (app.vandtia.constructor as any).BOT_PACE_MS = 0;
 
-    // V during the swap changes nothing, and says so.
-    app.notices.length = 0;
+    /*
+     * V works during the swap - refusing a key somebody reaches for is its
+     * own trap ("i cant switch to game view with V like before", sysop
+     * 2026-09-16). What must not happen is the flip OUTLIVING the swap, and
+     * that is what the rest of this asserts.
+     */
     app.vandtia.toggleView();
-    assert.strictEqual(app.vandtia.handView, 'hand',
-      'the swap keeps the hand in the lower panel - both rows are up already');
-    assert.ok(/already on screen/i.test(app.notices.join(' ')),
-      `and the caller is told why: ${app.notices.join(' ')}`);
+    assert.strictEqual(app.vandtia.handView, 'table', 'V flips, whatever the phase');
 
-    // Even if something flipped it, play starts on the hand.
+    // However it was left, play starts on the hand.
     app.vandtia.handView = 'table';
     app.vandtia.primaryAction();                     // X: ready
     await new Promise((r) => setTimeout(r, 600));

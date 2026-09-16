@@ -186,3 +186,50 @@ export async function anEmptyHandLeavesNoGhostCards(): Promise<void> {
       'a played-out hand hides its widgets rather than leaving them on screen');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function anUnoActionCardIsDrawnNotSpeltUndefined(): Promise<void> {
+  /*
+   * "uno has card layout issues and one card says undefined" (sysop,
+   * 2026-09-16).
+   *
+   * Two vocabularies for one card: this door's UNO engine says `Skip`,
+   * `Draw2`, `Wild4`; the SDK's renderer says `skip`, `draw2`, `wild4`. The
+   * TEXT path translated between them through a private method on UIManager
+   * and the WIDGET path did not - so the widgets were handed a `Skip` the
+   * renderer had never heard of, and drew "Gundef" across the face.
+   */
+  const { toEngineUnoCard } = await import('../lib/uno-engine');
+
+  // The door's spellings reach the renderer's.
+  assert.deepStrictEqual(toEngineUnoCard({ color: 'G', value: 'Skip' }),
+    { color: 'G', value: 'skip' });
+  assert.deepStrictEqual(toEngineUnoCard({ color: 'W', value: 'Wild4' }),
+    { color: 'W', value: 'wild4' });
+  assert.deepStrictEqual(toEngineUnoCard({ color: 'B', value: '7' }),
+    { color: 'B', value: '7' });
+
+  // Already translated survives a second pass, which is what makes it safe
+  // to apply on a path that may already have run.
+  assert.deepStrictEqual(toEngineUnoCard({ color: 'G', value: 'skip' }),
+    { color: 'G', value: 'skip' });
+
+  // And the card actually draws, with no "undef" anywhere on its face.
+  const app = await openApp();
+  try {
+    sizeHandPanel(app, 60, 12);
+    const hand = [
+      { color: 'G', value: 'Skip' },
+      { color: 'R', value: 'Draw2' },
+      { color: 'W', value: 'Wild4' },
+    ];
+    app.cardButtons.render(
+      hand.map((card) => ({ kind: 'uno' as const, card: toEngineUnoCard(card) ?? card })),
+      { selected: null, playable: [0, 1, 2], onPick: () => {} },
+    );
+
+    const faces = app.cardButtons.focusables()
+      .map((card: any) => String(card.getContent()).replace(/\{[^}]*\}/g, ''))
+      .join(' ');
+    assert.ok(!/undef/i.test(faces), `no card says undefined: ${faces}`);
+  } finally { app.screen?.destroy?.(); }
+}
