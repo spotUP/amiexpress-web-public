@@ -148,3 +148,34 @@ describe('the line the row prints', () => {
     }
   });
 });
+
+/**
+ * A ROW IS NAMED THE WAY THE SYSOP KNOWS IT.
+ *
+ * "i still dont see samilog anywhere" (sysop, 2026-09-16) - looking straight
+ * at the row that IS it. `bull6.txt` is rebuilt by SAmiLog and signs itself
+ * "Super-AmiLog by P0T-NOoDLE of ANTHROX"; the page called it "Last callers",
+ * which is what it holds and not what he calls it.
+ */
+describe('what a bulletin row is called', () => {
+  it('names the Super-AmiLog by the door that writes it', async () => {
+    get.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          node: 1,
+          steps: [{
+            screen: 'BULL', label: 'Board bulletin', note: '', skippedByQuickFlag: false,
+            file: 'Screens/BULL.TXT', exists: true, bytes: 32, blankPause: false,
+            items: [{ code: 'SS', target: 'BBS:Bulletins/bull6.txt', pause: false }],
+          }],
+          available: [],
+        },
+        timestamp: '',
+      },
+    });
+
+    render(<LoginSequencePage />);
+    expect(await screen.findByText(/Super-AmiLog/)).toBeTruthy();
+  });
+});

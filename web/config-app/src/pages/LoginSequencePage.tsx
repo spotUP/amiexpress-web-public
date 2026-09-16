@@ -70,14 +70,22 @@ interface ThemeChoice {
   isDefault: boolean;
 }
 
-/** What the board calls each MultiTop design, so a sysop picks by meaning. */
+/**
+ * What the board calls each MultiTop design, so a sysop picks by meaning.
+ *
+ * The name a sysop knows a bulletin by is the one the DOOR that writes it
+ * prints - `bull6.txt` is rebuilt by SAmiLog and signs itself "Super-AmiLog
+ * by P0T-NOoDLE of ANTHROX" - so the label carries that name too. Without it
+ * the row read "Last callers" and the sysop, hunting a Super-AmiLog he could
+ * see on his own screen, went past it three times (2026-09-16).
+ */
 const KNOWN: Record<string, string> = {
   'bull1.txt': 'MultiTop - uploaded bytes',
   'bull2.txt': 'MultiTop - downloaded bytes',
   'bull3.txt': 'MultiTop - messages',
   'bull4.txt': 'MultiTop - upload CPS',
   'bull5.txt': 'MultiTop - download CPS',
-  'bull6.txt': 'Last callers',
+  'bull6.txt': 'Last callers - the Super-AmiLog screen',
   'bull7.txt': 'News',
   'bull8.txt': 'Sport',
 };
