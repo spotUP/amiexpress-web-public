@@ -43,7 +43,28 @@ function keyValueDoors(): Array<{ door: string; manifest: Manifest; cfg: string 
     .map(door => ({ door, file: path.join(DOORS_ROOT, door, 'door.settings.json') }))
     .filter(({ file }) => fs.existsSync(file))
     .map(({ door, file }) => ({ door, manifest: JSON.parse(fs.readFileSync(file, 'utf8')) as Manifest }))
-    .filter(({ manifest }) => !!manifest.cfgFile && manifest.cfgFormat !== 'empire')
+    .filter(({ manifest }) => {
+      if (!manifest.cfgFile || manifest.cfgFormat === 'empire') return false;
+      /*
+       * A cfg an ART SECTION owns is not a Key=value cfg.
+       *
+       * QuickNew declares `cfgFile: QuickNew.Config1` and an `artSections`
+       * entry claiming the SAME file with `format: "quicknew"` - it is a
+       * block format (a directory path and two ANSI templates per area),
+       * edited by that block editor, and its settings list is deliberately
+       * empty. Audited as Key=value, every line of it reads as a key the
+       * manifest forgot, which is twenty false offenders and no information.
+       *
+       * Safe to skip, and only because the renderer is: `renderDoorCfg`
+       * merges its rendered lines INTO the file rather than over it
+       * (mergeIntoCfg), so a manifest with no Key=value settings rewrites
+       * nothing. That merge is what the overwrite-everything bug was fixed
+       * to, and this exemption depends on it staying that way.
+       */
+      const artOwnsTheCfg = (manifest as { artSections?: Array<{ file?: string }> })
+        .artSections?.some(section => section.file === manifest.cfgFile);
+      return !artOwnsTheCfg;
+    })
     .map(({ door, manifest }) => ({ door, manifest, cfg: path.join(DOORS_ROOT, door, manifest.cfgFile!) }))
     .filter(({ cfg }) => fs.existsSync(cfg));
 }

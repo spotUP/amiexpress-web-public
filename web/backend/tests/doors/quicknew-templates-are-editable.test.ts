@@ -47,7 +47,19 @@ describe('reading QuickNew templates', () => {
   it('reads the real config on this board', () => {
     const blocks = parseQuickNewBlocks(fs.readFileSync(REAL, 'latin1'));
 
-    expect(blocks.length).toBeGreaterThan(5);
+    /*
+     * At least one block, not "more than five".
+     *
+     * The board REWRITES this file - it is regenerated from the sysop's file
+     * areas - so the number of blocks is his to change and was never a
+     * property of the parser. It read `> 5` until his board came down to five
+     * areas and this went red (2026-09-16) without anything being wrong.
+     *
+     * What IS worth asserting against the real file is that the parser reads
+     * it at all and that every block it returns is well formed, which is what
+     * the loop below does.
+     */
+    expect(blocks.length).toBeGreaterThan(0);
     // Every block names a directory and carries both templates.
     for (const b of blocks) {
       expect(b.dirPath).toMatch(/^BBS:/i);
