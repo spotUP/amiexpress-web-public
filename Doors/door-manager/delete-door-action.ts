@@ -116,7 +116,22 @@ export async function performDoorDelete<T extends DeletableDoor>(
     paint(`\n\n{${T.warn}-fg}Reloading...{/${T.warn}-fg}\n`);
     await deps.refreshRegistry();
     const doors = await deps.fetchDoors();
-    deps.onDoorsChanged(doors, Math.max(0, deps.selectedIndex - 1));
+    /*
+     * THE DOOR THAT TOOK THE DELETED ONE'S PLACE IS THE ONE TO SELECT.
+     *
+     * Removing the row at index i slides the row that was at i+1 down INTO i,
+     * so i is where the cursor belongs - the same place every list leaves it
+     * after a delete. This used to hand back `i - 1`, which steps backwards
+     * OVER that row, so each delete walked the selection one further up the
+     * list from where the sysop was working and the info panel followed it
+     * there ("when i delete more than one door in doorman the list and
+     * descriptions gets offset", 2026-09-16).
+     *
+     * Deleting the LAST row is the one case where i is now past the end, and
+     * the view clamps it (`refresh` -> `clampSelection`) rather than this
+     * having to know the new length.
+     */
+    deps.onDoorsChanged(doors, deps.selectedIndex);
 
     // The door is only deleted when it has left the list the sysop is
     // looking at. Saying "deleted" while it is still on screen is the exact
