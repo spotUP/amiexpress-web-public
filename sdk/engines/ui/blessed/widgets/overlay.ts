@@ -121,58 +121,39 @@ export class Overlay extends Box {
   }
 
   /**
-   * Emit overlay event for web clients to render actual transparency
+   * A MODAL DOES NOT DIM THE SCREEN. A terminal cannot.
+   *
+   * "the modals dim the screen that is not possible in a bbs" (sysop,
+   * 2026-09-16), and he is right twice over.
+   *
+   * A cell has a foreground, a background and an attribute. There is no
+   * alpha, so there is no dimming anything: the only way to make a cell
+   * look darker is to REPAINT it, which means deciding what it now says.
+   * What this used to do instead was send the browser an OSC
+   * `9999;overlay` and let CSS draw a translucent rectangle over the
+   * canvas - a effect of the web client, not of the door.
+   *
+   * Which is the second problem. A caller on telnet, on SSH, or on a C64
+   * never got it, so the same door looked like two different doors
+   * depending on how somebody dialled in, and the one that looked
+   * 'right' was the one no BBS can actually produce.
+   *
+   * So nothing is emitted. The overlay stays exactly what it is in a
+   * terminal - a widget that catches clicks and holds focus while a
+   * modal is up - and a modal is what it always was on a BBS: a framed
+   * box drawn over the screen. The frontend's handler for the sequence
+   * is left in place and simply never hears from us again.
    */
-  private _emitOverlayWidgetEvent(show: boolean): void {
-    if (!this.screen) {
-      return;
-    }
-
-    // Get element position for positioned overlay rendering
-    const coords = this._getCoords();
-    const pos = coords ? {
-      x: coords.xi,
-      y: coords.yi,
-      width: coords.xl - coords.xi,
-      height: coords.yl - coords.yi,
-    } : {
-      // Default to full screen if coords not available
-      x: 0,
-      y: 0,
-      width: this.screen.width,
-      height: this.screen.height,
-    };
-
-    // Send a special escape sequence that the frontend can intercept
-    // Format: ESC ] 9999 ; overlay ; <json> BEL
-    const payload: Record<string, unknown> = {
-      id: this._overlayWidgetId,
-      show,
-      opacity: this._overlayOpacity,
-      x: pos.x,
-      y: pos.y,
-      width: pos.width,
-      height: pos.height,
-    };
-    // If a modal is open on top of the overlay, punch it out of the CSS dim
-    // so the terminal content inside that cell region is not obscured.
-    if (this._exclude) {
-      payload.exclude = {
-        x: this._exclude.xi,
-        y: this._exclude.yi,
-        width: this._exclude.xl - this._exclude.xi,
-        height: this._exclude.yl - this._exclude.yi,
-      };
-    }
-    const data = JSON.stringify(payload);
-    const osc = ESC + `]9999;overlay;${data}` + String.fromCharCode(7);
-    // Use OSC (Operating System Command) format that won't display as text
-    // Write directly through the screen's program which handles output
-    this.screen.program.write(osc);
+  private _emitOverlayWidgetEvent(_show: boolean): void {
+    /* Deliberately empty - see above. */
   }
 
   /**
-   * Get overlay opacity
+   * The opacity this overlay was configured with.
+   *
+   * Kept because doors and widgets read it, but it no longer reaches a
+   * screen: a terminal cell has no alpha, so nothing dims. See
+   * `_emitOverlayWidgetEvent`.
    */
   get opacity(): number {
     return this._overlayOpacity;
