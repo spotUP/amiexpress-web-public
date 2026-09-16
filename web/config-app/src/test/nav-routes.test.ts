@@ -129,3 +129,53 @@ describe('legacy paths', () => {
     expect(capabilities).toContain('ComputerList.info');
   });
 });
+
+/**
+ * A PAGE NOBODY IMPORTS IS A PAGE NOBODY CAN OPEN.
+ *
+ * The two tests above check the sidebar against the route table, so they pass
+ * happily while a finished page sits in neither. That is not hypothetical: the
+ * sysop asked for an editor for the login flow, it was built with its own
+ * backend routes and three test files, and it was never routed - "we added a
+ * startup scrips/bulls manager to the admin ui where i can edit the login flow
+ * but i cant find it can you?" (2026-09-16). The comment at the top of this
+ * file says InfoEditorPage was the same, 351 lines, imported by nothing.
+ *
+ * Tests do not count as an importer. They are exactly what makes such a page
+ * look alive.
+ */
+describe('pages that exist but nobody can reach', () => {
+  it('is imported by something other than its own tests', () => {
+    const { readdirSync, statSync } = require('fs') as typeof import('fs');
+    const pagesDir = resolve(__dirname, '..', 'pages');
+    const srcDir = resolve(__dirname, '..');
+
+    /** Every .tsx under src, except the tests - what a user can actually reach through. */
+    const sourceFiles: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        if (statSync(full).isDirectory()) {
+          if (entry === 'test' || entry === 'node_modules') continue;
+          walk(full);
+          continue;
+        }
+        if (entry.endsWith('.tsx') || entry.endsWith('.ts')) sourceFiles.push(full);
+      }
+    };
+    walk(srcDir);
+    const sources = sourceFiles.map((file) => ({ file, text: readFileSync(file, 'utf8') }));
+
+    const orphans = readdirSync(pagesDir)
+      .filter((name) => name.endsWith('Page.tsx'))
+      .map((name) => name.replace(/\.tsx$/, ''))
+      .filter((page) => !sources.some(({ file, text }) =>
+        !file.endsWith(`pages/${page}.tsx`) && text.includes(`/${page}'`)
+      ));
+
+    expect(
+      orphans,
+      `Pages imported by nothing but their tests: ${orphans.join(', ')}`
+    ).toEqual([]);
+  });
+});
