@@ -55,14 +55,13 @@ door.onStart(async (ctx) => {
     (0, door_theme_1.applyTheme)(ctx.bbs);
     const doorDir = path.join(__dirname, '..');
     const settings = (0, settings_1.loadSettings)();
+    // Everything that comes from a SETTING comes through one function, so a
+    // knob that stops being forwarded fails a test rather than quietly editing
+    // into the void. The webhook is an environment variable and the theme is a
+    // constant, so those two are the call site's.
     const cfg = {
-        numTurns: settings.numTurns,
-        startCash: settings.startCash,
-        startDebt: settings.startDebt,
-        debtInterest: settings.debtInterest,
-        bankInterest: settings.bankInterest,
+        ...(0, settings_1.configFieldsFrom)(settings),
         discordWebhook: process.env.DOPEWARS_DISCORD_WEBHOOK ?? '',
-        notifyLivechat: settings.notifyLivechat,
         theme: jamaica_1.JAMAICA_THEME,
     };
     const server = server_1.DopewarsServer.getInstance();

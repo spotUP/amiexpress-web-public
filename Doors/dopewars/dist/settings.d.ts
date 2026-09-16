@@ -42,4 +42,17 @@ export declare function applySettings(raw: Record<string, string | number | bool
  * ever passed by a test standing up a board of its own.
  */
 export declare function loadSettings(from?: string): DopewarsSettings;
+/**
+ * The settings, shaped the way `DopewarsConfig` wants them.
+ *
+ * Every field here comes from a setting and nothing else does: the Discord
+ * webhook is an environment variable and the theme is a constant, so both stay
+ * at the call site in `index.ts`. Extracted 2026-09-16 because the mapping was
+ * written inline in `onStart`, where the only way to check it was to read the
+ * source and look for the word `settings.` once per key - which cannot tell a
+ * forwarded value from a mentioned one.
+ *
+ * A key that stops being forwarded now fails a test that compares VALUES.
+ */
+export declare function configFieldsFrom(settings: DopewarsSettings): DopewarsSettings;
 //# sourceMappingURL=settings.d.ts.map

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_SETTINGS = void 0;
 exports.applySettings = applySettings;
 exports.loadSettings = loadSettings;
+exports.configFieldsFrom = configFieldsFrom;
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 /**
  * What GANJA WARS ran with before it declared anything. A board that sets
@@ -67,5 +68,27 @@ function loadSettings(from = __dirname) {
         console.error('[GanjaWars] settings:', error.message);
         return exports.DEFAULT_SETTINGS;
     }
+}
+/**
+ * The settings, shaped the way `DopewarsConfig` wants them.
+ *
+ * Every field here comes from a setting and nothing else does: the Discord
+ * webhook is an environment variable and the theme is a constant, so both stay
+ * at the call site in `index.ts`. Extracted 2026-09-16 because the mapping was
+ * written inline in `onStart`, where the only way to check it was to read the
+ * source and look for the word `settings.` once per key - which cannot tell a
+ * forwarded value from a mentioned one.
+ *
+ * A key that stops being forwarded now fails a test that compares VALUES.
+ */
+function configFieldsFrom(settings) {
+    return {
+        numTurns: settings.numTurns,
+        startCash: settings.startCash,
+        startDebt: settings.startDebt,
+        debtInterest: settings.debtInterest,
+        bankInterest: settings.bankInterest,
+        notifyLivechat: settings.notifyLivechat,
+    };
 }
 //# sourceMappingURL=settings.js.map

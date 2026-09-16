@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { applySettings, loadSettings, DEFAULT_SETTINGS } from '../../../../Doors/dopewars/src/settings';
+import { applySettings, configFieldsFrom, loadSettings, DEFAULT_SETTINGS } from '../../../../Doors/dopewars/src/settings';
 
 const DOOR_DIR = path.join(__dirname, '../../../../Doors/dopewars');
 const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_DIR, 'door.settings.json'), 'utf8'));
@@ -107,13 +107,42 @@ describe('GANJA WARS settings reach the door', () => {
     expect(loadSettings(doorRoot)).toEqual(DEFAULT_SETTINGS);
   });
 
-  it('builds the config from the settings, not from literals', () => {
-    const source = fs.readFileSync(path.join(DOOR_DIR, 'src/index.ts'), 'utf8');
-    const onStart = source.slice(source.indexOf('door.onStart('));
+  /*
+   * REWRITTEN 2026-09-16, and the DOOR changed with it. This used to slice
+   * `index.ts` from "door.onStart(" and check that the text mentioned
+   * `settings.<key>` once per key - which cannot tell a value that is
+   * FORWARDED from one that is merely named, and passes on a line like
+   * `numTurns: 30, // was settings.numTurns`.
+   *
+   * The mapping lives in `configFieldsFrom` now, so the test compares values.
+   */
+  it('forwards every sysop value into the config the game is initialised with', () => {
+    // Values that are not the defaults, so a field wired to the wrong source
+    // cannot pass by coincidence.
+    const set = {
+      numTurns: 61, startCash: 1234, startDebt: 4321,
+      debtInterest: 13, bankInterest: 7, notifyLivechat: false,
+    };
 
-    expect(onStart).toContain('loadSettings()');
-    for (const key of Object.keys(DEFAULT_SETTINGS)) {
-      expect(onStart).toContain(`settings.${key}`);
-    }
+    expect(configFieldsFrom(set)).toEqual(set);
+  });
+
+  it('forwards the shipped values untouched when the sysop set nothing', () => {
+    expect(configFieldsFrom(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it('carries every declared key, so a new knob cannot be added and dropped', () => {
+    // The manifest, the defaults and the config now agree by construction -
+    // this is the third side of that triangle.
+    expect(Object.keys(configFieldsFrom(DEFAULT_SETTINGS)).sort())
+      .toEqual(Object.keys(DEFAULT_SETTINGS).sort());
+  });
+
+  it('is what the door actually builds its config from', () => {
+    // The wiring claim, and the one thing a runtime check cannot make from
+    // outside: that `onStart` spreads the function rather than rebuilding the
+    // literal. One line, not a shape.
+    const source = fs.readFileSync(path.join(DOOR_DIR, 'src/index.ts'), 'utf8');
+    expect(source).toContain('...configFieldsFrom(settings)');
   });
 });
