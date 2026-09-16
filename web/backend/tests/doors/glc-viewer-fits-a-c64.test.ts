@@ -180,19 +180,22 @@ describe('the placeholder logo the door ships', () => {
     for (const row of rows) expect(printableWidth(row)).toBeLessThanOrEqual(NARROW_WIDTH);
   });
 
-  it('is drawn with a PRINTABLE glyph, not reverse video and not a block', () => {
+  it('is drawn with REVERSE VIDEO, which is what a solid block IS in PETSCII', () => {
     /*
-     * Three encodings were tried and only this one survives to a C64 screen:
-     *  - U+2588 is not a latin-1 byte, and these files are read as latin-1;
-     *  - reverse-video spaces transduce correctly (`12 20 20 92` on the wire,
-     *    `a0` in the PETSCII machine, which IS a solid cell) and still came
-     *    out blank on the board, alongside a title bar that lost its blue
-     *    background - something on that path normalises colour and reverse.
-     * A placeholder has to be visible on the board the sysop has.
+     * `█` maps to `R(0x20)` in this board's own table
+     * (`unicode-to-petscii.ts:85`): there is no separate block glyph, a
+     * block is a reversed space. BBSTITLE.SEQ draws its 192 of them the same
+     * way. The one evening this looked broken, the art was never on the wire
+     * at all - the door was reading its files from the wrong directory
+     * (`door-root.ts`), and a printable-glyph placeholder was tried against
+     * a bug that did not exist.
+     *
+     * U+2588 itself cannot be used: it is not a latin-1 byte and these files
+     * are read as latin-1.
      */
-    expect(placeholder(1)).not.toContain('\x1b[7m');
+    expect(placeholder(1)).toContain('\x1b[7m');
+    expect(placeholder(1)).toContain('\x1b[27m');
     expect(placeholder(1)).not.toMatch(/[\u2580-\u259F]/);
-    expect(placeholder(1)).toContain('#');
   });
 });
 

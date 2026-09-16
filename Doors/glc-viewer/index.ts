@@ -28,6 +28,7 @@ import {
   narrowBody, narrowHeader, narrowListRows, narrowSkeletonRow, NARROW_WIDTH,
 } from './src/narrow';
 import { autoLines } from './src/sizing';
+import { doorRootFrom } from './src/door-root';
 import { settleOnto } from './src/settle-paint';
 import { nothingSettled, scrambleFrame, visibleLength } from './src/scramble';
 
@@ -41,15 +42,10 @@ export const metadata = {
 };
 
 /**
- * This door's own directory, found from the file rather than from the process.
- *
- * `process.cwd()` is the BACKEND when a door runs on this board, not the door
- * - `tests/doors/doors-do-not-use-cwd.test.ts` exists because doors kept
- * reading the backend's files by accident. `__dirname` is `src/` in
- * development and `dist/` in production, so the door root is one level up
- * from either.
+ * This door's own directory, FOUND rather than assumed - see src/door-root.ts
+ * for the machine it was wrong on.
  */
-const DOOR_ROOT = path.resolve(__dirname, '..');
+const DOOR_ROOT = doorRootFrom(__dirname);
 
 interface GLCConfig {
   serverHost: string;

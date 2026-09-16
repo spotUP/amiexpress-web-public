@@ -60,6 +60,7 @@ const skeleton_1 = require("./src/skeleton");
 const fetch_deadline_1 = require("./src/fetch-deadline");
 const narrow_1 = require("./src/narrow");
 const sizing_1 = require("./src/sizing");
+const door_root_1 = require("./src/door-root");
 const settle_paint_1 = require("./src/settle-paint");
 const scramble_1 = require("./src/scramble");
 // Metadata
@@ -71,15 +72,10 @@ exports.metadata = {
     command: 'GLC',
 };
 /**
- * This door's own directory, found from the file rather than from the process.
- *
- * `process.cwd()` is the BACKEND when a door runs on this board, not the door
- * - `tests/doors/doors-do-not-use-cwd.test.ts` exists because doors kept
- * reading the backend's files by accident. `__dirname` is `src/` in
- * development and `dist/` in production, so the door root is one level up
- * from either.
+ * This door's own directory, FOUND rather than assumed - see src/door-root.ts
+ * for the machine it was wrong on.
  */
-const DOOR_ROOT = path.resolve(__dirname, '..');
+const DOOR_ROOT = (0, door_root_1.doorRootFrom)(__dirname);
 /**
  * Read a field the server might spell several ways.
  *

@@ -81,7 +81,7 @@ describe('which logo a caller sees', () => {
     // placeholder - and never style 1's variant.
     const drawn = ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } });
     expect(drawn.join('\n')).not.toContain('STYLE ONE ONLY');
-    expect(drawn.join('')).toContain('#');   // the shipped placeholder
+    expect(drawn.join('')).toContain('\x1b[7m');   // the shipped placeholder, in reverse video
   });
 
   it('refuses a setting that points outside the door\'s own folder', () => {
