@@ -21,6 +21,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { renderGlcScreen } from './src/render';
+import { logoFor } from './src/logo';
 
 // Metadata
 export const metadata = {
@@ -367,6 +368,45 @@ async function fetchGLCData(config: GLCConfig, page: number = 1): Promise<string
  * Display GLC data with ANSI art
  */
 /**
+ * The board root, for the Studio's variant store, or null when it cannot be
+ * found. A door that cannot see the board still draws - it just draws the
+ * wide logo.
+ */
+function boardRoot(): string | null {
+  try {
+    const { resolveBbsRoot } = require('@amiexpress/bbs-door-sdk/settings');
+    const root = resolveBbsRoot(__dirname);
+    return typeof root === 'string' && root.length > 0 ? root : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What the admin saved for this door, or nothing at all. */
+function settingValues(): Record<string, unknown> {
+  try {
+    const { readDoorSettings } = require('@amiexpress/bbs-door-sdk/settings');
+    const values = readDoorSettings(__dirname);
+    return values && typeof values === 'object' ? values as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * How wide the caller's screen is.
+ *
+ * Forty means a C64 or a teletext caller, and the narrow logo. The board
+ * hands a door its session; a door that is handed nothing assumes the wide
+ * screen, which is what every ANSI caller has.
+ */
+function columnsOf(ctx: DoorContext): number {
+  const session = (ctx as unknown as { bbsSession?: { screenWidth?: number } }).bbsSession;
+  const width = Number(session?.screenWidth ?? 80);
+  return Number.isFinite(width) && width > 0 ? width : 80;
+}
+
+/**
  * Draw the screen, through the renderer that is pinned to the E source.
  *
  * This function used to BE the renderer, and it drew an approximation: five
@@ -384,9 +424,20 @@ function displayData(
   data: GLCData,
   config: GLCConfig,
   showLocation: boolean,
+  callerColumns: number,
 ): void {
   const lines = renderGlcScreen({
     style: config.style,
+    // The artist's drawing when there is one, the original's when there is
+    // not - and the narrow one for a caller on forty columns.
+    logo: logoFor({
+      style: config.style,
+      doorDir: DOOR_ROOT,
+      bbsRoot: boardRoot(),
+      columns: callerColumns,
+      values: settingValues(),
+      command: 'GLC',
+    }),
     screenClear: config.screenClear,
     showLocation,
     centreName: config.centreName,
@@ -448,7 +499,7 @@ door.onStart(async (ctx: DoorContext) => {
 
     // Display data
     const showLocation = config.viewBBS.length > 0;
-    displayData(socket, glcData, config, showLocation);
+    displayData(socket, glcData, config, showLocation, columnsOf(ctx));
 
   } catch (err: any) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);

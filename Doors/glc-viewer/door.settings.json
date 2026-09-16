@@ -1,0 +1,128 @@
+{
+  "command": "GLC",
+  "name": "Global Last Callers",
+  "description": "Who has called every BBS on the scenewall, and this board's place among them",
+  "cfgFile": "GLCViewer.cfg",
+  "settings": [
+    {
+      "key": "serverHost",
+      "cfgKey": "SERVERHOST",
+      "label": "Scenewall server",
+      "type": "string",
+      "default": "scenewall.bbs.io",
+      "help": "Where the global list comes from. Every AmiExpress board sends its callers to the same place."
+    },
+    {
+      "key": "serverPort",
+      "cfgKey": "SERVERPORT",
+      "label": "Server port",
+      "type": "string",
+      "default": "11541",
+      "help": "The scenewall's port."
+    },
+    {
+      "key": "timeout",
+      "cfgKey": "TIMEOUT",
+      "label": "Seconds to wait",
+      "type": "string",
+      "default": "10",
+      "help": "Seconds to wait for the server. A caller waits this long at most; the screen is drawn either way."
+    },
+    {
+      "key": "retries",
+      "cfgKey": "RETRIES",
+      "label": "Retries",
+      "type": "string",
+      "default": "5",
+      "help": "How many times a failed fetch is tried again before the door gives up and draws what it has."
+    },
+    {
+      "key": "tempFile",
+      "cfgKey": "TEMPFILE",
+      "label": "Working file",
+      "type": "string",
+      "default": "t:jsondata",
+      "help": "Where the 68K viewer spooled the server's answer. Kept so both doors can share one config file."
+    },
+    {
+      "key": "lines",
+      "cfgKey": "LINES",
+      "label": "Callers to show",
+      "type": "string",
+      "default": "20",
+      "help": "How many callers to ask the server for."
+    },
+    {
+      "key": "screenClear",
+      "cfgKey": "SCREENCLEAR",
+      "label": "Clear the screen first",
+      "type": "string",
+      "default": "YES",
+      "help": "YES clears the caller's screen before the list. The clear rides on the first logo line, as the original sends it."
+    },
+    {
+      "key": "style",
+      "cfgKey": "STYLE",
+      "label": "Style",
+      "type": "string",
+      "default": "3",
+      "help": "1 to 4, or a comma-separated list for a random pick each call - the logos below are numbered to match."
+    },
+    {
+      "key": "centreName",
+      "cfgKey": "CENTRENAME",
+      "label": "Centre the name column",
+      "type": "string",
+      "default": "1",
+      "help": "1 centres the name column, padding it out to 21 characters a space at a time."
+    },
+    {
+      "key": "timeZone",
+      "cfgKey": "TIMEZONE",
+      "label": "Time zone",
+      "type": "string",
+      "default": "GMT Standard Time",
+      "help": "Windows naming, because the scenewall server is what reads it."
+    },
+    {
+      "key": "logo1",
+      "label": "Logo, style 1",
+      "type": "string",
+      "art": true,
+      "default": "art/style1.ans",
+      "artMaxLines": 8,
+      "artMaxLineLength": 80,
+      "help": "Five lines of ANSI above the title bar. Draw a 40-column version beside it and a C64 caller reads that instead."
+    },
+    {
+      "key": "logo2",
+      "label": "Logo, style 2",
+      "type": "string",
+      "art": true,
+      "default": "art/style2.ans",
+      "artMaxLines": 8,
+      "artMaxLineLength": 80,
+      "help": "Five lines of ANSI above the title bar. Draw a 40-column version beside it and a C64 caller reads that instead."
+    },
+    {
+      "key": "logo3",
+      "label": "Logo, style 3",
+      "type": "string",
+      "art": true,
+      "default": "art/style3.ans",
+      "artMaxLines": 8,
+      "artMaxLineLength": 80,
+      "help": "Five lines of ANSI above the title bar. Draw a 40-column version beside it and a C64 caller reads that instead."
+    },
+    {
+      "key": "logo4",
+      "label": "Logo, style 4",
+      "type": "string",
+      "art": true,
+      "default": "art/style4.ans",
+      "artMaxLines": 8,
+      "artMaxLineLength": 80,
+      "help": "Five lines of ANSI above the title bar. Draw a 40-column version beside it and a C64 caller reads that instead."
+    }
+  ]
+}

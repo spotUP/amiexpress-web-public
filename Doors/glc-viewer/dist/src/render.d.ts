@@ -39,6 +39,14 @@ export interface GlcScreen {
     showLocation: boolean;
     /** CENTRENAME=YES: pad the name column out to 21 and re-centre it. */
     centreName: boolean;
+    /**
+     * The five lines above the title bar.
+     *
+     * Absent means the original's, which is what a board that has never opened
+     * the Studio draws. `logo.ts` decides which file answers; this stays a list
+     * of lines so the renderer has no idea a file exists.
+     */
+    logo?: readonly string[];
     calls: readonly GlcCall[];
     yesterday: GlcDayStats;
     previousDay: GlcDayStats;

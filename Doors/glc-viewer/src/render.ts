@@ -61,6 +61,14 @@ export interface GlcScreen {
   showLocation: boolean;
   /** CENTRENAME=YES: pad the name column out to 21 and re-centre it. */
   centreName: boolean;
+  /**
+   * The five lines above the title bar.
+   *
+   * Absent means the original's, which is what a board that has never opened
+   * the Studio draws. `logo.ts` decides which file answers; this stays a list
+   * of lines so the renderer has no idea a file exists.
+   */
+  logo?: readonly string[];
   calls: readonly GlcCall[];
   yesterday: GlcDayStats;
   previousDay: GlcDayStats;
@@ -98,7 +106,9 @@ export function renderGlcScreen(screen: GlcScreen): string[] {
   const style = screen.style >= 1 && screen.style <= 4 ? screen.style : 1;
   const firstPair = style === 1 || style === 3;
 
-  const logo = firstPair ? LOGO_STYLE_1_3 : LOGO_STYLE_2_4;
+  const logo = screen.logo && screen.logo.length > 0
+    ? screen.logo
+    : (firstPair ? LOGO_STYLE_1_3 : LOGO_STYLE_2_4);
   const banner = firstPair ? BANNER_1_3 : BANNER_2_4;
   const columns = firstPair
     ? (screen.showLocation ? COLUMNS_LOCATION_1_3 : COLUMNS_BBS_1_3)

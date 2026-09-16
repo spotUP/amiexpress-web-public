@@ -40,7 +40,9 @@ function clamp(value, width, ceiling) {
 function renderGlcScreen(screen) {
     const style = screen.style >= 1 && screen.style <= 4 ? screen.style : 1;
     const firstPair = style === 1 || style === 3;
-    const logo = firstPair ? art_generated_1.LOGO_STYLE_1_3 : art_generated_1.LOGO_STYLE_2_4;
+    const logo = screen.logo && screen.logo.length > 0
+        ? screen.logo
+        : (firstPair ? art_generated_1.LOGO_STYLE_1_3 : art_generated_1.LOGO_STYLE_2_4);
     const banner = firstPair ? art_generated_1.BANNER_1_3 : art_generated_1.BANNER_2_4;
     const columns = firstPair
         ? (screen.showLocation ? art_generated_1.COLUMNS_LOCATION_1_3 : art_generated_1.COLUMNS_BBS_1_3)
