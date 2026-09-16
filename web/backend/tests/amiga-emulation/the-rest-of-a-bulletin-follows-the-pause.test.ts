@@ -42,6 +42,12 @@ beforeAll(() => {
   fs.mkdirSync(path.join(tmpDir, 'Bulletins'), { recursive: true });
   fs.writeFileSync(path.join(tmpDir, 'Bulletins', 'bull6.txt'), SAMILOG);
   fs.writeFileSync(path.join(tmpDir, 'Bulletins', 'fitted.txt'), FITTED);
+  // The same bulletin as the budget writes it since 2026-09-16 (22 rows for
+  // a 23-row terminal): one caller fewer.
+  const rows22 = FITTED.toString('latin1').split('\n');
+  const lastCaller = rows22.map((l, i) => (/^\x1b\[31m19\.2/.test(l) ? i : -1)).filter((i) => i >= 0).pop()!;
+  rows22.splice(lastCaller, 1);
+  fs.writeFileSync(path.join(tmpDir, 'Bulletins', 'fitted22.txt'), Buffer.from(rows22.join('\n'), 'latin1'));
   // Three screens' worth (57 rows): the bulletin, then its logo and table
   // again, so the pause has to ask twice and the records bar comes once.
   const encore = SAMILOG.toString('latin1').split('\n').slice(1, 21).join('\n');
@@ -223,5 +229,22 @@ describe('the row count, as express.e keeps it', () => {
     const wire = r.out.join('');
     const firstPage = wire.slice(0, wire.indexOf(PROMPT));
     expect(rows(firstPage)).toBe(24);
+  });
+});
+
+describe('a bulletin fitted to the board\'s shortest terminal', () => {
+  it('shows whole on a 23-row terminal with no prompt, after the door printed newlines first', async () => {
+    const r = rig(23, 2);
+    await r.handler.handleShowFile(msg('BBS:Bulletins/fitted22.txt'));
+    const wire = r.out.join('');
+    expect(count(wire, PROMPT)).toBe(0);
+    expect(count(wire, TAILER)).toBe(1);
+    expect(r.replies).toEqual([0x1000]);
+  });
+
+  it('but the 23-row one the old budget wrote does prompt there, which is the sysop\'s report', async () => {
+    const r = rig(23);
+    await r.handler.handleShowFile(msg('BBS:Bulletins/fitted.txt'));
+    expect(count(r.out.join(''), PROMPT)).toBe(1);
   });
 });

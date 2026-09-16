@@ -23,16 +23,20 @@
  *
  * A bulletin is written at LOGOFF, with nobody on the board - there is no
  * caller to ask how tall their terminal is, so it must fit the shortest one
- * it might later be shown on. That is 24: the ANSI standard is 80x24, and
- * this board's own default says so in three places (config.ts,
- * session-manager, index.ts all fall back to `screenHeight: 24`).
+ * it might later be shown on. That is 23: the board's own new-user screen
+ * length (`new_user_lines_per_screen`, database.ts) and the height the
+ * sysop's browser reports - "the screen is 23 lines" (2026-09-16), when a
+ * bulletin fitted to 24 met `(Pause)...More(y/n/ns)?` under its last row in
+ * the Bulls door, one row too tall for a normal terminal. The ANSI 80x24
+ * that the first number came from is the fallback in config.ts, not what a
+ * caller here has.
  *
  * I built the first fit against 25 - the Amiga and C64 convention - and the
- * sysop met `(Pause)...More(y/n/ns)?` on a bulletin the suite called fitted
- * (2026-09-15). Fitting the shorter terminal fits the taller one too; the
- * reverse is what shipped.
+ * sysop met the prompt on a bulletin the suite called fitted (2026-09-15);
+ * then against 24, and met it again. Fitting the shorter terminal fits the
+ * taller one too; the reverse is what shipped, twice.
  */
-export const SHORTEST_TERMINAL_ROWS = 24;
+export const SHORTEST_TERMINAL_ROWS = 23;
 
 /** The rows a caller sees - the trailing newline does not make one. */
 export function renderedRows(text: string): number {

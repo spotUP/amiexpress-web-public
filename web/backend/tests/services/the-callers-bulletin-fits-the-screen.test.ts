@@ -139,11 +139,15 @@ describe('the last callers bulletin', () => {
      * screen. Asserting 25 here is exactly how a one-row overflow shipped
      * while this suite was green.
      */
-    const dir = board(6);
+    // A 5-row logo: this fixture's furniture is 12 rows, so the 22-row budget
+    // (23-row terminal, 2026-09-16) leaves exactly the five-caller floor. A
+    // 6-row logo cannot fit any more and stays tall - see the case below.
+    const dir = board(5);
     const text = serviceFor(dir).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS });
 
     // Asked on the SHORTEST terminal a generated screen must fit - the
-    // sysop's is 24, and asserting 25 is what let a one-row overflow ship.
+    // sysop's is 23 now (it was 24 when this was written, and 25 before
+    // that); asserting a taller one is what let a one-row overflow ship.
     expect(paginatesAt(text, SHORTEST_TERMINAL_ROWS)).toBe(false);
     expect(callerRows(text)).toBeGreaterThanOrEqual(5);
   });
@@ -249,5 +253,21 @@ describe('the samilog logo', () => {
   // board's own files.
   test('the board really does keep the logo in Utils/samilog', () => {
     expect(fs.existsSync(path.join(REPO_ROOT, 'Utils', 'samilog', 'samilog.header.txt'))).toBe(true);
+  });
+});
+
+describe('the terminal the bulletin is fitted for', () => {
+  it('is 23 rows - the board\'s new-user screen length and the sysop\'s browser - not the ANSI 24', () => {
+    // 2026-09-16: fitted to 24, the bulletin was one row too tall for a
+    // normal terminal and the Bulls door put the prompt under its last row.
+    expect(SHORTEST_TERMINAL_ROWS).toBe(23);
+    expect(GENERATED_SCREEN_ROWS).toBe(22);
+    const dir = boardWith(5);
+    try {
+      const text = serviceFor(dir).generateBulletin(20, { fitRows: GENERATED_SCREEN_ROWS, minCallers: 1 });
+      expect(paginatesAt(text, 23)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
