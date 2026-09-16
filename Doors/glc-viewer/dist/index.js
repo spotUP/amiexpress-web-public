@@ -425,6 +425,32 @@ function rowsOf(ctx) {
     return Number.isFinite(rows) && Number(rows) > 0 ? Number(rows) : 22;
 }
 /**
+ * The command this door was launched as.
+ *
+ * It matters because the BOARD files things under it: the ANSI Studio writes
+ * a C64 logo to `Screens/doors/<CMD>/`, keyed by the REGISTERED command, and
+ * a door that guessed `GLC` while registered as `GL` would never find the
+ * drawing an artist made (2026-09-16).
+ *
+ * The board records it on the session for every door now; the manifest's own
+ * `command` is the fallback for an older host, and `GL` the last resort.
+ */
+function commandOf(ctx) {
+    const session = ctx.bbsSession;
+    const launched = session?.doorCommand;
+    if (typeof launched === 'string' && launched.trim().length > 0)
+        return launched.trim().toUpperCase();
+    try {
+        const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_ROOT, 'door.settings.json'), 'utf8'));
+        if (manifest.command)
+            return manifest.command.toUpperCase();
+    }
+    catch {
+        /* a door with no manifest still draws */
+    }
+    return 'GL';
+}
+/**
  * Enough empty data to render a header.
  *
  * `renderGlcHeader` reads none of it, but the screen type is one object and
@@ -446,7 +472,7 @@ const EMPTY_DATA = {
  * Returns the screen it drew from, so the caller can finish it with the same
  * style and the same columns once the scenewall answers.
  */
-function drawHeader(socket, config, showLocation, callerColumns) {
+function drawHeader(socket, config, showLocation, callerColumns, command) {
     const base = {
         style: config.style,
         screenClear: config.screenClear,
@@ -460,7 +486,7 @@ function drawHeader(socket, config, showLocation, callerColumns) {
             bbsRoot: boardRoot(),
             columns: callerColumns,
             values: settingValues(),
-            command: 'GLC',
+            command,
         }),
         columns: callerColumns,
         animate: config.animate,
@@ -489,7 +515,7 @@ function drawHeader(socket, config, showLocation, callerColumns) {
  * back over exactly those and each real row is written with the row cleared
  * first, so a short list cannot leave a placeholder showing under it.
  */
-function drawData(socket, base, data, skeletonCount) {
+async function drawData(socket, base, data, skeletonCount) {
     const screen = {
         ...base,
         calls: data.calls.map((call) => ({
@@ -519,7 +545,7 @@ function drawData(socket, base, data, skeletonCount) {
             yesterday: screen.yesterday,
             records: screen.records,
         });
-        const painted = (0, settle_paint_1.settleOnto)(socket, body, skeletonCount, { animate: base.animate });
+        const painted = await (0, settle_paint_1.settleOnto)(socket, body, skeletonCount, { animate: base.animate });
         // A placeholder the shorter list did not reach is cleared, not left.
         for (let i = painted; i < skeletonCount; i++) {
             socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
@@ -527,7 +553,7 @@ function drawData(socket, base, data, skeletonCount) {
         return;
     }
     const rows = (0, render_1.renderGlcRows)(screen);
-    const painted = (0, settle_paint_1.settleOnto)(socket, rows, skeletonCount, { animate: base.animate });
+    const painted = await (0, settle_paint_1.settleOnto)(socket, rows, skeletonCount, { animate: base.animate });
     // Any placeholder the real list did not reach is cleared rather than left
     // standing: the server can answer with fewer callers than were asked for.
     for (let i = painted; i < skeletonCount; i++) {
@@ -560,7 +586,7 @@ door.onStart(async (ctx) => {
          */
         if (config.lines === AUTO_LINES)
             config.lines = (0, sizing_1.autoLines)(rowsOf(ctx));
-        const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
+        const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx));
         /*
          * A FORTY-COLUMN LIST SIZES ITSELF.
          *
@@ -631,7 +657,7 @@ door.onStart(async (ctx) => {
             for (let i = 1; i < placeholders.length; i++) {
                 socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
             }
-            drawData(socket, base, normalizeGLCData({}), 0);
+            await drawData(socket, base, normalizeGLCData({}), 0);
             return;
         }
         let glcData;
@@ -644,10 +670,10 @@ door.onStart(async (ctx) => {
             for (let i = 1; i < placeholders.length; i++) {
                 socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
             }
-            drawData(socket, base, normalizeGLCData({}), 0);
+            await drawData(socket, base, normalizeGLCData({}), 0);
             return;
         }
-        drawData(socket, base, glcData, placeholders.length);
+        await drawData(socket, base, glcData, placeholders.length);
         if (source === 'cache') {
             // The caller should know the list is the last one that arrived rather
             // than the one that is true this second.

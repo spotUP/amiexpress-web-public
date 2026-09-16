@@ -2334,6 +2334,19 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
   const originalSubState = session.subState;
 
   /*
+   * WHICH COMMAND THIS DOOR WAS LAUNCHED AS.
+   *
+   * `executeAmigaDoor` has always recorded it for XIMProtocol; a TypeScript
+   * door was told nothing, so it could only guess its own name - and a door
+   * that guesses wrong looks in the wrong place for anything the BOARD files
+   * under its command. GLC-VIEWER reads its C64 logo from
+   * `Screens/doors/<CMD>/`, which the ANSI Studio writes under the REGISTERED
+   * command, and it is registered as GL (2026-09-16).
+   */
+  (session as any).doorCommand = door.command;
+  (session as any).doorId = door.command;
+
+  /*
    * Which key repeat this door wants, recorded BEFORE any door code runs.
    *
    * A server door reaches game mode by calling `bbs.enableGameMode()` from

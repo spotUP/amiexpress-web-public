@@ -2,7 +2,7 @@
   "name": "glc-viewer-door",
   "version": "1.1.0",
   "description": "Global Last Callers Viewer",
-  "bbsCommand": "GLC",
+  "bbsCommand": "GL",
   "main": "dist/index.js",
   "author": "REBEL/qUARTEX",
   "license": "MIT",

@@ -1,5 +1,5 @@
 {
-  "command": "GLC",
+  "command": "GL",
   "name": "Global Last Callers",
   "description": "Who has called every BBS on the scenewall, and this board's place among them",
   "cfgFile": "GLCViewer.cfg",

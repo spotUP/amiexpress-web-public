@@ -109,51 +109,81 @@ describe('painting the table over its placeholders', () => {
     return { written, emit: (_event: string, payload: string) => written.push(payload) };
   };
 
+  /** No real waiting in a test, but the frames still happen in order. */
+  const instantly = async () => {};
+
   const TABLE = ['\x1b[36mONE', '\x1b[36mTWO'];
 
-  it('ends with the real table, whatever the frames did', () => {
+  it('ends with the real table, whatever the frames did', async () => {
     const w = wire();
-    settleOnto(w, TABLE, 2, { animate: true, frames: 3, random: sequence([0.1, 0.6]) });
+    await settleOnto(w, TABLE, 2, { animate: true, frames: 3, random: sequence([0.1, 0.6]), sleep: instantly });
 
     const tail = w.written.slice(-2).map((line) => line.replace('\x1b[K', ''));
     expect(tail).toEqual(TABLE.map((line) => line + '\r\n'));
   });
 
-  it('walks back over the placeholders before its first frame', () => {
+  it('walks back over the placeholders before its first frame', async () => {
     const w = wire();
-    settleOnto(w, TABLE, 2, { animate: true, frames: 2, random: sequence([0.3]) });
-    // Two rows on screen, two cursor-ups, before anything is drawn.
+    await settleOnto(w, TABLE, 2, { animate: true, frames: 2, random: sequence([0.3]), sleep: instantly });
     expect(w.written[0]).toBe('\x1b[A\x1b[A');
   });
 
-  it('writes each later frame over the frame before it, not over the placeholders', () => {
+  it('writes each later frame over the frame before it, not over the placeholders', async () => {
     const w = wire();
-    settleOnto(w, ['\x1b[36mABCDEFGH'], 5, { animate: true, frames: 3, random: sequence([0.2, 0.8]) });
+    await settleOnto(w, ['\x1b[36mABCDEFGH'], 5, {
+      animate: true, frames: 3, random: sequence([0.2, 0.8]), sleep: instantly,
+    });
 
     const rewinds = w.written.filter((line) => line.startsWith('\x1b[A'));
-    // The first rewind clears five placeholder rows; every one after it
-    // steps back over the ONE row this table has.
     expect(rewinds[0]).toBe('\x1b[A'.repeat(5));
     for (const rewind of rewinds.slice(1)) expect(rewind).toBe('\x1b[A');
   });
 
-  it('clears each row before drawing on it, so a shorter value cannot leave a tail', () => {
+  it('WAITS between frames, or the terminal paints only the last one', async () => {
+    // The first cut emitted every frame in one synchronous loop and the table
+    // appeared all at once: "the scramble animation reveals all real
+    // characters at the same time" (sysop, 2026-09-16).
+    const waits: number[] = [];
+    await settleOnto(wire(), TABLE, 2, {
+      animate: true, frames: 4, frameMs: 60, random: sequence([0.4]),
+      sleep: async (ms) => { waits.push(ms); },
+    });
+    expect(waits.length).toBeGreaterThan(1);
+    for (const ms of waits) expect(ms).toBe(60);
+  });
+
+  it('settles a short cell before a long one, which is what makes it a fade', async () => {
+    // A share of each row finishes every row on the same frame however long
+    // it is; a small constant per frame lets the short ones stop early.
     const w = wire();
-    settleOnto(w, TABLE, 2, { animate: false });
+    await settleOnto(w, ['AB', '\x1b[36mABCDEFGHIJKLMNOPQRST'], 0, {
+      animate: true, frames: 10, random: sequence([0.5]), sleep: instantly,
+    });
+
+    // Somewhere in the middle the short row is finished and the long one is
+    // not - that difference IS the cross-fade.
+    const frames = w.written.filter((line) => line.startsWith('\x1b[K')).map((l) => l.slice(3, -2));
+    const shortDone = frames.findIndex((line, i) => i % 2 === 0 && line === 'AB');
+    const longStillMoving = frames.some((line, i) => i % 2 === 1 && i > shortDone && !line.endsWith('T'));
+    expect(shortDone).toBeGreaterThanOrEqual(0);
+    expect(longStillMoving).toBe(true);
+  });
+
+  it('clears each row before drawing on it, so a shorter value cannot leave a tail', async () => {
+    const w = wire();
+    await settleOnto(w, TABLE, 2, { animate: false });
     for (const line of w.written.filter((l) => !l.startsWith('\x1b[A'))) {
       expect(line.startsWith('\x1b[K')).toBe(true);
     }
   });
 
-  it('draws once when the board asked for no animation', () => {
+  it('draws once when the board asked for no animation', async () => {
     const w = wire();
-    settleOnto(w, TABLE, 2, { animate: false });
-    // One rewind, two rows, and nothing else on the wire.
+    await settleOnto(w, TABLE, 2, { animate: false });
     expect(w.written).toHaveLength(3);
   });
 
-  it('reports how many rows it left on screen, so the rest can be cleared', () => {
-    const w = wire();
-    expect(settleOnto(w, TABLE, 9, { animate: false })).toBe(2);
+  it('reports how many rows it left on screen, so the rest can be cleared', async () => {
+    expect(await settleOnto(wire(), TABLE, 9, { animate: false })).toBe(2);
   });
 });

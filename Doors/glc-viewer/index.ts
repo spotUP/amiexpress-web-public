@@ -477,6 +477,33 @@ function rowsOf(ctx: DoorContext): number {
   return Number.isFinite(rows) && Number(rows) > 0 ? Number(rows) : 22;
 }
 
+/**
+ * The command this door was launched as.
+ *
+ * It matters because the BOARD files things under it: the ANSI Studio writes
+ * a C64 logo to `Screens/doors/<CMD>/`, keyed by the REGISTERED command, and
+ * a door that guessed `GLC` while registered as `GL` would never find the
+ * drawing an artist made (2026-09-16).
+ *
+ * The board records it on the session for every door now; the manifest's own
+ * `command` is the fallback for an older host, and `GL` the last resort.
+ */
+function commandOf(ctx: DoorContext): string {
+  const session = (ctx as unknown as { bbsSession?: { doorCommand?: string } }).bbsSession;
+  const launched = session?.doorCommand;
+  if (typeof launched === 'string' && launched.trim().length > 0) return launched.trim().toUpperCase();
+
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(DOOR_ROOT, 'door.settings.json'), 'utf8'),
+    ) as { command?: string };
+    if (manifest.command) return manifest.command.toUpperCase();
+  } catch {
+    /* a door with no manifest still draws */
+  }
+  return 'GL';
+}
+
 /** What the header needs: everything that does not depend on the server. */
 type GlcScreenBase = {
   style: number;
@@ -518,6 +545,7 @@ function drawHeader(
   config: GLCConfig,
   showLocation: boolean,
   callerColumns: number,
+  command: string,
 ): GlcScreenBase {
   const base: GlcScreenBase = {
     style: config.style,
@@ -532,7 +560,7 @@ function drawHeader(
       bbsRoot: boardRoot(),
       columns: callerColumns,
       values: settingValues(),
-      command: 'GLC',
+      command,
     }),
     columns: callerColumns,
     animate: config.animate,
@@ -564,12 +592,12 @@ function drawHeader(
  * back over exactly those and each real row is written with the row cleared
  * first, so a short list cannot leave a placeholder showing under it.
  */
-function drawData(
+async function drawData(
   socket: SocketIOSocket,
   base: GlcScreenBase,
   data: GLCData,
   skeletonCount: number,
-): void {
+): Promise<void> {
   const screen = {
     ...base,
     calls: data.calls.map((call) => ({
@@ -600,7 +628,7 @@ function drawData(
       yesterday: screen.yesterday,
       records: screen.records,
     });
-    const painted = settleOnto(socket, body, skeletonCount, { animate: base.animate });
+    const painted = await settleOnto(socket, body, skeletonCount, { animate: base.animate });
     // A placeholder the shorter list did not reach is cleared, not left.
     for (let i = painted; i < skeletonCount; i++) {
       socket.emit('ansi-output', overwrite('') + '\r\n');
@@ -609,7 +637,7 @@ function drawData(
   }
 
   const rows = renderGlcRows(screen);
-  const painted = settleOnto(socket, rows, skeletonCount, { animate: base.animate });
+  const painted = await settleOnto(socket, rows, skeletonCount, { animate: base.animate });
   // Any placeholder the real list did not reach is cleared rather than left
   // standing: the server can answer with fewer callers than were asked for.
   for (let i = painted; i < skeletonCount; i++) {
@@ -648,7 +676,7 @@ door.onStart(async (ctx: DoorContext) => {
      */
     if (config.lines === AUTO_LINES) config.lines = autoLines(rowsOf(ctx));
 
-    const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
+    const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx));
 
     /*
      * A FORTY-COLUMN LIST SIZES ITSELF.
@@ -723,7 +751,7 @@ door.onStart(async (ctx: DoorContext) => {
       for (let i = 1; i < placeholders.length; i++) {
         socket.emit('ansi-output', overwrite('') + '\r\n');
       }
-      drawData(socket, base, normalizeGLCData({}), 0);
+      await drawData(socket, base, normalizeGLCData({}), 0);
       return;
     }
 
@@ -736,11 +764,11 @@ door.onStart(async (ctx: DoorContext) => {
       for (let i = 1; i < placeholders.length; i++) {
         socket.emit('ansi-output', overwrite('') + '\r\n');
       }
-      drawData(socket, base, normalizeGLCData({}), 0);
+      await drawData(socket, base, normalizeGLCData({}), 0);
       return;
     }
 
-    drawData(socket, base, glcData, placeholders.length);
+    await drawData(socket, base, glcData, placeholders.length);
 
     if (source === 'cache') {
       // The caller should know the list is the last one that arrived rather
