@@ -36,6 +36,7 @@ import {
   Users,
   Zap,
   FileImage,
+  ListOrdered,
   Newspaper,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -111,6 +112,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu', keywords: ['Global Wall'] },
       { path: 'screens', label: 'Screens', icon: FileImage, minLevel: 100, description: "Every screen the board can display, and the themes that are sets of them", keywords: ['Screen Files', 'Screen Themes', 'Theme', 'Themes', 'Artist', 'ANSI', 'PETSCII', 'RIP', 'Art'] },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
+      { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },
     ],
   },

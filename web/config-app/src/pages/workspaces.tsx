@@ -29,7 +29,6 @@ import { ScreenFilesPage } from './ScreenFilesPage';
 import { ArtistStudioPage } from './ArtistStudioPage';
 import { ScreenThemesPage } from './ScreenThemesPage';
 import { QuestionnairePage } from './QuestionnairePage';
-import { LoginSequencePage } from './LoginSequencePage';
 import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
 import { FileCheckersPage } from './FileCheckersPage';
@@ -171,9 +170,6 @@ const SCREEN_TABS: TabDefinition[] = [
   // their themes" - so a sysop gets the SAME page an artist gets, with every
   // theme in its picker, rather than a second tool that could disagree with it.
   { id: 'studio', label: 'Artist studio', render: () => <ArtistStudioPage /> },
-  // What a caller is shown on the way IN, as a list the sysop can tick rather
-  // than a screen file on a volume he cannot reach.
-  { id: 'login-sequence', label: 'Login sequence', render: () => <LoginSequencePage /> },
   { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
 ];
 
