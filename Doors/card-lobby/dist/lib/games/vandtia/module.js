@@ -82,6 +82,10 @@ class VandtiaGameModule {
     // ------------------------------------------------------------------
     // Starting
     // ------------------------------------------------------------------
+    /** What this caller was dealt, for the door's deal animation. */
+    dealtHand(table, userId) {
+        return this.load(table)?.engine.playerById(userId)?.hand ?? [];
+    }
     async start(table) {
         try {
             await this.host.reloadState();
@@ -402,6 +406,14 @@ class VandtiaGameModule {
             this.selectedCardIndex = null;
             this.host.pushEvent(result.message);
             this.save(fresh, loaded.engine, loaded.beforeStacks);
+            /*
+             * A card that turns the pile away is SEEN landing on it first. The pile
+             * comes from the engine's own report (`VandtiaResult.burned`) - the
+             * door must not rebuild it, or the burn rule would live in two places.
+             */
+            if (result.burned) {
+                await this.host.cardAnimator.burn(result.burned.pile.map((card) => ({ kind: 'standard', card: card })));
+            }
             await this.host.persistState();
             await this.advance(fresh);
         });

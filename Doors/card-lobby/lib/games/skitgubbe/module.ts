@@ -204,6 +204,11 @@ export class SkitgubbeGameModule implements TableGameModule {
     return tableId ? this.host.findTableById(tableId) ?? null : null;
   }
 
+  /** What this caller was dealt, for the door's deal animation. */
+  public dealtHand(table: LobbyTable, userId: string): unknown[] {
+    return this.load(table)?.engine.playerById(userId)?.hand ?? [];
+  }
+
   /** The card a second press of the same key - or ENTER - would play. */
   public selectedCard(): number | null {
     return this.selectedCardIndex;

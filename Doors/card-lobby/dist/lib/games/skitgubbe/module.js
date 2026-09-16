@@ -162,6 +162,10 @@ class SkitgubbeGameModule {
         const tableId = this.host.currentProfile?.currentTableId;
         return tableId ? this.host.findTableById(tableId) ?? null : null;
     }
+    /** What this caller was dealt, for the door's deal animation. */
+    dealtHand(table, userId) {
+        return this.load(table)?.engine.playerById(userId)?.hand ?? [];
+    }
     /** The card a second press of the same key - or ENTER - would play. */
     selectedCard() {
         return this.selectedCardIndex;

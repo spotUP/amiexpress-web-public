@@ -43,6 +43,16 @@ class CardButtons {
     underlays() {
         return this.unders.filter((under) => !under.hidden);
     }
+    /**
+     * The inside width of the panel these cards are drawn in.
+     *
+     * The animator asks so it knows where OFF the panel is - a card slides in
+     * from beyond the right edge, and only the renderer knows where that edge
+     * is for this row.
+     */
+    panelWidth() {
+        return Math.max(0, (Number(this.host.panel.width) || 0) - 2);
+    }
     clear() {
         for (const button of this.buttons)
             button.hide();

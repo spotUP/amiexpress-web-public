@@ -19,6 +19,8 @@ import type { TableGameModule, TableGamePainter, GameHintKind } from './types';
 export interface LegacyGameHost {
   /** Which UNO card the caller has picked, if any. */
   readonly selectedUnoCardIndex: number | null;
+  /** The cards an UNO player is holding, for the deal animation. */
+  unoHandFor(table: LobbyTable, userId: string): unknown[];
   startHoldemHand(table: LobbyTable): Promise<void>;
   startUnoGame(table: LobbyTable): Promise<void>;
   selectUnoCard(index: number): void;
@@ -78,6 +80,10 @@ export class UnoGameModule implements TableGameModule {
   selectCard(index: number): void { this.host.selectUnoCard(index); }
   /** Press the same card key again - or ENTER - and it is played. */
   selectedCard(): number | null { return this.host.selectedUnoCardIndex; }
+  /** What this caller was dealt, for the door's deal animation. */
+  dealtHand(table: LobbyTable, userId: string): unknown[] {
+    return this.host.unoHandFor(table, userId);
+  }
   moveSelection(delta: number): void { this.host.moveUnoSelection(delta); }
   primaryAction(): void { this.host.triggerUnoPlayCard(); }
   secondaryAction(): void { this.host.triggerUnoDrawCard(); }

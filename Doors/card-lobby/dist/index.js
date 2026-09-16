@@ -19,8 +19,9 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
-const refusal_1 = require("./lib/games/refusal");
 const KeyBindings_1 = require("./managers/KeyBindings");
+const CardAnimator_1 = require("./managers/CardAnimator");
+const UnoActions_1 = require("./managers/UnoActions");
 const CardButtons_1 = require("./managers/CardButtons");
 const games_1 = require("./lib/games");
 const lib_1 = require("./lib");
@@ -304,6 +305,14 @@ class CardLobbyApp {
             get cardPreferences() { return uiManagerRef.cardPreferences; },
             get unicodeCapable() { return uiManagerRef.unicodeCapable; },
         });
+        /*
+         * ONE animator for every game, built here beside the two card rows it
+         * draws through. A game that grew its own would grow its own pace and
+         * its own idea of when to skip - the duplication that put fourteen
+         * `isUnoTable()` branches in this file once already.
+         */
+        this.cardAnimator = new CardAnimator_1.CardAnimator(this);
+        this.unoActions = new UnoActions_1.UnoActions(this);
         this.skitgubbe = new games_1.SkitgubbeGameModule(this);
         this.vandtia = new games_1.VandtiaGameModule(this);
         this.patience = new games_1.PatienceGameModule(this);
@@ -588,6 +597,16 @@ class CardLobbyApp {
     // ============================================================================
     // UNO STATE MANAGEMENT
     // ============================================================================
+    /**
+     * The cards an UNO player is holding.
+     *
+     * Read through the engine rather than off the table, so the deal animation
+     * shows the same hand the panel is about to draw.
+     */
+    unoHandFor(table, userId) {
+        const state = this.loadUnoGameState(table)?.engine.getGameState();
+        return state?.players.find((player) => player.id === userId)?.hand ?? [];
+    }
     loadUnoGameState(table) {
         if (!table.hand)
             return null;
@@ -1071,130 +1090,12 @@ class CardLobbyApp {
         this.exitDoor();
     }
     // ============================================================================
-    // UNO ACTION TRIGGERS
+    // UNO ACTION TRIGGERS - managers/UnoActions.ts
     // ============================================================================
-    triggerUnoPlayCard() {
-        if (this.modalActive || !this.currentProfile || !this.lobby)
-            return;
-        const table = this.currentProfile.currentTableId
-            ? this.findTableById(this.currentProfile.currentTableId)
-            : null;
-        if (!table)
-            return;
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState)
-            return;
-        const state = gameState.engine.getGameState();
-        const currentPlayer = state.players[state.currentPlayerIndex];
-        // Check if it's the player's turn
-        if (currentPlayer.id !== this.currentProfile.userId) {
-            this.pushNotice('Not your turn.');
-            return;
-        }
-        // Check if a card is selected
-        if (this.selectedUnoCardIndex === null) {
-            this.pushNotice('Select a card first (keys 1-9, 0).');
-            return;
-        }
-        const card = currentPlayer.hand[this.selectedUnoCardIndex];
-        if (!card) {
-            this.pushNotice('Invalid card selection.');
-            return;
-        }
-        /*
-         * WHY IT WILL NOT GO, AND WHAT WOULD. "Cannot play that card." told the
-         * caller nothing at all - not the rule, not the way out ("if i can't
-         * throw a card in any cardgame try print an explanatory status message",
-         * sysop 2026-09-16). UNO's rule is colour, or value, or a wild; the way
-         * out is the draw pile.
-         */
-        if (!gameState.engine.canPlayCard(this.currentProfile.userId, card)) {
-            const state = gameState.engine.getGameState();
-            const top = state.discardPile[state.discardPile.length - 1];
-            const colour = (0, uno_engine_1.unoColorName)(state.currentColor);
-            this.pushNotice((0, refusal_1.explainRefusal)(`${(0, uno_engine_1.unoCardName)(card)} does not match ${colour} ${top ? (0, uno_engine_1.unoCardName)(top) : ''}`.trim(), `Play a ${colour} card, another ${top ? String(top.value).toUpperCase() : 'match'}, `
-                + 'or a wild - or press D to draw.'));
-            return;
-        }
-        // If wild card, we'll prompt for color in handleUnoAction
-        this.runAction(async () => {
-            await this.handleUnoAction('play-card', this.selectedUnoCardIndex ?? undefined);
-            this.selectedUnoCardIndex = null;
-        });
-    }
-    triggerUnoDrawCard() {
-        if (this.modalActive || !this.currentProfile || !this.lobby)
-            return;
-        const table = this.currentProfile.currentTableId
-            ? this.findTableById(this.currentProfile.currentTableId)
-            : null;
-        if (!table)
-            return;
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState)
-            return;
-        const state = gameState.engine.getGameState();
-        const currentPlayer = state.players[state.currentPlayerIndex];
-        // Check if it's the player's turn
-        if (currentPlayer.id !== this.currentProfile.userId) {
-            this.pushNotice('Not your turn.');
-            return;
-        }
-        this.runAction(() => this.handleUnoAction('draw-card'));
-    }
-    triggerUnoCallUno() {
-        if (this.modalActive || !this.currentProfile || !this.lobby)
-            return;
-        const table = this.currentProfile.currentTableId
-            ? this.findTableById(this.currentProfile.currentTableId)
-            : null;
-        if (!table)
-            return;
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState)
-            return;
-        const player = gameState.engine.getPlayer(this.currentProfile.userId);
-        if (!player)
-            return;
-        // Check if player has 1 card (can call UNO)
-        if (player.hand.length !== 1) {
-            this.pushNotice('You can only call UNO when you have 1 card left.');
-            return;
-        }
-        if (player.calledUno) {
-            this.pushNotice('You already called UNO.');
-            return;
-        }
-        this.runAction(() => this.handleUnoAction('call-uno'));
-    }
-    triggerUnoChallenge() {
-        if (this.modalActive || !this.currentProfile || !this.lobby)
-            return;
-        const table = this.currentProfile.currentTableId
-            ? this.findTableById(this.currentProfile.currentTableId)
-            : null;
-        if (!table)
-            return;
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState)
-            return;
-        const state = gameState.engine.getGameState();
-        // Check if there's an active challenge window
-        if (!state.challengeWindow) {
-            this.pushNotice('No challenge available.');
-            return;
-        }
-        // Check if player is eligible to challenge
-        if (!state.challengeWindow.eligibleChallengers.includes(this.currentProfile.userId)) {
-            this.pushNotice('You cannot challenge this action.');
-            return;
-        }
-        // Determine challenge type
-        const challengeType = state.challengeWindow.type === 'uno'
-            ? 'challenge-uno'
-            : 'challenge-wild-four';
-        this.runAction(() => this.handleUnoAction(challengeType));
-    }
+    triggerUnoPlayCard() { this.unoActions.playCard(); }
+    triggerUnoDrawCard() { this.unoActions.drawCard(); }
+    triggerUnoCallUno() { this.unoActions.callUno(); }
+    triggerUnoChallenge() { this.unoActions.challenge(); }
     updateTableActions() {
         if (!this.currentProfile || !this.lobby)
             return;
@@ -1421,6 +1322,17 @@ class CardLobbyApp {
             return;
         }
         await module.start(table);
+        /*
+         * ONE deal animation for every game. The door deals here and nowhere
+         * else, so this is the only place that has to know about it; a game
+         * only says what the caller was dealt (`dealtHand`). Putting it in each
+         * game's own start path would give every game its own pace and its own
+         * idea of when to skip.
+         */
+        const dealt = module.dealtHand?.(this.findTableById(table.id) ?? table, this.currentProfile.userId) ?? [];
+        if (dealt.length > 0) {
+            await this.cardAnimator.deal(dealt.map((card) => ({ kind: 'standard', card: card })));
+        }
         this.updateAllPanels();
     }
     /**

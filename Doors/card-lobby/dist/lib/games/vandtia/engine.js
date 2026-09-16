@@ -276,6 +276,8 @@ class VandtiaEngine {
         if ((0, exports.burnsThePile)(card) || runBurns) {
             const burned = this.state.pile.length;
             const run = BURN_RUN[card.rank] ?? DEFAULT_BURN_RUN;
+            // Kept before the pile goes, for the door to show the card landing.
+            const turnedAway = [...this.state.pile];
             this.state.burned.push(...this.state.pile);
             this.state.pile = [];
             this.state.lastAction = (0, exports.burnsThePile)(card)
@@ -287,7 +289,11 @@ class VandtiaEngine {
             else {
                 this.checkForLoser();
             }
-            return { success: true, message: this.state.lastAction };
+            return {
+                success: true,
+                message: this.state.lastAction,
+                burned: { pile: turnedAway, reason: (0, exports.burnsThePile)(card) ? 'ten' : 'run' },
+            };
         }
         /*
          * A card that plays again keeps the turn. The pile stays where it is -

@@ -21,6 +21,7 @@ import { isBotPlayer } from '../../utils';
 import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
 import { VandtiaEngine, cardId, type VandtiaSnapshot } from './engine';
 import { explainRefusal } from '../refusal';
+import type { CardAnimator } from '../../../managers/CardAnimator';
 
 /** Plumbing only - no game logic. */
 export interface VandtiaHost {
@@ -36,6 +37,14 @@ export interface VandtiaHost {
   updateAllPanels(): void;
   runAction(action: () => void | Promise<void>): void;
   labelVandtiaButtons(hasGame: boolean, swapping: boolean, canTake: boolean): void;
+  /**
+   * The frames this game passes through: dealing, and a pile turned away.
+   *
+   * The animator's OWN type, imported. Describing its shape here instead is
+   * how `CardButtonArgs` came to reject options that CardButtons had - a
+   * second declaration of the same thing, checked against nothing.
+   */
+  readonly cardAnimator: CardAnimator;
 }
 
 export class VandtiaGameModule implements TableGameModule {
@@ -111,6 +120,11 @@ export class VandtiaGameModule implements TableGameModule {
   // Starting
   // ------------------------------------------------------------------
 
+  /** What this caller was dealt, for the door's deal animation. */
+  public dealtHand(table: LobbyTable, userId: string): unknown[] {
+    return this.load(table)?.engine.playerById(userId)?.hand ?? [];
+  }
+
   public async start(table: LobbyTable): Promise<void> {
     try {
       await this.host.reloadState();
@@ -142,6 +156,7 @@ export class VandtiaGameModule implements TableGameModule {
       this.host.updateTableStatus(fresh);
       this.host.pushEvent(`Skitgubbe dealt at table #${fresh.id}. Swap, then play.`);
       await this.host.persistState();
+
       await this.advance(fresh);
     } catch (error) {
       const fresh = this.host.findTableById(table.id);
@@ -453,6 +468,17 @@ export class VandtiaGameModule implements TableGameModule {
       this.selectedCardIndex = null;
       this.host.pushEvent(result.message);
       this.save(fresh, loaded.engine, loaded.beforeStacks);
+
+      /*
+       * A card that turns the pile away is SEEN landing on it first. The pile
+       * comes from the engine's own report (`VandtiaResult.burned`) - the
+       * door must not rebuild it, or the burn rule would live in two places.
+       */
+      if (result.burned) {
+        await this.host.cardAnimator.burn(
+          result.burned.pile.map((card) => ({ kind: 'standard' as const, card: card as never })),
+        );
+      }
       await this.host.persistState();
       await this.advance(fresh);
     });

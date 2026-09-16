@@ -75,6 +75,26 @@ export interface VandtiaState {
 export interface VandtiaResult {
   success: boolean;
   message: string;
+  /**
+   * THE PILE AS IT WAS WITH THE CARD ON IT, when that card turned it away.
+   *
+   * "when i add a card that empties the pile my card is not shown on the pile
+   * before emptying" (sysop, 2026-09-16). The card is pushed and the pile is
+   * turned away inside ONE call, so the state a caller can render has already
+   * lost the card: the vändtia lands and vanishes in the same frame.
+   *
+   * A move with two moments in it needs both to be observable, so the second
+   * one is reported here rather than left for the door to reconstruct. The
+   * door must NOT re-derive this by pushing the card onto a copy of the pile:
+   * that is a second implementation of the burn rule, and it would drift from
+   * this one - which already changed once, the day the ace's run became two.
+   */
+  burned?: {
+    /** Every card that went away, the one just played last. */
+    pile: VandtiaCard[];
+    /** `ten` for the vändtia itself, `run` for a run of the same rank. */
+    reason: 'ten' | 'run';
+  };
 }
 
 export interface VandtiaSnapshot {
@@ -360,6 +380,8 @@ export class VandtiaEngine {
     if (burnsThePile(card) || runBurns) {
       const burned = this.state.pile.length;
       const run = BURN_RUN[card.rank] ?? DEFAULT_BURN_RUN;
+      // Kept before the pile goes, for the door to show the card landing.
+      const turnedAway = [...this.state.pile];
       this.state.burned.push(...this.state.pile);
       this.state.pile = [];
       this.state.lastAction = burnsThePile(card)
@@ -371,7 +393,11 @@ export class VandtiaEngine {
       } else {
         this.checkForLoser();
       }
-      return { success: true, message: this.state.lastAction };
+      return {
+        success: true,
+        message: this.state.lastAction,
+        burned: { pile: turnedAway, reason: burnsThePile(card) ? 'ten' : 'run' },
+      };
     }
 
     /*

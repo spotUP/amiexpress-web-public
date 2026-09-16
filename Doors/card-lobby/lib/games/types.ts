@@ -63,6 +63,20 @@ export interface TableGameModule {
   /** Paint the table panels for this game. */
   render(painter: TableGamePainter, table: LobbyTable): void;
 
+  /**
+   * THE CARDS THIS CALLER WAS JUST DEALT, for the deal animation.
+   *
+   * "at the start of all card games animate the cards when they are given to
+   * the player one by one" (sysop, 2026-09-16). The door deals in ONE place
+   * (`dealHand`), so the animation is driven from there and each game only
+   * has to say what landed in front of this player - the same shape as
+   * `panelTitles` and `refusalAdvice`.
+   *
+   * A game that leaves it out is dealt without an animation, which is what
+   * every game did before.
+   */
+  dealtHand?(table: LobbyTable, userId: string): unknown[];
+
   /** A number key: pick the nth card of the hand (0-based). */
   selectCard(index: number): void;
 

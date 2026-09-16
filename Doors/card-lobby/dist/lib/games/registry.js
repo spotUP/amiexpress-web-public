@@ -58,6 +58,10 @@ class UnoGameModule {
     selectCard(index) { this.host.selectUnoCard(index); }
     /** Press the same card key again - or ENTER - and it is played. */
     selectedCard() { return this.host.selectedUnoCardIndex; }
+    /** What this caller was dealt, for the door's deal animation. */
+    dealtHand(table, userId) {
+        return this.host.unoHandFor(table, userId);
+    }
     moveSelection(delta) { this.host.moveUnoSelection(delta); }
     primaryAction() { this.host.triggerUnoPlayCard(); }
     secondaryAction() { this.host.triggerUnoDrawCard(); }
