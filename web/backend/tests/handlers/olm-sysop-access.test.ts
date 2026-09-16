@@ -73,6 +73,7 @@ import * as path from 'path';
 
 import { ACSPermission } from '../../src/constants/acs-permissions';
 import { checkSecurity, setACSConfig } from '../../src/utils/acs.util';
+import { flushOutput } from '../../src/utils/output.util';
 import {
   loadAcsAccessFiles,
   findAcsLevel,
@@ -262,12 +263,46 @@ function setPermission(
   loadAcsAccessFiles(root);
 }
 
+let capturedSockets = 0;
+
+/**
+ * A socket the output layer can tell apart from the last one.
+ *
+ * `emitText` does not write to the socket - it appends to that socket's ANSI
+ * buffer, and `getAnsiBuffer` keys the buffer map on `socket.id`. Every
+ * capture socket here used to be `{ emit }` with no id, so all of them keyed
+ * on `undefined`: the first one to emit created the buffer, the map handed
+ * that SAME buffer (bound to that FIRST socket) to every later test, and the
+ * flush delivered their output to a socket nobody was reading. The cases
+ * expecting text saw "" while the ones expecting silence passed for the wrong
+ * reason (2026-09-16).
+ *
+ * A real socket has an id and an `on`, so the harness gives it both.
+ */
 function captureSocket() {
   const output: string[] = [];
+  const socket = {
+    id: `olm-test-${++capturedSockets}`,
+    on: () => { /* the buffer registers a disconnect cleanup */ },
+    emit: (event: string, data: any) => { if (event === 'ansi-output') output.push(String(data)); },
+  } as any;
   return {
     output,
-    text: () => output.join(''),
-    socket: { emit: (event: string, data: any) => { if (event === 'ansi-output') output.push(String(data)); } } as any,
+    socket,
+    /*
+     * What the caller ends up seeing, which means flushing first.
+     *
+     * `emitText` only appends to the buffer; something else has to drain it.
+     * `handleOlmCommand` ends on `emitPrompt`, which flushes - but
+     * `handleQuietCommand` just prints and returns, and on the board it is
+     * the dispatcher that flushes before the menu prompt goes out. Reading
+     * `output` without a flush therefore asked the socket for bytes still
+     * sitting in the buffer, and the three Q cases failed against "".
+     */
+    text: () => {
+      flushOutput(socket);
+      return output.join('');
+    },
   };
 }
 

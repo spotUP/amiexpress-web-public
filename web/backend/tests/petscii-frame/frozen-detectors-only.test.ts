@@ -45,7 +45,11 @@ describe('the 80-column path takes only the frozen detectors out of the frame mo
   });
 
   it.each([
-    'amiga-emulation/xim/io.ts',        // the line-wrap safety net: the hottest 80-column caller
+    // The line-wrap safety net - the hottest 80-column caller. It lived in
+    // `xim/io.ts` until 8d987590b moved the row loop out to its own module so
+    // a paused file could hand back the lines it had not sent; the detectors
+    // went with the loop, and this is where they are called from now.
+    'amiga-emulation/xim/io-emit-lines.ts',
     'utils/wrap-for-session.util.ts',   // session-width prose wrap
     'utils/dir-file.util.ts',           // DIR listings
   ])('%s imports only frozen names, and never the frame module directly', (rel) => {
@@ -54,6 +58,17 @@ describe('the 80-column path takes only the frozen detectors out of the frame mo
     const taken = namesImportedFrom(src, 'ascii-art.util');
     expect(taken.length).toBeGreaterThan(0);
     expect(taken.filter((n) => !FROZEN.includes(n))).toEqual([]);
+  });
+
+  it.each([
+    'amiga-emulation/xim/io.ts',
+    'amiga-emulation/xim/io-emit-lines.ts',
+    'utils/wrap-for-session.util.ts',
+    'utils/dir-file.util.ts',
+  ])('%s never reaches the frame module directly', (rel) => {
+    // Asked of `io.ts` too, which no longer calls the detectors itself: the
+    // seam it must not open is the frame module, whether or not it wraps.
+    expect(read(rel)).not.toContain(FRAME_MODULE);
   });
 
   it('no 80-column file names a ladder symbol at all', () => {

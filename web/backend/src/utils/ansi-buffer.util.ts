@@ -173,10 +173,22 @@ export function getAnsiBuffer(socket: Socket): AnsiBuffer {
   const buffer = new AnsiBuffer(socket);
   bufferMap.set(socketId, buffer);
 
-  // Clean up on disconnect
-  socket.on('disconnect', () => {
-    releaseAnsiBuffer(socketId);
-  });
+  /*
+   * Clean up on disconnect - when the socket can tell us it disconnected.
+   *
+   * Not every object that reaches the output path is a full Socket.IO socket:
+   * transport shims and test doubles pass `{ id, emit }`, and calling `.on`
+   * on one threw a TypeError out of `getAnsiBuffer` - which is to say out of
+   * `emitText`, from inside whatever command was printing. That killed the
+   * jest worker running `system-commands` outright (2026-09-16) rather than
+   * failing an assertion. Losing the cleanup for such a socket costs one
+   * buffer entry; taking the output path down costs the caller everything.
+   */
+  if (typeof (socket as any).on === 'function') {
+    socket.on('disconnect', () => {
+      releaseAnsiBuffer(socketId);
+    });
+  }
 
   return buffer;
 }
