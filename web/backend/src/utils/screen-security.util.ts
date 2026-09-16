@@ -244,8 +244,21 @@ console.log(`[SCREEN] Found text screen: ${resolved}`);
     }
   }
 
-  // express.e:6308 - No screen found
-console.warn(`[SCREEN] Not found: ${screenDirAndName} (checked levels ${userSecLevel} down to ${minLevel})`);
+  /*
+   * express.e:6308 - no screen found HERE, which is not news.
+   *
+   * This function answers for ONE directory, and the loader calls it once per
+   * search location - so a miss is the search working, not a fault. It used
+   * to write a WARN line for every one of them, and this board's logger
+   * spends ~13ms per line: building the screen index (every screen, every
+   * node directory, every theme) wrote 9,363 of them and took MINUTES, with
+   * the admin's login-sequence request waiting behind it the whole time -
+   * "found it on local now its stuck loading" (sysop, 2026-09-16).
+   *
+   * The real failure is still reported, once, by the caller that ran out of
+   * places to look: `[SYSOP WARNING] Screen File: Screen "X" not found after
+   * trying 6 locations`, with every location it tried listed above it.
+   */
   return null;
 }
 

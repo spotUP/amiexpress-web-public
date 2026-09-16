@@ -122,9 +122,28 @@ export function LoginSequencePage() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * HOW LONG A CALLER WATCHES SKELETONS BEFORE BEING TOLD SOMETHING.
+   *
+   * The board builds its screen index on the first request that needs it -
+   * every screen, every node directory, every theme - and on a board with
+   * seventy node directories that is several seconds of synchronous work. A
+   * page that only spins through it looks broken, which is how it was
+   * reported: "found it on local now its stuck loading" (2026-09-16), with a
+   * dead backend under it that no amount of waiting would fix.
+   */
+  const SLOW_LOAD_MS = 12000;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const slow = setTimeout(() => {
+      setError(
+        'The board has not answered yet. It builds its screen index on the first'
+        + ' request after a restart, which takes a few seconds on a board with many'
+        + ' nodes - or the backend is down. Retry below.'
+      );
+    }, SLOW_LOAD_MS);
     try {
       /*
        * `request()` returns the WHOLE envelope, so `apiClient.get<T>` answers
@@ -165,6 +184,7 @@ export function LoginSequencePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      clearTimeout(slow);
       setLoading(false);
     }
   }, [node, theme]);
@@ -261,7 +281,25 @@ export function LoginSequencePage() {
    * (the row the sysop was editing came back as the board's copy). A refresh
    * of a page already on screen is not a loading state.
    */
-  if (loading && steps.length === 0) return <SkeletonRows />;
+  if (loading && steps.length === 0) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-content-secondary">
+          Reading the board's login sequence. The first read after a restart also
+          builds the screen index, which takes a few seconds.
+        </p>
+        {error && (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-status-danger">{error}</p>
+            <button type="button" className="btn-secondary" onClick={() => { void load(); }}>
+              Retry
+            </button>
+          </div>
+        )}
+        <SkeletonRows />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -313,7 +351,14 @@ export function LoginSequencePage() {
       </div>
 
       {status && <p className="text-sm text-status-ok">{status}</p>}
-      {error && <p className="text-sm text-status-danger">{error}</p>}
+      {error && (
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-status-danger">{error}</p>
+          <button type="button" className="btn-secondary" onClick={() => { void load(); }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {steps.map((step, position) => {
         const items = drafts[step.screen] ?? [];
