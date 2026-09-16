@@ -1006,6 +1006,32 @@ export class Element extends EventEmitter {
       // Note: _contentDirty stays true so content gets re-parsed with wrapping during render
     }
 
+    /*
+     * NEW CONTENT CAN BE SHORTER THAN THE SCROLL OFFSET IT INHERITS.
+     *
+     * The offset belongs to the element, not to the text, so replacing a long
+     * document with a short one left the view scrolled to a line the new
+     * content does not have - and the element painted blank rows, or rows from
+     * nowhere, while its content sat unread above the viewport.
+     *
+     * DOORMAN is where the sysop met it: deleting a door paints a growing
+     * progress log into the info panel, which scrolls; when the delete
+     * finishes and the panel goes back to the short description of the
+     * selected door, the offset from the log was still in force and the
+     * description came out offset ("when i delete more than one door in
+     * doorman the list and descriptions gets offset", 2026-09-16). Measured
+     * there: a 40-line log scrolled to 30, replaced by a 3-line description,
+     * left scroll at 30 against a scroll height of 0.
+     *
+     * Only touched when the element is actually scrolled, so the common case -
+     * every unscrolled box, on every render - pays nothing and emits no
+     * spurious scroll event. `setScroll` clamps to the CURRENT height, which
+     * is what pulls a stale offset back into range.
+     */
+    if (this.childBase > 0 && this.childBase > this.getScrollHeight()) {
+      this.setScroll(this.getScrollHeight());
+    }
+
     this.emit('set content');
   }
 
