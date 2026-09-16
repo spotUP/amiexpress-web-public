@@ -49,7 +49,7 @@ import {
 } from '../screens/screen-index.service';
 import { MCI_CATALOG, MCI_FAMILY_ORDER, MCI_ENABLED_KEY } from '../screens/mci-catalog';
 import { repairOneFile } from '../screens/screen-repair';
-import { planMciCarry, applyMciCarry, type MciPlacement } from '../screens/mci-carry';
+import { planMciCarry, applyMciCarry, splitScreenCodes, type MciPlacement } from '../screens/mci-carry';
 import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
 import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
 import { findScreenReferences, removeScreenReferences } from '../screens/screen-references';
@@ -357,10 +357,25 @@ screensRouter.get('/file', (req: Request, res: Response) => {
   const themeSlug = requestedTheme && requestedTheme !== 'default' ? requestedTheme : undefined;
   const indexed = getScreenIndex(baseDir, themeSlug).files[facts.relPath];
 
+  /*
+   * The codes, split off from the art, for an editor that must not let them be
+   * typed over. A canvas editor loads rows as characters, so a code on its own
+   * row is deletable like any other text - which is how a bulletin lost its
+   * `~SP` and `~CC_ctop` to a few removed lines (the sysop, 2026-09-16).
+   *
+   * Sent for every format: the split is a property of the TEXT, and a `.seq`
+   * or `.ttx` carrying codes has the same exposure as a `.ans`. An editor that
+   * does not use it is unaffected - this adds fields, it changes none.
+   */
+  const codes = splitScreenCodes(buf.toString('latin1'));
+
   return sendOk(res, {
     ...facts,
     readBy: indexed?.readBy ?? facts.readBy,
     content: buf.toString('base64'),
+    codeHead: codes.head,
+    codeTail: codes.tail,
+    artContent: Buffer.from(codes.art, 'latin1').toString('base64'),
   });
 });
 

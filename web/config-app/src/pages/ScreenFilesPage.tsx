@@ -486,7 +486,21 @@ export function ScreenFilesPage() {
     setEditingPetscii(false);
 
     let cancelled = false;
-    screenToCanvas(file.content).then(canvas => {
+    /*
+     * THE CANVAS GETS THE ART, NEVER THE CODES.
+     *
+     * A code on its own row is characters like any other once it is on the
+     * canvas, so a sysop removing rows removes codes with them - which is how
+     * `Conf2/bull20.txt` lost its `~SP` and `~CC_ctop` (2026-09-16). The board
+     * splits the file for us (`artContent`, with `codeHead`/`codeTail` beside
+     * it) using the same rule the carry uses, so the two cannot disagree about
+     * what a code line is. The codes are shown beside the editor, read-only,
+     * and the carry puts them back around the saved art.
+     *
+     * `?? file.content` for a board that has not been redeployed yet: the
+     * editor keeps working exactly as before against an older API.
+     */
+    screenToCanvas(file.artContent ?? file.content).then(canvas => {
       if (cancelled) return;
       setEditing(createSurface(canvas));
       setPendingEdit(null);
@@ -600,7 +614,15 @@ export function ScreenFilesPage() {
       const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
       // Per target: node 1's copy names Node1 and node 7's names Node7, so the
       // board reads each target's own file rather than one plan for all.
-      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets, { carryCodes });
+      /*
+       * An EDITOR save always carries. The canvas never held the codes, so
+       * "do not carry" would not mean "the sysop retyped them" - it would mean
+       * losing them, which is the failure this whole path exists to stop. An
+       * upload still honours the choice, because a file somebody typed codes
+       * into is allowed to be the whole truth.
+       */
+      const placement = editorWrite && carryCodes === 'none' ? 'above' : carryCodes;
+      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets, { carryCodes: placement });
       showSuccess(`Wrote ${targets.length} file${targets.length === 1 ? '' : 's'}`);
       setPendingUpload(null);
       setCarryVerdict(null);

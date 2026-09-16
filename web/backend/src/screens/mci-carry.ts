@@ -25,7 +25,7 @@
  * REPORTED and lost rather than guessed at.
  */
 
-import { scanMciCodes } from './mci-catalog';
+import { scanMciCodes, type ScannedMciCode } from './mci-catalog';
 
 export type MciPlacement = 'none' | 'above' | 'below';
 
@@ -83,13 +83,46 @@ function isCodeLine(line: string): boolean {
  * `oldText` and `newText` are latin1 - a screen carries Amiga high-bit bytes,
  * and a UTF-8 round trip turns one into U+FFFD.
  */
+
+/** A scanned code that is the screen CLEAR and nothing else - `~f`, `~F`, `~2f`. */
+function isClearScreen(found: ScannedMciCode): boolean {
+  return /^~\d{0,3}f$/i.test(found.text);
+}
+
+/** A whole line whose every code is a clear, and which holds no art. */
+function isClearOnlyLine(line: string): boolean {
+  const codes = scanMciCodes(line);
+  return codes.length > 0 && codes.every(isClearScreen) && isCodeLine(line);
+}
+
 export function planMciCarry(oldText: string, newText: string): CarryPlan {
   const plan: CarryPlan = { head: [], tail: [], lost: [], uploadHasCodes: false };
 
-  if (scanMciCodes(newText).some(found => found.entry || found.text === '~')) {
+  /*
+   * `~f` DOES NOT COUNT AS THE UPLOAD HAVING CODES.
+   *
+   * The rule above is "the upload wins": a replacement carrying codes of its
+   * own is the whole truth, so nothing is carried. That is right for a file a
+   * sysop typed codes into, and wrong for the one code an ANSI editor puts
+   * there by itself - `~f`, the screen clear, which is furniture at the top of
+   * the drawing rather than a program.
+   *
+   * The sysop met it on `Conf2/bull20.txt` (2026-09-16): new art whose only
+   * code was a leading `~f` silently took `~SP` and `~CC_ctop` - a pause and a
+   * door invocation - out of the bulletin. The screen still painted and the
+   * door stopped running, which is exactly the failure this module exists to
+   * prevent.
+   *
+   * Matched on the scanner's own shape rather than the literal two bytes, so a
+   * repeat count (`~2f`) and an upper-case `~F` are the same furniture.
+   */
+  const uploadCodes = scanMciCodes(newText).filter(found => found.entry || found.text === '~');
+  if (uploadCodes.some(found => !isClearScreen(found))) {
     plan.uploadHasCodes = true;
     return plan;
   }
+  /** The upload brought its own clear, so a carried one would fire twice. */
+  const uploadClears = uploadCodes.some(isClearScreen);
 
   const lines = oldText.split('\n').map(l => l.replace(/\r$/, ''));
   const codeLine = lines.map(isCodeLine);
@@ -108,7 +141,9 @@ export function planMciCarry(oldText: string, newText: string): CarryPlan {
 
   lines.forEach((line, i) => {
     if (i < firstArt) {
-      if (codeLine[i]) plan.head.push(line);
+      // A head line that is only the clear is dropped when the upload already
+      // carries one: two clears in a row blank the screen twice.
+      if (codeLine[i] && !(uploadClears && isClearOnlyLine(line))) plan.head.push(line);
       return;
     }
     if (i > lastArt) {
@@ -183,4 +218,38 @@ export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPl
   const tail = below.length ? below.join(ending) + ending : '';
 
   return head + body + (body.endsWith(ending) || body === '' ? '' : ending) + tail + trailer;
+}
+
+/**
+ * The code-only lines that top and tail a screen, and the art between them.
+ *
+ * The ANSI editor loads a file's rows onto a canvas, so a code sitting on its
+ * own row is just characters a sysop can type over or delete - "i removed
+ * lines in the art, did i remove codes? that should not be possible" (the
+ * sysop, 2026-09-16). The editor asks for this split and edits `art` only, so
+ * the codes are never on the canvas to lose; the carry puts them back on save.
+ *
+ * Measured against the same head/tail rule `planMciCarry` uses, so the two
+ * cannot disagree about what a code line is.
+ */
+export function splitScreenCodes(text: string): { head: string[]; art: string; tail: string[] } {
+  const ending = lineEnding(text);
+  const lines = text.split('\n').map(l => l.replace(/\r$/, ''));
+  const codeLine = lines.map(isCodeLine);
+
+  let firstArt = 0;
+  while (firstArt < lines.length && (codeLine[firstArt] || !lines[firstArt].trim())) firstArt++;
+  let lastArt = lines.length - 1;
+  while (lastArt >= 0 && (codeLine[lastArt] || !lines[lastArt].trim())) lastArt--;
+
+  // A file that is all codes has no art to edit; it is head and nothing else.
+  if (firstArt >= lines.length) {
+    return { head: lines.filter((_, i) => codeLine[i]), art: '', tail: [] };
+  }
+
+  return {
+    head: lines.slice(0, firstArt).filter((_, i) => codeLine[i]),
+    art: lines.slice(firstArt, lastArt + 1).join(ending),
+    tail: lines.slice(lastArt + 1).filter((_, i) => codeLine[lastArt + 1 + i]),
+  };
 }
