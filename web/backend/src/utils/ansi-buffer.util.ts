@@ -20,6 +20,7 @@
 import { Socket } from 'socket.io';
 import { wrapForSession } from './wrap-for-session.util';
 import { foldColoursForBoard } from './eight-colour-session.util';
+import { foldTrueColourToAnsi } from './true-colour-fold.util';
 
 export class AnsiBuffer {
   private buffer: string[] = [];
@@ -236,7 +237,25 @@ export function emitText(socket: Socket, text: string, immediate: boolean = fals
   // wrapping text whose colours have already been folded is the same work
   // twice. foldColoursForBoard is identity on a sixteen-colour board, which
   // is every board that has not asked for the Amiga's eight.
-  buffer.append(foldColoursForBoard(wrapForSession(text, session)));
+  /*
+   * 24-bit art, folded for a caller that cannot render it.
+   *
+   * PabloDraw and Moebius write colour as `ESC[0;r;g;bt`. A browser's xterm
+   * draws those; an Amiga telnet client swallows them as an unknown CSI and
+   * keeps the previous colour, so a logo whose every colour is written that
+   * way arrives almost monochrome ("the logos need to degrade nicely for amiga
+   * telnet clients", the sysop, 2026-09-16). For a BYTE transport each becomes
+   * the nearest of the sixteen; a web session keeps the artist's exact colour.
+   *
+   * Before the width fold, because it only ever SHORTENS the text - an escape
+   * out, a shorter escape in - and wrapping measures visible columns, which
+   * neither sequence contributes to. Doing it after would measure the same
+   * columns twice for no gain.
+   */
+  const forBytes = session?.connectionType && session.connectionType !== 'web';
+  const coloured = forBytes ? foldTrueColourToAnsi(text) : text;
+
+  buffer.append(foldColoursForBoard(wrapForSession(coloured, session)));
 
   if (immediate) {
     buffer.flushImmediate();

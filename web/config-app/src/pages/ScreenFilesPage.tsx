@@ -27,7 +27,8 @@ import { Modal } from '../components/ui/Modal';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { DoorArtDialog } from './DoorArtDialog';
 import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
-import { screenToCanvas } from './screen-bytes';
+import { screenToCanvas, base64ToBytes, inkedHeight } from './screen-bytes';
+import { countTrueColourCodes } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, describeCarry,
@@ -276,6 +277,8 @@ export function ScreenFilesPage() {
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
+  /** Rows with ink vs rows in the file, so a padded export is visible before a save trims it. */
+  const [editorRows, setEditorRows] = useState<{ inked: number; total: number } | null>(null);
   /**
    * True while the pending write came from the editor.
    *
@@ -485,6 +488,31 @@ export function ScreenFilesPage() {
     setEditingRip(false);
     setEditingPetscii(false);
 
+    /*
+     * TRUE-COLOUR ART IS NOT EDITABLE HERE, AND SAYING SO BEATS FLATTENING IT.
+     *
+     * PabloDraw and Moebius write 24-bit colour as `ESC[0;r;g;bt`. A `Cell`
+     * holds a 0-15 palette index, so the parser consumes those sequences and
+     * the codec cannot write them back: opening such a file and saving it
+     * drops every one. Measured on `h7-up_rough_doors.asc` - 337 sequences in,
+     * zero out, 6,838 bytes down to 2,459 (2026-09-16).
+     *
+     * Refused rather than warned: the damage happens on SAVE, which is one
+     * keystroke away from the edit the sysop came to make, and a flattened
+     * drawing cannot be got back from the file. Viewing and downloading are
+     * untouched, and PabloDraw still edits it.
+     */
+    const trueColour = countTrueColourCodes(base64ToBytes(file.content));
+    if (trueColour > 0) {
+      setEditing(null);
+      setPendingEdit(null);
+      showError(
+        `This screen carries ${trueColour} 24-bit colour codes that the editor cannot keep - `
+        + 'saving here would flatten it to sixteen colours. Edit it in PabloDraw or Moebius.',
+      );
+      return;
+    }
+
     let cancelled = false;
     /*
      * THE CANVAS GETS THE ART, NEVER THE CODES.
@@ -503,6 +531,10 @@ export function ScreenFilesPage() {
     screenToCanvas(file.artContent ?? file.content).then(canvas => {
       if (cancelled) return;
       setEditing(createSurface(canvas));
+      // A padded export is the file's own doing, not the editor's: this board
+      // has art saved onto 100 rows with 18 of them inked. Saying so up front
+      // explains a tall canvas, and the save already trims to the inked rows.
+      setEditorRows({ inked: inkedHeight(canvas), total: canvas.length });
       setPendingEdit(null);
     });
     return () => { cancelled = true; };
@@ -1881,6 +1913,13 @@ export function ScreenFilesPage() {
           />
         )}
 
+        {editing && !pendingUpload && editorRows && editorRows.total > editorRows.inked && (
+          <p className="text-xs text-content-secondary">
+            This file is {editorRows.total} rows, {editorRows.inked} of them drawn on.
+            The blank rows below the art are padding the file already carried; saving writes
+            the {editorRows.inked} rows with ink and drops them.
+          </p>
+        )}
         {editing && !pendingUpload && (
           <ScreenEditor
             surface={editing}

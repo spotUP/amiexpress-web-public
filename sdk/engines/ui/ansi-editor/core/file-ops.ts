@@ -725,3 +725,32 @@ export function saveFile(canvas: Cell[][], filename: string, iceColors: boolean 
       return saveANSFile(canvas, iceColors, sauce);
   }
 }
+
+/**
+ * How many 24-bit colour sequences a file carries.
+ *
+ * PabloDraw and Moebius write true colour as `ESC[0;r;g;bt` (foreground) and
+ * `ESC[1;r;g;bt` (background) - the one CSI this parser does not model, because
+ * a `Cell` holds a 0-15 palette index and has nowhere to put an RGB triple.
+ *
+ * The sequences are consumed and ignored on load, which is survivable for
+ * LOOKING at a screen. It is not survivable for SAVING one: `canvasToANSI`
+ * writes from the cells, so a load-and-save round trip drops every one of them.
+ * Measured on `!ASCII-Art/ansi/H7/h7-up_rough_doors.asc` (2026-09-16): 337
+ * sequences in, zero out, 6,838 bytes down to 2,459 - an artist's true-colour
+ * drawing flattened to sixteen colours with nothing said.
+ *
+ * So a host that can write files asks this BEFORE opening an editor on one,
+ * and says what editing would cost. Counting rather than a boolean because the
+ * number is what makes the warning concrete.
+ */
+export function countTrueColourCodes(bytes: Uint8Array): number {
+  let count = 0;
+  for (let i = 0; i + 2 < bytes.length; i++) {
+    if (bytes[i] !== 0x1b || bytes[i + 1] !== 0x5b) continue;  // ESC [
+    let j = i + 2;
+    while (j < bytes.length && ((bytes[j] >= 0x30 && bytes[j] <= 0x39) || bytes[j] === 0x3b)) j++;
+    if (j < bytes.length && bytes[j] === 0x74) count++;  // final 't'
+  }
+  return count;
+}

@@ -82,7 +82,7 @@ export async function screenToCanvas(base64: string, maxRows?: number): Promise<
  * TRAILING only. A blank row BETWEEN two inked rows is composition and stays.
  * `isCellEmpty` is the one definition of empty, shared with the editor.
  */
-function inkedHeight(canvas: Cell[][]): number {
+export function inkedHeight(canvas: Cell[][]): number {
   let height = canvas.length;
   while (height > 0 && canvas[height - 1].every(isCellEmpty)) height--;
   return height;
