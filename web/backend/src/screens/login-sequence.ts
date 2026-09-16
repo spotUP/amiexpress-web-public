@@ -187,11 +187,20 @@ export function writeScreenProgram(program: ScreenProgram): string {
  * line's bytes, so a sysop who only reorders never sees his formatting
  * rewritten.
  *
- * THE LAST ITEM NEVER PAUSES. A `~SP` on the final screen of the walk makes
- * the caller press a key to be shown the next thing anyway, which on this
- * board is the menu.
+ * THE LAST ITEM OF A STEP NEVER PAUSES. A `~SP` on the final screen of the
+ * walk makes the caller press a key to be shown the next thing anyway, which
+ * on this board is the menu.
+ *
+ * `trailingPause` lifts that for a screen a step INCLUDES, where the premise
+ * does not hold: the board's `BULL.TXT` is one `~SS_` and what follows it is
+ * the next bulletin, drawn at once. The sysop watched a Super-AmiLog wiped
+ * that way and asked for the pause the rule was refusing him (2026-09-16).
  */
-export function applyLoginSelection(content: string, wanted: LoginItem[]): string {
+export function applyLoginSelection(
+  content: string,
+  wanted: LoginItem[],
+  opts: { trailingPause?: boolean } = {},
+): string {
   const program = readScreenProgram(content);
 
   const original = new Map<string, ProgramLine>();
@@ -200,7 +209,7 @@ export function applyLoginSelection(content: string, wanted: LoginItem[]): strin
   }
 
   const rendered: ProgramLine[] = wanted.map((item, index) => {
-    const pause = index < wanted.length - 1 ? item.pause : false;
+    const pause = index < wanted.length - 1 || opts.trailingPause ? item.pause : false;
     const previous = original.get(`${item.code}:${item.target}`);
     // Its own bytes, when nothing about it changed.
     if (previous && previous.item!.pause === pause) return { ...previous };

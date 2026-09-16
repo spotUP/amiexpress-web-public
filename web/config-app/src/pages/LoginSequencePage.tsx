@@ -29,6 +29,8 @@ interface LoginItem {
   code: 'SS' | 'CC' | 'SR';
   target: string;
   pause: boolean;
+  /** The rows of the screen this row shows, when that screen is a program too. */
+  nested?: { file: string; items: LoginItem[] } | null;
 }
 
 /** The other rung's copy, when this one is empty and that one is not. */
@@ -52,6 +54,8 @@ interface LoginStep {
   program: boolean;
   /** Where the content is, when it is not in the file above. */
   otherCopy?: OtherCopy | null;
+  /** Where a screen would be created, for a step that has none. */
+  home?: string | null;
 }
 
 interface Available {
@@ -117,6 +121,8 @@ export function LoginSequencePage() {
    * write that carries it returns.
    */
   const unsaved = useRef<Record<string, LoginItem[] | undefined>>({});
+  /** Rows of included screens, keyed by the file they belong to. */
+  const [nested, setNested] = useState<Record<string, LoginItem[]>>({});
   const [node, setNode] = useState(1);
   /*
    * WHICH BOARD IS BEING EDITED. A theme shadows the board's own screens, so
@@ -190,6 +196,15 @@ export function LoginSequencePage() {
         s.screen,
         unsaved.current[s.screen] ?? (s.items ?? []).map(i => ({ ...i })),
       ])));
+      // One level down, keyed by the file rather than the step: two steps can
+      // include the same screen, and it is one file either way.
+      const below: Record<string, LoginItem[]> = {};
+      for (const step of loaded) {
+        for (const item of step.items ?? []) {
+          if (item.nested) below[item.nested.file] = item.nested.items.map(i => ({ ...i }));
+        }
+      }
+      setNested(below);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -239,6 +254,45 @@ export function LoginSequencePage() {
     const timers = saveTimers.current;
     return () => { for (const id of Object.values(timers)) clearTimeout(id); };
   }, []);
+
+  /** Write the rows of a screen a step INCLUDES - one level down. */
+  const persistInclude = async (file: string, items: LoginItem[]) => {
+    setSaving(file);
+    setError(null);
+    try {
+      await apiClient.put('/api/screens/login-sequence/include', { path: file, node, theme, items });
+      showSuccess(`${file} saved`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  /**
+   * Give a step the screen it does not have.
+   *
+   * The board decides WHERE (`step.home`) - the loader's search order is the
+   * only thing that makes a new file one a caller actually reads - so this
+   * sends that answer back rather than a path of its own.
+   */
+  const createScreen = async (step: LoginStep, first: LoginItem) => {
+    if (!step.home) return;
+    setSaving(step.screen);
+    setError(null);
+    try {
+      await apiClient.post('/api/screens/login-sequence', {
+        screen: step.screen, path: step.home, node, theme, items: [first],
+      });
+      showSuccess(`${step.label} created at ${step.home}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(null);
+    }
+  };
 
   /** Write one step's list. The only place this page writes. */
   const persist = async (screen: string, items: LoginItem[]) => {
@@ -419,6 +473,46 @@ export function LoginSequencePage() {
               </p>
             )}
 
+            {/*
+              A STEP WITH NO FILE IS NOT A DEAD LINE.
+              The board says where the screen would go - the loader's search
+              order decides, and a file written anywhere else is one nothing
+              reads - so the sysop picks what it should show and the board
+              creates it there. The pause is ticked: a first row that is also
+              the last is unpaused by the writer anyway, and a second row
+              inherits a sane default.
+            */}
+            {!step.file && step.home && (
+              <div className="space-y-1">
+                <p className="text-xs text-content-secondary">
+                  Nothing here yet. Choose what this step should show and it will be created at{' '}
+                  <span className="font-mono">{step.home}</span>.
+                </p>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="bg-surface-2 border border-border rounded px-2 py-1 text-sm text-content-primary"
+                    defaultValue=""
+                    aria-label={`Create ${step.label} showing`}
+                    onChange={e => {
+                      if (!e.target.value) return;
+                      void createScreen(step, { code: 'SS', target: e.target.value, pause: true });
+                      e.target.value = '';
+                    }}
+                  >
+                    <option value="">Create this screen showing...</option>
+                    {available.map(a => (
+                      <option key={a.target} value={a.target}>
+                        {a.target}
+                        {describe(a.target) ? ` - ${describe(a.target)}` : ''}
+                        {a.bytes < 8 ? ' [empty]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <Plus size={14} className="text-content-muted" />
+                </div>
+              </div>
+            )}
+
             {items.length === 0 && step.otherCopy && (
               <div className="flex items-center gap-2 text-xs">
                 <p className="text-content-secondary">
@@ -522,6 +616,120 @@ export function LoginSequencePage() {
                 </button>
               </div>
             ))}
+
+            {/*
+              ONE LEVEL DOWN. A screen a step shows can be a program itself -
+              the board's BULL.TXT is a form feed and one `~SS_`, and the
+              bulletin screens list five MultiTop pages the same way. "there
+              are more stuff that launches stuff during login bulletins etc"
+              (sysop, 2026-09-16). These rows belong to the INCLUDED file and
+              are written to it, which is why they carry its name and its own
+              Save.
+            */}
+            {items.map((item, index) => item.nested ? (
+              <div key={`${step.screen}:${index}:nested`} className="ml-6 border-l border-border pl-3 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-content-secondary">
+                    Inside <span className="font-mono">{item.target}</span>
+                    {' '}(<span className="font-mono">{item.nested.file}</span>)
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={saving === item.nested.file}
+                    onClick={() => { void persistInclude(item.nested!.file, nested[item.nested!.file] ?? []); }}
+                  >
+                    <Save size={14} />
+                    {saving === item.nested.file ? 'Saving' : `Save ${item.nested.file.split('/').pop()}`}
+                  </button>
+                </div>
+
+                {(nested[item.nested.file] ?? []).map((sub, subIndex) => {
+                  const file = item.nested!.file;
+                  const rows = nested[file] ?? [];
+                  const editSub = (next: LoginItem[]) => setNested(prev => ({ ...prev, [file]: next }));
+                  return (
+                    <div key={`${file}:${subIndex}`} className="flex items-start gap-2 text-sm py-0.5">
+                      <select
+                        className="bg-surface-2 border border-border rounded px-1 py-1 text-xs text-content-primary"
+                        value={sub.code}
+                        aria-label={`What row ${subIndex + 1} of ${file} does`}
+                        onChange={e => {
+                          const next = [...rows];
+                          next[subIndex] = { ...sub, code: e.target.value as LoginItem['code'] };
+                          editSub(next);
+                        }}
+                      >
+                        <option value="SS">SS show</option>
+                        <option value="CC">CC run</option>
+                        <option value="SR">SR random</option>
+                      </select>
+                      <span className="flex-1 flex flex-col gap-0.5">
+                        <input
+                          type="text"
+                          className="w-full bg-surface-2 border border-border rounded px-2 py-1 text-sm text-content-primary"
+                          value={sub.target}
+                          spellCheck={false}
+                          aria-label={`Row ${subIndex + 1} of ${file}`}
+                          onChange={e => {
+                            const next = [...rows];
+                            next[subIndex] = { ...sub, target: e.target.value };
+                            editSub(next);
+                          }}
+                        />
+                        <span className="text-xs text-content-muted font-mono">{mciLine(sub)}</span>
+                      </span>
+                      <label className="text-xs text-content-secondary inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={sub.pause}
+                          onChange={e => {
+                            const next = [...rows];
+                            next[subIndex] = { ...sub, pause: e.target.checked };
+                            editSub(next);
+                          }}
+                        />
+                        pause
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        aria-label={`Move ${sub.target} up in ${file}`}
+                        onClick={() => {
+                          if (subIndex === 0) return;
+                          const next = [...rows];
+                          [next[subIndex - 1], next[subIndex]] = [next[subIndex], next[subIndex - 1]];
+                          editSub(next);
+                        }}
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        aria-label={`Move ${sub.target} down in ${file}`}
+                        onClick={() => {
+                          if (subIndex === rows.length - 1) return;
+                          const next = [...rows];
+                          [next[subIndex], next[subIndex + 1]] = [next[subIndex + 1], next[subIndex]];
+                          editSub(next);
+                        }}
+                      >
+                        <ArrowDown size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        aria-label={`Remove ${sub.target} from ${file}`}
+                        onClick={() => editSub(rows.filter((_, i) => i !== subIndex))}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null)}
 
             {step.exists && (
               <div className="flex items-center gap-2">
