@@ -25,7 +25,9 @@ function attachKeyBindings(host) {
     host.screen.key(['q'], () => {
         if (host.modalActive)
             return;
-        host.exitDoor();
+        // Through the quit ACTION, which asks first and lets a game steal the
+        // key (UNO takes Q for CHALLENGE while a challenge window is open).
+        host.triggerQuit();
     });
     host.screen.key(['tab'], () => {
         if (host.modalActive)

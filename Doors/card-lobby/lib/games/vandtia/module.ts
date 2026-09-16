@@ -730,9 +730,19 @@ export class VandtiaGameModule implements TableGameModule {
     });
   }
 
+  /**
+   * The third action button, which this game had nothing for.
+   *
+   * "we need ui buttons as well for all card game actions" (sysop,
+   * 2026-09-16) - the bar showed `-` in two slots while a hand was on, and
+   * the two things a caller reaches for that had no button were flipping the
+   * lower panel and leaving the table. This is the flip; `secondaryAction`
+   * is TAKE and `quitAction` leaves.
+   */
   public tertiaryAction(): void {
-    this.host.pushNotice('Skitgubbe: pick a card and press it again - or ENTER - to play it. C takes the pile.');
+    this.toggleView();
   }
+
 
   public render(painter: TableGamePainter, table: LobbyTable): void {
     painter.renderVandtiaGameView(table);

@@ -87,12 +87,35 @@ async function seated(app: any, id: number): Promise<any> {
 }
 
 /** Dealt, past the swap, and on turn. */
+/**
+ * Dealt, past the swap, and WAITING ON THE CALLER.
+ *
+ * A fixed sleep after readying was not enough: the bots play their turns
+ * asynchronously, and a test that starts pressing keys while one of them is
+ * still moving reads a turn that changes under it. That is what made
+ * `aCardKeyPicksAndTheSameKeyPlaysIt` and `enterPlaysWhateverIsPicked` fail
+ * about one run in three - a false red, which is the kind that makes a whole
+ * suite ignorable.
+ *
+ * So the bots are given no pace at all and the fixture waits for the turn to
+ * actually BE the caller's before handing back.
+ */
 async function playing(app: any, id: number): Promise<any> {
   await seated(app, id);
+  (app.vandtia.constructor as any).BOT_PACE_MS = 0;
   app.vandtia.primaryAction();                   // ready
-  await new Promise((r) => setTimeout(r, 600));
+  await new Promise((r) => setTimeout(r, 400));
   app.applyViewMode('table');
   app.updateAllPanels();
+
+  const me = app.currentProfile.userId;
+  const until = Date.now() + 3000;
+  while (Date.now() < until) {
+    const engine = app.vandtia.load(app.findTableById(id))?.engine;
+    if (!engine || engine.state.phase !== 'playing') break;
+    if (engine.currentPlayerId() === me && !app.actionInProgress) break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
   return app.findTableById(id);
 }
 

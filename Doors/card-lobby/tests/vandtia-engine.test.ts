@@ -362,3 +362,50 @@ export async function testBotsPlayAWholeGameToASkitgubbe(): Promise<void> {
     Math.random = realRandom;
   }
 }
+
+export async function testAHandSortsItselfIntoTheOrderTheGameIsReadIn(): Promise<void> {
+  /*
+   * "the cardlobby should autosort hands in the way that makes most sense for
+   * the game played" (sysop, 2026-09-16). For vandtia that is by VALUE, low
+   * to high: every turn asks "what have I got that beats the pile", and a
+   * sorted hand answers it at a glance.
+   *
+   * The two wilds go last, together. A 2 and a 10 play on anything, so they
+   * are never part of that question - and they are the cards worth keeping
+   * track of, which is easier at a fixed end than wherever their number falls.
+   */
+  const engine = playing(threeHanded());
+  const me = engine.state.players[0];
+
+  me.hand = cards('KD', '2S', '4H', '10C', '7S');
+  engine.sortHand(me);
+
+  assert.deepStrictEqual(ids(me.hand), ['4H', '7S', 'KD', '2S', '10C'],
+    'low to high, then the wilds');
+}
+
+export async function testAHandIsLeftAloneWhileItIsBeingArranged(): Promise<void> {
+  // A caller arranging their own two rows must be able to leave a card where
+  // they put it - sorting under them would undo the swap they just made.
+  const engine = playing(threeHanded());
+  engine.state.phase = 'swap';
+  const me = engine.state.players[0];
+
+  me.hand = cards('KD', '2S', '4H');
+  engine.sortHand(me);
+
+  assert.deepStrictEqual(ids(me.hand), ['KD', '2S', '4H'], 'untouched during the swap');
+}
+
+export async function testACardDrawnMidGameLandsInItsPlace(): Promise<void> {
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('3S'), currentIndex: 0, stock: cards('5H') });
+  const me = engine.state.players[0];
+  me.hand = cards('9D', 'KC');
+
+  // Playing the nine refills from the stock, and the drawn five sorts in.
+  engine.playCard('u1', 0);
+
+  assert.deepStrictEqual(ids(engine.state.players[0].hand), ['5H', 'KC'],
+    'the drawn card landed in order rather than on the end');
+}

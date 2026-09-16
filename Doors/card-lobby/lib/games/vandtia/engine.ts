@@ -365,6 +365,9 @@ export class VandtiaEngine {
       this.state.phase = 'playing';
       this.state.currentIndex = 0;
       this.state.lastAction = 'Play begins.';
+      // Everybody's hand in order the moment arranging is over - after this
+      // point a hand is read, not arranged.
+      for (const seated of this.state.players) this.sortHand(seated);
     }
     return { success: true, message: this.state.lastAction };
   }
@@ -481,6 +484,34 @@ export class VandtiaEngine {
     while (player.hand.length < 3 && this.state.stock.length > 0) {
       player.hand.push(this.state.stock.pop() as VandtiaCard);
     }
+    this.sortHand(player);
+  }
+
+  /**
+   * KEEP A HAND IN THE ORDER THIS GAME IS READ IN.
+   *
+   * "the cardlobby should autosort hands in the way that makes most sense for
+   * the game played" (sysop, 2026-09-16). For vändtia that is by VALUE, low
+   * to high: every turn is the question "what have I got that beats the
+   * pile", and a sorted hand answers it at a glance.
+   *
+   * The two wilds go last, together. A 2 and a 10 play on anything, so they
+   * are never part of that question - and they are the cards worth keeping
+   * track of, which is easier at a fixed end of the hand than wherever their
+   * number would put them.
+   *
+   * It runs on every refill, so a card drawn mid-game lands in its place
+   * rather than on the end. NOT during the swap: a caller arranging their own
+   * two rows must be able to leave a card where they put it.
+   */
+  public sortHand(player: VandtiaPlayer): void {
+    if (this.state.phase === 'swap') return;
+    player.hand.sort((a, b) => {
+      const wildA = isWild(a) ? 1 : 0;
+      const wildB = isWild(b) ? 1 : 0;
+      if (wildA !== wildB) return wildA - wildB;
+      return cardValue(a) - cardValue(b);
+    });
   }
 
   /**

@@ -213,6 +213,8 @@ export class CardLobbyApp {
   public get handContent() { return this.uiManager.handContent; }
   public get activityPanel() { return this.uiManager.activityPanel; }
   public get activityContent() { return this.uiManager.activityContent; }
+  /** The chat log, which Tab must be able to reach at a table. */
+  public get chatContent() { return this.uiManager.chatContent; }
   private get actionButtons() { return this.uiManager.actionButtons; }
   private get overlayShade() { return this.uiManager.overlayShade; }
   private get layout() { return this.uiManager.layout; }
@@ -1296,6 +1298,21 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
 
   public triggerFold(): void {
     if (this.modalActive) return;
+
+    /*
+     * FOLD is poker's word. At a card game's table this button is LEAVE -
+     * the way out that a caller could not find on the screen at all (sysop,
+     * 2026-09-16). Poker keeps the betting action below.
+     */
+    if (this.currentProfile?.currentTableId && this.lobby) {
+      const table = this.findTableById(this.currentProfile.currentTableId);
+      const module = this.games.for(table);
+      if (table && module && !module.usesPokerEngine) {
+        this.runAction(() => this.tableFlow.leaveCurrentTable());
+        return;
+      }
+    }
+
     const { canAct } = this.getActionContext();
     if (!canAct) return;
     this.runAction(() => this.handlePlayerAction('fold'));
@@ -1379,7 +1396,28 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
       if (table && module?.quitAction?.()) return;
     }
 
-    this.exitDoor();
+    /*
+     * ASK BEFORE LEAVING, especially from a table.
+     *
+     * "pressing q exits the cardlobby to the bbs without any confirm
+     * dialogue" (sysop, 2026-09-16). Q sits next to the keys a caller uses
+     * constantly, and it used to drop them straight out of the door - out of
+     * a hand they were in the middle of, with no way back to it.
+     *
+     * At a table the question says so, because leaving mid-hand is the part
+     * worth a second thought; from the lobby it is the plain question.
+     */
+    const atTable = Boolean(this.currentProfile?.currentTableId)
+      && this.viewMode === 'table';
+
+    void this.dialogManager.showYesNoDialog(
+      'Leave the Card Lobby?',
+      atTable
+        ? 'You are still at a table. Leave the lobby and go back to the BBS?'
+        : 'Go back to the BBS?',
+    ).then((leave) => {
+      if (leave) this.exitDoor();
+    });
   }
 
   // ============================================================================
@@ -1463,6 +1501,17 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
         ...this.tableCardButtons.focusables(),
         this.playersContent,
         this.activityContent,
+        /*
+         * AND THE CHAT. "the chat is disabled as well and i cant tab to it"
+         * (sysop, 2026-09-16) - it was not disabled, it was simply never in
+         * the ring: the table's focus order listed the cards, the two text
+         * panels and the action buttons, and the chat panel was not among
+         * them. A panel a caller can see and cannot reach reads as broken.
+         *
+         * `T` still opens the prompt to say something; this is for the caller
+         * who tabs looking for it.
+         */
+        this.chatContent,
         this.actionButtons.fold,
         this.actionButtons.check,
         this.actionButtons.call,
