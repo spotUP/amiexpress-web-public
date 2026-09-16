@@ -30,6 +30,13 @@ export interface SettleOptions {
   random?: Random;
   /** Injected so a test does not wait in real time. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Rows that are already what they will be - the rules and the legend
+   * under the table. `still[i]` true means row `i` starts settled and is
+   * never drawn as noise; the page's frame holds while the values in it
+   * resolve.
+   */
+  still?: readonly boolean[];
 }
 
 /** One frame of every row, over the rows already on screen. */
@@ -68,8 +75,12 @@ export async function settleOnto(
   const sleep = options.sleep ?? wait;
 
   if (options.animate && lines.length > 0) {
-    const masks = lines.map((line) => nothingSettled(visibleLength(line)));
-    const longest = Math.max(...masks.map((m) => m.length), 1);
+    const masks = lines.map((line, i) => (
+      options.still?.[i]
+        ? nothingSettled(visibleLength(line)).map(() => true)
+        : nothingSettled(visibleLength(line))
+    ));
+    const longest = Math.max(...masks.map((m, i) => (options.still?.[i] ? 0 : m.length)), 1);
 
     /*
      * A FEW CHARACTERS PER FRAME, not a share of the row.

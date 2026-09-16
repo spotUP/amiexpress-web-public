@@ -11,6 +11,7 @@ exports.renderNarrowScreen = renderNarrowScreen;
 exports.printableWidth = printableWidth;
 exports.narrowHeader = narrowHeader;
 exports.narrowSkeletonRow = narrowSkeletonRow;
+exports.narrowSkeletonBody = narrowSkeletonBody;
 exports.narrowBody = narrowBody;
 /**
  * The last-callers list on forty columns.
@@ -181,6 +182,26 @@ function narrowSkeletonRow() {
         + ' ' + SYSTEM_PEN + dots(SYSTEM_COLUMNS)
         + ' ' + TIME_PEN + dots(ACTION_COLUMNS)
         + ' ' + dots(TIME_COLUMNS);
+}
+/**
+ * The bottom while the scenewall is asked: `count` rows of dots, then the
+ * rule, the two totals with their numbers as dots, and the closing rule -
+ * the same rows `narrowBody` will settle over them, so the C64 screen has
+ * its final height before the answer and nothing scrolls when it lands.
+ */
+function narrowSkeletonBody(count) {
+    const dots = (width) => '.'.repeat(width);
+    const lines = [];
+    for (let i = 0; i < Math.max(0, count); i++)
+        lines.push(narrowSkeletonRow());
+    lines.push(exports.NARROW_RULE);
+    for (const line of narrowFooter({ statdate: dots(8), calls: dots(4), topcps: dots(6), uploads: dots(7), downloads: dots(7) }, {
+        allcalls: dots(4), recordcalls: dots(4), calls: dots(4), mostcalled: dots(16),
+        calls2: dots(4), secondmostcalled: dots(16), calls3: dots(4), thirdmostcalled: dots(16),
+    }))
+        lines.push(line);
+    lines.push(`${exports.NARROW_RULE}${RESET}`);
+    return lines;
 }
 /** The bottom: the rows, the rule under them, the totals. */
 function narrowBody(screen) {

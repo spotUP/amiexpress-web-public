@@ -22,4 +22,16 @@ export declare function skeletonRows(count: number): string[];
 export declare function rewind(count: number): string;
 /** Draw `line` over whatever is on the current row. */
 export declare function overwrite(line: string): string;
+/** The footer with every total still to come, in the style's own layout. */
+export declare function skeletonFooter(style: number): string[];
+/** Everything under the header, waiting: `count` call rows, then the footer. */
+export declare function skeletonBody(count: number, style: number): string[];
+/**
+ * Whether a placeholder row is waiting for data, or is already what it will
+ * be. The rules and the legend are the same before and after the answer;
+ * only a row of dots has something coming. The waiting noise and the
+ * settling leave the still rows alone, so the page's frame holds while the
+ * values inside it resolve.
+ */
+export declare function awaitsData(placeholder: string): boolean;
 //# sourceMappingURL=skeleton.d.ts.map

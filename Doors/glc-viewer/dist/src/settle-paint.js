@@ -46,8 +46,10 @@ async function settleOnto(wire, lines, onScreen, options) {
     const random = options.random ?? Math.random;
     const sleep = options.sleep ?? wait;
     if (options.animate && lines.length > 0) {
-        const masks = lines.map((line) => (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(line)));
-        const longest = Math.max(...masks.map((m) => m.length), 1);
+        const masks = lines.map((line, i) => (options.still?.[i]
+            ? (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(line)).map(() => true)
+            : (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(line))));
+        const longest = Math.max(...masks.map((m, i) => (options.still?.[i] ? 0 : m.length)), 1);
         /*
          * A FEW CHARACTERS PER FRAME, not a share of the row.
          *

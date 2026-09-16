@@ -13,6 +13,13 @@ export interface SettleOptions {
     random?: Random;
     /** Injected so a test does not wait in real time. */
     sleep?: (ms: number) => Promise<void>;
+    /**
+     * Rows that are already what they will be - the rules and the legend
+     * under the table. `still[i]` true means row `i` starts settled and is
+     * never drawn as noise; the page's frame holds while the values in it
+     * resolve.
+     */
+    still?: readonly boolean[];
 }
 /**
  * Write `lines` over `onScreen` placeholder rows, settling as they go.

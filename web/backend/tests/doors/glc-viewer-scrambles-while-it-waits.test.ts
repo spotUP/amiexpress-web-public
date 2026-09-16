@@ -187,3 +187,18 @@ describe('painting the table over its placeholders', () => {
     expect(await settleOnto(wire(), TABLE, 9, { animate: false })).toBe(2);
   });
 });
+
+describe('rows that start still', () => {
+  it('are written as themselves in every frame, never as noise', async () => {
+    const frames: string[] = [];
+    const wire = { emit: (_e: string, p: string) => { frames.push(p); } };
+    const rule = '\x1b[34m-----------------';
+    const lines = ['\x1b[36mSpot          ', rule, '\x1b[36mBob           '];
+    await settleOnto(wire, lines, 3, {
+      animate: true, frames: 6, frameMs: 0, still: [false, true, false], sleep: async () => {},
+    });
+    const paintsOfRule = frames.filter((f) => f.includes('\x1b[34m'));
+    expect(paintsOfRule.length).toBeGreaterThan(1);
+    for (const paint of paintsOfRule) expect(paint).toContain(rule);
+  });
+});

@@ -191,6 +191,28 @@ export function narrowSkeletonRow(): string {
     + ' ' + dots(TIME_COLUMNS);
 }
 
+/**
+ * The bottom while the scenewall is asked: `count` rows of dots, then the
+ * rule, the two totals with their numbers as dots, and the closing rule -
+ * the same rows `narrowBody` will settle over them, so the C64 screen has
+ * its final height before the answer and nothing scrolls when it lands.
+ */
+export function narrowSkeletonBody(count: number): string[] {
+  const dots = (width: number) => '.'.repeat(width);
+  const lines: string[] = [];
+  for (let i = 0; i < Math.max(0, count); i++) lines.push(narrowSkeletonRow());
+  lines.push(NARROW_RULE);
+  for (const line of narrowFooter(
+    { statdate: dots(8), calls: dots(4), topcps: dots(6), uploads: dots(7), downloads: dots(7) },
+    {
+      allcalls: dots(4), recordcalls: dots(4), calls: dots(4), mostcalled: dots(16),
+      calls2: dots(4), secondmostcalled: dots(16), calls3: dots(4), thirdmostcalled: dots(16),
+    },
+  )) lines.push(line);
+  lines.push(`${NARROW_RULE}${RESET}`);
+  return lines;
+}
+
 /** The bottom: the rows, the rule under them, the totals. */
 export function narrowBody(screen: NarrowScreen): string[] {
   const lines: string[] = [];

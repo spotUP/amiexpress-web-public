@@ -126,3 +126,56 @@ describe('what a caller is given when the scenewall is slow', () => {
     expect(readCache(dir)).toBe('{"calls":[1]}');
   });
 });
+
+describe('the footer waits with the table', () => {
+  const { skeletonBody, skeletonFooter, skeletonRow, awaitsData } = require('../../../../Doors/glc-viewer/src/skeleton');
+  const { renderGlcFooter, renderGlcRows } = require('../../../../Doors/glc-viewer/src/render');
+  const { narrowSkeletonBody, narrowBody, NARROW_RULE } = require('../../../../Doors/glc-viewer/src/narrow');
+  const art = require('../../../../Doors/glc-viewer/src/art.generated');
+
+  const day = { statdate: '16-09-26', calls: '132', topcps: '99999', uploads: '1', downloads: '2' };
+  const records = {
+    allcalls: '1', recordcalls: '361', calls: '102', mostcalled: 'The Northern Palace',
+    calls2: '3', secondmostcalled: 'x', calls3: '2', thirdmostcalled: 'y',
+  };
+  const screen = (style: number) => ({
+    style, logo: [], columns: 80, showLocation: false, screenClear: false, calls: [],
+    yesterday: day, previousDay: day, records,
+  });
+
+  it('has exactly the rows the real footer will have, in every style', () => {
+    for (const style of [1, 2, 3, 4]) {
+      expect(skeletonFooter(style)).toHaveLength(renderGlcFooter(screen(style)).length);
+      expect(skeletonBody(6, style)).toHaveLength(6 + renderGlcFooter(screen(style)).length);
+    }
+  });
+
+  it('keeps the rules and the legend as they are - only the totals are dots', () => {
+    const footer = skeletonFooter(1);
+    expect(footer[0]).toBe(art.RULER_BOTTOM);
+    for (const line of art.LEGEND) expect(footer).toContain(line);
+    expect(footer[footer.length - 1]).toBe(art.RULE_FINAL);
+    expect(footer.some((row: string) => row.includes('........'))).toBe(true);
+  });
+
+  it('knows which rows are waiting for data and which are already themselves', () => {
+    expect(awaitsData(skeletonRow())).toBe(true);
+    expect(awaitsData(art.RULER_BOTTOM)).toBe(false);
+    for (const line of art.LEGEND) expect(awaitsData(line)).toBe(false);
+    const footer = skeletonFooter(3);
+    expect(footer.filter(awaitsData)).toHaveLength(3);
+  });
+
+  it('holds the same rows on a C64 as the real body will settle onto', () => {
+    const call = {
+      Username: 'Spot', Location: 'Sweden', Bbsname: 'uPtOWN', Dateon: '16-09',
+      Timeon: '08:38', Timeoff: '08:44', Actions: 'UD', Upload: '1', Download: '2',
+    };
+    const real = narrowBody({
+      logo: [], showLocation: false, screenClear: false, calls: [call, call, call],
+      yesterday: day, records,
+    });
+    expect(narrowSkeletonBody(3)).toHaveLength(real.length);
+    expect(narrowSkeletonBody(3)[3]).toBe(NARROW_RULE);
+  });
+});

@@ -79,6 +79,13 @@ export declare function printableWidth(line: string): number;
 export declare function narrowHeader(logo: readonly string[], showLocation: boolean, screenClear: boolean): string[];
 /** One placeholder row, in the narrow table's own columns. */
 export declare function narrowSkeletonRow(): string;
+/**
+ * The bottom while the scenewall is asked: `count` rows of dots, then the
+ * rule, the two totals with their numbers as dots, and the closing rule -
+ * the same rows `narrowBody` will settle over them, so the C64 screen has
+ * its final height before the answer and nothing scrolls when it lands.
+ */
+export declare function narrowSkeletonBody(count: number): string[];
 /** The bottom: the rows, the rule under them, the totals. */
 export declare function narrowBody(screen: NarrowScreen): string[];
 //# sourceMappingURL=narrow.d.ts.map

@@ -16,6 +16,7 @@
  */
 import { ROW_TEMPLATE } from './art.generated';
 import { formatE } from './estringf';
+import { renderGlcFooter, type GlcDayStats, type GlcRecords } from './render';
 
 /** Cursor up one row, and clear it before drawing over it. */
 export const CURSOR_UP = '\x1b[A';
@@ -56,4 +57,58 @@ export function rewind(count: number): string {
 /** Draw `line` over whatever is on the current row. */
 export function overwrite(line: string): string {
   return CLEAR_ROW + line;
+}
+
+/**
+ * THE FOOTER IS ON SCREEN BEFORE THE DATA TOO.
+ *
+ * The first cut held only the call rows while the network was asked and
+ * wrote the footer - a rule, three legend rows, a rule, three day-total rows,
+ * a rule - after the answer landed. Nine rows arriving at once pushed the
+ * page down by nine, and on a twenty-five row terminal that scrolled the
+ * logo off the top. The sysop read it right: "this doesnt draw until the
+ * scramble anim finishes" (2026-09-16). So the page has its final SHAPE
+ * from the first paint: the footer goes out with the placeholders, its
+ * totals as dots, and the real totals settle over them like the calls do.
+ */
+const dots = (width: number): string => '.'.repeat(width);
+
+const SKELETON_DAY: GlcDayStats = {
+  statdate: dots(8), calls: dots(3), topcps: dots(5), uploads: dots(7), downloads: dots(7),
+};
+
+const SKELETON_RECORDS: GlcRecords = {
+  allcalls: dots(3), recordcalls: dots(3), calls: dots(3), mostcalled: dots(14),
+  calls2: dots(3), secondmostcalled: dots(14), calls3: dots(3), thirdmostcalled: dots(14),
+};
+
+/** The footer with every total still to come, in the style's own layout. */
+export function skeletonFooter(style: number): string[] {
+  return renderGlcFooter({
+    style,
+    logo: [],
+    columns: 80,
+    showLocation: false,
+    screenClear: false,
+    calls: [],
+    yesterday: SKELETON_DAY,
+    previousDay: SKELETON_DAY,
+    records: SKELETON_RECORDS,
+  } as unknown as Parameters<typeof renderGlcFooter>[0]);
+}
+
+/** Everything under the header, waiting: `count` call rows, then the footer. */
+export function skeletonBody(count: number, style: number): string[] {
+  return [...skeletonRows(count), ...skeletonFooter(style)];
+}
+
+/**
+ * Whether a placeholder row is waiting for data, or is already what it will
+ * be. The rules and the legend are the same before and after the answer;
+ * only a row of dots has something coming. The waiting noise and the
+ * settling leave the still rows alone, so the page's frame holds while the
+ * values inside it resolve.
+ */
+export function awaitsData(placeholder: string): boolean {
+  return /\.{3,}/.test(placeholder.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
 }

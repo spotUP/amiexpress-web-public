@@ -33,7 +33,7 @@ const asked: string[] = [];
 
 /** Run the door with a stubbed scenewall and collect what it emitted. */
 async function runTheDoor(
-  bbsSession: { screenWidth?: number; screenHeight?: number } = {},
+  bbsSession: { screenWidth?: number; screenHeight?: number; user?: { linesPerScreen?: number } } = {},
 ): Promise<string> {
   jest.resetModules();
   asked.length = 0;
@@ -86,22 +86,22 @@ async function runTheDoor(
   };
 
   // The board's cfg names three styles and the door draws one at random
-  // when it reads it (`STYLE=1,4,3`). The first draw is pinned to the FIRST
-  // of them - style 1, which shares its logo with style 3 - so the
-  // assertions below have one logo to look for; the animation's own dice
-  // are restored as soon as the config is read.
+  // when it reads it (`STYLE=1,4,3`) - and it reads it in onStart, not at
+  // load. The dice are pinned for the whole run, so the draw is the FIRST
+  // style - 1, which shares its logo with style 3 - and the assertions
+  // below have one logo to look for. The settling uses the same dice and
+  // still ends on the real rows; it only always picks the first candidate.
   const dice = jest.spyOn(Math, 'random').mockReturnValue(0);
-  let door: any;
-  try {
-    door = require(DOOR).default;
-  } finally {
-    dice.mockRestore();
-  }
+  const door = require(DOOR).default;
   // `startHandlers` is where onStart() puts them (sdk/core/Door.ts:45). The
   // door registers exactly one.
   const handlers = (door as any).startHandlers as Array<(ctx: unknown) => Promise<void>>;
   expect(handlers).toHaveLength(1);
-  await handlers[0]({ socket, bbs: {}, user: { username: 'Spot' }, bbsSession });
+  try {
+    await handlers[0]({ socket, bbs: {}, user: { username: 'Spot' }, bbsSession });
+  } finally {
+    dice.mockRestore();
+  }
 
   return emitted.join('');
 }
@@ -214,5 +214,90 @@ describe('LINES=AUTO on a C64', () => {
     const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, screenHeight: 24 });
     expect(askedCount()).toBe(autoLines(24));
+  });
+});
+
+/**
+ * The sysop's screenshot, 2026-09-16: "something makes glc much bigger when
+ * it draws its final frame" - a twenty-five row terminal with the logo
+ * scrolled off the top. The footer, nine rows of it, was written only after
+ * the answer landed; his reading was the right one: "this doesnt draw until
+ * the scramble anim finishes". The page holds its whole shape from the
+ * first paint now, and the final paint covers exactly what it walks back.
+ */
+describe('the page has its final shape before the network answers', () => {
+  const firstRewind = (drawn: string): number => drawn.indexOf('\x1b[A');
+
+  /**
+   * The screen's height, walked from the stream: a row per CRLF, a row back
+   * per cursor-up, and the deepest row reached is how tall the page got.
+   */
+  const heightOf = (drawn: string): number => {
+    let row = 0; let deepest = 0;
+    for (let i = 0; i < drawn.length; i++) {
+      if (drawn.startsWith('\r\n', i)) { row++; deepest = Math.max(deepest, row); i++; }
+      else if (drawn.startsWith('\x1b[A', i)) { row = Math.max(0, row - 1); i += 2; }
+    }
+    return deepest;
+  };
+
+  /** The rows on screen before the first paint over them. */
+  const rowsBeforeFirstRewind = (drawn: string): number =>
+    (drawn.slice(0, firstRewind(drawn)).match(/\r\n/g) ?? []).length;
+
+  it('draws the legend and the day totals under the placeholders, on eighty columns', async () => {
+    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 });
+    expect(drawn).toContain(art.LEGEND[0]);
+    expect(drawn.indexOf(art.LEGEND[0])).toBeLessThan(firstRewind(drawn));
+    expect(drawn.indexOf('ALLTIME RECORDS')).toBeLessThan(firstRewind(drawn));
+  });
+
+  it('draws the totals under the placeholders on a C64 too', async () => {
+    const drawn = await runTheDoor({ screenWidth: 40, screenHeight: 25 });
+    expect(drawn.indexOf('YESTERDAY')).toBeLessThan(firstRewind(drawn));
+    expect(drawn.indexOf('MOST CALLED')).toBeLessThan(firstRewind(drawn));
+  });
+
+  it('is exactly as tall after the answer as it was before it - the page cannot grow', async () => {
+    for (const screenWidth of [80, 40]) {
+      const drawn = await runTheDoor({ screenWidth, screenHeight: 25 });
+      const before = rowsBeforeFirstRewind(drawn);
+      expect(before).toBeGreaterThan(10);
+      expect(heightOf(drawn)).toBe(before);
+    }
+  });
+
+  it('keeps the legend still while the numbers settle - it is not noise', async () => {
+    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 });
+    // Every paint of the legend's first row is the row itself.
+    const legend: string = art.LEGEND[0];
+    const paints = drawn.split('\r\n').filter((row) => row.includes('OWNLOAD FAIL'));
+    expect(paints.length).toBeGreaterThan(1);
+    for (const row of paints) expect(row.endsWith(legend)).toBe(true);
+  });
+});
+
+/**
+ * The sysop's page length is 0 - never pause - and the door read that as
+ * the height of his screen, fell back to twenty-two rows and gave him four
+ * callers on a twenty-five row terminal. The screen the board reports is
+ * the screen; the pause length is only a second opinion.
+ */
+describe('how tall the screen is', () => {
+  const askedCount = (): number => Number(/[?&]count=(\d+)/.exec(asked[0])![1]);
+
+  it('is what the terminal reported, not the user\'s pause length', async () => {
+    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    await runTheDoor({ screenWidth: 80, screenHeight: 25, user: { linesPerScreen: 0 } });
+    expect(askedCount()).toBe(autoLines(25));
+    expect(askedCount()).toBe(7);
+  });
+
+  it('falls back to the pause length when nothing reported a screen', async () => {
+    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    await runTheDoor({ screenWidth: 80, user: { linesPerScreen: 40 } });
+    expect(askedCount()).toBe(autoLines(40));
   });
 });

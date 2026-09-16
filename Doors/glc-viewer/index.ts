@@ -22,10 +22,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { renderGlcHeader, renderGlcRows, renderGlcFooter } from './src/render';
 import { logoFor } from './src/logo';
-import { rewind, overwrite, skeletonRows } from './src/skeleton';
+import { rewind, overwrite, skeletonBody, awaitsData } from './src/skeleton';
 import { bodyForThisCall } from './src/fetch-deadline';
 import {
-  narrowBody, narrowHeader, narrowListRows, narrowSkeletonRow, NARROW_WIDTH,
+  narrowBody, narrowHeader, narrowListRows, narrowSkeletonBody, NARROW_WIDTH,
 } from './src/narrow';
 import { autoLines } from './src/sizing';
 import { doorRootFrom } from './src/door-root';
@@ -460,17 +460,26 @@ const AUTO_LINES = -1;
 /**
  * How many rows the caller's screen has.
  *
- * The same chain XIM answers `DT_LINELENGTH` from
- * (`XIMProtocol.ts:140-144`), so the door and the 68K viewer size themselves
- * from one number.
+ * The SCREEN first: `session.screenHeight` is what the browser reported
+ * (`screen-width.util.ts` applyClientReportedGeometry) or what the graphics
+ * prompt set for the mode, and it is the surface this door is drawing on.
+ * The user's page length is second, and only when it is a number: the 68K
+ * viewer had nothing but `DT_LINELENGTH`, but that is the PAUSE length, and
+ * the sysop's is 0 - "never pause" - which read as "no screen" and gave him
+ * four callers on a twenty-five row terminal (2026-09-16).
  */
 function rowsOf(ctx: DoorContext): number {
   const session = (ctx as unknown as {
     bbsSession?: { screenHeight?: number; user?: { linesPerScreen?: number; lineLength?: number; pageLength?: number } };
   }).bbsSession;
   const user = session?.user;
-  const rows = user?.linesPerScreen ?? user?.lineLength ?? user?.pageLength ?? session?.screenHeight ?? 22;
-  return Number.isFinite(rows) && Number(rows) > 0 ? Number(rows) : 22;
+  const candidates = [
+    session?.screenHeight, user?.linesPerScreen, user?.lineLength, user?.pageLength,
+  ];
+  for (const rows of candidates) {
+    if (Number.isFinite(rows) && Number(rows) > 0) return Number(rows);
+  }
+  return 24;
 }
 
 /**
@@ -592,8 +601,17 @@ async function drawData(
   socket: SocketIOSocket,
   base: GlcScreenBase,
   data: GLCData,
-  skeletonCount: number,
+  placeholders: readonly string[],
 ): Promise<void> {
+  const skeletonCount = placeholders.length;
+  /*
+   * A row of the settled body that is byte-identical to a placeholder row -
+   * a rule, a legend line - is already what it will be, and starts still.
+   * Read off the rows themselves rather than by index: the server may answer
+   * with fewer callers than were asked for, which slides the footer up.
+   */
+  const frozen = new Set(placeholders.filter((row) => !awaitsData(row)));
+  const stillFor = (body: readonly string[]): boolean[] => body.map((row) => frozen.has(row));
   const screen = {
     ...base,
     calls: data.calls.map((call) => ({
@@ -624,7 +642,9 @@ async function drawData(
       yesterday: screen.yesterday,
       records: screen.records,
     });
-    const painted = await settleOnto(socket, body, skeletonCount, { animate: base.animate });
+    const painted = await settleOnto(socket, body, skeletonCount, {
+      animate: base.animate, still: stillFor(body),
+    });
     // A placeholder the shorter list did not reach is cleared, not left.
     for (let i = painted; i < skeletonCount; i++) {
       socket.emit('ansi-output', overwrite('') + '\r\n');
@@ -632,17 +652,37 @@ async function drawData(
     return;
   }
 
-  const rows = renderGlcRows(screen);
-  const painted = await settleOnto(socket, rows, skeletonCount, { animate: base.animate });
+  // The rows and the footer settle as ONE block over the placeholders that
+  // already hold their shape; the footer is not written after the table any
+  // more, because nine rows arriving late is what scrolled the logo away.
+  const body = [...renderGlcRows(screen), ...renderGlcFooter(screen)];
+  const painted = await settleOnto(socket, body, skeletonCount, {
+    animate: base.animate, still: stillFor(body),
+  });
   // Any placeholder the real list did not reach is cleared rather than left
   // standing: the server can answer with fewer callers than were asked for.
   for (let i = painted; i < skeletonCount; i++) {
     socket.emit('ansi-output', overwrite('') + '\r\n');
   }
+}
 
-  for (const line of renderGlcFooter(screen)) {
-    socket.emit('ansi-output', line + '\r\n');
-  }
+
+/**
+ * No list: say why where the first call would have been, and let the rest of
+ * the page - an empty table and its footer - settle over the placeholders
+ * that are still standing, so even a failure keeps the page's shape.
+ */
+async function drawFailure(
+  socket: SocketIOSocket,
+  base: GlcScreenBase,
+  placeholders: readonly string[],
+  reason: string,
+): Promise<void> {
+  socket.emit('ansi-output', rewind(placeholders.length));
+  socket.emit('ansi-output', overwrite(reason) + '\r\n');
+  const rest = placeholders.slice(1);
+  for (const row of rest) socket.emit('ansi-output', overwrite(row) + '\r\n');
+  await drawData(socket, base, normalizeGLCData({}), rest);
 }
 
 /**
@@ -693,11 +733,14 @@ door.onStart(async (ctx: DoorContext) => {
     } else if (config.lines === AUTO_LINES) {
       config.lines = autoLines(rowsOf(ctx));
     }
-    // Both widths hold the table's shape while the network answers; only the
-    // row differs, because the narrow table's columns are its own.
+    // Both widths hold the WHOLE page's shape while the network answers -
+    // the call rows and the footer under them - so nothing is added, and
+    // nothing scrolls, when the answer lands. Only the rows differ, because
+    // the narrow table's columns are its own.
     const placeholders = base.columns <= NARROW_WIDTH
-      ? Array.from({ length: config.lines }, () => narrowSkeletonRow())
-      : skeletonRows(config.lines);
+      ? narrowSkeletonBody(config.lines)
+      : skeletonBody(config.lines, base.style);
+    const still = placeholders.map((row) => !awaitsData(row));
     for (const row of placeholders) socket.emit('ansi-output', row + '\r\n');
 
     /*
@@ -728,7 +771,8 @@ door.onStart(async (ctx: DoorContext) => {
       waiting = setInterval(() => {
         socket.emit('ansi-output', rewind(placeholders.length));
         for (let i = 0; i < placeholders.length; i++) {
-          socket.emit('ansi-output', overwrite(scrambleFrame(placeholders[i], masks[i], Math.random)) + '\r\n');
+          const row = still[i] ? placeholders[i] : scrambleFrame(placeholders[i], masks[i], Math.random);
+          socket.emit('ansi-output', overwrite(row) + '\r\n');
         }
       }, 125);
       if (typeof waiting.unref === 'function') waiting.unref();
@@ -749,12 +793,7 @@ door.onStart(async (ctx: DoorContext) => {
     if (!body) {
       // Nothing from the network and nothing kept: say so where the calls
       // would have been, and still draw the rest of the screen.
-      socket.emit('ansi-output', rewind(placeholders.length));
-      socket.emit('ansi-output', overwrite('\x1b[31m  THE SCENEWALL DID NOT ANSWER') + '\r\n');
-      for (let i = 1; i < placeholders.length; i++) {
-        socket.emit('ansi-output', overwrite('') + '\r\n');
-      }
-      await drawData(socket, base, normalizeGLCData({}), 0);
+      await drawFailure(socket, base, placeholders, '\x1b[31m  THE SCENEWALL DID NOT ANSWER');
       return;
     }
 
@@ -762,16 +801,11 @@ door.onStart(async (ctx: DoorContext) => {
     try {
       glcData = normalizeGLCData(JSON.parse(body));
     } catch (err: any) {
-      socket.emit('ansi-output', rewind(placeholders.length));
-      socket.emit('ansi-output', overwrite(`\x1b[31m  COULD NOT READ THE ANSWER: ${err.message}`) + '\r\n');
-      for (let i = 1; i < placeholders.length; i++) {
-        socket.emit('ansi-output', overwrite('') + '\r\n');
-      }
-      await drawData(socket, base, normalizeGLCData({}), 0);
+      await drawFailure(socket, base, placeholders, `\x1b[31m  COULD NOT READ THE ANSWER: ${err.message}`);
       return;
     }
 
-    await drawData(socket, base, glcData, placeholders.length);
+    await drawData(socket, base, glcData, placeholders);
 
     if (source === 'cache') {
       // The caller should know the list is the last one that arrived rather

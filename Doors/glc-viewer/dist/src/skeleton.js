@@ -5,6 +5,9 @@ exports.skeletonRow = skeletonRow;
 exports.skeletonRows = skeletonRows;
 exports.rewind = rewind;
 exports.overwrite = overwrite;
+exports.skeletonFooter = skeletonFooter;
+exports.skeletonBody = skeletonBody;
+exports.awaitsData = awaitsData;
 /**
  * What a caller looks at while the scenewall is thinking.
  *
@@ -23,6 +26,7 @@ exports.overwrite = overwrite;
  */
 const art_generated_1 = require("./art.generated");
 const estringf_1 = require("./estringf");
+const render_1 = require("./render");
 /** Cursor up one row, and clear it before drawing over it. */
 exports.CURSOR_UP = '\x1b[A';
 exports.CLEAR_ROW = '\x1b[K';
@@ -58,5 +62,53 @@ function rewind(count) {
 /** Draw `line` over whatever is on the current row. */
 function overwrite(line) {
     return exports.CLEAR_ROW + line;
+}
+/**
+ * THE FOOTER IS ON SCREEN BEFORE THE DATA TOO.
+ *
+ * The first cut held only the call rows while the network was asked and
+ * wrote the footer - a rule, three legend rows, a rule, three day-total rows,
+ * a rule - after the answer landed. Nine rows arriving at once pushed the
+ * page down by nine, and on a twenty-five row terminal that scrolled the
+ * logo off the top. The sysop read it right: "this doesnt draw until the
+ * scramble anim finishes" (2026-09-16). So the page has its final SHAPE
+ * from the first paint: the footer goes out with the placeholders, its
+ * totals as dots, and the real totals settle over them like the calls do.
+ */
+const dots = (width) => '.'.repeat(width);
+const SKELETON_DAY = {
+    statdate: dots(8), calls: dots(3), topcps: dots(5), uploads: dots(7), downloads: dots(7),
+};
+const SKELETON_RECORDS = {
+    allcalls: dots(3), recordcalls: dots(3), calls: dots(3), mostcalled: dots(14),
+    calls2: dots(3), secondmostcalled: dots(14), calls3: dots(3), thirdmostcalled: dots(14),
+};
+/** The footer with every total still to come, in the style's own layout. */
+function skeletonFooter(style) {
+    return (0, render_1.renderGlcFooter)({
+        style,
+        logo: [],
+        columns: 80,
+        showLocation: false,
+        screenClear: false,
+        calls: [],
+        yesterday: SKELETON_DAY,
+        previousDay: SKELETON_DAY,
+        records: SKELETON_RECORDS,
+    });
+}
+/** Everything under the header, waiting: `count` call rows, then the footer. */
+function skeletonBody(count, style) {
+    return [...skeletonRows(count), ...skeletonFooter(style)];
+}
+/**
+ * Whether a placeholder row is waiting for data, or is already what it will
+ * be. The rules and the legend are the same before and after the answer;
+ * only a row of dots has something coming. The waiting noise and the
+ * settling leave the still rows alone, so the page's frame holds while the
+ * values inside it resolve.
+ */
+function awaitsData(placeholder) {
+    return /\.{3,}/.test(placeholder.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
 }
 //# sourceMappingURL=skeleton.js.map
