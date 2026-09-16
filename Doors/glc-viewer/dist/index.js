@@ -60,6 +60,8 @@ const skeleton_1 = require("./src/skeleton");
 const fetch_deadline_1 = require("./src/fetch-deadline");
 const narrow_1 = require("./src/narrow");
 const sizing_1 = require("./src/sizing");
+const settle_paint_1 = require("./src/settle-paint");
+const scramble_1 = require("./src/scramble");
 // Metadata
 exports.metadata = {
     name: 'Global Last Callers',
@@ -199,6 +201,7 @@ function loadConfig() {
         screenClear: false,
         style: 1,
         centreName: false,
+        animate: true,
         timeZone: '',
         viewBBS: ''
     };
@@ -263,6 +266,9 @@ function loadConfig() {
                         else {
                             config.style = parseInt(value) || 1;
                         }
+                        break;
+                    case 'ANIMATE':
+                        config.animate = !/^(0|no|off|false)$/i.test(value.trim());
                         break;
                     case 'CENTRENAME':
                         config.centreName = value === '1';
@@ -457,6 +463,7 @@ function drawHeader(socket, config, showLocation, callerColumns) {
             command: 'GLC',
         }),
         columns: callerColumns,
+        animate: config.animate,
     };
     /*
      * A FORTY-COLUMN CALLER IS DRAWN FOR, not cut down - the board's frame
@@ -502,10 +509,8 @@ function drawData(socket, base, data, skeletonCount) {
         records: data.records,
     };
     if (base.columns <= narrow_1.NARROW_WIDTH) {
-        // The header is already on screen; the placeholders under it are walked
-        // back over and written on, exactly as the wide screen does it.
-        if (skeletonCount > 0)
-            socket.emit('ansi-output', (0, skeleton_1.rewind)(skeletonCount));
+        // The header is already on screen; the placeholders under it settle into
+        // the table, exactly as the wide screen does it.
         const body = (0, narrow_1.narrowBody)({
             logo: base.logo,
             showLocation: base.showLocation,
@@ -514,23 +519,18 @@ function drawData(socket, base, data, skeletonCount) {
             yesterday: screen.yesterday,
             records: screen.records,
         });
-        for (const line of body)
-            socket.emit('ansi-output', (0, skeleton_1.overwrite)(line) + '\r\n');
+        const painted = (0, settle_paint_1.settleOnto)(socket, body, skeletonCount, { animate: base.animate });
         // A placeholder the shorter list did not reach is cleared, not left.
-        for (let i = body.length; i < skeletonCount; i++) {
+        for (let i = painted; i < skeletonCount; i++) {
             socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
         }
         return;
     }
     const rows = (0, render_1.renderGlcRows)(screen);
-    if (skeletonCount > 0)
-        socket.emit('ansi-output', (0, skeleton_1.rewind)(skeletonCount));
-    for (const row of rows) {
-        socket.emit('ansi-output', (0, skeleton_1.overwrite)(row) + '\r\n');
-    }
+    const painted = (0, settle_paint_1.settleOnto)(socket, rows, skeletonCount, { animate: base.animate });
     // Any placeholder the real list did not reach is cleared rather than left
     // standing: the server can answer with fewer callers than were asked for.
-    for (let i = rows.length; i < skeletonCount; i++) {
+    for (let i = painted; i < skeletonCount; i++) {
         socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
     }
     for (const line of (0, render_1.renderGlcFooter)(screen)) {
@@ -587,7 +587,42 @@ door.onStart(async (ctx) => {
          * door draws the LAST answer it got: yesterday's list beats a red line,
          * and a late answer is still written to the cache for the next caller.
          */
-        const { body, source } = await (0, fetch_deadline_1.bodyForThisCall)(() => fetchGLCData(config), config.timeout, DOOR_ROOT);
+        /*
+         * NOISE WHILE THE SCENEWALL IS ASKED.
+         *
+         * The placeholder rows are redrawn as scrambled characters until the
+         * answer lands, so a caller can see the door is working rather than
+         * guessing at a still screen. Nothing is settled during the wait - every
+         * frame is noise - and the settling happens once, onto the real rows, in
+         * `settleOnto`.
+         *
+         * Eight frames a second: enough to read as movement, and forty columns of
+         * ten rows is under four hundred bytes a frame, which a 19200 line
+         * carries without noticing. The timer is unref'd and always cleared - a
+         * door must not hold the process open, and a frame arriving after the
+         * table would overwrite it.
+         */
+        let waiting;
+        if (base.animate && placeholders.length > 0) {
+            const masks = placeholders.map((row) => (0, scramble_1.nothingSettled)((0, scramble_1.visibleLength)(row)));
+            waiting = setInterval(() => {
+                socket.emit('ansi-output', (0, skeleton_1.rewind)(placeholders.length));
+                for (let i = 0; i < placeholders.length; i++) {
+                    socket.emit('ansi-output', (0, skeleton_1.overwrite)((0, scramble_1.scrambleFrame)(placeholders[i], masks[i], Math.random)) + '\r\n');
+                }
+            }, 125);
+            if (typeof waiting.unref === 'function')
+                waiting.unref();
+        }
+        let body;
+        let source;
+        try {
+            ({ body, source } = await (0, fetch_deadline_1.bodyForThisCall)(() => fetchGLCData(config), config.timeout, DOOR_ROOT));
+        }
+        finally {
+            if (waiting)
+                clearInterval(waiting);
+        }
         if (!body) {
             // Nothing from the network and nothing kept: say so where the calls
             // would have been, and still draw the rest of the screen.

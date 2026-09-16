@@ -85,6 +85,14 @@
       "help": "Windows naming, because the scenewall server is what reads it."
     },
     {
+      "key": "animate",
+      "cfgKey": "ANIMATE",
+      "label": "Scramble the list into place",
+      "type": "string",
+      "default": "YES",
+      "help": "The rows arrive as noise and stop on their real characters while the scenewall is asked. NO draws them once, which is what a very slow line wants."
+    },
+    {
       "key": "logo1",
       "label": "Logo, style 1",
       "type": "string",
