@@ -91,8 +91,8 @@ const MESSAGE_STRING_CAPACITY = 198;
  * so that 68K doors see exactly what they expect.
  * ============================================================================
  */
-import { waitBudgetMs } from './wait-budget';
-export { waitBudgetMs };
+import { waitBudgetMs, asyncWaitEnabled } from './wait-budget';
+export { waitBudgetMs, asyncWaitEnabled };
 
 export class AEDoorLibrary {
   private socket: Socket;
@@ -1845,7 +1845,7 @@ console.warn(
 
   private waitForReply(state: DoorInterfaceState, command: number): boolean {
     this.inWaitForReply = true;
-    const asyncWait = process.env.DOOR_ASYNC_WAIT === '1';
+    const asyncWait = asyncWaitEnabled();
     const profile = process.env.DOOR_PROFILE === '1';
     const started = profile ? Date.now() : 0;
     let iterations = 0;

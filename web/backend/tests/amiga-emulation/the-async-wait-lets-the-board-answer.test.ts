@@ -85,7 +85,9 @@ describe('the async wait lets the board answer', () => {
   it('and the sync loop yields nothing while it runs', async () => {
     const { library, state } = libraryUnderTest();
 
-    delete process.env.DOOR_ASYNC_WAIT;
+    // `0` OPTS OUT now: the async wait is what a board runs by default, so
+    // the legacy loop has to be asked for by name to be measured at all.
+    process.env.DOOR_ASYNC_WAIT = '0';
     const syncTicks = await timerTicksDuring(() => library.waitForReply(state, 7));
 
     // Nothing else ran. Read this precisely: the sync loop is bounded by
