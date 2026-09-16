@@ -38,6 +38,8 @@ export interface VandtiaHost {
   pushEvent(message: string): void;
   /** A game that has finished says so, in the dialog every game uses. */
   announceGameOver(title: string, body: string): void;
+  /** One finished game, counted for everybody who was at the table. */
+  recordGameResult(gameId: string, playerIds: string[], winnerId: string | null): void;
   updateTableStatus(table: LobbyTable): void;
   clearTableHand(table: LobbyTable): void;
   updateAllPanels(): void;
@@ -1190,6 +1192,19 @@ export class VandtiaGameModule implements TableGameModule {
       })),
       playedAt: Date.now(),
     };
+
+    /*
+     * And counted, so the lobby can say who is any good at this - "skitgubbe
+     * can have a highscore list that tracks games won same for uno etc"
+     * (sysop, 2026-09-16). The winner is whoever went out FIRST; everybody
+     * human at the table has played one.
+     */
+    this.host.recordGameResult(
+      'skitgubbe',
+      table.players.filter((player) => player.role === 'player' && !isBotPlayer(player))
+        .map((player) => player.userId),
+      engine.state.finishedOrder[0] ?? null,
+    );
 
     this.host.clearTableHand(table);
     this.host.updateTableStatus(table);

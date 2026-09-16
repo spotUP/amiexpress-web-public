@@ -371,6 +371,15 @@ class SkitgubbeGameModule {
                     : `${player.username}${you} - out`;
             }),
         ].join('\n'));
+        /*
+         * Counted for the lobby's table of games won (sysop, 2026-09-16). This
+         * game names a LOSER rather than a winner, so with two players the other
+         * one won it and with three nobody did - the table then records a game
+         * played for everybody, which is the honest answer.
+         */
+        const humans = seated.filter((player) => !(0, utils_1.isBotPlayer)(player)).map((player) => player.userId);
+        const survivorIds = survivors.map((player) => player.userId);
+        this.host.recordGameResult('skitgubbe-trick', humans, survivorIds.length === 1 ? survivorIds[0] : null);
         // Keep the finished position on the table for a moment: the panels read
         // `table.hand` and a caller who blinks should still see who lost.
         table.lastHand = {

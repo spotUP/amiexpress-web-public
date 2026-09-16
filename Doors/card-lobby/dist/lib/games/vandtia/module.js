@@ -1077,6 +1077,14 @@ class VandtiaGameModule {
             })),
             playedAt: Date.now(),
         };
+        /*
+         * And counted, so the lobby can say who is any good at this - "skitgubbe
+         * can have a highscore list that tracks games won same for uno etc"
+         * (sysop, 2026-09-16). The winner is whoever went out FIRST; everybody
+         * human at the table has played one.
+         */
+        this.host.recordGameResult('skitgubbe', table.players.filter((player) => player.role === 'player' && !(0, utils_1.isBotPlayer)(player))
+            .map((player) => player.userId), engine.state.finishedOrder[0] ?? null);
         this.host.clearTableHand(table);
         this.host.updateTableStatus(table);
         await this.host.persistState();

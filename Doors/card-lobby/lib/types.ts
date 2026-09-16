@@ -49,6 +49,15 @@ export interface PlayerStats {
   handsPlayed: number;
   wins: number;
   losses: number;
+  /**
+   * Games FINISHED, per game - which is not the same as hands won.
+   *
+   * `wins` above counts hands that PAID, a chip delta, and every game in this
+   * lobby that is played for the title settles at zero ("skitgubbe is a
+   * social game, it requires no buy in"). Optional because profiles saved
+   * before it existed are not broken, only empty.
+   */
+  byGame?: Record<string, { played: number; won: number }>;
   net: number;
   biggestPot: number;
   winStreak: number;

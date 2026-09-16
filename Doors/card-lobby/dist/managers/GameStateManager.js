@@ -764,6 +764,9 @@ class GameStateManager {
             callbacks.emitLiveChat(`BIG WIN: ${currentProfile.username} won ${currentDelta} in ${table.gameName} (#${table.id})`);
         }
         callbacks.pushEvent(`${winner.name} wins! Game finished at table #${table.id}.`);
+        // Counted for the lobby's table of games won (sysop, 2026-09-16).
+        callbacks.recordGameResult(table.gameId, table.players.filter((player) => player.role === 'player' && !(0, lib_1.isBotPlayer)(player))
+            .map((player) => player.userId), winnerId);
         /*
          * And announced, the way every game in the lobby announces - "the game
          * ended now, no dialog announcing that i won or lost or anything" (sysop,

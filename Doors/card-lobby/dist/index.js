@@ -28,7 +28,7 @@ const games_1 = require("./lib/games");
 const lib_1 = require("./lib");
 const activity_hints_1 = require("./lib/activity-hints");
 const live_chat_1 = require("./lib/live-chat");
-const achievements_1 = require("./lib/achievements");
+const Scores_1 = require("./managers/Scores");
 const desktop_layout_1 = require("./lib/desktop-layout");
 const metadata_1 = require("./lib/metadata");
 const managers_1 = require("./managers");
@@ -264,6 +264,7 @@ class CardLobbyApp {
         // Initialize managers
         this.uiManager = new managers_1.UIManager(this.screen, this.desktop, this.session.bbsSession?.nodeId ?? 1);
         this.gameStateManager = new managers_1.GameStateManager();
+        this.scores = new Scores_1.Scores(this);
         this.tableFlow = new TableFlow_1.TableFlow(this);
         this.unoEvents = new UnoEventBus_1.UnoEventBus(this, lib_1.REFRESH_INTERVAL_MS);
         this.gameViews = new GameViews_1.GameViews(this);
@@ -355,7 +356,7 @@ class CardLobbyApp {
             focusLobby: this.focusLobby.bind(this),
             focusTable: this.focusTable.bind(this),
             showProfileWindow: () => this.dialogManager.showProfileWindow(this.currentProfile),
-            showLeaderboardWindow: () => this.dialogManager.showLeaderboardWindow(this.profiles),
+            showLeaderboardWindow: () => this.dialogManager.showLeaderboardWindow(this.profiles, this.scores),
             showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
             showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
             showCardStyleWindow: () => this.chooseCardStyle(),
@@ -1136,11 +1137,23 @@ class CardLobbyApp {
          * At a table the question says so, because leaving mid-hand is the part
          * worth a second thought; from the lobby it is the plain question.
          */
-        const atTable = Boolean(this.currentProfile?.currentTableId)
-            && this.viewMode === 'table';
-        void this.dialogManager.showYesNoDialog('Leave the Card Lobby?', atTable
-            ? 'You are still at a table. Leave the lobby and go back to the BBS?'
-            : 'Go back to the BBS?').then((leave) => {
+        /*
+         * AT A TABLE, Q IS A DOOR BACK TO THE LOBBY.
+         *
+         * "pressing q in a cardgame exits to the bbs instead of the lobby"
+         * (sysop, 2026-09-16). Q sits among the keys a caller presses constantly,
+         * and it used to drop them out of the DOOR from inside a hand - two rooms
+         * at once, and no way back to the game. One step out at a time: the table
+         * first, the door only from the lobby, where leaving is what Q means.
+         */
+        if (Boolean(this.currentProfile?.currentTableId) && this.viewMode === 'table') {
+            void this.dialogManager.showYesNoDialog('Leave the table?', 'Go back to the lobby? The game carries on without you.').then((leave) => {
+                if (leave)
+                    this.runAction(() => this.tableFlow.leaveCurrentTable());
+            });
+            return;
+        }
+        void this.dialogManager.showYesNoDialog('Leave the Card Lobby?', 'Go back to the BBS?').then((leave) => {
             if (leave)
                 this.exitDoor();
         });
@@ -1403,33 +1416,11 @@ class CardLobbyApp {
         this.updateAllPanels();
     }
     /**
-     * The lobby's OWN awards, and the board's.
-     *
-     * These are two systems on purpose (achievements SP3): the chips and the
-     * notice are this door's, scoped to the table; `door.cardlobby.unlock` is
-     * the global one, reported through the board so a player's card play counts
-     * beside everything else he does. The lobby award is the trigger, not the
-     * payload - the key is which one, so the global rules can ask for variety
-     * rather than duplicating the local thresholds.
-     */
-    handleAchievementUnlocks(profile) {
-        for (const unlocked of (0, achievements_1.unlockAchievements)(profile)) {
-            this.pushNotice(`Achievement unlocked: ${unlocked.name} (+${unlocked.reward})`);
-            this.reportAchievement('door.cardlobby.unlock', { key: unlocked.id });
-        }
-    }
-    updateStatsAfterHand(profile, delta, pot) {
-        (0, achievements_1.recordHandResult)(profile, delta, pot);
-        this.reportAchievement('door.cardlobby.hand');
-        if (delta > 0)
-            this.reportAchievement('door.cardlobby.win', { value: delta });
-    }
-    /**
      * One event to the board. Optional on the context (an older SDK, or a board
      * with no achievements server), never throws, and a false answer is the
      * normal case for a caller who is not a player.
      */
-    reportAchievement(type, opts) {
+    reportToBoard(type, opts) {
         try {
             this.session
                 .achievement?.(type, opts);
@@ -1438,13 +1429,17 @@ class CardLobbyApp {
             /* a hand is not worth a crash */
         }
     }
+    /** One finished game, counted for everyone who was at the table. */
+    recordGameResult(gameId, playerIds, winnerId) {
+        this.scores.recordGameResult(gameId, playerIds, winnerId);
+    }
     // Game state delegation methods
     async finalizeHoldemHand(table, engine, beforeStacks) {
         await this.gameStateManager.finalizeHoldemHand(table, engine, beforeStacks, this.lobby, this.profiles, this.currentProfile, {
             clearTableHand: this.clearTableHand.bind(this),
             updateTableStatus: this.updateTableStatus.bind(this),
-            updateStatsAfterHand: this.updateStatsAfterHand.bind(this),
-            handleAchievementUnlocks: this.handleAchievementUnlocks.bind(this),
+            updateStatsAfterHand: this.scores.updateStatsAfterHand.bind(this.scores),
+            handleAchievementUnlocks: this.scores.handleAchievementUnlocks.bind(this.scores),
             pushNotice: this.pushNotice.bind(this),
             pushEvent: this.pushEvent.bind(this),
             emitLiveChat: this.emitLiveChat.bind(this),
@@ -1539,13 +1534,14 @@ class CardLobbyApp {
         await this.gameStateManager.finalizeUnoGame(table, engine, beforeStacks, this.lobby, profiles, this.currentProfile, {
             clearTableHand: this.clearTableHand.bind(this),
             updateTableStatus: this.updateTableStatus.bind(this),
-            updateStatsAfterHand: this.updateStatsAfterHand.bind(this),
-            handleAchievementUnlocks: this.handleAchievementUnlocks.bind(this),
+            updateStatsAfterHand: this.scores.updateStatsAfterHand.bind(this.scores),
+            handleAchievementUnlocks: this.scores.handleAchievementUnlocks.bind(this.scores),
             pushNotice: this.pushNotice.bind(this),
             pushEvent: this.pushEvent.bind(this),
             emitLiveChat: (message) => this.emitLiveChat(message),
             broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
             announceGameOver: this.announceGameOver.bind(this),
+            recordGameResult: this.recordGameResult.bind(this),
             persistState: this.persistState.bind(this),
         });
     }

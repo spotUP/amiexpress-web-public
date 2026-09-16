@@ -26,11 +26,32 @@ import { showCardStyleDialog } from './CardStyleDialog';
 import { showThemeDialog } from './ThemeDialog';
 import type { Theme } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
+/** Where the games-won page gets its rows (managers/Scores.ts). */
+export interface GameScoreSource {
+  gamesPlayed(): string[];
+  table(gameId: string, limit?: number): Array<{ username: string; won: number; played: number }>;
+}
+
+/**
+ * What a game is called on the board.
+ *
+ * The id is what the table stores and the name is what a caller reads; a game
+ * this map has not heard of prints its id rather than nothing, so a game
+ * added later appears on the board the day it records a result.
+ */
+const GAME_TITLES: Record<string, string> = {
+  skitgubbe: 'Skitgubbe (vandtia)',
+  'skitgubbe-trick': 'Skitgubbe (trick-taking)',
+  uno: 'UNO',
+  'uno-house': 'UNO (house rules)',
+  patience: 'Patience',
+};
+
 export class DialogManager {
   private screen: Screen;
   private overlayShade: Box;
   private modalActive = false;
-  private leaderboardMode: LeaderboardMode = 'weekly';
+  private leaderboardMode: LeaderboardMode | 'games' = 'weekly';
 
   constructor(screen: Screen, overlayShade: Box) {
     this.screen = screen;
@@ -74,17 +95,63 @@ export class DialogManager {
     this.showTextWindow('Achievements', lines.join('\n'));
   }
 
-  showLeaderboardWindow(profiles: Record<string, PlayerProfile>): void {
-    const content = this.buildLeaderboardContent(profiles);
-    this.showTextWindow('Leaderboard', content, {
-      footer: 'Keys: 1 Daily  2 Weekly  3 All-Time',
+  /**
+   * The board of who is doing well - and, on its fourth page, of who WINS.
+   *
+   * "skitgubbe can have a highscore list that tracks games won same for uno
+   * etc" (sysop, 2026-09-16). It is a page of this rather than a screen of
+   * its own: the three pages here already answer "how is everyone doing", and
+   * a second leaderboard in another menu is how a caller ends up not knowing
+   * where to look. The chips pages measure a hand that PAID; the games page
+   * measures a game somebody WON, which is the only measure a social game
+   * has.
+   */
+  showLeaderboardWindow(
+    profiles: Record<string, PlayerProfile>,
+    games?: GameScoreSource,
+  ): void {
+    const content = (): string => (this.leaderboardMode === 'games'
+      ? this.buildGameScoreContent(games)
+      : this.buildLeaderboardContent(profiles));
+    this.showTextWindow('Leaderboard', content(), {
+      footer: 'Keys: 1 Daily  2 Weekly  3 All-Time  4 Games Won',
       onKey: (key) => {
         if (key === '1') this.leaderboardMode = 'daily';
         if (key === '2') this.leaderboardMode = 'weekly';
         if (key === '3') this.leaderboardMode = 'all';
-        return this.buildLeaderboardContent(profiles);
+        if (key === '4') this.leaderboardMode = 'games';
+        return content();
       },
     });
+  }
+
+  /** Games won, per game, best first. */
+  buildGameScoreContent(games?: GameScoreSource): string {
+    const lines: string[] = ['Mode: GAMES WON', ''];
+    const played = games?.gamesPlayed() ?? [];
+
+    if (played.length === 0) {
+      lines.push('Nobody has finished a game yet.');
+      lines.push('');
+      lines.push('A game counts when it ENDS - the Skitgubbe is decided, or');
+      lines.push('somebody goes out first at UNO. Hands of poker are on the');
+      lines.push('other three pages, where the chips are.');
+      return lines.join('\n');
+    }
+
+    for (const gameId of played) {
+      lines.push(`{cyan-fg}${GAME_TITLES[gameId] ?? gameId}{/}`);
+      lines.push('RANK NAME           WON  PLAYED');
+      lines.push('---- -------------- ---- ------');
+      games?.table(gameId, 5).forEach((row, index) => {
+        lines.push(
+          `${String(index + 1).padEnd(4)} ${row.username.slice(0, 14).padEnd(14)} `
+          + `${String(row.won).padStart(4)} ${String(row.played).padStart(6)}`,
+        );
+      });
+      lines.push('');
+    }
+    return lines.join('\n');
   }
 
   buildLeaderboardContent(profiles: Record<string, PlayerProfile>): string {

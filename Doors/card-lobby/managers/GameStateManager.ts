@@ -914,6 +914,7 @@ export class GameStateManager {
       emitLiveChat: (message: string) => void;
       broadcastEvent: (tableId: number, type: string, data: any) => Promise<void>;
       announceGameOver: (title: string, body: string) => void;
+      recordGameResult: (gameId: string, playerIds: string[], winnerId: string | null) => void;
       persistState: () => Promise<void>;
     },
   ): Promise<void> {
@@ -993,6 +994,14 @@ export class GameStateManager {
     }
 
     callbacks.pushEvent(`${winner.name} wins! Game finished at table #${table.id}.`);
+
+    // Counted for the lobby's table of games won (sysop, 2026-09-16).
+    callbacks.recordGameResult(
+      table.gameId,
+      table.players.filter((player) => player.role === 'player' && !isBotPlayer(player))
+        .map((player) => player.userId),
+      winnerId,
+    );
 
     /*
      * And announced, the way every game in the lobby announces - "the game
