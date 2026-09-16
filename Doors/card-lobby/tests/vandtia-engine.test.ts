@@ -122,12 +122,49 @@ export async function testATwoGoesOnAnythingAndTakesTheValueBackDown(): Promise<
   assert.deepStrictEqual(legal, ['2H'], 'nothing but the two answers an ace');
 
   engine.playCard('u1', 0);
-  assert.strictEqual(engine.currentPlayerId(), 'u2', 'and play carries on');
 
-  engine.state.players[1].hand = cards('3S', '4H', '5D');
-  const afterTwo = ids(engine.legalPlays('u2').map((i) => engine.state.players[1].hand[i]));
+  /*
+   * AND THE TURN COMES BACK. "2 can be thrown on anything as well and gives
+   * the turn back to me but it does not remove the pile" (sysop,
+   * 2026-09-16) - the board's own reading, which this test used to
+   * contradict by asserting play carried on to the next seat.
+   */
+  assert.strictEqual(engine.currentPlayerId(), 'u1', 'the same player leads again');
+  assert.deepStrictEqual(ids(engine.state.pile), ['AS', '2H'],
+    'and the pile is still there - a two lowers it, it does not turn it away');
+
+  engine.state.players[0].hand = cards('3S', '4H', '5D');
+  const afterTwo = ids(engine.legalPlays('u1').map((i) => engine.state.players[0].hand[i]));
   assert.deepStrictEqual(afterTwo.sort(), ['3S', '4H', '5D'],
     'the pile is a two now, so the lowest card in the game answers it');
+}
+
+export async function testTwoAcesTurnThePileAwayAndTheSamePlayerGoesAgain(): Promise<void> {
+  // "two aces should also remove the pile and give the turn back to me"
+  // (sysop, 2026-09-16). Every other rank still needs four in a row.
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('4S', '9H', 'AD'), currentIndex: 0, stock: [] });
+  engine.state.players[0].hand = cards('AH', '4D', '5C');
+
+  const result = engine.playCard('u1', 0);
+
+  assert.ok(result.success, result.message);
+  assert.strictEqual(engine.state.pile.length, 0, 'two aces turn the pile away');
+  assert.strictEqual(engine.state.burned.length, 4, 'burned out of the game, not picked up');
+  assert.strictEqual(engine.currentPlayerId(), 'u1', 'and the same player plays again');
+}
+
+export async function testTwoOfAnyOtherRankIsJustTwoCards(): Promise<void> {
+  // The ace's run of two is the ace's alone: two kings burn nothing.
+  const engine = playing(threeHanded());
+  position(engine, { pile: cards('4S', 'KD'), currentIndex: 0, stock: [] });
+  engine.state.players[0].hand = cards('KH', '4D', '5C');
+
+  engine.playCard('u1', 0);
+
+  assert.deepStrictEqual(ids(engine.state.pile), ['4S', 'KD', 'KH'],
+    'two kings leave the pile where it is');
+  assert.strictEqual(engine.currentPlayerId(), 'u2', 'and the turn moves on');
 }
 
 export async function testATenTurnsThePileAwayAndTheSamePlayerGoesAgain(): Promise<void> {

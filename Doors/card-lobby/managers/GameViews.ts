@@ -562,13 +562,28 @@ export class GameViews {
       pile: true,
       onPick: () => { /* the pile is read, not picked */ },
     });
-    if (!drewPile) {
-      this.host.flopContent.setContent(top3.length > 0
+    /*
+     * THE PANEL'S TEXT IS ALWAYS THIS GAME'S, drawn or not.
+     *
+     * It used to be written only when the card widgets declined, and
+     * `renderBoardAndHand` above had already put POKER's "Board not dealt
+     * yet." there - so a Skitgubbe pile that did draw left that sentence
+     * underneath it, ready to appear the moment the panel got too small.
+     *
+     * And during the SWAP there is no pile to lead: "it says the pile is
+     * empty but we are playing" (sysop, 2026-09-16). True, and useless - the
+     * game has not started, the cards are being arranged. The panel says
+     * which half of the game the caller is in.
+     */
+    this.host.flopContent.setContent(swapping
+      ? `{${UI_THEME.accent}-fg}Arranging your cards.{/}\n`
+        + `{${UI_THEME.dim}-fg}The pile starts when everybody is ready.{/}`
+      : top3.length > 0
         ? `{${UI_THEME.accent}-fg}Pile{/} ${state.pile.length}   `
           + `{${UI_THEME.dim}-fg}Stock ${state.stock.length}{/}\n`
           + top3.map((card) => `${card.rank}${card.suit}`).join('  ')
         : `The pile is empty - lead anything.\n{${UI_THEME.dim}-fg}Stock ${state.stock.length}{/}`);
-    }
+    void drewPile;
 
     // The caller's own cards, as widgets: clickable, focusable, and lit when
     // picked. The six in front of them are shown rather than played from -

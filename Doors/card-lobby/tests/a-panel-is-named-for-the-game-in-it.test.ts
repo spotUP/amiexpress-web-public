@@ -126,3 +126,59 @@ export async function theTitlesReachTheWidgets(): Promise<void> {
     assert.strictEqual(titleOf(app.uiManager.handPanel), 'YOUR HAND');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function theUpperPanelNeverSpeaksForPoker(): Promise<void> {
+  /*
+   * "it says the pile is empty but we are playing" (sysop, 2026-09-16).
+   * During the SWAP there is no pile to lead - the cards are being arranged -
+   * and the panel said "The pile is empty - lead anything." anyway. Worse,
+   * `renderBoardAndHand` had already written POKER's "Board not dealt yet."
+   * into that widget, and the Skitgubbe text was only written when the card
+   * widgets DECLINED to draw - so the poker sentence sat underneath a drawn
+   * pile, ready to surface on any panel too small for card art.
+   */
+  const app = await openApp();
+  try {
+    const me = app.currentProfile.userId;
+    const table: any = {
+      id: 200, gameId: 'skitgubbe', gameName: 'Skitgubbe', stakesLabel: 'Social',
+      smallBlind: 0, bigBlind: 0, buyIn: 0, entryFee: 0,
+      minPlayers: 2, maxPlayers: 2, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: me,
+      autoStart: false, isPrivate: false, observers: [],
+      players: [{
+        userId: me, username: 'sysop', seat: 0, stack: 0, buyIn: 0,
+        role: 'player', joinedAt: Date.now(), isBot: false,
+      }],
+    };
+    app.syncBotsForTable(table);
+    app.lobby.tables.unshift(table);
+    app.currentProfile.currentTableId = 200;
+    app.currentProfile.status = 'table';
+    await app.persistState();
+    await app.dealHand();
+    void table;
+    app.applyViewMode('table');
+    app.updateAllPanels();
+
+    const panel = () => String(app.uiManager.flopContent.getContent()).replace(/\{[^}]*\}/g, '');
+
+    assert.ok(!panel().includes('Board not dealt yet'),
+      `no poker text in a Skitgubbe panel: ${panel()}`);
+    assert.ok(!panel().includes('lead anything'),
+      `nothing is led during the swap: ${panel()}`);
+    assert.ok(/arrang/i.test(panel()), `it says what the caller is doing: ${panel()}`);
+
+    // Once the play starts and a card is on the pile, it counts the pile.
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 600));
+    const loaded = app.vandtia.load(app.findTableById(200));
+    loaded.engine.state.pile = [{ rank: '7', suit: 'H' }] as any;
+    app.findTableById(200).hand.snapshot = loaded.engine.serialize();
+    await app.persistState();
+    app.updateAllPanels();
+
+    assert.ok(/Pile\s+1/.test(panel()), `a pile with a card in it is counted: ${panel()}`);
+    assert.ok(!panel().includes('Board not dealt yet'), 'and still no poker text');
+  } finally { app.screen?.destroy?.(); }
+}

@@ -116,6 +116,27 @@ export const isWild = (card: VandtiaCard): boolean => card.rank === '2' || card.
 /** The vändtia itself: turns the pile away. */
 export const burnsThePile = (card: VandtiaCard): boolean => card.rank === '10';
 
+/**
+ * A card that hands the turn straight back to whoever played it.
+ *
+ * The ten does it because it turns the pile away and somebody has to lead the
+ * empty pile. The TWO does it as well - "2 can be thrown on anything as well
+ * and gives the turn back to me but it does not remove the pile" (sysop,
+ * 2026-09-16): it is the board's house reading of "sänker värdet på högen",
+ * and it is what makes a two worth holding rather than a card you are stuck
+ * with. Neither is the same question as whether the pile burns.
+ */
+export const playsAgain = (card: VandtiaCard): boolean =>
+  card.rank === '10' || card.rank === '2';
+
+/** How many of the same rank on top of the pile turn it away. */
+const BURN_RUN: Record<string, number> = {
+  // "two aces should also remove the pile and give the turn back to me"
+  // (sysop, 2026-09-16). Every other rank needs the usual four in a row.
+  A: 2,
+};
+const DEFAULT_BURN_RUN = 4;
+
 export const cardValue = (card: VandtiaCard): number => CARD_VALUE[card.rank] ?? 0;
 
 export const cardId = (card: VandtiaCard): string => `${card.rank}${card.suit}`;
@@ -335,18 +356,35 @@ export class VandtiaEngine {
 
     // "Tio: Vänder bort hela högen" - and four of the same value in a row
     // does it too. Either way the same player plays again.
-    if (burnsThePile(card) || this.topFourAreEqual()) {
+    const runBurns = this.topRunBurns();
+    if (burnsThePile(card) || runBurns) {
       const burned = this.state.pile.length;
+      const run = BURN_RUN[card.rank] ?? DEFAULT_BURN_RUN;
       this.state.burned.push(...this.state.pile);
       this.state.pile = [];
       this.state.lastAction = burnsThePile(card)
         ? `${player.name} plays the vändtia ${cardId(card)} and turns ${burned} cards away.`
-        : `${player.name} makes four of a kind and turns ${burned} cards away.`;
+        : `${player.name} makes ${run} of a kind and turns ${burned} cards away.`;
 
       if (this.retireIfEmpty(player)) {
         this.advanceTurn(player);
       } else {
         this.checkForLoser();
+      }
+      return { success: true, message: this.state.lastAction };
+    }
+
+    /*
+     * A card that plays again keeps the turn. The pile stays where it is -
+     * a two lowers the pile rather than turning it away - so this is NOT the
+     * burn branch above, only the same player leading again.
+     */
+    if (playsAgain(card)) {
+      if (this.retireIfEmpty(player)) {
+        this.advanceTurn(player);
+      } else {
+        this.checkForLoser();
+        this.state.lastAction = `${player.name} plays ${cardId(card)} and goes again.`;
       }
       return { success: true, message: this.state.lastAction };
     }
@@ -384,11 +422,23 @@ export class VandtiaEngine {
     }
   }
 
-  private topFourAreEqual(): boolean {
+  /**
+   * Does the top of the pile end in a run long enough to turn it away?
+   *
+   * Four of the same rank does it, as it always has - and TWO ACES do,
+   * because the board plays it that way: "two aces should also remove the
+   * pile and give the turn back to me" (sysop, 2026-09-16). The length is per
+   * RANK (`BURN_RUN`) rather than a special case in the middle of `playCard`,
+   * so another rank with its own house rule is one entry in that table.
+   */
+  private topRunBurns(): boolean {
     const pile = this.state.pile;
-    if (pile.length < 4) return false;
-    const last = pile.slice(-4);
-    return last.every((card) => card.rank === last[0].rank);
+    const top = pile[pile.length - 1];
+    if (!top) return false;
+    const needed = BURN_RUN[top.rank] ?? DEFAULT_BURN_RUN;
+    if (pile.length < needed) return false;
+    const last = pile.slice(-needed);
+    return last.every((card) => card.rank === top.rank);
   }
 
   /** A player with nothing left anywhere is out, and safe. */

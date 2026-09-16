@@ -128,10 +128,10 @@ class CardButtons {
          * tallest and widest in the row; measuring one card and trusting it for
          * the rest is the same mistake FULL_CARD_ROWS makes.
          */
-        const square = (candidate) => {
+        const square = (candidate, to) => {
             const widths = candidate.map((art) => (0, utils_1.stripBlessedTags)(art[0] ?? '').length);
-            const height = Math.max(0, ...candidate.map((art) => art.length));
-            const cardWidth = Math.max(0, ...widths);
+            const height = to?.height ?? Math.max(0, ...candidate.map((art) => art.length));
+            const cardWidth = to?.width ?? Math.max(0, ...widths);
             return candidate.map((art, index) => {
                 const pad = ' '.repeat(Math.max(0, cardWidth - (widths[index] ?? 0)));
                 const padded = art.map((line) => line + pad);
@@ -289,10 +289,26 @@ class CardButtons {
         const slotWidth = layout.cardWidth;
         const cardWidth = slotWidth - slotX;
         const cardHeight = layout.height - slotY;
+        /*
+         * THE CARD UNDERNEATH IS SQUARED TO THE CARD ON TOP OF IT.
+         *
+         * The engine draws a back SHORTER than a face - four rows against five at
+         * `mini` - and each pile's blind card used to be squared only against
+         * itself, so it ended two rows above the open card lying on it and the
+         * bottom of the pile was simply missing ("the bottom cards in the
+         * skitgubbe piles are missing the two bottom rows", sysop 2026-09-16).
+         * A pile is one card tall plus the step, so both layers take the SAME
+         * measurements - the ones the layout settled on.
+         */
         const underArt = stacked
-            ? cards.map((entry) => (entry.under
-                ? square([drawOne(entry.under, layout.size)])[0]
-                : null))
+            ? square(cards.map((entry) => (entry.under ? drawOne(entry.under, layout.size) : [])), 
+            // The pile's FULL height, not the top card's: the blind card is
+            // offset up by `slotY`, so matching only the card on top of it leaves
+            // its last row hanging in the air above the pile's bottom edge - "the
+            // blind cards are missing their bottom row" (sysop, 2026-09-16). Made
+            // this tall, its left edge runs the whole way down and the two cards
+            // finish level, which is what a card lying on another one looks like.
+            { height: cardHeight + slotY, width: cardWidth }).map((padded, index) => (cards[index].under ? padded : null))
             : cards.map(() => null);
         /*
          * A full-size card is TEN rows and the hand panel's inside is ten, so a
@@ -303,8 +319,17 @@ class CardButtons {
          * and the activity panel names the keys either way.
          */
         const perRow = layout.perRow;
-        const withLabels = layout.stackY === 0
+        const roomForLabels = layout.stackY === 0
             && layout.cardRows * (cardHeight + 1) + lift <= rows;
+        /*
+         * Whether a label is ACTUALLY drawn, which is not the same as whether
+         * there is room for one: a row the caller cannot pick from asks for none
+         * (`labels: false` - the pile, the cards in front of you). Reserving the
+         * row anyway made every widget one taller than its own content, which
+         * wasted a row per row of cards and left a pile's widget a row taller
+         * than the blind card underneath it.
+         */
+        const withLabels = roomForLabels && options.labels !== false;
         const buttonHeight = withLabels ? cardHeight + 1 : cardHeight;
         this.host.fallback.hide();
         this.ensure(cards.length);
@@ -330,7 +355,7 @@ class CardButtons {
             if (beneath && underButton) {
                 underButton.show();
                 underButton.width = cardWidth;
-                underButton.height = cardHeight;
+                underButton.height = cardHeight + slotY;
                 underButton.top = slotTop;
                 underButton.left = slotLeft;
                 underButton.setContent(beneath.join('\n'));
@@ -346,7 +371,7 @@ class CardButtons {
             // Everything sits one row down, and the picked card rises into the gap.
             button.top = slotTop + (beneath ? slotY : 0);
             button.left = slotLeft + (beneath ? slotX : 0);
-            const showLabel = withLabels && options.labels !== false;
+            const showLabel = withLabels;
             button.setContent(showLabel
                 ? [
                     ...art[index],

@@ -356,6 +356,14 @@ export class UIManager {
         { id: 'where', content: '' },
         { id: 'notice', content: '' },
       ],
+      /*
+       * The notice SCROLLS rather than being cut off. "Showing the cards in
+       * front of you. V shows ." was the sysop's screenshot on 2026-09-16:
+       * the bar is one row, the notice is the last section, and `_fit` drops
+       * whatever runs past the edge. This door's notices are sentences, so
+       * the clip loses the half that says what to press.
+       */
+      scroll: true,
     }) as any;
   }
 

@@ -253,3 +253,59 @@ export async function theDiscardPileIsAPileNotARowOfCards(): Promise<void> {
     assert.strictEqual(new Set(contents).size, 3, 'three different cards, all open');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function theBlindCardRunsTheWholeHeightOfItsPile(): Promise<void> {
+  /*
+   * "the bottom cards in the skitgubbe piles are missing the two bottom
+   * rows", then "the blind cards are missing their bottom row" (sysop,
+   * 2026-09-16). Two faults, one pile: the engine draws a BACK shorter than a
+   * face (four rows against five at `mini`) and each blind card was squared
+   * only against ITSELF; and even squared to the open card it still ended a
+   * row early, because it sits a row HIGHER - the step the card on top is
+   * offset by.
+   *
+   * So the blind card is drawn to the pile's full height. Its left edge runs
+   * the whole way down, the two cards finish level, and the only part of it
+   * that shows is the corner it peeks out of - which is what a card lying on
+   * another card looks like.
+   */
+  const app = await openApp();
+  try {
+    sizeHandPanel(app);
+    const entries = SIX.slice(0, 3).map((card) => ({
+      kind: 'standard' as const,
+      card,
+      under: { kind: 'standard' as const, card: SIX[3], face: 'back' as const },
+    }));
+    const drawn = app.cardButtons.render(entries, {
+      selected: null, playable: [], labels: false, onPick: () => {},
+    });
+    assert.strictEqual(drawn, true, 'the piles draw');
+
+    const open = app.cardButtons.focusables();
+    const blind = app.cardButtons.underlays();
+    assert.strictEqual(open.length, 3);
+    assert.strictEqual(blind.length, 3);
+
+    for (let pile = 0; pile < 3; pile += 1) {
+      const blindTop = Number(blind[pile].top);
+      const openTop = Number(open[pile].top);
+      assert.ok(blindTop < openTop, 'the blind card peeks out above the card on it');
+      assert.strictEqual(
+        blindTop + Number(blind[pile].height),
+        openTop + Number(open[pile].height),
+        'and the two finish level - no row of the pile is missing',
+      );
+      assert.strictEqual(lines(blind[pile]).length, Number(blind[pile].height),
+        'the blind card fills its own widget, every row of it');
+    }
+
+    // Every row of the blind card carries its hatching: a short card grows by
+    // repeating its own last row, never by blank ones.
+    for (const card of blind) {
+      const rows = lines(card);
+      assert.strictEqual(rows.filter((row: string) => row.trim().length > 0).length, rows.length,
+        'no blank row is left at the bottom of a blind card');
+    }
+  } finally { app.screen?.destroy?.(); }
+}
