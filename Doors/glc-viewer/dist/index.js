@@ -77,13 +77,28 @@ exports.metadata = {
  * from either.
  */
 const DOOR_ROOT = path.resolve(__dirname, '..');
+/**
+ * Read a field the server might spell several ways.
+ *
+ * CASE-INSENSITIVELY, and that is the fix rather than a longer candidate
+ * list. The wire sends `Timeon`; this asked for `TimeOn`, `timeOn` and
+ * `timeon` and got none of them, so every caller's ON column came out blank
+ * on a C64 screen (sysop's screenshot, 2026-09-16). A list of spellings that
+ * has to be complete is a list that will be incomplete again - the server has
+ * sent `Username`, `username` and `Handle` over the years - so the CANDIDATES
+ * stay an order of preference and the MATCH stops caring about case.
+ */
 function getStringField(source, candidates, defaultValue = '') {
     if (!source) {
         return defaultValue;
     }
-    for (const key of candidates) {
-        if (key in source && source[key] !== undefined && source[key] !== null) {
-            return String(source[key]);
+    const byLowerKey = new Map();
+    for (const key of Object.keys(source))
+        byLowerKey.set(key.toLowerCase(), source[key]);
+    for (const candidate of candidates) {
+        const value = byLowerKey.get(candidate.toLowerCase());
+        if (value !== undefined && value !== null) {
+            return String(value);
         }
     }
     return defaultValue;

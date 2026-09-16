@@ -77,6 +77,20 @@ export function logoFor(request: LogoRequest): readonly string[] {
     if (narrow) return narrow;
   }
 
+  /*
+   * A NARROW CALLER IS NEVER GIVEN THE WIDE DRAWING.
+   *
+   * The sysop's first C64 screenshot (2026-09-16) opened with the 79-column
+   * logo wrapped across eight rows of a forty-column screen - unreadable, and
+   * it pushed the list off the top. The wide art is not a fallback for a
+   * caller who cannot hold it: without a `_c64` variant the narrow screen
+   * simply has no logo, and its title bar is the header.
+   *
+   * The slot is in the Studio either way, so drawing one is a decision an
+   * artist makes rather than something the door guesses at.
+   */
+  if (request.columns <= NARROW_COLUMNS) return [];
+
   const named = request.values[key];
   if (typeof named === 'string' && named.length > 0) {
     // Inside the door's own folder, and nowhere else: the value is a setting

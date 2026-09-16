@@ -143,3 +143,22 @@ describe('the screen opens before the network answers', () => {
     expect(theCaller).toBeGreaterThan(firstRewind);
   });
 });
+
+/**
+ * The sysop's screenshot, 2026-09-16: every caller's ON column was blank.
+ *
+ * The server sends `Timeon`; the door asked for `TimeOn`, `timeOn` and
+ * `timeon`, and `in` is case-SENSITIVE. The reader stopped caring about case;
+ * this is that, read off the wire the door actually draws.
+ */
+describe('the fields the server really sends', () => {
+  it('shows the time a caller came on, whatever the case of the key', async () => {
+    const drawn = await runTheDoor();
+    expect(drawn).toContain('08:38');
+  });
+
+  it('shows the one it went off on too', async () => {
+    const drawn = await runTheDoor();
+    expect(drawn).toContain('08:44');
+  });
+});

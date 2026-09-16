@@ -76,8 +76,10 @@ describe('which logo a caller sees', () => {
 
   it('is the variant for the style being drawn, not another style\'s', () => {
     const bbsRoot = boardWithVariant(1, ['\x1b[35mSTYLE ONE ONLY']);
-    // Style 3 asked; only style 1 has a narrow drawing.
-    expect(ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual(originalLogo(3));
+    // Style 3 asked; only style 1 has a narrow drawing - and a narrow caller
+    // is never handed the wide one, so the answer is no logo rather than
+    // another style's.
+    expect(ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual([]);
   });
 
   it('refuses a setting that points outside the door\'s own folder', () => {
@@ -121,5 +123,26 @@ describe('the shipped art', () => {
     for (const slot of drawable) {
       expect(fs.existsSync(path.join(DOOR, slot.default))).toBe(true);
     }
+  });
+});
+
+/**
+ * The first C64 screenshot, 2026-09-16: the 79-column logo wrapped across
+ * eight rows of a forty-column screen and pushed the list off the top.
+ */
+describe('a forty-column caller and the wide drawing', () => {
+  it('is given no logo at all rather than one that cannot fit', () => {
+    expect(ask({ columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual([]);
+  });
+
+  it('still gets the narrow one when an artist has drawn it', () => {
+    const narrow = ['\x1b[35mFORTY WIDE'];
+    const bbsRoot = boardWithVariant(3, narrow);
+    expect(ask({ bbsRoot, columns: 40, values: { logo3: 'art/style3.ans' } })).toEqual(narrow);
+  });
+
+  it('keeps the wide drawing for everyone above forty', () => {
+    expect(ask({ columns: 41, values: { logo3: 'art/style3.ans' } })).toEqual(originalLogo(3));
+    expect(ask({ columns: 80, values: { logo3: 'art/style3.ans' } })).toEqual(originalLogo(3));
   });
 });
