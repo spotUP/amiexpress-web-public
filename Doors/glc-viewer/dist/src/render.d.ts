@@ -52,6 +52,20 @@ export interface GlcScreen {
     previousDay: GlcDayStats;
     records: GlcRecords;
 }
+/**
+ * The screen in three pieces, so the door can draw the top of it before the
+ * network has answered.
+ *
+ * A caller used to look at nothing until the scenewall replied. The logo,
+ * the title bar and the column rule depend on no data at all, so they go out
+ * first and the rows land underneath them when they arrive. Composed back
+ * into one list by `renderGlcScreen`, which is what the parity tests read.
+ */
+export declare function renderGlcHeader(screen: GlcScreen): string[];
+/** One line per call, in the order the server sent them. */
+export declare function renderGlcRows(screen: GlcScreen): string[];
+/** The rule under the calls, the action legend, and the day totals. */
+export declare function renderGlcFooter(screen: GlcScreen): string[];
 /** Every line of the screen, in order, without their line terminators. */
 export declare function renderGlcScreen(screen: GlcScreen): string[];
 //# sourceMappingURL=render.d.ts.map

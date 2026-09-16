@@ -1,5 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.renderGlcHeader = renderGlcHeader;
+exports.renderGlcRows = renderGlcRows;
+exports.renderGlcFooter = renderGlcFooter;
 exports.renderGlcScreen = renderGlcScreen;
 /**
  * What GLCViewer puts on the wire, as a list of lines.
@@ -36,9 +39,17 @@ function centreLikeE(value) {
 function clamp(value, width, ceiling) {
     return value.length > width ? ceiling : value;
 }
-/** Every line of the screen, in order, without their line terminators. */
-function renderGlcScreen(screen) {
-    const style = screen.style >= 1 && screen.style <= 4 ? screen.style : 1;
+/**
+ * The screen in three pieces, so the door can draw the top of it before the
+ * network has answered.
+ *
+ * A caller used to look at nothing until the scenewall replied. The logo,
+ * the title bar and the column rule depend on no data at all, so they go out
+ * first and the rows land underneath them when they arrive. Composed back
+ * into one list by `renderGlcScreen`, which is what the parity tests read.
+ */
+function renderGlcHeader(screen) {
+    const style = clampStyle(screen.style);
     const firstPair = style === 1 || style === 3;
     const logo = screen.logo && screen.logo.length > 0
         ? screen.logo
@@ -56,9 +67,13 @@ function renderGlcScreen(screen) {
     lines.push(banner);
     lines.push(columns);
     lines.push(art_generated_1.RULER_TOP);
-    for (const call of screen.calls) {
+    return lines;
+}
+/** One line per call, in the order the server sent them. */
+function renderGlcRows(screen) {
+    return screen.calls.map((call) => {
         const name = screen.showLocation ? call.Location : call.Bbsname;
-        lines.push((0, estringf_1.formatE)(art_generated_1.ROW_TEMPLATE, [
+        return (0, estringf_1.formatE)(art_generated_1.ROW_TEMPLATE, [
             call.Username,
             screen.centreName ? centreLikeE(name) : name,
             call.Dateon,
@@ -67,9 +82,13 @@ function renderGlcScreen(screen) {
             call.Actions,
             (0, estringf_1.transferField)(call.Upload),
             (0, estringf_1.transferField)(call.Download),
-        ]));
-    }
-    lines.push(art_generated_1.RULER_BOTTOM);
+        ]);
+    });
+}
+/** The rule under the calls, the action legend, and the day totals. */
+function renderGlcFooter(screen) {
+    const style = clampStyle(screen.style);
+    const lines = [art_generated_1.RULER_BOTTOM];
     for (const line of art_generated_1.LEGEND)
         lines.push(line);
     lines.push(art_generated_1.RULE_PLAIN);
@@ -79,27 +98,29 @@ function renderGlcScreen(screen) {
     const y = screen.yesterday;
     const p = screen.previousDay;
     const r = screen.records;
-    const stats = {
-        yCalls: clamp(y.calls, 3, '999'),
-        yCps: clamp(y.topcps, 5, '99999'),
-        yUp: clamp(y.uploads, 7, '9999999'),
-        yDown: clamp(y.downloads, 7, '9999999'),
-        pCalls: clamp(p.calls, 3, '999'),
-        pCps: clamp(p.topcps, 5, '99999'),
-        pUp: clamp(p.uploads, 7, '9999999'),
-        pDown: clamp(p.downloads, 7, '9999999'),
-    };
     if (style === 1 || style === 2) {
-        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_1_2[0], [y.statdate, stats.yCalls, stats.yCps, stats.yUp, stats.yDown]));
-        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_1_2[1], [p.statdate, stats.pCalls, stats.pCps, stats.pUp, stats.pDown]));
+        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_1_2[0], [y.statdate, clamp(y.calls, 3, '999'), clamp(y.topcps, 5, '99999'), clamp(y.uploads, 7, '9999999'), clamp(y.downloads, 7, '9999999')]));
+        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_1_2[1], [p.statdate, clamp(p.calls, 3, '999'), clamp(p.topcps, 5, '99999'), clamp(p.uploads, 7, '9999999'), clamp(p.downloads, 7, '9999999')]));
         lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_1_2[2], [r.recordcalls, r.calls, r.mostcalled]));
     }
     else {
-        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_3_4[0], [y.statdate, stats.yCalls, r.calls, r.mostcalled]));
-        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_3_4[1], [p.statdate, stats.pCalls, r.calls2, r.secondmostcalled]));
+        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_3_4[0], [y.statdate, clamp(y.calls, 3, '999'), r.calls, r.mostcalled]));
+        lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_3_4[1], [p.statdate, clamp(p.calls, 3, '999'), r.calls2, r.secondmostcalled]));
         lines.push((0, estringf_1.formatE)(art_generated_1.FOOTER_3_4[2], [r.recordcalls, r.calls3, r.thirdmostcalled]));
     }
     lines.push(art_generated_1.RULE_FINAL);
     return lines;
+}
+/** 1-4; anything else is 1, as `GLCViewer.e:862` decides. */
+function clampStyle(style) {
+    return style >= 1 && style <= 4 ? style : 1;
+}
+/** Every line of the screen, in order, without their line terminators. */
+function renderGlcScreen(screen) {
+    return [
+        ...renderGlcHeader(screen),
+        ...renderGlcRows(screen),
+        ...renderGlcFooter(screen),
+    ];
 }
 //# sourceMappingURL=render.js.map

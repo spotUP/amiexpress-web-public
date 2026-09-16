@@ -101,9 +101,17 @@ function clamp(value: string, width: number, ceiling: string): string {
   return value.length > width ? ceiling : value;
 }
 
-/** Every line of the screen, in order, without their line terminators. */
-export function renderGlcScreen(screen: GlcScreen): string[] {
-  const style = screen.style >= 1 && screen.style <= 4 ? screen.style : 1;
+/**
+ * The screen in three pieces, so the door can draw the top of it before the
+ * network has answered.
+ *
+ * A caller used to look at nothing until the scenewall replied. The logo,
+ * the title bar and the column rule depend on no data at all, so they go out
+ * first and the rows land underneath them when they arrive. Composed back
+ * into one list by `renderGlcScreen`, which is what the parity tests read.
+ */
+export function renderGlcHeader(screen: GlcScreen): string[] {
+  const style = clampStyle(screen.style);
   const firstPair = style === 1 || style === 3;
 
   const logo = screen.logo && screen.logo.length > 0
@@ -115,7 +123,6 @@ export function renderGlcScreen(screen: GlcScreen): string[] {
     : (screen.showLocation ? COLUMNS_LOCATION_2_4 : COLUMNS_BBS_2_4);
 
   const lines: string[] = [];
-
   // The clear is PREPENDED to the first logo line, not sent on its own: E
   // builds both into `tempStr` and transmits it once.
   lines.push((screen.screenClear ? FORM_FEED : '') + logo[0]);
@@ -123,10 +130,14 @@ export function renderGlcScreen(screen: GlcScreen): string[] {
   lines.push(banner);
   lines.push(columns);
   lines.push(RULER_TOP);
+  return lines;
+}
 
-  for (const call of screen.calls) {
+/** One line per call, in the order the server sent them. */
+export function renderGlcRows(screen: GlcScreen): string[] {
+  return screen.calls.map((call) => {
     const name = screen.showLocation ? call.Location : call.Bbsname;
-    lines.push(formatE(ROW_TEMPLATE, [
+    return formatE(ROW_TEMPLATE, [
       call.Username,
       screen.centreName ? centreLikeE(name) : name,
       call.Dateon,
@@ -135,10 +146,14 @@ export function renderGlcScreen(screen: GlcScreen): string[] {
       call.Actions,
       transferField(call.Upload),
       transferField(call.Download),
-    ]));
-  }
+    ]);
+  });
+}
 
-  lines.push(RULER_BOTTOM);
+/** The rule under the calls, the action legend, and the day totals. */
+export function renderGlcFooter(screen: GlcScreen): string[] {
+  const style = clampStyle(screen.style);
+  const lines: string[] = [RULER_BOTTOM];
   for (const line of LEGEND) lines.push(line);
   lines.push(RULE_PLAIN);
 
@@ -148,27 +163,31 @@ export function renderGlcScreen(screen: GlcScreen): string[] {
   const y = screen.yesterday;
   const p = screen.previousDay;
   const r = screen.records;
-  const stats = {
-    yCalls: clamp(y.calls, 3, '999'),
-    yCps: clamp(y.topcps, 5, '99999'),
-    yUp: clamp(y.uploads, 7, '9999999'),
-    yDown: clamp(y.downloads, 7, '9999999'),
-    pCalls: clamp(p.calls, 3, '999'),
-    pCps: clamp(p.topcps, 5, '99999'),
-    pUp: clamp(p.uploads, 7, '9999999'),
-    pDown: clamp(p.downloads, 7, '9999999'),
-  };
 
   if (style === 1 || style === 2) {
-    lines.push(formatE(FOOTER_1_2[0], [y.statdate, stats.yCalls, stats.yCps, stats.yUp, stats.yDown]));
-    lines.push(formatE(FOOTER_1_2[1], [p.statdate, stats.pCalls, stats.pCps, stats.pUp, stats.pDown]));
+    lines.push(formatE(FOOTER_1_2[0], [y.statdate, clamp(y.calls, 3, '999'), clamp(y.topcps, 5, '99999'), clamp(y.uploads, 7, '9999999'), clamp(y.downloads, 7, '9999999')]));
+    lines.push(formatE(FOOTER_1_2[1], [p.statdate, clamp(p.calls, 3, '999'), clamp(p.topcps, 5, '99999'), clamp(p.uploads, 7, '9999999'), clamp(p.downloads, 7, '9999999')]));
     lines.push(formatE(FOOTER_1_2[2], [r.recordcalls, r.calls, r.mostcalled]));
   } else {
-    lines.push(formatE(FOOTER_3_4[0], [y.statdate, stats.yCalls, r.calls, r.mostcalled]));
-    lines.push(formatE(FOOTER_3_4[1], [p.statdate, stats.pCalls, r.calls2, r.secondmostcalled]));
+    lines.push(formatE(FOOTER_3_4[0], [y.statdate, clamp(y.calls, 3, '999'), r.calls, r.mostcalled]));
+    lines.push(formatE(FOOTER_3_4[1], [p.statdate, clamp(p.calls, 3, '999'), r.calls2, r.secondmostcalled]));
     lines.push(formatE(FOOTER_3_4[2], [r.recordcalls, r.calls3, r.thirdmostcalled]));
   }
 
   lines.push(RULE_FINAL);
   return lines;
+}
+
+/** 1-4; anything else is 1, as `GLCViewer.e:862` decides. */
+function clampStyle(style: number): number {
+  return style >= 1 && style <= 4 ? style : 1;
+}
+
+/** Every line of the screen, in order, without their line terminators. */
+export function renderGlcScreen(screen: GlcScreen): string[] {
+  return [
+    ...renderGlcHeader(screen),
+    ...renderGlcRows(screen),
+    ...renderGlcFooter(screen),
+  ];
 }

@@ -118,3 +118,28 @@ describe('what a caller actually receives', () => {
     expect(drawn.endsWith('\r\n')).toBe(true);
   });
 });
+
+describe('the screen opens before the network answers', () => {
+  it('draws the logo and the placeholder rows without waiting', async () => {
+    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const { skeletonRow } = require('../../../../Doors/glc-viewer/src/skeleton');
+    const drawn = await runTheDoor();
+
+    // The logo is on the wire, and so is the table's shape.
+    expect(drawn).toContain(art.LOGO_STYLE_1_3[0].replace('\x1b[0;40;37m', '\x1b[0;40;37m'));
+    expect(drawn).toContain(skeletonRow());
+
+    // ...and the real rows were written OVER them: the cursor walked back.
+    expect(drawn).toContain('\x1b[A');
+    expect(drawn).toContain('\x1b[K');
+  });
+
+  it('puts every real row after the rewind, not before it', async () => {
+    const drawn = await runTheDoor();
+    const firstRewind = drawn.indexOf('\x1b[A');
+    const theCaller = drawn.indexOf('\x1b[36mSpot');
+
+    expect(firstRewind).toBeGreaterThan(-1);
+    expect(theCaller).toBeGreaterThan(firstRewind);
+  });
+});

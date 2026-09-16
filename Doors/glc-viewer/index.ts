@@ -20,8 +20,10 @@ import { Socket as SocketIOSocket } from 'socket.io';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import { renderGlcScreen } from './src/render';
+import { renderGlcHeader, renderGlcRows, renderGlcFooter } from './src/render';
 import { logoFor } from './src/logo';
+import { rewind, overwrite, skeletonRows } from './src/skeleton';
+import { bodyForThisCall } from './src/fetch-deadline';
 
 // Metadata
 export const metadata = {
@@ -406,28 +408,49 @@ function columnsOf(ctx: DoorContext): number {
   return Number.isFinite(width) && width > 0 ? width : 80;
 }
 
+/** What the header needs: everything that does not depend on the server. */
+type GlcScreenBase = {
+  style: number;
+  screenClear: boolean;
+  showLocation: boolean;
+  centreName: boolean;
+  logo: readonly string[];
+};
+
 /**
- * Draw the screen, through the renderer that is pinned to the E source.
+ * Enough empty data to render a header.
  *
- * This function used to BE the renderer, and it drew an approximation: five
- * literal spaces where `GLCViewer.e` writes `ESC[5C`, and a column header of
- * its own invention. The art now comes from `src/art.generated.ts`, lifted out
- * of the E source by `dev/extract-art.py` and compared against it on every
- * test run, so what reaches a caller is what the 68K door put on the wire.
- *
- * All this does is map the door's normalised data onto the renderer's shapes
- * and write the lines. `transmit()` in the original is
- * `WriteStr(diface, textLine, LF)` - one line, one terminator.
+ * `renderGlcHeader` reads none of it, but the screen type is one object and
+ * this keeps the door from inventing a second, narrower one that would then
+ * drift from the renderer's.
  */
-function displayData(
+const EMPTY_DATA = {
+  calls: [] as never[],
+  yesterday: { statdate: '', calls: '', topcps: '', uploads: '', downloads: '' },
+  previousDay: { statdate: '', calls: '', topcps: '', uploads: '', downloads: '' },
+  records: {
+    allcalls: '', recordcalls: '', calls: '', mostcalled: '',
+    calls2: '', secondmostcalled: '', calls3: '', thirdmostcalled: '',
+  },
+};
+
+/**
+ * The half of the screen that needs no data, drawn at once.
+ *
+ * Returns the screen it drew from, so the caller can finish it with the same
+ * style and the same columns once the scenewall answers.
+ */
+function drawHeader(
   socket: SocketIOSocket,
-  data: GLCData,
   config: GLCConfig,
   showLocation: boolean,
   callerColumns: number,
-): void {
-  const lines = renderGlcScreen({
+): GlcScreenBase {
+  const base: GlcScreenBase = {
     style: config.style,
+    screenClear: config.screenClear,
+    showLocation,
+    centreName: config.centreName,
     // The artist's drawing when there is one, the original's when there is
     // not - and the narrow one for a caller on forty columns.
     logo: logoFor({
@@ -438,9 +461,29 @@ function displayData(
       values: settingValues(),
       command: 'GLC',
     }),
-    screenClear: config.screenClear,
-    showLocation,
-    centreName: config.centreName,
+  };
+
+  for (const line of renderGlcHeader({ ...base, ...EMPTY_DATA })) {
+    socket.emit('ansi-output', line + '\r\n');
+  }
+  return base;
+}
+
+/**
+ * Draw the calls and the totals over the placeholder rows.
+ *
+ * `skeletonCount` is how many rows are already on screen; the cursor walks
+ * back over exactly those and each real row is written with the row cleared
+ * first, so a short list cannot leave a placeholder showing under it.
+ */
+function drawData(
+  socket: SocketIOSocket,
+  base: GlcScreenBase,
+  data: GLCData,
+  skeletonCount: number,
+): void {
+  const screen = {
+    ...base,
     calls: data.calls.map((call) => ({
       Username: call.Username,
       Location: call.location,
@@ -456,9 +499,21 @@ function displayData(
     yesterday: data.yesterdayStats,
     previousDay: data.previousDayStats,
     records: data.records,
-  });
+  };
 
-  for (const line of lines) {
+  const rows = renderGlcRows(screen);
+  if (skeletonCount > 0) socket.emit('ansi-output', rewind(skeletonCount));
+
+  for (const row of rows) {
+    socket.emit('ansi-output', overwrite(row) + '\r\n');
+  }
+  // Any placeholder the real list did not reach is cleared rather than left
+  // standing: the server can answer with fewer callers than were asked for.
+  for (let i = rows.length; i < skeletonCount; i++) {
+    socket.emit('ansi-output', overwrite('') + '\r\n');
+  }
+
+  for (const line of renderGlcFooter(screen)) {
     socket.emit('ansi-output', line + '\r\n');
   }
 }
@@ -478,29 +533,65 @@ door.onStart(async (ctx: DoorContext) => {
 
   try {
     const config = loadConfig();
+    const showLocation = config.viewBBS.length > 0;
 
-    // Fetch JSON data
-    const jsonText = await fetchGLCData(config);
+    /*
+     * THE SCREEN OPENS BEFORE THE NETWORK IS ASKED.
+     *
+     * Everything above the column rule depends on no data at all, so a caller
+     * sees the logo immediately rather than a blank line while the scenewall
+     * decides. The placeholder rows below it hold the table's shape - in the
+     * calls' own column widths - and the real rows are written over them.
+     */
+    const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
+    const placeholders = skeletonRows(config.lines);
+    for (const row of placeholders) socket.emit('ansi-output', row + '\r\n');
 
-    if (!jsonText || jsonText.length === 0) {
-      socket.emit('ansi-output', '\x1b[31mError: Could not get data from server\x1b[0m\r\n');
+    /*
+     * ONE DEADLINE FOR THE WHOLE FETCH, not a socket timer that restarts on
+     * every byte - that is how the 68K viewer held a login for 58 seconds
+     * with `TIMEOUT=5` in its own config. When the scenewall misses it, the
+     * door draws the LAST answer it got: yesterday's list beats a red line,
+     * and a late answer is still written to the cache for the next caller.
+     */
+    const { body, source } = await bodyForThisCall(
+      () => fetchGLCData(config),
+      config.timeout,
+      DOOR_ROOT,
+    );
+
+    if (!body) {
+      // Nothing from the network and nothing kept: say so where the calls
+      // would have been, and still draw the rest of the screen.
+      socket.emit('ansi-output', rewind(placeholders.length));
+      socket.emit('ansi-output', overwrite('\x1b[31m  THE SCENEWALL DID NOT ANSWER') + '\r\n');
+      for (let i = 1; i < placeholders.length; i++) {
+        socket.emit('ansi-output', overwrite('') + '\r\n');
+      }
+      drawData(socket, base, normalizeGLCData({}), 0);
       return;
     }
 
-    // Parse JSON
     let glcData: GLCData;
     try {
-      const parsed = JSON.parse(jsonText);
-      glcData = normalizeGLCData(parsed);
+      glcData = normalizeGLCData(JSON.parse(body));
     } catch (err: any) {
-      socket.emit('ansi-output', `\x1b[31mError: Could not parse JSON data: ${err.message}\x1b[0m\r\n`);
+      socket.emit('ansi-output', rewind(placeholders.length));
+      socket.emit('ansi-output', overwrite(`\x1b[31m  COULD NOT READ THE ANSWER: ${err.message}`) + '\r\n');
+      for (let i = 1; i < placeholders.length; i++) {
+        socket.emit('ansi-output', overwrite('') + '\r\n');
+      }
+      drawData(socket, base, normalizeGLCData({}), 0);
       return;
     }
 
-    // Display data
-    const showLocation = config.viewBBS.length > 0;
-    displayData(socket, glcData, config, showLocation, columnsOf(ctx));
+    drawData(socket, base, glcData, placeholders.length);
 
+    if (source === 'cache') {
+      // The caller should know the list is the last one that arrived rather
+      // than the one that is true this second.
+      socket.emit('ansi-output', '\x1b[33m  (the scenewall did not answer - this is the last list it sent)\x1b[0m\r\n');
+    }
   } catch (err: any) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);
   }
