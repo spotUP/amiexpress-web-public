@@ -685,8 +685,14 @@ const buildSimpleFace = (
   const border = style === "unicode" ? UNICODE_BORDER : "|";
   const empty = style === "unicode" ? UNICODE_EMPTY : ASCII_EMPTY;
 
-  const leftLine = `${border}${padEnd(leftLabel, INNER_WIDTH)}${border}`;
-  const rightLine = `${border}${padStart(rightLabel, INNER_WIDTH)}${border}`;
+  // Both ends of both label lines: the same four corners a standard card has.
+  const bothEnds = (): string => {
+    const gap = Math.max(1, INNER_WIDTH - leftLabel.trimEnd().length - rightLabel.trim().length);
+    const inner = `${leftLabel.trimEnd()}${" ".repeat(gap)}${rightLabel.trim()}`;
+    return `${border}${padEnd(inner.slice(0, INNER_WIDTH), INNER_WIDTH)}${border}`;
+  };
+  const leftLine = bothEnds();
+  const rightLine = bothEnds();
 
   const formatArt = (line: string) => `${border}${padEnd(line, INNER_WIDTH)}${border}`;
 
@@ -714,6 +720,27 @@ const formatRankRight = (rank: Rank, borderChar: string) => {
   const isTen = rank === "10";
   const rankRight = isTen ? rank : `${rank} `;
   return `${borderChar}${padStart(rankRight, INNER_WIDTH)}${borderChar}`;
+};
+
+/**
+ * A rank line carrying the rank at BOTH ends.
+ *
+ * "the cards needs their numbers in all 4 corners so visibility is better"
+ * (sysop, 2026-09-16). A real card is printed that way for one reason: a card
+ * overlapped from either side still shows what it is. On a BBS the cards are
+ * fanned and stacked - the pile shows three cards overlapping, a hand of
+ * twenty fans with a column of each card visible - so whichever corner is
+ * covered, the other one answers.
+ *
+ * Used for the top AND the bottom rank line, which puts the rank in all four
+ * corners of a full card and in both corners a mini card has.
+ */
+const formatRankCorners = (rank: Rank, borderChar: string) => {
+  const isTen = rank === "10";
+  const left = isTen ? rank : ` ${rank}`;
+  const right = isTen ? rank : `${rank} `;
+  const gap = Math.max(1, INNER_WIDTH - left.length - right.length);
+  return `${borderChar}${`${left}${" ".repeat(gap)}${right}`.slice(0, INNER_WIDTH)}${borderChar}`;
 };
 
 type CacheKey = string;
@@ -805,8 +832,8 @@ export const parseUnoCardString = (value: string): UnoCard => {
 const renderUnicodeCardLines = ({ rank, suit }: Card): string[] => {
   const symbol = normalizeSuit(suit);
   const suitLine = `${UNICODE_BORDER}    ${symbol}    ${UNICODE_BORDER}`;
-  const rankLineLeft = formatRankLeft(rank, UNICODE_BORDER);
-  const rankLineRight = formatRankRight(rank, UNICODE_BORDER);
+  const rankLineLeft = formatRankCorners(rank, UNICODE_BORDER);
+  const rankLineRight = formatRankCorners(rank, UNICODE_BORDER);
 
   return [
     UNICODE_TOP,
@@ -825,11 +852,11 @@ const renderAsciiCardLines = ({ rank, suit }: Card): string[] => {
 
   return [
     ASCII_TOP,
-    formatRankLeft(rank, "|"),
+    formatRankCorners(rank, "|"),
     ASCII_EMPTY,
     ...artLines,
     ASCII_EMPTY,
-    formatRankRight(rank, "|"),
+    formatRankCorners(rank, "|"),
     ASCII_BOTTOM,
   ];
 };
@@ -840,7 +867,13 @@ const renderAsciiMiniCardLines = ({ rank, suit }: Card): string[] => {
   const rankPart = rank === "10" ? "10" : ` ${rank}`;
   // Use a wider separator for very short art to keep the suit visibly offset from the rank.
   const separator = artLines[0].length === 1 ? "  " : " ";
-  const firstLineInner = padEnd(`${rankPart}${separator}${artLines[0]}`, INNER_WIDTH);
+  const written = `${rankPart}${separator}${artLines[0]}`;
+  // The right-hand corner as well, when the art leaves room for it - a mini
+  // card has only the two top corners, so both of them carry the rank.
+  const roomForCorner = INNER_WIDTH - written.length >= rankPart.length + 1;
+  const firstLineInner = roomForCorner
+    ? `${written}${" ".repeat(INNER_WIDTH - written.length - rankPart.length)}${rankPart}`
+    : padEnd(written, INNER_WIDTH);
   const firstLine = `|${firstLineInner}|`;
   const remainingArt = artLines.slice(1).map((line) => `|${centerLine(line, INNER_WIDTH)}|`);
 

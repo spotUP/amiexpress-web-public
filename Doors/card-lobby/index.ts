@@ -1869,6 +1869,7 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
       pushEvent: this.pushEvent.bind(this),
       emitLiveChat: (message: string) => this.emitLiveChat(message),
       broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
+      announceGameOver: this.announceGameOver.bind(this),
       persistState: this.persistState.bind(this),
     });
   }
@@ -1970,6 +1971,23 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
 
   public showMessageDialog(title: string, text: string): Promise<void> {
     return this.dialogManager.showMessageDialog(title, text);
+  }
+
+  /**
+   * HOW A GAME ENDS: somebody is told.
+   *
+   * "the game ended now, no dialog announcing that i won or lost or anything"
+   * (sysop, 2026-09-16). Every game pushed a line into the event list and
+   * left it at that, so the hand a caller had been playing for ten minutes
+   * finished as one row of scrolling text among the chat.
+   *
+   * One announcement for every game in the lobby, so a game added later ends
+   * the way the others do. It is NOT awaited: the dialog is the caller's to
+   * dismiss in their own time, and the game that just finished must not sit
+   * inside an action waiting for them.
+   */
+  public announceGameOver(title: string, body: string): void {
+    void this.showMessageDialog(title, body);
   }
 
 

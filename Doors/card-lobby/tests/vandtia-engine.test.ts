@@ -564,3 +564,131 @@ export async function testNothingIsLaidDownOncePlayHasStarted(): Promise<void> {
   const result = engine.dropOnTable('u1', [0, 1], 0);
   assert.strictEqual(result.success, false, 'the arranging phase is over');
 }
+
+/*
+ * FIFTY-TWO CARDS, ALL THE WAY DOWN.
+ *
+ * "the deck has 52 cards it felt like we played more than 52 cards" and "uh
+ * i got more face down cards when i played out my 3 face down cards" (sysop,
+ * 2026-09-16). Both are the same question asked twice: does a card ever get
+ * copied? Every card in the game is in exactly one place - a hand, a row in
+ * front of somebody, the pile, the stock or the burned heap - so the count
+ * across all of them is 52 after every single move, and no card id appears
+ * twice.
+ */
+function census(engine: VandtiaEngine): string[] {
+  const all: VandtiaCard[] = [
+    ...engine.state.stock,
+    ...engine.state.pile,
+    ...engine.state.burned,
+  ];
+  for (const player of engine.state.players) {
+    all.push(...player.hand, ...player.faceUp, ...player.faceDown);
+  }
+  return ids(all);
+}
+
+
+/**
+ * Put named cards in a player's hand by MOVING them, never by inventing them.
+ *
+ * A fixture that assigns `cards('9H','9S','9C')` straight into a hand leaves
+ * the originals wherever they were dealt, and the deck then holds 55 cards -
+ * which is a bug in the test, indistinguishable from the bug it is looking
+ * for. Two of these tests said so before this helper existed.
+ */
+function give(engine: VandtiaEngine, playerId: string, wanted: string[]): void {
+  const zones: VandtiaCard[][] = [engine.state.stock, engine.state.pile, engine.state.burned];
+  for (const player of engine.state.players) zones.push(player.hand, player.faceUp, player.faceDown);
+
+  const taken: VandtiaCard[] = [];
+  for (const id of wanted) {
+    for (const zone of zones) {
+      const at = zone.findIndex((card) => `${card.rank}${card.suit}` === id);
+      if (at >= 0) { taken.push(...zone.splice(at, 1)); break; }
+    }
+  }
+  const me = engine.playerById(playerId);
+  if (!me) throw new Error(`no player ${playerId}`);
+  // Whatever was in the hand goes back to the stock, so the count still holds.
+  engine.state.stock.push(...me.hand.splice(0, me.hand.length));
+  me.hand.push(...taken);
+}
+
+export async function testNoCardIsEverCopiedOrLost(): Promise<void> {
+  const engine = playing(threeHanded('conservation'));
+
+  const check = (when: string): void => {
+    const seen = census(engine);
+    assert.strictEqual(seen.length, 52, `${when}: ${seen.length} cards in play, not 52`);
+    assert.strictEqual(new Set(seen).size, 52, `${when}: a card is in two places at once`);
+  };
+
+  check('at the start');
+
+  // Play the game out the way the door does: whoever is on turn plays their
+  // first legal card, or takes the pile when nothing goes.
+  for (let move = 0; move < 400 && engine.state.phase === 'playing'; move += 1) {
+    const id = engine.currentPlayerId();
+    if (!id) break;
+    const legal = engine.legalPlays(id);
+    const result = legal.length > 0
+      ? engine.playCard(id, legal[0])
+      : engine.takePile(id);
+    assert.ok(result.success, `move ${move}: ${result.message}`);
+    check(`after move ${move}`);
+  }
+}
+
+export async function testAGroupPlayCopiesNothingEither(): Promise<void> {
+  // The house rule moves several cards at once, which is where a copy would
+  // come from: a splice that shifts the indices still to be removed leaves a
+  // played card in the hand AND puts it on the pile.
+  const engine = playing(threeHanded('conservation-group'));
+  const me = engine.state.players[0];
+  position(engine, { currentIndex: 0 });
+  give(engine, 'u1', ['9H', '9S', '9C']);
+  // A pile they all answer, taken from the stock so the count still holds.
+  engine.state.pile = engine.state.stock.splice(
+    engine.state.stock.findIndex((card) => card.rank === '4'), 1,
+  );
+
+  const before = census(engine).length;
+  assert.ok(engine.playCards('u1', [0, 1, 2]).success);
+  const after = census(engine);
+
+  assert.strictEqual(after.length, before, 'the same cards, in different places');
+  assert.strictEqual(new Set(after).size, after.length, 'and none of them twice');
+  for (const id of ['9H', '9S', '9C']) {
+    assert.ok(!ids(me.hand).includes(id), `${id} left the hand`);
+    assert.ok(ids(engine.state.pile).includes(id), `${id} is on the pile`);
+  }
+}
+
+export async function testTheBlindCardsRunOutRatherThanGrowing(): Promise<void> {
+  /*
+   * "uh i got more face down cards when i played out my 3 face down cards"
+   * (sysop, 2026-09-16). Nothing in the game may ADD to the blind row: it is
+   * dealt once and only ever shrinks.
+   *
+   * Note what a blind card that does not fit does - it goes into the HAND
+   * along with the pile, and the player is back to playing from the hand.
+   * That is the rule, and it is also the likeliest thing to be read as "more
+   * cards": the row in front of you stops being what you play from.
+   */
+  const engine = playing(threeHanded('blind-row'));
+  const blindAtStart = engine.state.players.map((player) => player.faceDown.length);
+
+  for (let move = 0; move < 400 && engine.state.phase === 'playing'; move += 1) {
+    const id = engine.currentPlayerId();
+    if (!id) break;
+    const legal = engine.legalPlays(id);
+    const result = legal.length > 0 ? engine.playCard(id, legal[0]) : engine.takePile(id);
+    assert.ok(result.success, `move ${move}: ${result.message}`);
+
+    engine.state.players.forEach((player, seat) => {
+      assert.ok(player.faceDown.length <= blindAtStart[seat],
+        `${player.name} has ${player.faceDown.length} blind cards, more than the ${blindAtStart[seat]} dealt`);
+    });
+  }
+}

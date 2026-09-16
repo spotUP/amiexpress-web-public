@@ -281,3 +281,160 @@ export async function droppingWhereNothingWasPickedUpDoesNothing(): Promise<void
     assert.deepStrictEqual(rowsOf(app, 613), before, 'a drop with nothing held moves nothing');
   } finally { app.screen?.destroy?.(); }
 }
+
+export async function aHeldCardStaysWhereItWasPickedUp(): Promise<void> {
+  /*
+   * "when i click and hold the button on a card without moving the mouse the
+   * card is drawn at the top of the screen not at the current position"
+   * (sysop, 2026-09-16).
+   *
+   * Taking hold of a card reparents it to the SCREEN so nothing clips it -
+   * and taking hold of it also repaints the panels, because the door lights
+   * the card that was grabbed. The renderer then wrote the card's place in
+   * the PANEL's coordinates at a widget whose parent was now the screen, and
+   * row one of the panel is row one of the screen. A caller who moved the
+   * mouse never saw it: the next mousemove overwrote the position first.
+   */
+  const app = await openApp();
+  try {
+    await swapping(app, 614);
+    app.updateAllPanels();
+    app.screen.render();
+
+    const card: any = app.cardButtons.focusables()[0];
+    const before = { left: Number(card.aleft), top: Number(card.atop) };
+    assert.ok(before.top > 2, `the hand row is down the screen, not at the top (${before.top})`);
+
+    card.emit('mousedown', { x: before.left + 2, y: before.top + 1 });
+    assert.strictEqual(app.cardButtons.dragging, 0, 'the card is in flight');
+
+    // The repaint that taking hold of a card causes.
+    app.updateAllPanels();
+    app.screen.render();
+
+    assert.deepStrictEqual(
+      { left: Number(card.aleft), top: Number(card.atop) },
+      before,
+      'a card nobody has moved yet is still where it was picked up',
+    );
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aCardPutDownGoesBackToItsExactPlace(): Promise<void> {
+  // Reading `left` measures from the panel's outer corner and writing it
+  // counts from inside the border, so a drag that read one and wrote the
+  // other walked the card a cell up and to the left each time.
+  const app = await openApp();
+  try {
+    await swapping(app, 615);
+    app.updateAllPanels();
+    app.screen.render();
+
+    const card: any = app.cardButtons.focusables()[0];
+    const home: any = card.parent;
+    const before = { left: Number(card.aleft), top: Number(card.atop) };
+
+    card.emit('mousedown', { x: before.left + 2, y: before.top + 1 });
+    app.screen.emit('mouse', { action: 'mousemove', x: before.left + 20, y: before.top - 6 });
+    assert.notStrictEqual(Number(card.atop), before.top, 'it travels with the pointer');
+
+    app.screen.emit('mouse', { action: 'mouseup', x: before.left + 20, y: before.top - 6 });
+    await new Promise((r) => setTimeout(r, 150));
+
+    assert.strictEqual(card.parent, home, 'and belongs to its own panel again');
+    assert.strictEqual(app.cardButtons.dragging, null, 'nothing is in flight');
+    assert.deepStrictEqual(
+      { left: Number(card.aleft), top: Number(card.atop) },
+      before,
+      'put down exactly where the renderer had it',
+    );
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aCardCarriedOntoThePileIsPlayed(): Promise<void> {
+  /*
+   * "the card drops before i let go of them when i drag them out to the pile"
+   * (sysop, 2026-09-16).
+   *
+   * Two things were wrong. Dragging was wired for the SWAP only, so during
+   * play a card could be picked up and carried and had nowhere to go - it
+   * went home on release, which reads as the card dropping by itself. And
+   * the card in flight is drawn in front of everything, so at the moment the
+   * button came up it was the widget under the pointer and answered the drop
+   * itself, before the pointer's coordinates were looked at.
+   */
+  const app = await openApp();
+  try {
+    await swapping(app, 616);
+    // Past the arranging and on turn, which is when a card can be played.
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 400));
+
+    const me = app.currentProfile.userId;
+    const until = Date.now() + 3000;
+    while (Date.now() < until) {
+      const engine = app.vandtia.load(app.findTableById(616))?.engine;
+      if (!engine || engine.state.phase !== 'playing') break;
+      if (engine.currentPlayerId() === me && !app.actionInProgress) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+
+    const engine = app.vandtia.load(app.findTableById(616)).engine;
+    if (engine.state.phase !== 'playing' || engine.currentPlayerId() !== me) return;
+    const legal = engine.legalPlays(me);
+    if (legal.length === 0) return;
+
+    app.updateAllPanels();
+    app.screen.render();
+
+    const card = engine.cardsInPlay(me)[legal[0]];
+    const id = `${card.rank}${card.suit}`;
+    const held: any = app.cardButtons.focusables()[legal[0]];
+    const from = { x: Number(held.aleft) + 2, y: Number(held.atop) + 1 };
+
+    held.emit('mousedown', { x: from.x, y: from.y });
+    assert.strictEqual(app.cardButtons.dragging, legal[0], 'the card is in flight');
+
+    // Carried up onto the panel holding the pile, and let go there.
+    const pile = app.tableCardButtons.panelBounds();
+    const onto = { x: pile.left + Math.floor(pile.width / 2), y: pile.top + 2 };
+    app.screen.emit('mouse', { action: 'mousemove', x: onto.x, y: onto.y });
+    app.screen.emit('mouse', { action: 'mouseup', x: onto.x, y: onto.y });
+    await new Promise((r) => setTimeout(r, 300));
+
+    const after = app.vandtia.load(app.findTableById(616)).engine;
+    const inHand = after.cardsInPlay(me).map((c: any) => `${c.rank}${c.suit}`);
+    assert.ok(!inHand.includes(id), `${id} was played, not put back (${inHand.join(' ')})`);
+  } finally { app.screen?.destroy?.(); }
+}
+
+export async function aCardLetGoOverNothingGoesBack(): Promise<void> {
+  // The other half: a drag that ends nowhere in particular must not play the
+  // card. Picking it up still picks it, so ENTER can finish the move.
+  const app = await openApp();
+  try {
+    await swapping(app, 617);
+    (app.vandtia.constructor as any).BOT_PACE_MS = 0;
+    app.vandtia.primaryAction();
+    await new Promise((r) => setTimeout(r, 400));
+
+    const me = app.currentProfile.userId;
+    const engine = app.vandtia.load(app.findTableById(617)).engine;
+    if (engine.state.phase !== 'playing' || engine.currentPlayerId() !== me) return;
+
+    app.updateAllPanels();
+    app.screen.render();
+    const before = engine.cardsInPlay(me).map((c: any) => `${c.rank}${c.suit}`);
+
+    const held: any = app.cardButtons.focusables()[0];
+    held.emit('mousedown', { x: Number(held.aleft) + 2, y: Number(held.atop) + 1 });
+    app.screen.emit('mouse', { action: 'mousemove', x: 1, y: 1 });
+    app.screen.emit('mouse', { action: 'mouseup', x: 1, y: 1 });
+    await new Promise((r) => setTimeout(r, 250));
+
+    const after = app.vandtia.load(app.findTableById(617)).engine
+      .cardsInPlay(me).map((c: any) => `${c.rank}${c.suit}`);
+    assert.deepStrictEqual(after, before, 'a card let go over nothing is still in hand');
+  } finally { app.screen?.destroy?.(); }
+}

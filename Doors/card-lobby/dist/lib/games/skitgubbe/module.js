@@ -354,6 +354,23 @@ class SkitgubbeGameModule {
                 ? `${loserName} is the Skitgubbe. You take ${stake} ${constants_1.CHIP_NAME}.`
                 : `${loserName} is the Skitgubbe.`);
         }
+        /*
+         * Announced rather than only logged - "the game ended now, no dialog
+         * announcing that i won or lost or anything" (sysop, 2026-09-16), and
+         * every game in the lobby says so the same way.
+         */
+        this.host.announceGameOver(table.gameName, [
+            me && loserId === me
+                ? 'You are the Skitgubbe - last one holding cards.'
+                : `${loserName} is the Skitgubbe.`,
+            '',
+            ...seated.map((player) => {
+                const you = player.userId === me ? '  (you)' : '';
+                return player.userId === loserId
+                    ? `${player.username}${you} - the Skitgubbe`
+                    : `${player.username}${you} - out`;
+            }),
+        ].join('\n'));
         // Keep the finished position on the table for a moment: the panels read
         // `table.hand` and a caller who blinks should still see who lost.
         table.lastHand = {

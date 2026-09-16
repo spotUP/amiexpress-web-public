@@ -21,6 +21,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VandtiaGameModule = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const utils_1 = require("../../utils");
+const constants_1 = require("../../constants");
 const engine_1 = require("./engine");
 const refusal_1 = require("../refusal");
 class VandtiaGameModule {
@@ -843,7 +844,21 @@ class VandtiaGameModule {
             return ['Waiting for the other players...'];
         const source = engine.sourceFor(meId);
         const legal = engine.legalPlays(meId);
-        const keys = legal.map((i) => i === this.selectedCardIndex ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`).join(' ');
+        /*
+         * EVERY CARD IS LISTED, and the line says which of them will go.
+         *
+         * "i have 3 cards but the pick headline only lists 2 cards now" (sysop,
+         * 2026-09-16). It listed the LEGAL plays, so a hand of three with one
+         * card too low printed two numbers - and the third card read as missing
+         * rather than as unplayable. A caller may pick any card they hold; the
+         * game tells them why one will not go when they try it
+         * (`explainRefusal`), which is the other half of the same courtesy.
+         */
+        const keys = engine.cardsInPlay(meId).map((_, i) => (i === this.selectedCardIndex
+            ? `{yellow-bg}{black-fg}${i + 1}{/}{/}`
+            : legal.includes(i)
+                ? `{green-fg}${i + 1}{/}`
+                : `{${constants_1.UI_THEME.dim}-fg}${i + 1}{/}`)).join(' ');
         const top = engine.topOfPile();
         if (source === 'faceDown') {
             return [
@@ -880,6 +895,23 @@ class VandtiaGameModule {
             this.host.pushNotice('You are the Skitgubbe. Deal again?');
         else if (me && loserId)
             this.host.pushNotice(`${loserName} is the Skitgubbe.`);
+        /*
+         * And said out loud, rather than only in the event list - "the game ended
+         * now, no dialog announcing that i won or lost or anything" (sysop,
+         * 2026-09-16). The order everybody went out in is the whole result of a
+         * game of Skitgubbe: first out won, last one left is the Skitgubbe.
+         */
+        const order = engine.state.finishedOrder
+            .map((id, place) => {
+            const name = engine.state.players.find((p) => p.id === id)?.name ?? id;
+            return `${place + 1}. ${name}${id === me ? '  (you)' : ''}`;
+        });
+        const mine = me === loserId
+            ? 'You are the Skitgubbe - last one holding cards.'
+            : engine.state.finishedOrder[0] === me
+                ? 'You went out first. You win.'
+                : `${loserName} is the Skitgubbe.`;
+        this.host.announceGameOver('Skitgubbe', [mine, '', ...order, order.length > 0 ? '' : '', `${loserName} is the Skitgubbe.`].join('\n'));
         table.lastHand = {
             board: engine.state.pile.map(engine_1.cardId),
             hands: Object.fromEntries(engine.state.players.map((p) => [p.id, p.hand.map(engine_1.cardId)])),

@@ -272,6 +272,8 @@ class GameViews {
                 playable: playableIndices,
                 onFocus: (index) => this.host.selectUnoCard(index),
                 onPick: (index) => this.host.selectUnoCard(index),
+                // Carried onto the pile with the mouse, the same as Skitgubbe's.
+                ...this.dragToPlay(table),
             });
         }
         else {
@@ -413,6 +415,34 @@ class GameViews {
      * its own hit test. Whichever row has a card at that point takes the drop;
      * a drag that ends over nothing simply puts the card down where it was.
      */
+    /**
+     * DRAGGING A CARD ONTO THE PILE PLAYS IT - in every game in the lobby.
+     *
+     * "the card drops before i let go of them when i drag them out to the pile"
+     * (sysop, 2026-09-16). Dragging was wired for the Skitgubbe SWAP only, so
+     * during play a card could be picked up and carried and then had nowhere to
+     * go: it went home on release, which reads as the card dropping by itself.
+     *
+     * A drop is decided by WHERE the pointer let go. Over the panel holding the
+     * pile, the card is played; anywhere else it goes back, and picking it up
+     * has still picked it (the same thing a click does), so the caller can
+     * finish with ENTER.
+     *
+     * It asks the registry for the table's module rather than naming a game, so
+     * a game added later drags the day it registers - "this goes for all card
+     * games dont do changes for only one game" (sysop, 2026-09-15).
+     */
+    dragToPlay(table) {
+        const moduleFor = () => this.host.gameModuleFor(table);
+        return {
+            onGrab: (index) => { moduleFor()?.selectCard(index); },
+            onDropAt: (x, y) => {
+                if (!this.host.tableCardButtons.covers(x, y))
+                    return;
+                moduleFor()?.primaryAction();
+            },
+        };
+    }
     dropSwapAt(from, x, y) {
         const hand = this.host.cardButtons.indexAt(x, y, from === 'hand'
             ? this.host.cardButtons.dragging ?? undefined
@@ -562,6 +592,7 @@ class GameViews {
         const entries = showingTable
             ? tableStacks(me)
             : showing.map((card) => ({ kind: 'standard', card }));
+        const carry = this.dragToPlay(table);
         this.host.cardButtons.render(entries, {
             selected: showingTable ? null
                 : swapping
@@ -583,9 +614,15 @@ class GameViews {
             labels: !showingTable,
             onFocus: (index) => { if (!showingTable)
                 this.host.vandtia.selectCard(index); },
-            onGrab: swapping ? (index) => this.host.vandtia.grabAt('hand', index) : undefined,
+            // Arranging: a card is carried between the two rows. Playing: a card
+            // is carried onto the pile, which plays it.
+            onGrab: swapping
+                ? (index) => this.host.vandtia.grabAt('hand', index)
+                : carry.onGrab,
             onDrop: swapping ? (index) => this.host.vandtia.dropOn('hand', index) : undefined,
-            onDropAt: swapping ? (x, y) => this.dropSwapAt('hand', x, y) : undefined,
+            onDropAt: swapping
+                ? (x, y) => this.dropSwapAt('hand', x, y)
+                : carry.onDropAt,
             onPick: (index) => {
                 if (showingTable)
                     return;

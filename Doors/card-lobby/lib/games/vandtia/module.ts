@@ -21,6 +21,7 @@ import type { CardGameAI } from '@amiexpress/bbs-door-sdk';
 import { Difficulty, VandtiaActionType } from '@amiexpress/bbs-door-sdk';
 import type { LobbyTable, PlayerProfile } from '../../types';
 import { isBotPlayer } from '../../utils';
+import { UI_THEME } from '../../constants';
 import type { TableGameModule, TableGamePainter, GameHintKind } from '../types';
 import { VandtiaEngine, cardId, type VandtiaSnapshot, type VandtiaCard } from './engine';
 import { explainRefusal } from '../refusal';
@@ -35,6 +36,8 @@ export interface VandtiaHost {
   persistState(): Promise<void>;
   pushNotice(message: string): void;
   pushEvent(message: string): void;
+  /** A game that has finished says so, in the dialog every game uses. */
+  announceGameOver(title: string, body: string): void;
   updateTableStatus(table: LobbyTable): void;
   clearTableHand(table: LobbyTable): void;
   updateAllPanels(): void;
@@ -927,8 +930,24 @@ export class VandtiaGameModule implements TableGameModule {
 
     const source = engine.sourceFor(meId);
     const legal = engine.legalPlays(meId);
-    const keys = legal.map((i) =>
-      i === this.selectedCardIndex ? `{yellow-bg}{black-fg}${i + 1}{/}{/}` : `{green-fg}${i + 1}{/}`).join(' ');
+
+    /*
+     * EVERY CARD IS LISTED, and the line says which of them will go.
+     *
+     * "i have 3 cards but the pick headline only lists 2 cards now" (sysop,
+     * 2026-09-16). It listed the LEGAL plays, so a hand of three with one
+     * card too low printed two numbers - and the third card read as missing
+     * rather than as unplayable. A caller may pick any card they hold; the
+     * game tells them why one will not go when they try it
+     * (`explainRefusal`), which is the other half of the same courtesy.
+     */
+    const keys = engine.cardsInPlay(meId).map((_, i) => (
+      i === this.selectedCardIndex
+        ? `{yellow-bg}{black-fg}${i + 1}{/}{/}`
+        : legal.includes(i)
+          ? `{green-fg}${i + 1}{/}`
+          : `{${UI_THEME.dim}-fg}${i + 1}{/}`
+    )).join(' ');
     const top = engine.topOfPile();
 
     if (source === 'faceDown') {
@@ -969,6 +988,27 @@ export class VandtiaGameModule implements TableGameModule {
     const me = this.host.currentProfile?.userId;
     if (me && loserId === me) this.host.pushNotice('You are the Skitgubbe. Deal again?');
     else if (me && loserId) this.host.pushNotice(`${loserName} is the Skitgubbe.`);
+
+    /*
+     * And said out loud, rather than only in the event list - "the game ended
+     * now, no dialog announcing that i won or lost or anything" (sysop,
+     * 2026-09-16). The order everybody went out in is the whole result of a
+     * game of Skitgubbe: first out won, last one left is the Skitgubbe.
+     */
+    const order = engine.state.finishedOrder
+      .map((id, place) => {
+        const name = engine.state.players.find((p) => p.id === id)?.name ?? id;
+        return `${place + 1}. ${name}${id === me ? '  (you)' : ''}`;
+      });
+    const mine = me === loserId
+      ? 'You are the Skitgubbe - last one holding cards.'
+      : engine.state.finishedOrder[0] === me
+        ? 'You went out first. You win.'
+        : `${loserName} is the Skitgubbe.`;
+    this.host.announceGameOver(
+      'Skitgubbe',
+      [mine, '', ...order, order.length > 0 ? '' : '', `${loserName} is the Skitgubbe.`].join('\n'),
+    );
 
     table.lastHand = {
       board: engine.state.pile.map(cardId),

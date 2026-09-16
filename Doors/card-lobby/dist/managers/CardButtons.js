@@ -63,6 +63,28 @@ class CardButtons {
         });
         return found;
     }
+    /**
+     * Where this row's panel sits, in screen cells.
+     *
+     * A drop is decided by WHERE the pointer let go: a card dragged onto the
+     * panel holding the pile is a card played onto the pile. Only the renderer
+     * knows where its panel is, so it is the one asked.
+     */
+    panelBounds() {
+        const panel = this.host.panel;
+        return {
+            left: Number(panel?.aleft) || 0,
+            top: Number(panel?.atop) || 0,
+            width: Number(panel?.width) || 0,
+            height: Number(panel?.height) || 0,
+        };
+    }
+    /** Is this point inside the panel these cards are drawn in? */
+    covers(x, y) {
+        const box = this.panelBounds();
+        return x >= box.left && x < box.left + box.width
+            && y >= box.top && y < box.top + box.height;
+    }
     /** The cards lying under the ones above - drawn only, in the same order. */
     underlays() {
         return this.unders.filter((under) => !under.hidden);
@@ -316,18 +338,61 @@ class CardButtons {
         };
         let art = null;
         let layout = null;
-        // With the lift first; without it rather than not at all.
-        for (const tryLift of [LIFT_ROWS, 0]) {
-            lift = tryLift;
-            for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
-                for (const size of sizes) {
-                    const candidate = artFor(size);
-                    const found = shape(candidate, size);
-                    if (found) {
-                        art = candidate;
-                        layout = found;
-                        break;
+        /*
+         * THE BIGGEST CARD THAT FITS, and the lift is what pays for it.
+         *
+         * "the face down cards was not as tall as they could be" (sysop,
+         * 2026-09-16). The search used to hold the lift row back first and drop
+         * the CARD SIZE to keep it, so a panel one row short of a full card with
+         * a lift drew half-height cards - with a row of the panel left empty
+         * underneath them. A row of cards you can read is the point; a card
+         * standing proud of its neighbours is a nicety, and the nicety goes
+         * first.
+         *
+         * So size is the outer loop now: full with the lift, full without it,
+         * and only then a smaller card.
+         */
+        /*
+         * WHAT A ROW OF CARDS GIVES UP FIRST, in order:
+         *
+         *   1. nothing - the biggest card, its number under it, and the lift;
+         *   2. the lift, the row a picked card rises into;
+         *   3. the card SIZE;
+         *   4. the numbers, and only when no size will fit with them.
+         *
+         * The numbers come near-last on purpose: they are how a caller PLAYS the
+         * card ("4, 5 or 6 for the table card"), so a smaller card you can name
+         * beats a bigger one you cannot. Below that, size beats the lift - a
+         * half-height card with an empty row under it was what "the face down
+         * cards was not as tall as they could be" (sysop, 2026-09-16) looked
+         * like.
+         */
+        const wantsLabels = options.labels !== false;
+        const labelsFit = (found) => found.stackY === 0 && found.cardRows * ((found.height - slotY) + 1) + lift <= rows;
+        for (const needLabels of wantsLabels ? [true, false] : [false]) {
+            for (const size of sizes) {
+                for (const tryLift of [LIFT_ROWS, 0]) {
+                    lift = tryLift;
+                    for (const shape of options.pile ? [asPile, grid, fan] : [grid, fan]) {
+                        const candidate = artFor(size);
+                        const found = shape(candidate, size);
+                        if (process.env.CARD_LAYOUT_DEBUG) {
+                            // eslint-disable-next-line no-console
+                            console.error('[layout]', JSON.stringify({
+                                needLabels, size, lift, shape: shape.name, rows, width,
+                                art: candidate[0]?.length, slotX, slotY,
+                                found: found && { h: found.height, w: found.cardWidth, rows: found.cardRows },
+                                labels: found ? labelsFit(found) : null,
+                            }));
+                        }
+                        if (found && (!needLabels || labelsFit(found))) {
+                            art = candidate;
+                            layout = found;
+                            break;
+                        }
                     }
+                    if (layout)
+                        break;
                 }
                 if (layout)
                     break;
@@ -423,6 +488,25 @@ class CardButtons {
                 underButton.hide();
             }
             button.show();
+            /*
+             * A CARD IN FLIGHT IS NOT IN THIS ROW'S COORDINATES.
+             *
+             * "when i click and hold the button on a card without moving the mouse
+             * the card is drawn at the top of the screen not at the current
+             * position" (sysop, 2026-09-16).
+             *
+             * Picking a card up reparents it to the SCREEN so nothing clips it
+             * (`beginDrag`), and picking it up also repaints the panels - the door
+             * lights the card the caller grabbed. This loop then wrote `top = 1`
+             * at a widget whose parent is now the whole screen, and row one of the
+             * screen is where it went. Moving the mouse hid the bug, because the
+             * next mousemove overwrote the position before anything was drawn.
+             *
+             * So the renderer owns every card except the one being carried: that
+             * one belongs to the pointer until the button comes up.
+             */
+            if (this.dragging === index)
+                return;
             button.width = cardWidth;
             button.height = buttonHeight;
             // Everything sits one row down, and the picked card rises into the gap.
@@ -459,8 +543,26 @@ class CardButtons {
                     this.beginDrag(index, data, options);
                 });
             }
-            if (options.onDrop)
-                button.on('mouseup', () => options.onDrop?.(index));
+            if (options.onDrop) {
+                button.on('mouseup', () => {
+                    /*
+                     * A CARD DOES NOT DROP ON ITSELF.
+                     *
+                     * The card being carried follows the pointer and is drawn in
+                     * front, so at the moment the button comes up IT is the widget
+                     * under the cursor - and this handler fired first, resolving the
+                     * drop to the card's own place before the pointer's coordinates
+                     * were ever looked at. The gesture ended where it started, which
+                     * is what "the card drops before i let go of them when i drag them
+                     * out to the pile" (sysop, 2026-09-16) looks like from the other
+                     * side. The screen-level drop (`onDropAt`) hit-tests the cards the
+                     * caller can actually see and skips the one in flight.
+                     */
+                    if (this.dragging === index)
+                        return;
+                    options.onDrop?.(index);
+                });
+            }
             // A row that cannot be picked from does not take the focus either.
             button.options.focusable = options.labels !== false;
             button.clickable = options.labels !== false;
@@ -529,11 +631,26 @@ class CardButtons {
         const screen = this.host.screen;
         if (!button || !screen?.on)
             return;
+        /*
+         * WHERE THE CARD IS, IN BOTH FRAMES.
+         *
+         * `aleft`/`atop` are screen cells - what the card travels in. `position`
+         * is the raw number the renderer WROTE, which is what it must be given
+         * back when it goes home: reading `button.left` does not return that
+         * number, because the getter measures from the panel's outer corner and
+         * the setter counts from inside its border. Read one, write the other,
+         * and every drag moved the card a cell up and to the left - the same
+         * trap the deal animation hit.
+         */
         const grab = {
             dx: Number(data?.x ?? 0) - Number(button.aleft ?? 0),
             dy: Number(data?.y ?? 0) - Number(button.atop ?? 0),
-            left: Number(button.left) || 0,
-            top: Number(button.top) || 0,
+            screenLeft: Number(button.aleft) || 0,
+            screenTop: Number(button.atop) || 0,
+            home: {
+                left: button.position?.left ?? (Number(button.left) || 0),
+                top: button.position?.top ?? (Number(button.top) || 0),
+            },
         };
         /*
          * THE WHOLE CARD TRAVELS, not the part that still fits.
@@ -551,18 +668,21 @@ class CardButtons {
          * rather than the panel's frame.
          */
         const home = button.parent;
-        const homeLeft = Number(home?.aleft ?? 0);
-        const homeTop = Number(home?.atop ?? 0);
         const screenParent = this.host.screen;
         if (home && typeof home.remove === 'function' && typeof screenParent.append === 'function') {
             home.remove(button);
             screenParent.append(button);
-            button.left = homeLeft + grab.left;
-            button.top = homeTop + grab.top;
+            // The screen has no border to count from, so a screen cell IS the
+            // number to write - the card does not move when it is picked up.
+            button.left = grab.screenLeft;
+            button.top = grab.screenTop;
         }
         // In front of its neighbours while it travels, or it slides UNDER the
-        // cards it is being dragged past.
+        // cards it is being dragged past - and drawn there at once, so a caller
+        // who holds the button still sees the card where they took hold of it.
         button.setFront?.();
+        this.dragging = index;
+        screen.render?.();
         const follow = (event) => {
             if (event?.action === 'mousemove') {
                 // Screen coordinates: while it travels the card is the screen's.
@@ -581,12 +701,11 @@ class CardButtons {
                 screenParent.remove(button);
                 home.append(button);
             }
-            button.left = grab.left;
-            button.top = grab.top;
+            button.left = grab.home.left;
+            button.top = grab.home.top;
             screen.render();
             options.onDropAt?.(Number(event.x), Number(event.y));
         };
-        this.dragging = index;
         screen.on('mouse', follow);
     }
     /** The widgets for the cards underneath, made once and reused. */

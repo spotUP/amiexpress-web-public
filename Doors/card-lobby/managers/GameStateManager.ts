@@ -14,7 +14,9 @@ import {
   type PlayerProfile,
   type LastHandSummary,
   type UnoActionType,
-  type UnoColor,
+  type UnoColor,
+
+
   CHIP_NAME,
   settings,
   PokerAction,
@@ -911,6 +913,7 @@ export class GameStateManager {
       pushEvent: (message: string) => void;
       emitLiveChat: (message: string) => void;
       broadcastEvent: (tableId: number, type: string, data: any) => Promise<void>;
+      announceGameOver: (title: string, body: string) => void;
       persistState: () => Promise<void>;
     },
   ): Promise<void> {
@@ -990,6 +993,29 @@ export class GameStateManager {
     }
 
     callbacks.pushEvent(`${winner.name} wins! Game finished at table #${table.id}.`);
+
+    /*
+     * And announced, the way every game in the lobby announces - "the game
+     * ended now, no dialog announcing that i won or lost or anything" (sysop,
+     * 2026-09-16). UNO is scored, so the score is the result: what the winner
+     * took, and what each hand left behind.
+     */
+    const board = state.players
+      .map((player) => {
+        const points = scores[player.id] ?? 0;
+        const you = player.id === currentProfile.userId ? '  (you)' : '';
+        return player.id === winnerId
+          ? `${player.name}${you} - out first, wins ${winnings} ${CHIP_NAME}`
+          : `${player.name}${you} - ${points} point${points === 1 ? '' : 's'} left`;
+      });
+    callbacks.announceGameOver(
+      'UNO',
+      [
+        winnerId === currentProfile.userId ? 'You went out first. You win.' : `${winner.name} wins.`,
+        '',
+        ...board,
+      ].join('\n'),
+    );
 
     // Broadcast game ended event
     await callbacks.broadcastEvent(table.id, 'gameEnded', {
