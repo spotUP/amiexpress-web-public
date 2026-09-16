@@ -102,7 +102,7 @@ export type { ConfirmModalOptions } from './widgets/confirm-modal';
 export { FKeyBar, fkeyBar } from './widgets/fkey-bar';
 export type { FKeyBarOptions, FKeyItem } from './widgets/fkey-bar';
 export { StatusBar, statusBar } from './widgets/status-bar';
-export type { StatusBarOptions, StatusBarSection } from './widgets/status-bar';
+export type { StatusBarOptions, StatusBarSection, StatusBarScrollOptions } from './widgets/status-bar';
 export { SearchModal, searchModal } from './widgets/search-modal';
 export type { SearchModalOptions, SearchField, SearchResult } from './widgets/search-modal';
 export { AudioLevelBar, audioLevelBar, renderAudioLevel } from './widgets/audio-level-bar';

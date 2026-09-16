@@ -61,6 +61,12 @@ export { readDoorSettings, readDoorSettingOverrides, readManifest as readDoorSet
 // Core utilities - ANSI string manipulation
 export * from './core/ansi-string-utils';
 
+// Scrolltext: a line read through a window narrower than itself, for any
+// single-row widget whose text does not fit (StatusBar's `scroll` option
+// is the first consumer). Pure - a frame is a function of a step.
+export { createScrollText, visibleLength } from './engines/ui/text/scroll-text';
+export type { ScrollText, ScrollTextOptions, ScrollMode } from './engines/ui/text/scroll-text';
+
 // Screen utilities
 export { getTerminalDimensions, BBS_CONSTANTS } from './src/utils/screen-utils';
 
