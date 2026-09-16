@@ -36,11 +36,18 @@ describe('the graphics prompt', () => {
   });
 
   it('both answers announce the mode with its shape, which is what mounts the canvas', () => {
-    expect(eventsOf(run('P').emitted, 'petscii-mode')).toEqual([{ cols: 40, rows: 25, palette: 'vic' }]);
+    // `charset` travels with the shape and the colours: a Swedish C64's ROM
+    // puts a-ring and the umlauts where the bracket/pound trio sits, and it is
+    // a caller setting (W row 22). Nobody is logged in at the graphics prompt,
+    // so both answers get the standard set and $5C stays the pound sign this
+    // board's MCI uses for its column tab.
+    expect(eventsOf(run('P').emitted, 'petscii-mode'))
+      .toEqual([{ cols: 40, rows: 25, palette: 'vic', charset: 'standard' }]);
     // ...and the 80-column screen is a C128's, so its colours are the VDC's
     // unless this caller has said otherwise (the preference is applied at
     // login; nobody is logged in at the graphics prompt).
-    expect(eventsOf(run('P8').emitted, 'petscii-mode')).toEqual([{ cols: 80, rows: 25, palette: 'vdc' }]);
+    expect(eventsOf(run('P8').emitted, 'petscii-mode'))
+      .toEqual([{ cols: 80, rows: 25, palette: 'vdc', charset: 'standard' }]);
     // And the legacy geometry event is still sent for the 40-column caller,
     // because the browser has used that literal as the mount switch since
     // the canvas existed: a mid-deploy session must not lose its screen.

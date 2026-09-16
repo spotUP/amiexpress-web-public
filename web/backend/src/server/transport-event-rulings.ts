@@ -1309,6 +1309,13 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "canvas to mount and needs no shape: a real C64 IS the screen, and its " +
     "width is settled by the port it called.",
   },
+  "key-repeat-mode": {
+    kind: "web-only",
+    note: "How fast the BROWSER auto-repeats a held key while a door owns the screen - " +
+    "'game' or 'application', from services/game-mode.service.ts, the one emitter " +
+    "every route into game mode reaches. Consumer: packages/terminal BBSTerminal.tsx; " +
+    "a byte caller's own terminal owns key repeat, so the board cannot set it.",
+  },
   "petscii-off": {
     kind: "web-only",
     note:

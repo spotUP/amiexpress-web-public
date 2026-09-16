@@ -208,8 +208,16 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'party:join',
   'party:leave',
   'password-mode',
+  // The browser's key auto-repeat rate while a door owns the screen. It was
+  // emitted with no ruling at all, which is what the arm-A count below caught.
+  'key-repeat-mode',
   'petscii-bytes',
   'petscii-mode',
+  // Joined beside `petscii-mode`: the other direction of the same switch,
+  // sent when the graphics answer is NOT PETSCII so a browser that had been
+  // on the canvas drops back to xterm. It shipped with a ruling but never
+  // reached this list, which is what left the census red.
+  'petscii-off',
   'petscii-palette',
   'petscii-charset',
   'petscii-output',
@@ -573,7 +581,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // ruled web-only beside `petscii-palette`, and `door-message` DROPPED -
     // its only emit site (Doors/card-lobby/server.ts `emitSound`) went with
     // ae11b503f and the census caught the ruling outliving the name.
-    expect(ruled.length).toBe(246);
+    // 248 as of 2026-09-16: `key-repeat-mode` (services/game-mode.service.ts)
+    // was emitted to the browser with NO ruling and no pin - the arm-A count
+    // below is what caught it - so a ruling was written for it here, taking
+    // the table from 247 to 248. `petscii-off` needed no new ruling; it had
+    // one already and was simply missing from PINNED_EVENT_NAMES, which is
+    // why the table was 247 against a pin of 246.
+    expect(ruled.length).toBe(248);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -628,7 +642,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // answer is TP-10's ansi-output push, like every operator name here.
       // 116 (2026-09-10): `texttv-mode`, the teletext session flag from the
       // graphics prompt's T answer - browser-only by construction.
-      'web-only': 116,
+      // 118 (2026-09-16): `key-repeat-mode` (the browser's key auto-repeat
+      // rate while a door owns the screen - a byte caller's own terminal owns
+      // that and the board cannot set it) and `petscii-off` (the other
+      // direction of the PETSCII switch, which had carried a ruling since
+      // 2026-09-15 without the census being able to see its optional-chained
+      // call site).
+      'web-only': 118,
       'not-transport': 104,
     });
   });
@@ -695,7 +715,20 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // it a few pushes later, exactly as it caught `petscii-palette` - the
     // fix is the ruling beside that one, web-only, not this number moving
     // on its own.
-    expect(fromA.length).toBe(155);
+    //
+    // 158 as of 2026-09-16: TWO joined. `key-repeat-mode`
+    // (services/game-mode.service.ts) was emitted to the browser with no
+    // ruling and no pin at all - the browser's key auto-repeat rate while a
+    // door owns the screen - and it is ruled and pinned beside this now.
+    //
+    // `petscii-off` is the more interesting one: it had been RULED since
+    // 2026-09-15 and was emitted, but the census could not see it, because
+    // its one call site used optional chaining and this arm is a text scan
+    // for a plain call with a quoted name. A ruled, emitted, uncountable
+    // event is a contradiction the pin cannot hold, so the call site was made
+    // plain like every other emit in that file rather than the scan widened -
+    // the scan's narrowness is what makes the count mean anything.
+    expect(fromA.length).toBe(158);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

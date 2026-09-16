@@ -312,7 +312,13 @@ console.log('[RIP] RIP requested on a transport with no rasteriser - falling bac
    * ignores `petscii-mode`.
    */
   if (!session.petsciiMode) {
-    socket.emit?.('petscii-off', { cols: session.screenWidth, rows: session.screenHeight });
+    // Plain `emit`, like every other emit in this file. It was written with
+    // optional chaining, and the transport census is a TEXT SCAN for a plain
+    // emit call with a quoted name - so the one optional call in the backend
+    // made this event invisible to the census while carrying a ruling, which
+    // is a contradiction the pin cannot hold. The same socket is emitted on
+    // unconditionally a few lines above, so the guard was never load-bearing.
+    socket.emit('petscii-off', { cols: session.screenWidth, rows: session.screenHeight });
   }
 
   // express.e:29545 quickFlag - skip bulletins during login

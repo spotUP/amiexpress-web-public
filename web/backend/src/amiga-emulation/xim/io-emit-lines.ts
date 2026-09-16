@@ -34,7 +34,15 @@ export interface PreparedLines {
 export interface LineSink {
   /** Column the caller's screen wraps at; 0 for no wrapping. */
   lineWrap: number;
-  emit(text: string): void;
+  /**
+   * Put one finished row on the wire.
+   *
+   * Named `write`, not `emit`: it hands bytes to the caller's socket through
+   * the handler, and a method called `emit` here reads as a socket EVENT to
+   * anything scanning for them - the transport census flagged it as an
+   * unruled variable-emit site the day this module was split out.
+   */
+  write(text: string): void;
   /** One more row has gone out with a newline (express.e's lineCount++). */
   countRow(): void;
   /**
@@ -97,7 +105,7 @@ export function emitPreparedLines(job: PreparedLines, sink: LineSink): EmitLines
       const output = `${segment}${ansiReset}${suffix}`;
 
       // Emit output BEFORE checking pause
-      sink.emit(output);
+      sink.write(output);
       bytes += output.length;
 
       // express.e only increments lineCount and checks pause if a newline was emitted
