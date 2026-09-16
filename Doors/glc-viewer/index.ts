@@ -27,6 +27,7 @@ import { bodyForThisCall } from './src/fetch-deadline';
 import {
   narrowBody, narrowHeader, narrowListRows, narrowSkeletonRow, NARROW_WIDTH,
 } from './src/narrow';
+import { autoLines } from './src/sizing';
 
 // Metadata
 export const metadata = {
@@ -267,7 +268,24 @@ function loadConfig(): GLCConfig {
             config.retries = parseInt(value) || 5;
             break;
           case 'LINES':
-            config.lines = parseInt(value) || 10;
+            /*
+             * `AUTO` is the original's own answer to this screen not fitting:
+             * `count := getAEIntValue(DT_LINELENGTH) - 18`, floored at five
+             * (`GLCViewer.e:828-831`). Eighteen is the wide screen's chrome -
+             * logo, title bar, column header, two rules, the action legend,
+             * the three totals - and what is left is the list.
+             *
+             * The sysop hit the reason it exists: "the ansi version grows when
+             * the chrome fills so all is not visible" (2026-09-16). A fixed
+             * twenty callers plus eighteen rows of chrome is twenty-eight rows
+             * on a twenty-four row screen, and the logo goes off the top.
+             */
+            if (value.toUpperCase() === 'AUTO') {
+              config.lines = AUTO_LINES;
+            } else {
+              const asked = parseInt(value, 10);
+              if (Number.isFinite(asked) && asked > 0) config.lines = asked;
+            }
             break;
           case 'SCREENCLEAR':
             config.screenClear = value.toUpperCase() === 'YES';
@@ -424,6 +442,31 @@ function columnsOf(ctx: DoorContext): number {
   const session = (ctx as unknown as { bbsSession?: { screenWidth?: number } }).bbsSession;
   const width = Number(session?.screenWidth ?? 80);
   return Number.isFinite(width) && width > 0 ? width : 80;
+}
+
+/**
+ * `LINES=AUTO`, held until the caller's screen is known.
+ *
+ * Config is read before the door has a context, so AUTO is recorded as a
+ * sentinel here and resolved in `onStart`, where the caller's display lines
+ * can be asked for. The sum itself lives in `src/sizing.ts`.
+ */
+const AUTO_LINES = -1;
+
+/**
+ * How many rows the caller's screen has.
+ *
+ * The same chain XIM answers `DT_LINELENGTH` from
+ * (`XIMProtocol.ts:140-144`), so the door and the 68K viewer size themselves
+ * from one number.
+ */
+function rowsOf(ctx: DoorContext): number {
+  const session = (ctx as unknown as {
+    bbsSession?: { screenHeight?: number; user?: { linesPerScreen?: number; lineLength?: number; pageLength?: number } };
+  }).bbsSession;
+  const user = session?.user;
+  const rows = user?.linesPerScreen ?? user?.lineLength ?? user?.pageLength ?? session?.screenHeight ?? 22;
+  return Number.isFinite(rows) && Number(rows) > 0 ? Number(rows) : 22;
 }
 
 /** What the header needs: everything that does not depend on the server. */
@@ -597,6 +640,8 @@ door.onStart(async (ctx: DoorContext) => {
      * decides. The placeholder rows below it hold the table's shape - in the
      * calls' own column widths - and the real rows are written over them.
      */
+    if (config.lines === AUTO_LINES) config.lines = autoLines(rowsOf(ctx));
+
     const base = drawHeader(socket, config, showLocation, columnsOf(ctx));
 
     /*

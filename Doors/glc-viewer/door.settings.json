@@ -49,8 +49,8 @@
       "cfgKey": "LINES",
       "label": "Callers to show",
       "type": "string",
-      "default": "20",
-      "help": "How many callers to ask the server for."
+      "default": "AUTO",
+      "help": "AUTO sizes the list to the caller's own screen - their display lines less the eighteen rows of chrome, which is what the original does. A number asks the server for exactly that many."
     },
     {
       "key": "screenClear",
