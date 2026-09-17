@@ -42,6 +42,30 @@ describe('finding packs', () => {
     expect(services[0].fileCount).toBe(4);
   });
 
+  it('counts a pack’s pages only when the count is looked at', () => {
+    /*
+     * THE PAGE COUNT IS ONE NUMBER BESIDE A NAME, and reading it eagerly
+     * meant a directory scan per pack. With the restoration archive
+     * installed - 1,474 packs over 40,000 pages - opening the browser cost
+     * 2.2 seconds warm and 16 cold, in front of a blank screen. It is
+     * still correct, just counted on demand.
+     */
+    const [service] = listServices(FIXTURES);
+    expect(Object.keys(service)).toContain('fileCount');
+    expect(service.fileCount).toBe(4);
+    // And stable once counted, rather than re-scanning on every read.
+    expect(service.fileCount).toBe(4);
+  });
+
+  it('keeps the listing until the directory itself changes', () => {
+    // Installing a pack is a rare, deliberate act; rebuilding the list on
+    // every door open is not worth 1,474 JSON reads.
+    const first = listServices(FIXTURES);
+    expect(listServices(FIXTURES)).toBe(first);
+    clearServiceCache();
+    expect(listServices(FIXTURES)).not.toBe(first);
+  });
+
   it('skips a directory that does not', () => {
     // Half-copied archives are a normal thing to find on a volume.
     expect(listServices(FIXTURES).some(s => s.dir.endsWith('not-a-pack'))).toBe(false);

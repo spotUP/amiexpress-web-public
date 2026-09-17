@@ -122,9 +122,23 @@ export function teletextRoot(startDir: string = __dirname): string {
  * a service", and half-copied archives are a normal thing to find on a
  * volume.
  */
+/**
+ * The listing, remembered until the Teletext directory itself changes.
+ *
+ * Installing a pack is a sysop act and a rare one, so the listing is built
+ * once per process and kept. Its stamp is the root directory's own mtime,
+ * which moves when a pack is added or removed.
+ */
+let listingCache: { root: string; stamp: number; summaries: ServiceSummary[] } | null = null;
+
 export function listServices(root: string = teletextRoot()): ServiceSummary[] {
+  let stamp: number;
   let entries: fs.Dirent[];
   try {
+    stamp = fs.statSync(root).mtimeMs;
+    if (listingCache && listingCache.root === root && listingCache.stamp === stamp) {
+      return listingCache.summaries;
+    }
     entries = fs.readdirSync(root, { withFileTypes: true });
   } catch {
     return [];
@@ -136,14 +150,36 @@ export function listServices(root: string = teletextRoot()): ServiceSummary[] {
     const dir = path.join(root, entry.name);
     const manifest = readManifest(dir);
     if (!manifest) continue;
-    summaries.push({
+
+    /*
+     * THE PAGE COUNT IS COUNTED WHEN IT IS LOOKED AT, NOT BEFORE.
+     *
+     * It is one number beside a name, and reading it meant a directory
+     * scan per pack. With the restoration archive installed - 1,474 packs
+     * over 40,000 pages - that was 2.2 seconds of the caller sitting in
+     * front of a blank screen every time the door opened, and 16 seconds
+     * cold. The browser shows nineteen rows at a time, so nineteen scans
+     * is what it should cost.
+     */
+    const summary = {
       id: manifest.id || entry.name,
       title: manifest.title || entry.name,
       dir,
-      fileCount: listPageFiles(dir).length,
+    } as ServiceSummary;
+    let counted: number | null = null;
+    Object.defineProperty(summary, 'fileCount', {
+      enumerable: true,
+      get(): number {
+        if (counted === null) counted = listPageFiles(dir).length;
+        return counted;
+      },
     });
+    summaries.push(summary);
   }
-  return summaries.sort((a, b) => a.title.localeCompare(b.title));
+
+  summaries.sort((a, b) => a.title.localeCompare(b.title));
+  listingCache = { root, stamp, summaries };
+  return summaries;
 }
 
 /** The pack's manifest, or null when the directory is not a pack. */
@@ -361,5 +397,6 @@ export function findService(id: string, root: string = teletextRoot()): LoadedSe
 }
 
 export function clearServiceCache(): void {
+  listingCache = null;
   cache.clear();
 }
