@@ -38,6 +38,11 @@ beforeEach(() => {
   const { screensRouter } = require('../../src/api/screens-routes');
   app = express();
   app.use(express.json({ limit: '8mb' }));
+  // See screens-share.test.ts: repair and flag are the sysop's routes.
+  app.use((req, _res, next) => {
+    (req as express.Request & { user?: unknown }).user = { userId: '1', username: 'sysop', secLevel: 255 };
+    next();
+  });
   app.use('/api/screens', screensRouter);
 });
 

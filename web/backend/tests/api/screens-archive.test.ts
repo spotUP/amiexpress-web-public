@@ -34,6 +34,12 @@ beforeEach(() => {
   const { screensRouter } = require('../../src/api/screens-routes');
   app = express();
   app.use(express.json());
+  // See screens-share.test.ts: export and import are the sysop's routes,
+  // and the real mount always carries a user.
+  app.use((req, _res, next) => {
+    (req as express.Request & { user?: unknown }).user = { userId: '1', username: 'sysop', secLevel: 255 };
+    next();
+  });
   app.use('/api/screens', screensRouter);
 });
 

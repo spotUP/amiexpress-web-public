@@ -195,3 +195,64 @@ describe('the accounts at either end', () => {
     expect(res.status).toBe(200);
   });
 });
+
+/**
+ * THE BOARD-WIDE ROUTES ARE THE SYSOP'S, and they used to be open.
+ *
+ * The sandbox above constrains an ARTIST by the paths a request names. Seven
+ * routes name no path at all - they act on the whole board - and two things
+ * met to leave them open: `pathsInRequest` finds nothing to refuse on them,
+ * and the middleware deliberately waves through any level-100 account that
+ * owns NO theme, to keep the access long-standing helper accounts had.
+ *
+ * A theme-owning artist was already refused (403, "names no screen path"). An
+ * admin account owning nothing could repair every screen on the board, rewrite
+ * node tooltypes, import an archive over it and export the lot.
+ *
+ * That was a considered decision and this reverses it, because the screens
+ * rework makes the split explicit: an artist draws, a sysop runs the board
+ * ("role-driven so artists cannot reach board configuration", the sysop,
+ * 2026-09-17). Drawing needs none of these seven.
+ */
+describe('the routes that act on the whole board', () => {
+  const helper = { username: 'helper', secLevel: 100 };   // owns no theme
+  const artist = { username: 'skope', secLevel: 100 };    // owns `neon`
+  const sysop = { username: 'sysop', secLevel: 255 };
+
+  const boardWide: ReadonlyArray<[string, (a: ReturnType<typeof app>) => request.Test]> = [
+    ['POST /repair', a => request(a).post('/api/screens/repair').send({ path: 'Screens/BULL.TXT' })],
+    ['POST /repair-all', a => request(a).post('/api/screens/repair-all').send({ dryRun: true })],
+    ['POST /flag', a => request(a).post('/api/screens/flag').send({ path: 'Screens/BULL.TXT', flag: 'art' })],
+    ['POST /share', a => request(a).post('/api/screens/share').send({ nodes: [1], sharedDir: 'Screens/Node', dryRun: true })],
+    ['GET /shared-directories', a => request(a).get('/api/screens/shared-directories')],
+    ['POST /import', a => request(a).post('/api/screens/import').field('dryRun', 'true')],
+    ['GET /export all', a => request(a).get('/api/screens/export?scope=all')],
+  ];
+
+  for (const [name, call] of boardWide) {
+    it(`${name} refuses an admin account that owns no theme`, async () => {
+      // RED before: 200, because the sandbox's "not an artist" branch let it by.
+      const res = await call(app(helper));
+      expect(res.status).toBe(403);
+    });
+
+    it(`${name} refuses an artist too`, async () => {
+      const res = await call(app(artist));
+      expect(res.status).toBe(403);
+    });
+  }
+
+  it('leaves the sysop every one of them', async () => {
+    for (const [name, call] of boardWide) {
+      const res = await call(app(sysop));
+      expect([name, res.status === 403]).toEqual([name, false]);
+    }
+  });
+
+  it('still lets an artist draw, which is the whole point of level 100', async () => {
+    const res = await request(app(artist))
+      .put('/api/screens/file?path=Themes/neon/Board/BULL.TXT')
+      .send({ content: b64('redrawn\r\n') });
+    expect(res.status).toBe(200);
+  });
+});

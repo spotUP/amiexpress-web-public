@@ -36,6 +36,13 @@ beforeEach(() => {
   const { screensRouter } = require('../../src/api/screens-routes');
   app = express();
   app.use(express.json());
+  // The real mount is behind authenticateToken + requireLevel(100), so a
+  // request with no user is a shape production never sees - and the
+  // board-wide routes this suite drives are the sysop's.
+  app.use((req, _res, next) => {
+    (req as express.Request & { user?: unknown }).user = { userId: '1', username: 'sysop', secLevel: 255 };
+    next();
+  });
   app.use('/api/screens', screensRouter);
 });
 

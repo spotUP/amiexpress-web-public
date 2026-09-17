@@ -19,6 +19,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS, getScreenFileName } from '../screens/screen-tables';
 
 import type { AuthRequest } from '../middleware/auth.middleware';
+import { requireSysop } from '../middleware/auth.middleware';
 import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
 import { screenDrawsNothing, screenIsProgram } from '../screens/screen-blankness';
 import {
@@ -99,6 +100,21 @@ screensRouter.use((req: Request, res: Response, next: NextFunction) => {
 
   if (isSysop(caller)) return next();
 
+  /*
+   * SEVEN ROUTES DO NOT COME THROUGH HERE ANY MORE.
+   *
+   * This guard refuses by the PATHS a request names, and the board-wide
+   * routes - /repair, /repair-all, /flag, /share, /shared-directories,
+   * /import and /export - name none. `pathsInRequest` found nothing to
+   * refuse on them, and the branch below then waved through any level-100
+   * account owning no theme, so such an account could repair every screen on
+   * the board, rewrite node tooltypes and import an archive over it.
+   *
+   * Each of those seven now carries `requireSysop()` of its own. Nothing
+   * about the rule below changes: a helper account that owns no theme keeps
+   * the path-bearing access it has always had, which is the case this
+   * branch was written for.
+   */
   const roots = writableRoots(bbsRoot, caller);
   if (roots.length === 0) {
     // Not an artist: an admin account that owns no theme keeps exactly the
@@ -900,7 +916,7 @@ screensRouter.put('/file', (req: Request, res: Response) => {
  * that says the guess is wrong and a designer does edit this one; `null`
  * removes the override so the heuristic applies again.
  */
-screensRouter.post('/flag', (req: Request, res: Response) => {
+screensRouter.post('/flag', requireSysop(), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const rel = String(req.body?.path || '');
   const full = resolveScreenPath(rel);
@@ -939,7 +955,7 @@ screensRouter.post('/flag', (req: Request, res: Response) => {
  * itself lives in screens/screen-repair.ts, because the health page offers the
  * same one.
  */
-screensRouter.post('/repair', (req: Request, res: Response) => {
+screensRouter.post('/repair', requireSysop(), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const rel = String(req.body?.path || '');
   const full = resolveScreenPath(rel);
@@ -976,7 +992,7 @@ screensRouter.post('/repair', (req: Request, res: Response) => {
  * Reported per file rather than as a count, because "40 repaired, 7 refused"
  * with no names is a report a sysop cannot act on.
  */
-screensRouter.post('/repair-all', (req: Request, res: Response) => {
+screensRouter.post('/repair-all', requireSysop(), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const index = getScreenIndex(baseDir);
   const dryRun = req.body?.dryRun === true;
@@ -1396,7 +1412,7 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
  * offer a hardcoded `Screens/Shared`, which does not exist here, and the share
  * failed with a message about the board root.
  */
-screensRouter.get('/shared-directories', (_req: Request, res: Response) => {
+screensRouter.get('/shared-directories', requireSysop(), (_req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const found: { dir: string; files: number }[] = [];
 
@@ -1427,7 +1443,7 @@ screensRouter.get('/shared-directories', (_req: Request, res: Response) => {
   return sendOk(res, { directories: found.sort((a, b) => b.files - a.files) });
 });
 
-screensRouter.post('/share', (req: Request, res: Response) => {
+screensRouter.post('/share', requireSysop(), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const nodes: number[] = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
   const sharedDirRel = String(req.body?.sharedDir || '');
@@ -1528,7 +1544,7 @@ function isScreenFileName(name: string): boolean {
  * A sysop on a release package has no git and no shell on the volume; an
  * archive is how screens are backed up and carried between hosts.
  */
-screensRouter.get('/export', (req: Request, res: Response) => {
+screensRouter.get('/export', requireSysop(), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const scope = String(req.query.scope || 'all');
 
@@ -1570,7 +1586,7 @@ screensRouter.get('/export', (req: Request, res: Response) => {
  * half-applies is worse than one that is rejected, because the sysop cannot
  * see which half landed.
  */
-screensRouter.post('/import', upload.single('archive'), (req: Request, res: Response) => {
+screensRouter.post('/import', requireSysop(), upload.single('archive'), (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const file = (req as Request & { file?: { buffer: Buffer } }).file;
   if (!file) return res.status(400).json({ success: false, error: 'No archive uploaded' });
