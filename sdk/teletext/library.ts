@@ -20,6 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TelesoftwareMap } from './telesoftware';
+import { CATALOGUE_FILE, type Catalogue } from './catalogue';
 import type { TeletextService, TeletextPage, NationalSubset } from './marco/model/types';
 import { importTti, importT42, extractTeletextLines } from './marco/tti/index';
 import { fastextByPage, type TeletextLine } from './packet27';
@@ -100,6 +101,23 @@ export function loadTelesoftwareMap(dir: string): TelesoftwareMap | null {
     if (!fs.existsSync(full)) return null;
     const parsed = JSON.parse(fs.readFileSync(full, 'utf8')) as TelesoftwareMap;
     if (!parsed || typeof parsed.disc !== 'string' || !Array.isArray(parsed.programs)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The board's quicklink list, or null.
+ *
+ * Built beside the packs by a script rather than worked out here: a board
+ * with fifteen hundred packs on it would otherwise scan every one of them
+ * to draw its opening screen.
+ */
+export function loadCatalogue(root: string = teletextRoot()): Catalogue | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(root, CATALOGUE_FILE), 'utf8')) as Catalogue;
+    if (!parsed || !Array.isArray(parsed.entries)) return null;
     return parsed;
   } catch {
     return null;

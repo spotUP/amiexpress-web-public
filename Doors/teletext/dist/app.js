@@ -52,6 +52,7 @@ const library_1 = require("@amiexpress/bbs-door-sdk/teletext/library");
 const telesoftware_1 = require("@amiexpress/bbs-door-sdk/teletext/telesoftware");
 const emulator_url_1 = require("@amiexpress/bbs-door-sdk/beeb/emulator-url");
 const proof_store_1 = require("@amiexpress/bbs-door-sdk/beeb/proof-store");
+const catalogue_1 = require("@amiexpress/bbs-door-sdk/teletext/catalogue");
 const path = __importStar(require("path"));
 const settings_1 = require("./settings");
 /**
@@ -81,6 +82,10 @@ class TeletextApp {
          * narrows; the arrows walk what is left.
          */
         this.pickerFilter = '';
+        /** The board's quicklink list, and where the caller is in it. */
+        this.catalogue = [];
+        this.indexAt = 0;
+        this.indexTop = 0;
         /** First row of the list that is on screen. */
         this.pickerTop = 0;
         this.loaded = null;
@@ -119,11 +124,29 @@ class TeletextApp {
     }
     // --- Lifecycle --------------------------------------------------------
     start() {
-        this.services = (0, library_1.listServices)(this.root ?? (0, library_1.teletextRoot)());
+        const root = this.root ?? (0, library_1.teletextRoot)();
+        this.services = (0, library_1.listServices)(root);
         this.session.socket.on('emulator:closed', this.onEmulatorClosed);
         this.screen.begin();
         if (this.services.length === 0) {
             this.paintPicker();
+            return;
+        }
+        /*
+         * OPEN ON WHAT THERE IS TO PLAY.
+         *
+         * A board with the restoration archive installed carries fifteen
+         * hundred recovered broadcast days, and the handful holding a game are
+         * scattered across years and networks behind page numbers nobody could
+         * remember - Bamboozle on 152, a quiz hidden at 30A, sixteen BBC
+         * programs on Ceefax 704 to 719. Landing on a service list and wishing
+         * the caller luck is not a browser, it is a filing cabinet.
+         */
+        const catalogue = (0, library_1.loadCatalogue)(root);
+        this.catalogue = catalogue ? (0, catalogue_1.playableOnly)(catalogue.entries) : [];
+        if (this.catalogue.length > 0 && !this.settings.defaultService) {
+            this.view = 'index';
+            this.paintIndex();
             return;
         }
         const wanted = this.settings.defaultService;
@@ -156,11 +179,26 @@ class TeletextApp {
     }
     // --- Input ------------------------------------------------------------
     handleKey(ch) {
+        if (this.view === 'index')
+            return this.indexKey(ch);
         if (this.view === 'picker')
             return this.pickerKey(ch);
         return this.pageKey(ch);
     }
     onArrow(direction) {
+        if (this.view === 'index') {
+            if (direction === 'up')
+                this.indexAt = Math.max(0, this.indexAt - 1);
+            if (direction === 'down')
+                this.indexAt = Math.min(this.catalogue.length - 1, this.indexAt + 1);
+            const rows = this.indexRows();
+            if (this.indexAt < this.indexTop)
+                this.indexTop = this.indexAt;
+            if (this.indexAt >= this.indexTop + rows)
+                this.indexTop = this.indexAt - rows + 1;
+            this.paintIndex();
+            return;
+        }
         if (this.view === 'picker') {
             const shown = this.shown();
             if (direction === 'up')
@@ -178,15 +216,92 @@ class TeletextApp {
         this.stepPage(direction === 'right' ? 1 : -1);
     }
     onEscape() {
-        // ESC leaves the page for the service list, and leaves the list for the
-        // board - the same shape as TEXTTV's index/quit pair.
+        // ESC walks back the way the caller came: a page returns to whichever
+        // list opened it, and a list leaves the door.
+        if (this.view === 'page' && this.catalogue.length > 0) {
+            this.view = 'index';
+            this.clearCarousel();
+            this.paintIndex();
+            return;
+        }
         if (this.view === 'page' && this.services.length > 1) {
             this.view = 'picker';
             this.clearCarousel();
             this.paintPicker();
             return;
         }
+        if (this.view === 'picker' && this.catalogue.length > 0) {
+            this.view = 'index';
+            this.paintIndex();
+            return;
+        }
         this.quit();
+    }
+    // --- The quicklink list -----------------------------------------------
+    indexRows() {
+        return Math.max(1, this.screen.rows - 6);
+    }
+    indexKey(ch) {
+        if (ch === '\r' || ch === '\n')
+            return this.openEntry(this.catalogue[this.indexAt]);
+        if (ch === 'q' || ch === 'Q')
+            return this.quit();
+        if (ch === 's' || ch === 'S') {
+            this.view = 'picker';
+            this.paintPicker();
+            return;
+        }
+        // 1-9 picks straight off the visible page, the way a teletext index does.
+        if (ch >= '1' && ch <= '9') {
+            const at = this.indexTop + Number(ch) - 1;
+            if (at < this.catalogue.length) {
+                this.indexAt = at;
+                this.openEntry(this.catalogue[at]);
+            }
+        }
+    }
+    /** Open the service a quicklink names, on the page it names. */
+    openEntry(entry) {
+        if (!entry)
+            return;
+        const summary = this.services.find(service => service.id === entry.service);
+        if (!summary) {
+            this.notice = `${entry.service} is no longer installed`;
+            this.paintIndex();
+            return;
+        }
+        if (!this.openService(summary))
+            return;
+        // openService lands on the pack's home page; the quicklink is more
+        // specific than that.
+        if (entry.page !== this.page)
+            this.goTo(entry.page);
+    }
+    paintIndex() {
+        this.view = 'index';
+        this.screen.clear();
+        this.screen.line(1, 'TELETEXT GAMES', '\x1b[1;37m');
+        this.screen.line(2, '-'.repeat(40), '\x1b[36m');
+        const rows = this.indexRows();
+        for (let i = 0; i < rows; i++) {
+            const at = this.indexTop + i;
+            const entry = this.catalogue[at];
+            if (!entry)
+                break;
+            const chosen = at === this.indexAt;
+            const number = i < 9 ? String(i + 1) : ' ';
+            const where = (0, store_1.formatPageNumber)(entry.page);
+            const label = (0, screen_1.fit)(`${chosen ? '>' : ' '}${number} ${entry.label}`, 40 - where.length - 1);
+            this.screen.line(4 + i, label.padEnd(40 - where.length - 1) + ' ' + where, chosen ? '\x1b[1;37m' : entry.kind === 'game' ? '\x1b[0;33m' : '\x1b[0;36m');
+        }
+        this.paintStatus();
+    }
+    indexBar() {
+        if (this.notice)
+            return `! ${this.notice}`;
+        const entry = this.catalogue[this.indexAt];
+        const what = entry?.kind === 'program' ? entry.command ?? 'program' : 'ENTER=open';
+        return `${this.indexAt + 1}/${this.catalogue.length} ${what}  S=All  Q=Quit`;
     }
     // --- The service list -------------------------------------------------
     pickerKey(ch) {
@@ -491,6 +606,8 @@ class TeletextApp {
         this.paintPage();
     }
     paintStatus() {
+        if (this.view === 'index')
+            return this.screen.status(this.indexBar());
         this.screen.status(this.view === 'picker' ? this.pickerBar() : this.pageBar());
     }
     pageBar() {

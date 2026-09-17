@@ -696,11 +696,23 @@ const CONTINUES_AFTER = 3;
 /** How far past the break to look for the program picking up again. */
 const RESYNC_WINDOW = 400;
 
-/** Valid ascending records starting at `from`, without regard to what came before. */
-function recordsFrom(data: Uint8Array, from: number): number {
+/**
+ * Valid ascending records starting at `from`, counted only when they
+ * CONTINUE the program - that is, when the first of them carries a line
+ * number greater than the last line already read.
+ *
+ * BASIC line numbers ascend strictly within one program, so records that
+ * restart LOWER are a different thing entirely: another program, or data
+ * that happens to look like records. BREAKOUT is exactly that - 112 clean
+ * lines, 10 to 1120 in tens, ending in ENDPROC, and then a second run of
+ * records beginning again at 1020. Reading those as a continuation made
+ * this file look unrepairable when its only fault was the same single
+ * destroyed end marker as the others.
+ */
+function recordsFrom(data: Uint8Array, from: number, after = -1): number {
   let at = from;
   let found = 0;
-  let previous = -1;
+  let previous = after;
   while (at + 3 < data.length && data[at] === 0x0d) {
     if (data[at + 1] === 0xff) break;
     const number = (data[at + 1] << 8) | data[at + 2];
@@ -731,6 +743,21 @@ function recordsFrom(data: Uint8Array, from: number): number {
  * real code after it, and repairing it would truncate the game. It stays
  * marked damaged, which is the honest answer.
  */
+/** The line number of the last record before `end`. */
+function lastLineNumber(data: Uint8Array, end: number): number {
+  let at = 0;
+  let previous = -1;
+  while (at + 3 < data.length && at < end && data[at] === 0x0d) {
+    if (data[at + 1] === 0xff) break;
+    const number = (data[at + 1] << 8) | data[at + 2];
+    const length = data[at + 3];
+    if (length < 4 || at + length > data.length || number <= previous || number > MAX_BASIC_LINE) break;
+    previous = number;
+    at += length;
+  }
+  return previous;
+}
+
 export function repairTerminator(data: Uint8Array): { data: Uint8Array; repaired: boolean } {
   const shape = inspectProgram(data);
   if (shape.kind !== 'tokenised' || shape.terminated) return { data, repaired: false };
@@ -738,9 +765,12 @@ export function repairTerminator(data: Uint8Array): { data: Uint8Array; repaired
   const at = shape.brokeAt;
   if (at === null || at + 1 >= data.length || data[at] !== 0x0d) return { data, repaired: false };
 
+  // The last line actually read, which anything claiming to continue the
+  // program has to come after.
+  const lastLine = lastLineNumber(data, at);
   for (let i = at + 1; i < Math.min(data.length, at + 1 + RESYNC_WINDOW); i++) {
     if (data[i] !== 0x0d) continue;
-    if (recordsFrom(data, i) >= CONTINUES_AFTER) return { data, repaired: false };
+    if (recordsFrom(data, i, lastLine) >= CONTINUES_AFTER) return { data, repaired: false };
   }
 
   const mended = Uint8Array.from(data);

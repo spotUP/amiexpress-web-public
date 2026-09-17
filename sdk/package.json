@@ -181,6 +181,12 @@
       "require": "./dist/teletext/compose.js",
       "default": "./dist/teletext/compose.js"
     },
+    "./teletext/catalogue": {
+      "types": "./dist/teletext/catalogue.d.ts",
+      "import": "./dist-esm/teletext/catalogue.js",
+      "require": "./dist/teletext/catalogue.js",
+      "default": "./dist/teletext/catalogue.js"
+    },
     "./teletext/telesoftware": {
       "types": "./dist/teletext/telesoftware.d.ts",
       "import": "./dist-esm/teletext/telesoftware.js",

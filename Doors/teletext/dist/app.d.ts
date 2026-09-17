@@ -33,6 +33,10 @@ export declare class TeletextApp {
      * narrows; the arrows walk what is left.
      */
     private pickerFilter;
+    /** The board's quicklink list, and where the caller is in it. */
+    private catalogue;
+    private indexAt;
+    private indexTop;
     /** First row of the list that is on screen. */
     private pickerTop;
     private loaded;
@@ -62,6 +66,12 @@ export declare class TeletextApp {
     private handleKey;
     private onArrow;
     private onEscape;
+    private indexRows;
+    private indexKey;
+    /** Open the service a quicklink names, on the page it names. */
+    private openEntry;
+    private paintIndex;
+    private indexBar;
     private pickerKey;
     /** The services the filter leaves. */
     private shown;

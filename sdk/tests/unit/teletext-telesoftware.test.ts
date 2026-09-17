@@ -258,6 +258,29 @@ describe('putting back an end marker the tape destroyed', () => {
     expect(data).toBe(damaged);
   });
 
+  it('repairs when what follows RESTARTS at a lower line number', () => {
+    /*
+     * BREAKOUT. Its 112 lines run 10 to 1120 in tens and end in ENDPROC -
+     * a whole program - and then a SECOND run of records begins again at
+     * 1020. BASIC line numbers ascend strictly within one program, so
+     * records that restart lower are a different thing entirely, not a
+     * continuation. Counting them as one made this file look unrepairable
+     * when its only fault was the same single destroyed end marker as
+     * Snake's and Galaxy's.
+     */
+    const damaged = Uint8Array.from([
+      ...program(8, 1000),          // lines 1010..1080
+      0x0d, 0x80,                   // the marker, destroyed
+      ...program(10, 100),          // a second run, starting again at 110
+      0x0d, 0xff,
+    ]);
+    const { data, repaired } = repairTerminator(damaged);
+    expect(repaired).toBe(true);
+    const shape = inspectProgram(data);
+    expect(shape.terminated).toBe(true);
+    expect(shape.lines).toBe(8);
+  });
+
   it('leaves a program that already ends alone', () => {
     const whole = Uint8Array.from([...program(6), 0x0d, 0xff]);
     expect(repairTerminator(whole).repaired).toBe(false);
