@@ -28,6 +28,7 @@ door.onStart(async (ctx) => {
         socket: ctx.socket,
         bbsSession: ctx.bbsSession,
         user: ctx.user,
+        bbs: ctx.bbs,
         close: () => ctx.close(),
     });
     app.start();

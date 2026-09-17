@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TeletextApp = void 0;
 /**
@@ -18,7 +51,18 @@ const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
 const library_1 = require("@amiexpress/bbs-door-sdk/teletext/library");
 const telesoftware_1 = require("@amiexpress/bbs-door-sdk/teletext/telesoftware");
 const emulator_url_1 = require("@amiexpress/bbs-door-sdk/beeb/emulator-url");
+const proof_store_1 = require("@amiexpress/bbs-door-sdk/beeb/proof-store");
+const path = __importStar(require("path"));
 const settings_1 = require("./settings");
+/**
+ * Where the BEEB door records who has shown their ROMs.
+ *
+ * Read from here rather than duplicated: one record, one answer, whichever
+ * door the caller came through.
+ */
+function beebProofFile() {
+    return path.join(__dirname, '..', 'beeb', 'data', 'proven.json');
+}
 class TeletextApp {
     /**
      * @param root Which Teletext directory to browse. The door leaves this
@@ -26,7 +70,7 @@ class TeletextApp {
      *   that reads whatever packs happen to be installed is a test that
      *   breaks the day a sysop installs one.
      */
-    constructor(session, root) {
+    constructor(session, root, proofFile) {
         this.services = [];
         /**
          * What the caller has typed to narrow the list.
@@ -55,6 +99,7 @@ class TeletextApp {
         this.onEmulatorClosed = () => this.onEmulatorReturn();
         this.session = session;
         this.root = root;
+        this.beebProof = proofFile ?? beebProofFile();
         this.settings = (0, settings_1.loadSettings)();
         // The board tells a door which screen the caller chose. A teletext
         // session gets DECDHL and real sextants; everyone else gets the
@@ -409,10 +454,25 @@ class TeletextApp {
             this.paintStatus();
             return;
         }
+        /*
+         * THE SAME GATE THE BEEB DOOR KEEPS, because a door that skipped it
+         * would simply be the way round it. The board holds one copy of the
+         * ROMs and hands them to nobody who has not shown their own, and this
+         * is a second front door to the same machine.
+         */
+        if (!(0, proof_store_1.hasProved)(this.beebProof, this.session.user?.id)) {
+            this.notice = 'run BEEB once and show your own ROMs first';
+            this.paintStatus();
+            return;
+        }
         this.running = program;
         this.clearCarousel();
         this.session.socket.emit('emulator:open', {
-            url: (0, emulator_url_1.emulatorUrl)({ file: disc, autotype: `${program.command}\n` }),
+            url: (0, emulator_url_1.emulatorUrl)({
+                file: disc,
+                autotype: `${program.command}\n`,
+                token: this.session.bbs?.grantBeebRomAccess?.(),
+            }),
             title: program.title,
             machine: 'BBC MICRO',
         });

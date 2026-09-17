@@ -209,13 +209,21 @@ export function listTitles(startDir?: string): Title[] {
 }
 
 /** The URL that runs one title, through the SDK's shared builder. */
-export function urlFor(title: Title, options: { autoboot?: boolean } = {}): string {
-  return emulatorUrl({ file: title.file, kind: title.kind, autoboot: options.autoboot });
+export function urlFor(
+  title: Title,
+  options: { autoboot?: boolean; token?: string } = {},
+): string {
+  return emulatorUrl({
+    file: title.file,
+    kind: title.kind,
+    autoboot: options.autoboot,
+    token: options.token,
+  });
 }
 
 /** An empty machine, for a caller who just wants BASIC. */
-export function bareUrl(): string {
-  return emulatorUrl();
+export function bareUrl(token?: string): string {
+  return emulatorUrl({ token });
 }
 
 function prettyName(file: string): string {

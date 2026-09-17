@@ -91,6 +91,7 @@ export declare function listTitles(startDir?: string): Title[];
 /** The URL that runs one title, through the SDK's shared builder. */
 export declare function urlFor(title: Title, options?: {
     autoboot?: boolean;
+    token?: string;
 }): string;
 /** An empty machine, for a caller who just wants BASIC. */
-export declare function bareUrl(): string;
+export declare function bareUrl(token?: string): string;

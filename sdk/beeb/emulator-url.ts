@@ -38,6 +38,14 @@ export interface EmulatorLaunch {
    * chaining types `*TAPE\nCHAIN""\n`.
    */
   autotype?: string;
+  /**
+   * The caller's grant to fetch the ROMs.
+   *
+   * The board will not serve them to an unproved caller, and the emulator
+   * asks for them by relative path from inside its own bundle - so the
+   * grant rides in on the page's query and the page turns it into a cookie.
+   */
+  token?: string;
 }
 
 /**
@@ -62,6 +70,8 @@ export function emulatorUrl(launch: EmulatorLaunch = {}): string {
   } else if (launch.file && launch.autoboot !== false) {
     parts.push('autoboot');
   }
+
+  if (launch.token) parts.push(`rom=${encodeURIComponent(launch.token)}`);
 
   return `/beeb/?${parts.join('&')}`;
 }

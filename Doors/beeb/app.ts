@@ -11,7 +11,11 @@
  * this runs - CLIENT_ONLY in the .info, handled by door-min-columns.util -
  * so there is no capability check here to drift out of step with that one.
  */
-import { KeyStream, type ArrowKey } from '@amiexpress/bbs-door-sdk/teletext/screen';
+import * as fs from 'fs';
+import * as path from 'path';
+import { KeyStream, fit, type ArrowKey } from '@amiexpress/bbs-door-sdk/teletext/screen';
+import { verifyRomArchive } from '@amiexpress/bbs-door-sdk/beeb/rom-proof';
+import { hasProved, recordProof } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
 import {
   listTitles,
   checkRoms,
@@ -32,7 +36,17 @@ export interface DoorSession {
     off?(event: string, handler: (...args: unknown[]) => void): void;
   };
   bbsSession: Record<string, unknown>;
-  user?: { username?: string };
+  user?: { username?: string; id?: string | number };
+  /**
+   * What the board lends a door: the browser file picker, and the grant
+   * that lets this caller fetch the ROMs once they have shown they own a
+   * copy. A host without them simply cannot run the machine, which is the
+   * right failure.
+   */
+  bbs?: {
+    requestArchiveUpload?(): Promise<{ path: string; filename: string }>;
+    grantBeebRomAccess?(): string;
+  };
   close(): void;
 }
 
@@ -51,6 +65,8 @@ export class BeebApp {
   private readonly session: DoorSession;
   private readonly keys: KeyStream;
   private readonly startDir: string | undefined;
+  /** Where this board records who has shown their ROMs. */
+  private readonly proofPath: string;
   private readonly width: number;
   private readonly rows: number;
 
@@ -58,13 +74,18 @@ export class BeebApp {
   private roms: RomCheck = { missing: [], mismatched: [] };
   private at = 0;
   private top = 0;
+  /** An upload is being taken and checked; keys wait. */
+  private busy = false;
+  /** One line of feedback over the listing. */
+  private message = '';
   private running: Title | null = null;
   private closed = false;
   private readonly onEmulatorClosed = () => this.onReturn();
 
-  constructor(session: DoorSession, startDir?: string) {
+  constructor(session: DoorSession, startDir?: string, proofFile?: string) {
     this.session = session;
     this.startDir = startDir;
+    this.proofPath = proofFile ?? path.join(__dirname, '..', 'data', 'proven.json');
 
     // The board tells a door how wide the caller's screen is. A teletext
     // session reports 40, and everything below is laid out from it.
@@ -114,8 +135,10 @@ export class BeebApp {
   }
 
   private handleKey(ch: string): void {
+    if (this.busy) return; // an upload is being checked; one at a time
     if (this.running) return; // the surface has the caller; wait for it back
     if (ch === 'q' || ch === 'Q') return this.quit();
+    if (ch === 'u' || ch === 'U') return void this.proveRoms();
     if (ch === 'b' || ch === 'B') return this.launchBare();
     if (ch === '\r' || ch === '\n') return this.launchSelected();
     if (ch >= '1' && ch <= '9') {
@@ -129,17 +152,96 @@ export class BeebApp {
 
   // --- Running ----------------------------------------------------------
 
+  /** Has THIS caller shown a copy of the ROMs? */
+  private proved(): boolean {
+    return hasProved(this.proofPath, this.session.user?.id);
+  }
+
+  /**
+   * Ask the caller to show their own copy of the ROMs.
+   *
+   * The board holds one copy and ships none - Acorn's ROMs are not ours to
+   * hand out - so everybody shows theirs once, the sysop included. The
+   * upload is read, checked and deleted; what is kept is the fact that they
+   * showed it.
+   */
+  private async proveRoms(): Promise<boolean> {
+    const ask = this.session.bbs?.requestArchiveUpload;
+    if (!ask) {
+      this.notice('This board cannot take an upload from here.');
+      return false;
+    }
+
+    this.busy = true;
+    this.write(
+      `\x1b[2J\x1b[H\x1b[1;37mYOUR OWN ROMS\x1b[0m\r\n\r\n` +
+        `This board keeps one copy of the BBC ROMs and\r\n` +
+        `gives out none. Show a copy of your own once\r\n` +
+        `and the machine is yours from then on.\r\n\r\n` +
+        `Send a .zip holding:\r\n` +
+        REQUIRED_ROMS.map((rom: string) => `  ${rom}\r\n`).join('') +
+        `\r\nThe file is checked and then deleted.\r\n`,
+    );
+
+    let uploaded: { path: string; filename: string } | null = null;
+    try {
+      uploaded = await ask.call(this.session.bbs);
+      const result = verifyRomArchive(uploaded.path, romsDir(this.startDir));
+
+      if (!result.proven) {
+        const why = [
+          ...result.missing.map(rom => `missing ${rom}`),
+          ...result.problems,
+        ].slice(0, 4);
+        this.busy = false;
+        this.notice(`Not accepted: ${why.join('; ')}`);
+        return false;
+      }
+
+      recordProof(this.proofPath, String(this.session.user?.id ?? ''), {
+        at: new Date().toISOString(),
+        seeded: result.seeded || undefined,
+      });
+      this.busy = false;
+      this.notice(
+        result.seeded
+          ? 'Accepted - and yours are now the board\u2019s copy.'
+          : 'Accepted. The BBC Micro is yours.',
+      );
+      return true;
+    } catch (error) {
+      this.busy = false;
+      this.notice(`Upload stopped: ${(error as Error).message}`);
+      return false;
+    } finally {
+      // Never kept, whatever happened.
+      if (uploaded) { try { fs.unlinkSync(uploaded.path); } catch { /* already gone */ } }
+    }
+  }
+
+  /** A one-line message over the listing. */
+  private notice(text: string): void {
+    this.message = text;
+    this.paint();
+  }
+
   private launchSelected(): void {
     const title = this.titles[this.at];
     if (!title) return;
-    this.launch(title, urlFor(title));
+    void this.launch(title);
   }
 
   private launchBare(): void {
-    this.launch(null, bareUrl());
+    void this.launch(null);
   }
 
-  private launch(title: Title | null, url: string): void {
+  private async launch(title: Title | null): Promise<void> {
+    // Nobody reaches the machine without having shown the ROMs first.
+    if (!this.proved() && !(await this.proveRoms())) return;
+
+    const token = this.session.bbs?.grantBeebRomAccess?.();
+    const url = title ? urlFor(title, { token }) : bareUrl(token);
+
     this.running = title ?? { file: '', name: 'BASIC', kind: 'disc', bytes: 0 };
     this.session.socket.emit('emulator:open', {
       url,
@@ -227,9 +329,21 @@ export class BeebApp {
       out += '\r\n';
     }
 
+    if (this.message) {
+      out += `\x1b[1;33m${fit(this.message, this.width)}\x1b[0m\r\n`;
+      this.message = '';
+    }
+
+    // Saying it plainly beats a caller pressing ENTER and being asked for a
+    // file they were not expecting to need.
+    const proved = this.proved();
     const bar = this.width >= 60
-      ? ' ENTER runs   B for BASIC   Q quits '
-      : ' ENTER=run  B=BASIC  Q=quit ';
+      ? proved
+        ? ' ENTER runs   B for BASIC   Q quits '
+        : ' ENTER runs (shows your ROMs first)   U uploads   Q quits '
+      : proved
+        ? ' ENTER=run  B=BASIC  Q=quit '
+        : ' ENTER=run  U=your ROMs  Q=quit ';
     out += `\x1b[0;44;37m${bar}\x1b[0m\r\n`;
     this.write(out);
   }

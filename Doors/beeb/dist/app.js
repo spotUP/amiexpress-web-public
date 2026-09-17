@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BeebApp = void 0;
 /**
@@ -14,7 +47,11 @@ exports.BeebApp = void 0;
  * this runs - CLIENT_ONLY in the .info, handled by door-min-columns.util -
  * so there is no capability check here to drift out of step with that one.
  */
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
+const rom_proof_1 = require("@amiexpress/bbs-door-sdk/beeb/rom-proof");
+const proof_store_1 = require("@amiexpress/bbs-door-sdk/beeb/proof-store");
 const library_1 = require("./library");
 /**
  * What the caller's screen can hold, not what this door assumed.
@@ -27,16 +64,21 @@ const NARROWEST = 40;
 /** marker, index, the two gaps, the kind and the size columns. */
 const FIXED_COLUMNS = 15;
 class BeebApp {
-    constructor(session, startDir) {
+    constructor(session, startDir, proofFile) {
         this.titles = [];
         this.roms = { missing: [], mismatched: [] };
         this.at = 0;
         this.top = 0;
+        /** An upload is being taken and checked; keys wait. */
+        this.busy = false;
+        /** One line of feedback over the listing. */
+        this.message = '';
         this.running = null;
         this.closed = false;
         this.onEmulatorClosed = () => this.onReturn();
         this.session = session;
         this.startDir = startDir;
+        this.proofPath = proofFile ?? path.join(__dirname, '..', 'data', 'proven.json');
         // The board tells a door how wide the caller's screen is. A teletext
         // session reports 40, and everything below is laid out from it.
         const declaredWidth = Number(session.bbsSession?.screenWidth);
@@ -86,10 +128,14 @@ class BeebApp {
         this.paint();
     }
     handleKey(ch) {
+        if (this.busy)
+            return; // an upload is being checked; one at a time
         if (this.running)
             return; // the surface has the caller; wait for it back
         if (ch === 'q' || ch === 'Q')
             return this.quit();
+        if (ch === 'u' || ch === 'U')
+            return void this.proveRoms();
         if (ch === 'b' || ch === 'B')
             return this.launchBare();
         if (ch === '\r' || ch === '\n')
@@ -103,16 +149,90 @@ class BeebApp {
         }
     }
     // --- Running ----------------------------------------------------------
+    /** Has THIS caller shown a copy of the ROMs? */
+    proved() {
+        return (0, proof_store_1.hasProved)(this.proofPath, this.session.user?.id);
+    }
+    /**
+     * Ask the caller to show their own copy of the ROMs.
+     *
+     * The board holds one copy and ships none - Acorn's ROMs are not ours to
+     * hand out - so everybody shows theirs once, the sysop included. The
+     * upload is read, checked and deleted; what is kept is the fact that they
+     * showed it.
+     */
+    async proveRoms() {
+        const ask = this.session.bbs?.requestArchiveUpload;
+        if (!ask) {
+            this.notice('This board cannot take an upload from here.');
+            return false;
+        }
+        this.busy = true;
+        this.write(`\x1b[2J\x1b[H\x1b[1;37mYOUR OWN ROMS\x1b[0m\r\n\r\n` +
+            `This board keeps one copy of the BBC ROMs and\r\n` +
+            `gives out none. Show a copy of your own once\r\n` +
+            `and the machine is yours from then on.\r\n\r\n` +
+            `Send a .zip holding:\r\n` +
+            library_1.REQUIRED_ROMS.map((rom) => `  ${rom}\r\n`).join('') +
+            `\r\nThe file is checked and then deleted.\r\n`);
+        let uploaded = null;
+        try {
+            uploaded = await ask.call(this.session.bbs);
+            const result = (0, rom_proof_1.verifyRomArchive)(uploaded.path, (0, library_1.romsDir)(this.startDir));
+            if (!result.proven) {
+                const why = [
+                    ...result.missing.map(rom => `missing ${rom}`),
+                    ...result.problems,
+                ].slice(0, 4);
+                this.busy = false;
+                this.notice(`Not accepted: ${why.join('; ')}`);
+                return false;
+            }
+            (0, proof_store_1.recordProof)(this.proofPath, String(this.session.user?.id ?? ''), {
+                at: new Date().toISOString(),
+                seeded: result.seeded || undefined,
+            });
+            this.busy = false;
+            this.notice(result.seeded
+                ? 'Accepted - and yours are now the board\u2019s copy.'
+                : 'Accepted. The BBC Micro is yours.');
+            return true;
+        }
+        catch (error) {
+            this.busy = false;
+            this.notice(`Upload stopped: ${error.message}`);
+            return false;
+        }
+        finally {
+            // Never kept, whatever happened.
+            if (uploaded) {
+                try {
+                    fs.unlinkSync(uploaded.path);
+                }
+                catch { /* already gone */ }
+            }
+        }
+    }
+    /** A one-line message over the listing. */
+    notice(text) {
+        this.message = text;
+        this.paint();
+    }
     launchSelected() {
         const title = this.titles[this.at];
         if (!title)
             return;
-        this.launch(title, (0, library_1.urlFor)(title));
+        void this.launch(title);
     }
     launchBare() {
-        this.launch(null, (0, library_1.bareUrl)());
+        void this.launch(null);
     }
-    launch(title, url) {
+    async launch(title) {
+        // Nobody reaches the machine without having shown the ROMs first.
+        if (!this.proved() && !(await this.proveRoms()))
+            return;
+        const token = this.session.bbs?.grantBeebRomAccess?.();
+        const url = title ? (0, library_1.urlFor)(title, { token }) : (0, library_1.bareUrl)(token);
         this.running = title ?? { file: '', name: 'BASIC', kind: 'disc', bytes: 0 };
         this.session.socket.emit('emulator:open', {
             url,
@@ -189,9 +309,20 @@ class BeebApp {
             }
             out += '\r\n';
         }
+        if (this.message) {
+            out += `\x1b[1;33m${(0, screen_1.fit)(this.message, this.width)}\x1b[0m\r\n`;
+            this.message = '';
+        }
+        // Saying it plainly beats a caller pressing ENTER and being asked for a
+        // file they were not expecting to need.
+        const proved = this.proved();
         const bar = this.width >= 60
-            ? ' ENTER runs   B for BASIC   Q quits '
-            : ' ENTER=run  B=BASIC  Q=quit ';
+            ? proved
+                ? ' ENTER runs   B for BASIC   Q quits '
+                : ' ENTER runs (shows your ROMs first)   U uploads   Q quits '
+            : proved
+                ? ' ENTER=run  B=BASIC  Q=quit '
+                : ' ENTER=run  U=your ROMs  Q=quit ';
         out += `\x1b[0;44;37m${bar}\x1b[0m\r\n`;
         this.write(out);
     }

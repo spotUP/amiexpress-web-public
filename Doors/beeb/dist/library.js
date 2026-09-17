@@ -209,11 +209,16 @@ function listTitles(startDir) {
 }
 /** The URL that runs one title, through the SDK's shared builder. */
 function urlFor(title, options = {}) {
-    return (0, emulator_url_1.emulatorUrl)({ file: title.file, kind: title.kind, autoboot: options.autoboot });
+    return (0, emulator_url_1.emulatorUrl)({
+        file: title.file,
+        kind: title.kind,
+        autoboot: options.autoboot,
+        token: options.token,
+    });
 }
 /** An empty machine, for a caller who just wants BASIC. */
-function bareUrl() {
-    return (0, emulator_url_1.emulatorUrl)();
+function bareUrl(token) {
+    return (0, emulator_url_1.emulatorUrl)({ token });
 }
 function prettyName(file) {
     return file

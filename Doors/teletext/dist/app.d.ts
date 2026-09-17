@@ -7,6 +7,11 @@ export interface DoorSession {
     bbsSession: Record<string, unknown>;
     user?: {
         username?: string;
+        id?: string | number;
+    };
+    /** The board's grant for fetching the BBC ROMs, for a proved caller. */
+    bbs?: {
+        grantBeebRomAccess?(): string;
     };
     close(): void;
 }
@@ -16,6 +21,8 @@ export declare class TeletextApp {
     private readonly screen;
     private readonly keys;
     private readonly root;
+    /** Where the BEEB door records who has shown their ROMs. */
+    private readonly beebProof;
     private services;
     /**
      * What the caller has typed to narrow the list.
@@ -48,7 +55,7 @@ export declare class TeletextApp {
      *   that reads whatever packs happen to be installed is a test that
      *   breaks the day a sysop installs one.
      */
-    constructor(session: DoorSession, root?: string);
+    constructor(session: DoorSession, root?: string, proofFile?: string);
     start(): void;
     stop(): void;
     handleInput(data: string): void;

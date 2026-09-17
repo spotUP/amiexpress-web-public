@@ -39,6 +39,8 @@ import {
   type TelesoftwareListing,
 } from '@amiexpress/bbs-door-sdk/teletext/telesoftware';
 import { emulatorUrl } from '@amiexpress/bbs-door-sdk/beeb/emulator-url';
+import { hasProved } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
+import * as path from 'path';
 import { loadSettings, type TeletextSettings } from './settings';
 
 export interface DoorSession {
@@ -48,11 +50,23 @@ export interface DoorSession {
     off?(event: string, handler: (...args: unknown[]) => void): void;
   };
   bbsSession: Record<string, unknown>;
-  user?: { username?: string };
+  user?: { username?: string; id?: string | number };
+  /** The board's grant for fetching the BBC ROMs, for a proved caller. */
+  bbs?: { grantBeebRomAccess?(): string };
   close(): void;
 }
 
 type View = 'picker' | 'page';
+
+/**
+ * Where the BEEB door records who has shown their ROMs.
+ *
+ * Read from here rather than duplicated: one record, one answer, whichever
+ * door the caller came through.
+ */
+function beebProofFile(): string {
+  return path.join(__dirname, '..', 'beeb', 'data', 'proven.json');
+}
 
 export class TeletextApp {
   private readonly session: DoorSession;
@@ -60,6 +74,8 @@ export class TeletextApp {
   private readonly screen: TeletextScreen;
   private readonly keys: KeyStream;
   private readonly root: string | undefined;
+  /** Where the BEEB door records who has shown their ROMs. */
+  private readonly beebProof: string;
 
   private services: ServiceSummary[] = [];
   /**
@@ -94,9 +110,10 @@ export class TeletextApp {
    *   that reads whatever packs happen to be installed is a test that
    *   breaks the day a sysop installs one.
    */
-  constructor(session: DoorSession, root?: string) {
+  constructor(session: DoorSession, root?: string, proofFile?: string) {
     this.session = session;
     this.root = root;
+    this.beebProof = proofFile ?? beebProofFile();
     this.settings = loadSettings();
 
     // The board tells a door which screen the caller chose. A teletext
@@ -472,10 +489,26 @@ export class TeletextApp {
       return;
     }
 
+    /*
+     * THE SAME GATE THE BEEB DOOR KEEPS, because a door that skipped it
+     * would simply be the way round it. The board holds one copy of the
+     * ROMs and hands them to nobody who has not shown their own, and this
+     * is a second front door to the same machine.
+     */
+    if (!hasProved(this.beebProof, this.session.user?.id)) {
+      this.notice = 'run BEEB once and show your own ROMs first';
+      this.paintStatus();
+      return;
+    }
+
     this.running = program;
     this.clearCarousel();
     this.session.socket.emit('emulator:open', {
-      url: emulatorUrl({ file: disc, autotype: `${program.command}\n` }),
+      url: emulatorUrl({
+        file: disc,
+        autotype: `${program.command}\n`,
+        token: this.session.bbs?.grantBeebRomAccess?.(),
+      }),
       title: program.title,
       machine: 'BBC MICRO',
     });

@@ -11,7 +11,7 @@
  * before the door runs.
  */
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
-import { BeebApp } from './app';
+import { BeebApp, type DoorSession } from './app';
 
 export const metadata = {
   name: 'BBC Micro',
@@ -29,6 +29,8 @@ door.onStart(async (ctx: DoorContext) => {
     socket: ctx.socket as unknown as DoorSessionSocket,
     bbsSession: ctx.bbsSession as Record<string, unknown>,
     user: ctx.user,
+    // The browser file picker and the ROM grant both come from the board.
+    bbs: ctx.bbs as DoorSessionBbs,
     close: () => ctx.close(),
   });
   app.start();
@@ -50,6 +52,8 @@ door.onError(async (ctx, error) => {
   app = null;
   ctx.close();
 });
+
+type DoorSessionBbs = DoorSession['bbs'];
 
 type DoorSessionSocket = {
   emit(event: string, data?: unknown): void;

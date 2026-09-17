@@ -28,6 +28,7 @@ door.onStart(async (ctx: DoorContext) => {
     socket: ctx.socket as unknown as DoorSession['socket'],
     bbsSession: ctx.bbsSession as Record<string, unknown>,
     user: ctx.user,
+    bbs: ctx.bbs as DoorSession['bbs'],
     close: () => ctx.close(),
   });
   app.start();

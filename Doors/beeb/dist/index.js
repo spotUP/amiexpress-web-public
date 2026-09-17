@@ -29,6 +29,8 @@ door.onStart(async (ctx) => {
         socket: ctx.socket,
         bbsSession: ctx.bbsSession,
         user: ctx.user,
+        // The browser file picker and the ROM grant both come from the board.
+        bbs: ctx.bbs,
         close: () => ctx.close(),
     });
     app.start();

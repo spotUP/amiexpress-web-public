@@ -12,7 +12,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./library.test', './width.test'];
+const TEST_MODULES = ['./library.test', './width.test', './rom-proof.test'];
 
 const realLog = console.log;
 console.log = () => {};

@@ -39,6 +39,7 @@ import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 import { bareEmulatorPage } from './beeb-bare-page';
+import { ROM_COOKIE, romAccessHolder, cookieValue } from './beeb-rom-access';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
 import { materialiseCatalogEntry, materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
@@ -392,18 +393,40 @@ console.log(`[Static] Fonts count: ${fontFiles.length}`);
       next();
     });
 
-    const media: Array<[string, string]> = [
-      ['/beeb/roms', join(beebRoot, 'roms')],
-      ['/beeb/discs', join(beebRoot, 'software')],
-      ['/beeb/tapes', join(beebRoot, 'software')],
+    /*
+     * THE ROMS ARE NOT PUBLIC, AND THE PROOF DEPENDS ON IT.
+     *
+     * Callers are asked to show they own the BBC ROMs before they may use
+     * the machine. If this route stayed open static serving, anyone could
+     * simply fetch the file they were being asked to produce, and the whole
+     * arrangement would be decoration.
+     *
+     * The token comes in on the emulator page's query and is turned into a
+     * cookie there, because the emulator asks for its own ROMs by relative
+     * path from inside a vendored bundle - there is nowhere to hang a query
+     * parameter on those requests.
+     */
+    const romGate: express.RequestHandler = (req, res, next) => {
+      const token = cookieValue(req.headers.cookie, ROM_COOKIE);
+      if (romAccessHolder(token)) return next();
+      res
+        .status(403)
+        .type('text/plain')
+        .send('Run the BEEB door and show your own copy of the ROMs first.\n');
+    };
+
+    const media: Array<[string, string, express.RequestHandler[]]> = [
+      ['/beeb/roms', join(beebRoot, 'roms'), [romGate]],
+      ['/beeb/discs', join(beebRoot, 'software'), []],
+      ['/beeb/tapes', join(beebRoot, 'software'), []],
     ];
-    for (const [route, dir] of media) {
+    for (const [route, dir, guards] of media) {
       // fallthrough:false is the whole point. With it on, a ROM the sysop
       // has not installed falls past this route to the SPA and comes back
       // as 200 text/html - and the emulator then tries to parse the
       // terminal's index page as a ROM image and shows a black screen. A
       // missing file has to say 404.
-      app.use(route, webTerminalGate, express.static(dir, { maxAge: 0, fallthrough: false }));
+      app.use(route, webTerminalGate, ...guards, express.static(dir, { maxAge: 0, fallthrough: false }));
     }
     // The page itself, with the emulator's own interface hidden - see
     // beeb-bare-page.ts for why this happens here and not in the vendored
@@ -422,9 +445,21 @@ console.log(`[Static] Fonts count: ${fontFiles.length}`);
       };
     })();
 
-    app.get(['/beeb', '/beeb/', '/beeb/index.html'], webTerminalGate, (_req, res, next) => {
+    app.get(['/beeb', '/beeb/', '/beeb/index.html'], webTerminalGate, (req, res, next) => {
       const page = barePage();
       if (!page) return next();
+
+      // The door puts the caller's grant on the URL; it becomes a cookie
+      // here so the emulator's own relative ROM fetches carry it.
+      const offered = typeof req.query.rom === 'string' ? req.query.rom : undefined;
+      if (romAccessHolder(offered)) {
+        res.cookie?.(ROM_COOKIE, offered as string, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/beeb',
+          maxAge: 30 * 60 * 1000,
+        });
+      }
       res.type('html').send(page);
     });
 

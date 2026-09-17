@@ -61,7 +61,8 @@ class Terminal {
         off: () => {},
       },
       bbsSession: { texttvMode: true, screenHeight: 25 },
-      user: { username: 'tester' },
+      user: { username: 'tester', id: 7 },
+      bbs: { grantBeebRomAccess: () => 'test-grant' },
       close: () => { this.closed = true; },
     };
   }
@@ -80,10 +81,28 @@ class Terminal {
   }
 }
 
+/**
+ * A proof record saying this caller has shown their ROMs.
+ *
+ * The board holds one copy of the BBC ROMs and gives them to nobody who has
+ * not shown their own, and RED is a second front door to the same machine -
+ * so these tests have to come through the same gate a caller does.
+ */
+function proved(root: string, userId: number | null = 7): string {
+  const file = path.join(root, 'proven.json');
+  const users = userId === null ? {} : { [String(userId)]: { at: new Date().toISOString() } };
+  fs.writeFileSync(file, JSON.stringify({ users }));
+  return file;
+}
+
 /** Open the browser on the demo pack and go to a page. */
-function browseTo(root: string, page: string): { term: Terminal; app: TeletextApp } {
+function browseTo(
+  root: string,
+  page: string,
+  proofFile: string = proved(root),
+): { term: Terminal; app: TeletextApp } {
   const term = new Terminal();
-  const app = new TeletextApp(term.session(), root);
+  const app = new TeletextApp(term.session(), root, proofFile);
   app.start();
   for (const digit of page) app.handleInput(digit);
   return { term, app };
@@ -148,4 +167,27 @@ export async function aPackWithNoSidecarBrowsesAsBefore(): Promise<void> {
   app.start();
   assert.ok(!term.text.includes('TELESOFTWARE'), 'no sidecar, no program pages');
   assert.strictEqual(term.opened(), null, 'and nothing is launched');
+}
+
+export async function redRefusesUntilTheCallerHasShownTheirRoms(): Promise<void> {
+  /*
+   * THE GATE, FROM THE OTHER SIDE. The board keeps one copy of the ROMs and
+   * hands them to nobody who has not shown a copy of their own. A door that
+   * skipped the check would not be a convenience, it would be the way round
+   * it.
+   */
+  const root = board();
+  const { term, app } = browseTo(root, '102', proved(root, null));
+  app.handleInput('r');
+
+  assert.strictEqual(term.opened(), null, 'nothing is launched');
+  assert.ok(term.text.includes('show your own ROMs'), 'and it says why');
+}
+
+export async function aProvedCallerGetsAGrantOnTheUrl(): Promise<void> {
+  // The board refuses /beeb/roms without one, so the door has to carry it.
+  const { term, app } = browseTo(board(), '102');
+  app.handleInput('r');
+  const url = term.opened()?.url ?? '';
+  assert.ok(url.includes('rom=test-grant'), `the grant rides along: ${url}`);
 }

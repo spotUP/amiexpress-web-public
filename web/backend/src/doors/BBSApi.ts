@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import { appendUserNote } from '../utils/user-notes.util';
+import { grantRomAccess } from '../server/beeb-rom-access';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
@@ -1872,6 +1873,19 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
       console.warn(`[WARN] achievements: could not store the address: ${(error as Error).message}`);
       return false;
     }
+  }
+
+  /**
+   * A short-lived grant letting THIS caller fetch the BBC ROMs.
+   *
+   * The board refuses `/beeb/roms` to anyone who has not shown they own
+   * them, so a door that is about to open the machine asks for one of
+   * these and puts it on the emulator's URL. Callers who have not proved
+   * are never given one - the door checks that before it calls.
+   */
+  grantBeebRomAccess(): string {
+    const who = String(this.session.user?.id ?? this.session.user?.username ?? 'unknown');
+    return grantRomAccess(who);
   }
 
   /**

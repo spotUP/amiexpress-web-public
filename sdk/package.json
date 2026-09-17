@@ -109,6 +109,24 @@
       "require": "./dist/petscii/frame/index.js",
       "default": "./dist/petscii/frame/index.js"
     },
+    "./beeb/rom-proof": {
+      "types": "./dist/beeb/rom-proof.d.ts",
+      "import": "./dist-esm/beeb/rom-proof.js",
+      "require": "./dist/beeb/rom-proof.js",
+      "default": "./dist/beeb/rom-proof.js"
+    },
+    "./beeb/proof-store": {
+      "types": "./dist/beeb/proof-store.d.ts",
+      "import": "./dist-esm/beeb/proof-store.js",
+      "require": "./dist/beeb/proof-store.js",
+      "default": "./dist/beeb/proof-store.js"
+    },
+    "./beeb/roms": {
+      "types": "./dist/beeb/roms.d.ts",
+      "import": "./dist-esm/beeb/roms.js",
+      "require": "./dist/beeb/roms.js",
+      "default": "./dist/beeb/roms.js"
+    },
     "./beeb/emulator-url": {
       "types": "./dist/beeb/emulator-url.d.ts",
       "import": "./dist-esm/beeb/emulator-url.js",
