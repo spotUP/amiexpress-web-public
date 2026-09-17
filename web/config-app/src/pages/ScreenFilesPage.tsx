@@ -9,6 +9,7 @@ import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
+import { previewScreenOrder } from './screen-preview-view';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
@@ -648,7 +649,9 @@ export function ScreenFilesPage() {
         <ScreenPreviewPanel
           theme={theme}
           themeTitle={themeTitle}
-          screenNames={(data?.screens ?? []).map(entry => entry.screen)}
+          /* Art first, so the panel does not open on a screen that is only
+             codes and draw a black rectangle. */
+          screenNames={previewScreenOrder(data?.screens ?? [], data?.files)}
         />
       ),
     },    {

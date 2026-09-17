@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { ScreenPreview } from './ScreenPreview';
 import { PetsciiScreenPreview } from './PetsciiScreenPreview';
 import { SkeletonRows } from './ui/states';
+import { hasVisibleContent } from '../pages/screen-preview-view';
 
 /** What the board answered for one screen, one caller, one theme. */
 export interface ScreenPreviewResult {
@@ -146,6 +147,22 @@ export function ScreenPreviewPanel({ theme, themeTitle, screenNames, initial }: 
           {shown.isPetscii
             ? <PetsciiScreenPreview content={shown.content} />
             : <ScreenPreview content={atob(shown.content)} cols={asCaller.term === 'c64' ? 40 : 80} />}
+
+          {/*
+            A BLACK RECTANGLE NEEDS A SENTENCE.
+
+            "preview as a caller is just black in ansi studio" (sysop,
+            2026-09-17) - and it was, faithfully: the screen it opened on was
+            AWAITSCREEN, twenty bytes of codes that the board expands to a
+            clear-and-home and nothing else. The preview was right and looked
+            broken, which is worse than being wrong.
+          */}
+          {!shown.isPetscii && !hasVisibleContent(atob(shown.content)) && (
+            <p className="text-sm text-status-warn">
+              This screen draws nothing to look at. It is a program - the codes in it run, and
+              what a caller sees is whatever they pull in. Nothing to draw here.
+            </p>
+          )}
 
           <dl className="text-xs text-ink-muted">
             <div>

@@ -19,6 +19,7 @@ import { ScreenGallery } from '../components/ScreenGallery';
 import { SkeletonRows } from '../components/ui/states';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
 import { ThemeStatusBar } from './ThemeStatusBar';
+import { previewScreenOrder } from './screen-preview-view';
 import { buildGalleryItems, type ScreenIndexShape } from './screen-index-view';
 import { themeChecklist, themeProgress } from './theme-checklist';
 import { useMyTheme } from './use-my-theme';
@@ -158,8 +159,14 @@ export function ArtistStudioPage() {
       .sort((a, b) => a.localeCompare(b));
   }, [sysop, choices, userList]);
 
+  /*
+   * ART FIRST. The preview opened on whatever the catalogue listed first,
+   * which is AWAITSCREEN - twenty bytes of codes that draw nothing - so the
+   * panel came up black: "preview as a caller is just black in ansi studio"
+   * (sysop, 2026-09-17).
+   */
   const screenNames = useMemo(
-    () => (data?.screens ?? []).map(entry => entry.screen),
+    () => previewScreenOrder(data?.screens ?? [], data?.files),
     [data],
   );
 
