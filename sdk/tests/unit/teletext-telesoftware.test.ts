@@ -9,7 +9,7 @@
  * thousand literal tildes and not one line ending, which looks like success
  * until you try to load one.
  */
-import { pageBlock, decodeBlock, decodeChain, RAISE_CODE, LOWER_CODE, PAGE_BLOCK_BYTES } from '../../teletext/telesoftware';
+import { pageBlock, decodeBlock, decodeChain, inspectProgram, RAISE_CODE, LOWER_CODE, PAGE_BLOCK_BYTES } from '../../teletext/telesoftware';
 import type { TeletextLine } from '../../teletext/packet27';
 
 const ESC = 0x7c;
@@ -126,5 +126,87 @@ describe('a chain of pages', () => {
     const [program] = decodeChain([{ lines: only }]);
     expect(program.complete).toBe(false);
     expect(program.blockCount).toBe(3);
+  });
+});
+
+describe('bytes the stream cannot say plainly', () => {
+  /*
+   * Every one of these cost the same thing, and it is worth naming once: a
+   * tokenised BASIC program is a linked list of byte lengths, so a SINGLE
+   * byte lost or invented anywhere desynchronises every record after it.
+   * All eleven recovered games answered `Bad program` while the first
+   * thirty-nine lines of GOMOKU decoded perfectly.
+   */
+  // Only the leading bytes: the rest of a 1024-byte block is the spaces an
+  // untransmitted packet stands in for.
+  const payload = (stream: number[], take = 1): number[] =>
+    Array.from(decodeBlock(pageBlock(page([...startBlock(1, 1), ...stream]))).data.subarray(0, take));
+
+  it('reads an escape followed by itself as the escape character', () => {
+    // GOMOKU sends `7C 7C` for the low byte of BASIC line number 380.
+    expect(payload([ESC, ESC])[0]).toBe(ESC);
+  });
+
+  it('reads an escaped operator code as that byte, not as the operator', () => {
+    // In 7-bit mode the operators live in the LONE table, so the stream
+    // cannot send them bare as data - it escapes them, and the escape
+    // table's default entry is identity.
+    expect(payload([ESC, RAISE_CODE])[0]).toBe(RAISE_CODE);
+    expect(payload([ESC, LOWER_CODE])[0]).toBe(LOWER_CODE);
+  });
+
+  it('takes an operator operand through the escape too', () => {
+    // GOMOKU sends BASIC line 440 as `60 7C 60 31`: raise, whose operand is
+    // the escaped literal 0x60, giving 0xB8. Read with a plain byte fetch
+    // it raises the ESCAPE character instead and then swallows the length
+    // byte into a second operator.
+    expect(payload([RAISE_CODE, ESC, RAISE_CODE, 0x31], 2)).toEqual([0x60 + 88, 0x31]);
+  });
+
+  it('lowers modulo 256, which is what makes the end-of-program marker', () => {
+    // 87 lowered by 88 is 0xFF under 256 and 0xFE under the 255 the
+    // specification extract states. The byte before it is 0x0D, so the pair
+    // is BASIC's end marker - and 0xFE walks straight past the end of the
+    // program into the page's filler graphics.
+    expect(payload([LOWER_CODE, 0x65, LOWER_CODE, 0x57], 2)).toEqual([0x0d, 0xff]);
+  });
+});
+
+describe('what a decoded program turns out to be', () => {
+  /** A tokenised line: 0x0D, line number, total length, then the payload. */
+  const basicLine = (number: number, body: number[]): number[] =>
+    [0x0d, (number >> 8) & 0xff, number & 0xff, body.length + 4, ...body];
+
+  const tokenised = (count: number): number[] => {
+    const out: number[] = [];
+    for (let i = 1; i <= count; i++) out.push(...basicLine(i * 10, [0xf1, 0x41]));
+    return [...out, 0x0d, 0xff];
+  };
+
+  it('knows a tokenised program, and that its line chain reaches the end', () => {
+    const shape = inspectProgram(Uint8Array.from(tokenised(6)));
+    expect(shape.kind).toBe('tokenised');
+    expect(shape.lines).toBe(6);
+    expect(shape.terminated).toBe(true);
+    expect(shape.brokeAt).toBeNull();
+  });
+
+  it('says where a broken line chain stops', () => {
+    const bytes = tokenised(6);
+    // Overstate the fifth line's length by one byte. Every record after it
+    // is then read from the wrong offset - which is the entire failure mode
+    // this decoder was built to rule out.
+    bytes[4 * 6 + 3] += 1;
+    const shape = inspectProgram(Uint8Array.from(bytes));
+    expect(shape.kind).toBe('tokenised');
+    expect(shape.terminated).toBe(false);
+    expect(shape.brokeAt).toBeGreaterThan(0);
+  });
+
+  it('knows BASIC source from documentation by its line numbers', () => {
+    const text = (body: string): Uint8Array =>
+      Uint8Array.from([...body].map(c => c.charCodeAt(0)));
+    expect(inspectProgram(text('10 REM SNAKE\r20 MODE 7\r30 END\r')).kind).toBe('source');
+    expect(inspectProgram(text('TELESOFTWARE\rThe programs on this page\rare broadcast weekly.\r')).kind).toBe('text');
   });
 });

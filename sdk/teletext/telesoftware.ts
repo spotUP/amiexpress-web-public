@@ -44,8 +44,14 @@ const ESCAPE_CODES = new Set([0x1b, 0x9b, 0x7c, 0xfc]);
  * the opposite assignment yields printable bytes and NO line endings at
  * all, which is not a source file.
  *
- * Raising adds 88 to the parity-stripped byte, lowering subtracts it, both
- * modulo 255 (spec s.10.3.2).
+ * Raising adds 88 to the parity-stripped byte and lowering subtracts it.
+ *
+ * THE MODULUS IS 256, NOT THE 255 THE SPECIFICATION EXTRACT STATES. It
+ * only shows below 88, where the two differ by one, and the corpus settles
+ * it: every tokenised program ends with `7E 57`, which is 87 lowered. Under
+ * 255 that is 0xFE and under 256 it is 0xFF - and the byte before it is
+ * 0x0D, so the pair is BASIC's end-of-program marker. Decoded as 0xFE the
+ * chain walks straight past the end of the program into the padding.
  */
 export const RAISE_CODE = 0x60;
 export const LOWER_CODE = 0x7e;
@@ -176,20 +182,35 @@ export function decodeBlock(
   };
 
   /**
-   * One byte of a command argument, after the raising and lowering
-   * operators. These may be nested inside other commands' arguments
-   * (spec s.10.1.6), which is the only reason they are a function.
+   * One byte of the stream, with the operators and the escape resolved.
+   *
+   * AN OPERATOR'S OPERAND IS NOT A RAW BYTE. It is read through the same
+   * tables as everything else, so it may itself be escaped - and it has to
+   * be, whenever the value to raise or lower is one the stream cannot say
+   * plainly: the escape character, or either operator.
+   *
+   * GOMOKU sends BASIC line 440 as `60 7C 60 31`. That is: raise, whose
+   * operand is the escaped literal 0x60, giving 0x60 + 88 = 0xB8 - the low
+   * byte of 440 - followed by the length byte 0x31. Taking the operand
+   * with a plain read raises the ESCAPE character instead, yielding 0xD4
+   * for the line number and then swallowing the length byte into a second
+   * operator, so the record claims line 468 and 137 bytes and the chain
+   * walks off into the middle of a string.
+   *
+   * Nesting is in the specification for the same reason (s.10.1.6), which
+   * is why this recurses rather than reading one byte.
    */
   const operand = (): number | null => {
     const byte = nextByte();
     if (byte === null) return null;
-    if (byte === RAISE_CODE) {
-      const next = nextByte();
-      return next === null ? null : (sevenBit(next) + RAISE_LOWER_OFFSET) % 255;
+    if (ESCAPE_CODES.has(byte)) return nextByte();
+    if (sevenBitMode && byte === RAISE_CODE) {
+      const next = operand();
+      return next === null ? null : (sevenBit(next) + RAISE_LOWER_OFFSET) % 256;
     }
-    if (byte === LOWER_CODE) {
-      const next = nextByte();
-      return next === null ? null : (sevenBit(next) - RAISE_LOWER_OFFSET + 255) % 255;
+    if (sevenBitMode && byte === LOWER_CODE) {
+      const next = operand();
+      return next === null ? null : (sevenBit(next) - RAISE_LOWER_OFFSET + 256) % 256;
     }
     return byte;
   };
@@ -225,11 +246,11 @@ export function decodeBlock(
      * because every 8-bit byte in it had been left encoded.
      */
     if (sevenBitMode && inBlock && (byte === RAISE_CODE || byte === LOWER_CODE)) {
-      const next = nextByte();
+      const next = operand();
       if (next === null) break;
       out.push(byte === RAISE_CODE
-        ? (sevenBit(next) + RAISE_LOWER_OFFSET) % 255
-        : (sevenBit(next) - RAISE_LOWER_OFFSET + 255) % 255);
+        ? (sevenBit(next) + RAISE_LOWER_OFFSET) % 256
+        : (sevenBit(next) - RAISE_LOWER_OFFSET + 256) % 256);
       continue;
     }
 
@@ -244,7 +265,26 @@ export function decodeBlock(
 
     const codeByte = nextByte();
     if (codeByte === null) break;
-    const command = COMMANDS[codeByte] ?? COMMANDS[sevenBit(codeByte)];
+
+    /*
+     * IN 7-BIT MODE THE OPERATORS ARE NOT ESCAPE-TABLE COMMANDS.
+     *
+     * The 7-bit overlay adds the raising and lowering subroutines to the
+     * LONE table (s.10.3.1), which is where this decoder already honours
+     * them - a bare 0x60 or 0x7E. Their ESCAPE-table entries therefore
+     * keep the default meaning, identity, and that is precisely how the
+     * transmission sends those two bytes AS DATA: it cannot send them
+     * bare, because bare means operator.
+     *
+     * SNAKE builds a string with STRING$(33,"`") and sends the backquote
+     * as `7C 60`. Read as escape-plus-URB that swallows the closing quote
+     * as an operand, and the line is one byte short of what its length
+     * byte claims.
+     */
+    const operatorAsCommand: boolean = sevenBitMode && (codeByte === RAISE_CODE || codeByte === LOWER_CODE);
+    const command: string | undefined = operatorAsCommand
+      ? undefined
+      : COMMANDS[codeByte] ?? COMMANDS[sevenBit(codeByte)];
 
     switch (command) {
       case 'TXO':
@@ -343,13 +383,35 @@ export function decodeBlock(
         const next = nextByte();
         if (next === null) break;
         const raised = command === 'URB'
-          ? (sevenBit(next) + RAISE_LOWER_OFFSET) % 255
-          : (sevenBit(next) - RAISE_LOWER_OFFSET + 255) % 255;
+          ? (sevenBit(next) + RAISE_LOWER_OFFSET) % 256
+          : (sevenBit(next) - RAISE_LOWER_OFFSET + 256) % 256;
         if (inBlock) out.push(raised);
         break;
       }
       default:
-        unknown.add(codeByte);
+        /*
+         * THE ESCAPE TABLE HAS 256 ENTRIES AND THE DEFAULT ONE IS IDENTITY.
+         *
+         * An escaped code that names no command is not an error - it is the
+         * byte itself, which is the only way the stream can carry a value
+         * whose LONE-table entry has been redefined into something else.
+         * The escape character is the clearest case: 0x7C is this
+         * transmission's escape AND the low byte of BASIC line number 380,
+         * so GOMOKU block 2 sends `7C 7C` for it.
+         *
+         * Emitting nothing here cost each tokenised program ONE byte at
+         * every such code. A BASIC program is a linked list of line
+         * lengths, so a single lost byte desynchronises the chain from
+         * that point to the end of the file: the machine answered `Bad
+         * program` for all eleven games while the first thirty-nine lines
+         * of GOMOKU had in fact decoded perfectly.
+         *
+         * Codes inside the documented command block (Table 4) are still
+         * reported, because one of those arriving here means a command
+         * this decoder does not implement rather than data.
+         */
+        if (codeByte >= 0x61 && codeByte <= 0x77) unknown.add(codeByte);
+        if (inBlock) out.push(codeByte);
         break;
     }
   }
@@ -437,4 +499,95 @@ export function decodeChain(
   }
 
   return [...found.values()].sort((a, b) => b.blocks.size - a.blocks.size);
+}
+
+// --- What a decoded program actually is -----------------------------------
+
+/**
+ * Telesoftware carried three different things and said so only by
+ * convention, so the shape has to be read off the bytes.
+ *
+ *  - `tokenised` - a BBC BASIC program as the machine stores it, a linked
+ *    list of records `0x0D <line high> <line low> <length>` ending at
+ *    `0x0D 0xFF`. Loaded with CHAIN, and NOT with *EXEC or *RUN.
+ *  - `source` - the same program as text, numbered lines of ASCII. Typed
+ *    back in with *EXEC, then RUN.
+ *  - `text` - prose. The 1985 transmissions carried documentation
+ *    alongside the programs; nothing loads these, they are read.
+ *
+ * Getting this wrong is not cosmetic. *EXEC on a tokenised program feeds
+ * token bytes to the command line, and CHAIN on a text file answers `Bad
+ * program`.
+ */
+export type ProgramKind = 'tokenised' | 'source' | 'text';
+
+export interface ProgramShape {
+  kind: ProgramKind;
+  /** BASIC line records walked, for a tokenised program. */
+  lines: number;
+  /** Whether the line chain reached BASIC's `0x0D 0xFF` end marker. */
+  terminated: boolean;
+  /** Where the chain stopped making sense, when it did. */
+  brokeAt: number | null;
+}
+
+/**
+ * The fewest line records worth calling a program.
+ *
+ * A prose file can open with a carriage return and read as one plausible
+ * record by chance; four in a row, each with a line number greater than
+ * the last, does not happen by accident.
+ */
+const TOKENISED_MIN_LINES = 4;
+
+/** How much of a text file must be numbered lines before it is BASIC source. */
+const SOURCE_MIN_NUMBERED = 0.6;
+
+/**
+ * Walk the tokenised line chain, and report where it stops.
+ *
+ * This is the only honest test of a telesoftware decode. A BASIC program is
+ * a linked list of byte lengths, so ONE byte lost or invented anywhere
+ * desynchronises every record after it - which is why a decoder can be
+ * ninety-five percent right and still produce nothing but `Bad program`.
+ */
+export function inspectProgram(data: Uint8Array): ProgramShape {
+  let at = 0;
+  let lines = 0;
+  let previous = -1;
+
+  while (at + 1 < data.length && data[at] === 0x0d) {
+    if (data[at + 1] === 0xff) {
+      return finish(lines, true, null, data);
+    }
+    if (at + 3 >= data.length) break;
+    const number = (data[at + 1] << 8) | data[at + 2];
+    const length = data[at + 3];
+    if (length < 4 || at + length > data.length || number <= previous) break;
+    previous = number;
+    lines++;
+    at += length;
+  }
+
+  return finish(lines, false, at, data);
+}
+
+function finish(
+  lines: number,
+  terminated: boolean,
+  brokeAt: number | null,
+  data: Uint8Array,
+): ProgramShape {
+  if (lines >= TOKENISED_MIN_LINES) {
+    return { kind: 'tokenised', lines, terminated, brokeAt: terminated ? null : brokeAt };
+  }
+  return { kind: numberedLineShare(data) >= SOURCE_MIN_NUMBERED ? 'source' : 'text', lines: 0, terminated: false, brokeAt: null };
+}
+
+/** The share of carriage-return-separated lines that open with a line number. */
+function numberedLineShare(data: Uint8Array): number {
+  const text = String.fromCharCode(...data.subarray(0, 4096));
+  const rows = text.split(/[\r\n]+/).filter(row => row.trim().length > 0);
+  if (rows.length === 0) return 0;
+  return rows.filter(row => /^\s*\d+\s*\S/.test(row)).length / rows.length;
 }

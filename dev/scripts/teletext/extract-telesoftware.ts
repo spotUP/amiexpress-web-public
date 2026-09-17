@@ -14,18 +14,21 @@
  *   --title "..."  the disc title, twelve characters
  *   --partial      include programs whose blocks are incomplete
  *
- * What comes out is BASIC SOURCE, not a tokenised program, because that is
- * how it was sent - the transmission redefines a teletext control code to
- * mean carriage return and sends the text through. So on the Beeb:
+ * What comes out is not all one thing. The 1985 transmissions carried
+ * tokenised BASIC programs, BASIC source as text, and plain documentation,
+ * and said which only by convention - so each decoded program is inspected
+ * and given the addresses and the loading command that suit it:
  *
- *   *CAT            see what is on the disc
- *   *EXEC SNAKE     type the program in, as if from the keyboard
- *   RUN
+ *   CHAIN "SNAKE"   a tokenised program, as the machine stores it
+ *   *EXEC PATCH2    BASIC source, typed back in - then RUN
+ *   *TYPE GAMEINF   documentation, to be read
+ *
+ * SHIFT+BREAK boots the disc, which catalogues it and says the same.
  */
 import * as fs from 'fs';
 import * as path from 'path';
 import { extractTeletextLines } from '../../../sdk/teletext/marco/tti/index';
-import { decodeChain } from '../../../sdk/teletext/telesoftware';
+import { decodeChain, inspectProgram, type ProgramShape } from '../../../sdk/teletext/telesoftware';
 import { buildDfsImage, sectorsFor, type DfsFile } from '../../../sdk/teletext/dfs-image';
 import { softwareDirFor } from './telesoftware-paths';
 import type { TeletextLine } from '../../../sdk/teletext/packet27';
@@ -66,16 +69,27 @@ function main(): void {
     return;
   }
 
-  console.log(`programs decoded: ${programs.length}, writing ${wanted.length}`);
+  console.log(`programs decoded: ${programs.length}, writing ${wanted.length}\n`);
+  console.log('  NAME     KIND        BYTES  LINES  LOAD WITH');
   const discFiles: DfsFile[] = [];
+  const chainable: string[] = [];
   for (const program of wanted) {
-    let lines = 0;
-    for (const byte of program.data) if (byte === 0x0d) lines++;
+    const shape = inspectProgram(program.data);
+    const name = dfsName(program.title);
+    if (shape.kind === 'tokenised' && shape.terminated) chainable.push(name);
+    const suspect = shape.kind === 'tokenised' && !shape.terminated
+      ? `  SUSPECT: line chain breaks at byte ${shape.brokeAt}`
+      : program.complete ? '' : '  INCOMPLETE';
     console.log(
-      `  ${program.title.padEnd(10)} ${String(program.data.length).padStart(6)} bytes` +
-        `  ${String(lines).padStart(4)} lines  ${program.complete ? '' : '(INCOMPLETE)'}`,
+      `  ${name.padEnd(8)} ${shape.kind.padEnd(10)} ${String(program.data.length).padStart(6)}` +
+        `  ${String(shape.lines).padStart(5)}  ${loadCommand(name, shape)}${suspect}`,
     );
-    discFiles.push({ name: dfsName(program.title), data: program.data });
+    discFiles.push({ name, data: program.data, ...addressesFor(shape) });
+  }
+
+  // A disc that boots. Option 3 is *EXEC, so !BOOT is typed at the prompt.
+  if (chainable.length > 0) {
+    discFiles.unshift({ name: '!BOOT', data: bootFile(chainable[0]), load: 0, exec: 0 });
   }
 
   // A DFS disc is 400 or 800 sectors; take the bigger if the smaller will
@@ -84,7 +98,7 @@ function main(): void {
   const sectors = needed <= 400 ? 400 : 800;
   const image = buildDfsImage(discFiles, {
     title: flag('title') ?? path.basename(pack).slice(0, 12),
-    bootOption: 0,
+    bootOption: 3,
     sectors,
   });
 
@@ -92,7 +106,42 @@ function main(): void {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, image);
   console.log(`\nwrote ${out}: ${image.length} bytes, ${needed} of ${sectors} sectors used`);
-  console.log('on the Beeb:  *CAT  then  *EXEC <NAME>  then  RUN');
+  console.log('on the Beeb: hold SHIFT and press BREAK, or *CAT and use the commands above');
+}
+
+/**
+ * Where a file loads, and where it runs from.
+ *
+ * A tokenised program gets what BBC BASIC's own SAVE writes: load &FFFF1900
+ * - PAGE on a disc machine - and execution at &FFFF8023, BASIC's entry
+ * point. The top two bits of each DFS address stand for the &FFFF host
+ * prefix, which is what the leading 3 is.
+ *
+ * Text of either sort gets zero. Nothing executes it, and a load address
+ * that lies is worse than none.
+ */
+function addressesFor(shape: ProgramShape): { load: number; exec: number } {
+  if (shape.kind !== 'tokenised') return { load: 0, exec: 0 };
+  return { load: 0x31900, exec: 0x38023 };
+}
+
+/** What the caller types to get this file going. */
+function loadCommand(name: string, shape: ProgramShape): string {
+  if (shape.kind === 'tokenised') return `CHAIN "${name}"`;
+  if (shape.kind === 'source') return `*EXEC ${name} then RUN`;
+  return `*TYPE ${name}`;
+}
+
+/**
+ * The boot file, typed in by *EXEC when the disc is booted.
+ *
+ * Deliberately two lines and no cleverness: it catalogues the disc and says
+ * how to start something. Anything more would be this repository writing
+ * 1985 software that 1985 did not broadcast.
+ */
+function bootFile(example: string): Uint8Array {
+  const text = `*CAT\rPRINT"CHAIN a game, eg.  CHAIN ""${example}"""\r`;
+  return Uint8Array.from([...text].map(c => c.charCodeAt(0)));
 }
 
 /** DFS names are seven characters, uppercase, no spaces. */
