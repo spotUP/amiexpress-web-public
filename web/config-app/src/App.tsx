@@ -2,9 +2,9 @@ import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell/AppShell';
-import { SkeletonRows } from './components/ui/states';
+import { SkeletonRows, EmptyState } from './components/ui/states';
 import { LEGACY_ROUTES } from './routes/legacy-routes';
-import { hardcodedMinLevel } from './components/AppShell/nav-config';
+import { routeAccess, routeKeyOf } from './components/AppShell/route-access';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ActivityPage } from './pages/ActivityPage';
@@ -63,8 +63,19 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
-/** Route guard that checks the live admin permissions for the current path. */
-function SysopRoute({ children }: { children: React.ReactNode }) {
+/**
+ * Route guard: the live admin permissions, then the compiled-in nav floor.
+ *
+ * Named for what it does rather than for one level - it has never been
+ * sysop-only, and calling it SysopRoute is why `screens`, at level 100, was
+ * left out of it. The decision itself lives in `route-access.ts`, pure, so the
+ * three outcomes can be tested without a router: allow, redirect, and REFUSE.
+ *
+ * Refuse is the one this used to lack. Redirecting always sent a refused
+ * account to Screens, which is fine until the route being refused IS Screens -
+ * then it is a loop. See `a-denied-route-does-not-bounce-forever.test.ts`.
+ */
+function LevelRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, secLevel, adminPerms } = useAuth();
   const location = useLocation();
 
@@ -78,14 +89,15 @@ function SysopRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) return <Navigate to="/admin/login" />;
 
-  // Extract the path segment after /admin/ to look up live permissions
-  const routeKey = location.pathname.replace(/^\/admin\//, '').split('/')[0];
-  // Live perms loaded from API (may be empty for non-sysop users who get 403).
-  // Fall back to the hardcoded nav-config minLevel when live perms are absent.
-  const minLevel = routeKey in adminPerms ? adminPerms[routeKey] : hardcodedMinLevel(routeKey);
+  const access = routeAccess(routeKeyOf(location.pathname), secLevel, adminPerms);
+  if (access.kind === 'allow') return <>{children}</>;
+  if (access.kind === 'redirect') return <Navigate to={access.to} />;
 
-  if (secLevel < minLevel) return <Navigate to="/admin/screens" />;
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-surface-0 p-5">
+      <EmptyState message={access.reason} />
+    </div>
+  );
 }
 
 function App() {
@@ -107,48 +119,48 @@ function App() {
             Overview, and a caller below its level lands on Screens instead.
             Unguarded, a level-100 screen editor who typed /admin got the
             Overview's furniture with 403s behind every panel. */}
-        <Route index element={<SysopRoute><OverviewPage /></SysopRoute>} />
+        <Route index element={<LevelRoute><OverviewPage /></LevelRoute>} />
 
         {/* Live — sysop-only except Overview */}
-        <Route path="activity" element={<SysopRoute><ActivityPage /></SysopRoute>} />
+        <Route path="activity" element={<LevelRoute><ActivityPage /></LevelRoute>} />
         {/* Screens and themes are one subject and one page; level 100, because
             an artist needs both halves - one names the theme, the other draws
             its screens. */}
-        <Route path="screens" element={<ScreensWorkspace />} />
-        <Route path="nodes" element={<SysopRoute><NodesWorkspace /></SysopRoute>} />
-        <Route path="operator-chat" element={<SysopRoute><OperatorChatWorkspace /></SysopRoute>} />
-        <Route path="operator-chat/personas" element={<SysopRoute><CoSysopPersonasPage /></SysopRoute>} />
-        <Route path="notifications" element={<SysopRoute><NotificationsPage /></SysopRoute>} />
+        <Route path="screens" element={<LevelRoute><ScreensWorkspace /></LevelRoute>} />
+        <Route path="nodes" element={<LevelRoute><NodesWorkspace /></LevelRoute>} />
+        <Route path="operator-chat" element={<LevelRoute><OperatorChatWorkspace /></LevelRoute>} />
+        <Route path="operator-chat/personas" element={<LevelRoute><CoSysopPersonasPage /></LevelRoute>} />
+        <Route path="notifications" element={<LevelRoute><NotificationsPage /></LevelRoute>} />
 
         {/* Bot plugins — one static route per bot (WHIP first). The generic
             BotPage renders from the manifest; uninstalled bots get an empty
             state, and the sidebar hides them, so non-bot sysops see nothing. */}
-        <Route path="bots/whip" element={<SysopRoute><BotPage pluginId="whip" /></SysopRoute>} />
+        <Route path="bots/whip" element={<LevelRoute><BotPage pluginId="whip" /></LevelRoute>} />
 
         {/* People — sysop-only */}
-        <Route path="users" element={<SysopRoute><UsersPage /></SysopRoute>} />
-        <Route path="security" element={<SysopRoute><SecurityPage /></SysopRoute>} />
-        <Route path="admin-roles" element={<SysopRoute><AdminRolesPage /></SysopRoute>} />
+        <Route path="users" element={<LevelRoute><UsersPage /></LevelRoute>} />
+        <Route path="security" element={<LevelRoute><SecurityPage /></LevelRoute>} />
+        <Route path="admin-roles" element={<LevelRoute><AdminRolesPage /></LevelRoute>} />
 
         {/* Content — screens editor accessible at 100+, rest sysop-only */}
-        <Route path="conferences" element={<SysopRoute><ConferencesWorkspace /></SysopRoute>} />
-        <Route path="doors" element={<SysopRoute><DoorsPage /></SysopRoute>} />
-        <Route path="sprite-manager" element={<SysopRoute><SpriteManagerPage /></SysopRoute>} />
-        <Route path="login-sequence" element={<SysopRoute><LoginSequencePage /></SysopRoute>} />
-        <Route path="bulls" element={<SysopRoute><BullsInfoPage /></SysopRoute>} />
+        <Route path="conferences" element={<LevelRoute><ConferencesWorkspace /></LevelRoute>} />
+        <Route path="doors" element={<LevelRoute><DoorsPage /></LevelRoute>} />
+        <Route path="sprite-manager" element={<LevelRoute><SpriteManagerPage /></LevelRoute>} />
+        <Route path="login-sequence" element={<LevelRoute><LoginSequencePage /></LevelRoute>} />
+        <Route path="bulls" element={<LevelRoute><BullsInfoPage /></LevelRoute>} />
 
         {/* System — sysop-only */}
-        <Route path="system" element={<SysopRoute><SystemConfigPage /></SysopRoute>} />
-        <Route path="config-files" element={<SysopRoute><ConfigFilesWorkspace /></SysopRoute>} />
-        <Route path="lookup-tables" element={<SysopRoute><LookupTablesWorkspace /></SysopRoute>} />
-        <Route path="health" element={<SysopRoute><HealthWorkspace /></SysopRoute>} />
+        <Route path="system" element={<LevelRoute><SystemConfigPage /></LevelRoute>} />
+        <Route path="config-files" element={<LevelRoute><ConfigFilesWorkspace /></LevelRoute>} />
+        <Route path="lookup-tables" element={<LevelRoute><LookupTablesWorkspace /></LevelRoute>} />
+        <Route path="health" element={<LevelRoute><HealthWorkspace /></LevelRoute>} />
 
         {/* Diagnostics — sysop-only */}
-        <Route path="statistics" element={<SysopRoute><StatisticsPage /></SysopRoute>} />
-        <Route path="logs" element={<SysopRoute><LogsPage /></SysopRoute>} />
-        <Route path="session-logs" element={<SysopRoute><LazyPage><SessionLogsPage /></LazyPage></SysopRoute>} />
-        <Route path="audit" element={<SysopRoute><AuditLogPage /></SysopRoute>} />
-        <Route path="import-export" element={<SysopRoute><LazyPage><ImportExportPage /></LazyPage></SysopRoute>} />
+        <Route path="statistics" element={<LevelRoute><StatisticsPage /></LevelRoute>} />
+        <Route path="logs" element={<LevelRoute><LogsPage /></LevelRoute>} />
+        <Route path="session-logs" element={<LevelRoute><LazyPage><SessionLogsPage /></LazyPage></LevelRoute>} />
+        <Route path="audit" element={<LevelRoute><AuditLogPage /></LevelRoute>} />
+        <Route path="import-export" element={<LevelRoute><LazyPage><ImportExportPage /></LazyPage></LevelRoute>} />
 
         {/*
           Permanent redirects for every destination folded into a tab, from one

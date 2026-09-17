@@ -11,7 +11,12 @@ export interface AdminSectionPerm {
 }
 
 export const ADMIN_SECTIONS: AdminSectionPerm[] = [
-  { key: 'overview',   label: 'Overview',        defaultMinLevel: 100 },
+  // The Overview's panels are fed by /api/config, which is requireSysop(),
+  // so a level-100 account landing there got a 403 behind every one of
+  // them. nav-config has said 255 since that was found; this table said
+  // 100 and is what the Admin Roles page shows, so the page was showing a
+  // policy the admin does not follow.
+  { key: 'overview',   label: 'Overview',        defaultMinLevel: 255 },
   { key: 'activity',   label: 'Activity Feed',   defaultMinLevel: 255 },
   { key: 'nodes',      label: 'Nodes',           defaultMinLevel: 255 },
   { key: 'operator-chat', label: 'Operator Chat', defaultMinLevel: 255 },
@@ -19,7 +24,7 @@ export const ADMIN_SECTIONS: AdminSectionPerm[] = [
   { key: 'security',   label: 'Access Levels',   defaultMinLevel: 255 },
   { key: 'conferences', label: 'Conferences',    defaultMinLevel: 255 },
   { key: 'doors',      label: 'Doors',           defaultMinLevel: 255 },
-  { key: 'screens',    label: 'Screen Files',    defaultMinLevel: 100 },
+  { key: 'screens',    label: 'Screens',         defaultMinLevel: 100 },
   { key: 'system',     label: 'Configuration',   defaultMinLevel: 255 },
   { key: 'config-files', label: 'Config Files',  defaultMinLevel: 255 },
   { key: 'lookup-tables', label: 'Lookup Tables', defaultMinLevel: 255 },
