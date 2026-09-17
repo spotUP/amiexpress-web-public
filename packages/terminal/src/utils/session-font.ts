@@ -105,7 +105,23 @@ export function advanceRatioFor(font: string): number {
 }
 
 /**
- * The largest size at or below `size` whose CELL is a whole CSS pixel.
+ * The step between two sizes that both draw without a seam, for `font`.
+ *
+ * The smallest whole size whose cell is also whole: 2px for a 0.5-advance
+ * Amiga face (a 1px cell), 5px for TeletextUPR's 0.6 (a 3px cell), 1px for a
+ * 1.0-advance face like PetMe64. Derived from the ratio rather than tabled,
+ * so a face added to ADVANCE_RATIOS needs nothing here.
+ */
+export function seamlessStep(font: string): number {
+  const ratio = advanceRatioFor(font);
+  for (let step = 1; step <= 100; step++) {
+    if (Math.abs(step * ratio - Math.round(step * ratio)) < 1e-9) return step;
+  }
+  return 1; // A ratio no small whole size divides is not a face this board ships.
+}
+
+/**
+ * The largest size at or below `size` that seams on NEITHER axis.
  *
  * The terminal draws with xterm's DOM renderer, which lays a row out as
  * spans of text; a fractional cell width rounds per span, and the glyphs
@@ -124,12 +140,29 @@ export function advanceRatioFor(font: string): number {
  * underscores did not: "det ar liksom inte tillrackligt med plats, dom
  * overlappar". The board no longer loads it.)
  *
- * DOWN, never up: the caller's size is already the largest that fits.
+ * BOTH AXES, and it used to be one. This floored the CELL and divided back
+ * through the advance, which says nothing about the height - and the DOM
+ * renderer gives every row its own box, sized to `css.cell.height`. Every
+ * face here declares a line box of exactly one em, on hhea and on OS/2, so
+ * the cell height IS the font size: a fractional size is a fractional row
+ * box, and consecutive rows then start off the device-pixel grid. For a 0.5
+ * advance, dividing back happened to land on an even whole number and the
+ * height was whole by luck. TeletextUPR advances 0.6 and 24px came back as
+ * 23.333 - whole across, a third of a pixel down - so a hairline ran under
+ * every row and straight through the middle of every double-height headline,
+ * which is drawn as two glyphs in two rows ("the doubled texts in text-tv
+ * modes has lines in them", the sysop, 2026-09-17).
+ *
+ * So: step down to a whole size whose cell is whole as well.
+ *
+ * DOWN, never up: the caller's size is already the largest that fits. The one
+ * exception is a size below a single step, where there is no smaller legal
+ * answer and a fractional one would seam - the step itself is returned.
  */
 export function seamlessSize(size: number, font: string): number {
-  const ratio = advanceRatioFor(font);
-  const cell = Math.floor(size * ratio);
-  return cell > 0 ? cell / ratio : size;
+  const step = seamlessStep(font);
+  const stepped = Math.floor(size / step) * step;
+  return stepped >= step ? stepped : step;
 }
 
 /** seamlessSize for the teletext face. */

@@ -14,6 +14,7 @@ import {
   advanceRatioFor,
   applyFont,
   seamlessSize,
+  seamlessStep,
   seamlessTeletextSize,
 } from '../../../../../packages/terminal/src/utils/session-font';
 
@@ -87,7 +88,17 @@ describe('seamlessSize', () => {
         const cell = snapped * advanceRatioFor(font);
         expect(Math.abs(cell - Math.round(cell))).toBeLessThan(1e-9);
         expect(snapped).toBeLessThanOrEqual(size);
-        expect(size - snapped).toBeLessThan(1 / advanceRatioFor(font));
+        /*
+         * One STEP, which is no longer one cell.
+         *
+         * The snap now has to leave the row box whole as well as the cell
+         * (a-row-leaves-no-hairline-under-it.test.ts), so the legal sizes are
+         * the multiples of `seamlessStep` rather than every whole cell. For a
+         * 0.5-advance face that is unchanged at 2px; TeletextUPR's 0.6 steps
+         * by 5px of size, and 12.7 therefore gives up 2.7 rather than the 1.67
+         * this used to allow.
+         */
+        expect(size - snapped).toBeLessThan(seamlessStep(font));
       }
     }
   });

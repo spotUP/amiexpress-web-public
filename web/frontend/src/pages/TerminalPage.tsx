@@ -292,7 +292,28 @@ export function TerminalPage(): JSX.Element {
       return;
     }
 
-    const fitted = fitFontSize(fitSizeRef.current, available, measure);
+    /*
+     * THE SNAPPED SIZE IS THE ONE THAT IS KEPT, and it used to be the raw fit.
+     *
+     * `effective` below is the seam-free size, and it was computed for the
+     * local `measure`/bezel arithmetic only - what got STORED, and therefore
+     * what reached the terminal through the `fontSize` prop and
+     * `term.options.fontSize`, was the unsnapped `fitted`. `applyFont` calls
+     * itself the one place a face and a size meet, and this was the road
+     * around it: the board ran at a fractional size, so every row box was
+     * fractional and the DOM renderer left a hairline under each one (the
+     * sysop, 2026-09-17, in teletext headlines, the ANSI editor and ordinary
+     * art alike).
+     *
+     * Storing the snapped size also keeps the next search honest - the seed
+     * is then a size the terminal can actually hold.
+     */
+    const fitted = keptFontSize(
+      fitFontSize(fitSizeRef.current, available, measure),
+      family,
+      isHandheld(),
+      seamlessSize,
+    );
     if (fitted !== fitSizeRef.current) {
       fitSizeRef.current = fitted;
       setFitSize(fitted);

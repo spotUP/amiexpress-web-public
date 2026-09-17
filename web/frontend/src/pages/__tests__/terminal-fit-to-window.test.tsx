@@ -295,3 +295,47 @@ describe('coming back from a door fullscreen re-fits at once', () => {
     expect(grid.height).toBeLessThanOrEqual(600);
   });
 });
+
+/*
+ * THE SIZE THE PAGE HANDS DOWN IS THE ONE THAT DRAWS, and it was not the one
+ * that got snapped.
+ *
+ * The test above reads the terminal double, which the fit's own `measure`
+ * probe writes to - and `measure(effective)` was the last probe, so the double
+ * ended on the seam-free size and the case looked covered. At runtime the
+ * PROP wins: BBSTerminal's fontSize effect assigns it straight to
+ * `term.options.fontSize`, after the probes are done. That prop carried the
+ * unsnapped fit, so the board ran at a fractional size and the DOM renderer
+ * left a hairline under every row - through the middle of a teletext
+ * double-height headline, which is drawn as two glyphs in two rows ("the
+ * doubled texts in text-tv modes has lines in them", the sysop, 2026-09-17).
+ *
+ * So this asks the PROP, and it asks about both axes: every face declares a
+ * line box of exactly one em, so a whole row box means a whole font size.
+ */
+describe('the size handed to the terminal seams on neither axis', () => {
+  it('is whole down the row as well as across the cell', () => {
+    for (const [width, height] of [[1280, 800], [1366, 768], [1440, 900], [1512, 945], [1920, 1080], [1024, 640]]) {
+      cleanup();
+      harness.props = null;
+      harness.term = makeTerminal();
+      mountAt(width, height);
+
+      const handed = harness.props?.fontSize as number;
+      expect(handed).toBeGreaterThan(0);
+      // Down: the row box is the font size, so a fraction is a hairline.
+      expect(Math.abs(handed - Math.round(handed))).toBeLessThan(1e-9);
+      // Across: what the 2026-09-14 snap was written for.
+      const cell = handed * CHAR_ASPECT;
+      expect(Math.abs(cell - Math.round(cell))).toBeLessThan(1e-9);
+    }
+  });
+
+  it('still hands down a size the whole grid fits in', () => {
+    const { page } = mountAt(1366, 768);
+    const handed = harness.props?.fontSize as number;
+    const grid = gridFor(handed);
+    expect(grid.width + 2 * TERMINAL_BEZEL_PX).toBeLessThanOrEqual(page.clientWidth + 0.001);
+    expect(grid.height + 2 * TERMINAL_BEZEL_PX).toBeLessThanOrEqual(page.clientHeight + 0.001);
+  });
+});

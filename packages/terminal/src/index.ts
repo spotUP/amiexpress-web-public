@@ -51,6 +51,7 @@ export {
   applyFont,
   seamlessTeletextSize,
   seamlessSize,
+  seamlessStep,
   advanceRatioFor,
   type BbsFont,
   type FontTarget,
