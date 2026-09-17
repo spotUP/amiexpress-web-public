@@ -50,10 +50,26 @@ export { getScreenFileName };
  */
 const nodeScreenDirCache = new Map<string, { stamp: number; dir: string; seenIn: number }>();
 
-export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
-  const defaultDir = path.join(baseDir, `Node${nodeId}`);
-  const infoPath = path.join(baseDir, `Node${nodeId}.info`);
-
+/**
+ * The screen directory an icon's `SCREENS` tooltype names, or `defaultDir`.
+ *
+ * ONE body for both scopes, because express.e has one rule. A node's
+ * directory comes from `Node<n>.info` (ACP.e:2666-2673) and a conference's
+ * from `Conf<n>.info` (express.e:5052-5054), and both are "the default unless
+ * the icon says otherwise" with the same trailing-slash handling, the same
+ * assign resolution and the same "a corrupt icon loses you nothing" fallback.
+ * Two copies of that would drift the first time one of them was fixed.
+ *
+ * `assignNode` is the node an Amiga assign like `NODE:` resolves against. A
+ * conference's tooltype has no node of its own, and every real one names
+ * `BBS:`, so it passes the caller's node through rather than inventing one.
+ */
+function screenDirFromIcon(
+  baseDir: string,
+  infoPath: string,
+  defaultDir: string,
+  assignNode: number,
+): string {
   /*
    * Inside one snapshot the icon is checked ONCE.
    *
@@ -100,11 +116,11 @@ export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
       // side; path.join here does its own separators, so strip it.
       const cleaned = declared.replace(/[\/]+$/, '');
       dir = cleaned.includes(':')
-        ? new BBSPaths(baseDir).resolveAmigaPath(cleaned, nodeId)
+        ? new BBSPaths(baseDir).resolveAmigaPath(cleaned, assignNode)
         : path.resolve(baseDir, cleaned);
     }
   } catch (error) {
-    // A corrupt icon must not take the node's screens away: fall back to the
+    // A corrupt icon must not take the screens away: fall back to the
     // directory express.e would have used with no tooltype at all.
 console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(error as Error).message}`);
     dir = defaultDir;
@@ -112,6 +128,45 @@ console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(erro
 
   nodeScreenDirCache.set(infoPath, { stamp, dir, seenIn: snap });
   return dir;
+}
+
+/** The directory a node reads its screens from (ACP.e:2666-2673). */
+export function resolveNodeScreenDir(baseDir: string, nodeId: number): string {
+  return screenDirFromIcon(
+    baseDir,
+    path.join(baseDir, `Node${nodeId}.info`),
+    path.join(baseDir, `Node${nodeId}`),
+    nodeId,
+  );
+}
+
+/**
+ * The directory a CONFERENCE reads its screens from.
+ *
+ * express.e:5052-5054, run on every join:
+ *
+ *     StrCopy(confScreenDir,currentConfDir)
+ *     readToolType(TOOLTYPE_CONF,conf,'SCREENS',confScreenDir)
+ *
+ * The conference's own directory is the DEFAULT and the tooltype overrides it,
+ * exactly as a node's does. This port read the node's and ignored the
+ * conference's, so a board could not do the thing AmiExpress offers: point
+ * every conference at one directory and keep ONE menu instead of fourteen
+ * ("i only need one main menu for the users and one for the sysops", the
+ * sysop, 2026-09-17).
+ *
+ * The default comes from `conferenceDir`, which reads `LOCATION.n` - never
+ * `Conf<n>` built from the number. Conference 1 on this board lives in
+ * `Conf2`, and arithmetic here would serve the screens of a conference that
+ * was deleted.
+ */
+export function resolveConfScreenDir(baseDir: string, confId: number, nodeId = 0): string {
+  return screenDirFromIcon(
+    baseDir,
+    path.join(baseDir, `Conf${confId}.info`),
+    conferenceDir(baseDir, confId),
+    nodeId,
+  );
 }
 
 /**
@@ -285,13 +340,40 @@ export function screenSearchLocations(
     // express.e:31849 reads LOCATION.n for a conference's directory; deriving
     // `Conf<n>` from the number breaks the moment a board is renumbered, which
     // is how MENU went missing for the conference that moved into position 1.
-    const confDir = conferenceDir(baseDir, opts.confId);
+    const ownDir = conferenceDir(baseDir, opts.confId);
+    // express.e:5053 lets `Conf<n>.info` send the conference somewhere else,
+    // exactly as a node's icon does - which is how ONE menu can serve every
+    // conference instead of fourteen copies drifting apart.
+    const screenDir = resolveConfScreenDir(baseDir, opts.confId, opts.nodeId);
     // Keyed on the conference NUMBER, which is what this function is given and
     // what confIds() enumerates - not on the directory LOCATION.n names.
     const themed = theme(path.join('Conf', String(opts.confId)), `Conf/${opts.confId}`);
     if (themed) locations.push(themed);
-    locations.push({ dir: confDir, desc: `Conf${opts.confId}` });
-    locations.push({ dir: path.join(confDir, 'Screens'), desc: `Conf${opts.confId}/Screens` });
+    locations.push({
+      dir: screenDir,
+      desc: path.resolve(screenDir) === path.resolve(ownDir)
+        ? `Conf${opts.confId}`
+        : `Conf${opts.confId} SCREENS tooltype`,
+    });
+    // The conference's own `Screens/` stays under its directory, and is only
+    // meaningful when the tooltype has not sent the conference elsewhere.
+    if (path.resolve(screenDir) === path.resolve(ownDir)) {
+      locations.push({ dir: path.join(ownDir, 'Screens'), desc: `Conf${opts.confId}/Screens` });
+    }
+    /*
+     * THE SHARED CONFERENCE DIRECTORY, LAST, and it is the floor under a
+     * conference with no menu of its own - the same shape as `Screens/Node`
+     * above, for the same reason.
+     *
+     * Ordered after the conference's own directory, so nothing is shadowed: a
+     * conference that keeps its own MENU keeps it, and only a screen it does
+     * not have falls through to the one every conference shares. Skipped when
+     * the tooltype already points here.
+     */
+    const sharedConfDir = path.join(baseDir, 'Screens', 'Conf');
+    if (path.resolve(sharedConfDir) !== path.resolve(screenDir) && fs.existsSync(sharedConfDir)) {
+      locations.push({ dir: sharedConfDir, desc: 'Screens/Conf (shared)' });
+    }
   } else if (dirType === ScreenDirType.GLOBAL) {
     const themed = theme('Board', 'Board');
     if (themed) locations.push(themed);
