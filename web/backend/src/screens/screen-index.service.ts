@@ -22,6 +22,9 @@ import {
   resolveNodeScreenDir, screenSearchLocations, isScreenFile,
 } from './screen-resolution';
 import { BOARD_WRITTEN_NAME } from './screen-tables';
+import {
+  QUESTIONNAIRE_SCREEN, isQuestionnaireScript, preferredScript, baudOf,
+} from './questionnaire-script';
 import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
@@ -1063,6 +1066,8 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
 
   /** relPath -> every screen that reads it. The answer to "can I delete this?". */
   const readers = new Map<string, ScreenReader[]>();
+  /** Filled after the catalogue walk; the questionnaire is found by its own rule. */
+  const questionnaireResolutions: ScopeResolution[] = [];
 
   const confConfig = loadConfConfig(baseDir);
   const conferences: ConferenceFacts[] = conferenceNumbers(baseDir).map(id => {
@@ -1277,6 +1282,74 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
       dirType,
       resolutions,
       missingScopes: resolutions.filter(r => !r.file).length,
+      duplicateGroups: [...hashes.entries()]
+        .filter(([, paths]) => paths.length > 1)
+        .map(([sha256, paths]) => ({ sha256, paths })),
+    });
+  }
+
+  /*
+   * THE QUESTIONNAIRE, which is a screen the catalogue walk cannot find.
+   *
+   * `Node<n>/script<baud>` has no screen EXTENSION, so `findSecurityScreen`
+   * (which builds `<name>.TXT` and walks levels in fives) never reaches one,
+   * and `variantOf` would read the baud as a security level - 2400 is not a
+   * level this board can have. The bulletins a few lines below are here for
+   * the same reason: read by number rather than by name, and otherwise
+   * reported as read by nothing.
+   *
+   * It IS a screen - a text in a node directory, fanned out to every node,
+   * shown to a caller, carrying the `~CC_` codes the board runs - so it is
+   * listed as one, with the bauds as its variants. A bare trailing `~` marks
+   * a question, which is the one thing about the file that is not
+   * screen-shaped.
+   */
+  for (const { scope, id } of scopesFor(baseDir, ScreenDirType.NODE)) {
+    if (scope !== 'node' || id === null) continue;
+    const dirRel = `Node${id}`;
+    const names = listDir(path.join(baseDir, dirRel)).filter(isQuestionnaireScript);
+    if (names.length === 0) continue;
+
+    const run = preferredScript(names);
+    const file = run ? path.join(dirRel, run) : null;
+
+    questionnaireResolutions.push({
+      scope: 'node',
+      id,
+      dir: dirRel,
+      dirIsShared: false,
+      file,
+      variants: names.slice().sort((a, b) => a.localeCompare(b)),
+    });
+
+    // Every copy is read by the board: the caller's own baud picks one, and
+    // which one that is depends on the caller, not on the file.
+    for (const name of names) {
+      const rel = path.join(dirRel, name);
+      readers.set(rel, [...(readers.get(rel) ?? []), {
+        screen: QUESTIONNAIRE_SCREEN,
+        scope: 'node',
+        id,
+        // NOT securityLevel: the digits are a modem speed.
+        serves: `${baudOf(name)} baud`,
+        via: name === run ? 'resolved' : 'variant',
+      }]);
+      factsFor(path.join(baseDir, rel));
+    }
+  }
+
+  if (questionnaireResolutions.length > 0) {
+    const hashes = new Map<string, string[]>();
+    for (const res of questionnaireResolutions) {
+      if (!res.file) continue;
+      const facts = factsFor(path.join(baseDir, res.file));
+      hashes.set(facts.sha256, [...(hashes.get(facts.sha256) ?? []), res.file]);
+    }
+    screens.push({
+      screen: QUESTIONNAIRE_SCREEN,
+      dirType: ScreenDirType.NODE,
+      resolutions: questionnaireResolutions,
+      missingScopes: questionnaireResolutions.filter(r => !r.file).length,
       duplicateGroups: [...hashes.entries()]
         .filter(([, paths]) => paths.length > 1)
         .map(([sha256, paths]) => ({ sha256, paths })),

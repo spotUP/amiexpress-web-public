@@ -28,7 +28,13 @@ import { screensRouter } from '../../src/api/screens-routes';
 
 function app() {
   const a = express();
-  a.use('/api/screens', express.json(), screensRouter);
+  a.use('/api/screens', (req, _res, next) => {
+    // A sysop, because the real mount always has one: S3 gave the board-wide
+    // screen routes `requireSysop()` and a router mounted with no user at all
+    // answers 401 to every case in this file.
+    (req as unknown as { user: unknown }).user = { username: 'sysop', secLevel: 255 };
+    next();
+  }, express.json(), screensRouter);
   return a;
 }
 
