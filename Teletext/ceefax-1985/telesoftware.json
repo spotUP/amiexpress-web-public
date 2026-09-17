@@ -1,0 +1,198 @@
+{
+  "disc": "ceefax-1985.ssd",
+  "programs": [
+    {
+      "title": "CALEND",
+      "file": "CALEND",
+      "kind": "text",
+      "command": "*TYPE CALEND",
+      "pages": [
+        1801
+      ],
+      "blocks": 25,
+      "complete": false,
+      "intact": true
+    },
+    {
+      "title": "VIDFAX2",
+      "file": "VIDFAX2",
+      "kind": "text",
+      "command": "*TYPE VIDFAX2",
+      "pages": [
+        1799
+      ],
+      "blocks": 20,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "GAMEINF",
+      "file": "GAMEINF",
+      "kind": "text",
+      "command": "*TYPE GAMEINF",
+      "pages": [
+        1809
+      ],
+      "blocks": 17,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "GALAXY",
+      "file": "GALAXY",
+      "kind": "tokenised",
+      "command": "CHAIN \"GALAXY\"",
+      "pages": [
+        1814
+      ],
+      "blocks": 15,
+      "complete": true,
+      "intact": false
+    },
+    {
+      "title": "VIDIED",
+      "file": "VIDIED",
+      "kind": "text",
+      "command": "*TYPE VIDIED",
+      "pages": [
+        1797
+      ],
+      "blocks": 11,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "BREAKOU",
+      "file": "BREAKOU",
+      "kind": "tokenised",
+      "command": "CHAIN \"BREAKOU\"",
+      "pages": [
+        1811
+      ],
+      "blocks": 8,
+      "complete": true,
+      "intact": false
+    },
+    {
+      "title": "GOMOKU",
+      "file": "GOMOKU",
+      "kind": "tokenised",
+      "command": "CHAIN \"GOMOKU\"",
+      "pages": [
+        1815
+      ],
+      "blocks": 8,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "VIDFAX1",
+      "file": "VIDFAX1",
+      "kind": "text",
+      "command": "*TYPE VIDFAX1",
+      "pages": [
+        1798
+      ],
+      "blocks": 7,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "SNAKE",
+      "file": "SNAKE",
+      "kind": "tokenised",
+      "command": "CHAIN \"SNAKE\"",
+      "pages": [
+        1813
+      ],
+      "blocks": 7,
+      "complete": true,
+      "intact": false
+    },
+    {
+      "title": "MASTRBR",
+      "file": "MASTRBR",
+      "kind": "tokenised",
+      "command": "CHAIN \"MASTRBR\"",
+      "pages": [
+        1816
+      ],
+      "blocks": 7,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "DATE",
+      "file": "DATE",
+      "kind": "tokenised",
+      "command": "CHAIN \"DATE\"",
+      "pages": [
+        1800,
+        1944
+      ],
+      "blocks": 6,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "FLASH",
+      "file": "FLASH",
+      "kind": "tokenised",
+      "command": "CHAIN \"FLASH\"",
+      "pages": [
+        1812
+      ],
+      "blocks": 6,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "REVERSI",
+      "file": "REVERSI",
+      "kind": "tokenised",
+      "command": "CHAIN \"REVERSI\"",
+      "pages": [
+        1817
+      ],
+      "blocks": 6,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "PATCH2",
+      "file": "PATCH2",
+      "kind": "source",
+      "command": "*EXEC PATCH2",
+      "pages": [
+        1796
+      ],
+      "blocks": 5,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "Bubbles",
+      "file": "BUBBLES",
+      "kind": "tokenised",
+      "command": "CHAIN \"BUBBLES\"",
+      "pages": [
+        1808
+      ],
+      "blocks": 4,
+      "complete": true,
+      "intact": true
+    },
+    {
+      "title": "F.T",
+      "file": "FT",
+      "kind": "text",
+      "command": "*TYPE FT",
+      "pages": [
+        1797
+      ],
+      "blocks": 2,
+      "complete": true,
+      "intact": true
+    }
+  ]
+}

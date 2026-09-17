@@ -19,7 +19,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-
+import type { TelesoftwareMap } from './telesoftware';
 import type { TeletextService, TeletextPage, NationalSubset } from './marco/model/types';
 import { importTti, importT42, extractTeletextLines } from './marco/tti/index';
 import { fastextByPage, type TeletextLine } from './packet27';
@@ -62,6 +62,12 @@ export interface LoadedService {
   index: ServiceIndex;
   /** Files that would not parse. The service still holds everything else. */
   errors: PageLoadError[];
+  /**
+   * The programs this service broadcast, when its telesoftware has been
+   * decoded to a disc. Null for a pack that carries none - which is most of
+   * them, and not an error.
+   */
+  telesoftware: TelesoftwareMap | null;
 }
 
 export interface ServiceSummary {
@@ -70,6 +76,34 @@ export interface ServiceSummary {
   dir: string;
   /** How many page files the pack holds. Cheap: no parsing. */
   fileCount: number;
+}
+
+/**
+ * The sidecar naming the programs a pack's pages carried.
+ *
+ * Written beside the pages by the extractor rather than worked out here:
+ * decoding sixteen programs out of six hundred pages takes seconds, and a
+ * browser opening a service must not.
+ */
+export const TELESOFTWARE_FILE = 'telesoftware.json';
+
+/**
+ * Read that sidecar, or null.
+ *
+ * Tolerant on purpose. A pack without one is the normal case, and a
+ * malformed one must not stop a service from being browsed - the pages are
+ * the point, and the programs are an extra.
+ */
+export function loadTelesoftwareMap(dir: string): TelesoftwareMap | null {
+  const full = path.join(dir, TELESOFTWARE_FILE);
+  try {
+    if (!fs.existsSync(full)) return null;
+    const parsed = JSON.parse(fs.readFileSync(full, 'utf8')) as TelesoftwareMap;
+    if (!parsed || typeof parsed.disc !== 'string' || !Array.isArray(parsed.programs)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 /** The file extensions a pack's pages are allowed to have. */
@@ -197,6 +231,7 @@ export function loadService(dir: string): LoadedService {
     }
   }
 
+  const telesoftware = loadTelesoftwareMap(dir);
   const subset: NationalSubset = manifest.subset ?? 'english';
   const service: TeletextService = {
     id: manifest.id || path.basename(dir),
@@ -227,7 +262,7 @@ export function loadService(dir: string): LoadedService {
   const homePage = manifest.homePage ? parsePageNumber(manifest.homePage) : null;
   const index = buildServiceIndex(service, homePage ? { homePage } : {});
 
-  return { dir, manifest, service, index, errors };
+  return { dir, manifest, service, index, errors, telesoftware };
 }
 
 /**

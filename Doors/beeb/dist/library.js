@@ -53,6 +53,8 @@ exports.bareUrl = bareUrl;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
+const emulator_url_1 = require("@amiexpress/bbs-door-sdk/beeb/emulator-url");
+Object.defineProperty(exports, "MODEL", { enumerable: true, get: function () { return emulator_url_1.MODEL; } });
 /** Disc and tape images the emulator can load. */
 const DISC_EXTENSIONS = new Set(['.ssd', '.dsd', '.adf', '.adl']);
 const TAPE_EXTENSIONS = new Set(['.uef', '.csw']);
@@ -62,20 +64,6 @@ const TAPE_EXTENSIONS = new Set(['.uef', '.csw']);
  * Getting one of these names wrong is a black screen, not an error.
  */
 exports.REQUIRED_ROMS = ['os.rom', 'BASIC.ROM', path.join('b', 'DFS-1.2.rom')];
-/**
- * The machine, named explicitly rather than left to the emulator's default.
- *
- * jsbeeb knows several models and they want DIFFERENT ROMs - `B` and
- * `B-DFS0.9` and `B1770` and `Master` each ask for their own set, and
- * `Master` wants `master/mos3.20`, which is nothing like the three files
- * this board tells a sysop to install. Leaving the model to the default
- * means the emulator asks for a ROM nobody was told about and shows "failed
- * to find a ROM" over a board that is correctly set up.
- *
- * So the model is pinned, and REQUIRED_ROMS above is exactly its ROM set.
- * The two must be changed together.
- */
-exports.MODEL = 'B-DFS1.2';
 /**
  * The DFS version the pinned model's 8271 disc controller expects.
  *
@@ -219,21 +207,13 @@ function listTitles(startDir) {
     }
     return titles.sort((a, b) => a.name.localeCompare(b.name));
 }
-/**
- * The URL that runs one title.
- *
- * The board serves the emulator at /beeb/ and maps its `discs/` and
- * `tapes/` paths onto the board's software folder, so the emulator's own
- * loading works unmodified - no patching of a GPL bundle.
- */
+/** The URL that runs one title, through the SDK's shared builder. */
 function urlFor(title, options = {}) {
-    const parameter = title.kind === 'tape' ? 'tape' : 'disc1';
-    const autoboot = options.autoboot === false ? '' : '&autoboot';
-    return `/beeb/?model=${exports.MODEL}&${parameter}=${encodeURIComponent(title.file)}${autoboot}`;
+    return (0, emulator_url_1.emulatorUrl)({ file: title.file, kind: title.kind, autoboot: options.autoboot });
 }
 /** An empty machine, for a caller who just wants BASIC. */
 function bareUrl() {
-    return `/beeb/?model=${exports.MODEL}`;
+    return (0, emulator_url_1.emulatorUrl)();
 }
 function prettyName(file) {
     return file

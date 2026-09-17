@@ -10,6 +10,7 @@
   },
   "include": [
     "teletext/**/*",
+    "beeb/**/*",
     // Both of these already declare an "import" condition in package.json
     // and neither was emitted - found by tests/unit/esm-conditions-resolve.
     "components/achievement-toast.ts",

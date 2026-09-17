@@ -441,6 +441,14 @@ export interface TelesoftwareProgram {
   complete: boolean;
   /** The program, assembled. Only meaningful when complete. */
   data: Uint8Array;
+  /**
+   * The teletext pages this program was broadcast on, in order.
+   *
+   * Ceefax gave a program a page number and put its blocks on the subpages
+   * of it - GOMOKU was page 717 - so this is what a caller browsing the
+   * service is actually looking at when they reach it.
+   */
+  pages: number[];
 }
 
 /**
@@ -458,7 +466,7 @@ export interface TelesoftwareProgram {
  * Blocks are fed in order for the same reason.
  */
 export function decodeChain(
-  pages: ReadonlyArray<{ lines: readonly TeletextLine[] }>,
+  pages: ReadonlyArray<{ lines: readonly TeletextLine[]; page?: number }>,
 ): TelesoftwareProgram[] {
   const found = new Map<string, TelesoftwareProgram>();
   const tables = new Map<string, Map<number, number[]>>();
@@ -479,8 +487,13 @@ export function decodeChain(
 
     const program = found.get(key) ?? {
       title: key, datatype: null, blocks: new Map<number, Uint8Array>(),
-      blockCount: null, complete: false, data: new Uint8Array(),
+      blockCount: null, complete: false, data: new Uint8Array(), pages: [],
     };
+    // `entry.page` is the source page, whose own `page` is its number.
+    const pageNumber = entry.page.page;
+    if (pageNumber !== undefined && !program.pages.includes(pageNumber)) {
+      program.pages.push(pageNumber);
+    }
     if (block.blockNumber !== null) program.blocks.set(block.blockNumber, block.data);
     if (block.blockCount !== null) program.blockCount = block.blockCount;
     program.datatype = program.datatype ?? block.datatype;
@@ -488,6 +501,7 @@ export function decodeChain(
   }
 
   for (const program of found.values()) {
+    program.pages.sort((a, b) => a - b);
     const total = program.blockCount ?? program.blocks.size;
     program.complete = total > 0 && [...Array(total)].every((_, i) => program.blocks.has(i + 1));
     const parts: number[] = [];
@@ -590,4 +604,65 @@ function numberedLineShare(data: Uint8Array): number {
   const rows = text.split(/[\r\n]+/).filter(row => row.trim().length > 0);
   if (rows.length === 0) return 0;
   return rows.filter(row => /^\s*\d+\s*\S/.test(row)).length / rows.length;
+}
+
+
+// --- What a service says it carries ---------------------------------------
+
+/**
+ * What a caller types to get one file going.
+ *
+ * Shared rather than restated where the disc is written, because the page
+ * that offers a program and the catalogue entry beside it have to say the
+ * same thing - and "*RUN SNAKE", which is neither, is what a reasonable
+ * person tries first.
+ */
+export function loadCommandFor(name: string, kind: ProgramKind): string {
+  if (kind === 'tokenised') return `CHAIN "${name}"`;
+  if (kind === 'source') return `*EXEC ${name}`;
+  return `*TYPE ${name}`;
+}
+
+/** One recovered program, as the pack records it. */
+export interface TelesoftwareListing {
+  /** The name it was broadcast under. */
+  title: string;
+  /** Its name on the disc, which is what the load command uses. */
+  file: string;
+  kind: ProgramKind;
+  /** Exactly what to type on the Beeb. */
+  command: string;
+  /** The teletext pages it was broadcast on. */
+  pages: number[];
+  blocks: number;
+  /** Every block of the transmission was recovered. */
+  complete: boolean;
+  /**
+   * For a tokenised program, whether its line chain reaches BASIC's end
+   * marker. A program that is complete but not intact was recovered whole
+   * from a damaged tape, and will not load.
+   */
+  intact: boolean;
+}
+
+/**
+ * The sidecar a pack carries beside its pages.
+ *
+ * Written when the disc is built, by the one process that knows all of it
+ * at once: which pages held which program, what the program turned out to
+ * be, and which disc it was written to.
+ */
+export interface TelesoftwareMap {
+  /** The disc image, as it sits in the board's Beeb/software folder. */
+  disc: string;
+  programs: TelesoftwareListing[];
+}
+
+/** The program broadcast on a page, if any. */
+export function programOnPage(
+  map: TelesoftwareMap | null | undefined,
+  page: number,
+): TelesoftwareListing | null {
+  if (!map) return null;
+  return map.programs.find(entry => entry.pages.includes(page)) ?? null;
 }

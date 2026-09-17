@@ -1,6 +1,8 @@
 export interface DoorSession {
     socket: {
-        emit(event: string, data: string): void;
+        emit(event: string, data?: unknown): void;
+        on(event: string, handler: (...args: unknown[]) => void): void;
+        off?(event: string, handler: (...args: unknown[]) => void): void;
     };
     bbsSession: Record<string, unknown>;
     user?: {
@@ -26,6 +28,9 @@ export declare class TeletextApp {
     private notice;
     private carousel;
     private closed;
+    /** The program running on the board's BBC Micro, while one is. */
+    private running;
+    private readonly onEmulatorClosed;
     /**
      * @param root Which Teletext directory to browse. The door leaves this
      *   alone and gets the board's; a test passes its own, because a test
@@ -52,7 +57,32 @@ export declare class TeletextApp {
     private toggleHold;
     private quit;
     private current;
+    /** The program broadcast on the page being looked at, if any. */
+    private programHere;
     private paintPage;
+    /**
+     * A telesoftware page, shown as what it is.
+     *
+     * These pages were never meant to be looked at. Their rows carry a
+     * program in the Redefinable Telesoftware Format, and painting them as
+     * characters gives a screen of mojibake - which is exactly what it did,
+     * and read as a rendering bug rather than as software.
+     *
+     * So the page is described instead of drawn, and the caller is offered
+     * the thing the page was for.
+     */
+    private paintProgram;
+    /**
+     * Hand the program to the board's BBC Micro, already typed in.
+     *
+     * AUTOTYPE RATHER THAN AUTOBOOT, and they are exclusive - jsbeeb takes
+     * the first of autoboot, autochain, autorun, autotype that it finds, so a
+     * URL carrying both boots the disc and ignores the program. Booting would
+     * only reach the disc's catalogue; typing reaches THIS program, which is
+     * the one the caller was reading about.
+     */
+    private runProgram;
+    private onEmulatorReturn;
     private paintStatus;
     private pageBar;
     private pickerBar;

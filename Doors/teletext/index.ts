@@ -10,7 +10,7 @@
  * following the links IS playing them.
  */
 import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
-import { TeletextApp } from './app';
+import { TeletextApp, type DoorSession } from './app';
 
 export const metadata = {
   name: 'Teletext',
@@ -25,7 +25,7 @@ let app: TeletextApp | null = null;
 
 door.onStart(async (ctx: DoorContext) => {
   app = new TeletextApp({
-    socket: ctx.socket as unknown as { emit(event: string, data: string): void },
+    socket: ctx.socket as unknown as DoorSession['socket'],
     bbsSession: ctx.bbsSession as Record<string, unknown>,
     user: ctx.user,
     close: () => ctx.close(),

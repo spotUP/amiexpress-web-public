@@ -1,3 +1,4 @@
+import { MODEL } from '@amiexpress/bbs-door-sdk/beeb/emulator-url';
 /**
  * The three files a Model B needs, by the exact names the emulator asks
  * for (jsbeeb `src/models.js`: `os.rom`, `BASIC.ROM`, `b/DFS-1.2.rom`).
@@ -15,9 +16,11 @@ export declare const REQUIRED_ROMS: string[];
  * to find a ROM" over a board that is correctly set up.
  *
  * So the model is pinned, and REQUIRED_ROMS above is exactly its ROM set.
- * The two must be changed together.
+ * The two must be changed together - which is why the pin itself lives in
+ * the SDK now: the TELETEXT door sends callers to the same machine, and two
+ * doors disagreeing about the model is two different sets of missing ROMs.
  */
-export declare const MODEL = "B-DFS1.2";
+export { MODEL };
 /**
  * The DFS version the pinned model's 8271 disc controller expects.
  *
@@ -85,13 +88,7 @@ export declare function romIdentity(file: string): RomIdentity | null;
 export declare function checkRoms(startDir?: string): RomCheck;
 /** Everything in the board's software folder the emulator could load. */
 export declare function listTitles(startDir?: string): Title[];
-/**
- * The URL that runs one title.
- *
- * The board serves the emulator at /beeb/ and maps its `discs/` and
- * `tapes/` paths onto the board's software folder, so the emulator's own
- * loading works unmodified - no patching of a GPL bundle.
- */
+/** The URL that runs one title, through the SDK's shared builder. */
 export declare function urlFor(title: Title, options?: {
     autoboot?: boolean;
 }): string;

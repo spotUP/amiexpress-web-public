@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveBbsRoot } from '@amiexpress/bbs-door-sdk/settings';
+import { MODEL, emulatorUrl } from '@amiexpress/bbs-door-sdk/beeb/emulator-url';
 
 /** Disc and tape images the emulator can load. */
 const DISC_EXTENSIONS = new Set(['.ssd', '.dsd', '.adf', '.adl']);
@@ -31,9 +32,11 @@ export const REQUIRED_ROMS = ['os.rom', 'BASIC.ROM', path.join('b', 'DFS-1.2.rom
  * to find a ROM" over a board that is correctly set up.
  *
  * So the model is pinned, and REQUIRED_ROMS above is exactly its ROM set.
- * The two must be changed together.
+ * The two must be changed together - which is why the pin itself lives in
+ * the SDK now: the TELETEXT door sends callers to the same machine, and two
+ * doors disagreeing about the model is two different sets of missing ROMs.
  */
-export const MODEL = 'B-DFS1.2';
+export { MODEL };
 
 /**
  * The DFS version the pinned model's 8271 disc controller expects.
@@ -205,22 +208,14 @@ export function listTitles(startDir?: string): Title[] {
   return titles.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * The URL that runs one title.
- *
- * The board serves the emulator at /beeb/ and maps its `discs/` and
- * `tapes/` paths onto the board's software folder, so the emulator's own
- * loading works unmodified - no patching of a GPL bundle.
- */
+/** The URL that runs one title, through the SDK's shared builder. */
 export function urlFor(title: Title, options: { autoboot?: boolean } = {}): string {
-  const parameter = title.kind === 'tape' ? 'tape' : 'disc1';
-  const autoboot = options.autoboot === false ? '' : '&autoboot';
-  return `/beeb/?model=${MODEL}&${parameter}=${encodeURIComponent(title.file)}${autoboot}`;
+  return emulatorUrl({ file: title.file, kind: title.kind, autoboot: options.autoboot });
 }
 
 /** An empty machine, for a caller who just wants BASIC. */
 export function bareUrl(): string {
-  return `/beeb/?model=${MODEL}`;
+  return emulatorUrl();
 }
 
 function prettyName(file: string): string {

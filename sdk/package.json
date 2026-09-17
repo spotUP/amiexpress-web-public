@@ -109,6 +109,12 @@
       "require": "./dist/petscii/frame/index.js",
       "default": "./dist/petscii/frame/index.js"
     },
+    "./beeb/emulator-url": {
+      "types": "./dist/beeb/emulator-url.d.ts",
+      "import": "./dist-esm/beeb/emulator-url.js",
+      "require": "./dist/beeb/emulator-url.js",
+      "default": "./dist/beeb/emulator-url.js"
+    },
     "./teletext": {
       "types": "./dist/teletext/index.d.ts",
       "import": "./dist-esm/teletext/index.js",
@@ -156,6 +162,12 @@
       "import": "./dist-esm/teletext/compose.js",
       "require": "./dist/teletext/compose.js",
       "default": "./dist/teletext/compose.js"
+    },
+    "./teletext/telesoftware": {
+      "types": "./dist/teletext/telesoftware.d.ts",
+      "import": "./dist-esm/teletext/telesoftware.js",
+      "require": "./dist/teletext/telesoftware.js",
+      "default": "./dist/teletext/telesoftware.js"
     },
     "./teletext/screen": {
       "types": "./dist/teletext/screen.d.ts",

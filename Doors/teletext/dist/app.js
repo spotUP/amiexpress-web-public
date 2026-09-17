@@ -16,6 +16,8 @@ exports.TeletextApp = void 0;
 const store_1 = require("@amiexpress/bbs-door-sdk/teletext/store");
 const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
 const library_1 = require("@amiexpress/bbs-door-sdk/teletext/library");
+const telesoftware_1 = require("@amiexpress/bbs-door-sdk/teletext/telesoftware");
+const emulator_url_1 = require("@amiexpress/bbs-door-sdk/beeb/emulator-url");
 const settings_1 = require("./settings");
 class TeletextApp {
     /**
@@ -37,6 +39,9 @@ class TeletextApp {
         this.notice = '';
         this.carousel = null;
         this.closed = false;
+        /** The program running on the board's BBC Micro, while one is. */
+        this.running = null;
+        this.onEmulatorClosed = () => this.onEmulatorReturn();
         this.session = session;
         this.root = root;
         this.settings = (0, settings_1.loadSettings)();
@@ -59,6 +64,7 @@ class TeletextApp {
     // --- Lifecycle --------------------------------------------------------
     start() {
         this.services = (0, library_1.listServices)(this.root ?? (0, library_1.teletextRoot)());
+        this.session.socket.on('emulator:closed', this.onEmulatorClosed);
         this.screen.begin();
         if (this.services.length === 0) {
             this.paintPicker();
@@ -81,6 +87,10 @@ class TeletextApp {
         this.closed = true;
         this.clearCarousel();
         this.keys.dispose();
+        this.session.socket.off?.('emulator:closed', this.onEmulatorClosed);
+        // A surface left open would outlive the door.
+        if (this.running)
+            this.session.socket.emit('emulator:close');
         this.screen.end();
     }
     handleInput(data) {
@@ -175,7 +185,12 @@ class TeletextApp {
             return this.typeDigit(ch);
         switch (ch) {
             case 'r':
-            case 'R': return this.follow('red');
+            case 'R': {
+                // The coloured keys keep their meaning; a telesoftware page simply
+                // has somewhere better for RED to go than a link it does not carry.
+                const program = this.programHere();
+                return program ? this.runProgram(program) : this.follow('red');
+            }
             case 'g':
             case 'G': return this.follow('green');
             case 'y':
@@ -281,7 +296,14 @@ class TeletextApp {
     current() {
         return this.loaded ? this.loaded.index.get(this.page) : null;
     }
+    /** The program broadcast on the page being looked at, if any. */
+    programHere() {
+        return (0, telesoftware_1.programOnPage)(this.loaded?.telesoftware, this.page);
+    }
     paintPage() {
+        const program = this.programHere();
+        if (program)
+            return this.paintProgram(program);
         const page = this.current();
         const subpage = (0, store_1.subpageAt)(page, this.subpage);
         if (!subpage) {
@@ -293,12 +315,90 @@ class TeletextApp {
         this.paintStatus();
         this.scheduleCarousel();
     }
+    /**
+     * A telesoftware page, shown as what it is.
+     *
+     * These pages were never meant to be looked at. Their rows carry a
+     * program in the Redefinable Telesoftware Format, and painting them as
+     * characters gives a screen of mojibake - which is exactly what it did,
+     * and read as a rendering bug rather than as software.
+     *
+     * So the page is described instead of drawn, and the caller is offered
+     * the thing the page was for.
+     */
+    paintProgram(program) {
+        this.clearCarousel();
+        this.screen.clear();
+        this.screen.line(1, `TELESOFTWARE${' '.repeat(12)}P${(0, store_1.formatPageNumber)(this.page)}`, '\x1b[1;37m');
+        this.screen.line(2, '-'.repeat(40), '\x1b[36m');
+        this.screen.line(4, (0, screen_1.fit)(program.title.toUpperCase(), 40), '\x1b[1;33m');
+        const blocks = `${program.blocks} block${program.blocks === 1 ? '' : 's'}`;
+        this.screen.line(6, `Broadcast on this page in ${blocks}.`);
+        this.screen.line(7, program.complete ? 'Every block was recovered.' : 'Some blocks are missing.');
+        this.screen.line(9, 'On the BBC Micro it is:', '\x1b[0;36m');
+        this.screen.line(10, (0, screen_1.fit)(program.command, 40), '\x1b[1;37m');
+        if (!program.intact) {
+            this.screen.line(12, 'The tape damaged this one: it loads', '\x1b[1;31m');
+            this.screen.line(13, 'but will not run.', '\x1b[1;31m');
+        }
+        else if (program.kind === 'tokenised') {
+            this.screen.line(12, 'PRESS RED TO PLAY IT', '\x1b[1;31m');
+        }
+        else {
+            this.screen.line(12, 'PRESS RED TO LOAD IT', '\x1b[1;31m');
+        }
+        this.paintStatus();
+    }
+    /**
+     * Hand the program to the board's BBC Micro, already typed in.
+     *
+     * AUTOTYPE RATHER THAN AUTOBOOT, and they are exclusive - jsbeeb takes
+     * the first of autoboot, autochain, autorun, autotype that it finds, so a
+     * URL carrying both boots the disc and ignores the program. Booting would
+     * only reach the disc's catalogue; typing reaches THIS program, which is
+     * the one the caller was reading about.
+     */
+    runProgram(program) {
+        const disc = this.loaded?.telesoftware?.disc;
+        if (!disc) {
+            this.notice = 'this service has no disc to run it from';
+            this.paintStatus();
+            return;
+        }
+        this.running = program;
+        this.clearCarousel();
+        this.session.socket.emit('emulator:open', {
+            url: (0, emulator_url_1.emulatorUrl)({ file: disc, autotype: `${program.command}\n` }),
+            title: program.title,
+            machine: 'BBC MICRO',
+        });
+        this.screen.clear();
+        this.screen.line(1, 'TELESOFTWARE', '\x1b[1;37m');
+        this.screen.line(2, '-'.repeat(40), '\x1b[36m');
+        this.screen.line(4, (0, screen_1.fit)(`Loading ${program.title.toUpperCase()}...`, 40), '\x1b[1;33m');
+        this.screen.line(6, 'Close the BBC Micro to come back');
+        this.screen.line(7, 'to the page.');
+        this.paintStatus();
+    }
+    onEmulatorReturn() {
+        if (this.closed)
+            return;
+        this.running = null;
+        this.paintPage();
+    }
     paintStatus() {
         this.screen.status(this.view === 'picker' ? this.pickerBar() : this.pageBar());
     }
     pageBar() {
         if (this.notice)
             return `! ${this.notice}`;
+        if (this.running)
+            return `RUNNING ${this.running.file}  Q=Quit`;
+        const program = this.programHere();
+        if (program) {
+            const verb = program.intact ? 'R=Run' : 'DAMAGED';
+            return `P${(0, store_1.formatPageNumber)(this.page)} ${verb} H=Home Q=Quit`;
+        }
         const page = this.current();
         const count = (0, store_1.subpageCount)(page);
         const parts = [];

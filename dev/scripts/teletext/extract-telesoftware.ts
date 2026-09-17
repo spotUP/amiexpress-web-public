@@ -28,9 +28,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { extractTeletextLines } from '../../../sdk/teletext/marco/tti/index';
-import { decodeChain, inspectProgram, type ProgramShape } from '../../../sdk/teletext/telesoftware';
+import {
+  decodeChain,
+  inspectProgram,
+  loadCommandFor,
+  type ProgramShape,
+  type TelesoftwareListing,
+  type TelesoftwareMap,
+} from '../../../sdk/teletext/telesoftware';
 import { buildDfsImage, sectorsFor, type DfsFile } from '../../../sdk/teletext/dfs-image';
 import { softwareDirFor } from './telesoftware-paths';
+import { pageNumberFromFilename, TELESOFTWARE_FILE } from '../../../sdk/teletext/library';
+import { formatPageNumber } from '../../../sdk/teletext/store';
 import type { TeletextLine } from '../../../sdk/teletext/packet27';
 
 function main(): void {
@@ -55,7 +64,11 @@ function main(): void {
     return;
   }
 
+  // The page number comes from the community filename (Pmpp-ssss.t42), so
+  // the decode can record WHERE each program was broadcast - which is what
+  // lets the teletext browser offer a program on the page that carried it.
   const pages = files.map(name => ({
+    page: pageNumberFromFilename(name) ?? undefined,
     lines: extractTeletextLines(
       new Uint8Array(fs.readFileSync(path.join(pagesDir, name))),
     ) as unknown as TeletextLine[],
@@ -73,6 +86,7 @@ function main(): void {
   console.log('  NAME     KIND        BYTES  LINES  LOAD WITH');
   const discFiles: DfsFile[] = [];
   const chainable: string[] = [];
+  const listings: TelesoftwareListing[] = [];
   for (const program of wanted) {
     const shape = inspectProgram(program.data);
     const name = dfsName(program.title);
@@ -85,6 +99,16 @@ function main(): void {
         `  ${String(shape.lines).padStart(5)}  ${loadCommand(name, shape)}${suspect}`,
     );
     discFiles.push({ name, data: program.data, ...addressesFor(shape) });
+    listings.push({
+      title: program.title,
+      file: name,
+      kind: shape.kind,
+      command: loadCommandFor(name, shape.kind),
+      pages: program.pages,
+      blocks: program.blocks.size,
+      complete: program.complete,
+      intact: shape.kind !== 'tokenised' || shape.terminated,
+    });
   }
 
   // A disc that boots. Option 3 is *EXEC, so !BOOT is typed at the prompt.
@@ -106,7 +130,20 @@ function main(): void {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, image);
   console.log(`\nwrote ${out}: ${image.length} bytes, ${needed} of ${sectors} sectors used`);
-  console.log('on the Beeb: hold SHIFT and press BREAK, or *CAT and use the commands above');
+
+  // The sidecar, beside the pages rather than beside the disc: it is the
+  // SERVICE that knows a page carried a program, and the browser reading it
+  // has the pack open already.
+  const map: TelesoftwareMap = { disc: path.basename(out), programs: listings };
+  const sidecar = path.join(pack, TELESOFTWARE_FILE);
+  fs.writeFileSync(sidecar, `${JSON.stringify(map, null, 2)}\n`);
+  const placed = listings.filter(entry => entry.pages.length > 0).length;
+  console.log(
+    `wrote ${sidecar}: ${listings.length} programs, ${placed} of them on a known page` +
+      ` (${listings.filter(e => e.pages.length).map(e => formatPageNumber(e.pages[0])).join(' ')})`,
+  );
+  console.log('\non the Beeb: hold SHIFT and press BREAK, or *CAT and use the commands above');
+  console.log('in TELETEXT: browse to a program page and press RED');
 }
 
 /**
@@ -125,11 +162,10 @@ function addressesFor(shape: ProgramShape): { load: number; exec: number } {
   return { load: 0x31900, exec: 0x38023 };
 }
 
-/** What the caller types to get this file going. */
+/** What the caller types to get this file going, for the listing printed here. */
 function loadCommand(name: string, shape: ProgramShape): string {
-  if (shape.kind === 'tokenised') return `CHAIN "${name}"`;
-  if (shape.kind === 'source') return `*EXEC ${name} then RUN`;
-  return `*TYPE ${name}`;
+  const command = loadCommandFor(name, shape.kind);
+  return shape.kind === 'source' ? `${command} then RUN` : command;
 }
 
 /**

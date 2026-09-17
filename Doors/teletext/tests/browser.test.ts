@@ -33,7 +33,13 @@ class FakeTerminal {
 
   session(teletextMode = false): DoorSession {
     return {
-      socket: { emit: (_event: string, data: string) => { this.chunks.push(data); } },
+      socket: {
+        emit: (_event: string, data?: unknown) => {
+          if (typeof data === 'string') this.chunks.push(data);
+        },
+        on: () => {},
+        off: () => {},
+      },
       bbsSession: { texttvMode: teletextMode, screenHeight: 25 },
       user: { username: 'tester' },
       close: () => { this.closed = true; },

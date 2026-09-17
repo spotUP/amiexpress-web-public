@@ -12,7 +12,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./browser.test'];
+const TEST_MODULES = ['./browser.test', './telesoftware.test'];
 
 const realLog = console.log;
 console.log = () => {};
