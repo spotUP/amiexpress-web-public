@@ -141,18 +141,19 @@ describe('the editor as a dialog', () => {
     expect(viewport.contains(within(dialog).getByTestId('ansi-canvas'))).toBe(true);
   });
 
-  it('goes back to the file on cancel, without writing', async () => {
-    // Cancel leaves the EDITOR, not the file: the dialog is where the file's
-    // details, its preview and its MCI list live now.
+  it('leaves without writing on cancel', async () => {
+    // Cancel shuts the whole dialog, which is a CHANGE from the page's old
+    // modal: that one dropped back to a read-only view of the same file,
+    // because the file's details lived on the page behind it. The one dialog
+    // carries those details itself and opens the editor as soon as the art
+    // decodes, so a read-only step in the middle is a dead end - there is no
+    // way back INTO the editor without reopening the dialog anyway.
     const user = userEvent.setup();
     const dialog = await openEditor(user);
 
     await user.click(within(dialog).getByRole('button', { name: /cancel editing/i }));
 
-    // The canvas is still on screen - the file's read-only view uses the same
-    // renderer - so the editor being gone is what "cancelled" looks like.
-    await waitFor(() => expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull());
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(false);
   });
 });

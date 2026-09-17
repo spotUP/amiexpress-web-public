@@ -124,14 +124,22 @@ describe('deleting a screen file', () => {
 describe('repairing a damaged screen', () => {
   beforeEach(() => { deleted = false; refuse = false; damaged = false; fetchMock.mockClear(); });
 
-  it('offers the fix on the file that is damaged, and asks the board to do it', async () => {
+  /*
+   * REPAIR SITS BESIDE THE COMPLAINT, in the one dialog.
+   *
+   * It used to sit in this page's own modal, which the one dialog replaced.
+   * The dialog is where a file's problems are reported, so that is where the
+   * fix belongs - and it is the sysop's, because repairing rewrites a file an
+   * artist may not own. Classification went the other way, onto the report
+   * row that makes the claim.
+   */
+  it('offers the fix beside the complaint, and asks the board to do it', async () => {
     damaged = true;
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
-
     await user.click(within(dialog).getByRole('button', { name: /put the escape byte back/i }));
 
     await waitFor(() => {

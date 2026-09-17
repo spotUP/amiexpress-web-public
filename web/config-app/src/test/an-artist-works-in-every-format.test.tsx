@@ -98,7 +98,7 @@ describe('an artist with a screen open', () => {
     const user = userEvent.setup();
     const onOpenPath = open();
 
-    const seq = await screen.findByRole('button', { name: 'PETSCII' });
+    const seq = await screen.findByRole('tab', { name: 'PETSCII' });
     await user.click(seq);
 
     expect(onOpenPath).toHaveBeenCalledWith('Themes/skope/Node/BBSTITLE.SEQ');
@@ -127,7 +127,7 @@ describe('an artist with a screen open', () => {
   it('can upload a drawing over the open screen, for artists who draw in PabloDraw', async () => {
     const user = userEvent.setup();
     open();
-    await screen.findByRole('button', { name: 'PETSCII' });
+    await screen.findByRole('tab', { name: 'PETSCII' });
 
     // The strip comes from the index and is there at once; the action row
     // waits on the file itself.

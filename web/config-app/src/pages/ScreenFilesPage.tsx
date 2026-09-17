@@ -1,38 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil, History } from 'lucide-react';
+import { FileImage, AlertTriangle, Download, Share2, Upload } from 'lucide-react';
 import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
-import {
-  everyCopyOption,
-  fanOutOptions,
-  writeEverywhereLabel,
-  type FanOutOption,
-} from './screen-write-plan';
 import { describeScreen } from './screen-descriptions';
 import { callSitesFor } from './screen-provenance';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
-import { ScreenArt } from '../components/ScreenArt';
 import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
-import { ScreenEditor } from '../components/ScreenEditor';
-import { RipScreenEditor } from '../components/RipScreenEditor';
-import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
-import { CodeChip } from '../components/CodeChip';
-import { Modal } from '../components/ui/Modal';
-import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { DoorArtDialog } from './DoorArtDialog';
+import { ArtistScreenDialog } from './ArtistScreenDialog';
+import { ErrorPanel } from '../components/ui/states';
+import type { ArtistTheme } from './use-my-theme';
 import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
-import { screenToCanvas, base64ToBytes, inkedHeight } from './screen-bytes';
-import { countTrueColourCodes, isPaletteArt } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
-import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
-  groupMciCodes, filterMciCodes, describeMciUsage, describeCarry,
-  type MciCodeShape, type MciFamilyShape, type CarryVerdict,
+  groupMciCodes, filterMciCodes, describeMciUsage,
+  type MciCodeShape, type MciFamilyShape,
 } from './screen-mci';
 import {
   duplicateGroups, describeGroup, partitionDuplicates, type DuplicateGroup,
@@ -40,8 +27,8 @@ import {
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
-  type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, type ScreenFileShape, buildGalleryItems, describeReader, describeProblem, screenPrecedence,
+  type ScopeResolutionShape, type ConferenceShape,
+  type ScreenFileShape, buildGalleryItems, describeProblem,
   formatsPresent, missingFormats,
   isDoorArt, isCommandsOnly, isNotArt,
 } from './screen-index-view';
@@ -100,62 +87,10 @@ function scopeName(scope: string, id: number | null, conferences?: ConferenceSha
  * nobody could answer before this page.
  */
 
-/**
- * The other FORMATS of the screen that is open, from the index.
- *
- * A screen is one thing a caller sees and several files: `BBSTITLE.txt` for an
- * ANSI caller, `BBSTITLE.SEQ` for a C64, `bbstitle.rip` for RIPscrip. Those are
- * one axis and belong in a tab strip.
- *
- * SECURITY LEVEL IS A DIFFERENT AXIS AND IS DELIBERATELY NOT HERE. `MENU250` is
- * not "the RIP version of MENU" - it is the menu a level-250 caller gets, its
- * own screen with its own formats. Putting the two on one strip would have a
- * sysop editing the sysop menu believing they were switching format.
- */
-function formatSiblings(
-  openPath: string | null,
-  screens: Array<{ resolutions: Array<{ variants: string[] }> }> | undefined,
-): string[] {
-  if (!openPath) return [];
-  const name = openPath.slice(openPath.lastIndexOf('/') + 1).toLowerCase();
-  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
-
-  for (const entry of screens ?? []) {
-    for (const res of entry.resolutions) {
-      if (res.variants.some(v => v.toLowerCase() === name)) {
-        return res.variants.map(v => `${dir}${v}`);
-      }
-    }
-  }
-  return [];
-}
 
 
 
-/** `BBSTITLE.SEQ` -> `PETSCII`, for a tab a designer can read. */
-function formatLabel(filePath: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith('.seq')) return 'PETSCII';
-  if (lower.endsWith('.rip')) return 'RIP';
-  if (lower.endsWith('.gr')) return 'Amiga ANSI';
-  /*
-   * Teletext is not "ANSI / text", and saying so put TWO tabs with the same
-   * name on one screen - Node0 carries BBSTITLE.txt and BBSTITLE.ttx, and the
-   * sysop had no way to tell which tab was which (2026-09-14). `.ttx` is this
-   * board's ANSI teletext, drawn like ANSI by the TDAText face; `.tti` is
-   * native packet-level teletext, which is listed and never parsed here.
-   */
-  if (lower.endsWith('.ttx')) return 'Teletext';
-  if (lower.endsWith('.tti')) return 'Teletext (native)';
-  if (lower.endsWith('.ibm')) return 'IBM ANSI';
-  return 'ANSI / text';
-}
 
-/** The last segment of a board path, for a download's fallback filename. */
-function baseName(filePath: string): string {
-  const parts = filePath.split(/[\\/]/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : 'screen.txt';
-}
 
 /**
  * The format chips' rule lives in `screen-index-view` beside the gallery it
@@ -164,28 +99,6 @@ function baseName(filePath: string): string {
  */
 export { formatsPresent, missingFormats };
 
-/**
- * The write that has only one destination: it happens, and says so.
- *
- * Rendered instead of the "where?" dialog when the fan-out offers a single
- * target. It fires ONCE - a write is not idempotent and a re-render must not
- * repeat it - and shows a line of text while it does, so the save is not a
- * silent nothing between pressing Save and the panel closing.
- */
-function SingleDestinationWrite(
-  { option, onDone }: { option: FanOutOption; onDone: (option: FanOutOption) => void | Promise<void> },
-) {
-  const fired = useRef(false);
-  useEffect(() => {
-    if (fired.current) return;
-    fired.current = true;
-    void onDone(option);
-  }, [option, onDone]);
-
-  return (
-    <p className="p-4 text-sm text-content-secondary">Saving...</p>
-  );
-}
 
 export function ScreenFilesPage() {
   const queryClient = useQueryClient();
@@ -209,6 +122,14 @@ export function ScreenFilesPage() {
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   /**
+   * The last failure from a board-wide action, shown on the page itself.
+   *
+   * It used to be rendered inside this page's own modal, which the one dialog
+   * replaced. The actions that set it - repair, delete, the share planner -
+   * are the page's, not the dialog's, so the message belongs on the page.
+   */
+  const [fileError, setFileError] = useState<string | null>(null);
+  /**
    * A door's art block living inside its config file (Bulls' Title logo in
    * Bulls.CFG) — no screen path, so the file dialog cannot open it. Opened
    * in the door-art dialog on the same canvas instead.
@@ -217,27 +138,6 @@ export function ScreenFilesPage() {
     command: string; doorName: string; file: string; section: string;
     label: string; maxLines: number; maxLineLength: number;
   } | null>(null);
-  const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
-  /**
-   * Whether the "what is this file" control is showing on a file the manager
-   * already reads as art. It is the rare correction, so it is not on screen
-   * until the sysop says the guess is wrong.
-   */
-  const [kindOpen, setKindOpen] = useState(false);
-  /** The sibling path a chosen file will be written to as a NEW format of the open screen. */
-  const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
-  const addFormatInput = useRef<HTMLInputElement | null>(null);
-  /**
-   * What replacing this file would do to its MCI codes, from the board's own
-   * dry run - and what the sysop chose to do about it.
-   *
-   * A screen is a program, and an ANSI editor writes no `~CC_`. Replacing a
-   * file used to drop every code in it without a word: the menu still painted
-   * and the keys stopped working.
-   */
-  const [carryVerdict, setCarryVerdict] = useState<CarryVerdict | null>(null);
-  const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
-  const uploadInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
   /**
@@ -265,84 +165,11 @@ export function ScreenFilesPage() {
    * sysop cannot find.
    */
   const [showUnread, setShowUnread] = useState(false);
-  /**
-   * Why the last action on the open file failed.
-   *
-   * Reported as "i deleted a screen file but the dialog did not close and the
-   * gallery was not refreshed" - which is what a REFUSED delete looks like:
-   * the toast says why and then goes away, and the dialog is still sitting
-   * there with the file in it. The reason belongs where the action was taken.
-   */
-  const [fileError, setFileError] = useState<string | null>(null);
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [editing, setEditing] = useState<EditorSurface | null>(null);
-  /** Rows with ink vs rows in the file, so a padded export is visible before a save trims it. */
-  const [editorRows, setEditorRows] = useState<{ inked: number; total: number } | null>(null);
-  /**
-   * True while the pending write came from the editor.
-   *
-   * The fan-out choice renders in the page for an uploaded file and inside the
-   * dialog for an edited one - "the page is extremely tall and unmanageable",
-   * and hunting for the choice after the editor closed was part of that.
-   */
-  const [editorWrite, setEditorWrite] = useState(false);
-  /**
-   * A file whose editor should open as soon as its bytes arrive.
-   *
-   * Reported as "there is no way to open the screen files? they are just
-   * listed": opening one meant clicking the row, finding the panel that
-   * appeared below a full-height table, clicking the path, then clicking Edit.
-   * Edit now sits on the row itself, and the bytes are fetched on the way.
-   */
-  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
-  /**
-   * A .rip screen open in the RIP editor.
-   *
-   * Kept apart from `editing` because the two editors hold different things:
-   * the ANSI one owns a canvas of cells, the RIP one owns a parsed document.
-   * A .rip file has no cells - it is a vector program - so routing it into
-   * the ANSI editor would show a blank 80x25 and save that over the artwork.
-   */
-  const [editingRip, setEditingRip] = useState(false);
-  const [editingPetscii, setEditingPetscii] = useState(false);
 
-  /**
-   * Put every editor away.
-   *
-   * Three booleans decide which editor is mounted and nothing cleared them
-   * together, so one left set by a previous file outlived the file it was
-   * editing.
-   */
-  const closeEditors = () => {
-    setEditing(null);
-    setEditingRip(false);
-    setEditingPetscii(false);
-    setEditorWrite(false);
-  };
 
-  /**
-   * AN EDITOR BELONGS TO THE FILE IT WAS OPENED FOR.
-   *
-   * Clearing them by hand at each place the open file changes is the shape
-   * that failed: there are ten such places, `closeEditors` was called from
-   * one, and the modal's own onClose cleared two of the three booleans -
-   * PETSCII was added last and that list never grew. So an artist who edited
-   * a `.seq`, closed the dialog and opened anything else got the PETSCII
-   * editor over the new file's bytes, with no format strip to leave by, and a
-   * Save would have written C64 screen codes over their ANSI.
-   *
-   * Reported by the sysop on `Utils/samilog/samilog.header.txt.gr`
-   * (2026-09-14): "samilog opened as petscii and there are no buttons to
-   * switch after i had nother petscii screen loaded before".
-   *
-   * Binding it to the open file makes the stale case unreachable rather than
-   * merely handled: the editor that opens next is the one the routing effect
-   * below chooses for THIS file.
-   */
-  useEffect(() => { closeEditors(); }, [openFile]);
   const detailRef = useRef<HTMLElement>(null);
-  const [showRevisions, setShowRevisions] = useState(false);
 
   /**
    * Which theme the page is looking through. `default` is the board's own
@@ -366,6 +193,29 @@ export function ScreenFilesPage() {
     queryFn: () => apiClient.getScreenThemes(),
   });
   const themeList = (themeEnvelope as { data?: { themes?: Array<{ slug: string; title: string; status: string }> } } | undefined)?.data;
+  /**
+   * The theme the dialog is standing in, as an object.
+   *
+   * The page picks a theme by SLUG, in its "Viewing" selector; the dialog
+   * takes the whole theme, because it names the theme in its own sentences
+   * ("Redraw this in ..."). `default` is the board itself and has no entry in
+   * the registry, which is why it is spelled out here rather than looked up.
+   */
+  const dialogTheme: ArtistTheme = useMemo(() => {
+    const found = themeList?.themes?.find(t => t.slug === theme);
+    if (found) return found as ArtistTheme;
+    return {
+      slug: 'default',
+      title: "the board's own screens",
+      status: 'live',
+      dir: '',
+      owner: '',
+      screens: null,
+      // A sysop on this page may write the board, which is what `default` is.
+      mine: true,
+    };
+  }, [themeList, theme]);
+
   const themeTitle = theme === 'default'
     ? 'the board itself'
     : (themeList?.themes?.find(t => t.slug === theme)?.title ?? theme);
@@ -417,14 +267,6 @@ export function ScreenFilesPage() {
     }>,
   });
 
-  const { data: file } = useQuery({
-    // Through the theme being VIEWED: a theme's own file is read by nothing in
-    // the board's index, which is why every redrawn screen used to claim "No
-    // screen on this board reads this file".
-    queryKey: ['screen-file', openFile, theme],
-    queryFn: async () => (await apiClient.getScreenFile(openFile as string, theme)).data,
-    enabled: !!openFile,
-  });
 
   useEffect(() => {
     if (!openScreen || !detailRef.current) return;
@@ -457,222 +299,12 @@ export function ScreenFilesPage() {
     global: visible.filter(row => row.dirType === 'global'),
   }), [visible]);
 
-  useEffect(() => {
-    if (!pendingEdit || !file || openFile !== pendingEdit) return;
-    // Routed by FORMAT, because the four screen types are different media and
-    // one editor cannot serve them: a .rip is a vector program, a .seq is
-    // PETSCII bytes, ANSI and plain text are cells.
-    if (file.format === 'rip') {
-      setEditing(null);
-      setEditingPetscii(false);
-      setEditingRip(true);
-      setPendingEdit(null);
-      return;
-    }
-    if (file.format === 'petscii') {
-      setEditing(null);
-      setEditingRip(false);
-      // A .seq is screen codes and colour RAM, not cells - so it does not go
-      // through screenToCanvas below, the same way a .rip does not.
-      setEditingPetscii(true);
-      setPendingEdit(null);
-      return;
-    }
-    if (file.format !== 'ansi' && file.format !== 'text') {
-      // Nothing here edits it, and whatever is open belongs to another file:
-      // it must not stay on screen over this one.
-      setEditing(null);
-      setPendingEdit(null);
-      return;
-    }
-    setEditingRip(false);
-    setEditingPetscii(false);
-
-    /*
-     * COLOUR THE EDITOR CANNOT HOLD IS REFUSED. COLOUR IT CAN IS NOT.
-     *
-     * PabloDraw and Moebius write 24-bit colour as `ESC[0;r;g;bt`, and a
-     * `Cell` holds a 0-15 palette index, so the codec cannot write those
-     * sequences back. That was read as "any file carrying them is 24-bit art",
-     * and this refused all of them.
-     *
-     * Wrong, and it locked the board's artist out of his own screen. The
-     * editors write a document's PALETTE out as RGB, so ordinary
-     * sixteen-colour art arrives full of 24-bit syntax: all 337 sequences in
-     * `h7-up_rough_doors.asc` are VGA palette entries with a rounding wobble
-     * of one or two per channel, furthest 12 away in squared distance. "he
-     * never actively tried to make it 24-bit" (the artist, via the sysop,
-     * 2026-09-17) - and he was right.
-     *
-     * So the question is not how the file was WRITTEN but what it HOLDS.
-     * Palette art round-trips through the editor with nothing lost and opens
-     * normally. Only a colour genuinely off the sixteen is refused, and that
-     * refusal still earns itself: the damage happens on SAVE, one keystroke
-     * from the edit the sysop came to make, and a flattened drawing cannot be
-     * got back from the file.
-     */
-    const bytes = base64ToBytes(file.content);
-    if (!isPaletteArt(bytes)) {
-      setEditing(null);
-      setPendingEdit(null);
-      showError(
-        `This screen carries ${countTrueColourCodes(bytes)} 24-bit colour codes with colours `
-        + 'outside the sixteen - saving here would flatten them. Edit it in PabloDraw or Moebius.',
-      );
-      return;
-    }
-
-    let cancelled = false;
-    /*
-     * THE CANVAS GETS THE ART, NEVER THE CODES.
-     *
-     * A code on its own row is characters like any other once it is on the
-     * canvas, so a sysop removing rows removes codes with them - which is how
-     * `Conf2/bull20.txt` lost its `~SP` and `~CC_ctop` (2026-09-16). The board
-     * splits the file for us (`artContent`, with `codeHead`/`codeTail` beside
-     * it) using the same rule the carry uses, so the two cannot disagree about
-     * what a code line is. The codes are shown beside the editor, read-only,
-     * and the carry puts them back around the saved art.
-     *
-     * `?? file.content` for a board that has not been redeployed yet: the
-     * editor keeps working exactly as before against an older API.
-     */
-    screenToCanvas(file.artContent ?? file.content).then(canvas => {
-      if (cancelled) return;
-      setEditing(createSurface(canvas));
-      // A padded export is the file's own doing, not the editor's: this board
-      // has art saved onto 100 rows with 18 of them inked. Saying so up front
-      // explains a tall canvas, and the save already trims to the inked rows.
-      setEditorRows({ inked: inkedHeight(canvas), total: canvas.length });
-      setPendingEdit(null);
-    });
-    return () => { cancelled = true; };
-  }, [pendingEdit, file, openFile]);
 
   const entry: ScreenIndexEntryShape | undefined = data?.screens.find(s => s.screen === openScreen);
 
-  /**
-   * The fan-out choices for whatever file is open.
-   *
-   * `openScreen` is set by a row in the tables and NOT by the gallery, and the
-   * gallery is how a designer reaches a screen. Without a screen name there
-   * were no options at all, so a replacement picked from the gallery had
-   * nothing to click: the file was chosen and the write could not be applied.
-   * `fanOutOptions` always offers "this file only", so the name is passed as
-   * empty rather than the whole list being skipped.
-   */
-  const options: FanOutOption[] = useMemo(
-    () => (data && openFile ? fanOutOptions(data, openScreen ?? '', openFile) : []),
-    [data, openScreen, openFile],
-  );
 
-  /*
-   * What the page DOES, and what it merely offers.
-   *
-   * A screen exists once per node because AmiExpress keeps it that way, not
-   * because a sysop wants forty-one different titles, so writing every copy
-   * is the action and the rest are alternatives beside it.
-   */
-  const everyCopy = useMemo(() => everyCopyOption(options), [options]);
-  const otherWrites = useMemo(
-    () => options.filter(option => option.choice !== everyCopy?.choice),
-    [options, everyCopy],
-  );
 
-  /** Every destination the save could go to, the write-everywhere one first. */
-  const writeOptions = useMemo(
-    () => [...(everyCopy ? [everyCopy] : []), ...otherWrites],
-    [everyCopy, otherWrites],
-  );
 
-  /** Read the chosen file as base64 - bytes, never text, all the way through. */
-  const readAsBase64 = (chosen: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-      reader.readAsDataURL(chosen);
-    });
-
-  /**
-   * Ask the board what replacing this file would do to its codes.
-   *
-   * A dry run: it answers 200 with the verdict and writes nothing, so it is
-   * safe to run the moment a file is picked and before anything is chosen.
-   * The verdict is for the file being replaced; every other target of a
-   * fan-out keeps its OWN codes, which is the board's rule and not this
-   * page's.
-   */
-  const previewCarry = async (filePath: string, bytes: string) => {
-    try {
-      const res = await apiClient.putScreenFile(filePath, bytes, [filePath], {
-        carryCodes: 'above',
-        dryRun: true,
-      });
-      setCarryVerdict((res.data?.targets ?? [])[0] ?? null);
-    } catch {
-      // A verdict is an aid, not a gate. If the board cannot answer, the
-      // replace still works exactly as it did before this existed.
-      setCarryVerdict(null);
-    }
-  };
-
-  /**
-   * Write a chosen file as the open screen's missing format - to every node
-   * that has the open file, so a .seq added to BBSTITLE reaches all forty
-   * copies and not only Node1's. No MCI carry: there is no existing file of
-   * this format to carry from.
-   */
-  const addFormat = async (chosen: File) => {
-    if (!addingFormat || !openFile) return;
-    try {
-      const bytes = await readAsBase64(chosen);
-      // The same rule the upload uses, so a new format lands on the same set
-      // of files the sysop would have written the screen itself to.
-      const copies = everyCopy?.targets ?? [openFile];
-      const swap = (p: string) => p.replace(/\.[^./]+$/, '') + '.' + addingFormat.ext;
-      const targets = [...new Set(copies.map(swap))];
-      await apiClient.putScreenFile(addingFormat.path, bytes, targets, { carryCodes: 'none' });
-      showSuccess(`Added the ${addingFormat.label} version - ${targets.length} file${targets.length === 1 ? '' : 's'}`);
-      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
-      setOpenFile(addingFormat.path);
-    } catch (error) {
-      showError((error as Error).message);
-    } finally {
-      setAddingFormat(null);
-    }
-  };
-
-  const applyWrite = async (option: FanOutOption) => {
-    if (!pendingUpload || !openFile) return;
-    try {
-      if (option.choice === 'share-then-write') {
-        const nodes = option.targets
-          .map(t => Number(/^Node(\d+)/.exec(t)?.[1]))
-          .filter(n => Number.isFinite(n));
-        await apiClient.shareScreens(nodes, sharedDir);
-      }
-      const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
-      // Per target: node 1's copy names Node1 and node 7's names Node7, so the
-      // board reads each target's own file rather than one plan for all.
-      /*
-       * An EDITOR save always carries. The canvas never held the codes, so
-       * "do not carry" would not mean "the sysop retyped them" - it would mean
-       * losing them, which is the failure this whole path exists to stop. An
-       * upload still honours the choice, because a file somebody typed codes
-       * into is allowed to be the whole truth.
-       */
-      const placement = editorWrite && carryCodes === 'none' ? 'above' : carryCodes;
-      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets, { carryCodes: placement });
-      showSuccess(`Wrote ${targets.length} file${targets.length === 1 ? '' : 's'}`);
-      setPendingUpload(null);
-      setCarryVerdict(null);
-      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
-      queryClient.invalidateQueries({ queryKey: ['screen-file', openFile] });
-    } catch (error) {
-      showError((error as Error).message);
-    }
-  };
 
   /**
    * Ask the backend, per node, whether it can read the shared directory - and
@@ -811,38 +443,7 @@ export function ScreenFilesPage() {
     }
   };
 
-  /**
-   * What the sysop says a file IS, over what the manager guessed.
-   *
-   * The classification is a heuristic - by name, and by the signature of the
-   * tool that writes a file - and this board has been told once already that
-   * its live screens were read by nothing.
-   */
-  const flagFile = async (target: string, flag: 'backup' | 'runtime' | 'art' | null) => {
-    try {
-      const res = await apiClient.flagScreen(target, flag);
-      showSuccess(res.message ?? 'Marked');
-      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
-      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
-    } catch (error) {
-      showError((error as Error).message);
-    }
-  };
 
-  const repairFile = async (target: string) => {
-    setFileError(null);
-
-    try {
-      const res = await apiClient.repairScreenFile(target);
-      showSuccess(res.message ?? 'Repaired');
-      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
-      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
-    } catch (error) {
-      const status = (error as ApiError).status;
-      setFileError(status ? `${(error as Error).message} (HTTP ${status})` : (error as Error).message);
-      showError((error as Error).message);
-    }
-  };
 
   const removeFile = async (target: string) => {
     /*
@@ -1231,12 +832,14 @@ export function ScreenFilesPage() {
       header: '',
       align: 'right',
       cell: item => (
-        <button
-          className="underline text-status-danger"
-          onClick={event => { event.stopPropagation(); removeFile(item.relPath); }}
-        >
-          Delete
-        </button>
+        <span className="flex items-center justify-end gap-3">
+          <button
+            className="underline text-status-danger"
+            onClick={event => { event.stopPropagation(); removeFile(item.relPath); }}
+          >
+            Delete
+          </button>
+        </span>
       ),
     },
   ];
@@ -1704,6 +1307,10 @@ export function ScreenFilesPage() {
         value the workspace strip did not recognise, which sent the workspace
         back to its default and made these tabs impossible to link to.
       */}
+      {fileError && (
+        <ErrorPanel message={fileError} onRetry={() => setFileError(null)} />
+      )}
+
       <TabbedWorkspace tabs={tabs} param="view" />
 
       {entry && (
@@ -1743,15 +1350,17 @@ export function ScreenFilesPage() {
             onRowClick={res => {
               if (!res.file) return;
               setFileError(null);
+              /*
+               * OPENING IS ALL THIS DOES NOW.
+               *
+               * It used to decide, from the file's format, whether to route
+               * into an editor - and the list it decided from is how a .seq
+               * row came to open read-only with no way onward ("no editor,
+               * just a preview", sysop 2026-09-14). The dialog knows its own
+               * formats and says in a sentence what it can do with each, so
+               * a caller no longer has to know before it opens.
+               */
               setOpenFile(res.file);
-              const format = data?.files[res.file]?.format;
-              // `petscii` joined this list on 2026-09-14, when a PETSCII
-              // editor first existed to route to. Without it a .seq row
-              // opened the read-only view and there was no way onward, which
-              // reads as "no editor, just a preview" (sysop, same day).
-              if (format === 'ansi' || format === 'text' || format === 'rip' || format === 'petscii') {
-                setPendingEdit(res.file);
-              }
             }}
           />
 
@@ -1813,637 +1422,30 @@ export function ScreenFilesPage() {
       )}
 
       {/*
-        The editor is a dialog, not another section.
+        ONE DIALOG OVER A SCREEN, and this page used to carry a second.
+        `ArtistScreenDialog` already renders the identity, the sentence naming
+        what the slot is, and every way forward - and it already takes `sysop`,
+        `auditing` and `onSwitchTheme`, because it was built to be the sysop's
+        dialog too. This page's own modal answered the same questions by
+        different rules: an inspector, a format strip, three editor mounts and
+        a fan-out write picker, roughly seven hundred lines of them.
 
-        An 80x25 canvas plus its tools under a table, a resolutions list and a
-        preview made a page nobody could work in - reported as "the page is
-        extremely tall and unmanageable". Saving stays in here too: the fan-out
-        choice is the last step of editing, not something to find afterwards.
+        "two dialogs over the same files, behind two levels of tabs, answering
+        the same question by different rules" - the diagnosis in
+        thoughts/shared/plans/2026-09-14-screens-one-page-one-dialog-design.md,
+        whose step 3 this is.
       */}
-      <Modal
-        open={!!openFile}
-        title={openFile ?? 'A screen file'}
-        maxWidth="max-w-5xl"
-        onClose={() => {
-          // Closing clears the open file; the effect above puts the editors
-          // away. This used to list them itself and miss PETSCII.
-          setOpenFile(null);
-          setPendingUpload(null);
-        }}
-      >
-        {/*
-          The format strip lives ABOVE the editor modes, not inside the
-          read-only view: clicking a file opens it straight into the editor,
-          and a sysop drawing BBSTITLE's ANSI is exactly the person who needs
-          "+ PETSCII" and "+ RIP" in front of them.
-        */}
-        {openFile && file && !pendingUpload && (
-          <>
-        {(formatSiblings(openFile, data?.screens).length > 1
-          || missingFormats(openFile, formatSiblings(openFile, data?.screens)).length > 0) && (
-          <div className="flex flex-wrap gap-1 border-b border-surface-3 pb-2" role="tablist">
-            {formatSiblings(openFile, data?.screens).map(sibling => (
-              <button
-                key={sibling}
-                type="button"
-                role="tab"
-                aria-selected={sibling === openFile}
-                /*
-                 * A TAB ROUTES LIKE A ROW DOES.
-                 *
-                 * It used only to change the open file, so whichever editor
-                 * was already on screen stayed: open an ANSI screen, click the
-                 * PETSCII tab, and the ANSI editor was still mounted, drawing
-                 * the .seq bytes as text - "petscii selected it shows ansi"
-                 * (sysop, 2026-09-14), the PETSCII art arriving as scattered
-                 * dots. The FORMAT decides the editor, so changing format has
-                 * to re-decide it.
-                 */
-                onClick={() => { closeEditors(); setOpenFile(sibling); setPendingEdit(sibling); }}
-                className={
-                  sibling === openFile
-                    ? 'px-3 py-1 text-sm rounded-t bg-surface-3 text-content-primary'
-                    : 'px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors'
-                }
-                title={sibling}
-              >
-                {formatLabel(sibling)}
-              </button>
-            ))}
-            {!isDoorArt(file) && missingFormats(openFile, formatSiblings(openFile, data?.screens)).map(missing => (
-              <button
-                key={missing.ext}
-                type="button"
-                className="px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors border border-dashed border-surface-3"
-                title={`Upload a .${missing.ext} file as ${missing.path}`}
-                onClick={() => { setAddingFormat(missing); addFormatInput.current?.click(); }}
-              >
-                + {missing.label}
-              </button>
-            ))}
-            <input
-              ref={addFormatInput}
-              type="file"
-              data-testid="screen-add-format"
-              className="hidden"
-              accept={addingFormat ? `.${addingFormat.ext}` : undefined}
-              onChange={async e => {
-                const chosen = e.target.files?.[0];
-                e.target.value = '';
-                if (chosen) await addFormat(chosen);
-              }}
-            />
-          </div>
-        )}
-          </>
-        )}
-        {editingRip && !pendingUpload && file && (
-          <RipScreenEditor
-            content={file.content}
-            filePath={openFile ?? undefined}
-            // The same exit an ANSI edit takes: bytes into the fan-out, with
-            // the same backup, the same targets and the same refusals. A RIP
-            // screen is not a second write path.
-            onSave={bytes => {
-              setPendingUpload({ bytes, name: 'the edited screen' });
-              setEditorWrite(true);
-            }}
-            onCancel={() => { setEditingRip(false); setEditorWrite(false); }}
-          />
-        )}
+      <ArtistScreenDialog
+        path={openFile}
+        theme={dialogTheme}
+        index={data}
+        sysop
+        onClose={() => setOpenFile(null)}
+        onOpenPath={setOpenFile}
+        onSwitchTheme={setTheme}
+        auditing={theme !== 'default'}
+      />
 
-        {editingPetscii && !pendingUpload && file && (
-          <PetsciiScreenEditor
-            content={file.content}
-            filePath={openFile ?? undefined}
-            mci={file.mci ?? []}
-            // The same exit every other edit takes: bytes into the fan-out,
-            // with the same backup, the same targets and the same refusals.
-            // A PETSCII screen is not a second write path.
-            onSave={bytes => {
-              setPendingUpload({ bytes, name: 'the edited screen' });
-              setEditorWrite(true);
-            }}
-            onCancel={() => { setEditingPetscii(false); setEditorWrite(false); }}
-          />
-        )}
-
-        {editing && !pendingUpload && editorRows && editorRows.total > editorRows.inked && (
-          <p className="text-xs text-content-secondary">
-            This file is {editorRows.total} rows, {editorRows.inked} of them drawn on.
-            The blank rows below the art are padding the file already carried; saving writes
-            the {editorRows.inked} rows with ink and drops them.
-          </p>
-        )}
-        {editing && !pendingUpload && (
-          <ScreenEditor
-            surface={editing}
-            mci={file?.mci ?? []}
-            filePath={openFile ?? undefined}
-            // The page owns the CP437 bridge, so it decodes the picked file and
-            // hands the editor a surface. Nothing is written until Save.
-            onLoadFile={async chosen => {
-              const bytes = await readAsBase64(chosen);
-              setEditing(createSurface(await screenToCanvas(bytes)));
-            }}
-            onChange={setEditing}
-            onDownload={
-              openFile
-                ? () =>
-                    downloadScreen(
-                      `/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`,
-                      baseName(openFile),
-                    )
-                : undefined
-            }
-            // An edit produces bytes, and bytes go out the way an uploaded file
-            // does - the same fan-out, the same backup, the same refusals. The
-            // editor is not a second write path.
-            onSave={bytes => {
-              setPendingUpload({ bytes, name: 'the edited screen' });
-              setEditorWrite(true);
-            }}
-            onCancel={() => { setEditing(null); setEditorWrite(false); }}
-          />
-        )}
-
-        {/*
-          A QUESTION WITH ONE ANSWER IS NOT A QUESTION.
-      
-          The editor saves through the upload's fan-out on purpose - same
-          backup, same refusals, no second write path - and that fan-out asks
-          WHERE because most screens on this board exist in many copies (forty
-          one nodes, a theme's mirror). A file that has exactly one copy has
-          nothing to choose: `Utils/samilog/samilog.header.txt.gr` offered a
-          single button reading "Write this file" and then a way back, which
-          the sysop met as "why does it ask this???" (2026-09-14).
-      
-          So one destination writes itself and the dialog never opens. Two or
-          more still ask, because then the answer matters.
-        */}
-        {editorWrite && pendingUpload && writeOptions.length === 1 && (
-          <SingleDestinationWrite
-            option={writeOptions[0]}
-            onDone={async option => {
-              await applyWrite(option);
-              setEditing(null);
-              setEditorWrite(false);
-              setOpenFile(null);
-            }}
-          />
-        )}
-
-        {editorWrite && pendingUpload && writeOptions.length > 1 && (
-          <div className="space-y-2 p-4">
-            <p className="text-sm text-content-primary">
-              Write <span className="font-mono">{openFile}</span> where?
-            </p>
-            {writeOptions.map((option, at) => (
-              <button
-                key={option.choice}
-                className="block text-left underline"
-                onClick={async () => {
-                  await applyWrite(option);
-                  // The write was the task: close, rather than leaving the
-                  // sysop in a dialog with nothing left to do in it.
-                  setEditing(null);
-                  setEditorWrite(false);
-                  setOpenFile(null);
-                }}
-              >
-                {at === 0 && everyCopy ? writeEverywhereLabel(option) : option.label}
-              </button>
-            ))}
-            <button
-              className="block text-left text-content-secondary underline"
-              onClick={() => { setPendingUpload(null); setEditorWrite(false); }}
-            >
-              back to the editor
-            </button>
-          </div>
-        )}
-
-        {/*
-          The file itself: what it is, what it runs, and what a caller sees.
-          This was a section under the page, which is what made the page
-          "extremely tall and unmanageable" - the tab list, the screens table,
-          the resolutions and then all of this.
-        */}
-        {openFile && !file && !editing && (
-          <div className="p-4 space-y-2" data-testid="file-skeleton">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-surface-2" />
-            <div className="h-40 animate-pulse bg-surface-2" />
-          </div>
-        )}
-
-        {openFile && file && !editing && !editingRip && !editingPetscii && !editorWrite && (
-          <div className="space-y-3 p-4">
-            {/*
-              One tab per FORMAT of this screen. Before this the other formats
-              were listed as text in the table and could not be opened at all,
-              so a board's PETSCII and RIP art was invisible here.
-            */}
-            {fileError && (
-              <p className="text-sm text-status-danger">
-                That did not work: {fileError}
-              </p>
-            )}
-            {/*
-              Which conference this file belongs to, by NAME.
-              `Conf3/bull20.txt` says nothing about which board section a
-              designer is about to replace - and the directory number is not
-              the conference number: on this board conference 1 lives in
-              Conf2. The name is the only thing a sysop recognises.
-            */}
-            {conferenceOfPath(openFile, data?.conferences) && (
-              <p className="text-sm text-content-primary">
-                {conferenceOfPath(openFile, data?.conferences)}
-              </p>
-            )}
-            <p className="text-sm text-content-secondary">
-              {file.bytes} bytes, {file.format}
-              {file.sauce?.width && file.sauce?.height
-                ? `, ${file.sauce.width}x${file.sauce.height}`
-                : ''}
-            </p>
-
-            {/* The artist signed it; the manager should say so. */}
-            {file.sauce && (file.sauce.title || file.sauce.author) && (
-              <p className="text-sm text-content-primary">
-                {file.sauce.title || 'Untitled'}
-                {file.sauce.author && ` by ${file.sauce.author}`}
-                {file.sauce.group && ` of ${file.sauce.group}`}
-                {file.sauce.date && (
-                  <span className="text-content-secondary"> ({file.sauce.date})</span>
-                )}
-              </p>
-            )}
-
-            {/*
-              What this file IS, before anything else. A path like
-              Conf2/bull20.txt does not say "the bulletin a caller meets on
-              joining Amiga Demoscene, if their security level is 20 to 24" -
-              and that is the sentence a sysop or a designer needs.
-            */}
-            {/*
-              * WHICH COPY THE BOARD SERVES.
-              *
-              * A theme covers the board's screen rather than deleting it, so
-              * two real files with real readers sit in this list looking
-              * identical - and on the live board they WERE all but identical,
-              * differing by one `~XISUBSCAN` line that executes rather than
-              * draws. Without this the sysop is left to guess which a caller
-              * gets ("they look identical", 2026-09-15).
-              */}
-            {data && file.relPath && (() => {
-              const verdict = screenPrecedence(file as ScreenFileShape, data as never);
-              if (verdict.covers.length === 0 && verdict.coveredBy.length === 0) return null;
-              return (
-                <p className="text-sm text-accent">
-                  {verdict.serves
-                    ? `Served to callers wearing ${verdict.serves}. It covers ${verdict.covers.join(', ')}, which everyone else still gets.`
-                    : `Covered by ${verdict.coveredBy.map(c => c.path ?? `${c.theme}'s copy`).join(', ')} for callers wearing ${verdict.coveredBy.map(c => c.theme).join(', ')}. This file is what everyone else gets.`}
-                </p>
-              );
-            })()}
-
-            {file.readBy && file.readBy.length > 0 ? (
-              <div className="text-sm">
-                <h4 className="text-content-primary">Read by</h4>
-                <ul className="text-content-secondary">
-                  {file.readBy.map((reader: ScreenReaderShape, i: number) => (
-                    <li key={i}>{describeReader(reader, data?.callersByLevel)}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              file.theme && theme !== file.theme ? (
-                <p className="text-sm text-content-secondary">
-                  Belongs to the theme <span className="font-mono">{file.theme}</span> - shown to
-                  callers wearing it in place of the board&apos;s screen. Select that theme above to
-                  see exactly where it is served.
-                </p>
-              ) : (
-                <p className="text-sm text-status-warn">
-                  No screen on this board reads this file - at any security level,
-                  in any screen type, and no other screen includes it.
-                  {theme !== 'default' && (
-                    <> Looked at through <span className="font-mono">{theme}</span>; the board&apos;s
-                    own view may read it.</>
-                  )}
-                </p>
-              )
-            )}
-
-            <div className="flex items-center gap-3 text-sm">
-              <input
-                ref={uploadInput}
-                type="file"
-                data-testid="screen-upload"
-                className="hidden"
-                onChange={async e => {
-                  const chosen = e.target.files?.[0];
-                  if (!chosen) return;
-                  const bytes = await readAsBase64(chosen);
-                  setPendingUpload({ bytes, name: chosen.name });
-                  setCarryCodes('above');
-                  if (openFile) await previewCarry(openFile, bytes);
-                  e.target.value = '';
-                }}
-              />
-              <button
-                className="inline-flex items-center gap-1 underline"
-                onClick={() => uploadInput.current?.click()}
-              >
-                <Upload size={14} /> Replace
-              </button>
-              {(file.format === 'ansi' || file.format === 'text') && (
-                <button
-                  className="inline-flex items-center gap-1 underline"
-                  aria-label="Edit this file"
-                  onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
-                >
-                  <Pencil size={14} /> Edit
-                </button>
-              )}
-              {/*
-                A .rip screen opens in the RIP editor. Its own button rather
-                than a branch inside the ANSI one: the artwork is a vector
-                program that no canvas of cells can hold, and what is editable
-                about it is where a caller can click.
-              */}
-              {file.format === 'rip' && (
-                <button
-                  className="inline-flex items-center gap-1 underline"
-                  aria-label="Edit this file"
-                  onClick={() => setEditingRip(true)}
-                >
-                  <Pencil size={14} /> Edit
-                </button>
-              )}
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 underline"
-                onClick={() =>
-                  downloadScreen(
-                    `/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`,
-                    baseName(openFile),
-                  )
-                }
-              >
-                <Download size={14} /> Download
-              </button>
-              <button
-                className="inline-flex items-center gap-1 underline"
-                onClick={() => setShowRevisions(v => !v)}
-              >
-                <History size={14} /> Revisions
-              </button>
-              <button
-                className="inline-flex items-center gap-1 underline text-status-danger"
-                onClick={() => removeFile(openFile)}
-              >
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-
-            {pendingUpload && !editorWrite && (
-              <div className="card space-y-4 text-sm">
-                <div>
-                  <h4 className="text-base text-content-primary">Replace this screen</h4>
-                  <p className="text-content-secondary">
-                    <span className="font-mono">{openFile}</span> becomes{' '}
-                    <span className="font-mono">{pendingUpload.name}</span>
-                  </p>
-                </div>
-
-                {/*
-                  A screen is a program and an ANSI editor writes no ~CC_. What
-                  a replace would cost is said BEFORE the fan-out is chosen,
-                  because the cost is the same whichever fan-out it is.
-                */}
-                {carryVerdict && (carryVerdict.carried.length > 0 || carryVerdict.lost.length > 0) && (
-                  <div className="space-y-2">
-                    <p className={carryVerdict.lost.length ? 'text-status-warn' : 'text-content-secondary'}>
-                      {describeCarry(carryVerdict)}
-                    </p>
-                    {carryVerdict.carried.length > 0 && (
-                      <ul className="space-y-1 border-l-2 border-border pl-3">
-                        {carryVerdict.carried.map(line => (
-                          <li key={line}><CodeChip>{line}</CodeChip></li>
-                        ))}
-                      </ul>
-                    )}
-                    <div>
-                      <label className="label" htmlFor="carry-placement">Keep these codes</label>
-                      <select
-                        id="carry-placement"
-                        className="input-field"
-                        value={carryCodes}
-                        onChange={e => setCarryCodes(e.target.value as 'none' | 'above' | 'below')}
-                      >
-                        <option value="above">where they were, around the art</option>
-                        <option value="below">all together, after the art</option>
-                        <option value="none">do not keep them</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/*
-                  ONE action, not a question with four answers.
-                  "when do i not want to replace the 41 files for the
-                  bbstitle?" (sysop) - almost never, so the page writes every
-                  copy and keeps the rest as alternatives rather than asking
-                  which of four before anything happens.
-                */}
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {everyCopy && (
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => applyWrite(everyCopy)}
-                      >
-                        {writeEverywhereLabel(everyCopy)}
-                      </button>
-                    )}
-                    {otherWrites.map(option => (
-                      <button
-                        key={option.choice}
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => applyWrite(option)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 border-t border-border pt-3">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
-                  >
-                    Cancel
-                  </button>
-                  <span className="text-content-muted">
-                    Every file written is backed up beside itself first.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/*
-              THE MANAGER'S GUESS, and only where it can be wrong about
-              something the sysop can see.
-              "this stuff is a bit weird as well - artist can only edit the
-              editable ones anyway?" (sysop, 2026-09-14). It read as a
-              permission because "art a designer edits" names a person; it is
-              really "what IS this file", and it decides whether the gallery
-              shows the file or files it away as something the board wrote.
-              On a file the manager already reads as art - almost all of them -
-              it is a control with nothing to do, so it waits behind a link.
-            */}
-            {file.generated ? (
-              <div className="space-y-2 text-sm">
-                <p className="text-status-warn">
-                  {file.generated === 'runtime'
-                    ? 'The manager thinks the board writes this file, so the gallery keeps it out of the way.'
-                    : 'The manager thinks this is an old copy kept beside the real file, so the gallery keeps it out of the way.'}
-                </p>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => flagFile(openFile, 'art')}
-                >
-                  It is art - show it
-                </button>
-              </div>
-            ) : kindOpen ? (
-              <div className="flex flex-wrap items-end gap-2 text-sm">
-                <div>
-                  <label className="label" htmlFor="screen-kind">This file is</label>
-                  <select
-                    id="screen-kind"
-                    className="input-field"
-                    value={file.generated ?? 'art'}
-                    onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
-                  >
-                    <option value="art">art a designer edits</option>
-                    <option value="runtime">written by the board</option>
-                    <option value="backup">an old copy kept beside the real one</option>
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => flagFile(openFile, null)}
-                >
-                  Use the manager's guess
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="text-sm text-content-secondary underline"
-                onClick={() => setKindOpen(true)}
-              >
-                Not art?
-              </button>
-            )}
-
-            {file.problems && file.problems.length > 0 && (
-              <div className="text-sm space-y-1">
-                <ul className="text-status-warn">
-                  {file.problems.map((problem: string) => (
-                    <li key={problem}>{describeProblem(problem)}</li>
-                  ))}
-                </ul>
-                {/*
-                  The damage is mechanical - a CSI sequence with its ESC gone -
-                  so the repair is too. A backup is written first, and the
-                  board refuses the file if it holds any escape byte, because
-                  then a bare [ may be art.
-                */}
-                {file.problems.includes('colour-codes-without-escape') && (
-                  <button className="underline text-accent" onClick={() => repairFile(openFile)}>
-                    Put the escape byte back
-                  </button>
-                )}
-              </div>
-            )}
-
-            {file.format === 'ansi' || file.format === 'text' ? (
-              // The editor's own renderer, so the view and the edit cannot
-              // disagree about what the file looks like.
-              // Tall art scrolls inside its own viewport rather than pushing
-              // everything below it off the page - the same treatment the
-              // editor's canvas gets.
-              <ScreenArt
-                content={file.content}
-                className="max-h-[60vh]"
-                /*
-                 * Tall art scrolls; a 3,019-line changelog is not art. Without
-                 * a ceiling this canvas is 96,608 pixels high, past what any
-                 * browser will allocate, and the page freezes. 200 rows is
-                 * eight screenfuls - more than any real piece on this board.
-                 */
-                maxRows={200}
-              />
-            ) : file.format === 'rip' ? (
-              // Drawn by the same RIPtermJS a RIP caller's terminal uses, with
-              // this screen's clickable regions over it. The same component the
-              // Edit button opens, read-only - a viewer and an editor that draw
-              // a file differently is the bug class this page keeps hitting.
-              <RipScreenEditor content={file.content} filePath={openFile ?? undefined} readOnly />
-            ) : file.format === 'petscii' ? (
-              // The same PetsciiMachine + PetsciiCanvas a C64 caller's terminal
-              // draws with. The apology that stood here predated both: the
-              // renderer exists, so showing nothing was the misleading part.
-              //
-              // And it is now the EDITOR, read-only, for the reason the RIP
-              // branch above gives: the component the artist studio opens is
-              // the component that shows the file here, so a viewer and an
-              // editor cannot drift apart.
-              <PetsciiScreenEditor content={file.content} filePath={openFile ?? undefined} readOnly />
-            ) : (
-              <p className="text-sm text-content-secondary">
-                No preview for this format.
-              </p>
-            )}
-
-            {file.mci?.length > 0 && (
-              <div className="text-sm">
-                <h4 className="text-content-primary">
-                  This screen runs things - {file.mci.length} MCI reference
-                  {file.mci.length === 1 ? '' : 's'}
-                </h4>
-                <ul className="mt-1 space-y-1">
-                  {file.mci.map((ref: MciReferenceShape, i: number) => (
-                    <li key={i} className="flex flex-wrap items-baseline gap-2">
-                      <CodeChip dead={!ref.resolves}>
-                        ~{ref.code}{ref.target ? `_${ref.target}` : ''}
-                      </CodeChip>
-                      {ref.targetName && (
-                        <span className="text-content-secondary">{ref.targetName}</span>
-                      )}
-                      {!ref.resolves && (
-                        <span className="text-status-danger">points at nothing</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Revisions panel */}
-            {showRevisions && <ScreenRevisionsPanel path={openFile} onClose={() => setShowRevisions(false)} />}
-          </div>
-        )}
-      </Modal>
 
       {openArt && (
         <DoorArtDialog

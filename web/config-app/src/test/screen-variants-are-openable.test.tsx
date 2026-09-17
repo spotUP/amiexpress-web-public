@@ -42,13 +42,20 @@ describe('the page source', () => {
     expect(column).not.toMatch(/cell: res => <span className="font-mono">\{res\.variants\.join/);
   });
 
-  it('routes a petscii file to the PETSCII surface, read-only', () => {
-    // Repointed 2026-09-14: the component is PetsciiScreenEditor in its
-    // readOnly mode now, which is what the artist studio opens. The property
-    // is unchanged - a .seq reaches the board's own PETSCII renderer - and
-    // `readOnly` is asserted because this page SHOWS files and the studio is
-    // where they are drawn.
-    const source = readFileSync(join(__dirname, '..', 'pages', 'ScreenFilesPage.tsx'), 'utf8');
-    expect(source).toMatch(/file\.format === 'petscii'[\s\S]{0,600}PetsciiScreenEditor[\s\S]{0,200}readOnly/);
-  });
+  /*
+   * RETIRED 2026-09-17, and the property kept.
+   *
+   * This asserted, by reading this page's source, that a `.seq` was routed to
+   * `PetsciiScreenEditor` in its read-only mode. The page no longer routes
+   * anything: it opens the ONE dialog, and the dialog picks the surface from
+   * the file's own format and says in a sentence what it can do with it. So
+   * the source it pinned is gone, while the property - a PETSCII file reaches
+   * the board's own PETSCII renderer - is asserted where it now lives, by
+   * `a-seq-slot-opens-an-editor.test.tsx` and `an-artist-works-in-every-format
+   * .test.tsx`, both driving the real dialog rather than a regex.
+   *
+   * A source pin proves a call exists, never that it works. Two of them here
+   * survived a rename and a repoint before this; the third did not survive the
+   * page losing the code entirely, which is the right outcome.
+   */
 });

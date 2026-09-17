@@ -28,9 +28,10 @@ import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas, readAsBase64 } from './screen-bytes';
 import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
-import { describeProblem, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
+import { describeProblem, formatLabel, formatSiblings, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { CodeChip } from '../components/CodeChip';
+import type { CarryVerdict } from './screen-mci';
 import { ScreenSlotBanner } from '../components/ScreenSlotBanner';
 import { screenSlotState } from './screen-slot-state';
 
@@ -41,6 +42,12 @@ interface ScreenFilePayload {
   mci?: MciReferenceShape[];
   /** What the board thinks is wrong with these bytes, if anything. */
   problems?: string[];
+  /**
+   * What the manager thinks this file IS, when it thinks it is not art.
+   * `runtime` means the board writes it; `backup` means it is an old copy
+   * kept beside the real one. Absent means the manager reads it as art.
+   */
+  generated?: 'runtime' | 'backup' | null;
 }
 
 export interface ArtistScreenDialogProps {
@@ -92,6 +99,17 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
   const [editing, setEditing] = useState<EditorSurface | null>(null);
   /** Set when the bytes cannot be read as a screen at all. */
   const [undrawable, setUndrawable] = useState<string | null>(null);
+  /**
+   * Why the last action in here failed, shown IN HERE.
+   *
+   * "A toast is missable and then gone; the reason belongs where the button
+   * was pressed" - the rule this dialog inherited when it took over the
+   * page's modal, whose delete said so in place. A refusal that only toasts
+   * reads as "the dialog did not close".
+   */
+  const [actionError, setActionError] = useState<string | null>(null);
+  /** Whether the "what is this file" control is unfolded. */
+  const [kindOpen, setKindOpen] = useState(false);
   const replaceInput = useRef<HTMLInputElement | null>(null);
   const svgInput = useRef<HTMLInputElement | null>(null);
   const addFormatInput = useRef<HTMLInputElement | null>(null);
@@ -108,7 +126,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
    * to silently delete every code in it - the art painted and the keys stopped
    * working. The board answers what would be carried; the artist decides.
    */
-  const [carryVerdict, setCarryVerdict] = useState<{ carried: string[]; lost: string[]; uploadHasCodes?: boolean } | null>(null);
+  const [carryVerdict, setCarryVerdict] = useState<CarryVerdict | null>(null);
   const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
 
@@ -223,6 +241,46 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
     }
     importSvg.mutate({ chosen, target });
     return true;
+  };
+
+  /**
+   * Start this empty slot from the board's own art.
+   *
+   * `slotAffordances` offers `copy-board` whenever the artist's slot is empty
+   * and the board has the same screen drawn, and nothing honoured it: the
+   * banner draws a button only for an action the caller handles, so the offer
+   * was filtered out and an artist standing on an empty slot - with the
+   * board's art right there - was told to upload one.
+   *
+   * The same copy the redraw below makes, from the other direction. Redraw
+   * copies the screen you are LOOKING at; this copies the board's, because the
+   * one you are looking at is the empty slot.
+   */
+  const copyBoard = useMutation({
+    mutationFn: (from: string) => apiClient.copyScreenIntoTheme(theme.slug, from),
+    onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
+      if (answer.data?.to) onOpenPath(answer.data.to);
+      if (answer.message) showSuccess(answer.message);
+      void queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-theme-validation', theme.slug] });
+    },
+    onError: (error: Error) => showError(error.message),
+  });
+
+  /** Overrule the manager about what this file is. */
+  const flagAs = async (flag: 'backup' | 'runtime' | 'art' | null) => {
+    if (!path) return;
+    setActionError(null);
+    try {
+      const res = await apiClient.flagScreen(path, flag);
+      showSuccess(res.message ?? 'Marked');
+      await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      await queryClient.invalidateQueries({ queryKey: ['screen-file', path] });
+    } catch (error) {
+      setActionError(`That did not work: ${(error as Error).message}`);
+      showError((error as Error).message);
+    }
   };
 
   const redraw = useMutation({
@@ -373,6 +431,11 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       showSuccess(writeTargets.length > 1 ? `Saved ${writeTargets.length} copies` : 'Saved');
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       await queryClient.invalidateQueries({ queryKey: ['screen-file', path] });
+      // A save is the end of the visit. The bytes are written and the index
+      // refetched, so what is under the dialog - the gallery card, the row's
+      // thumbnail - now shows the art that was just drawn; leaving the dialog
+      // up hides the only place the result is visible.
+      onClose();
     },
     onError: (error: Error) => showError(error.message),
   });
@@ -386,16 +449,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
    * board. An artist has to be able to draw all three, which is why these
    * controls are here and not only on the sysop's page.
    */
-  const siblings = useMemo(() => {
-    if (!path || !index?.files) return [];
-    const dir = path.slice(0, path.lastIndexOf('/') + 1);
-    const stem = (path.slice(path.lastIndexOf('/') + 1)).replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
-    return Object.keys(index.files).filter(rel => {
-      if (!rel.toLowerCase().startsWith(dir.toLowerCase())) return false;
-      const name = rel.slice(rel.lastIndexOf('/') + 1);
-      return name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase() === stem;
-    });
-  }, [path, index]);
+  const siblings = useMemo(() => formatSiblings(path, index?.files), [path, index]);
 
   const missing = useMemo(() => {
     // A blank slot draws its ANSI on the canvas; the other formats arrive
@@ -439,8 +493,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
   });
 
   const writeBytes = useMutation({
-    mutationFn: ({ target, bytes, carry }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below' }) =>
-      apiClient.putScreenFile(target, bytes, target === path ? writeTargets : [target], { carryCodes: carry ?? 'above' }),
+    mutationFn: ({ target, bytes, carry, targets }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below'; targets?: string[] }) =>
+      apiClient.putScreenFile(target, bytes, targets ?? (target === path ? writeTargets : [target]), { carryCodes: carry ?? 'above' }),
     onSuccess: async (_answer, { target }) => {
       setPendingUpload(null);
       setCarryVerdict(null);
@@ -455,7 +509,16 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
     onError: (error: Error) => showError(error.message),
   });
 
-  const title = path ? path.split('/').pop() ?? path : '';
+  /*
+   * THE WHOLE PATH, not the file name.
+   *
+   * An artist's theme holds one `BBSTITLE.txt`, so the stem was enough while
+   * this dialog only ever opened inside a studio. It is now the ONE dialog the
+   * sysop's screen tables open too, and the board carries seventy-one copies
+   * of that name - `Node1/BBSTITLE.txt` and `Node7/BBSTITLE.txt` would both
+   * have read "BBSTITLE.txt" over an editor about to write one of them.
+   */
+  const title = path ?? '';
 
   /**
    * Whose files these writes land in. Auditing (somebody else's theme) does
@@ -487,6 +550,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       ref={addFormatInput}
       type="file"
       aria-label="Add a format"
+      data-testid="screen-add-format"
       className="hidden"
       onChange={async event => {
         const chosen = event.target.files?.[0];
@@ -494,7 +558,22 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
         if (!chosen || !addingFormat) return;
         if (convertIfSvg(chosen, addingFormat.path)) { setAddingFormat(null); return; }
         if (!(await confirmAuditWrite(chosen.name))) return;
-        writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
+        /*
+         * A NEW FORMAT LANDS WHEREVER THE SCREEN ITSELF WOULD.
+         *
+         * The board serves by EXTENSION, and `Node1/BBSTITLE.txt` is the same
+         * screen as `Node2/BBSTITLE.txt` - so a `.rip` added beside one of
+         * them has to reach the other, or two thirds of the nodes go on
+         * showing the board's own art to RIP callers. The rule is the save's
+         * own target set with the extension swapped, which is what the sysop's
+         * page did. Nothing is carried: there is no old file of this format to
+         * carry codes out of.
+         */
+        const swapExt = (rel: string) => `${rel.replace(/\.[^./]+$/, '')}.${addingFormat.ext}`;
+        const targets = [...new Set((writeTargets.length ? writeTargets : [path as string]).map(swapExt))];
+        writeBytes.mutate({
+          target: addingFormat.path, bytes: await readAsBase64(chosen), carry: 'none', targets,
+        });
         setAddingFormat(null);
       }}
     />
@@ -544,7 +623,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           <ScreenSlotBanner
             state={slotState}
             themeTitle={theme.title}
-            busy={redraw.isPending || writeBytes.isPending}
+            busy={redraw.isPending || copyBoard.isPending || writeBytes.isPending}
             /*
              * Drawing an empty slot, for the two formats that HAVE a drawing
              * surface. PETSCII opens a blank C64 screen; ANSI opens the blank
@@ -566,6 +645,14 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
              */
             onUpload={mine && slotState.kind === 'yours-undrawn' ? () => replaceInput.current?.click() : undefined}
             onRedrawIntoMine={!mine ? () => redraw.mutate() : undefined}
+            /*
+             * The board's copy, when the slot says there is one. `download`
+             * and a delete are NOT wired here on purpose: the toolbar below
+             * already carries both for a file that exists, and a second copy
+             * of each on the same screen is the clutter this banner exists to
+             * remove.
+             */
+            onCopyBoard={mine ? (from: string) => copyBoard.mutate(from) : undefined}
           />
         </div>
       )}
@@ -576,15 +663,23 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           served by extension, so this is the difference between a theme that
           covers the board and one that covers a third of it. */}
       {!isNew && (file || siblings.length > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm" role="tablist">
+          {/*
+            TABS, because that is what they are: one is selected and it decides
+            which editor is mounted below. They were `aria-pressed` toggles,
+            which says "this button is held down" and leaves a screen reader
+            with no idea the strip is a choice of one.
+          */}
           {siblings.map(sibling => (
             <button
               key={sibling}
               type="button"
-              aria-pressed={sibling === path}
+              role="tab"
+              aria-selected={sibling === path}
               className={`px-2 py-1 border ${sibling === path
                 ? 'border-border-strong text-content-primary'
                 : 'border-border text-content-secondary'}`}
+              title={sibling}
               onClick={() => onOpenPath(sibling)}
             >
               {formatLabel(sibling)}
@@ -698,6 +793,20 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               surface={editing}
               mci={file?.mci ?? []}
               filePath={path ?? undefined}
+              /*
+               * TWO JOBS, NOT TWO BUTTONS FOR ONE JOB.
+               *
+               * This loads bytes ONTO THE CANVAS and writes nothing; the
+               * dialog's own "Upload a drawing" REPLACES the file on the
+               * board, with a carry verdict and a confirmation. The sysop met
+               * them under one name on the PETSCII editor ("a duplicate upload
+               * a drawing button") and the fix was the wording, which
+               * ScreenEditor already had. PETSCII keeps only the dialog's,
+               * through hostOffersUpload.
+               */
+              onLoadFile={async chosen => {
+                setEditing(createSurface(await screenToCanvas(await readAsBase64(chosen))));
+              }}
               onChange={setEditing}
               onSave={async base64 => { if (await confirmAuditWrite('This drawing')) save.mutate(base64); }}
               onCancel={onClose}
@@ -749,6 +858,12 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
         </div>
       )}
 
+      {actionError && (
+        <p className="mt-2 text-sm text-status-danger" data-testid="screen-action-error">
+          {actionError}
+        </p>
+      )}
+
       {!isNew && file && (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           {mine && (
@@ -768,6 +883,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                 type="file"
                 accept=".ans,.txt,.rip,.seq,.ttx,.tti,.svg,image/svg+xml"
                 aria-label="Upload a drawing"
+                data-testid="screen-upload"
                 className="hidden"
                 onChange={async event => {
                   const chosen = event.target.files?.[0];
@@ -865,34 +981,49 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
             <History size={14} /> {showRevisions ? 'Hide history' : 'History'}
           </button>
 
-          {mine && (
-            /* An artist may drop their own version so the board's art shows
-               again. It is their file, inside their theme, and the sandbox
-               already allows it - refusing here would be this page inventing
-               a rule the board does not have. */
+          {(mine || sysop) && (
+            /*
+             * TWO DELETIONS, ONE BUTTON, AND THEY ARE NOT THE SAME ACT.
+             *
+             * An artist DROPS their own version: their file, inside their
+             * theme, the board's art shows again afterwards, and the sandbox
+             * already allows it. A sysop DELETES the board's screen, and
+             * nothing shows afterwards - so it is spelled differently, warns
+             * differently, and says what stops resolving.
+             *
+             * Both were true before this dialog became the sysop's too; the
+             * page's own modal carried the sysop half, in a second delete with
+             * a third wording. That page's modal is gone.
+             */
             <button
               type="button"
               className="inline-flex items-center gap-1 underline text-status-danger"
               onClick={async () => {
                 if (!path) return;
+                const name = path.split('/').pop();
+                const dropping = mine && theme.slug !== 'default';
+                setActionError(null);
                 const ok = await confirm({
-                  title: 'Drop your version of this screen?',
-                  message: `${path.split('/').pop()} is backed up beside itself, then removed. Callers wearing ${theme.title} go back to the board's own art.`,
-                  confirmText: 'Drop it',
+                  title: dropping ? 'Drop your version of this screen?' : 'Delete this screen file?',
+                  message: dropping
+                    ? `${name} is backed up beside itself, then removed. Callers wearing ${theme.title} go back to the board's own art.`
+                    : `${name} is backed up beside itself, then removed. Any caller it resolved for is served whatever the board finds next, or nothing.`,
+                  confirmText: dropping ? 'Drop it' : 'Delete it',
                 });
                 if (!ok) return;
                 try {
                   await apiClient.deleteScreenFile(path);
-                  showSuccess('Dropped. The board\'s art shows again.');
+                  showSuccess(dropping ? "Dropped. The board's art shows again." : 'Deleted.');
                   await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
                   await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
                   onClose();
                 } catch (error) {
+                  setActionError(`That did not work: ${(error as Error).message}`);
                   showError((error as Error).message);
                 }
               }}
             >
-              <Trash2 size={14} /> Drop mine
+              <Trash2 size={14} /> {mine && theme.slug !== 'default' ? 'Drop mine' : 'Delete'}
             </button>
           )}
         </div>
@@ -959,7 +1090,18 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               )}
               {carryVerdict.lost.length > 0 && (
                 <p className="text-status-warn">
-                  Lost unless you keep them: {carryVerdict.lost.map(code => <CodeChip key={code}>{code}</CodeChip>)}
+                  {/*
+                    The board reports each unplaceable code WITH the line it
+                    sat on (`planMciCarry` -> `LostMciCode`), and the line is
+                    how a sysop puts it back by hand. Chip plus line, never the
+                    object.
+                  */}
+                  Lost unless you keep them:{' '}
+                  {carryVerdict.lost.map(code => (
+                    <span key={`${code.line}:${code.text}`} className="mr-2">
+                      <CodeChip>{code.text}</CodeChip> (line {code.line})
+                    </span>
+                  ))}
                 </p>
               )}
               <label className="flex items-center gap-2">
@@ -996,24 +1138,104 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
         </div>
       )}
 
-      {/* The codes in this screen, and whether each still points at something. */}
-      {file?.mci && file.mci.length > 0 && (
-        <div className="mt-3 space-y-1 text-sm">
-          <h3 className="text-content-primary">Codes in this screen</h3>
-          <ul className="space-y-1">
-            {file.mci.map((ref, index) => (
-              <li key={`${ref.code}-${index}`} className="flex flex-wrap items-center gap-2">
-                <CodeChip>{`~${ref.code}_${ref.target ?? ''}`}</CodeChip>
-                {ref.resolves === false && <span className="text-status-danger">points at nothing</span>}
-              </li>
-            ))}
-          </ul>
+      {/*
+        THE CODES ARE LISTED ONCE, BY THE EDITOR.
+
+        This dialog used to draw its own list from `file.mci` - the board's
+        snapshot of the bytes as they were FETCHED. Every editor mounted here
+        (ScreenEditor, PetsciiScreenEditor) already lists the codes it reads
+        off the live canvas, with the line and column each one sits at and a
+        change/remove beside it. Two lists means the second one goes stale the
+        moment a code is changed or removed: `~CC_gwall|` stayed on screen
+        after being replaced by `~CC_ctop|`, because the fetch had not been
+        redone. The board's `resolves` flag still reaches the editor through
+        the `mci` prop, so nothing is lost by keeping the canvas as the one
+        source.
+      */}
+
+      {/*
+        WHAT THIS FILE IS, which decides whether the gallery shows it.
+        The manager guesses, and the guess can be wrong about something only a
+        person can see. It is the sysop's call, not an artist's - the artist
+        edits their theme, and the board's classification of a board file is
+        not theirs to change. It waits behind a link on a file already read as
+        art, which is almost all of them.
+      */}
+      {sysop && file && (
+        <div className="mt-3 text-sm">
+          {file.generated ? (
+            <div className="space-y-2">
+              <p className="text-status-warn">
+                {file.generated === 'runtime'
+                  ? 'The manager thinks the board writes this file, so the gallery keeps it out of the way.'
+                  : 'The manager thinks this is an old copy kept beside the real file, so the gallery keeps it out of the way.'}
+              </p>
+              <button type="button" className="btn-primary" onClick={() => flagAs('art')}>
+                It is art - show it
+              </button>
+            </div>
+          ) : kindOpen ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="label" htmlFor="screen-kind">This file is</label>
+                <select
+                  id="screen-kind"
+                  className="input-field"
+                  value={file.generated ?? 'art'}
+                  onChange={e => flagAs(e.target.value as 'backup' | 'runtime' | 'art')}
+                >
+                  <option value="art">art a designer edits</option>
+                  <option value="runtime">written by the board</option>
+                  <option value="backup">an old copy kept beside the real one</option>
+                </select>
+              </div>
+              <button type="button" className="btn-secondary" onClick={() => flagAs(null)}>
+                Use the manager's guess
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="text-content-secondary underline"
+              onClick={() => setKindOpen(true)}
+            >
+              Not art?
+            </button>
+          )}
         </div>
       )}
 
       {file?.problems && file.problems.length > 0 && (
-        <p className="mt-3 text-sm text-status-warn">
-          {file.problems.map(describeProblem).join('; ')}
+        <p className="mt-3 flex flex-wrap items-center gap-3 text-sm text-status-warn">
+          <span>{file.problems.map(describeProblem).join('; ')}</span>
+          {/*
+            THE FIX SITS BESIDE THE COMPLAINT.
+            A screen whose colour codes lost their escape byte is reported
+            here, and the repair used to be two pages away in the screen
+            manager's own modal. It is the sysop's, because repairing rewrites
+            a file an artist may not own - the board refuses them anyway.
+          */}
+          {sysop && file.problems.includes('colour-codes-without-escape') && (
+            <button
+              type="button"
+              className="underline"
+              onClick={async () => {
+                if (!path) return;
+                setActionError(null);
+                try {
+                  const res = await apiClient.repairScreenFile(path);
+                  showSuccess(res.message ?? 'Repaired');
+                  await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+                  await queryClient.invalidateQueries({ queryKey: ['screen-file', path] });
+                } catch (error) {
+                  setActionError(`That did not work: ${(error as Error).message}`);
+                  showError((error as Error).message);
+                }
+              }}
+            >
+              Put the escape byte back
+            </button>
+          )}
         </p>
       )}
 
@@ -1022,24 +1244,6 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       )}
     </Modal>
   );
-}
-
-/** `BBSTITLE.SEQ` -> `PETSCII`, for a tab an artist can read. */
-function formatLabel(filePath: string): string {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith('.seq')) return 'PETSCII';
-  if (lower.endsWith('.rip')) return 'RIP';
-  if (lower.endsWith('.gr')) return 'Amiga ANSI';
-  /*
-   * Teletext is not "ANSI / text", and saying so put TWO tabs with the same
-   * name on one screen - Node0 carries BBSTITLE.txt and BBSTITLE.ttx, and the
-   * sysop had no way to tell which tab was which (2026-09-14). `.ttx` is this
-   * board's ANSI teletext, drawn like ANSI by the TDAText face; `.tti` is
-   * native packet-level teletext, which is listed and never parsed here.
-   */
-  if (lower.endsWith('.ttx')) return 'Teletext';
-  if (lower.endsWith('.tti')) return 'Teletext (native)';
-  return 'ANSI / text';
 }
 
 /**

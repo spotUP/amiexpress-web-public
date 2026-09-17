@@ -117,9 +117,16 @@ describe('replacing a screen that carries codes', () => {
     const user = userEvent.setup();
     await chooseReplacement(user);
 
-    expect(await screen.findByText(/2 lines of codes kept/)).toBeTruthy();
-    expect(screen.getByText(/cannot be placed \(line 4\)/)).toBeTruthy();
-    expect(screen.getByText('~CC_gwall|')).toBeTruthy();
+    // The one dialog says this in its own words: the codes it will KEEP, and
+    // the ones LOST unless you keep them. The page's own modal counted lines
+    // and named the line number; the dialog names the codes themselves, which
+    // is the thing a sysop recognises.
+    // The labels sit beside code chips, so the sentence is split across
+    // elements; the chips are the part a sysop reads, and they are the pin.
+    expect(await screen.findByText('~CC_gwall|')).toBeTruthy();
+    const verdict = screen.getByText('~CC_gwall|').closest('div')!;
+    expect(verdict.textContent).toMatch(/Kept:/);
+    expect(verdict.textContent).toMatch(/Lost unless you keep them:/);
   });
 
   it('asks the board without writing anything', async () => {
@@ -134,13 +141,15 @@ describe('replacing a screen that carries codes', () => {
     const user = userEvent.setup();
     await chooseReplacement(user);
 
-    await screen.findByText(/2 lines of codes kept/);
+    await screen.findByText('~CC_gwall|');
     // By name: the file panel has a second select - what the file IS - and an
     // unnamed lookup matched whichever came first.
     await user.selectOptions(
       screen.getByRole('combobox', { name: /Keep these codes/i }), 'below',
     );
-    await user.click(screen.getByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
+    // The dialog writes straight to the targets it computed; the page's
+    // fan-out picker went with the page's modal.
+    await user.click(screen.getByRole('button', { name: /^Write it$/i }));
 
     await waitFor(() => expect(puts.some(p => p.body.dryRun !== true)).toBe(true));
     const write = puts.filter(p => p.body.dryRun !== true).pop()!;
@@ -151,8 +160,10 @@ describe('replacing a screen that carries codes', () => {
     const user = userEvent.setup();
     await chooseReplacement(user);
 
-    await screen.findByText(/2 lines of codes kept/);
-    await user.click(screen.getByRole('button', { name: /^Write (this file|all \\d+ (identical )?copies)$/i }));
+    await screen.findByText('~CC_gwall|');
+    // The dialog writes straight to the targets it computed; the page's
+    // fan-out picker went with the page's modal.
+    await user.click(screen.getByRole('button', { name: /^Write it$/i }));
 
     await waitFor(() => expect(puts.some(p => p.body.dryRun !== true)).toBe(true));
     expect(puts.filter(p => p.body.dryRun !== true).pop()!.body.carryCodes).toBe('above');

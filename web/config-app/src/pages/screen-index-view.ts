@@ -454,8 +454,7 @@ export function formatsPresent(
   files: Record<string, { relPath: string }> | undefined,
 ): { ansi: boolean; petscii: boolean; rip: boolean; teletext: boolean; teletextNative: boolean } {
   const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
-  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
-  const stem = base.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '').toLowerCase();
+  const stem = screenStem(openPath);
 
   const have = { ansi: false, petscii: false, rip: false, teletext: false, teletextNative: false };
   for (const key of Object.keys(files ?? {})) {
@@ -463,7 +462,7 @@ export function formatsPresent(
     if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
     const name = lower.slice(lower.lastIndexOf('/') + 1);
     const ext = name.slice(name.lastIndexOf('.') + 1);
-    if (name.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (screenStem(key) !== stem) continue;
     if (ext === 'seq') have.petscii = true;
     else if (ext === 'rip') have.rip = true;
     else if (ext === 'ttx') have.teletext = true;
@@ -471,6 +470,49 @@ export function formatsPresent(
     else have.ansi = true;
   }
   return have;
+}
+
+/**
+ * Every file of the SAME SCREEN in the same directory - its other formats.
+ *
+ * One stem rule, shared with `formatsPresent` and the board's own loader. The
+ * artist's dialog kept its own copy of this that stripped
+ * `(txt|seq|rip|gr|ibm|ans)` and not `.ttx` or `.tti`, so a screen with a
+ * teletext sibling listed no teletext tab at all: `BBSTITLE.ttx` reduced to
+ * `bbstitle.ttx`, which matches no stem. It is one function now.
+ */
+export function formatSiblings(
+  openPath: string | null,
+  files: Record<string, { relPath: string }> | undefined,
+): string[] {
+  if (!openPath) return [];
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
+  const stem = screenStem(openPath);
+
+  return Object.keys(files ?? {}).filter(key => {
+    const lower = key.toLowerCase();
+    if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) return false;
+    return screenStem(key) === stem;
+  });
+}
+
+/** `BBSTITLE.SEQ` -> `PETSCII`, for a tab a designer can read. */
+export function formatLabel(filePath: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith('.seq')) return 'PETSCII';
+  if (lower.endsWith('.rip')) return 'RIP';
+  if (lower.endsWith('.gr')) return 'Amiga ANSI';
+  /*
+   * Teletext is not "ANSI / text", and saying so put TWO tabs with the same
+   * name on one screen - Node0 carries BBSTITLE.txt and BBSTITLE.ttx, and the
+   * sysop had no way to tell which tab was which (2026-09-14). `.ttx` is this
+   * board's ANSI teletext, drawn like ANSI by the TDAText face; `.tti` is
+   * native packet-level teletext, which is listed and never parsed here.
+   */
+  if (lower.endsWith('.ttx')) return 'Teletext';
+  if (lower.endsWith('.tti')) return 'Teletext (native)';
+  if (lower.endsWith('.ibm')) return 'IBM ANSI';
+  return 'ANSI / text';
 }
 
 /** What each format is CALLED on a card, so a chip and a warning agree. */
@@ -517,7 +559,7 @@ export function siblingInFormat(
     const lower = key.toLowerCase();
     if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
     const name = lower.slice(lower.lastIndexOf('/') + 1);
-    if (name.replace(/\.(txt|seq|rip|tti|ttx|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (screenStem(key) !== stem) continue;
     if (wanted.includes(name.slice(name.lastIndexOf('.') + 1))) return key;
   }
   return null;
