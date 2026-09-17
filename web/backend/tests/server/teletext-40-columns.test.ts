@@ -6,7 +6,9 @@
  * and the answer matrix in tests/handlers/graphics-answer.test.ts.
  */
 import { doorScreenWidth, doorScreenHeight } from '../../src/amiga-emulation/xim/screen-width.util';
-import { sessionColumns } from '../../src/utils/door-min-columns.util';
+import { sessionColumns, resolveDoorMinColumns } from '../../src/utils/door-min-columns.util';
+import { readTooltypeMap } from '../../src/utils/info-file.util';
+import * as path from 'path';
 import { isNarrow } from '../../src/utils/table-format.util';
 import { wrapForSession, wrapDoorTextForSession } from '../../src/utils/wrap-for-session.util';
 import { wipeEffectsEnabled } from '../../src/utils/screen-wipe.util';
@@ -49,5 +51,28 @@ describe('teletext 40-column authorities', () => {
     expect(wipeEffectsEnabled(T as any)).toBe(false);
     expect(wipeEffectsEnabled(ANSI as any)).toBe(true);
     expect(wipeEffectsEnabled(null)).toBe(true);
+  });
+});
+
+describe('the doors a teletext caller is here for', () => {
+  /*
+   * THE GATE IS DEFAULT-CLOSED, AND THAT IS RIGHT - but it means a door
+   * that fits 40 columns is refused until it SAYS so. BEEB did not, and a
+   * teletext caller got "THIS DOOR NEEDS AN 80 COLUMN SCREEN" from a door
+   * whose whole purpose is a machine that boots into teletext.
+   *
+   * Read from the real registration rather than restated here: a test that
+   * repeats the tooltype it is checking proves only that two files agree
+   * with each other.
+   */
+  const REGISTRATIONS = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+  const TELETEXT_DOORS = ['TELETEXT', 'TTQUIZ', 'TTWORMS', 'BEEB', 'TEXTTV'];
+
+  test.each(TELETEXT_DOORS)('%s opens for a 40-column teletext caller', command => {
+    const toolTypes = Object.fromEntries(
+      readTooltypeMap(path.join(REGISTRATIONS, `${command}.info`)),
+    );
+    expect(Object.keys(toolTypes).length).toBeGreaterThan(0);
+    expect(resolveDoorMinColumns({ command, toolTypes })).toBeLessThanOrEqual(sessionColumns(T as any));
   });
 });

@@ -7,3 +7,4 @@ PRIORITY=SAME
 NAME=BBC Micro - run disc images on an emulated Beeb
 ACCESS=1
 CLIENT_ONLY=YES
+MIN_COLUMNS=40
