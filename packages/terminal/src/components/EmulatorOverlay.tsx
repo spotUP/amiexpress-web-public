@@ -11,15 +11,24 @@
  * ours on top turns a teletext screen into a web page with a computer in
  * it. The machine gets the whole surface.
  *
- * Getting out is Escape, and which side hears it is decided by focus:
+ * GETTING OUT IS SHIFT+ESCAPE, and it is heard wherever the keyboard is.
  *
- *  - While the caller is playing, the frame holds focus, and a focused
- *    frame's keys never reach this document. Escape goes to the BBC, where
- *    it is a real key - it is how you stop a BASIC program, and games use
- *    it. That is deliberate; a surface that swallowed Escape would make
- *    some software unusable.
- *  - Click off the machine, onto the black around it, and focus comes back
- *    here. Then Escape closes the surface.
+ * It used to be plain Escape, heard only when the frame did NOT have
+ * focus - the idea being that the caller would click off the machine, onto
+ * the black around it, and get their keyboard back. There is no such black:
+ * the frame is the whole surface, so every click lands inside it, focus
+ * never comes back, and the way out could not be reached at all. "esc does
+ * nothing" (sysop, 2026-09-17), and it never could have.
+ *
+ * Plain Escape still belongs to the BBC, which is the reason for the
+ * modifier rather than politeness: ESCAPE is a real key on that machine -
+ * it is how a BASIC program is stopped, and games read it. A surface that
+ * swallowed it would make some software unusable. SHIFT+ESCAPE means
+ * nothing to a Beeb, so it is free to mean something here.
+ *
+ * Heard on this document AND on the frame's own, which is allowed because
+ * the frame is same-origin - and in the CAPTURE phase, so the emulator
+ * cannot eat it first.
  *
  * The door can also take it away at any time (`emulator:close`).
  *
@@ -69,27 +78,57 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     }
   }, []);
 
+  /**
+   * The way out, wherever the keyboard happens to be.
+   *
+   * Shift is what separates this from the machine's own Escape key, so a
+   * bare Escape is deliberately ignored here and left to the BBC.
+   */
+  const onKeyDown = React.useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
+
+  /**
+   * Listen inside the frame as well as outside it.
+   *
+   * A focused frame's keys never reach this document, and the frame is the
+   * whole surface - so without this there is no key the caller can press.
+   * Capture phase, because the emulator handles keydown itself and would
+   * otherwise consume it.
+   */
+  const listenInside = React.useCallback(() => {
+    takeKeyboard();
+    try {
+      const inner = frameRef.current?.contentDocument;
+      if (!inner) return;
+      inner.removeEventListener('keydown', onKeyDown, true);
+      inner.addEventListener('keydown', onKeyDown, true);
+    } catch {
+      // Cross-origin one day: the outer listener is all there is.
+    }
+  }, [onKeyDown, takeKeyboard]);
+
   useEffect(() => {
     // Once on arrival, in case the frame is already loaded from cache.
-    const focus = window.setTimeout(takeKeyboard, 50);
-
-    // Only ever heard when the frame does NOT have focus. Not attached to
-    // the frame's own document, though it is same-origin and could be:
-    // doing that would take Escape away from the BBC, where it is a key
-    // that software depends on.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
+    const focus = window.setTimeout(listenInside, 50);
+    window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
       window.clearTimeout(focus);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+      try {
+        frameRef.current?.contentDocument?.removeEventListener('keydown', onKeyDown, true);
+      } catch {
+        // Nothing to take off.
+      }
     };
-  }, [onClose, takeKeyboard]);
+  }, [onKeyDown, listenInside]);
 
   return (
     <div
@@ -110,7 +149,7 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
         src={url}
         title={title}
         // The frame is usually still loading when the effect above runs.
-        onLoad={takeKeyboard}
+        onLoad={listenInside}
         style={{
           display: 'block',
           width: '100%',

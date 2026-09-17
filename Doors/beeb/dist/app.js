@@ -120,7 +120,7 @@ class BeebApp {
             machine: 'BBC MICRO',
         });
         this.write(`\x1b[2J\x1b[H\x1b[36mRunning \x1b[1;37m${this.running.name}\x1b[0;36m in the browser.\x1b[0m\r\n\r\n` +
-            `Close the emulator to come back here.\r\n`);
+            `Press SHIFT+ESC to come back here.\r\n`);
     }
     onReturn() {
         if (this.closed)

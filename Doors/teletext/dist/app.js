@@ -376,7 +376,7 @@ class TeletextApp {
         this.screen.line(1, 'TELESOFTWARE', '\x1b[1;37m');
         this.screen.line(2, '-'.repeat(40), '\x1b[36m');
         this.screen.line(4, (0, screen_1.fit)(`Loading ${program.title.toUpperCase()}...`, 40), '\x1b[1;33m');
-        this.screen.line(6, 'Close the BBC Micro to come back');
+        this.screen.line(6, 'Press SHIFT+ESC to come back');
         this.screen.line(7, 'to the page.');
         this.paintStatus();
     }
