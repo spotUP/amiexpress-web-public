@@ -62,6 +62,17 @@ export class TeletextApp {
   private readonly root: string | undefined;
 
   private services: ServiceSummary[] = [];
+  /**
+   * What the caller has typed to narrow the list.
+   *
+   * A board with the restoration archive installed has over a thousand
+   * service packs on it - one per recovered broadcast day - and a flat
+   * list of nineteen rows with no way down is no use at all. Typing
+   * narrows; the arrows walk what is left.
+   */
+  private pickerFilter = '';
+  /** First row of the list that is on screen. */
+  private pickerTop = 0;
   private loaded: LoadedService | null = null;
   private view: View = 'picker';
   private pickerAt = 0;
@@ -158,8 +169,10 @@ export class TeletextApp {
 
   private onArrow(direction: ArrowKey): void {
     if (this.view === 'picker') {
+      const shown = this.shown();
       if (direction === 'up') this.pickerAt = Math.max(0, this.pickerAt - 1);
-      if (direction === 'down') this.pickerAt = Math.min(this.services.length - 1, this.pickerAt + 1);
+      if (direction === 'down') this.pickerAt = Math.min(shown.length - 1, this.pickerAt + 1);
+      this.scrollPickerIntoView();
       this.paintPicker();
       return;
     }
@@ -184,19 +197,52 @@ export class TeletextApp {
 
   private pickerKey(ch: string): void {
     if (ch === '\r' || ch === '\n') {
-      const chosen = this.services[this.pickerAt];
+      const chosen = this.shown()[this.pickerAt];
       if (chosen) this.openService(chosen);
       return;
     }
-    if (ch >= '1' && ch <= '9') {
-      const chosen = this.services[Number(ch) - 1];
-      if (chosen) {
-        this.pickerAt = Number(ch) - 1;
-        this.openService(chosen);
-      }
+    if (ch === 'q' || ch === 'Q') return this.quit();
+
+    // Backspace and delete both arrive, depending on the terminal.
+    if (ch === '\x7f' || ch === '\b') {
+      this.pickerFilter = this.pickerFilter.slice(0, -1);
+      this.pickerAt = 0;
+      this.pickerTop = 0;
+      this.paintPicker();
       return;
     }
-    if (ch === 'q' || ch === 'Q') this.quit();
+
+    // Anything else printable narrows the list. Digits included: the packs
+    // are named for the day they were broadcast, so "1993" is a useful
+    // thing to type.
+    if (ch >= ' ' && ch <= '~') {
+      this.pickerFilter += ch;
+      this.pickerAt = 0;
+      this.pickerTop = 0;
+      this.paintPicker();
+    }
+  }
+
+  /** The services the filter leaves. */
+  private shown(): ServiceSummary[] {
+    const wanted = this.pickerFilter.trim().toLowerCase();
+    if (!wanted) return this.services;
+    return this.services.filter(
+      service =>
+        service.id.toLowerCase().includes(wanted) ||
+        service.title.toLowerCase().includes(wanted),
+    );
+  }
+
+  /** How many list rows fit under the heading. */
+  private pickerRows(): number {
+    return Math.max(1, this.screen.rows - 6);
+  }
+
+  private scrollPickerIntoView(): void {
+    const rows = this.pickerRows();
+    if (this.pickerAt < this.pickerTop) this.pickerTop = this.pickerAt;
+    if (this.pickerAt >= this.pickerTop + rows) this.pickerTop = this.pickerAt - rows + 1;
   }
 
   private openService(summary: ServiceSummary): boolean {
@@ -484,7 +530,9 @@ export class TeletextApp {
   private pickerBar(): string {
     if (this.notice) return `! ${this.notice}`;
     if (this.services.length === 0) return 'Q=Quit';
-    return 'ENTER=Open  1-9=Pick  Q=Quit';
+    const shown = this.shown().length;
+    const count = shown === this.services.length ? `${shown}` : `${shown}/${this.services.length}`;
+    return `${count}  TYPE=Find ENTER=Open Q=Quit`;
   }
 
   private paintPicker(): void {
@@ -503,15 +551,27 @@ export class TeletextApp {
       return;
     }
 
-    this.services.forEach((service, at) => {
-      const row = 4 + at;
-      if (row >= this.screen.rows - 1) return;
+    const shown = this.shown();
+    if (this.pickerFilter) {
+      this.screen.line(3, fit(`Find: ${this.pickerFilter}_`, 40), '\x1b[1;33m');
+    }
+    if (shown.length === 0) {
+      this.screen.line(5, 'Nothing matches that.');
+      this.paintStatus();
+      return;
+    }
+
+    const rows = this.pickerRows();
+    for (let i = 0; i < rows; i++) {
+      const at = this.pickerTop + i;
+      const service = shown[at];
+      if (!service) break;
       const marker = at === this.pickerAt ? '>' : ' ';
-      const label = `${marker}${at + 1} ${service.title}`;
+      const label = `${marker} ${service.title}`;
       const pages = `${service.fileCount}p`;
       const line = fit(label, 40 - pages.length - 1).padEnd(40 - pages.length - 1) + ' ' + pages;
-      this.screen.line(row, line, at === this.pickerAt ? '\x1b[1;37m' : '\x1b[0;37m');
-    });
+      this.screen.line(4 + i, line, at === this.pickerAt ? '\x1b[1;37m' : '\x1b[0;37m');
+    }
 
     this.paintStatus();
   }

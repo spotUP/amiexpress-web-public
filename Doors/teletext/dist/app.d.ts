@@ -17,6 +17,17 @@ export declare class TeletextApp {
     private readonly keys;
     private readonly root;
     private services;
+    /**
+     * What the caller has typed to narrow the list.
+     *
+     * A board with the restoration archive installed has over a thousand
+     * service packs on it - one per recovered broadcast day - and a flat
+     * list of nineteen rows with no way down is no use at all. Typing
+     * narrows; the arrows walk what is left.
+     */
+    private pickerFilter;
+    /** First row of the list that is on screen. */
+    private pickerTop;
     private loaded;
     private view;
     private pickerAt;
@@ -45,6 +56,11 @@ export declare class TeletextApp {
     private onArrow;
     private onEscape;
     private pickerKey;
+    /** The services the filter leaves. */
+    private shown;
+    /** How many list rows fit under the heading. */
+    private pickerRows;
+    private scrollPickerIntoView;
     private openService;
     private pageKey;
     private typeDigit;
