@@ -100,81 +100,6 @@ describe('the speed the machine runs at', () => {
     cleanup();
   });
 
-  /** Alt-T presses jsbeeb sees, by its own contract: it matches event.code. */
-  function turboPresses(inner: Document): { count: () => number } {
-    let n = 0;
-    inner.addEventListener('keydown', (event) => {
-      const key = event as KeyboardEvent;
-      if (key.altKey && key.code === 'KeyT') n++;
-    });
-    return { count: () => n };
-  }
-
-  function mounted() {
-    const onClose = vi.fn();
-    const { container } = overlay(onClose);
-    const inner = container.querySelector('iframe')!.contentDocument!;
-    const turbo = turboPresses(inner);
-    settle();
-    return { inner, turbo, onClose };
-  }
-
-  it('boots and loads at turbo', () => {
-    // A BBC Micro boots, types and pulls a program off a disc in its own
-    // time, and none of that is what anyone came for.
-    const { turbo } = mounted();
-    expect(turbo.count()).toBe(1);
-  });
-
-  it('drops back to 2MHz at the first keystroke', () => {
-    /*
-     * THE POINT OF THE WHOLE THING. These are 1982 action games timed
-     * against a 2MHz 6502; left at fast-as-possible they are unplayable.
-     * The first key is the one moment that reliably means "it is loaded
-     * and I am playing", with nothing to detect.
-     */
-    const { inner, turbo } = mounted();
-    act(() => {
-      inner.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }));
-    });
-    expect(turbo.count()).toBe(2);
-  });
-
-  it('is not ended by a bare modifier', () => {
-    const { inner, turbo } = mounted();
-    act(() => {
-      inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
-    });
-    expect(turbo.count()).toBe(1);
-  });
-
-  it('ends on its own when nothing is ever pressed', () => {
-    // Software that wants no input would otherwise play at warp forever.
-    const { turbo } = mounted();
-    act(() => {
-      vi.advanceTimersByTime(12_000);
-    });
-    expect(turbo.count()).toBe(2);
-  });
-
-  it('ends once, however many keys follow', () => {
-    const { inner, turbo } = mounted();
-    act(() => {
-      for (const code of ['Space', 'KeyA', 'KeyB']) {
-        inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', code }));
-      }
-    });
-    expect(turbo.count()).toBe(2);
-  });
-});
-
-describe('dropping back to 2MHz when the load finishes', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => {
-    vi.useRealTimers();
-    cleanup();
-  });
-
   function turboPresses(inner: Document): { count: () => number } {
     let n = 0;
     inner.addEventListener('keydown', (event) => {
@@ -204,7 +129,40 @@ describe('dropping back to 2MHz when the load finishes', () => {
     return { inner, light, turbo };
   }
 
+  /** One look at the drive lights. */
+  const WATCH = 120;
   const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  it('does NOT press turbo before the machine can hear it', () => {
+    /*
+     * THE BUG THIS EXISTS FOR, and it inverted the whole feature. Turbo is
+     * a TOGGLE. The opening press used to go out as soon as the frame
+     * loaded - while jsbeeb was still fetching ROMs and had no keyboard -
+     * so it was swallowed. The closing press then became the FIRST one the
+     * machine ever saw and turned turbo ON just as the game started.
+     * Pressing Alt+T by hand "fixed" it because that undid the press.
+     */
+    const { turbo } = machine();
+    tick(2000);
+    expect(turbo.count()).toBe(0);
+  });
+
+  it('starts once the drive is actually running', () => {
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(500);
+    expect(turbo.count()).toBe(1);
+  });
+
+  it('is not started by the flicker of mounting the image', () => {
+    // One look is not enough; the light has to still be on at the next.
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(WATCH);
+    light.classList.remove('on');
+    tick(2000);
+    expect(turbo.count()).toBe(0);
+  });
 
   it('stays fast while the disc is being read', () => {
     /*
@@ -221,21 +179,6 @@ describe('dropping back to 2MHz when the load finishes', () => {
     expect(turbo.count()).toBe(1); // still only the switch-on
   });
 
-  it('will not drop during the boot, however quiet the drive is', () => {
-    /*
-     * The machine mounts its disc image at startup and the light flickers
-     * for that, a full second before jsbeeb types the command. Acting on
-     * that quiet ended the boost as the typing began and left the real
-     * load running at 2MHz.
-     */
-    const { light, turbo } = machine();
-    light.classList.add('on');
-    tick(200);
-    light.classList.remove('on');
-    tick(2000);
-    expect(turbo.count()).toBe(1);
-  });
-
   it('drops back once the drive settles', () => {
     /*
      * THE BUG THIS EXISTS FOR. A game started by CHAIN runs on its own
@@ -244,22 +187,25 @@ describe('dropping back to 2MHz when the load finishes', () => {
      */
     const { light, turbo } = machine();
     light.classList.add('on');
-    tick(3500);
+    tick(1000);
     light.classList.remove('on');
     tick(1000);
     expect(turbo.count()).toBe(2);
   });
 
-  it('does not drop before the drive has ever run', () => {
-    // A caller who asked for a bare machine never lights it at all, and
-    // must not be held waiting for a light that is not coming.
+  it('never boosts a machine with no disc at all', () => {
+    // Nothing to hurry, and nothing that proves the machine is listening.
     const { turbo } = machine();
-    tick(3000);
-    expect(turbo.count()).toBe(1);
+    tick(20_000);
+    expect(turbo.count()).toBe(0);
   });
 
-  it('still has the timer as a backstop', () => {
-    const { turbo } = machine();
+  it('still has the timer as a backstop once boosting', () => {
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(500);
+    expect(turbo.count()).toBe(1);
+    // The light never goes out; the cap ends it anyway.
     tick(12_000);
     expect(turbo.count()).toBe(2);
   });
@@ -267,7 +213,7 @@ describe('dropping back to 2MHz when the load finishes', () => {
   it('drops only once, however long the drive stays dark', () => {
     const { light, turbo } = machine();
     light.classList.add('on');
-    tick(3500);
+    tick(1000);
     light.classList.remove('on');
     tick(5000);
     expect(turbo.count()).toBe(2);

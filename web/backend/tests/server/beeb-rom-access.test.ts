@@ -7,6 +7,7 @@
  * would have made the whole arrangement a formality.
  */
 import {
+  queryWithoutGrant,
   grantRomAccess,
   romAccessHolder,
   revokeRomAccess,
@@ -62,5 +63,40 @@ describe('reading the cookie the emulator page leaves', () => {
   it('answers nothing for a request that carries no cookies', () => {
     expect(cookieValue(undefined, ROM_COOKIE)).toBeUndefined();
     expect(cookieValue('', ROM_COOKIE)).toBeUndefined();
+  });
+});
+
+describe('taking the grant back off the URL', () => {
+  it('leaves every other byte exactly as it arrived', () => {
+    /*
+     * THE BUG THIS EXISTS FOR. Rebuilding the query through
+     * URLSearchParams writes a space as `+`. jsbeeb does not read `+` as a
+     * space, so the command came back as `CHAIN+"GOMOKU"` and the machine
+     * typed the plus: "No such variable".
+     */
+    const url = '/beeb/?model=B-DFS1.2&disc1=ceefax-1985.ssd&autotype=CHAIN%20%22GOMOKU%22%0A&grant=abc123';
+    const rest = queryWithoutGrant(url);
+    expect(rest).toBe('model=B-DFS1.2&disc1=ceefax-1985.ssd&autotype=CHAIN%20%22GOMOKU%22%0A');
+    expect(rest).not.toContain('+');
+    expect(rest).not.toContain('grant');
+  });
+
+  it('removes the grant wherever it sits', () => {
+    expect(queryWithoutGrant('/beeb/?grant=x&model=B')).toBe('model=B');
+    expect(queryWithoutGrant('/beeb/?model=B&grant=x&autoboot')).toBe('model=B&autoboot');
+  });
+
+  it('keeps a valueless flag the emulator reads', () => {
+    // `autoboot` carries no value and must survive as itself.
+    expect(queryWithoutGrant('/beeb/?disc1=a.ssd&autoboot&grant=x')).toBe('disc1=a.ssd&autoboot');
+  });
+
+  it('is empty when the grant was all there was', () => {
+    expect(queryWithoutGrant('/beeb/?grant=x')).toBe('');
+    expect(queryWithoutGrant('/beeb/')).toBe('');
+  });
+
+  it('does not mistake a name that merely ends in grant', () => {
+    expect(queryWithoutGrant('/beeb/?upgrant=keepme&grant=x')).toBe('upgrant=keepme');
   });
 });

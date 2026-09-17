@@ -39,7 +39,7 @@ import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 import { bareEmulatorPage } from './beeb-bare-page';
-import { ROM_COOKIE, romAccessHolder, cookieValue } from './beeb-rom-access';
+import { ROM_COOKIE, romAccessHolder, cookieValue, queryWithoutGrant } from './beeb-rom-access';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
 import { materialiseCatalogEntry, materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
@@ -471,12 +471,19 @@ console.log(`[Static] Fonts count: ${fontFiles.length}`);
           maxAge: 30 * 60 * 1000,
         });
 
-        const keep = new URLSearchParams();
-        for (const [name, value] of Object.entries(req.query)) {
-          if (name === 'grant') continue;
-          keep.append(name, Array.isArray(value) ? String(value[0]) : String(value ?? ''));
-        }
-        const rest = keep.toString();
+        /*
+         * THE REST OF THE QUERY IS PASSED THROUGH BYTE FOR BYTE.
+         *
+         * Not re-serialised. URLSearchParams writes a space as `+`, which is
+         * correct for form encoding and wrong for this: jsbeeb does not read
+         * `+` as a space, so `autotype=CHAIN%20%22GOMOKU%22` came back as
+         * `CHAIN+"GOMOKU"` and the machine dutifully typed the plus - "No
+         * such variable" (sysop, 2026-09-17).
+         *
+         * So the grant is cut out of the original string and nothing else is
+         * touched.
+         */
+        const rest = queryWithoutGrant(req.originalUrl);
         return res.redirect(302, rest ? `/beeb/?${rest}` : '/beeb/');
       }
       res.type('html').send(page);

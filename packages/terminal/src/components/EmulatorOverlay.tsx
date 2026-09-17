@@ -37,17 +37,24 @@
  * jsbeeb has a fast-as-possible mode for exactly this, bound to Alt-T, and
  * the frame is same-origin so it can be handed that key.
  *
- * It is turned ON when the frame loads and OFF again THE MOMENT THE DISC
- * STOPS BEING READ. The emulator lights a drive LED while it is loading
- * and puts it out when it finishes, so the machine says when it is done
- * and nothing has to be guessed.
+ * BOTH ENDS ARE DRIVEN BY THE DRIVE LIGHT, and neither is a guess. The
+ * emulator lights a LED while it reads a disc and puts it out when it
+ * stops, so the boost starts at the first sign of reading and ends when the
+ * reading settles.
  *
- * The first cut ended the boost at the caller's first keystroke, on the
- * theory that pressing something meant the program was up. It does not: a
- * game started by CHAIN begins on its own while the player just watches,
- * so nothing ended the boost and the game ran at warp until the cap - "they
- * play super fast now" (sysop, 2026-09-17). A keystroke still ends it, and
- * so does a timer, but both are now backstops rather than the signal.
+ * THE START MUST NOT BE FIRED BLIND. Turbo is a TOGGLE, and pressing it
+ * before the emulator's keyboard exists does nothing at all - jsbeeb is
+ * still fetching ROMs and building its core. That happened, silently: the
+ * opening press was swallowed, so the closing press became the FIRST one
+ * the machine ever saw and turned turbo ON just as the game began. The
+ * machine ran at fast-as-possible and pressing Alt+T by hand fixed it,
+ * because that undid the press ("still super fast", "i could toggle off
+ * speed manually", sysop 2026-09-17).
+ *
+ * Waiting for the drive to run removes the race entirely: a machine that is
+ * reading a disc is unquestionably alive and listening. A caller who asked
+ * for a bare machine never lights it and is simply never boosted, which is
+ * the right answer - there is nothing to hurry.
  *
  * The speed must NOT stay up during play: these are 1982 action games
  * timed against a 2MHz 6502, and Snake at fast-as-possible is not Snake.
@@ -107,16 +114,13 @@ const WATCH_MS = 120;
 const SETTLED_MS = 700;
 
 /**
- * The boost is not allowed to end before this, however quiet the drive is.
+ * How long the drive must run before the boost starts.
  *
- * The machine mounts its disc image at startup and the light flickers for
- * that, long before the program is asked for - and jsbeeb then waits a
- * further second of its own before typing the command. Without a floor the
- * whole rule fired during the boot, the boost ended as the typing began,
- * and the actual load - the part worth hurrying - ran at 2MHz:
- * "not sure they load fast though" (sysop, 2026-09-17).
+ * The machine touches the disc briefly while it mounts the image, long
+ * before the program is asked for. Requiring the light to be on for two
+ * consecutive looks keeps the boost for the real load.
  */
-const MIN_BOOST_MS = 3000;
+const RUNNING_TICKS = 2;
 
 export interface EmulatorOverlayProps {
   /** Same-origin URL to host. */
@@ -141,6 +145,12 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
   const pressing = useRef(false);
   const capTimer = useRef<number | null>(null);
   const watcher = useRef<number | null>(null);
+  /**
+   * The watch starts the boost and the boost is declared after the watch,
+   * so it is reached through a ref rather than by reordering two callbacks
+   * that each read better where they are.
+   */
+  const beginBoost = useRef<() => void>(() => {});
 
   /**
    * Press Alt-T inside the machine.
@@ -158,7 +168,7 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
       }
       pressing.current = true;
       inner.dispatchEvent(new view.KeyboardEvent('keydown', TURBO_KEY));
-      console.debug('[emulator] turbo: Alt-T sent');
+      console.info('[emulator] turbo: Alt-T sent');
       return true;
     } catch (error) {
       console.warn('[emulator] turbo: Alt-T threw', error);
@@ -177,12 +187,9 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
       window.clearInterval(watcher.current);
       watcher.current = null;
     }
-    if (!boosting.current) {
-      console.debug('[emulator] turbo: asked to stop, but was not boosting');
-      return;
-    }
+    if (!boosting.current) return;
     if (pressTurbo()) boosting.current = false;
-    console.debug('[emulator] turbo: OFF (boosting now', boosting.current, ')');
+    console.info('[emulator] turbo: OFF (boosting now', boosting.current, ')');
   }, [pressTurbo]);
 
   /**
@@ -194,8 +201,7 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
    */
   const watchTheDrive = React.useCallback(() => {
     if (watcher.current !== null) window.clearInterval(watcher.current);
-    const startedAt = Date.now();
-    let everRan = false;
+    let litTicks = 0;
     let darkSince: number | null = null;
     let wasLit = false;
     let warnedMissing = false;
@@ -223,17 +229,19 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
 
       if (lit !== wasLit) {
         wasLit = lit;
-        console.debug('[emulator] turbo: drive', lit ? 'RUNNING' : 'idle');
+        console.info('[emulator] turbo: drive', lit ? 'RUNNING' : 'idle');
       }
 
       if (lit) {
-        everRan = true;
         darkSince = null;
+        litTicks += 1;
+        // A machine that is reading a disc is alive and listening, which a
+        // machine that has only just been handed a URL is not.
+        if (litTicks === RUNNING_TICKS) beginBoost.current();
         return;
       }
-      if (!everRan) return;
-      // Boot and the pause before the command is typed are not the load.
-      if (Date.now() - startedAt < MIN_BOOST_MS) return;
+
+      if (!boosting.current) return;
       if (darkSince === null) darkSince = Date.now();
       else if (Date.now() - darkSince >= SETTLED_MS) stopBoost();
     }, WATCH_MS);
@@ -243,10 +251,13 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     if (boosting.current) return;
     if (!pressTurbo()) return;
     boosting.current = true;
-    console.debug('[emulator] turbo: ON');
-    watchTheDrive();
+    console.info('[emulator] turbo: ON');
+    if (capTimer.current !== null) window.clearTimeout(capTimer.current);
     capTimer.current = window.setTimeout(stopBoost, BOOST_CAP_MS);
-  }, [pressTurbo, stopBoost, watchTheDrive]);
+  }, [pressTurbo, stopBoost]);
+
+  // Handed to the watch, which is declared above it and does the starting.
+  beginBoost.current = startBoost;
 
   /**
    * Put the keyboard in the machine.
@@ -309,9 +320,11 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     } catch {
       // Cross-origin one day: the outer listener is all there is.
     }
-    // Boot, type and load at full tilt; the first keystroke ends it.
-    startBoost();
-  }, [onKeyDown, takeKeyboard, startBoost]);
+    // Watch for the machine to start reading. The boost begins there, not
+    // here: pressing a toggle at a machine that cannot hear it yet is how
+    // the speed ended up inverted.
+    watchTheDrive();
+  }, [onKeyDown, takeKeyboard, watchTheDrive]);
 
   useEffect(() => {
     // Once on arrival, in case the frame is already loaded from cache.

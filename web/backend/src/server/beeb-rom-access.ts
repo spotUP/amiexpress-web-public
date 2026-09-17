@@ -74,6 +74,27 @@ export function cookieValue(header: string | undefined, name: string): string | 
   return undefined;
 }
 
+/**
+ * The request's query with the grant cut out of it, byte for byte.
+ *
+ * NOT re-serialised through URLSearchParams, which writes a space as `+`.
+ * That is correct for form encoding and wrong here: jsbeeb does not read
+ * `+` as a space, so `autotype=CHAIN%20%22GOMOKU%22` came back through a
+ * round trip as `CHAIN+"GOMOKU"` and the machine typed the plus, answering
+ * "No such variable" (2026-09-17).
+ *
+ * Everything except the grant is therefore passed through untouched.
+ */
+export function queryWithoutGrant(originalUrl: string): string {
+  const at = originalUrl.indexOf('?');
+  if (at === -1) return '';
+  return originalUrl
+    .slice(at + 1)
+    .split('&')
+    .filter(part => part !== 'grant' && !part.startsWith('grant='))
+    .join('&');
+}
+
 /** Only for tests: forget every grant. */
 export function clearRomAccess(): void {
   grants.clear();
