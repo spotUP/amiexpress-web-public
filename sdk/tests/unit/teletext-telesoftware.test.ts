@@ -9,7 +9,7 @@
  * thousand literal tildes and not one line ending, which looks like success
  * until you try to load one.
  */
-import { pageBlock, decodeBlock, decodeChain, inspectProgram, RAISE_CODE, LOWER_CODE, PAGE_BLOCK_BYTES } from '../../teletext/telesoftware';
+import { pageBlock, decodeBlock, decodeChain, inspectProgram, repairTerminator, RAISE_CODE, LOWER_CODE, PAGE_BLOCK_BYTES } from '../../teletext/telesoftware';
 import type { TeletextLine } from '../../teletext/packet27';
 
 const ESC = 0x7c;
@@ -208,5 +208,65 @@ describe('what a decoded program turns out to be', () => {
       Uint8Array.from([...body].map(c => c.charCodeAt(0)));
     expect(inspectProgram(text('10 REM SNAKE\r20 MODE 7\r30 END\r')).kind).toBe('source');
     expect(inspectProgram(text('TELESOFTWARE\rThe programs on this page\rare broadcast weekly.\r')).kind).toBe('text');
+  });
+});
+
+describe('putting back an end marker the tape destroyed', () => {
+  const basicLine = (number: number, body: number[]): number[] =>
+    [0x0d, (number >> 8) & 0xff, number & 0xff, body.length + 4, ...body];
+
+  const program = (count: number, from = 10): number[] => {
+    const out: number[] = [];
+    for (let i = 1; i <= count; i++) out.push(...basicLine(from + i * 10, [0xf1, 0x41]));
+    return out;
+  };
+
+  it('repairs the one byte, when the program has ended', () => {
+    /*
+     * These are a BASIC program, then 0x0D 0xFF, then a blob the program
+     * copies to &7C00 - MODE 7 screen memory - to draw its title. SNAKE and
+     * GALAXY decode perfectly except for that single marker byte, which came
+     * off the tape as 0x80 and 0xCC; without it the machine says `Bad
+     * program` for a program that is entirely there.
+     */
+    const blob = [0xa2, 0x00, 0x48, 0x98, 0xc9, 0x03, 0x30, 0x06];
+    const damaged = Uint8Array.from([...program(8), 0x0d, 0x80, ...blob]);
+    expect(inspectProgram(damaged).terminated).toBe(false);
+
+    const { data, repaired } = repairTerminator(damaged);
+    expect(repaired).toBe(true);
+    expect(inspectProgram(data).terminated).toBe(true);
+    // One byte, and only one: the blob the program needs is untouched.
+    expect(data.length).toBe(damaged.length);
+    expect(Array.from(data.subarray(-blob.length))).toEqual(blob);
+  });
+
+  it('REFUSES when real program follows, rather than truncating it', () => {
+    /*
+     * BREAKOU's damage is a corrupted line HEADER with ten more records
+     * after it. Treating that as an end marker would silently cut a game in
+     * half - worse than leaving it honestly marked as damaged.
+     */
+    const damaged = Uint8Array.from([
+      ...program(6),
+      0x0d, 0x80, 0x23, 0x26, 0x46, 0x46,
+      ...program(10, 500),
+      0x0d, 0xff,
+    ]);
+    const { data, repaired } = repairTerminator(damaged);
+    expect(repaired).toBe(false);
+    expect(data).toBe(damaged);
+  });
+
+  it('leaves a program that already ends alone', () => {
+    const whole = Uint8Array.from([...program(6), 0x0d, 0xff]);
+    expect(repairTerminator(whole).repaired).toBe(false);
+  });
+
+  it('will not call a line number above BASIC’s limit a record', () => {
+    // Without this bound the walk reads SNAKE's damaged marker as "line
+    // 32902" and reports the break 114 bytes late, inside the machine code.
+    const damaged = Uint8Array.from([...program(5), 0x0d, 0x80, 0x86, 0x72, 0xa2, 0x00]);
+    expect(inspectProgram(damaged).lines).toBe(5);
   });
 });

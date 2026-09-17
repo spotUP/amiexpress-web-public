@@ -558,6 +558,16 @@ const TOKENISED_MIN_LINES = 4;
 const SOURCE_MIN_NUMBERED = 0.6;
 
 /**
+ * The highest line number BBC BASIC will accept.
+ *
+ * Without this bound the walk reads a CORRUPTED record as a real one and
+ * sails past the true end of the program - SNAKE's damaged terminator
+ * became "line 32902", and the break was then reported 114 bytes late, in
+ * the middle of the machine code the program carries after itself.
+ */
+const MAX_BASIC_LINE = 32767;
+
+/**
  * Walk the tokenised line chain, and report where it stops.
  *
  * This is the only honest test of a telesoftware decode. A BASIC program is
@@ -578,6 +588,7 @@ export function inspectProgram(data: Uint8Array): ProgramShape {
     const number = (data[at + 1] << 8) | data[at + 2];
     const length = data[at + 3];
     if (length < 4 || at + length > data.length || number <= previous) break;
+    if (number > MAX_BASIC_LINE) break;
     previous = number;
     lines++;
     at += length;
@@ -643,6 +654,8 @@ export interface TelesoftwareListing {
    * from a damaged tape, and will not load.
    */
   intact: boolean;
+  /** Its end-of-program marker was destroyed on the tape and put back. */
+  repaired?: boolean;
 }
 
 /**
@@ -665,4 +678,74 @@ export function programOnPage(
 ): TelesoftwareListing | null {
   if (!map) return null;
   return map.programs.find(entry => entry.pages.includes(page)) ?? null;
+}
+
+// --- Repairing a damaged terminator ---------------------------------------
+
+/**
+ * How many further records a resync must find before the program is judged
+ * to continue rather than to have ended.
+ *
+ * BREAKOU finds ten; SNAKE and GALAXY find none. Three is a wide margin
+ * between those, and erring high is the safe direction: a program wrongly
+ * judged to have ended would be silently TRUNCATED, which is worse than
+ * one left honestly marked as damaged.
+ */
+const CONTINUES_AFTER = 3;
+
+/** How far past the break to look for the program picking up again. */
+const RESYNC_WINDOW = 400;
+
+/** Valid ascending records starting at `from`, without regard to what came before. */
+function recordsFrom(data: Uint8Array, from: number): number {
+  let at = from;
+  let found = 0;
+  let previous = -1;
+  while (at + 3 < data.length && data[at] === 0x0d) {
+    if (data[at + 1] === 0xff) break;
+    const number = (data[at + 1] << 8) | data[at + 2];
+    const length = data[at + 3];
+    if (length < 4 || at + length > data.length) break;
+    if (number <= previous || number > MAX_BASIC_LINE) break;
+    previous = number;
+    found++;
+    at += length;
+  }
+  return found;
+}
+
+/**
+ * Put back an end-of-program marker the tape destroyed.
+ *
+ * These programs are a BASIC program, then `0x0D 0xFF`, then a blob the
+ * program copies to &7C00 - MODE 7 screen memory - to draw its title. The
+ * BASIC half decodes perfectly in SNAKE and GALAXY; a single byte, the one
+ * BASIC's own format says must be 0xFF, came off the tape as 0x80 and 0xCC.
+ * Without it the machine answers `Bad program` for a program that is
+ * entirely there.
+ *
+ * ONLY that one byte is written, and only when the program has demonstrably
+ * ENDED: the line chain must be perfect up to the break, and no run of
+ * further records may follow it. BREAKOU fails that second test - ten more
+ * records follow its break, so its damage is a corrupted line HEADER with
+ * real code after it, and repairing it would truncate the game. It stays
+ * marked damaged, which is the honest answer.
+ */
+export function repairTerminator(data: Uint8Array): { data: Uint8Array; repaired: boolean } {
+  const shape = inspectProgram(data);
+  if (shape.kind !== 'tokenised' || shape.terminated) return { data, repaired: false };
+
+  const at = shape.brokeAt;
+  if (at === null || at + 1 >= data.length || data[at] !== 0x0d) return { data, repaired: false };
+
+  for (let i = at + 1; i < Math.min(data.length, at + 1 + RESYNC_WINDOW); i++) {
+    if (data[i] !== 0x0d) continue;
+    if (recordsFrom(data, i) >= CONTINUES_AFTER) return { data, repaired: false };
+  }
+
+  const mended = Uint8Array.from(data);
+  mended[at + 1] = 0xff;
+  // Only a repair if it actually produced a program that ends.
+  if (!inspectProgram(mended).terminated) return { data, repaired: false };
+  return { data: mended, repaired: true };
 }

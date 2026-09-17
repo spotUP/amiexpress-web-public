@@ -32,6 +32,7 @@ import {
   decodeChain,
   inspectProgram,
   loadCommandFor,
+  repairTerminator,
   type ProgramShape,
   type TelesoftwareListing,
   type TelesoftwareMap,
@@ -88,17 +89,21 @@ function main(): void {
   const chainable: string[] = [];
   const listings: TelesoftwareListing[] = [];
   for (const program of wanted) {
-    const shape = inspectProgram(program.data);
+    // A single byte the tape destroyed, put back where BASIC's own format
+    // says it must be - and only when the program has demonstrably ended.
+    const { data, repaired } = repairTerminator(program.data);
+    const shape = inspectProgram(data);
     const name = dfsName(program.title);
     if (shape.kind === 'tokenised' && shape.terminated) chainable.push(name);
     const suspect = shape.kind === 'tokenised' && !shape.terminated
       ? `  SUSPECT: line chain breaks at byte ${shape.brokeAt}`
+      : repaired ? '  (end marker repaired)'
       : program.complete ? '' : '  INCOMPLETE';
     console.log(
       `  ${name.padEnd(8)} ${shape.kind.padEnd(10)} ${String(program.data.length).padStart(6)}` +
         `  ${String(shape.lines).padStart(5)}  ${loadCommand(name, shape)}${suspect}`,
     );
-    discFiles.push({ name, data: program.data, ...addressesFor(shape) });
+    discFiles.push({ name, data, ...addressesFor(shape) });
     listings.push({
       title: program.title,
       file: name,
@@ -108,6 +113,7 @@ function main(): void {
       blocks: program.blocks.size,
       complete: program.complete,
       intact: shape.kind !== 'tokenised' || shape.terminated,
+      repaired,
     });
   }
 

@@ -391,6 +391,8 @@ export class TeletextApp {
     const blocks = `${program.blocks} block${program.blocks === 1 ? '' : 's'}`;
     this.screen.line(6, `Broadcast on this page in ${blocks}.`);
     this.screen.line(7, program.complete ? 'Every block was recovered.' : 'Some blocks are missing.');
+    // Saying so is the point: one byte of this one was put back.
+    if (program.repaired) this.screen.line(8, 'Its end marker was repaired.', '\x1b[0;36m');
 
     this.screen.line(9, 'On the BBC Micro it is:', '\x1b[0;36m');
     this.screen.line(10, fit(program.command, 40), '\x1b[1;37m');

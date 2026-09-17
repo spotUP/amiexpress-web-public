@@ -11,7 +11,8 @@
       ],
       "blocks": 25,
       "complete": false,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "VIDFAX2",
@@ -23,7 +24,8 @@
       ],
       "blocks": 20,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "GAMEINF",
@@ -35,7 +37,8 @@
       ],
       "blocks": 17,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "GALAXY",
@@ -47,7 +50,8 @@
       ],
       "blocks": 15,
       "complete": true,
-      "intact": false
+      "intact": true,
+      "repaired": true
     },
     {
       "title": "VIDIED",
@@ -59,7 +63,8 @@
       ],
       "blocks": 11,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "BREAKOU",
@@ -71,7 +76,8 @@
       ],
       "blocks": 8,
       "complete": true,
-      "intact": false
+      "intact": false,
+      "repaired": false
     },
     {
       "title": "GOMOKU",
@@ -83,7 +89,8 @@
       ],
       "blocks": 8,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "VIDFAX1",
@@ -95,7 +102,8 @@
       ],
       "blocks": 7,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "SNAKE",
@@ -107,7 +115,8 @@
       ],
       "blocks": 7,
       "complete": true,
-      "intact": false
+      "intact": true,
+      "repaired": true
     },
     {
       "title": "MASTRBR",
@@ -119,7 +128,8 @@
       ],
       "blocks": 7,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "DATE",
@@ -132,7 +142,8 @@
       ],
       "blocks": 6,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "FLASH",
@@ -144,7 +155,8 @@
       ],
       "blocks": 6,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "REVERSI",
@@ -156,7 +168,8 @@
       ],
       "blocks": 6,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "PATCH2",
@@ -168,7 +181,8 @@
       ],
       "blocks": 5,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "Bubbles",
@@ -180,7 +194,8 @@
       ],
       "blocks": 4,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     },
     {
       "title": "F.T",
@@ -192,7 +207,8 @@
       ],
       "blocks": 2,
       "complete": true,
-      "intact": true
+      "intact": true,
+      "repaired": false
     }
   ]
 }
