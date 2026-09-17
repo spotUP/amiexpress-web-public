@@ -30,6 +30,22 @@
  * the frame is same-origin - and in the CAPTURE phase, so the emulator
  * cannot eat it first.
  *
+ * LOADING RUNS AT TURBO, PLAYING RUNS AT 2MHz.
+ *
+ * A BBC Micro takes its own sweet time to boot, type in a command and pull
+ * a program off a disc, and none of that is the bit anyone came for.
+ * jsbeeb has a fast-as-possible mode for exactly this, bound to Alt-T, and
+ * the frame is same-origin so it can be handed that key.
+ *
+ * It is turned ON when the frame loads and OFF again at the caller's first
+ * keystroke, which is the one moment that reliably means "the program is
+ * up and I am playing it" - no guessing at load progress, and nothing to
+ * detect. A program that never asks for a key drops back on a timer
+ * instead, so an attract screen cannot be left running at warp.
+ *
+ * The speed must NOT stay up during play: these are 1982 action games
+ * timed against a 2MHz 6502, and Snake at fast-as-possible is not Snake.
+ *
  * The door can also take it away at any time (`emulator:close`).
  *
  * Inline styles throughout: this package ships no Tailwind (the utilities
@@ -38,6 +54,31 @@
  * nothing.
  */
 import React, { useEffect, useRef } from 'react';
+
+/**
+ * jsbeeb's turbo toggle.
+ *
+ * Its keyboard matches on `event.code` (`keyCode(e){return e.code}`) and
+ * registers shortcuts under `alt:<code>`, so this is the whole contract.
+ */
+const TURBO_KEY: KeyboardEventInit = {
+  code: 'KeyT',
+  key: 't',
+  altKey: true,
+  bubbles: true,
+};
+
+/**
+ * How long a load may run fast when nobody presses anything.
+ *
+ * Generous: a disc load plus a title screen. It only matters for software
+ * that wants no input at all, which would otherwise play at warp speed
+ * forever.
+ */
+const BOOST_CAP_MS = 12000;
+
+/** Keys that are not the caller starting to play. */
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta']);
 
 export interface EmulatorOverlayProps {
   /** Same-origin URL to host. */
@@ -56,6 +97,48 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
   onClose,
 }) => {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  /** Whether the machine is currently running fast. */
+  const boosting = useRef(false);
+  /** Set while this component is the one pressing a key, so it ignores its own. */
+  const pressing = useRef(false);
+  const capTimer = useRef<number | null>(null);
+
+  /**
+   * Press Alt-T inside the machine.
+   *
+   * Built from the frame's OWN window, so the event is of the class that
+   * document's listeners expect.
+   */
+  const pressTurbo = React.useCallback((): boolean => {
+    try {
+      const inner = frameRef.current?.contentDocument;
+      const view = inner?.defaultView;
+      if (!inner || !view) return false;
+      pressing.current = true;
+      inner.dispatchEvent(new view.KeyboardEvent('keydown', TURBO_KEY));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      pressing.current = false;
+    }
+  }, []);
+
+  const stopBoost = React.useCallback(() => {
+    if (capTimer.current !== null) {
+      window.clearTimeout(capTimer.current);
+      capTimer.current = null;
+    }
+    if (!boosting.current) return;
+    if (pressTurbo()) boosting.current = false;
+  }, [pressTurbo]);
+
+  const startBoost = React.useCallback(() => {
+    if (boosting.current) return;
+    if (!pressTurbo()) return;
+    boosting.current = true;
+    capTimer.current = window.setTimeout(stopBoost, BOOST_CAP_MS);
+  }, [pressTurbo, stopBoost]);
 
   /**
    * Put the keyboard in the machine.
@@ -86,12 +169,18 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
    */
   const onKeyDown = React.useCallback(
     (event: KeyboardEvent) => {
+      // Never react to the Alt-T this component just sent itself.
+      if (pressing.current) return;
+
+      // The caller is playing now, so the machine goes back to 2MHz.
+      if (!MODIFIERS.has(event.key)) stopBoost();
+
       if (event.key !== 'Escape' || !event.shiftKey) return;
       event.preventDefault();
       event.stopPropagation();
       onClose();
     },
-    [onClose],
+    [onClose, stopBoost],
   );
 
   /**
@@ -112,7 +201,9 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     } catch {
       // Cross-origin one day: the outer listener is all there is.
     }
-  }, [onKeyDown, takeKeyboard]);
+    // Boot, type and load at full tilt; the first keystroke ends it.
+    startBoost();
+  }, [onKeyDown, takeKeyboard, startBoost]);
 
   useEffect(() => {
     // Once on arrival, in case the frame is already loaded from cache.
@@ -121,6 +212,7 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
 
     return () => {
       window.clearTimeout(focus);
+      if (capTimer.current !== null) window.clearTimeout(capTimer.current);
       window.removeEventListener('keydown', onKeyDown, true);
       try {
         frameRef.current?.contentDocument?.removeEventListener('keydown', onKeyDown, true);

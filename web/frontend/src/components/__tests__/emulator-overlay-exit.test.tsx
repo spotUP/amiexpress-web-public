@@ -92,3 +92,78 @@ describe('leaving the emulator', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('the speed the machine runs at', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  /** Alt-T presses jsbeeb sees, by its own contract: it matches event.code. */
+  function turboPresses(inner: Document): { count: () => number } {
+    let n = 0;
+    inner.addEventListener('keydown', (event) => {
+      const key = event as KeyboardEvent;
+      if (key.altKey && key.code === 'KeyT') n++;
+    });
+    return { count: () => n };
+  }
+
+  function mounted() {
+    const onClose = vi.fn();
+    const { container } = overlay(onClose);
+    const inner = container.querySelector('iframe')!.contentDocument!;
+    const turbo = turboPresses(inner);
+    settle();
+    return { inner, turbo, onClose };
+  }
+
+  it('boots and loads at turbo', () => {
+    // A BBC Micro boots, types and pulls a program off a disc in its own
+    // time, and none of that is what anyone came for.
+    const { turbo } = mounted();
+    expect(turbo.count()).toBe(1);
+  });
+
+  it('drops back to 2MHz at the first keystroke', () => {
+    /*
+     * THE POINT OF THE WHOLE THING. These are 1982 action games timed
+     * against a 2MHz 6502; left at fast-as-possible they are unplayable.
+     * The first key is the one moment that reliably means "it is loaded
+     * and I am playing", with nothing to detect.
+     */
+    const { inner, turbo } = mounted();
+    act(() => {
+      inner.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space' }));
+    });
+    expect(turbo.count()).toBe(2);
+  });
+
+  it('is not ended by a bare modifier', () => {
+    const { inner, turbo } = mounted();
+    act(() => {
+      inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
+    });
+    expect(turbo.count()).toBe(1);
+  });
+
+  it('ends on its own when nothing is ever pressed', () => {
+    // Software that wants no input would otherwise play at warp forever.
+    const { turbo } = mounted();
+    act(() => {
+      vi.advanceTimersByTime(12_000);
+    });
+    expect(turbo.count()).toBe(2);
+  });
+
+  it('ends once, however many keys follow', () => {
+    const { inner, turbo } = mounted();
+    act(() => {
+      for (const code of ['Space', 'KeyA', 'KeyB']) {
+        inner.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', code }));
+      }
+    });
+    expect(turbo.count()).toBe(2);
+  });
+});
