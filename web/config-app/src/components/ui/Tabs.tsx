@@ -5,6 +5,12 @@
  * bookmark, a link in a runbook and the browser's back button all keep
  * working. Every legacy path that was folded into a tab redirects to its tab
  * through this parameter - see the route table in App.tsx.
+ *
+ * ONE KEY PER STRIP, because the Screens area mounts a strip inside a strip.
+ * With `tab` hard-coded, clicking an inner tab wrote a value the outer strip
+ * did not recognise, so the outer silently fell back to its default and the
+ * inner selection could never be linked to. A strip nested in another passes
+ * its own `param`; a strip standing alone keeps `tab` and is unaffected.
  */
 
 import { useCallback } from 'react';
@@ -33,30 +39,41 @@ interface TabbedWorkspaceProps {
   defaultTab?: string;
   /** Rendered on the right of the tab strip - a count, a status, an action. */
   aside?: ReactNode;
+  /**
+   * The query parameter this strip owns. Defaults to `tab`.
+   *
+   * A strip rendered INSIDE another must name its own, or the two write over
+   * each other in the URL.
+   */
+  param?: string;
 }
 
-export function useTabParam(tabs: TabDefinition[], defaultTab?: string): [string, (id: string) => void] {
+export function useTabParam(
+  tabs: TabDefinition[],
+  defaultTab?: string,
+  param = 'tab',
+): [string, (id: string) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requested = searchParams.get('tab');
+  const requested = searchParams.get(param);
   const known = tabs.some((tab) => tab.id === requested);
   const active = known && requested ? requested : defaultTab ?? tabs[0]?.id ?? '';
 
   const setActive = useCallback(
     (id: string) => {
       const next = new URLSearchParams(searchParams);
-      next.set('tab', id);
+      next.set(param, id);
       // Replace rather than push: flipping between tabs should not fill the
       // back button with steps a sysop has to walk out of.
       setSearchParams(next, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams, param]
   );
 
   return [active, setActive];
 }
 
-export function TabbedWorkspace({ tabs, defaultTab, aside }: TabbedWorkspaceProps) {
-  const [active, setActive] = useTabParam(tabs, defaultTab);
+export function TabbedWorkspace({ tabs, defaultTab, aside, param }: TabbedWorkspaceProps) {
+  const [active, setActive] = useTabParam(tabs, defaultTab, param);
 
   return (
     <TabsPrimitive.Root value={active} onValueChange={setActive}>

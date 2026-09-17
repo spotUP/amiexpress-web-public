@@ -1698,7 +1698,13 @@ export function ScreenFilesPage() {
         </div>
       )}
 
-      <TabbedWorkspace tabs={tabs} />
+      {/*
+        This page is itself a tab of the Screens workspace, so its own strip
+        owns a DIFFERENT key. Sharing `tab` meant clicking any tab here wrote a
+        value the workspace strip did not recognise, which sent the workspace
+        back to its default and made these tabs impossible to link to.
+      */}
+      <TabbedWorkspace tabs={tabs} param="view" />
 
       {entry && (
         <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
