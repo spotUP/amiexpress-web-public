@@ -1,0 +1,13 @@
+DE,Demo news
+PN,10100
+SC,0000
+FL,100,102,103,104,100,100
+OL,1,\x8D\x86NEWS
+OL,3,\x87Teletext went out in the vertical
+OL,4,\x87blanking interval - the black bar
+OL,5,\x87between television frames.
+OL,7,\x87A page was 40 columns by 24 rows
+OL,8,\x87of seven-bit characters and there
+OL,9,\x87was no computer at your end.
+OL,11,\x82GREEN 102\x87  carousel
+OL,12,\x83YELLOW 103\x87 quiz

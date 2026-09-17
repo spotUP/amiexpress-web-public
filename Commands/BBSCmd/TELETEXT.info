@@ -1,0 +1,9 @@
+BBSCMD=TELETEXT
+TYPE=TS
+LOCATION=Doors/teletext
+DESCRIPTION=Browse recovered teletext services: page numbers, subpages, fastext keys
+MULTINODE=YES
+PRIORITY=SAME
+NAME=Teletext - Ceefax and Oracle archive browser
+ACCESS=1
+MIN_COLUMNS=40

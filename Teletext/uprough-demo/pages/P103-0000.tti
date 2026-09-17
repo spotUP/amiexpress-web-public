@@ -1,0 +1,14 @@
+DE,Demo quiz
+PN,10300
+SC,0000
+FL,105,106,106,106,100,100
+OL,1,\x8D\x83QUIZ
+OL,3,\x87Which BBS software is this board
+OL,4,\x87built on?
+OL,6,\x81RED    AMIEXPRESS
+OL,7,\x82GREEN  CNET
+OL,8,\x83YELLOW STARNET
+OL,9,\x86CYAN   TAG
+OL,12,\x87ANSWER: \x98AMIEXPRESS
+OL,14,\x87A teletext quiz was never a program.
+OL,15,\x87Each answer was a page number.

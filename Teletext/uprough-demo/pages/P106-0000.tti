@@ -1,0 +1,7 @@
+DE,Demo quiz wrong
+PN,10600
+SC,0000
+FL,103,8FF,8FF,8FF,100,100
+OL,1,\x8D\x81WRONG
+OL,3,\x87Good software. Wrong board.
+OL,6,\x81RED 103\x87 try again
