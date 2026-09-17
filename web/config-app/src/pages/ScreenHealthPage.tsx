@@ -22,7 +22,6 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
 import { ScreenScopeTables } from './ScreenScopeTables';
-import { QuestionnairePage } from './QuestionnairePage';
 import { ErrorPanel } from '../components/ui/states';
 import { formatBytes } from '../lib/format';
 import type { ArtistTheme } from './use-my-theme';
@@ -336,18 +335,6 @@ export function ScreenHealthPage() {
       id: 'resolution',
       label: 'Resolution',
       render: () => <ScreenScopeTables />,
-    },
-    {
-      /*
-       * The questionnaire is a SCREEN now (the index lists it per node, with
-       * the bauds as its variants), so this tab is on its way out: what is
-       * left here is the on/off switch, which moves into the screen's own
-       * dialog. Kept until it does, because switching what every new caller
-       * is asked is not a thing to lose in a refactor.
-       */
-      id: 'questionnaire',
-      label: 'Questionnaire',
-      render: () => <QuestionnairePage />,
     },
     {
       id: 'commands',

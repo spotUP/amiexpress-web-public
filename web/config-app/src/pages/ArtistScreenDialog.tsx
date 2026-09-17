@@ -33,6 +33,7 @@ import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { CodeChip } from '../components/CodeChip';
 import type { CarryVerdict } from './screen-mci';
 import { ScreenSlotBanner } from '../components/ScreenSlotBanner';
+import { QuestionnaireSwitch, isQuestionnaireScreen } from './QuestionnaireSwitch';
 import { screenSlotState } from './screen-slot-state';
 
 interface ScreenFilePayload {
@@ -588,6 +589,15 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           Editing in {theme.title}{theme.owner ? ` (${theme.owner}'s theme)` : ''} — saves land there, not in yours.
         </p>
       )}
+
+      {/*
+        THE ONE THING A SCREEN DOES NOT HAVE: an off switch. The questionnaire
+        is a screen (a text in every node directory, shown to a new caller,
+        carrying the codes the board runs), so it opens here like any other -
+        and whether new callers are asked at all is decided beside it rather
+        than on a page of its own.
+      */}
+      {sysop && isQuestionnaireScreen(path) && <QuestionnaireSwitch />}
 
       {savingLabel(writeTargets) && (
         /*
