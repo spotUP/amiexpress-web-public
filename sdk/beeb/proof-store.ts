@@ -11,6 +11,24 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveBbsRoot } from '../core/settings';
+
+/**
+ * THE one place the record lives, for every door that asks.
+ *
+ * Resolved from the board root rather than counted out in `..` from
+ * whichever door is asking - which is how it broke: BEEB wrote to
+ * `Doors/beeb/data/proven.json` while TELETEXT, one `..` short, read
+ * `Doors/teletext/beeb/data/proven.json`. That directory does not exist, so
+ * a caller who had just proved their ROMs in one door was asked for them
+ * again in the other, and nothing anywhere said why.
+ *
+ * It is the BEEB door's data directory because that door owns the machine;
+ * TELETEXT is a second way in to the same one.
+ */
+export function beebProofFile(startDir: string): string {
+  return path.join(resolveBbsRoot(startDir), 'Doors', 'beeb', 'data', 'proven.json');
+}
 
 export interface RomProof {
   /** When they proved it, ISO 8601. */

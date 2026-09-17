@@ -40,7 +40,7 @@ import {
   type TelesoftwareListing,
 } from '@amiexpress/bbs-door-sdk/teletext/telesoftware';
 import { emulatorUrl } from '@amiexpress/bbs-door-sdk/beeb/emulator-url';
-import { hasProved } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
+import { hasProved, beebProofFile } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
 import {
   playableOnly,
   type Catalogue,
@@ -64,15 +64,9 @@ export interface DoorSession {
 
 type View = 'index' | 'picker' | 'page';
 
-/**
- * Where the BEEB door records who has shown their ROMs.
- *
- * Read from here rather than duplicated: one record, one answer, whichever
- * door the caller came through.
- */
-function beebProofFile(): string {
-  return path.join(__dirname, '..', 'beeb', 'data', 'proven.json');
-}
+// Where the BEEB door records who has shown their ROMs. Resolved by the
+// SDK from the board root: one record, one answer, whichever door the
+// caller came through.
 
 export class TeletextApp {
   private readonly session: DoorSession;
@@ -123,7 +117,7 @@ export class TeletextApp {
   constructor(session: DoorSession, root?: string, proofFile?: string) {
     this.session = session;
     this.root = root;
-    this.beebProof = proofFile ?? beebProofFile();
+    this.beebProof = proofFile ?? beebProofFile(__dirname);
     this.settings = loadSettings();
 
     // The board tells a door which screen the caller chose. A teletext

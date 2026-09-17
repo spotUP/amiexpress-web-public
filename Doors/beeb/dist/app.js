@@ -48,7 +48,6 @@ exports.BeebApp = void 0;
  * so there is no capability check here to drift out of step with that one.
  */
 const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
 const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
 const rom_proof_1 = require("@amiexpress/bbs-door-sdk/beeb/rom-proof");
 const proof_store_1 = require("@amiexpress/bbs-door-sdk/beeb/proof-store");
@@ -78,7 +77,7 @@ class BeebApp {
         this.onEmulatorClosed = () => this.onReturn();
         this.session = session;
         this.startDir = startDir;
-        this.proofPath = proofFile ?? path.join(__dirname, '..', 'data', 'proven.json');
+        this.proofPath = proofFile ?? (0, proof_store_1.beebProofFile)(__dirname);
         // The board tells a door how wide the caller's screen is. A teletext
         // session reports 40, and everything below is laid out from it.
         const declaredWidth = Number(session.bbsSession?.screenWidth);

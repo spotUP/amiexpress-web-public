@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { KeyStream, fit, type ArrowKey } from '@amiexpress/bbs-door-sdk/teletext/screen';
 import { verifyRomArchive } from '@amiexpress/bbs-door-sdk/beeb/rom-proof';
-import { hasProved, recordProof } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
+import { hasProved, recordProof, beebProofFile } from '@amiexpress/bbs-door-sdk/beeb/proof-store';
 import {
   listTitles,
   checkRoms,
@@ -85,7 +85,7 @@ export class BeebApp {
   constructor(session: DoorSession, startDir?: string, proofFile?: string) {
     this.session = session;
     this.startDir = startDir;
-    this.proofPath = proofFile ?? path.join(__dirname, '..', 'data', 'proven.json');
+    this.proofPath = proofFile ?? beebProofFile(__dirname);
 
     // The board tells a door how wide the caller's screen is. A teletext
     // session reports 40, and everything below is laid out from it.
