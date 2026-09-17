@@ -16,7 +16,16 @@ exports.BeebApp = void 0;
  */
 const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
 const library_1 = require("./library");
-const ROWS = 22;
+/**
+ * What the caller's screen can hold, not what this door assumed.
+ *
+ * A teletext session is 40 columns; an ANSI one is usually 80. This door
+ * drew a 60-character rule and a 40-character name column either way, so
+ * every row wrapped on a teletext screen and the listing came apart.
+ */
+const NARROWEST = 40;
+/** marker, index, the two gaps, the kind and the size columns. */
+const FIXED_COLUMNS = 15;
 class BeebApp {
     constructor(session, startDir) {
         this.titles = [];
@@ -28,6 +37,15 @@ class BeebApp {
         this.onEmulatorClosed = () => this.onReturn();
         this.session = session;
         this.startDir = startDir;
+        // The board tells a door how wide the caller's screen is. A teletext
+        // session reports 40, and everything below is laid out from it.
+        const declaredWidth = Number(session.bbsSession?.screenWidth);
+        this.width = Number.isFinite(declaredWidth) && declaredWidth >= NARROWEST
+            ? Math.min(declaredWidth, 80)
+            : 80;
+        const declaredRows = Number(session.bbsSession?.screenHeight);
+        const height = Number.isFinite(declaredRows) && declaredRows >= 10 ? declaredRows : 24;
+        this.rows = Math.max(6, height - 8);
         this.keys = new screen_1.KeyStream({
             key: ch => this.handleKey(ch),
             escape: () => this.quit(),
@@ -63,8 +81,8 @@ class BeebApp {
             this.at = Math.min(this.titles.length - 1, this.at + 1);
         if (this.at < this.top)
             this.top = this.at;
-        if (this.at >= this.top + ROWS)
-            this.top = this.at - ROWS + 1;
+        if (this.at >= this.top + this.rows)
+            this.top = this.at - this.rows + 1;
         this.paint();
     }
     handleKey(ch) {
@@ -118,18 +136,20 @@ class BeebApp {
     paint() {
         let out = '\x1b[2J\x1b[H\x1b[?25l';
         out += '\x1b[1;37mBBC MICRO\x1b[0m\r\n';
-        out += `\x1b[36m${'-'.repeat(60)}\x1b[0m\r\n`;
+        out += `\x1b[36m${'-'.repeat(this.width)}\x1b[0m\r\n`;
         if (this.roms.missing.length > 0) {
             // There is no open-source BBC ROM - Acorn never allowed one - so an
             // unconfigured board is the normal case, and a black screen with no
             // explanation is the unhelpful one.
             out += '\x1b[33mThis board is missing BBC ROMs.\x1b[0m\r\n\r\n';
-            out += `Missing from ${short((0, library_1.romsDir)(this.startDir))}:\r\n`;
+            out += `Missing from ${short((0, library_1.romsDir)(this.startDir), this.width)}:\r\n`;
             for (const name of this.roms.missing)
                 out += `  \x1b[31m${name}\x1b[0m\r\n`;
-            out += `\r\nThe emulator needs all ${library_1.REQUIRED_ROMS.length}: ${library_1.REQUIRED_ROMS.join(', ')}.\r\n`;
-            out += 'They are Acorn copyright and are not shipped with the board.\r\n';
-            out += 'See Beeb/README.md.\r\n\r\n';
+            out += '\r\n';
+            for (const row of wrap(`The emulator needs all ${library_1.REQUIRED_ROMS.length}: ${library_1.REQUIRED_ROMS.join(', ')}. ` +
+                'They are Acorn copyright and are not shipped with the board. See Beeb/README.md.', this.width))
+                out += `${row}\r\n`;
+            out += '\r\n';
         }
         if (this.roms.mismatched.length > 0) {
             // A ROM filed under the wrong name boots to BASIC and then cannot
@@ -140,30 +160,39 @@ class BeebApp {
                 out += `  ${bad.file}\r\n`;
                 out += `    expected \x1b[36m${bad.expected}\x1b[0m, the file says \x1b[31m${bad.found}\x1b[0m\r\n`;
             }
-            out += `\r\nThis board emulates a Model B with the 8271 controller,\r\n`;
-            out += `so it needs DFS ${library_1.EXPECTED_DFS_VERSION}x. A 2.2x or later DFS is for the\r\n`;
-            out += `1770 controller and cannot drive discs here - the machine\r\n`;
-            out += `boots, then every disc command fails.\r\n\r\n`;
+            out += '\r\n';
+            for (const row of wrap(`This board emulates a Model B with the 8271 controller, so it needs DFS ` +
+                `${library_1.EXPECTED_DFS_VERSION}x. A 2.2x or later DFS is for the 1770 controller and ` +
+                'cannot drive discs here - the machine boots, then every disc command fails.', this.width))
+                out += `${row}\r\n`;
+            out += '\r\n';
         }
         if (this.titles.length === 0) {
-            out += `No software found in ${short((0, library_1.softwareDir)(this.startDir))}\r\n`;
-            out += 'Put .ssd, .dsd or .uef files there and they appear here.\r\n\r\n';
+            out += `No software found in ${short((0, library_1.softwareDir)(this.startDir), this.width)}\r\n`;
+            for (const row of wrap('Put .ssd, .dsd or .uef files there and they appear here.', this.width)) {
+                out += `${row}\r\n`;
+            }
+            out += '\r\n';
         }
         else {
-            const visible = this.titles.slice(this.top, this.top + ROWS);
+            const visible = this.titles.slice(this.top, this.top + this.rows);
             visible.forEach((title, row) => {
                 const index = this.top + row;
                 const chosen = index === this.at;
                 const marker = chosen ? '\x1b[1;37m>' : ' ';
                 const size = title.bytes > 0 ? `${Math.round(title.bytes / 1024)}K` : '';
-                out += `${marker}${String(row + 1).padStart(2)} ${pad(title.name, 40)} ${title.kind === 'tape' ? 'tape' : 'disc'} ${size.padStart(5)}\x1b[0m\r\n`;
+                const nameWidth = Math.max(8, this.width - FIXED_COLUMNS);
+                out += `${marker}${String(row + 1).padStart(2)} ${pad(title.name, nameWidth)} ${title.kind === 'tape' ? 'tape' : 'disc'} ${size.padStart(5)}\x1b[0m\r\n`;
             });
-            if (this.titles.length > ROWS) {
+            if (this.titles.length > this.rows) {
                 out += `\x1b[36m   ${this.titles.length} titles\x1b[0m\r\n`;
             }
             out += '\r\n';
         }
-        out += '\x1b[0;44;37m ENTER runs   B for BASIC   Q quits \x1b[0m\r\n';
+        const bar = this.width >= 60
+            ? ' ENTER runs   B for BASIC   Q quits '
+            : ' ENTER=run  B=BASIC  Q=quit ';
+        out += `\x1b[0;44;37m${bar}\x1b[0m\r\n`;
         this.write(out);
     }
     write(data) {
@@ -172,9 +201,36 @@ class BeebApp {
 }
 exports.BeebApp = BeebApp;
 function pad(text, width) {
-    return text.length <= width ? text.padEnd(width) : text.slice(0, width - 1) + '.';
+    return text.length <= width ? text.padEnd(width) : text.slice(0, Math.max(0, width - 1)) + '.';
 }
-function short(dir) {
-    return dir.length <= 52 ? dir : '...' + dir.slice(-49);
+/**
+ * Break prose to the caller's width.
+ *
+ * The setup screen's sentences were written to look right at 80 columns
+ * and were 59 characters long, so on a 40-column teletext session the one
+ * screen a new board always shows was the one that wrapped.
+ */
+function wrap(text, width) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+        if (!line)
+            line = word;
+        else if (line.length + 1 + word.length <= width)
+            line += ` ${word}`;
+        else {
+            lines.push(line);
+            line = word;
+        }
+    }
+    if (line)
+        lines.push(line);
+    return lines;
+}
+/** A path, cut from the FRONT: the end of it is the part worth reading. */
+function short(dir, width) {
+    const room = Math.max(8, width - 14);
+    return dir.length <= room ? dir : '...' + dir.slice(-(room - 3));
 }
 //# sourceMappingURL=app.js.map

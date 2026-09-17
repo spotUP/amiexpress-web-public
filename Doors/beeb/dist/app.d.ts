@@ -14,6 +14,8 @@ export declare class BeebApp {
     private readonly session;
     private readonly keys;
     private readonly startDir;
+    private readonly width;
+    private readonly rows;
     private titles;
     private roms;
     private at;
