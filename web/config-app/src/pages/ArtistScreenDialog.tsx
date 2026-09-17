@@ -225,6 +225,31 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
     return true;
   };
 
+  /**
+   * Start this empty slot from the board's own art.
+   *
+   * `slotAffordances` offers `copy-board` whenever the artist's slot is empty
+   * and the board has the same screen drawn, and nothing honoured it: the
+   * banner draws a button only for an action the caller handles, so the offer
+   * was filtered out and an artist standing on an empty slot - with the
+   * board's art right there - was told to upload one.
+   *
+   * The same copy the redraw below makes, from the other direction. Redraw
+   * copies the screen you are LOOKING at; this copies the board's, because the
+   * one you are looking at is the empty slot.
+   */
+  const copyBoard = useMutation({
+    mutationFn: (from: string) => apiClient.copyScreenIntoTheme(theme.slug, from),
+    onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
+      if (answer.data?.to) onOpenPath(answer.data.to);
+      if (answer.message) showSuccess(answer.message);
+      void queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+      void queryClient.invalidateQueries({ queryKey: ['screen-theme-validation', theme.slug] });
+    },
+    onError: (error: Error) => showError(error.message),
+  });
+
   const redraw = useMutation({
     mutationFn: () => apiClient.copyScreenIntoTheme(theme.slug, path as string),
     onSuccess: (answer: { data?: { to?: string }; message?: string }) => {
@@ -544,7 +569,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           <ScreenSlotBanner
             state={slotState}
             themeTitle={theme.title}
-            busy={redraw.isPending || writeBytes.isPending}
+            busy={redraw.isPending || copyBoard.isPending || writeBytes.isPending}
             /*
              * Drawing an empty slot, for the two formats that HAVE a drawing
              * surface. PETSCII opens a blank C64 screen; ANSI opens the blank
@@ -566,6 +591,14 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
              */
             onUpload={mine && slotState.kind === 'yours-undrawn' ? () => replaceInput.current?.click() : undefined}
             onRedrawIntoMine={!mine ? () => redraw.mutate() : undefined}
+            /*
+             * The board's copy, when the slot says there is one. `download`
+             * and a delete are NOT wired here on purpose: the toolbar below
+             * already carries both for a file that exists, and a second copy
+             * of each on the same screen is the clutter this banner exists to
+             * remove.
+             */
+            onCopyBoard={mine ? (from: string) => copyBoard.mutate(from) : undefined}
           />
         </div>
       )}
