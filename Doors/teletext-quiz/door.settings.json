@@ -1,0 +1,28 @@
+{
+  "command": "TTQUIZ",
+  "settings": [
+    {
+      "key": "questions",
+      "label": "Questions per round",
+      "type": "number",
+      "default": 10,
+      "min": 3,
+      "max": 30,
+      "help": "How many questions a caller is asked before the score page. A pack with fewer questions than this simply makes a shorter round."
+    },
+    {
+      "key": "pack",
+      "label": "Question pack",
+      "type": "string",
+      "default": "",
+      "help": "The id of one pack in the door's packs/ folder. Leave empty to draw from every installed pack at once. Packs are plain JSON - see packs/README.md for the format."
+    },
+    {
+      "key": "allowReveal",
+      "label": "Allow reveal",
+      "type": "boolean",
+      "default": true,
+      "help": "Whether V uncovers the concealed answer on a question page. A revealed question never scores, so this is about whether the option exists at all."
+    }
+  ]
+}
