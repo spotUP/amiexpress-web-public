@@ -754,3 +754,91 @@ export function countTrueColourCodes(bytes: Uint8Array): number {
   }
   return count;
 }
+
+/**
+ * The sixteen ANSI colours as RGB, in SGR order: 0-7 normal, 8-15 bright.
+ *
+ * The VGA hardware values, because that is what the art carries. PabloDraw and
+ * Moebius write a document's PALETTE out as explicit RGB, so ordinary
+ * sixteen-colour art arrives full of `ESC[1;r;g;bt` with values that are the
+ * palette entries plus a rounding wobble - `255,87,87` for bright red,
+ * `171,0,171` for magenta.
+ *
+ * One owner, here, because the board folds these for byte transports too
+ * (web/backend/src/utils/true-colour-fold.util.ts) and a second table would
+ * drift. A near-miss on one side and not the other means a screen the editor
+ * refuses and the wire flattens, or the reverse.
+ */
+export const ANSI_16_RGB: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 0, 0], [170, 0, 0], [0, 170, 0], [170, 85, 0],
+  [0, 0, 170], [170, 0, 170], [0, 170, 170], [170, 170, 170],
+  [85, 85, 85], [255, 85, 85], [85, 255, 85], [255, 255, 85],
+  [85, 85, 255], [255, 85, 255], [85, 255, 255], [255, 255, 255],
+];
+
+/** Which of the sixteen a colour is closest to, by squared RGB distance. */
+export function nearestAnsi16(r: number, g: number, b: number): number {
+  let best = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < ANSI_16_RGB.length; i++) {
+    const [pr, pg, pb] = ANSI_16_RGB[i];
+    const distance = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * The most a colour may miss the palette by and still count as palette art.
+ *
+ * The board's own files miss by at most 12. 64 is eight units on one channel:
+ * past any rounding an editor does, short of a colour chosen off the palette.
+ */
+export const PALETTE_ROUNDING_TOLERANCE = 64;
+
+/**
+ * How far this file's 24-bit colours sit from the sixteen, at worst.
+ *
+ * Zero when there are none, or when every one IS a palette entry. A dozen
+ * means palette art whose RGB carries a rounding wobble. A large number means
+ * somebody really did paint with colours the sixteen cannot hold.
+ *
+ * `countTrueColourCodes` says how a file was WRITTEN; this says what it holds,
+ * and only the second decides whether opening it would cost the artist
+ * anything ("he never actively tried to make it 24-bit", the sysop, via the
+ * artist, 2026-09-17).
+ */
+export function worstPaletteDistance(bytes: Uint8Array): number {
+  let worst = 0;
+  for (let i = 0; i + 2 < bytes.length; i++) {
+    if (bytes[i] !== 0x1b || bytes[i + 1] !== 0x5b) continue;  // ESC [
+    let j = i + 2;
+    let params = '';
+    while (j < bytes.length && ((bytes[j] >= 0x30 && bytes[j] <= 0x39) || bytes[j] === 0x3b)) {
+      params += String.fromCharCode(bytes[j]);
+      j++;
+    }
+    if (j >= bytes.length || bytes[j] !== 0x74) continue;  // final 't'
+
+    const parts = params.split(';').map(p => Number.parseInt(p, 10));
+    // Only the two COLOUR forms; `ESC[8;24;80t` is a window resize, not a
+    // colour, and measuring it against a palette would be meaningless.
+    if (parts.length < 4 || parts.slice(0, 4).some(n => !Number.isFinite(n))) continue;
+    const [mode, r, g, b] = parts;
+    if (mode !== 0 && mode !== 1) continue;
+
+    const clamp = (n: number) => Math.max(0, Math.min(255, n));
+    const [cr, cg, cb] = [clamp(r), clamp(g), clamp(b)];
+    const [pr, pg, pb] = ANSI_16_RGB[nearestAnsi16(cr, cg, cb)];
+    worst = Math.max(worst, (pr - cr) ** 2 + (pg - cg) ** 2 + (pb - cb) ** 2);
+  }
+  return worst;
+}
+
+/** Whether every 24-bit colour in `bytes` is a palette colour after all. */
+export function isPaletteArt(bytes: Uint8Array): boolean {
+  return worstPaletteDistance(bytes) <= PALETTE_ROUNDING_TOLERANCE;
+}

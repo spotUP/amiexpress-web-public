@@ -21,43 +21,62 @@
  * that are both defensible.
  */
 
-/**
- * The sixteen ANSI colours as RGB, in SGR order: 0-7 normal, 8-15 bright.
- *
- * The BRIGHT half is the pure set (`#ff0000`, `#00ff00`...), not the VGA
- * hardware values (`#ff5555`, `#55ff55`...). That is a deliberate choice about
- * what an artist MEANT rather than what one particular adapter emitted: a
- * drawing that says `#ff0000` is asking for bright red, and against the VGA
- * table plain distance answers DARK red - 170,0,0 is nearer to 255,0,0 than
- * 255,85,85 is - so every saturated colour in a logo came out muddy. Matching
- * the pure set puts `#ff0000` on bright red and leaves `#aa0000` on dark red,
- * which is what both were drawn as.
+/*
+ * THE PALETTE LIVES IN THE SDK, because the ANSI editor measures against it
+ * too and a second table would drift: a near-miss on one side and not the
+ * other means a screen the editor refuses and the wire flattens, or the
+ * reverse. The values are the VGA ones rather than the pure set - see
+ * engines/ui/ansi-editor/core/file-ops.ts for the bytes that settled it.
  */
-const ANSI_RGB: ReadonlyArray<readonly [number, number, number]> = [
-  [0, 0, 0], [170, 0, 0], [0, 170, 0], [170, 85, 0],
-  [0, 0, 170], [170, 0, 170], [0, 170, 170], [170, 170, 170],
-  [85, 85, 85], [255, 0, 0], [0, 255, 0], [255, 255, 0],
-  [0, 0, 255], [255, 0, 255], [0, 255, 255], [255, 255, 255],
-];
+import {
+  ANSI_16_RGB,
+  nearestAnsi16,
+  PALETTE_ROUNDING_TOLERANCE as SDK_TOLERANCE,
+} from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 
 /** Which of the sixteen a colour is closest to. */
 export function nearestAnsiColour(r: number, g: number, b: number): number {
-  let best = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < ANSI_RGB.length; i++) {
-    const [pr, pg, pb] = ANSI_RGB[i];
-    const distance = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
-    // A TIE GOES TO THE BRIGHT HALF. `#ff5555` - VGA's own bright red - sits
-    // exactly as far from brown as from bright red, and taking the first match
-    // painted it brown. These are art colours: the brighter reading is the one
-    // the artist meant.
-    const better = distance < bestDistance || (distance === bestDistance && i >= 8 && best < 8);
-    if (better) {
-      bestDistance = distance;
-      best = i;
-    }
+  return nearestAnsi16(r, g, b);
+}
+
+
+/**
+ * How far `text`'s colours sit from the sixteen, at worst, in squared RGB.
+ *
+ * Zero means every colour IS a palette entry; a dozen means the file is
+ * palette art whose RGB was written with a rounding wobble, which is what
+ * every 24-bit-looking file on this board has turned out to be. A large number
+ * means somebody really did paint with colours the sixteen cannot hold.
+ *
+ * This is what tells "24-bit syntax" apart from "24-bit art", and the two need
+ * telling apart: the first folds losslessly and the second does not.
+ */
+export function furthestFromPalette(text: string): number {
+  let worst = 0;
+  for (const match of text.matchAll(trueColourPattern())) {
+    const parts = match[1].split(';').map(p => Number.parseInt(p, 10));
+    if (parts.length < 4 || parts.slice(0, 4).some(n => !Number.isFinite(n))) continue;
+    const [, r, g, b] = parts;
+    const clamp = (n: number) => Math.max(0, Math.min(255, n));
+    const [cr, cg, cb] = [clamp(r), clamp(g), clamp(b)];
+    const [pr, pg, pb] = ANSI_16_RGB[nearestAnsiColour(cr, cg, cb)];
+    worst = Math.max(worst, (pr - cr) ** 2 + (pg - cg) ** 2 + (pb - cb) ** 2);
   }
-  return best;
+  return worst;
+}
+
+/**
+ * The most a colour may miss the palette by and still count as palette art.
+ *
+ * The board's own files miss by at most 12 (`171` for `170`, `87` for `85`).
+ * 64 is eight units on one channel: comfortably past any rounding an editor
+ * does, comfortably short of a colour chosen off the palette.
+ */
+export const PALETTE_ROUNDING_TOLERANCE = SDK_TOLERANCE;
+
+/** Whether folding `text` would lose an artist anything. */
+export function foldsLosslessly(text: string): boolean {
+  return furthestFromPalette(text) <= PALETTE_ROUNDING_TOLERANCE;
 }
 
 /** The SGR parameter that paints `index` as ink (30-37, then 90-97). */

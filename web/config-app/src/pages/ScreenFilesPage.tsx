@@ -28,7 +28,7 @@ import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { DoorArtDialog } from './DoorArtDialog';
 import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
 import { screenToCanvas, base64ToBytes, inkedHeight } from './screen-bytes';
-import { countTrueColourCodes } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
+import { countTrueColourCodes, isPaletteArt } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, describeCarry,
@@ -489,26 +489,35 @@ export function ScreenFilesPage() {
     setEditingPetscii(false);
 
     /*
-     * TRUE-COLOUR ART IS NOT EDITABLE HERE, AND SAYING SO BEATS FLATTENING IT.
+     * COLOUR THE EDITOR CANNOT HOLD IS REFUSED. COLOUR IT CAN IS NOT.
      *
-     * PabloDraw and Moebius write 24-bit colour as `ESC[0;r;g;bt`. A `Cell`
-     * holds a 0-15 palette index, so the parser consumes those sequences and
-     * the codec cannot write them back: opening such a file and saving it
-     * drops every one. Measured on `h7-up_rough_doors.asc` - 337 sequences in,
-     * zero out, 6,838 bytes down to 2,459 (2026-09-16).
+     * PabloDraw and Moebius write 24-bit colour as `ESC[0;r;g;bt`, and a
+     * `Cell` holds a 0-15 palette index, so the codec cannot write those
+     * sequences back. That was read as "any file carrying them is 24-bit art",
+     * and this refused all of them.
      *
-     * Refused rather than warned: the damage happens on SAVE, which is one
-     * keystroke away from the edit the sysop came to make, and a flattened
-     * drawing cannot be got back from the file. Viewing and downloading are
-     * untouched, and PabloDraw still edits it.
+     * Wrong, and it locked the board's artist out of his own screen. The
+     * editors write a document's PALETTE out as RGB, so ordinary
+     * sixteen-colour art arrives full of 24-bit syntax: all 337 sequences in
+     * `h7-up_rough_doors.asc` are VGA palette entries with a rounding wobble
+     * of one or two per channel, furthest 12 away in squared distance. "he
+     * never actively tried to make it 24-bit" (the artist, via the sysop,
+     * 2026-09-17) - and he was right.
+     *
+     * So the question is not how the file was WRITTEN but what it HOLDS.
+     * Palette art round-trips through the editor with nothing lost and opens
+     * normally. Only a colour genuinely off the sixteen is refused, and that
+     * refusal still earns itself: the damage happens on SAVE, one keystroke
+     * from the edit the sysop came to make, and a flattened drawing cannot be
+     * got back from the file.
      */
-    const trueColour = countTrueColourCodes(base64ToBytes(file.content));
-    if (trueColour > 0) {
+    const bytes = base64ToBytes(file.content);
+    if (!isPaletteArt(bytes)) {
       setEditing(null);
       setPendingEdit(null);
       showError(
-        `This screen carries ${trueColour} 24-bit colour codes that the editor cannot keep - `
-        + 'saving here would flatten it to sixteen colours. Edit it in PabloDraw or Moebius.',
+        `This screen carries ${countTrueColourCodes(bytes)} 24-bit colour codes with colours `
+        + 'outside the sixteen - saving here would flatten them. Edit it in PabloDraw or Moebius.',
       );
       return;
     }
