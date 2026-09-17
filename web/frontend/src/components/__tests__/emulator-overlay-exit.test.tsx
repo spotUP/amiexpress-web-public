@@ -167,3 +167,94 @@ describe('the speed the machine runs at', () => {
     expect(turbo.count()).toBe(2);
   });
 });
+
+describe('dropping back to 2MHz when the load finishes', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  function turboPresses(inner: Document): { count: () => number } {
+    let n = 0;
+    inner.addEventListener('keydown', (event) => {
+      const key = event as KeyboardEvent;
+      if (key.altKey && key.code === 'KeyT') n++;
+    });
+    return { count: () => n };
+  }
+
+  /** The emulator's own drive light: <span class="led disc" id="drive0">. */
+  function machine() {
+    const onClose = vi.fn();
+    const { container } = overlay(onClose);
+    const inner = container.querySelector('iframe')!.contentDocument!;
+    // jsdom leaves an unloaded frame's document completely empty - no body,
+    // not even a root element - so give it one before hanging the drive
+    // light on it.
+    inner.open();
+    inner.write('<html><body></body></html>');
+    inner.close();
+    const light = inner.createElement('span');
+    light.className = 'led disc';
+    light.id = 'drive0';
+    inner.body.appendChild(light);
+    const turbo = turboPresses(inner);
+    settle();
+    return { inner, light, turbo };
+  }
+
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  it('stays fast while the disc is being read', () => {
+    /*
+     * DFS reads in bursts with the light out between them, so dropping at
+     * the first dark frame would fall back to 2MHz in the middle of a load.
+     */
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(2000);
+    light.classList.remove('on');
+    tick(300);
+    light.classList.add('on');
+    tick(2000);
+    expect(turbo.count()).toBe(1); // still only the switch-on
+  });
+
+  it('drops back once the drive settles', () => {
+    /*
+     * THE BUG THIS EXISTS FOR. A game started by CHAIN runs on its own
+     * while the player watches, so waiting for a keystroke left it at
+     * fast-as-possible: "they play super fast now".
+     */
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(1500);
+    light.classList.remove('on');
+    tick(1000);
+    expect(turbo.count()).toBe(2);
+  });
+
+  it('does not drop before the drive has ever run', () => {
+    // A caller who asked for a bare machine never lights it at all, and
+    // must not be held waiting for a light that is not coming.
+    const { turbo } = machine();
+    tick(3000);
+    expect(turbo.count()).toBe(1);
+  });
+
+  it('still has the timer as a backstop', () => {
+    const { turbo } = machine();
+    tick(12_000);
+    expect(turbo.count()).toBe(2);
+  });
+
+  it('drops only once, however long the drive stays dark', () => {
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(500);
+    light.classList.remove('on');
+    tick(5000);
+    expect(turbo.count()).toBe(2);
+  });
+});
