@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle, UserCog, Archive } from 'lucide-react';
+import { Plus, Check, Send, Eye, Palette, Copy, Image, ShieldCheck, AlertTriangle, UserCog, Archive } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
-import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -137,8 +137,6 @@ export function ScreenThemesPage() {
 
   /** The theme whose validation report is open. */
   const [checking, setChecking] = useState<ScreenTheme | null>(null);
-  /** The theme being previewed; the caller to preview it as lives in the panel. */
-  const [previewing, setPreviewing] = useState<ScreenTheme | null>(null);
 
   const payload = (data as { data?: { themes?: ScreenTheme[]; defaultSlug?: string; canCreate?: boolean } } | undefined)?.data;
   const themes = payload?.themes ?? EMPTY_THEMES;
@@ -154,16 +152,6 @@ export function ScreenThemesPage() {
   });
   const report = (checkData as { data?: ThemeValidation } | undefined)?.data;
 
-
-  /** The screens the board can display, for the preview's own picker. */
-  const { data: indexData } = useQuery({
-    queryKey: ['screen-index'],
-    queryFn: () => apiClient.getScreenIndex(),
-    enabled: previewing !== null,
-  });
-  const screenNames: string[] =
-    ((indexData as { data?: { screens?: { screen: string }[] } } | undefined)?.data?.screens ?? [])
-      .map(entry => entry.screen);
 
   const createMutation = useMutation({
     mutationFn: () => apiClient.createScreenTheme(form),
@@ -208,15 +196,22 @@ export function ScreenThemesPage() {
     onError: (err: Error) => showError(`Could not change the owner: ${err.message}`),
   });
 
-  async function handOver(theme: ScreenTheme) {
-    const owner = window.prompt(
-      theme.dir === ''
-        ? "Which account may draw the board's own screens? (empty for nobody but sysops)"
-        : `Which account owns "${theme.title}"? (empty for nobody)`,
-      theme.owner,
-    );
-    if (owner === null) return;
-    ownerMutation.mutate({ slug: theme.slug, owner: owner.trim() });
+  /*
+   * HANDING A THEME OVER IS A CHOICE FROM A LIST, not a typed name.
+   *
+   * It was `window.prompt`. Ownership is not a label - the sandbox grants
+   * write access by matching this name against the caller's ACCOUNT - so one
+   * typo made a theme its artist could not open, with nothing on screen
+   * saying why. The create form has picked from `usernames` since the day
+   * ownership was added; this is the same control, arriving where the other
+   * half of the job lives.
+   */
+  const [handingOver, setHandingOver] = useState<ScreenTheme | null>(null);
+  const [handOverTo, setHandOverTo] = useState('');
+
+  function handOver(theme: ScreenTheme) {
+    setHandOverTo(theme.owner ?? '');
+    setHandingOver(theme);
   }
 
   const copyMutation = useMutation({
@@ -363,13 +358,25 @@ export function ScreenThemesPage() {
       align: 'right',
       cell: row => (
         <div className="flex gap-2 justify-end">
-          <button
-            type="button"
-            onClick={() => setPreviewing(row)}
-            title="Preview as a caller"
+          {/*
+            THE WAY TO THE ART, which this page had no route to at all: the
+            sysop read "this theme covers 3 of 12 screens" here and then
+            changed page and re-picked the theme by hand to do anything about
+            it.
+
+            "Preview as a caller" used to sit here and is gone. The panel was
+            mounted in three places over one endpoint; it belongs to the
+            artist's own status bar and to Screen health, where every other
+            board-wide report lives.
+          */}
+          <Link
+            to={`/admin/screens?theme=${encodeURIComponent(row.slug)}`}
+            title="Open the art"
+            aria-label="Open the art"
+            className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors"
           >
-            <Monitor size={16} />
-          </button>
+            <Image size={16} />
+          </Link>
           {row.dir !== '' && (
             <button type="button" onClick={() => setChecking(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Check this theme">
               <ShieldCheck size={16} />
@@ -517,23 +524,56 @@ export function ScreenThemesPage() {
         </div>
       </Modal>
 
+      {/*
+        Handing a theme to an artist, in the terms the sandbox understands.
+        The same picker the create form uses, over the same `usernames`.
+      */}
       <Modal
-        open={previewing !== null}
-        onClose={() => setPreviewing(null)}
-        title={previewing ? `${previewing.title}, as a caller meets it` : 'Preview'}
-        maxWidth="max-w-4xl"
+        open={handingOver !== null}
+        onClose={() => setHandingOver(null)}
+        title={handingOver
+          ? (handingOver.dir === ''
+              ? "Who may draw the board's own screens?"
+              : `Who owns ${handingOver.title}?`)
+          : 'Hand it over'}
       >
-        {previewing && (
-          <ScreenPreviewPanel
-            theme={previewing.slug}
-            themeTitle={previewing.title}
-            screenNames={screenNames}
-          />
-        )}
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            if (!handingOver) return;
+            ownerMutation.mutate({ slug: handingOver.slug, owner: handOverTo.trim() });
+            setHandingOver(null);
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label htmlFor="hand-over-owner" className="label">Owned by</label>
+            <select
+              id="hand-over-owner"
+              className="input-field w-full"
+              value={handOverTo}
+              onChange={event => setHandOverTo(event.target.value)}
+            >
+              <option value="">Sysops only</option>
+              {usernames.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-content-secondary">
+              That account may edit this theme&apos;s screens in the editor, and nothing else on
+              the board. Sysops only means nobody but a sysop can draw it.
+            </p>
+          </div>
 
-        <div className="flex gap-2 justify-end mt-4">
-          <button type="button" onClick={() => setPreviewing(null)}>Close</button>
-        </div>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" className="btn-secondary" onClick={() => setHandingOver(null)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={ownerMutation.isPending}>
+              Hand it over
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <Modal

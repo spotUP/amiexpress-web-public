@@ -25,6 +25,10 @@ export const ADMIN_SECTIONS: AdminSectionPerm[] = [
   { key: 'conferences', label: 'Conferences',    defaultMinLevel: 255 },
   { key: 'doors',      label: 'Doors',           defaultMinLevel: 255 },
   { key: 'screens',    label: 'Screens',         defaultMinLevel: 100 },
+  // Themes left the Screens page and became a destination of its own. Sysop,
+  // as it always was: it was a TAB the level-100 fork never rendered, and it
+  // lists every theme on the board with its owner and the board default.
+  { key: 'themes',     label: 'Themes',          defaultMinLevel: 255 },
   { key: 'system',     label: 'Configuration',   defaultMinLevel: 255 },
   { key: 'config-files', label: 'Config Files',  defaultMinLevel: 255 },
   { key: 'lookup-tables', label: 'Lookup Tables', defaultMinLevel: 255 },

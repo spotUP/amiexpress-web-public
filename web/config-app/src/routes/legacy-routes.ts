@@ -20,7 +20,8 @@ export interface LegacyRoute {
 }
 
 export const LEGACY_ROUTES: LegacyRoute[] = [
-  { from: 'screen-themes', to: 'screens?tab=themes', capability: 'Screen themes - who owns each set of board art' },
+  // Themes is a destination now, not a tab inside Screens.
+  { from: 'screen-themes', to: 'themes', capability: 'Screen themes - who owns each set of board art' },
   { from: 'node-control', to: 'nodes?tab=live', capability: 'Live node control and supervisor commands' },
   { from: 'drives', to: 'conferences?tab=file-areas', capability: 'DLPATH.n and ULPATH.n per conference' },
   { from: 'computers', to: 'lookup-tables?tab=computers', capability: 'ComputerList.info' },

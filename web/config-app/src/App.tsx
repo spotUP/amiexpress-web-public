@@ -28,6 +28,7 @@ import {
   OperatorChatWorkspace,
   ScreensWorkspace,
 } from './pages/workspaces';
+import { ScreenThemesPage } from './pages/ScreenThemesPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { CoSysopPersonasPage } from './pages/CoSysopPersonasPage';
 import { BotPage } from './pages/BotPage';
@@ -127,6 +128,12 @@ function App() {
             an artist needs both halves - one names the theme, the other draws
             its screens. */}
         <Route path="screens" element={<LevelRoute><ScreensWorkspace /></LevelRoute>} />
+        {/* Themes is a destination of its own: a theme is a SET of screens
+            with an owner, a status and a board default - what a sysop
+            administers - while /admin/screens is where the art is drawn.
+            Nested as a tab it shared one `?tab=` with the studio and could
+            not be linked to at all. */}
+        <Route path="themes" element={<LevelRoute><ScreenThemesPage /></LevelRoute>} />
         <Route path="nodes" element={<LevelRoute><NodesWorkspace /></LevelRoute>} />
         <Route path="operator-chat" element={<LevelRoute><OperatorChatWorkspace /></LevelRoute>} />
         <Route path="operator-chat/personas" element={<LevelRoute><CoSysopPersonasPage /></LevelRoute>} />

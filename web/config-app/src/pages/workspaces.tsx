@@ -27,7 +27,6 @@ import { ScreenTypesPage } from './ScreenTypesPage';
 import { useAuth } from '../contexts/AuthContext';
 import { ScreenFilesPage } from './ScreenFilesPage';
 import { ArtistStudioPage } from './ArtistStudioPage';
-import { ScreenThemesPage } from './ScreenThemesPage';
 import { QuestionnairePage } from './QuestionnairePage';
 import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
@@ -164,7 +163,6 @@ const SYSOP_LEVEL = 255;
 
 const SCREEN_TABS: TabDefinition[] = [
   { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
-  { id: 'themes', label: 'Themes', render: () => <ScreenThemesPage /> },
   // The artist's own view of any theme. "as a sysop i need to be able to
   // personate a user/artist in the ansi studio to audit and fix issues in
   // their themes" - so a sysop gets the SAME page an artist gets, with every

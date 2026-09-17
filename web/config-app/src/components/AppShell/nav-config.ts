@@ -38,6 +38,7 @@ import {
   FileImage,
   ListOrdered,
   Newspaper,
+  Palette,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -111,6 +112,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them', keywords: ['Drives', 'Drive Setup', 'File Areas', 'DLPATH', 'ULPATH', 'Storage', 'S3', 'Bucket', 'Pooled Storage', 'QUOTA', 'Cloud'] },
       { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu', keywords: ['Global Wall'] },
       { path: 'screens', label: 'Screens', icon: FileImage, minLevel: 100, description: "Every screen the board can display, and the themes that are sets of them", keywords: ['Screen Files', 'Screen Themes', 'Theme', 'Themes', 'Artist', 'ANSI', 'PETSCII', 'RIP', 'Art'] },
+      // SYSOP ONLY, which is what it was as a tab: `ScreensWorkspace` handed a
+      // level-100 account the artist's studio and never the tab strip, so an
+      // artist has never seen this page. It carries every theme on the board
+      // with its owner, its status and the board default - "artists should
+      // only see their own themes" (sysop). An artist's own theme is named
+      // and worn from the studio.
+      { path: 'themes', label: 'Themes', icon: Palette, minLevel: 255, description: 'Sets of screens a caller can wear, who owns each one, and which is the board default', keywords: ['Theme', 'Screen Themes', 'Artist', 'Owner', 'Default theme'] },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
       { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },

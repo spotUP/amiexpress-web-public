@@ -97,6 +97,7 @@ vi.mock('../components/ScreenPreview', () => ({
 }));
 
 import { ScreenThemesPage } from '../pages/ScreenThemesPage';
+import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -134,14 +135,30 @@ describe('publishing a theme', () => {
   });
 });
 
+/*
+ * THE PANEL, NOT THE THEMES PAGE.
+ *
+ * These two drove the preview through a button on the themes page. That
+ * button is gone (S6): the panel was mounted in THREE places over one
+ * endpoint, and the themes page was the duplicate - the sysop's copy lives on
+ * the Screens page's "Preview as a caller" tab, which
+ * `screens-through-a-theme.test.tsx` holds to being reachable, and the
+ * artist's on their own status bar.
+ *
+ * So reachability is pinned there and the BEHAVIOUR is pinned here, on the
+ * component itself: that the request carries the theme, that the bytes drawn
+ * are the ones the board returned, and that a C64 caller gets 40 columns.
+ */
 describe('previewing a theme', () => {
   beforeEach(() => { asked.length = 0; vi.clearAllMocks(); });
 
-  it('asks the board what a caller would be served and draws those bytes', async () => {
-    render(<ScreenThemesPage />, { wrapper });
-    await screen.findByText('Neon');
+  const panel = () => render(
+    <ScreenPreviewPanel theme="neon" themeTitle="Neon" screenNames={['BULL']} />,
+    { wrapper },
+  );
 
-    await userEvent.click(screen.getByTitle('Preview as a caller'));
+  it('asks the board what a caller would be served and draws those bytes', async () => {
+    panel();
 
     await waitFor(() => expect(screen.getByTestId('screen-preview')).toBeTruthy());
     expect(screen.getByTestId('screen-preview').textContent).toBe('the neon bulletin');
@@ -150,10 +167,7 @@ describe('previewing a theme', () => {
   });
 
   it('previews a C64 caller on a 40-column surface', async () => {
-    render(<ScreenThemesPage />, { wrapper });
-    await screen.findByText('Neon');
-
-    await userEvent.click(screen.getByTitle('Preview as a caller'));
+    panel();
     await waitFor(() => expect(screen.getByTestId('screen-preview')).toBeTruthy());
 
     await userEvent.selectOptions(screen.getByLabelText('Terminal'), 'c64');

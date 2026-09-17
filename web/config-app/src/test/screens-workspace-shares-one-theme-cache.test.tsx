@@ -21,7 +21,6 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { QUERY_DEFAULTS } from '../lib/query-client';
 import { MemoryRouter } from 'react-router-dom';
@@ -72,6 +71,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 
 import { ScreensWorkspace } from '../pages/workspaces';
+import { ScreenThemesPage } from '../pages/ScreenThemesPage';
 
 /** ONE client for the whole workspace, exactly as the app has. */
 let client: QueryClient;
@@ -102,26 +102,31 @@ describe('the screens workspace', () => {
     expect(cached.data?.canCreate).toBe(true);
   });
 
-  it('offers New theme after the files tab has already filled the theme cache', async () => {
-    const user = userEvent.setup();
+  /*
+   * TWO PAGES NOW, not two tabs. Themes became `/admin/themes` in S6, and
+   * that makes this MORE of a risk rather than less: the two readers no
+   * longer even share a mount, so nothing but the key ties them together.
+   * Navigating is rendering the second page into the same client, which is
+   * what the router does.
+   */
+  it('offers New theme after the screens page has already filled the theme cache', async () => {
     render(<ScreensWorkspace />, { wrapper });
 
-    // The files tab is the default: its selector loads ['screen-themes'] first.
+    // Screen files is the default tab: its selector loads ['screen-themes'].
     await waitFor(() => expect(screen.getByLabelText('Viewing')).toBeTruthy());
     await waitFor(() => expect(screen.getByRole('option', { name: /Tango/ })).toBeTruthy());
 
-    await user.click(screen.getByRole('tab', { name: 'Themes' }));
+    render(<ScreenThemesPage />, { wrapper });
 
     // The themes page must still see canCreate through the SAME cache entry.
     expect(await screen.findByRole('button', { name: /New theme/i })).toBeTruthy();
   });
 
-  it('lists the board\'s themes on the themes tab, not an empty table', async () => {
-    const user = userEvent.setup();
+  it('lists the board\'s themes, not an empty table', async () => {
     render(<ScreensWorkspace />, { wrapper });
     await waitFor(() => expect(screen.getByLabelText('Viewing')).toBeTruthy());
 
-    await user.click(screen.getByRole('tab', { name: 'Themes' }));
+    render(<ScreenThemesPage />, { wrapper });
 
     // The title cell carries the board-default marker beside the title, so
     // the row is matched on the element's text, not on one text node.
