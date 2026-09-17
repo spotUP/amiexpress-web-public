@@ -178,7 +178,7 @@ export async function theGrantRidesOnTheEmulatorUrl(): Promise<void> {
   h.app.handleInput('\r');
   await settle();
   const url = h.opened()?.url ?? '';
-  assert.ok(url.includes('rom=a-grant'), `the grant is on the URL: ${url}`);
+  assert.ok(url.includes('grant=a-grant'), `the grant is on the URL: ${url}`);
 }
 
 export async function anEmptyBoardTakesItsCopyFromTheFirstProof(): Promise<void> {

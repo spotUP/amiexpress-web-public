@@ -449,9 +449,10 @@ console.log(`[Static] Fonts count: ${fontFiles.length}`);
       const page = barePage();
       if (!page) return next();
 
-      // The door puts the caller's grant on the URL; it becomes a cookie
-      // here so the emulator's own relative ROM fetches carry it.
-      const offered = typeof req.query.rom === 'string' ? req.query.rom : undefined;
+      // The door puts the caller's grant on the URL as `grant` - never as
+      // `rom`, which is the emulator's own parameter for loading extra ROM
+      // images and would send it looking for a file by that name.
+      const offered = typeof req.query.grant === 'string' ? req.query.grant : undefined;
       if (romAccessHolder(offered)) {
         res.cookie?.(ROM_COOKIE, offered as string, {
           httpOnly: true,

@@ -43,7 +43,8 @@ export interface EmulatorLaunch {
    *
    * The board will not serve them to an unproved caller, and the emulator
    * asks for them by relative path from inside its own bundle - so the
-   * grant rides in on the page's query and the page turns it into a cookie.
+   * grant rides in on the page's query, as `grant`, and the page turns it
+   * into a cookie.
    */
   token?: string;
 }
@@ -71,7 +72,16 @@ export function emulatorUrl(launch: EmulatorLaunch = {}): string {
     parts.push('autoboot');
   }
 
-  if (launch.token) parts.push(`rom=${encodeURIComponent(launch.token)}`);
+  /*
+   * `grant`, NOT `rom`.
+   *
+   * `rom` is jsbeeb's OWN parameter - an array of extra ROM images to
+   * load - so a token passed under that name is taken for a filename and
+   * the machine dies on "Unable to load roms/<the token>, http code 404".
+   * Anything this board adds to that URL has to stay out of the
+   * emulator's namespace.
+   */
+  if (launch.token) parts.push(`grant=${encodeURIComponent(launch.token)}`);
 
   return `/beeb/?${parts.join('&')}`;
 }

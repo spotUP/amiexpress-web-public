@@ -189,5 +189,5 @@ export async function aProvedCallerGetsAGrantOnTheUrl(): Promise<void> {
   const { term, app } = browseTo(board(), '102');
   app.handleInput('r');
   const url = term.opened()?.url ?? '';
-  assert.ok(url.includes('rom=test-grant'), `the grant rides along: ${url}`);
+  assert.ok(url.includes('grant=test-grant'), `the grant rides along: ${url}`);
 }
