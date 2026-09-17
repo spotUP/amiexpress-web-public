@@ -119,6 +119,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // only see their own themes" (sysop). An artist's own theme is named
       // and worn from the studio.
       { path: 'themes', label: 'Themes', icon: Palette, minLevel: 255, description: 'Sets of screens a caller can wear, who owns each one, and which is the board default', keywords: ['Theme', 'Screen Themes', 'Artist', 'Owner', 'Default theme'] },
+      { path: 'screen-health', label: 'Screen Health', icon: Gauge, minLevel: 255, description: 'The board\'s screens audited: duplicates, files nothing reads, screens that are only codes, and the codes themselves', keywords: ['Duplicates', 'Read by nothing', 'Not art', 'Codes', 'MCI', 'Repair', 'Export', 'Import', 'Preview as a caller'] },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
       { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },

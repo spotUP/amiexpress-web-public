@@ -108,10 +108,16 @@ describe('an editor belongs to its own file', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-    // The sysop's own file: one nothing reads. Its row opens a file and asks
+    // The sysop's own file: one nothing reads. Its card opens a file and asks
     // for no edit, so the routing effect below never runs to correct the
     // editor left over from the screen before.
-    await user.click(await screen.findByRole('tab', { name: /Read by nothing/ }));
+    //
+    // Through the GALLERY with "Show art nothing reads" ticked, because the
+    // "Read by nothing" TAB moved to Screen health (S7) - and it has to stay
+    // on this page, with one dialog: a leak between two files can only happen
+    // where both were opened by the same mount.
+    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
+    await user.click(await screen.findByLabelText('Show art nothing reads'));
     await user.click(await screen.findByText('Utils/samilog/samilog.header.txt.gr'));
     await screen.findByRole('dialog');
 

@@ -81,9 +81,18 @@ vi.mock('../contexts/NotificationContext', () => ({
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
+/*
+ * ONE CLIENT FOR BOTH PAGES, because the two halves of this bug now live on
+ * different ones (S7): "Repair every damaged screen" is on Screen health, and
+ * the card it has to refresh is the gallery's, on Screens. What makes that
+ * work is the shared cache - the repair invalidates ['screen-index'] and
+ * ['screen-file'], and the card is drawn from them. A client per render would
+ * hide exactly that.
+ */
+let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MemoryRouter>
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -92,7 +101,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('the gallery after a repair', () => {
-  beforeEach(() => { served = DAMAGED; fileFetches = 0; fetchMock.mockClear(); });
+  beforeEach(() => {
+    served = DAMAGED; fileFetches = 0; fetchMock.mockClear();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  });
 
   it('asks for the bytes again, so the card stops showing the damage', async () => {
     const user = userEvent.setup();
@@ -101,6 +113,7 @@ describe('the gallery after a repair', () => {
     // The card draws once, from the damaged bytes.
     await waitFor(() => expect(fileFetches).toBe(1));
 
+    render(<ScreenHealthPage />, { wrapper });
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
     // ...and again after the repair, which is the whole bug: a card that
@@ -113,6 +126,7 @@ describe('the gallery after a repair', () => {
     render(<ScreenFilesPage />, { wrapper });
 
     await waitFor(() => expect(fileFetches).toBe(1));
+    render(<ScreenHealthPage />, { wrapper });
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
     await waitFor(() => {

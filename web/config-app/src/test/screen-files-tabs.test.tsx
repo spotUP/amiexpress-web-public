@@ -64,6 +64,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -100,7 +101,9 @@ describe('Screen Files, tabbed', () => {
     expect(screen.getByRole('tab', { name: /Conference screens 1/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Conference screens 1/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Board screens 1/ })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /Read by nothing 1/ })).toBeTruthy();
+    // "Read by nothing" is on Screen health now (S7) - it is an audit of the
+    // volume, not a way of looking at art.
+    expect(screen.queryByRole('tab', { name: /Read by nothing/ })).toBeNull();
   });
 
   it('shows conference screens under their own tab', async () => {
@@ -113,9 +116,9 @@ describe('Screen Files, tabbed', () => {
     expect(screen.queryByText('BBSTITLE')).toBeNull();
   });
 
-  it('lists the files nothing reads under their own tab', async () => {
+  it('lists the files nothing reads under their own tab, on Screen health', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Read by nothing/ }));
 

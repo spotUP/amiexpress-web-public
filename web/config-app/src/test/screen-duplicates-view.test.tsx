@@ -63,7 +63,9 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+// Moved to Screen health (S7): the reports and the board-wide writes are
+// the sysop's audit, not the page an artist opens to look at pictures.
+import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -75,7 +77,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 async function openDuplicates(user: ReturnType<typeof userEvent.setup>) {
-  render(<ScreenFilesPage />, { wrapper });
+  render(<ScreenHealthPage />, { wrapper });
   await user.click(await screen.findByRole('tab', { name: /Duplicates/ }));
 }
 
@@ -124,7 +126,7 @@ describe('the Duplicates tab', () => {
   });
 
   it('counts the tab by screens, not by files', async () => {
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     expect(await screen.findByRole('tab', { name: 'Duplicates 1' })).toBeTruthy();
   });

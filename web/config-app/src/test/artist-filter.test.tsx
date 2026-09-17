@@ -131,6 +131,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -245,9 +246,9 @@ describe('the screens page as an artist opens it', () => {
     expect(await screen.findByRole('tab', { name: 'Gallery 3' })).toBeTruthy();
   });
 
-  it('gives a screen that is only codes a tab of its own', async () => {
+  it('gives a screen that is only codes a tab of its own, on Screen health', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Commands and text/ }));
 

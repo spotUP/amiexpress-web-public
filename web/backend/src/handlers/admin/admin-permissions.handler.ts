@@ -29,6 +29,9 @@ export const ADMIN_SECTIONS: AdminSectionPerm[] = [
   // as it always was: it was a TAB the level-100 fork never rendered, and it
   // lists every theme on the board with its owner and the board default.
   { key: 'themes',     label: 'Themes',          defaultMinLevel: 255 },
+  // The reports and the board-wide writes that were tabs on Screens. Sysop:
+  // "only sysops should see files with no art in them etc".
+  { key: 'screen-health', label: 'Screen Health', defaultMinLevel: 255 },
   { key: 'system',     label: 'Configuration',   defaultMinLevel: 255 },
   { key: 'config-files', label: 'Config Files',  defaultMinLevel: 255 },
   { key: 'lookup-tables', label: 'Lookup Tables', defaultMinLevel: 255 },

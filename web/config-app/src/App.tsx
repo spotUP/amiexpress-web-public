@@ -29,6 +29,7 @@ import {
   ScreensWorkspace,
 } from './pages/workspaces';
 import { ScreenThemesPage } from './pages/ScreenThemesPage';
+import { ScreenHealthPage } from './pages/ScreenHealthPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { CoSysopPersonasPage } from './pages/CoSysopPersonasPage';
 import { BotPage } from './pages/BotPage';
@@ -134,6 +135,10 @@ function App() {
             Nested as a tab it shared one `?tab=` with the studio and could
             not be linked to at all. */}
         <Route path="themes" element={<LevelRoute><ScreenThemesPage /></LevelRoute>} />
+        {/* The board's audit, not an artist's view: 1,155 files, what nothing
+            reads, what is only codes, what drifted across its copies. It was
+            six tabs among eleven on the page an artist opens. */}
+        <Route path="screen-health" element={<LevelRoute><ScreenHealthPage /></LevelRoute>} />
         <Route path="nodes" element={<LevelRoute><NodesWorkspace /></LevelRoute>} />
         <Route path="operator-chat" element={<LevelRoute><OperatorChatWorkspace /></LevelRoute>} />
         <Route path="operator-chat/personas" element={<LevelRoute><CoSysopPersonasPage /></LevelRoute>} />

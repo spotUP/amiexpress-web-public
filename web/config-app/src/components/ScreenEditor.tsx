@@ -21,6 +21,7 @@ import { editorHelp, onAMac } from './editor-help';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
+import type { MciCodeShape, MciFamilyShape } from '../pages/screen-mci';
 import { describeFold, foldRows, screenfulRows } from '../pages/screen-fold';
 
 /** The code exactly as it is written on the canvas, tilde to terminator. */
@@ -186,12 +187,28 @@ export function ScreenEditor({
    * source MciPicker offers codes from), so the description here and the
    * description when inserting one cannot drift apart.
    */
+  /*
+   * ONE SHAPE UNDER ONE KEY. This cached the ENVELOPE and read `data.data`
+   * while `MciPicker` caches the PAYLOAD under the same key and reads
+   * `data.codes`. React Query keys the cache, not the shape, so whichever
+   * mounted first won - and with `staleTime: Infinity` here, the loser never
+   * refetched its way out of it. The picker then read `codes` off an envelope
+   * that has none and threw "codes is not iterable" the moment a sysop tried
+   * to change a code already in a screen.
+   *
+   * Hidden until now because the Screens page ran its own `['mci-catalog']`
+   * query, in the payload shape, before any editor mounted. Moving that query
+   * to Screen health took the accident away.
+   */
   const catalogQuery = useQuery({
     queryKey: ['mci-catalog'],
-    queryFn: () => apiClient.getMciCatalog(),
+    queryFn: async () => (await apiClient.getMciCatalog()).data as {
+      families: MciFamilyShape[];
+      codes: MciCodeShape[];
+    },
     staleTime: Infinity,
   });
-  const catalog: { code: string; summary: string }[] = catalogQuery.data?.data?.codes ?? [];
+  const catalog: { code: string; summary: string }[] = catalogQuery.data?.codes ?? [];
   const hovered = tokenAt(tokens, cursor.y, cursor.x);
   const explained = hovered ? explainToken(hovered, catalog) : null;
   // The select tool tracked its marquee internally and never showed it:

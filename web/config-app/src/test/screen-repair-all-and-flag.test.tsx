@@ -83,6 +83,11 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
+// Two pages, because the two halves of this file live on different ones now
+// (S7): "repair every damaged screen" is a board-wide write and moved to
+// Screen health, while marking ONE file as art or not is done in the dialog a
+// row on the Screens page opens.
+import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -99,7 +104,7 @@ describe('repairing every damaged screen at once', () => {
 
   it('names the files before writing any of them', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
@@ -112,7 +117,7 @@ describe('repairing every damaged screen at once', () => {
 
   it('asks the board what is damaged before it asks the sysop', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
@@ -122,7 +127,7 @@ describe('repairing every damaged screen at once', () => {
 
   it('writes only after the sysop says so', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
@@ -132,7 +137,7 @@ describe('repairing every damaged screen at once', () => {
   it('writes nothing when the sysop says no', async () => {
     confirmed.mockResolvedValueOnce(false as never);
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenHealthPage />, { wrapper });
 
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
