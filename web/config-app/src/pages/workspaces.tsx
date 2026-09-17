@@ -167,7 +167,7 @@ const SCREEN_TABS: TabDefinition[] = [
   // personate a user/artist in the ansi studio to audit and fix issues in
   // their themes" - so a sysop gets the SAME page an artist gets, with every
   // theme in its picker, rather than a second tool that could disagree with it.
-  { id: 'studio', label: 'Artist studio', render: () => <ArtistStudioPage /> },
+  { id: 'studio', label: 'Screen Designer', render: () => <ArtistStudioPage /> },
   { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
 ];
 

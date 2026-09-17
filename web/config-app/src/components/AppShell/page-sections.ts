@@ -270,7 +270,7 @@ const OPERATOR_CHAT_SECTIONS: PageSection[] = [
 const SCREEN_SECTIONS: PageSection[] = [
   { name: 'Screen files', fields: [], keywords: ['gallery', 'codes', 'duplicates', 'door art', 'MCI', 'revisions'] },
   { name: 'Themes', fields: [], keywords: ['theme', 'publish', 'wearable', 'validate', 'coverage'] },
-  { name: 'Artist studio', fields: [], keywords: ['artist', 'redraw', 'ANSI', 'PETSCII', 'RIP', 'SEQ', 'logo', 'checklist', 'progress'] },
+  { name: 'Screen Designer', fields: [], keywords: ['artist', 'artist studio', 'ansi studio', 'redraw', 'ANSI', 'PETSCII', 'RIP', 'SEQ', 'logo', 'checklist', 'progress'] },
   { name: 'Questionnaire', fields: [], keywords: ['new user', 'signup questions'] },
 ];
 

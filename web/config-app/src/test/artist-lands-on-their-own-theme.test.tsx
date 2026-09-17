@@ -128,7 +128,7 @@ describe('an artist opening Screens', () => {
     render(<ScreensWorkspace />, { wrapper });
 
     expect(await screen.findByRole('tab', { name: 'Screen files' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Artist studio' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Screen Designer' })).toBeTruthy();
     // Themes left for a destination of its own, `/admin/themes` - it was the
     // only sysop tab that had nothing to do with looking at art, and sharing
     // the strip's one `?tab=` is why no theme could be linked to.

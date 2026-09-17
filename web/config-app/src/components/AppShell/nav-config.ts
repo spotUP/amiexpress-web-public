@@ -111,7 +111,20 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them', keywords: ['Drives', 'Drive Setup', 'File Areas', 'DLPATH', 'ULPATH', 'Storage', 'S3', 'Bucket', 'Pooled Storage', 'QUOTA', 'Cloud'] },
       { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu', keywords: ['Global Wall'] },
-      { path: 'screens', label: 'Screens', icon: FileImage, minLevel: 100, description: "Every screen the board can display, and the themes that are sets of them", keywords: ['Screen Files', 'Screen Themes', 'Theme', 'Themes', 'Artist', 'ANSI', 'PETSCII', 'RIP', 'Art'] },
+      /*
+       * ONE NAME: Screen Designer.
+       *
+       * It had four - "Artist studio", "ANSI Studio", "Screen Files" and
+       * "screen manager" - and none of them named the page you were on. Not
+       * "ANSI Studio" either: the same place draws `.seq` for a C64, `.rip`
+       * for a RIP terminal and `.ttx` for teletext, so naming it after one of
+       * the four formats is wrong about three quarters of the board (sysop,
+       * 2026-09-17: "it's not only ansi... Screen Designer is a proper name").
+       *
+       * The retired names stay as keywords: a sysop who learned one of them
+       * must still find the page by typing it.
+       */
+      { path: 'screens', label: 'Screen Designer', icon: FileImage, minLevel: 100, description: 'Every screen the board can display, drawn - ANSI, PETSCII, RIP and teletext', keywords: ['Artist studio', 'ANSI Studio', 'Screen Files', 'screen manager', 'Screen Themes', 'Theme', 'Themes', 'Artist', 'ANSI', 'PETSCII', 'RIP', 'Art'] },
       // SYSOP ONLY, which is what it was as a tab: `ScreensWorkspace` handed a
       // level-100 account the artist's studio and never the tab strip, so an
       // artist has never seen this page. It carries every theme on the board

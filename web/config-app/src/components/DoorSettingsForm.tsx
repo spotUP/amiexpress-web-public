@@ -148,7 +148,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
       {artSections.length > 0 && (
         <p className="text-xs text-content-secondary border border-border rounded p-2">
           Title art ({artSections.map(a => a.label).join(', ')}) is drawn in
-          the ANSI Studio under Screen files → Door screens — a settings form
+          Screen Designer, under Door screens — a settings form
           is the wrong tool for art.
         </p>
       )}

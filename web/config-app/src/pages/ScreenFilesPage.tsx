@@ -735,7 +735,7 @@ export function ScreenFilesPage() {
     <div className="space-y-4">
       <header className="flex items-center gap-2">
         <FileImage size={20} />
-        <h1 className="text-xl text-content-primary">Screen Files</h1>
+        <h1 className="text-xl text-content-primary">Screen Designer</h1>
         <label htmlFor="screen-theme-select" className="label ml-2">Viewing</label>
         <select
           id="screen-theme-select"

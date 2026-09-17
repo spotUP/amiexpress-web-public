@@ -21,7 +21,7 @@ function labels(level: number): string[] {
 
 describe('what a level-100 screen editor may see in the admin', () => {
   it('offers Screens and nothing else', () => {
-    expect(labels(100)).toEqual(['Screens']);
+    expect(labels(100)).toEqual(['Screen Designer']);
   });
 
   it('does not offer the Overview, whose data is sysop-only', () => {
@@ -32,7 +32,7 @@ describe('what a level-100 screen editor may see in the admin', () => {
   it('still gives a sysop everything, including the Overview', () => {
     const sysop = labels(255);
     expect(sysop).toContain('Overview');
-    expect(sysop).toContain('Screens');
+    expect(sysop).toContain('Screen Designer');
     expect(sysop.length).toBeGreaterThan(labels(100).length);
   });
 

@@ -497,7 +497,7 @@ export function LoginSequencePage() {
                 {step.blankPause && (
                   <p className="text-xs text-status-warn">
                     [WARNING] This file draws nothing and still costs the caller a keypress.
-                    Remove it in the screen manager.
+                    Remove it in Screen Designer.
                   </p>
                 )}
               </div>

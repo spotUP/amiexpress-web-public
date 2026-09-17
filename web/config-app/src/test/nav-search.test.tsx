@@ -99,7 +99,7 @@ describe('filterNavGroups', () => {
     // 'Screens' since the files and the themes became one page; the point of
     // this test is the LEVEL, not the wording, so it names the level-100
     // destination that exists rather than one that used to.
-    expect(labelsOf(result)).toContain('Screens');
+    expect(labelsOf(result)).toContain('Screen Designer');
     expect(labelsOf(result)).not.toContain('Lookup Tables');
     const tooHigh = result
       .flatMap((group) => group.items)
