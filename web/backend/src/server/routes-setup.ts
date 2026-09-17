@@ -38,6 +38,7 @@ import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDesc
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
+import { bareEmulatorPage } from './beeb-bare-page';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
 import { materialiseCatalogEntry, materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
@@ -358,6 +359,78 @@ console.log(`[Static] Assets count: ${assetFiles.length}, first 5: ${assetFiles.
       const fontFiles = fs.readdirSync(fontsPath);
 console.log(`[Static] Fonts count: ${fontFiles.length}`);
     }
+  }
+
+  // --- BBC Micro emulator (vendored jsbeeb) --------------------------------
+  //
+  // Served as its own program at /beeb/, not compiled into anything here:
+  // jsbeeb is GPL-3 and this repository is not, so it is aggregated rather
+  // than linked. See vendor/jsbeeb/NOTICE.md.
+  //
+  // The three media paths are deliberately NOT served from the vendored
+  // bundle. jsbeeb ships Acorn's copyrighted ROMs and a pile of disc images;
+  // neither is ours to redistribute, so the vendored copy has them stripped
+  // and these routes point at the BOARD instead - the sysop's own ROMs and
+  // the software they have the right to run. Same policy KickstartRom.ts
+  // already sets for the Amiga.
+  const jsbeebPath = join(projectRoot, 'vendor', 'jsbeeb');
+  if (fs.existsSync(jsbeebPath)) {
+    const beebRoot = join(boardRoot(), 'Beeb');
+    // What the emulator actually asked for, and what it got. A BBC that
+    // boots to a black screen gives the caller nothing to report and the
+    // sysop nothing to look at; the failing fetch is the whole diagnosis,
+    // and it is invisible without this.
+    app.use('/beeb', (req, res, next) => {
+      const path = req.path;
+      // The page and its media only - not every hashed asset.
+      if (/^\/(roms|discs|tapes)\//.test(path) || path === '/' || path === '/index.html') {
+        res.on('finish', () => {
+          const level = res.statusCode >= 400 ? '[Beeb] MISS' : '[Beeb]     ';
+          console.log(`${level} ${res.statusCode} ${req.method} /beeb${path}`);
+        });
+      }
+      next();
+    });
+
+    const media: Array<[string, string]> = [
+      ['/beeb/roms', join(beebRoot, 'roms')],
+      ['/beeb/discs', join(beebRoot, 'software')],
+      ['/beeb/tapes', join(beebRoot, 'software')],
+    ];
+    for (const [route, dir] of media) {
+      // fallthrough:false is the whole point. With it on, a ROM the sysop
+      // has not installed falls past this route to the SPA and comes back
+      // as 200 text/html - and the emulator then tries to parse the
+      // terminal's index page as a ROM image and shows a black screen. A
+      // missing file has to say 404.
+      app.use(route, webTerminalGate, express.static(dir, { maxAge: 0, fallthrough: false }));
+    }
+    // The page itself, with the emulator's own interface hidden - see
+    // beeb-bare-page.ts for why this happens here and not in the vendored
+    // files. Registered BEFORE the static handler so it wins for the page,
+    // while every other file still comes straight off disk.
+    const barePage = (() => {
+      let cached: string | null = null;
+      return (): string | null => {
+        if (cached !== null) return cached;
+        try {
+          cached = bareEmulatorPage(fs.readFileSync(join(jsbeebPath, 'index.html'), 'utf8'));
+        } catch {
+          cached = null;
+        }
+        return cached;
+      };
+    })();
+
+    app.get(['/beeb', '/beeb/', '/beeb/index.html'], webTerminalGate, (_req, res, next) => {
+      const page = barePage();
+      if (!page) return next();
+      res.type('html').send(page);
+    });
+
+    app.use('/beeb', webTerminalGate, express.static(jsbeebPath, { maxAge: 0 }));
+    console.log(`[Static] Serving BBC Micro emulator at /beeb from ${jsbeebPath}`);
+    console.log(`[Static]   ROMs and software from ${beebRoot} (never from the repo)`);
   }
 
   if (!fs.existsSync(bbsFrontendPath)) {

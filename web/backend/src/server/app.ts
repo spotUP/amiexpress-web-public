@@ -60,7 +60,15 @@ export const app = express();
  *  - worker-src 'self' blob: — Tone.js (SDK AudioEngine, bundled into
  *    client doors) spins up a blob: worker for its clock; AudioWorklet
  *    module loads ride script-src, not worker-src.
- *  - frame-ancestors 'none' — modern X-Frame-Options DENY equivalent.
+ *  - frame-ancestors 'self' — the board frames ITSELF: the emulator
+ *    surface (EmulatorOverlay -> /beeb/) is a same-origin iframe over the
+ *    terminal. This was 'none', the DENY equivalent, which reported a
+ *    violation on every launch and would have blocked the emulator outright
+ *    the day this policy stops being report-only. 'self' keeps every
+ *    OUTSIDE site from framing the board, which is what the directive is
+ *    for; it does not let anyone else in.
+ *    NOTE: the live host's Caddyfile sets these headers too and is not in
+ *    this repo. Changing it here is only half the job on the live board.
  *  - object-src 'none', base-uri 'self' — defang plugin / base-tag
  *    injection attacks even though we don't use plugins.
  *
@@ -87,7 +95,7 @@ app.use(helmet({
       // reported a violation on every video call - harmless while the policy
       // is report-only, and a broken camera the moment it is enforced.
       mediaSrc: ["'self'", 'blob:', 'data:'],
-      frameAncestors: ["'none'"],
+      frameAncestors: ["'self'"],
       formAction: ["'self'"],
       baseUri: ["'self'"],
       objectSrc: ["'none'"],

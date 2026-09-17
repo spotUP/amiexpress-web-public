@@ -620,3 +620,15 @@ Doors/ACHIEVEC/ACHIEVE.cfg
 
 # The last-callers page the door keeps for a slow scenewall; the board writes it, never the repo.
 Doors/glc-viewer/glc.lastgood.json
+
+# BBC Micro: the sysop's ROMs and software, never the repository's.
+#
+# Acorn never permitted redistribution of the BBC OS, BASIC or DFS ROMs -
+# they asked archives to take them down - and the disc images are whatever
+# the board's owner has the right to run. The board loads both from here at
+# runtime; nothing in this folder but the documentation is ours to ship.
+Beeb/roms/**
+Beeb/software/**
+!Beeb/roms/.gitkeep
+!Beeb/roms/b/.gitkeep
+!Beeb/software/.gitkeep

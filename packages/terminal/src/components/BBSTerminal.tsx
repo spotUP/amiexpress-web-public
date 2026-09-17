@@ -6,6 +6,7 @@ import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { createDoubleHeightFilter, type DoubleHeightFilter } from '../utils/teletext-double-height';
+import { EmulatorOverlay } from './EmulatorOverlay';
 import {
   FIT_TO_WINDOW,
 } from '../utils/terminal-zoom';
@@ -233,7 +234,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const forcedModeRef = useRef(forcedMode);
   forcedModeRef.current = forcedMode;
   const keepFocusedRef = useRef(keepFocused);
-  keepFocusedRef.current = keepFocused;
+  // Assigned below, once `emulator` exists: an open emulator surface has to
+  // switch the focus keeper off. See the assignment after that state.
   const onDoorChangeRef = useRef(onDoorChange);
   onDoorChangeRef.current = onDoorChange;
   // Id of the browser-side door currently running (null when none). Kept in a
@@ -423,6 +425,33 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
+
+  /**
+   * A door asking for pixels instead of character cells.
+   *
+   * Null almost always. A door that needs a real framebuffer - an emulator,
+   * so far - sends `emulator:open` and the surface goes over the terminal
+   * until the caller closes it or the door takes it away.
+   */
+  const [emulator, setEmulator] = useState<{ url: string; title: string; machine?: string } | null>(null);
+
+  /*
+   * THE FOCUS KEEPER IS OFF WHILE THE EMULATOR SURFACE IS OPEN.
+   *
+   * xterm's textarea has a blur listener that takes focus back on the next
+   * animation frame, so the terminal keeps the keyboard when a stray click
+   * lands elsewhere. That is right for a terminal session and fatal for a
+   * frame over the top of it: focusing the emulator blurs the textarea, the
+   * keeper grabs focus straight back, and every keystroke goes to the
+   * terminal instead of the machine - which looks exactly like an emulator
+   * that ignores the keyboard.
+   *
+   * Assigned during render rather than mutated from an effect, because
+   * `keepFocused` is a prop and this used to be a plain reassignment from
+   * it on every render - anything an effect set here would be overwritten
+   * by the next one.
+   */
+  keepFocusedRef.current = keepFocused && emulator === null;
   const ripModeRef = useRef<boolean>(false);
 
   // Web transparency overlays (CSS-based, for web connections only)
@@ -2627,6 +2656,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // (session-font.ts: TELETEXT_FONT is outside BBS_FONTS and
     // cacheFont=false) so the next connect's pre-login window never
     // opens in it.
+    /**
+     * A door asking for a real framebuffer.
+     *
+     * Only ever a same-origin PATH. A door names something the board itself
+     * serves - `/beeb/...` - and never an outside URL: this puts a frame
+     * with `allow-same-origin` over the caller's session, so pointing it
+     * anywhere but at this board would hand that session to whoever owns
+     * the other end.
+     */
+    socket.on('emulator:open', (data: { url?: string; title?: string; machine?: string }) => {
+      const url = data?.url ?? '';
+      if (!url.startsWith('/') || url.startsWith('//')) {
+        console.warn('[Terminal] emulator:open refused - not a same-origin path:', url);
+        return;
+      }
+      console.log(`[Terminal] Emulator surface open: ${url}`);
+      setEmulator({ url, title: data?.title ?? '', machine: data?.machine });
+    });
+
+    // The door taking it back - a caller who quit the door from elsewhere,
+    // or a session ending.
+    socket.on('emulator:close', () => setEmulator(null));
+
     socket.on('texttv-mode', (data: { enabled: boolean }) => {
       if (data?.enabled) {
         console.log('[Terminal] Teletext mode on - TDAText face at 2x, teletext palette');
@@ -4059,6 +4111,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           />
         );
       })}
+      {emulator && (
+        <EmulatorOverlay
+          url={emulator.url}
+          title={emulator.title}
+          machine={emulator.machine}
+          onClose={() => {
+            setEmulator(null);
+            // Tell the door the caller is back, so it can carry on instead
+            // of waiting for something that has already happened.
+            socketRef.current?.emit('emulator:closed');
+          }}
+        />
+      )}
       {/* RIP Graphics Canvas Overlay */}
       <input
         ref={fileInputRef}
