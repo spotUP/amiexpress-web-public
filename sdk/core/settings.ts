@@ -114,6 +114,24 @@ function assertSetting(doorDir: string, setting: unknown, index: number): DoorSe
   if (s.type === 'choice' && (!Array.isArray(s.choices) || s.choices.length === 0)) {
     throw new DoorSettingsError(doorDir, `${where} (${s.key}) is a choice with no choices`);
   }
+  // ...and each one has to be { value, label }. The board's own schema
+  // (door-settings.service.ts) requires that shape, so a manifest listing
+  // bare strings passes here, ships, and then fails at boot with
+  // "cfg render failed" - a long way from the file that is wrong.
+  if (s.type === 'choice') {
+    (s.choices as unknown[]).forEach((choice, at) => {
+      const ok =
+        choice && typeof choice === 'object' &&
+        typeof (choice as { value?: unknown }).value === 'string' &&
+        typeof (choice as { label?: unknown }).label === 'string';
+      if (!ok) {
+        throw new DoorSettingsError(
+          doorDir,
+          `${where} (${s.key}) choices[${at}] must be { value, label }, not ${JSON.stringify(choice)}`,
+        );
+      }
+    });
+  }
   return s as DoorSetting;
 }
 

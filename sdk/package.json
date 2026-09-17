@@ -127,6 +127,42 @@
       "require": "./dist/teletext/tti-lexer.js",
       "default": "./dist/teletext/tti-lexer.js"
     },
+    "./teletext/store": {
+      "types": "./dist/teletext/store.d.ts",
+      "import": "./dist-esm/teletext/store.js",
+      "require": "./dist/teletext/store.js",
+      "default": "./dist/teletext/store.js"
+    },
+    "./teletext/render-session": {
+      "types": "./dist/teletext/render-session.d.ts",
+      "import": "./dist-esm/teletext/render-session.js",
+      "require": "./dist/teletext/render-session.js",
+      "default": "./dist/teletext/render-session.js"
+    },
+    "./teletext/library": {
+      "types": "./dist/teletext/library.d.ts",
+      "import": "./dist-esm/teletext/library.js",
+      "require": "./dist/teletext/library.js",
+      "default": "./dist/teletext/library.js"
+    },
+    "./teletext/import": {
+      "types": "./dist/teletext/import.d.ts",
+      "import": "./dist-esm/teletext/import.js",
+      "require": "./dist/teletext/import.js",
+      "default": "./dist/teletext/import.js"
+    },
+    "./teletext/compose": {
+      "types": "./dist/teletext/compose.d.ts",
+      "import": "./dist-esm/teletext/compose.js",
+      "require": "./dist/teletext/compose.js",
+      "default": "./dist/teletext/compose.js"
+    },
+    "./teletext/screen": {
+      "types": "./dist/teletext/screen.d.ts",
+      "import": "./dist-esm/teletext/screen.js",
+      "require": "./dist/teletext/screen.js",
+      "default": "./dist/teletext/screen.js"
+    },
     "./engines/ui/arcade": {
       "types": "./dist/engines/ui/arcade/index.d.ts",
       "import": "./dist-esm/engines/ui/arcade/index.js",
