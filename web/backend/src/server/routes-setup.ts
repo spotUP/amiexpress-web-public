@@ -449,17 +449,35 @@ console.log(`[Static] Fonts count: ${fontFiles.length}`);
       const page = barePage();
       if (!page) return next();
 
-      // The door puts the caller's grant on the URL as `grant` - never as
-      // `rom`, which is the emulator's own parameter for loading extra ROM
-      // images and would send it looking for a file by that name.
+      /*
+       * THE GRANT ARRIVES ON THE URL AND LEAVES ON A COOKIE.
+       *
+       * It comes in as `grant` - never as `rom`, which is the emulator's own
+       * parameter for extra ROM images and would send it looking for a file
+       * by that name. Once it is a cookie the URL is redirected WITHOUT it,
+       * so the token stops riding in the address bar, the history and the
+       * referer of everything the page fetches.
+       *
+       * That last part is not hypothetical: jsbeeb's page reported its own
+       * URL to Google Analytics, grant and all, until the tag was stripped
+       * (beeb-bare-page.ts). Belt as well as braces.
+       */
       const offered = typeof req.query.grant === 'string' ? req.query.grant : undefined;
-      if (romAccessHolder(offered)) {
-        res.cookie?.(ROM_COOKIE, offered as string, {
+      if (offered && romAccessHolder(offered)) {
+        res.cookie?.(ROM_COOKIE, offered, {
           httpOnly: true,
           sameSite: 'lax',
           path: '/beeb',
           maxAge: 30 * 60 * 1000,
         });
+
+        const keep = new URLSearchParams();
+        for (const [name, value] of Object.entries(req.query)) {
+          if (name === 'grant') continue;
+          keep.append(name, Array.isArray(value) ? String(value[0]) : String(value ?? ''));
+        }
+        const rest = keep.toString();
+        return res.redirect(302, rest ? `/beeb/?${rest}` : '/beeb/');
       }
       res.type('html').send(page);
     });

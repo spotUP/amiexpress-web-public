@@ -221,6 +221,21 @@ describe('dropping back to 2MHz when the load finishes', () => {
     expect(turbo.count()).toBe(1); // still only the switch-on
   });
 
+  it('will not drop during the boot, however quiet the drive is', () => {
+    /*
+     * The machine mounts its disc image at startup and the light flickers
+     * for that, a full second before jsbeeb types the command. Acting on
+     * that quiet ended the boost as the typing began and left the real
+     * load running at 2MHz.
+     */
+    const { light, turbo } = machine();
+    light.classList.add('on');
+    tick(200);
+    light.classList.remove('on');
+    tick(2000);
+    expect(turbo.count()).toBe(1);
+  });
+
   it('drops back once the drive settles', () => {
     /*
      * THE BUG THIS EXISTS FOR. A game started by CHAIN runs on its own
@@ -229,7 +244,7 @@ describe('dropping back to 2MHz when the load finishes', () => {
      */
     const { light, turbo } = machine();
     light.classList.add('on');
-    tick(1500);
+    tick(3500);
     light.classList.remove('on');
     tick(1000);
     expect(turbo.count()).toBe(2);
@@ -252,7 +267,7 @@ describe('dropping back to 2MHz when the load finishes', () => {
   it('drops only once, however long the drive stays dark', () => {
     const { light, turbo } = machine();
     light.classList.add('on');
-    tick(500);
+    tick(3500);
     light.classList.remove('on');
     tick(5000);
     expect(turbo.count()).toBe(2);

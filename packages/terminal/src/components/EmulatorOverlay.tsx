@@ -106,6 +106,18 @@ const WATCH_MS = 120;
  */
 const SETTLED_MS = 700;
 
+/**
+ * The boost is not allowed to end before this, however quiet the drive is.
+ *
+ * The machine mounts its disc image at startup and the light flickers for
+ * that, long before the program is asked for - and jsbeeb then waits a
+ * further second of its own before typing the command. Without a floor the
+ * whole rule fired during the boot, the boost ended as the typing began,
+ * and the actual load - the part worth hurrying - ran at 2MHz:
+ * "not sure they load fast though" (sysop, 2026-09-17).
+ */
+const MIN_BOOST_MS = 3000;
+
 export interface EmulatorOverlayProps {
   /** Same-origin URL to host. */
   url: string;
@@ -140,11 +152,16 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     try {
       const inner = frameRef.current?.contentDocument;
       const view = inner?.defaultView;
-      if (!inner || !view) return false;
+      if (!inner || !view) {
+        console.warn('[emulator] turbo: no frame document to press Alt-T in');
+        return false;
+      }
       pressing.current = true;
       inner.dispatchEvent(new view.KeyboardEvent('keydown', TURBO_KEY));
+      console.debug('[emulator] turbo: Alt-T sent');
       return true;
-    } catch {
+    } catch (error) {
+      console.warn('[emulator] turbo: Alt-T threw', error);
       return false;
     } finally {
       pressing.current = false;
@@ -160,8 +177,12 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
       window.clearInterval(watcher.current);
       watcher.current = null;
     }
-    if (!boosting.current) return;
+    if (!boosting.current) {
+      console.debug('[emulator] turbo: asked to stop, but was not boosting');
+      return;
+    }
     if (pressTurbo()) boosting.current = false;
+    console.debug('[emulator] turbo: OFF (boosting now', boosting.current, ')');
   }, [pressTurbo]);
 
   /**
@@ -173,8 +194,11 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
    */
   const watchTheDrive = React.useCallback(() => {
     if (watcher.current !== null) window.clearInterval(watcher.current);
+    const startedAt = Date.now();
     let everRan = false;
     let darkSince: number | null = null;
+    let wasLit = false;
+    let warnedMissing = false;
 
     watcher.current = window.setInterval(() => {
       let lit = false;
@@ -182,10 +206,24 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
         const inner = frameRef.current?.contentDocument;
         if (!inner) return;
         for (const id of DRIVE_LIGHTS) {
-          if (inner.getElementById(id)?.classList.contains(LIT)) lit = true;
+          const light = inner.getElementById(id);
+          if (!light) {
+            if (!warnedMissing) {
+              warnedMissing = true;
+              console.warn(`[emulator] turbo: no #${id} to watch - the load cannot be seen`);
+            }
+            continue;
+          }
+          if (light.classList.contains(LIT)) lit = true;
         }
-      } catch {
+      } catch (error) {
+        console.warn('[emulator] turbo: could not read the drive lights', error);
         return;
+      }
+
+      if (lit !== wasLit) {
+        wasLit = lit;
+        console.debug('[emulator] turbo: drive', lit ? 'RUNNING' : 'idle');
       }
 
       if (lit) {
@@ -194,6 +232,8 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
         return;
       }
       if (!everRan) return;
+      // Boot and the pause before the command is typed are not the load.
+      if (Date.now() - startedAt < MIN_BOOST_MS) return;
       if (darkSince === null) darkSince = Date.now();
       else if (Date.now() - darkSince >= SETTLED_MS) stopBoost();
     }, WATCH_MS);
@@ -203,6 +243,7 @@ export const EmulatorOverlay: React.FC<EmulatorOverlayProps> = ({
     if (boosting.current) return;
     if (!pressTurbo()) return;
     boosting.current = true;
+    console.debug('[emulator] turbo: ON');
     watchTheDrive();
     capTimer.current = window.setTimeout(stopBoost, BOOST_CAP_MS);
   }, [pressTurbo, stopBoost, watchTheDrive]);

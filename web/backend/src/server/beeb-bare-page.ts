@@ -100,13 +100,54 @@ const BARE_CSS = `
 `;
 
 /**
+ * THE EMULATOR'S ANALYTICS DO NOT RUN ON THIS BOARD.
+ *
+ * jsbeeb's own page carries Google Analytics, which is entirely reasonable
+ * for its own site and not something a BBS gets to inflict on its callers.
+ * It fires on every launch and reports the page URL - and that URL carried
+ * the caller's ROM grant, so the token the board issues to say "this person
+ * may fetch the ROMs" was being handed to a third party
+ * (`region1.google-analytics.com/g/collect?...&grant=...`, seen 2026-09-17).
+ *
+ * The board's Content-Security-Policy is report-only here and cannot be
+ * enforced: jsbeeb builds its 6502 core by evaluating generated source, so
+ * a policy without `unsafe-eval` stops the machine dead. Removing the tags
+ * on the way out is what is left, and it is the honest fix anyway - the
+ * caller's browser never makes the request at all.
+ *
+ * Nothing is edited in `vendor/`; this is the served copy, the same way the
+ * stylesheet above is added.
+ */
+function withoutAnalytics(html: string): string {
+  return (
+    html
+      // The loader.
+      .replace(/<script[^>]*googletagmanager\.com[^>]*>\s*<\/script>/gi, '')
+      // The inline bootstrap that defines and calls gtag().
+      .replace(/<script\b(?![^>]*\bsrc=)[^>]*>(?:(?!<\/script>)[\s\S])*?gtag\((?:(?!<\/script>)[\s\S])*?<\/script>/gi, '')
+      /*
+       * And the PERMISSION, in the page's own meta policy.
+       *
+       * Nothing calls those hosts once the tags above are gone, so this
+       * changes no behaviour today. It is here because a permission left
+       * lying about is how the behaviour comes back - a re-vendored bundle,
+       * or some other part of the page reaching for the same host, would
+       * simply be allowed.
+       */
+      .replace(/\s*\*\.google-analytics\.com/gi, '')
+      .replace(/\s*\*\.google\.com/gi, '')
+  );
+}
+
+/**
  * Put the stylesheet last in the head, so it wins on equal specificity.
  *
  * A page with no `</head>` is served untouched rather than guessed at - a
  * broken injection would be a blank screen with no way to tell why.
  */
 export function bareEmulatorPage(html: string): string {
-  const at = html.toLowerCase().lastIndexOf('</head>');
-  if (at === -1) return html;
-  return html.slice(0, at) + BARE_CSS + html.slice(at);
+  const clean = withoutAnalytics(html);
+  const at = clean.toLowerCase().lastIndexOf('</head>');
+  if (at === -1) return clean;
+  return clean.slice(0, at) + BARE_CSS + clean.slice(at);
 }
