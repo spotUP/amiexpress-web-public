@@ -63,7 +63,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -78,11 +78,10 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('Screen Files, tabbed', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('opens on the gallery, and the node tab shows only node screens', async () => {
+  it('shows only node screens under the node tab', async () => {
     // The gallery is the front door - a designer recognises art, not paths.
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
-    expect(await screen.findByTestId('screen-gallery')).toBeTruthy();
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
 
@@ -92,12 +91,11 @@ describe('Screen Files, tabbed', () => {
   });
 
   it('counts what is behind each tab, so the sysop knows before clicking', async () => {
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     // Wait on a COUNT, not on the tab strip: the strip renders before the
     // index arrives, and every count is 0 until it does.
     expect(await screen.findByRole('tab', { name: /Node screens 1/ })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /Gallery/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Conference screens 1/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Conference screens 1/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Board screens 1/ })).toBeTruthy();
@@ -108,7 +106,7 @@ describe('Screen Files, tabbed', () => {
 
   it('shows conference screens under their own tab', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Conference screens/ }));
 
@@ -127,7 +125,7 @@ describe('Screen Files, tabbed', () => {
 
   it('still opens a screen from inside its tab', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));

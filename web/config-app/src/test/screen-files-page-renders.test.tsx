@@ -76,7 +76,7 @@ vi.mock('../components/ScreenPreview', () => ({
   ScreenPreview: () => null,
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 /** The gallery opens first; these cases are about the tables behind it. */
 async function openScreenTab(user: ReturnType<typeof userEvent.setup>) {
@@ -95,7 +95,7 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('the Screen Files page', () => {
   it('renders the screens the API answers with, without throwing', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await openScreenTab(user);
 
     await waitFor(() => {
@@ -105,7 +105,7 @@ describe('the Screen Files page', () => {
 
   it('shows the scope and the counts the index carries', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await openScreenTab(user);
 
     await waitFor(() => {

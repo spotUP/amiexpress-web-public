@@ -56,7 +56,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -72,7 +72,7 @@ describe('choosing the directory to share from', () => {
 
   it('offers the directories the board actually has', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await openScreenTab(user);
     await user.click(await screen.findByText('BBSTITLE'));
 
@@ -83,7 +83,7 @@ describe('choosing the directory to share from', () => {
 
   it('asks the board about the chosen one, not a hardcoded name', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await openScreenTab(user);
     await user.click(await screen.findByText('BBSTITLE'));
 

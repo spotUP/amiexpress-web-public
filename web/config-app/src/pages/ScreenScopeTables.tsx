@@ -8,9 +8,6 @@ import { callSitesFor } from './screen-provenance';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
-import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
-import { previewScreenOrder } from './screen-preview-view';
-import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { DoorArtDialog } from './DoorArtDialog';
@@ -22,7 +19,7 @@ import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape,
-  type ScreenFileShape, buildGalleryItems,
+  type ScreenFileShape,
   formatsPresent, missingFormats,
   isDoorArt, isCommandsOnly, isNotArt,
 } from './screen-index-view';
@@ -91,7 +88,7 @@ function scopeName(scope: string, id: number | null, conferences?: ConferenceSha
 export { formatsPresent, missingFormats };
 
 
-export function ScreenFilesPage() {
+export function ScreenScopeTables() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
 
@@ -140,7 +137,6 @@ export function ScreenFilesPage() {
    * list has a tab of its own - a file the manager refuses to show is a file a
    * sysop cannot find.
    */
-  const [showUnread, setShowUnread] = useState(false);
 
 
   const detailRef = useRef<HTMLElement>(null);
@@ -197,9 +193,6 @@ export function ScreenFilesPage() {
     an artist previews their own from the status bar. Two mounts, one each,
     where there were three.
   */
-  const themeTitle = theme === 'default'
-    ? 'the board itself'
-    : (themeList?.themes?.find(t => t.slug === theme)?.title ?? theme);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index', theme],
@@ -557,26 +550,6 @@ export function ScreenFilesPage() {
    */
   /** Which format the gallery's thumbnails are drawn in; empty is whatever
    *  each screen resolves to, which is how it behaved before the choice. */
-  const [thumbnailFormat, setThumbnailFormat] = useState('');
-
-  const galleryItems: GalleryItem[] = useMemo(
-    () => (data
-      ? buildGalleryItems(data, {
-        theme, showGenerated, showUnread,
-        ...(thumbnailFormat ? { thumbnailFormat } : {}),
-      })
-      : []),
-    [data, showGenerated, showUnread, theme, thumbnailFormat],
-  );
-
-  /**
-   * The three kinds of file that are NOT a piece of the board's art, each
-   * with a tab of its own.
-   *
-   * Asked for together: door art apart from board art, "screens that have no
-   * art only commands" in their own place, and a gallery holding "only valid
-   * art that the artists actually should edit".
-   */
   const buckets = useMemo(() => {
     const all = Object.values(data?.files ?? {});
     return {
@@ -588,73 +561,18 @@ export function ScreenFilesPage() {
     };
   }, [data]);
 
-  const tabs: TabDefinition[] = [    {
-      id: 'gallery',
-      label: `Gallery ${galleryItems.length}`,
-      render: () => (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-content-secondary">
-              Every screen and bulletin on the board, drawn - identical copies
-              shown once. Click one to open it; thumbnails load as you scroll.
-            </p>
-            <label className="flex items-center gap-2 text-sm text-content-secondary">
-              <input
-                type="checkbox"
-                checked={showGenerated}
-                onChange={e => setShowGenerated(e.target.checked)}
-              />
-              Show leftovers and files the board writes
-            </label>
-            <label className="flex items-center gap-2 text-sm text-content-secondary">
-              <input
-                type="checkbox"
-                checked={showUnread}
-                onChange={e => setShowUnread(e.target.checked)}
-              />
-              Show art nothing reads
-            </label>
-            <label className="flex items-center gap-2 text-sm text-content-secondary">
-              Draw as
-              <select
-                aria-label="Draw thumbnails as"
-                className="input-field"
-                value={thumbnailFormat}
-                onChange={e => setThumbnailFormat(e.target.value)}
-              >
-                <option value="">What the screen resolves to</option>
-                <option value="ansi">ANSI</option>
-                <option value="petscii">PETSCII (.seq)</option>
-                <option value="rip">RIP</option>
-                <option value="teletext">Teletext (.ttx)</option>
-              </select>
-            </label>
-          </div>
-          <ScreenGallery
-            isLoading={isLoading}
-            items={query.trim()
-              ? galleryItems.filter(item =>
-                  item.label.toLowerCase().includes(query.trim().toLowerCase())
-                  || item.path.toLowerCase().includes(query.trim().toLowerCase()))
-              : galleryItems}
-            onOpen={setOpenFile}
-            theme={theme}
-          />
-        </div>
-      ),
-    },    {
-      id: 'preview',
-      label: 'Preview as a caller',
-      render: () => (
-        <ScreenPreviewPanel
-          theme={theme}
-          themeTitle={themeTitle}
-          /* Art first, so the panel does not open on a screen that is only
-             codes and draw a black rectangle. */
-          screenNames={previewScreenOrder(data?.screens ?? [], data?.files)}
-        />
-      ),
-    },    {
+  /*
+    NO GALLERY AND NO PREVIEW HERE.
+
+    Screen Designer is the gallery - that is its whole view - and previewing a
+    theme happens on its status bar, beside the selector that picks one. What
+    is left is the sysop's resolution audit: which file each node and each
+    conference actually reads for a screen, the variants around it, the share
+    planner that points many nodes at one directory, and the art that belongs
+    to a door rather than to the board.
+  */
+  const tabs: TabDefinition[] = [
+    {
       id: 'node',
       label: `Node screens ${byScope.node.length}`,
       render: () => screenTable(byScope.node),

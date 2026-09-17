@@ -148,7 +148,17 @@ export function ArtistStudioPage() {
   const artistsWithoutATheme = useMemo(() => {
     if (!sysop) return [];
     const owners = new Set(choices.map(entry => entry.owner.trim().toLowerCase()).filter(Boolean));
-    const users = ((userList as { data?: unknown } | undefined)?.data ?? []) as
+    /*
+     * THE ACCOUNT LIST ARRIVES IN TWO SHAPES, and this page white-screened on
+     * one of them: `users.filter is not a function` took the WHOLE page down -
+     * gallery, status bar and all - because a list of artists to offer a theme
+     * to is a side note beside a name, and it crashed the thing it sits next
+     * to. `ScreenThemesPage` already unwraps both; this did not.
+     */
+    const payload = (userList as { data?: unknown } | undefined)?.data;
+    const users = (Array.isArray(payload)
+      ? payload
+      : (payload as { users?: unknown[] } | undefined)?.users ?? []) as
       Array<{ username?: string; secLevel?: number }>;
     return users
       // The level the admin itself is gated on: an account that can reach the

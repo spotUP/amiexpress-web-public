@@ -72,7 +72,28 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+
+/*
+ * The gallery is Screen Designer's whole view since S9, so these cases drive
+ * it there. The theme is mocked rather than fetched - the board's own screens
+ * are one of the options in its selector - because what is under test is the
+ * CARDS, not a theme registry round-trip in front of them.
+ */
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { username: 'sysop' }, secLevel: 255 }),
+}));
+vi.mock('../pages/use-my-theme', () => ({
+  useMyTheme: () => ({
+    theme: {
+      slug: 'default', title: "The board's own screens", dir: '', owner: '',
+      status: 'live', mine: false, writable: true, widths: [80],
+    },
+    choices: [], select: vi.fn(), isPreparing: false, error: null,
+    auditing: false, sysop: true,
+  }),
+}));
+
+import { ArtistStudioPage as ScreenScopeTables } from '../pages/ArtistStudioPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -91,7 +112,7 @@ describe('deleting a screen file', () => {
     // was pressed. This is what "the dialog did not close" actually was.
     refuse = true;
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
@@ -103,7 +124,7 @@ describe('deleting a screen file', () => {
 
   it('closes the dialog and takes the card off the gallery', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
@@ -136,7 +157,7 @@ describe('repairing a damaged screen', () => {
   it('offers the fix beside the complaint, and asks the board to do it', async () => {
     damaged = true;
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
@@ -150,7 +171,7 @@ describe('repairing a damaged screen', () => {
 
   it('offers nothing of the sort on a healthy file', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');

@@ -93,7 +93,9 @@ describe('the screens workspace', () => {
     render(<ScreensWorkspace />, { wrapper });
 
     // The files tab is the default: its selector is what fills the entry.
-    await waitFor(() => expect(screen.getByLabelText('Viewing')).toBeTruthy());
+    // Screen Designer's own selector, which reads ['screen-themes'] through
+    // useMyTheme - the first of the two readers to mount.
+    await waitFor(() => expect(screen.getByLabelText('Theme')).toBeTruthy());
     await waitFor(() => expect(client.getQueryData(['screen-themes'])).toBeTruthy());
 
     // The themes page reads `data.data`. Anything else here is the entry it
@@ -113,8 +115,12 @@ describe('the screens workspace', () => {
     render(<ScreensWorkspace />, { wrapper });
 
     // Screen files is the default tab: its selector loads ['screen-themes'].
-    await waitFor(() => expect(screen.getByLabelText('Viewing')).toBeTruthy());
-    await waitFor(() => expect(screen.getByRole('option', { name: /Tango/ })).toBeTruthy());
+    // Screen Designer's own selector, which reads ['screen-themes'] through
+    // useMyTheme - the first of the two readers to mount.
+    await waitFor(() => expect(screen.getByLabelText('Theme')).toBeTruthy());
+    // The entry is what matters, not which option the picker happens to show:
+    // a sysop lands on their own theme, and Tango may not be it.
+    await waitFor(() => expect(client.getQueryData(['screen-themes'])).toBeTruthy());
 
     render(<ScreenThemesPage />, { wrapper });
 
@@ -124,7 +130,9 @@ describe('the screens workspace', () => {
 
   it('lists the board\'s themes, not an empty table', async () => {
     render(<ScreensWorkspace />, { wrapper });
-    await waitFor(() => expect(screen.getByLabelText('Viewing')).toBeTruthy());
+    // Screen Designer's own selector, which reads ['screen-themes'] through
+    // useMyTheme - the first of the two readers to mount.
+    await waitFor(() => expect(screen.getByLabelText('Theme')).toBeTruthy());
 
     render(<ScreenThemesPage />, { wrapper });
 

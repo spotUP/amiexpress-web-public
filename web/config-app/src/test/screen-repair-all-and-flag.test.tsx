@@ -88,7 +88,7 @@ vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 // Screen health, while marking ONE file as art or not is done in the dialog a
 // row on the Screens page opens.
 import { ScreenHealthPage } from '../pages/ScreenHealthPage';
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -151,9 +151,13 @@ describe('the sysop overruling the manager about a file', () => {
 
   it('sends the mark the sysop picked', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+    // Through the tables, which is where a file is reached on this page: the
+    // gallery card that used to open it is Screen Designer's now.
+    await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
+    await user.click(await screen.findByText('NODE_BULL'));
+    await user.click((await screen.findAllByText('Node1/NODE_BULL.TXT'))[0]);
     // The manager reads this one as art, so the control waits behind the
     // link rather than sitting on screen with nothing to correct.
     await user.click(await screen.findByRole('button', { name: /not art\?/i }));
@@ -175,9 +179,13 @@ describe('the sysop overruling the manager about a file', () => {
    */
   it('offers nothing to correct on a file the manager already reads as art', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+    // Through the tables, which is where a file is reached on this page: the
+    // gallery card that used to open it is Screen Designer's now.
+    await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
+    await user.click(await screen.findByText('NODE_BULL'));
+    await user.click((await screen.findAllByText('Node1/NODE_BULL.TXT'))[0]);
 
     await screen.findByRole('button', { name: /not art\?/i });
     expect(screen.queryByRole('combobox', { name: /This file is/i })).toBeNull();
@@ -185,9 +193,13 @@ describe('the sysop overruling the manager about a file', () => {
 
   it('clears the mark and gives the heuristic its say back', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    await user.click(await screen.findByText('Node1/NODE_BULL.TXT'));
+    // Through the tables, which is where a file is reached on this page: the
+    // gallery card that used to open it is Screen Designer's now.
+    await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
+    await user.click(await screen.findByText('NODE_BULL'));
+    await user.click((await screen.findAllByText('Node1/NODE_BULL.TXT'))[0]);
     await user.click(await screen.findByRole('button', { name: /not art\?/i }));
     await user.click(await screen.findByRole('button', { name: /use the manager's guess/i }));
 

@@ -104,8 +104,9 @@ describe('themes as a destination of its own', () => {
     expect(paths.has('themes'), 'no <Route path="themes">').toBe(true);
   });
 
-  it('is no longer a tab inside Screens', () => {
-    expect(WORKSPACE_TABS.screens).not.toContain('themes');
+  it('is no longer a tab inside Screen Designer', () => {
+    // S9 left that page with no tabs at all, so there is no strip to be in.
+    expect(WORKSPACE_TABS.screens).toBeUndefined();
   });
 });
 

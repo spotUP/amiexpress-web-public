@@ -71,7 +71,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -84,7 +84,7 @@ beforeEach(() => {
 });
 
 async function openTheAnsiScreen(user: ReturnType<typeof userEvent.setup>) {
-  render(<ScreenFilesPage />, { wrapper });
+  render(<ScreenScopeTables />, { wrapper });
   await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
   await user.click(await screen.findByText('BBSTITLE'));
   await user.click(await screen.findByText('Node0/BBSTITLE.txt'));

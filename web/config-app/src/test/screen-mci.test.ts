@@ -12,7 +12,7 @@ import {
   tokenEdit, tokenRemoval, splitToken,
   type MciCodeShape, type MciCanvas,
 } from '../pages/screen-mci';
-import { conferenceOfPath } from '../pages/ScreenFilesPage';
+import { conferenceOfPath } from '../pages/ScreenScopeTables';
 
 /** Rows of characters, which is all these functions need of a canvas. */
 function canvasOf(...rows: string[]): MciCanvas {

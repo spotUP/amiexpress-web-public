@@ -77,7 +77,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -93,7 +93,7 @@ describe('opening a RIP screen from the screens admin', () => {
 
   it('opens the RIP editor rather than the canvas of cells', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));
@@ -106,7 +106,7 @@ describe('opening a RIP screen from the screens admin', () => {
 
   it('shows the regions the screen already binds, with their commands', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));

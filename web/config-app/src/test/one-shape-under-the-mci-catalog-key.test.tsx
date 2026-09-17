@@ -87,7 +87,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
@@ -111,7 +111,7 @@ describe('the MCI catalog cache', () => {
 
   it('holds the PAYLOAD, which is the shape every reader unwraps', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     // The editor is the first consumer to mount, and it is the one that used
     // to write the envelope.
@@ -128,7 +128,7 @@ describe('the MCI catalog cache', () => {
 
   it('lets the picker take apart a code already in the screen', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));

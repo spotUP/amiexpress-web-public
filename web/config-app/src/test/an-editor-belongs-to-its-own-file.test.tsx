@@ -33,7 +33,9 @@ const base64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
 // of the one already open.
 const FILES: Record<string, { format: string; bytes: Uint8Array }> = {
   'Node0/BBSTITLE.SEQ': { format: 'petscii', bytes: seq },
-  'Utils/samilog/samilog.header.txt.gr': { format: 'ansi', bytes: ansi },
+  // The second file is ANSI and a screen of its own: the leak was the PETSCII
+  // editor still mounted over the NEXT file opened, whatever that file is.
+  'Node0/LOGON.TXT': { format: 'ansi', bytes: ansi },
 };
 
 const index = () => ({
@@ -48,9 +50,22 @@ const index = () => ({
       scope: 'node', id: 0, dir: 'Node0', dirIsShared: false,
       file: 'Node0/BBSTITLE.SEQ', variants: ['BBSTITLE.SEQ'],
     }],
+  }, {
+    screen: 'LOGON', dirType: 'node', missingScopes: 0, duplicateGroups: [],
+    resolutions: [{
+      scope: 'node', id: 0, dir: 'Node0', dirIsShared: false,
+      file: 'Node0/LOGON.TXT', variants: ['LOGON.TXT'],
+    }],
   }],
   files: Object.fromEntries(Object.entries(FILES).map(([relPath, f]) => [
-    relPath, { relPath, bytes: f.bytes.length, format: f.format, sha256: relPath, mci: [] },
+    relPath, {
+      relPath, bytes: f.bytes.length, format: f.format, sha256: relPath, mci: [],
+      // Read by the board, so the gallery draws a card for it: Screen
+      // Designer shows art a caller is served.
+      readBy: relPath.includes('BBSTITLE')
+        ? [{ screen: 'BBSTITLE', scope: 'node', id: 0, via: 'resolved' }]
+        : [],
+    },
   ])),
 });
 
@@ -78,7 +93,15 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+
+/*
+ * DRIVEN THROUGH THE RESOLUTION TABLES, not the gallery: what leaks is an
+ * editor left mounted from the FILE BEFORE, so the two files have to be
+ * opened from ONE mount - and the second is a file nothing reads, which is a
+ * Screen Health finding rather than a card in the designer's gallery. The
+ * rows carry both.
+ */
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -93,11 +116,9 @@ beforeEach(() => {
 describe('an editor belongs to its own file', () => {
   it('does not leave the PETSCII editor open over the next file opened', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));
-
-    // A PETSCII screen, opened and edited: this is the state that leaked.
     await user.click(await screen.findByText('Node0/BBSTITLE.SEQ'));
     const dialog = await screen.findByRole('dialog');
     await waitFor(() =>
@@ -108,17 +129,10 @@ describe('an editor belongs to its own file', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-    // The sysop's own file: one nothing reads. Its card opens a file and asks
-    // for no edit, so the routing effect below never runs to correct the
-    // editor left over from the screen before.
-    //
-    // Through the GALLERY with "Show art nothing reads" ticked, because the
-    // "Read by nothing" TAB moved to Screen health (S7) - and it has to stay
-    // on this page, with one dialog: a leak between two files can only happen
-    // where both were opened by the same mount.
-    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
-    await user.click(await screen.findByLabelText('Show art nothing reads'));
-    await user.click(await screen.findByText('Utils/samilog/samilog.header.txt.gr'));
+    // The next file, opened from the same mount - which is the only way the
+    // leak can happen at all.
+    await user.click(await screen.findByText('LOGON'));
+    await user.click(await screen.findByText('Node0/LOGON.TXT'));
     await screen.findByRole('dialog');
 
     // The PETSCII editor must not come back with it: these are ANSI bytes, and

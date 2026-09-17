@@ -13,7 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { missingFormats } from '../pages/ScreenFilesPage';
+import { missingFormats } from '../pages/ScreenScopeTables';
 
 const art = new TextEncoder().encode('\x1b[31mHI');
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -62,7 +62,7 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -89,7 +89,7 @@ describe('adding a format from the editor', () => {
 
   it('shows the missing formats beside the one that exists', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByText('Node1/BBSTITLE.txt'));   // the file, in its dialog
@@ -100,7 +100,7 @@ describe('adding a format from the editor', () => {
 
   it('writes the chosen file as that format to every node that has the screen', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click(await screen.findByText('Node1/BBSTITLE.txt'));

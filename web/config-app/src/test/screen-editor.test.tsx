@@ -107,7 +107,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 // xterm wants a real canvas; the caller's-eye preview is not what this is about.
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 /** The gallery opens first; these cases are about the tables behind it. */
 async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
@@ -125,7 +125,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 /** Open BBSTITLE, then the file under it - what a sysop clicks to get here. */
 async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
-  render(<ScreenFilesPage />, { wrapper });
+  render(<ScreenScopeTables />, { wrapper });
   await openScreenTab(user);
   await user.click(await screen.findByText('BBSTITLE'));
   // The resolution row is the affordance now, not a button in the cell. The
@@ -174,7 +174,7 @@ describe('editing a screen in the browser', () => {
     // The fan-out is the upload path's, unchanged: editing the LOGON screen has
     // to offer "all the nodes that have it" exactly as replacing it does.
     // One destination, so the save writes itself - there is no "where?" to
-    // answer. See SingleDestinationWrite in ScreenFilesPage.
+    // answer. See SingleDestinationWrite in ScreenScopeTables.
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
@@ -200,7 +200,7 @@ describe('editing a screen in the browser', () => {
 
     await user.click(screen.getByRole('button', { name: /^save$/i }));
     // One destination, so the save writes itself - there is no "where?" to
-    // answer. See SingleDestinationWrite in ScreenFilesPage.
+    // answer. See SingleDestinationWrite in ScreenScopeTables.
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
@@ -359,7 +359,7 @@ describe('reaching the editor', () => {
     // then asked for the file path to be clicked, then for Edit - three clicks
     // and no affordance saying so.
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 
@@ -372,7 +372,7 @@ describe('reaching the editor', () => {
 
   it('says a screen is openable, rather than leaving the row silent', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 

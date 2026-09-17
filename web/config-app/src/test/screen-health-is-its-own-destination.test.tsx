@@ -70,7 +70,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenHealthPage } from '../pages/ScreenHealthPage';
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -127,10 +127,13 @@ describe('screen health as a destination of its own', () => {
     await waitFor(() => expect(dialog.textContent).toContain('Screens/leftover.txt'));
   });
 
-  it('leaves the Screens page to the art', async () => {
-    render(<ScreenFilesPage />, { wrapper });
+  it('leaves the resolution tables to resolution', async () => {
+    render(<ScreenScopeTables />, { wrapper });
 
-    expect(await screen.findByRole('tab', { name: /Gallery/ })).toBeTruthy();
+    // S9 took the gallery and the preview off this page for good: Screen
+    // Designer is the gallery, and a theme is previewed from its status bar.
+    expect(await screen.findByRole('tab', { name: /Node screens/ })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /Gallery/ })).toBeNull();
     for (const name of [/Read by nothing/, /Commands and text/, /Not art/, /^Codes/, /Duplicates/]) {
       expect(screen.queryByRole('tab', { name })).toBeNull();
     }
@@ -139,13 +142,13 @@ describe('screen health as a destination of its own', () => {
     expect(screen.queryByRole('button', { name: /Export every screen/i })).toBeNull();
   });
 
-  it('keeps Preview as a caller beside the theme selector', async () => {
-    // It previews a THEME, and the selector that picks one is on the Screens
-    // page. Screen health reports on the board's own files and has no theme
-    // to choose - moving it there would have made it answer for one theme
-    // only, silently.
-    render(<ScreenFilesPage />, { wrapper });
+  it('does not carry a preview of its own', async () => {
+    // It previews a THEME, and the selector that picks one is Screen
+    // Designer's. Screen Health reports on the board's own files and has no
+    // theme to choose, so a preview here would answer for one theme only.
+    render(<ScreenScopeTables />, { wrapper });
+    await screen.findByRole('tab', { name: /Node screens/ });
 
-    expect(await screen.findByRole('tab', { name: /Preview as a caller/ })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /Preview as a caller/ })).toBeNull();
   });
 });

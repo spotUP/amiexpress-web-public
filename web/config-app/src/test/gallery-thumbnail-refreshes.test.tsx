@@ -80,7 +80,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 /*
@@ -108,7 +108,7 @@ describe('the gallery after a repair', () => {
 
   it('asks for the bytes again, so the card stops showing the damage', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     // The card draws once, from the damaged bytes.
     await waitFor(() => expect(fileFetches).toBe(1));
@@ -123,7 +123,7 @@ describe('the gallery after a repair', () => {
 
   it('draws the repaired bytes, not the ones it first fetched', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await waitFor(() => expect(fileFetches).toBe(1));
     render(<ScreenHealthPage />, { wrapper });

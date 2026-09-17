@@ -67,7 +67,7 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -115,7 +115,7 @@ describe('the screen tabs', () => {
 
   it('draw a thumbnail beside each screen', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
 
@@ -124,7 +124,7 @@ describe('the screen tabs', () => {
 
   it('says so for a screen with nothing to draw', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
 

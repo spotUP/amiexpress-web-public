@@ -10,11 +10,10 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { formatsPresent } from '../pages/ScreenFilesPage';
+import { formatsPresent } from '../pages/ScreenScopeTables';
 
 describe('which formats a screen has', () => {
   const files = {
@@ -95,7 +94,28 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+
+/*
+ * The gallery is Screen Designer's whole view since S9, so these cases drive
+ * it there. The theme is mocked rather than fetched - the board's own screens
+ * are one of the options in its selector - because what is under test is the
+ * CARDS, not a theme registry round-trip in front of them.
+ */
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { username: 'sysop' }, secLevel: 255 }),
+}));
+vi.mock('../pages/use-my-theme', () => ({
+  useMyTheme: () => ({
+    theme: {
+      slug: 'default', title: "The board's own screens", dir: '', owner: '',
+      status: 'live', mine: false, writable: true, widths: [80],
+    },
+    choices: [], select: vi.fn(), isPreparing: false, error: null,
+    auditing: false, sysop: true,
+  }),
+}));
+
+import { ArtistStudioPage as ScreenScopeTables } from '../pages/ArtistStudioPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -106,9 +126,7 @@ describe('the chips on a gallery card', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('shows ANSI and SEQ as present and RIP as missing', async () => {
-    const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
-    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
+    render(<ScreenScopeTables />, { wrapper });
 
     expect(await screen.findByTestId('chip-ansi-have')).toBeTruthy();
     expect(screen.getByTestId('chip-seq-have')).toBeTruthy();
@@ -116,9 +134,7 @@ describe('the chips on a gallery card', () => {
   });
 
   it('says what a missing format costs, for anyone who hovers', async () => {
-    const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
-    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
+    render(<ScreenScopeTables />, { wrapper });
 
     expect((await screen.findByTestId('chip-rip-missing')).getAttribute('title'))
       .toMatch(/falls back/);

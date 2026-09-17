@@ -123,15 +123,13 @@ describe('an artist opening Screens', () => {
     expect(posts.filter(call => call.includes('/api/themes'))).toEqual([]);
   });
 
-  it('a sysop still gets the whole workspace', async () => {
+  it('gives a sysop the same one page an artist gets', async () => {
     secLevel = 255;
     render(<ScreensWorkspace />, { wrapper });
 
-    expect(await screen.findByRole('tab', { name: 'Screen files' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Screen Designer' })).toBeTruthy();
-    // Themes left for a destination of its own, `/admin/themes` - it was the
-    // only sysop tab that had nothing to do with looking at art, and sharing
-    // the strip's one `?tab=` is why no theme could be linked to.
-    expect(screen.queryByRole('tab', { name: 'Themes' })).toBeNull();
+    // S9: one page for both. The strip - and the `secLevel < 255` fork that
+    // sent an artist somewhere else entirely - are gone, which is what made a
+    // sysop and an artist look at the same screens through two pages.
+    await waitFor(() => expect(screen.queryAllByRole('tab')).toHaveLength(0));
   });
 });

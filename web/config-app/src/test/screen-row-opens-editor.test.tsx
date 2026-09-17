@@ -64,7 +64,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 import { apiClient } from '../api/client';
 
 /** The gallery opens first; these cases are about the tables behind it. */
@@ -86,7 +86,7 @@ describe('opening a screen from its row', () => {
 
   it('opens the editor on the art, with no button to hunt for', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 
@@ -99,7 +99,7 @@ describe('opening a screen from its row', () => {
 
   it('does nothing for a scope where no file resolves', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 
@@ -115,7 +115,7 @@ describe('opening a screen from its row', () => {
     // and an anchor cannot carry the Authorization header, which is what
     // made Download answer `{"error":"Access token required"}` on live.
     const download = vi.spyOn(apiClient, 'downloadFile').mockResolvedValue(undefined);
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 
@@ -137,7 +137,7 @@ describe('opening a screen from its row', () => {
 
   it('loads a local ANSI file into the canvas it is editing', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 

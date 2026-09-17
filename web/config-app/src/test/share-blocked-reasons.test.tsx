@@ -74,7 +74,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { ScreenScopeTables } from '../pages/ScreenScopeTables';
 
 /** The gallery opens first; these cases are about the tables behind it. */
 async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
@@ -107,7 +107,7 @@ describe('a refused share', () => {
 
   it('names each blocked node and what it would lose', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 
@@ -123,7 +123,7 @@ describe('a refused share', () => {
 
   it('still offers to point the nodes that CAN share', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
 

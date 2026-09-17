@@ -24,10 +24,7 @@ import { AccessAreasPage } from './AccessAreasPage';
 import { DrivesPage } from './DrivesPage';
 import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
-import { useAuth } from '../contexts/AuthContext';
-import { ScreenFilesPage } from './ScreenFilesPage';
 import { ArtistStudioPage } from './ArtistStudioPage';
-import { QuestionnairePage } from './QuestionnairePage';
 import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
 import { FileCheckersPage } from './FileCheckersPage';
@@ -158,36 +155,30 @@ export function OperatorChatWorkspace() {
  * artist moves between "which themes exist" and "the files in mine" constantly,
  * and two nav entries made that a navigation problem.
  */
-/** The board's own rule for who configures it, as theme-sandbox spells it. */
-const SYSOP_LEVEL = 255;
-
-const SCREEN_TABS: TabDefinition[] = [
-  { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
-  // The artist's own view of any theme. "as a sysop i need to be able to
-  // personate a user/artist in the ansi studio to audit and fix issues in
-  // their themes" - so a sysop gets the SAME page an artist gets, with every
-  // theme in its picker, rather than a second tool that could disagree with it.
-  { id: 'studio', label: 'Screen Designer', render: () => <ArtistStudioPage /> },
-  { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
-];
-
 /**
- * Two audiences, two views of one subject.
+ * SCREEN DESIGNER IS ONE PAGE.
  *
- * A sysop configures the board's screens: the tables, the door art, the codes,
- * the duplicates, the list of what nothing reads. An artist redraws a theme,
- * and the sandbox already refuses them everything else - so the tabs were a
- * menu of 403s wrapped around the handful of files they may touch. The sysop,
- * 2026-09-08: "only sysops should see files with no art in them etc".
+ * It was a tab strip over two different worlds: "Screen files" for a sysop,
+ * "Artist studio" for everyone else, with a `secLevel < 255` fork deciding
+ * which you got. So a sysop and an artist looked at the same screens through
+ * two pages, and every fix had to land twice - which is how the dialog, the
+ * gallery and the theme switching each ended up existing twice over.
+ *
+ * The sysop asked for it to stop being two things, 2026-09-17: "merge the
+ * 'screen files' tab into an option in the select button ... so we dont need
+ * tabs, just an [item] in the sidebar". The selector has carried the board's
+ * own screens beside the themes since ownership was added, so the merge is
+ * mostly deletion: the strip goes, the fork goes, and what a sysop has that
+ * an artist does not - the resolution tables, the door art, the board-wide
+ * reports - is on Screen Health, where the rest of the audit already lives.
  */
 export function ScreensWorkspace() {
-  const { secLevel } = useAuth();
-  if (secLevel < SYSOP_LEVEL) return <ArtistStudioPage />;
-  return <TabbedWorkspace tabs={SCREEN_TABS} defaultTab="files" />;
+  return <ArtistStudioPage />;
 }
 
 export const WORKSPACE_TABS: Record<string, string[]> = {
-  screens: SCREEN_TABS.map((tab) => tab.id),
+  // Screen Designer has no tabs at all now; the strip it had was the second
+  // place a screen could be looked at.
   nodes: NODE_TABS.map((tab) => tab.id),
   conferences: CONFERENCE_TABS.map((tab) => tab.id),
   'lookup-tables': LOOKUP_TABS.map((tab) => tab.id),

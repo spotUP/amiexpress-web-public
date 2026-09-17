@@ -33,7 +33,7 @@ describe('a .seq screen in the file panel', () => {
 
 describe('the page source', () => {
   it('opens each variant instead of printing it', () => {
-    const source = readFileSync(join(__dirname, '..', 'pages', 'ScreenFilesPage.tsx'), 'utf8');
+    const source = readFileSync(join(__dirname, '..', 'pages', 'ScreenScopeTables.tsx'), 'utf8');
     // The variants column must produce something clickable that sets the open
     // file - a <span> of joined names is what hid the board's RIP and PETSCII
     // art from this page.

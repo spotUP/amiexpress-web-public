@@ -130,7 +130,30 @@ vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
 }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+
+/*
+ * The gallery is Screen Designer's whole view since S9, so these cases drive
+ * it there. The theme is mocked rather than fetched - the board's own screens
+ * are one of the options in its selector - because what is under test is the
+ * CARDS, not a theme registry round-trip in front of them.
+ */
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { username: 'sysop' }, secLevel: 255 }),
+}));
+vi.mock('../pages/use-my-theme', () => ({
+  useMyTheme: () => ({
+    theme: {
+      slug: 'default', title: "The board's own screens", dir: '', owner: '',
+      status: 'live', mine: false, writable: true, widths: [80],
+    },
+    choices: [], select: vi.fn(), isPreparing: false, error: null,
+    auditing: false, sysop: true,
+  }),
+}));
+
+import { ArtistStudioPage as ScreenScopeTables } from '../pages/ArtistStudioPage';
+// The resolution tables kept their tabs; they are a Screen Health section now.
+import { ScreenScopeTables as ResolutionTables } from '../pages/ScreenScopeTables';
 import { ScreenHealthPage } from '../pages/ScreenHealthPage';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -175,7 +198,7 @@ describe('the screens page as an artist opens it', () => {
 
   it('hides a codes-only screen from the tables by default', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ResolutionTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
 
@@ -185,7 +208,7 @@ describe('the screens page as an artist opens it', () => {
 
   it('shows it once the sysop asks for the plumbing', async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ResolutionTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Node screens/ }));
     await user.click(screen.getByRole('checkbox', { name: /plumbing/i }));
@@ -195,7 +218,7 @@ describe('the screens page as an artist opens it', () => {
 
   it("keeps a door's art in its own tab", async () => {
     const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ResolutionTables />, { wrapper });
 
     await user.click(await screen.findByRole('tab', { name: /Door screens/ }));
 
@@ -207,43 +230,62 @@ describe('the screens page as an artist opens it', () => {
     // The gallery is the artist's view of THE BOARD. A door directory is also
     // full of .txt files that are documentation, and drawing those as art was
     // the false positive this tab split fixes.
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    // The count on the tab is the assertion: the card itself is labelled by
-    // screen name, so looking for the path finds nothing either way and would
-    // pass on the unfiltered gallery too. Two cards belong here - BBSTITLE and
-    // the bulletin - against a codes-only screen, an orphan and a door file.
-    expect(await screen.findByRole('tab', { name: 'Gallery 2' })).toBeTruthy();
+    // The COUNT is the assertion: a card is labelled by screen name, so
+    // looking for the path finds nothing either way and would pass on the
+    // unfiltered gallery too. Two DRAWN cards belong here - BBSTITLE and the
+    // bulletin - against a codes-only screen, an orphan and a door file.
+    const gallery = await screen.findByTestId('screen-gallery');
+    const drawn = [...gallery.children]
+      // The board's own view also offers the frames around the screens it
+      // writes for itself - undrawn slots, marked with a +, which the sysop
+      // went looking for: "i cant find the achievement frames in ansi studio".
+      .map(card => card.textContent ?? '')
+      .filter(text => !text.startsWith('+'));
+
+    expect(drawn).toHaveLength(2);
   });
 
   it('leaves art nothing reads out of the gallery', async () => {
     // "i see a lot of read by nothing in the gallery the artists are not
     // interested in those". The fixture's gallery is BBSTITLE and the
     // bulletin; orphan.ans and the door file are not art anyone is serving.
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    expect(await screen.findByRole('tab', { name: 'Gallery 2' })).toBeTruthy();
+    const gallery = await screen.findByTestId('screen-gallery');
+    const drawn = [...gallery.children]
+      // The board's own view also offers the frames around the screens it
+      // writes for itself - undrawn slots, marked with a +, which the sysop
+      // went looking for: "i cant find the achievement frames in ansi studio".
+      .map(card => card.textContent ?? '')
+      .filter(text => !text.startsWith('+'));
+
+    expect(drawn).toHaveLength(2);
+    expect(drawn.join(' ')).not.toMatch(/doordoc|door\.txt/i);
   });
 
   it('keeps a bulletin in the gallery, which no screen name reads', async () => {
     // A bulletin is read by NUMBER. Filtering on readBy alone would have
     // dropped every bulletin from the artist's view; the index's own unused
     // list already knows the difference, which is why the filter uses it.
-    const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+    render(<ScreenScopeTables />, { wrapper });
 
-    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
-
+    // Screen Designer opens ON the gallery; there is no tab to reach it by.
     expect(await screen.findByText(/the first bulletin/)).toBeTruthy();
   });
 
-  it('shows the orphans once the sysop asks for them', async () => {
-    const user = userEvent.setup();
-    render(<ScreenFilesPage />, { wrapper });
+  it('leaves the orphans to Screen Health, which is where the audit is', async () => {
+    /*
+     * "Show art nothing reads" was a toggle on the sysop's own gallery. S9
+     * left ONE gallery - Screen Designer's, which is about art - and a file
+     * nothing reads is a finding, not a picture: it is listed under "Read by
+     * nothing" on Screen Health, with the rest of the reports.
+     */
+    render(<ScreenScopeTables />, { wrapper });
+    await screen.findByTestId('screen-gallery');
 
-    await user.click(screen.getByRole('checkbox', { name: /Show art nothing reads/i }));
-
-    expect(await screen.findByRole('tab', { name: 'Gallery 3' })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /Show art nothing reads/i })).toBeNull();
   });
 
   it('gives a screen that is only codes a tab of its own, on Screen health', async () => {

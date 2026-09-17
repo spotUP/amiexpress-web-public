@@ -21,6 +21,8 @@ import { useNotification } from '../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
+import { ScreenScopeTables } from './ScreenScopeTables';
+import { QuestionnairePage } from './QuestionnairePage';
 import { ErrorPanel } from '../components/ui/states';
 import { formatBytes } from '../lib/format';
 import type { ArtistTheme } from './use-my-theme';
@@ -321,6 +323,32 @@ export function ScreenHealthPage() {
   }, [data]);
 
   const tabs: TabDefinition[] = [
+    {
+      /*
+       * WHICH FILE EACH NODE AND CONFERENCE ACTUALLY READS.
+       *
+       * This was the Screens page's own tab strip - node, conference, board
+       * and door screens, with the resolution panel and the share planner
+       * behind a row. It is the sysop's audit of what the loader answers, not
+       * a way of looking at art, so it belongs beside the other reports
+       * rather than in front of an artist.
+       */
+      id: 'resolution',
+      label: 'Resolution',
+      render: () => <ScreenScopeTables />,
+    },
+    {
+      /*
+       * The questionnaire is a SCREEN now (the index lists it per node, with
+       * the bauds as its variants), so this tab is on its way out: what is
+       * left here is the on/off switch, which moves into the screen's own
+       * dialog. Kept until it does, because switching what every new caller
+       * is asked is not a thing to lose in a refactor.
+       */
+      id: 'questionnaire',
+      label: 'Questionnaire',
+      render: () => <QuestionnairePage />,
+    },
     {
       id: 'commands',
       label: `Commands and text ${buckets.commands.length}`,

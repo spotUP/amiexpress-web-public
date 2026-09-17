@@ -13,8 +13,9 @@
  * the server invented per request would answer both yes and leave the artist
  * with two themes.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 
 import { apiClient } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,7 +65,31 @@ export function useMyTheme(): {
   const username = String((user as { username?: string } | null)?.username ?? '').trim();
   /** The board's own level for "may administer" - the same number App.tsx gates on. */
   const sysop = secLevel >= 255;
-  const [chosen, setChosen] = useState<string | null>(null);
+  /*
+   * `?theme=<slug>` OPENS ON THAT THEME.
+   *
+   * The Themes page has linked here since S6 - "Open the art" on every row -
+   * and the link did nothing at all: the page always opened on whatever the
+   * picker would have chosen anyway. It is also how a sysop hands another
+   * sysop a look at one artist's work.
+   *
+   * The URL is the initial value, not the state: changing the picker
+   * afterwards must not be argued with by the address bar.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linked = (searchParams.get('theme') ?? '').trim() || null;
+  const [chosen, setChosenState] = useState<string | null>(linked);
+  const setChosen = useCallback((slug: string | null) => {
+    setChosenState(slug);
+    // The address bar follows the picker, so the page can be linked to in the
+    // state it is in - and a reload comes back to the same theme.
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (slug) next.set('theme', slug);
+      else next.delete('theme');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [error, setError] = useState<Error | null>(null);
   /** One create per browser tab, whatever React does with effects. */
   const creating = useRef(false);

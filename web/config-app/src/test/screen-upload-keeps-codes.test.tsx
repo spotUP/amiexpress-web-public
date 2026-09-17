@@ -33,6 +33,9 @@ const index = () => ({
   files: {
     'Node1/LOGON.TXT': {
       relPath: 'Node1/LOGON.TXT', bytes: artBytes.length, format: 'ansi', sha256: 'a', mci: [],
+      // The gallery is art a caller is SERVED: a file no screen reads is a
+      // finding for Screen Health, not a card here.
+      readBy: [{ screen: 'LOGON', scope: 'node', id: 1, via: 'resolved' }],
     },
   },
 });
@@ -82,7 +85,28 @@ vi.mock('../contexts/NotificationContext', () => ({
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
-import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+
+/*
+ * The gallery is Screen Designer's whole view since S9, so these cases drive
+ * it there. The theme is mocked rather than fetched - the board's own screens
+ * are one of the options in its selector - because what is under test is the
+ * CARDS, not a theme registry round-trip in front of them.
+ */
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { username: 'sysop' }, secLevel: 255 }),
+}));
+vi.mock('../pages/use-my-theme', () => ({
+  useMyTheme: () => ({
+    theme: {
+      slug: 'default', title: "The board's own screens", dir: '', owner: '',
+      status: 'live', mine: false, writable: true, widths: [80],
+    },
+    choices: [], select: vi.fn(), isPreparing: false, error: null,
+    auditing: false, sysop: true,
+  }),
+}));
+
+import { ArtistStudioPage as ScreenScopeTables } from '../pages/ArtistStudioPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -95,14 +119,16 @@ function wrapper({ children }: { children: ReactNode }) {
 
 /** Open the file, then hand the page a local .ans the way a sysop would. */
 async function chooseReplacement(user: ReturnType<typeof userEvent.setup>) {
-  render(<ScreenFilesPage />, { wrapper });
+  render(<ScreenScopeTables />, { wrapper });
 
   // Through the gallery, which is how a designer reaches a screen: it opens
   // the FILE panel. Clicking a row in the tables opens the editor instead, and
   // the panel - with its upload input - is hidden while the editor is up.
   // The card is labelled by the screen that reads the file, or by the path
   // when nothing does - which is this fixture.
-  await user.click(await screen.findByText('Node1/LOGON.TXT'));
+  // A card is labelled by the screen that reads it; the path was the sysop
+  // table's way of naming one.
+  await user.click((await screen.findAllByText(/^LOGON/))[0]);
 
   // By test id, not by tag: the page's FIRST file input is the archive
   // importer at the top, and picking that one uploads a screen into nothing.
