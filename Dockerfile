@@ -333,9 +333,26 @@ RUN mkdir -p /app/logs /app/default-data
 
 # Copy default BBS data to a template directory (NOT the live data location)
 # These will be used to initialize the persistent disk on first run only
+# jsbeeb, served at /beeb as its own program. Not default-data: it is not
+# board data a sysop edits, it is the emulator the BEEB door points at, and
+# routes-setup.ts looks for it beside the code at /app/vendor.
+COPY vendor /app/vendor
+
 COPY Screens /app/default-data/Screens
 COPY Bulletins /app/default-data/Bulletins
 COPY Commands /app/default-data/Commands
+# The teletext services a caller browses, and the BBC Micro's folder.
+#
+# Board data reaches a live volume ONLY through this template directory:
+# the entrypoint seeds from /app/default-data, so a directory missing here
+# is a door with nothing to read. TELETEXT and BEEB both deployed that way
+# once - registered, listed on the menu, and empty (2026-09-17).
+#
+# Beeb carries its README and the empty roms/software folders. It cannot
+# carry the ROMs: Acorn never permitted redistributing them, and the disc
+# images are whatever the board's owner has the right to run.
+COPY Teletext /app/default-data/Teletext
+COPY Beeb /app/default-data/Beeb
 # The sysop-editable layout templates - see the entrypoint's Prompts block.
 COPY Prompts /app/default-data/Prompts
 # The screen THEMES the board ships, and the registry that names them.
