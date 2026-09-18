@@ -27,6 +27,18 @@ export interface FanOutOption {
   suggested: boolean;
 }
 
+/**
+ * Which conference a screen file belongs to, or null for a board or node one.
+ *
+ * Both spellings the board writes: `Conf5/bull20.txt` on the volume and
+ * `Themes/h7/Conf/5/bull20.txt` inside a theme, which mirrors the same scope
+ * with a separator.
+ */
+export function conferenceOf(rel: string): number | null {
+  const match = /(?:^|\/)conf\/?(\d+)(?:\/|$)/i.exec(rel);
+  return match ? Number(match[1]) : null;
+}
+
 export function fanOutOptions(
   index: ScreenIndexShape,
   screen: string,
@@ -40,8 +52,38 @@ export function fanOutOptions(
     .map(r => r.file)
     .filter((f): f is string => !!f);
 
+  /*
+   * NEVER ACROSS CONFERENCES.
+   *
+   * A screen exists once per NODE and the board keeps 41 copies of it, so a
+   * fan-out is what a sysop means: "when do i not want to replace the 41 files
+   * for the bbstitle?" A CONFERENCE is the other thing entirely. `CONF_BULL`
+   * resolves to `Conf1/bull20.txt` through `Conf5/bull20.txt`, and those are
+   * five different bulletins for five different conferences - the demoscene
+   * one, the internal one - not copies of one screen.
+   *
+   * Fanning out across them wrote one picture into all five: the sysop
+   * redrew h7's conference 5 bulletin and found conference 2 wearing it too,
+   * "5 and 2 shows the same art though with my amiga demos test text in them"
+   * (2026-09-18). The identical set made it worse rather than better - once
+   * five conferences hold the same bytes, `same-content` keeps them welded.
+   *
+   * So a target in a DIFFERENT conference than the file being edited is
+   * dropped. Node copies of that conference's screen still fan out, and a
+   * board or node screen is untouched by this.
+   */
+  const openConference = conferenceOf(openPath);
+  /*
+   * Only a file that IS in a conference is held to its own conference. Editing
+   * a node screen goes on reaching a `Conf<n>/Screens/` twin of it, which is
+   * how a board that keeps the same logoff in eighty places is re-converged -
+   * that is a copy of one screen, not another conference's screen.
+   */
+  const sameConference = (rel: string) =>
+    openConference === null || conferenceOf(rel) === openConference;
+
   // The file the sysop opened leads, whatever order the index holds.
-  const targets = [openPath, ...resolved.filter(f => f !== openPath)];
+  const targets = [openPath, ...resolved.filter(f => f !== openPath && sameConference(f))];
 
   const options: FanOutOption[] = [
     { choice: 'this-file', label: 'this file only', targets: [openPath], suggested: false },
@@ -65,6 +107,7 @@ export function fanOutOptions(
   const identical = openFile
     ? Object.values(index.files)
       .filter(f => f.sha256 === openFile.sha256 && f.relPath !== openPath)
+      .filter(f => sameConference(f.relPath))
       .map(f => f.relPath)
       .sort((a, b) => a.localeCompare(b))
     : [];

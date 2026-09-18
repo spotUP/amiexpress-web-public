@@ -184,3 +184,58 @@ describe('what the write button says', () => {
     })).toBe('Write this file');
   });
 });
+
+
+/**
+ * A CONFERENCE IS NOT A COPY.
+ *
+ * "5 and 2 shows the same art though with my amiga demos test text in them"
+ * (sysop, 2026-09-18). `CONF_BULL` resolves to `Conf1/bull20.txt` through
+ * `Conf5/bull20.txt`, which are five different bulletins for five different
+ * conferences - and the fan-out treated them as copies of one screen, so
+ * redrawing h7's conference 5 wrote that picture into all five. The identical
+ * set welded them together after that: once five conferences hold the same
+ * bytes, "every copy identical to this one" is every conference.
+ */
+const fiveConferences = (hash: string): ScreenIndexShape => ({
+  builtAt: '',
+  unused: [],
+  screens: [{
+    screen: 'CONF_BULL',
+    dirType: 'conf',
+    missingScopes: 0,
+    duplicateGroups: [],
+    resolutions: [1, 2, 3, 4, 5].map(id => ({
+      scope: 'conf' as const, id, dir: `Conf${id}`, dirIsShared: false,
+      file: `Themes/h7/Conf/${id}/bull20.txt`, variants: [],
+    })),
+  }],
+  files: Object.fromEntries([1, 2, 3, 4, 5].map(id => [
+    `Themes/h7/Conf/${id}/bull20.txt`,
+    { relPath: `Themes/h7/Conf/${id}/bull20.txt`, bytes: 1, format: 'text', sha256: hash, mci: [] },
+  ])),
+});
+
+describe('a conference keeps its own bulletin', () => {
+  test('does not fan a conference screen out across the other conferences', () => {
+    const options = fanOutOptions(fiveConferences('same'), 'CONF_BULL', 'Themes/h7/Conf/5/bull20.txt');
+
+    for (const option of options) {
+      expect(option.targets).toEqual(['Themes/h7/Conf/5/bull20.txt']);
+    }
+  });
+
+  test('identical copies in OTHER conferences are not offered either', () => {
+    const options = fanOutOptions(fiveConferences('same'), 'CONF_BULL', 'Themes/h7/Conf/2/bull20.txt');
+    const everywhere = options.flatMap(o => o.targets);
+
+    expect(everywhere.every(t => t === 'Themes/h7/Conf/2/bull20.txt')).toBe(true);
+  });
+
+  test('a NODE screen still fans out - that is what a fan-out is for', () => {
+    const options = fanOutOptions(twoNodes('a', 'b'), 'BBSTITLE', 'Node1/BBSTITLE.txt');
+
+    expect(options.find(o => o.choice === 'all-copies')!.targets)
+      .toEqual(['Node1/BBSTITLE.txt', 'Node2/BBSTITLE.txt']);
+  });
+});
