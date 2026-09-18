@@ -34,6 +34,7 @@ import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
+import { splitScreenCodes } from '../screens/mci-carry';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
@@ -1289,6 +1290,41 @@ console.log(`[MCI] File not found, removing placeholder: ${filename}`);
  * @param nodeId - Node ID (default 0)
  * @returns Screen file content or null if not found
  */
+/**
+ * The theme's drawing with the board's codes put back around it.
+ *
+ * The same shape as a replace: `splitScreenCodes` gives a file's head codes,
+ * its art and its tail codes, and this keeps the BOARD's two code blocks and
+ * the THEME's art. Null when there is nothing to draw with - an unreadable
+ * file, or a theme copy that is all codes and no picture, where the board's
+ * own file is the better answer.
+ *
+ * Both files are decoded the way the loader decodes any screen, so the art
+ * arrives in the charset it was drawn in and the codes are the board's own
+ * bytes rather than a re-encoding of them.
+ */
+function artOfThemeWithBoardCodes(
+  boardFile: string,
+  themeFile: string,
+): { text: string; sourceEncoding: 'cp437' | 'iso-8859-1' | undefined } | null {
+  try {
+    const board = splitScreenCodes(readScreenText(boardFile));
+    const themeRead = readScreenWithTransforms(themeFile);
+    const theme = splitScreenCodes(themeRead.text);
+
+    if (theme.art.trim() === '') return null;
+
+    const ending = themeRead.text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = [...board.head, theme.art, ...board.tail];
+    return {
+      text: lines.join(ending) + ending,
+      sourceEncoding: sourceCharsetOf(themeRead),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function loadScreenFile(
   screenName: string,
   conferenceId?: number,
@@ -1641,7 +1677,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
    *
    * See thoughts/shared/plans/2026-09-14-a-theme-owns-art-not-behaviour-design.md
    */
-  const boardProgramSignature = (() => {
+  const boardProgram = (() => {
     if (!searchLocations.some(l => l.themed)) return null;
     for (const location of searchLocations) {
       if (location.themed) continue;
@@ -1661,13 +1697,16 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
           // Latin-1: a screen carries Amiga high-bit bytes.
           const bytes = fs.readFileSync(found);
           // Art with no codes at all: the theme owns it outright.
-          return screenIsProgram(bytes) ? screenProgramSignature(bytes) : null;
+          return screenIsProgram(bytes)
+            ? { signature: screenProgramSignature(bytes), file: found }
+            : null;
         } catch { /* unreadable tells us nothing */ }
         return null;
       }
     }
     return null;
   })();
+  const boardProgramSignature = boardProgram?.signature ?? null;
 
   /*
    * A THEME THAT CANNOT DRESS A C64 DOES NOT GET TO SHADOW THE BOARD'S .SEQ.
@@ -1722,6 +1761,48 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         } catch { sameBehaviour = false; }
       }
       if (!sameBehaviour) {
+        /*
+         * THE ART IS THE THEME'S, THE PROGRAM IS THE BOARD'S - both, not one.
+         *
+         * This used to `continue`, so a theme whose codes had drifted lost its
+         * PICTURE as well: "i switched to h7's theme on the live bbs, most
+         * screens show old ones" (sysop, 2026-09-18), about four screens whose
+         * art was perfectly good and whose codes were a `~5SR_` short of the
+         * board's. Throwing the drawing away to protect the program is the
+         * wrong half of the file to keep, and the sysop's answer was the
+         * obvious one: "you should make themes work".
+         *
+         * A screen is a head block of codes, art, and a tail block - the split
+         * `splitScreenCodes` already makes for the editor and the MCI carry
+         * makes on a replace. So the board's codes are put back around the
+         * theme's drawing, exactly as a replace does: the caller sees the
+         * artist's picture and the board runs what the board ran. A code the
+         * theme had among its art is dropped with the rest of its program,
+         * which is the same rule as before, applied to the half it belongs to.
+         *
+         * Text screens only. A `.seq` is screen codes and a `.rip` is a
+         * program in its own right; neither splits into head, art and tail,
+         * so those keep the old behaviour and the board's file is served.
+         */
+        const spliced = themeCopy && boardProgram && !isPetsciiSeqFile(themeCopy) && !isRipFile(themeCopy)
+          ? artOfThemeWithBoardCodes(boardProgram.file, themeCopy)
+          : null;
+
+        if (spliced && themeCopy) {
+          screenDebug(
+            `[loadScreenFile]  ${location.desc}: drawing ${screenName} from the theme and`
+            + ` running ${path.basename(boardProgram!.file)}'s codes around it`,
+          );
+          return {
+            content: spliced.text,
+            isPetscii: false,
+            isRip: false,
+            isTeletext: isTeletextFile(themeCopy) || undefined,
+            filePath: themeCopy,
+            sourceEncoding: spliced.sourceEncoding,
+          };
+        }
+
         screenDebug(
           `[loadScreenFile]  skipping ${location.desc}: its ${screenName} RUNS something`
           + ' different from the board\'s, and a theme owns art, not behaviour',

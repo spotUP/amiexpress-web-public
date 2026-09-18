@@ -135,9 +135,19 @@ describe('a theme may restyle a program, and not re-run it', () => {
     expect(emits.join('')).toContain('THETAIL');
   });
 
-  it('draws the BOARD\'s copy when the theme adds a door to it', async () => {
-    // Themes/607080/Conf/4/bull20.txt on the live board, in miniature: the
-    // board's include plus a `~XI` the theme added.
+  it('draws the THEME\'s art with the BOARD\'s codes when the theme adds a door to it', async () => {
+    /*
+     * Themes/607080/Conf/4/bull20.txt on the live board, in miniature: the
+     * board's include plus a `~XI` the theme added.
+     *
+     * UNTIL 2026-09-18 THIS TOOK THE ARTIST'S LOGO AWAY TOO. A screen is a
+     * head block of codes, a drawing and a tail block, and refusing the whole
+     * file to refuse the codes threw out the half a theme is FOR: h7 was worn
+     * on the live board and four of its screens went on showing the board's
+     * art, three of them only because a code had been lost from the theme's
+     * copy. The board's program is put back around the theme's drawing now -
+     * the same splice the MCI carry makes on a replace.
+     */
     write('Screens/BULL.TXT', '~f|BOARDLOGO\r\n~SS_BBS:Screens/tail.txt\r\n');
     write('Themes/t1/Board/BULL.TXT', '~f|THEMELOGO\r\n~SS_BBS:Screens/tail.txt\r\n~XISUBSCAN\r\n');
     write('Screens/tail.txt', 'THETAIL\r\n');
@@ -146,8 +156,40 @@ describe('a theme may restyle a program, and not re-run it', () => {
     const { socket, session, emits } = aCaller();
     await displayScreen(socket, session, 'BULL', false);
 
-    expect(emits.join('')).toContain('BOARDLOGO');
-    expect(emits.join('')).not.toContain('THEMELOGO');
+    const drawn = emits.join('');
+    // The artist's picture.
+    expect(drawn).toContain('THEMELOGO');
+    expect(drawn).not.toContain('BOARDLOGO');
+    // The board's program, unchanged: its include ran...
+    expect(drawn).toContain('THETAIL');
+    // ...and the code the theme tried to add did not reach the caller.
+    expect(drawn).not.toContain('SUBSCAN');
+  });
+});
+
+describe("h7's own case: a code the theme's copy has LOST", () => {
+  it("draws the theme's art and still runs the code that is missing from it", async () => {
+    /*
+     * The live board, 2026-09-18: `Node/awaitscreen.txt` in the theme had no
+     * `~CC_TELNET-FRONT`, `Node/logon20.txt` had lost the board's `~5SR_`
+     * flash pool, `Node/Logoff.txt` picked from two logoff screens where the
+     * board picks from three. Nothing about those is a theme trying to change
+     * behaviour - they are files that went through an editor that could not
+     * see the codes under the art. The art is the artist's, the program is
+     * the board's, and a caller gets both.
+     */
+    write('Screens/BULL.TXT', '~f|BOARDLOGO\r\n~CC_gwall\r\n~SS_BBS:Screens/tail.txt\r\n');
+    write('Themes/t1/Board/BULL.TXT', '~f|THEMELOGO\r\n~SS_BBS:Screens/tail.txt\r\n');
+    write('Screens/tail.txt', 'THETAIL\r\n');
+    invalidateScreenIndex();
+
+    const { socket, session, emits } = aCaller();
+    await displayScreen(socket, session, 'BULL', false);
+
+    const drawn = emits.join('');
+    expect(drawn).toContain('THEMELOGO');
+    expect(drawn).not.toContain('BOARDLOGO');
+    expect(drawn).toContain('THETAIL');
   });
 });
 

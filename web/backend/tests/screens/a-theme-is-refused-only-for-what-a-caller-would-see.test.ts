@@ -119,7 +119,7 @@ describe('an include names the file it names', () => {
  * `~5SR_` pool, `awaitscreen.txt` lost `~CC_TELNET-FRONT`, and `Logoff.txt`
  * picks from two logoff screens where the board picks from three.
  */
-describe('a theme is told which screens the board will refuse to show', () => {
+describe('a theme is told where its codes will be ignored', () => {
   const themeEntry = (): ThemeEntry => ({
     slug: 'h7', title: "h7's screens", author: 'h7', owner: 'h7',
     dir: 'Themes/h7', widths: [80], doorTheme: '', status: 'draft',
@@ -141,7 +141,7 @@ describe('a theme is told which screens the board will refuse to show', () => {
     const finding = report.advisory.find(f => f.rule === 'runs-different-codes');
 
     expect(finding).toBeTruthy();
-    expect(finding!.message).toMatch(/will not be used/);
+    expect(finding!.message).toMatch(/Your ART is drawn/);
     expect(finding!.message).toMatch(/BULL\.TXT/);
     expect(report.blocking.filter(f => f.rule === 'runs-different-codes')).toEqual([]);
   });

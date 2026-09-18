@@ -336,9 +336,10 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
        * board's `~5SR_` flash pool; `awaitscreen.txt` has lost `~CC_TELNET-FRONT`;
        * `Logoff.txt` picks from 2 logoff screens where the board picks from 3.
        *
-       * Advisory, not blocking: a caller is served the board's screen, which
-       * works. What is broken is the artist's expectation, and that is fixed
-       * by being told.
+       * Advisory, and now genuinely only worth knowing: since 2026-09-18 the
+       * loader draws the THEME's art with the BOARD's codes around it rather
+       * than refusing the file, so nothing is lost - but an artist who wrote
+       * `~XISUBSCAN` into his bulletin should be told it will not run.
        *
        * The comparison is `screenProgramSignature`, the function the LOADER
        * uses. Two ways of asking would drift, and the drift would be a gate
@@ -363,7 +364,7 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
           rule: 'runs-different-codes',
           severity: 'advisory',
           file: path.join(scope, name),
-          message: `${path.join(scope, name)} will not be used: it runs different codes from the board's ${boardRel}, and a theme owns art rather than behaviour. Give it the board's codes - replace the board's screen with this art instead, which carries them across - or leave it and the board's screen is what callers see.`,
+          message: `${path.join(scope, name)} runs different codes from the board's ${boardRel}. Your ART is drawn; the board's codes run around it, and this file's own are ignored - a theme owns art rather than behaviour.`,
         });
       }
 
