@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 import { ScreenArt } from '../components/ScreenArt';
 import { History, RotateCcw, Eye, EyeOff, X } from 'lucide-react';
 
@@ -26,6 +28,8 @@ function formatTs(ts: string): string {
 }
 
 export function ScreenRevisionsPanel({ path, onClose }: Props) {
+  const queryClient = useQueryClient();
+  const { confirm } = useNotification();
   const [revisions, setRevisions] = useState<RevisionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
@@ -73,7 +77,12 @@ export function ScreenRevisionsPanel({ path, onClose }: Props) {
   };
 
   const handleRestore = async (file: string) => {
-    if (!window.confirm(`Restore revision from ${formatTs(file)}? The current file will be saved as a new revision.`)) return;
+    const sure = await confirm({
+      title: `Restore the revision from ${formatTs(file)}?`,
+      message: 'The file as it is now is kept as a new revision, so this can be undone.',
+      confirmText: 'Restore it',
+    });
+    if (!sure) return;
     setRestoring(file);
     setStatus(null);
     try {
@@ -81,6 +90,20 @@ export function ScreenRevisionsPanel({ path, onClose }: Props) {
       setStatus(`Restored ${file}`);
       setPreviewFile(null);
       setPreviewContent(null);
+      /*
+       * THE BYTES CHANGED ON THE BOARD, SO EVERY READER OF THEM IS STALE.
+       *
+       * Reported as "restoring from history didnt work" and then, exactly,
+       * "the ansi editor didnt update with the restored file" - and the
+       * restore HAD worked: the file on disk went back to the right sha
+       * nineteen seconds after the upload. What did not happen is this. The
+       * dialog draws from `['screen-file', path, theme]` and the gallery and
+       * the tables from `['screen-index']`, and a restore invalidated
+       * neither, so the editor went on showing the art that had just been
+       * replaced. A restore you cannot see is a restore nobody believes.
+       */
+      await queryClient.invalidateQueries({ queryKey: ['screen-file', path] });
+      await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       await load();
     } catch {
       setStatus('Restore failed');
