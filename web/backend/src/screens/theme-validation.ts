@@ -124,18 +124,58 @@ function levelOf(stem: string, fileName: string): number | null | undefined {
  * about the theme and the board together, so it belongs to the whole-theme
  * walk and to the publish gate, not to a save.
  */
+/**
+ * A name the admin itself writes when it replaces a file: `.backup`,
+ * `.removed-<stamp>`, `.<topic>-backup-<stamp>`. Kept deliberately loose - a
+ * sysop's own `logon20.txt.bull6-backup-20260916` is the same thing.
+ */
+function looksLikeAnOldCopy(name: string): boolean {
+  return /\.(bak|old|orig|stale|save|prev)\b|backup|\.removed-\d/i.test(name);
+}
+
+/** What each problem means to a caller, in the sysop's terms. */
+const PROBLEM_MESSAGE: Record<string, string> = {
+  empty: 'is empty - a caller wearing this theme would be shown a blank screen',
+  'colour-codes-without-escape':
+    'holds colour codes with the escape byte missing, so a caller sees the codes printed instead of the colour. Repair it in the screen editor.',
+  'petscii-graphics-bank':
+    'is drawn in the C64 graphics bank; this board shows the lowercase one. It is served exactly as drawn - redraw it in the editor to follow the rule.',
+  'petscii-non-black-background':
+    'asks the C64 for a background colour; this board runs on a black screen. It is served exactly as drawn.',
+};
+
+/** Which problems stop a theme going live. The C64 rules report, they do not refuse. */
+const PROBLEM_SEVERITY: Record<string, ThemeFinding['severity']> = {
+  empty: 'blocking',
+  'colour-codes-without-escape': 'blocking',
+  'petscii-graphics-bank': 'advisory',
+  'petscii-non-black-background': 'advisory',
+};
+
 export function fileFindings(baseDir: string, themeRoot: string, rel: string): ThemeFinding[] {
   const findings: ThemeFinding[] = [];
   const name = path.basename(rel);
 
-  // Rule 1 - a file that is not a screen file. A .png in a theme directory is
-  // a mistake, not art the board can serve.
+  /*
+   * Rule 1 - a file the board will never serve. ADVISORY, not blocking.
+   *
+   * It used to stop publication, and on a theme an artist has actually worked
+   * in that is almost all of it: `bull20.txt.backup`, `BBSTITLE.txt.blink-backup-20260915`,
+   * `Logon100.txt.removed-20260914` - copies the ADMIN ITSELF wrote beside the
+   * file it was replacing. Publishing h7 reported 38 problems, 28 of them
+   * backups (sysop, 2026-09-18), and the gate is supposed to answer one
+   * question: would a caller wearing this theme be served broken art? A file
+   * the loader never opens cannot break anything for a caller - it is clutter,
+   * and clutter is worth saying, not worth refusing over.
+   */
   if (!isScreenFile(name)) {
     findings.push({
       rule: 'not-a-screen-file',
-      severity: 'blocking',
+      severity: 'advisory',
       file: rel,
-      message: `${rel} is not a screen file - the board serves ${SCREEN_EXTENSIONS.join(' ')} and nothing else`,
+      message: looksLikeAnOldCopy(name)
+        ? `${rel} is an old copy kept beside the real file. The board never serves it; delete it when you are done with it.`
+        : `${rel} is not a screen file - the board serves ${SCREEN_EXTENSIONS.join(' ')} and nothing else`,
     });
     return findings;
   }
@@ -147,16 +187,25 @@ export function fileFindings(baseDir: string, themeRoot: string, rel: string): T
     return [{ rule: 'file-problem', severity: 'blocking', file: rel, message: `${rel} could not be read` }];
   }
 
-  // Rule 2 - a file with a problem. An empty screen is a blank screen for a
-  // caller; a screen with its ESC bytes eaten prints its own colour codes.
+  /*
+   * Rule 2 - a file with a problem, each one worded as itself.
+   *
+   * This used to be a ternary: `empty`, or ELSE the missing-escape sentence.
+   * The C64 rules added two more problem kinds on 2026-09-18, so a PETSCII
+   * screen drawn in the graphics bank was reported to the sysop as "holds
+   * colour codes with the escape byte missing" - about a `.seq`, which has no
+   * escape codes at all - and it blocked his theme.
+   *
+   * The two C64 rules are ADVISORY here on purpose: a screen that breaks one
+   * is served exactly as its artist drew it (`petscii-board-rules.ts`), so it
+   * is a thing to know about a theme, not a reason to refuse it.
+   */
   for (const problem of facts.problems) {
     findings.push({
       rule: 'file-problem',
-      severity: 'blocking',
+      severity: PROBLEM_SEVERITY[problem] ?? 'blocking',
       file: rel,
-      message: problem === 'empty'
-        ? `${rel} is empty - a caller wearing this theme would be shown a blank screen`
-        : `${rel} holds colour codes with the escape byte missing, so a caller sees the codes printed instead of the colour. Repair it in the screen editor.`,
+      message: `${rel} ${PROBLEM_MESSAGE[problem] ?? 'has a problem the board could not describe'}`,
     });
   }
 

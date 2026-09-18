@@ -428,7 +428,10 @@ export function scanMciCodes(text: string): ScannedMciCode[] {
     // codes, and reading to the first `|` would make it one nonsense one.
     // Same stop set as the tokenizer's own `[^\s|~\r\n]`.
     let end = start;
-    while (end < text.length && !' |~\r\n\t'.includes(text[end])) end++;
+    // An ESC ends a code as surely as a space: art writes a colour straight
+    // after an include (`~SS_BBS:bulletins/bull9.txt` then `ESC[37m`), and
+    // swallowing it makes a file name nothing can resolve.
+    while (end < text.length && !' |~\r\n\t\x1b'.includes(text[end])) end++;
 
     const cmd = text.slice(start, end);
     if (!cmd) {

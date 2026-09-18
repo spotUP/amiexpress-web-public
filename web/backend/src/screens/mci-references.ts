@@ -65,9 +65,25 @@ export function locateMciReferences(content: string): LocatedMciReference[] {
     });
   };
 
-  for (const m of text.matchAll(/~CC_([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'CC', m[1]);
-  for (const m of text.matchAll(/~(?:SS_|2S)([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'SS', m[1]);
-  for (const m of text.matchAll(/~\d*SR_([^\s|~\r\n]+)/g)) push(m.index ?? 0, m[0], 'SR', m[1]);
+  /*
+   * A TARGET ENDS AT AN ESCAPE BYTE, and `~2SR_` IS A RANDOM INCLUDE.
+   *
+   * Publishing the h7 theme reported `~SS_BBS:bulletins/bull9.txt\x1b[37m,
+   * and this board has no such file` about a bulletin that is right there
+   * (sysop, 2026-09-18). Art puts a colour straight after an include -
+   * `~SS_BBS:bulletins/bull9.txt` then `ESC[37m` - and the stop set had no ESC
+   * in it, so the file name grew five bytes of escape sequence and resolved
+   * against nothing.
+   *
+   * The same report named `~SS_R_WORK:bbs/Screens/logoff/logoff`, which is no
+   * code at all: the file holds `~2SR_WORK:...`, a numbered random include,
+   * and the `2S` alternative below matched its first three bytes and read the
+   * rest as a file called `R_WORK:...`. The lookahead hands `~<n>SR_` to the
+   * pattern that owns it.
+   */
+  for (const m of text.matchAll(/~CC_([^\s|~\r\n\x1b]+)/g)) push(m.index ?? 0, m[0], 'CC', m[1]);
+  for (const m of text.matchAll(/~(?:SS_|2S(?!R_))([^\s|~\r\n\x1b]+)/g)) push(m.index ?? 0, m[0], 'SS', m[1]);
+  for (const m of text.matchAll(/~\d*SR_([^\s|~\r\n\x1b]+)/g)) push(m.index ?? 0, m[0], 'SR', m[1]);
   for (const m of text.matchAll(/~CL\./g)) push(m.index ?? 0, m[0], 'CL', '');
 
   return found.sort((a, b) => a.at - b.at);

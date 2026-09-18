@@ -61,11 +61,16 @@ test('a theme that only redraws one screen is publishable', () => {
   expect(report.publishable).toBe(true);
 });
 
-test('refuses a theme carrying a file the board could never serve', () => {
+test('says a file the board could never serve is there, and publishes anyway', () => {
+  // It BLOCKED until 2026-09-18. On a theme an artist has worked in, most of
+  // what that caught was the admin's own `.backup` and `.removed-<stamp>`
+  // copies - 28 of h7's 38 "problems" - and a file the loader never opens
+  // cannot show a caller anything broken.
   const report = validateTheme(root, theme({ 'Board/logo.png': 'PNG\r\n' }));
 
-  expect(rules(report.blocking)).toContain('not-a-screen-file');
-  expect(report.publishable).toBe(false);
+  expect(rules(report.blocking)).not.toContain('not-a-screen-file');
+  expect(rules(report.advisory)).toContain('not-a-screen-file');
+  expect(report.publishable).toBe(true);
 });
 
 test('refuses a theme whose screen is empty, because a caller would see nothing', () => {
