@@ -30,7 +30,7 @@ const envelope = (data: unknown) => Promise.resolve({
 
 const restores: string[] = [];
 
-vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
   const url = String(input);
   if (url.includes('/screens/restore')) {
     restores.push(url);
