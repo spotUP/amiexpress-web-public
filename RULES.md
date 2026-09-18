@@ -447,6 +447,32 @@ Build commands and test commands are in the `## Commands` table at the top. Test
 
 Full testing protocol: `Documentation/3-Developers/TESTING.md`.
 
+#### When to run what — measured 2026-09-18
+
+The admin suite is 207 files / ~1,265 tests and takes **4m45s**. A single
+targeted suite takes **5-15s**. The pre-push gate takes **~40s**.
+
+- **While iterating:** run the suites you touched, by path. Nothing else.
+- **Before a deploy:** one full sweep. Not before every commit - that is where
+  a day goes.
+- **The gate stays.** Forty seconds to stop an unbuildable `main` is cheap, and
+  it earns it: there is no CI on this repo.
+
+`vitest --changed` does NOT help for a change in a shared component - touching
+`ScreenEditor` selects nearly every suite anyway. Don't reach for it and
+assume you saved time; check what it selected.
+
+Two red herrings that waste minutes each time:
+
+- **A big parallel run invents failures.** Six red in a sweep, six green alone.
+  Re-run a suspect in isolation before believing it, and never run two vitest
+  processes at once - they time each other out.
+- **A green suite against a stale bundle proves nothing.** `web/config-app` is
+  served to localhost as a BUILT bundle: rebuild it (`npm run build`) before
+  judging any admin behaviour by hand, and check which asset the page actually
+  links to. On 2026-09-18 the sysop tested an admin two days old and reported
+  the editor as broken; the backend was current the whole time.
+
 ---
 
 ## Creating Doors/Games

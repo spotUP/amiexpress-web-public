@@ -678,9 +678,24 @@ export function ScreenEditor({
            * about to take - reported 2026-09-14 as "hard to see what i do".
            */
           cursor={readOnly ? null : cursor}
-          highlights={[...tokens.map(token => ({
-            x: token.column, y: token.line, length: token.length, broken: !token.resolves,
-          })), ...selectionHighlights]}
+          /*
+            FOLDED AWAY MEANS GONE FROM THE PICTURE, not tucked into a list.
+            "show or hide codes does nothing" (sysop, 2026-09-18) - because it
+            folded a LIST while `~f` went on sitting in the middle of the art.
+            With the codes hidden their characters are not drawn and there is
+            nothing to ring; with them shown, both come back.
+          */
+          highlights={[
+            ...(codesOpen
+              ? tokens.map(token => ({
+                x: token.column, y: token.line, length: token.length, broken: !token.resolves,
+              }))
+              : []),
+            ...selectionHighlights,
+          ]}
+          hidden={codesOpen ? [] : tokens.map(token => ({
+            x: token.column, y: token.line, length: token.length,
+          }))}
           onCellPointer={readOnly ? undefined : (x, y, phase) => {
             // The paste cursor follows the mouse in EVERY tool, not just
             // Type: Alt+V stamps at the cursor, and a sysop who selected

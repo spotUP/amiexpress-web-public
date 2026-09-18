@@ -54,6 +54,12 @@ export interface AnsiCanvasProps {
    */
   folds?: number[];
   /**
+   * Runs whose characters are not drawn - the MCI codes, while an artist has
+   * them folded away. The cells keep their colour; only the glyphs go, and
+   * the file is untouched.
+   */
+  hidden?: Highlight[];
+  /**
    * Which palette to DRAW the art in. 'amiga' shows the eight pens
    * console.device had, which is what a caller on a real Amiga sees; the art
    * itself is untouched.
@@ -63,7 +69,7 @@ export interface AnsiCanvasProps {
 }
 
 export function AnsiCanvas({
-  canvas, cursor, onCellPointer, highlights, folds, className, scale = 1,
+  canvas, cursor, onCellPointer, highlights, folds, hidden, className, scale = 1,
   palette = 'full',
   testId = 'ansi-canvas',
 }: AnsiCanvasProps) {
@@ -119,8 +125,8 @@ export function AnsiCanvas({
     element.height = height;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    paintScreen(ctx, canvas, cursor, highlights, palette, folds);
-  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds]);
+    paintScreen(ctx, canvas, cursor, highlights, palette, folds, hidden);
+  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds, hidden]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;

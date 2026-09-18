@@ -46,9 +46,27 @@ export function paintScreen(
    * lie than no marker at all.
    */
   folds: number[] = [],
+  /**
+   * Runs of cells whose CHARACTERS are not drawn - the MCI codes, while the
+   * artist has them folded away.
+   *
+   * "the artists dont need to see the codes" (sysop, 2026-09-18): `~f`,
+   * `~SP` and `~CC_ctop` are the board's plumbing sitting in the middle of
+   * somebody's picture, and an artist judging a drawing should not have to
+   * read past them. The BACKGROUND is still painted, so the art keeps its
+   * shape and its colour - only the glyphs go. Nothing about the file
+   * changes; this is the view, not the data.
+   */
+  hidden: Highlight[] = [],
 ): void {
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
+
+  /** `y:x` of every cell a folded code covers. */
+  const hiddenCells = new Set<string>();
+  for (const run of hidden) {
+    for (let i = 0; i < run.length; i++) hiddenCells.add(`${run.y}:${run.x + i}`);
+  }
 
   ctx.fillStyle = ansiColor(0);
   ctx.fillRect(0, 0, cols * CELL_WIDTH, rows * CELL_HEIGHT);
@@ -82,7 +100,7 @@ export function paintScreen(
 
       // A space carries its background and nothing else - drawing it costs a
       // glyph per cell on a screen that is mostly spaces.
-      if (cell.char && cell.char !== ' ') {
+      if (cell.char && cell.char !== ' ' && !hiddenCells.has(`${y}:${x}`)) {
         ctx.fillStyle = paletteColor(cell.fg, palette);
         ctx.fillText(cell.char, left, top);
       }

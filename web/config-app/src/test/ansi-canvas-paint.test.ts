@@ -201,3 +201,35 @@ describe('the Amiga preview', () => {
     expect(plain.glyphs[0].fill).toBe(ANSI_PALETTE[10]);
   });
 });
+
+describe('codes folded away', () => {
+  it('draws the art but not the characters of a hidden run', () => {
+    /*
+     * "the artists dont need to see the codes" - and folding them has to take
+     * them out of the PICTURE, not into a list: "show or hide codes does
+     * nothing" (sysop, 2026-09-18), because `~f` went on sitting in the art.
+     */
+    const canvas = createCanvas(6, 1);
+    for (const [x, char] of [...'~fART'].entries()) setCell(canvas, x, 0, { char, fg: 7, bg: 0 });
+
+    const { ctx, glyphs } = recordingContext();
+    paintScreen(ctx, canvas, null, [], 'full', [], [{ x: 0, y: 0, length: 2 }]);
+
+    const drawn = glyphs.map(g => g.char).join('');
+    expect(drawn).toBe('ART');
+  });
+
+  it('keeps the cells\' colour, so the drawing holds its shape', () => {
+    const canvas = createCanvas(2, 1);
+    setCell(canvas, 0, 0, { char: '~', fg: 7, bg: 4 });
+    setCell(canvas, 1, 0, { char: 'f', fg: 7, bg: 4 });
+
+    const { ctx, rects } = recordingContext();
+    paintScreen(ctx, canvas, null, [], 'full', [], [{ x: 0, y: 0, length: 2 }]);
+
+    // Both cells still painted their background; only the glyphs went.
+    const cells = rects.filter(r => r.args[2] === CELL_WIDTH && r.args[3] === CELL_HEIGHT);
+    expect(cells).toHaveLength(2);
+    expect(cells.every(c => c.fill === ANSI_PALETTE[4])).toBe(true);
+  });
+});
