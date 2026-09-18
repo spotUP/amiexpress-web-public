@@ -7,7 +7,7 @@
  * keys stopped working.
  */
 
-import { planMciCarry, applyMciCarry } from '../../src/screens/mci-carry';
+import { planMciCarry, applyMciCarry, splitScreenCodes } from '../../src/screens/mci-carry';
 
 const LOGON = [
   '~SS_BBS:bulletins/bull6.txt| ~SP',
@@ -238,5 +238,32 @@ describe('art that carries a SAUCE record', () => {
     expect(plan.lost).toEqual([]);
     expect(plan.tail).toEqual(['~SP', '~CC_ctop', '~XISUBSCAN']);
     expect(plan.head).toEqual(['~f']);
+  });
+});
+
+describe('the SAUCE record is not the last line of art', () => {
+  /**
+   * The same fault `planMciCarry` carried until dcb563506, in the other
+   * function that walks a screen's lines. `Conf2/bull20.txt` on the live board
+   * split as head `~f` and tail NOTHING - `~SP`, `~CC_ctop` and `~XISUBSCAN`
+   * were counted as part of the drawing, because 128 bytes of `SAUCE00 ...
+   * Amiga Topaz 1+` are neither blank nor a code line and `lastArt` landed on
+   * them. Every screen an ANSI editor has saved carries one.
+   */
+  const withSauce = (body: string) =>
+    body + '\x1a' + 'SAUCE00'.padEnd(94, ' ') + 'Amiga Topaz 1+'.padEnd(34, '\0');
+
+  it('finds the codes UNDER the art in a file an art program stamped', () => {
+    const split = splitScreenCodes(withSauce('~f\r\nTHE LOGO\r\n~SP\r\n~CC_ctop\r\n~XISUBSCAN\r\n'));
+
+    expect(split.head).toEqual(['~f']);
+    expect(split.tail).toEqual(['~SP', '~CC_ctop', '~XISUBSCAN']);
+  });
+
+  it('keeps the record with the art, so a caller writing `art` back writes the file', () => {
+    const split = splitScreenCodes(withSauce('~f\r\nTHE LOGO\r\n~SP\r\n'));
+
+    expect(split.art).toContain('THE LOGO');
+    expect(split.art).toContain('SAUCE00');
   });
 });

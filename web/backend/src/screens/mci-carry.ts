@@ -265,7 +265,26 @@ export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPl
  */
 export function splitScreenCodes(text: string): { head: string[]; art: string; tail: string[] } {
   const ending = lineEnding(text);
-  const lines = text.split('\n').map(l => l.replace(/\r$/, ''));
+  /*
+   * THE SAUCE RECORD IS NOT THE LAST LINE OF ART - the same fault
+   * `planMciCarry` carried until dcb563506, in the other function that walks
+   * a screen's lines.
+   *
+   * 128 bytes of `SAUCE00 ... Amiga Topaz 1+` are neither blank nor code, so
+   * `lastArt` landed on THEM and every code below the drawing was counted as
+   * art: `Conf2/bull20.txt` on the live board split as head `~f`, tail
+   * NOTHING, with `~SP`, `~CC_ctop` and `~XISUBSCAN` swallowed into the
+   * picture. Every screen an ANSI editor has saved carries a record, so this
+   * was most of the board - including what the editor is handed as
+   * `codeHead`/`codeTail`, which is how those codes reach a sysop at all.
+   *
+   * The record stays WITH the art: it describes the drawing, and a caller of
+   * this function that writes `art` back is writing the file's own bytes.
+   */
+  const cut = sauceOffset(text);
+  const body = text.slice(0, cut);
+  const trailer = text.slice(cut);
+  const lines = body.split('\n').map(l => l.replace(/\r$/, ''));
   const codeLine = lines.map(isCodeLine);
 
   let firstArt = 0;
@@ -275,12 +294,12 @@ export function splitScreenCodes(text: string): { head: string[]; art: string; t
 
   // A file that is all codes has no art to edit; it is head and nothing else.
   if (firstArt >= lines.length) {
-    return { head: lines.filter((_, i) => codeLine[i]), art: '', tail: [] };
+    return { head: lines.filter((_, i) => codeLine[i]), art: trailer, tail: [] };
   }
 
   return {
     head: lines.slice(0, firstArt).filter((_, i) => codeLine[i]),
-    art: lines.slice(firstArt, lastArt + 1).join(ending),
+    art: lines.slice(firstArt, lastArt + 1).join(ending) + trailer,
     tail: lines.slice(lastArt + 1).filter((_, i) => codeLine[lastArt + 1 + i]),
   };
 }

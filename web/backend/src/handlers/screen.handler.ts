@@ -34,7 +34,7 @@ import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
-import { splitScreenCodes } from '../screens/mci-carry';
+import { splitScreenCodes, applyMciCarry, type CarryPlan } from '../screens/mci-carry';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
@@ -1291,33 +1291,57 @@ console.log(`[MCI] File not found, removing placeholder: ${filename}`);
  * @returns Screen file content or null if not found
  */
 /**
+ * Every code that DOES something, as `screenProgramSignature` counts them.
+ *
+ * Decoration - `~f`, `~SP`, a colour - is not a program and stays with the
+ * art; an include or a door invocation is the board's to run, not the
+ * theme's.
+ */
+const PROGRAM_CODE_IN_ART = /~(?:SS_|2S|\d*SR_|SX_|CC_|XI)[^\s|~\r\n\x1b]*\|?/gi;
+
+/**
  * The theme's drawing with the board's codes put back around it.
  *
- * The same shape as a replace: `splitScreenCodes` gives a file's head codes,
- * its art and its tail codes, and this keeps the BOARD's two code blocks and
- * the THEME's art. Null when there is nothing to draw with - an unreadable
- * file, or a theme copy that is all codes and no picture, where the board's
- * own file is the better answer.
+ * THE SAME MACHINERY AS A REPLACE, deliberately: `planMciCarry` takes the
+ * board file's head and tail code blocks and `applyMciCarry` puts them back
+ * around new art, before the SAUCE record rather than after it (a code written
+ * past the record is thrown away by the board's own reader, which cuts at the
+ * marker). That pair is tested, and it was fixed this morning for the SAUCE
+ * case; a second hand-rolled splice here would be the second copy this repo
+ * keeps collecting its bugs from.
  *
- * Both files are decoded the way the loader decodes any screen, so the art
- * arrives in the charset it was drawn in and the codes are the board's own
- * bytes rather than a re-encoding of them.
+ * The theme's own program codes are stripped first - they are the half a theme
+ * does not own, and leaving one in would make `planMciCarry` treat the art as
+ * carrying codes of its own and hand it back untouched.
+ *
+ * Null when there is nothing to draw with: an unreadable file, or a theme copy
+ * that is all codes and no picture, where the board's own file is the answer.
  */
 function artOfThemeWithBoardCodes(
   boardFile: string,
   themeFile: string,
 ): { text: string; sourceEncoding: 'cp437' | 'iso-8859-1' | undefined } | null {
   try {
-    const board = splitScreenCodes(readScreenText(boardFile));
     const themeRead = readScreenWithTransforms(themeFile);
-    const theme = splitScreenCodes(themeRead.text);
+    const art = splitScreenCodes(themeRead.text).art.replace(PROGRAM_CODE_IN_ART, '');
+    if (art.trim() === '') return null;
 
-    if (theme.art.trim() === '') return null;
+    /*
+     * The board's own two blocks, taken with the same split - NOT through
+     * `planMciCarry`, whose first question is "does the upload carry codes of
+     * its own", which is a question about an artist's upload and not about
+     * this. `applyMciCarry` does the placing, so the codes land before the
+     * theme art's SAUCE record rather than after it.
+     */
+    const board = splitScreenCodes(readScreenText(boardFile));
+    if (board.head.length === 0 && board.tail.length === 0) return null;
 
-    const ending = themeRead.text.includes('\r\n') ? '\r\n' : '\n';
-    const lines = [...board.head, theme.art, ...board.tail];
+    const plan: CarryPlan = {
+      head: board.head, tail: board.tail, lost: [], uploadHasCodes: false,
+    };
+
     return {
-      text: lines.join(ending) + ending,
+      text: applyMciCarry(art, plan, 'keep'),
       sourceEncoding: sourceCharsetOf(themeRead),
     };
   } catch {
@@ -1804,8 +1828,10 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
         }
 
         screenDebug(
-          `[loadScreenFile]  skipping ${location.desc}: its ${screenName} RUNS something`
-          + ' different from the board\'s, and a theme owns art, not behaviour',
+          `[loadScreenFile]  skipping ${location.desc}: ${themeCopy
+            ? `its ${path.basename(themeCopy)} RUNS something different from the board's`
+              + ` and carries no art of its own to keep`
+            : `it has no ${screenName} of its own`}`,
         );
         continue;
       }
