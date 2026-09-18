@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
+import { Undo2, Redo2, Save, X, Download, Upload, Eye, EyeOff } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -384,8 +384,29 @@ export function ScreenEditor({
   // Selected tools, colours and brushes all read the same: a ring in the
   // board's accent, not a slightly stronger border (sysop, 2026-09-10:
   // "not clear enough which brushes and colors are selected").
+  /*
+   * SELECTED IS FILLED, NOT RINGED.
+   *
+   * This drew a 2px accent ring around whatever was active - "the
+   * selected/active buttons look terrible with that blue border as well"
+   * (sysop, 2026-09-18). A halo round a small bordered button reads as an
+   * error state and fights every other border in a toolbar. A segmented
+   * control says which one is on by filling it.
+   */
   const selectedRing = (on: boolean) =>
-    on ? 'border-border-strong ring-2 ring-accent' : 'border-border';
+    on
+      ? 'border-accent bg-accent text-content-inverse'
+      : 'border-border text-content-secondary hover:bg-surface-3';
+
+  /*
+   * A SWATCH CANNOT BE FILLED - the fill is the colour being chosen - so it
+   * takes an outline instead, in the neutral ink rather than the accent, so
+   * the mark reads against all sixteen.
+   */
+  const selectedSwatch = (on: boolean) =>
+    on
+      ? 'border-content-primary ring-1 ring-content-primary'
+      : 'border-border';
   /*
    * EIGHT SWATCHES ON AN EIGHT-PEN BOARD.
    *
@@ -415,7 +436,7 @@ export function ScreenEditor({
           aria-label={`${ANSI_COLOR_NAMES[index]} ${which === 'fg' ? 'foreground' : 'background'}`}
           title={which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`}
           aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
-          className={`w-5 h-5 border ${selectedRing((which === 'fg' ? surface.fg : surface.bg) === index)}`}
+          className={`w-5 h-5 border ${selectedSwatch((which === 'fg' ? surface.fg : surface.bg) === index)}`}
           style={{ backgroundColor: color }}
           onClick={() => onChange?.({ ...surface, [which]: index })}
         />
@@ -457,9 +478,14 @@ export function ScreenEditor({
             type="button"
             aria-pressed={surface.tool === tool}
             title={hotkey}
-            className={`px-2 py-1 text-sm border ${selectedRing(surface.tool === tool)} ${
-              surface.tool === tool ? 'text-content-primary' : 'text-content-secondary'
-            }`}
+            /*
+              The ink comes from `selectedRing` and NOWHERE ELSE. This set its
+              own on top, so a selected tool drew white text on the accent
+              fill while every other selected control drew the inverse ink -
+              "white text in some selected buttons and black in some" (sysop,
+              2026-09-18). Two places deciding one colour is how they differ.
+            */
+            className={`px-2 py-1 text-sm border ${selectedRing(surface.tool === tool)}`}
             onClick={() => onChange?.(withTool(surface, tool))}
           >
             {label}
@@ -791,13 +817,21 @@ export function ScreenEditor({
       {tokens.length > 0 && (
         <div className="text-sm space-y-1">
           <h4 className="flex flex-wrap items-center gap-2 text-content-primary">
+            {/*
+              A REAL CONTROL, not underlined text. The toolbar around it is a
+              row of text links and this matched it, which the sysop called
+              exactly what it was: "underlined text instead of real components
+              creating a pretty shitty ux experience" (2026-09-18). The design
+              system has buttons; this is one.
+            */}
             <button
               type="button"
-              className="inline-flex items-center gap-1 underline"
-              aria-expanded={codesOpen}
+              className="btn-small"
+              aria-pressed={codesOpen}
               onClick={() => setCodesOpen(open => !open)}
             >
-              {codesOpen ? 'Hide' : 'Show'} the codes
+              {codesOpen ? <EyeOff size={14} /> : <Eye size={14} />}
+              {codesOpen ? 'Hide the codes' : 'Show the codes'}
             </button>
             <span className="text-content-secondary">
               This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
@@ -836,14 +870,14 @@ export function ScreenEditor({
                   )}
                   <button
                     type="button"
-                    className="underline text-content-secondary"
+                    className="btn-small btn-secondary"
                     onClick={() => setEditingToken(token)}
                   >
                     change
                   </button>
                   <button
                     type="button"
-                    className="underline text-content-secondary"
+                    className="btn-small btn-danger"
                     onClick={() => {
                       // Blanked in place: the canvas is a grid, so a code is
                       // removed by returning its cells to spaces rather than
@@ -864,7 +898,7 @@ export function ScreenEditor({
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
         {onLoadFile && !readOnly && !hostOffersUpload && (
-          <label className="inline-flex items-center gap-1 underline cursor-pointer">
+          <label className="btn-small btn-secondary cursor-pointer">
             <Upload size={14} /> Open a file into the editor
             <input
               type="file"
@@ -881,7 +915,7 @@ export function ScreenEditor({
         {filePath && onDownload && (
           <button
             type="button"
-            className="inline-flex items-center gap-1 underline"
+            className="btn-small btn-secondary"
             onClick={onDownload}
           >
             <Download size={14} /> Download
@@ -889,15 +923,15 @@ export function ScreenEditor({
         )}
         {!readOnly && (
           <>
-            <button type="button" className="inline-flex items-center gap-1 underline"
+            <button type="button" className="btn-small btn-secondary"
               onClick={() => onChange?.(undo(surface))}>
               <Undo2 size={14} /> Undo
             </button>
-            <button type="button" className="inline-flex items-center gap-1 underline"
+            <button type="button" className="btn-small btn-secondary"
               onClick={() => onChange?.(redo(surface))}>
               <Redo2 size={14} /> Redo
             </button>
-            <button type="button" className="inline-flex items-center gap-1 underline disabled:opacity-50"
+            <button type="button" className="btn-small btn-primary"
               disabled={saving}
               onClick={() => onSave?.(canvasToScreen(surface.canvas))}>
               <Save size={14} /> {saving ? 'Saving…' : 'Save'}
@@ -906,7 +940,7 @@ export function ScreenEditor({
         )}
         {onCancel && (
           <button type="button" aria-label={readOnly ? 'Close' : 'Cancel editing'}
-            className="inline-flex items-center gap-1 underline text-content-secondary" onClick={onCancel}>
+            className="btn-small btn-secondary" onClick={onCancel}>
             <X size={14} /> {readOnly ? 'Close' : 'Cancel'}
           </button>
         )}

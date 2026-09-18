@@ -58,9 +58,17 @@ export function PetsciiCharsetBrowser({
         </label>
       </div>
 
+      {/*
+        THE CELL IS THE GLYPH'S SIZE, not a share of the row.
+        `minmax(0, 1fr)` stretched every cell to whatever width was going, so
+        a 16px character sat in a wider box and the selection ring wrapped the
+        character AND the gap beside it - "it selects the space next to the
+        char" (sysop, 2026-09-18). Sixteen fixed columns means the mark can
+        only ever be around the glyph.
+      */}
       <div
-        className="grid gap-px border border-border p-1"
-        style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))', background }}
+        className="grid gap-px border border-border p-1 w-max"
+        style={{ gridTemplateColumns: 'repeat(16, 16px)', background }}
         role="group"
         aria-label="Character set"
       >
@@ -73,7 +81,9 @@ export function PetsciiCharsetBrowser({
               disabled={disabled}
               aria-label={`Character ${code}`}
               aria-pressed={selected}
-              className={selected ? 'ring-1 ring-accent' : undefined}
+              /* The neutral outline the colour swatches use: a glyph cannot be
+                 filled to show it is chosen, and blue fights the art. */
+              className={`block leading-none h-4 w-4${selected ? ' ring-1 ring-content-primary' : ''}`}
               onClick={() => onBrush({ ...brush, screenCode: code })}
             >
               <PetsciiGlyph

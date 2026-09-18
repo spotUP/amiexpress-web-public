@@ -449,7 +449,7 @@ export function ConferencesPage() {
                   {orphan.files} file{orphan.files === 1 ? '' : 's'}, {formatBytes(orphan.bytes)}
                 </span>
                 <button
-                  className="underline text-status-danger"
+                  className="btn-small btn-danger"
                   aria-label={`Remove ${orphan.dir}`}
                   onClick={() => handleRemoveOrphan(orphan)}
                   disabled={removeOrphanMutation.isPending}
@@ -638,7 +638,7 @@ export function ConferencesPage() {
                               ) : (
                                 <button
                                   type="button"
-                                  className="text-xs underline text-content-secondary"
+                                  className="btn-small btn-secondary"
                                   aria-label={`Reset directory ${row.dir} ${side} path to the default`}
                                   onClick={() =>
                                     setFormData((current) =>

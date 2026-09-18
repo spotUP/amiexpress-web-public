@@ -317,7 +317,7 @@ export function PetsciiScreenEditor({
                 <div className="flex items-center gap-2 text-xs text-content-secondary">
                   <span>{region ? `Holding ${region.cols} by ${region.rows}` : 'Drag to lift a shape'}</span>
                   {region && (
-                    <button type="button" className="underline" onClick={() => setRegion(null)}>
+                    <button type="button" className="btn-small btn-secondary" onClick={() => setRegion(null)}>
                       Lift another
                     </button>
                   )}
@@ -453,7 +453,7 @@ export function PetsciiScreenEditor({
           </button>
         )}
         {onDownload && (
-          <button type="button" className="inline-flex items-center gap-1 text-sm underline" onClick={onDownload}>
+          <button type="button" className="btn-small btn-secondary" onClick={onDownload}>
             <Download size={14} /> Download
           </button>
         )}
@@ -477,7 +477,7 @@ export function PetsciiScreenEditor({
               */}
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-sm underline"
+              className="btn-small btn-secondary"
               onClick={() => uploadInput.current?.click()}
             >
               <Upload size={14} /> Open a file into the editor

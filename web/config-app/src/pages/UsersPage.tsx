@@ -552,7 +552,7 @@ export function UsersPage() {
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="h-control px-2 text-sm text-content-muted underline"
+              className="btn-small btn-secondary"
             >
               Clear
             </button>

@@ -120,8 +120,8 @@ export function AdminRolesPage() {
                           className="input-field w-20"
                           autoFocus
                         />
-                        <button onClick={() => commitEdit(sec.key)} className="text-xs text-accent hover:underline">save</button>
-                        <button onClick={() => setEditingKey(null)} className="text-xs text-content-muted hover:underline">cancel</button>
+                        <button onClick={() => commitEdit(sec.key)} className="btn-small btn-primary">save</button>
+                        <button onClick={() => setEditingKey(null)} className="btn-small btn-secondary">cancel</button>
                       </div>
                     ) : (
                       <button

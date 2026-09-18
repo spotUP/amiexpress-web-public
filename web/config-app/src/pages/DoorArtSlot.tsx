@@ -78,7 +78,7 @@ export function DoorArtSlot({ command, slot, onOpen }: DoorArtSlotProps) {
       {!slot.missing && (
         <button
           onClick={() => onOpen(slot)}
-          className="px-2 py-1 text-accent hover:underline text-sm"
+          className="btn-small btn-secondary"
         >
           Open in ANSI editor
         </button>

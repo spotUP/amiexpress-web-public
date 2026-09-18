@@ -484,7 +484,7 @@ export function ScreenScopeTables() {
                 key={variant}
                 type="button"
                 onClick={event => { event.stopPropagation(); setOpenFile(target); }}
-                className="underline hover:text-content-primary transition-colors"
+                className="btn-small btn-secondary"
                 title={`Open ${target}`}
               >
                 {variant}
@@ -625,7 +625,7 @@ export function ScreenScopeTables() {
                       file: section.file, section: section.section, label: section.label,
                       maxLines: section.maxLines, maxLineLength: section.maxLineLength,
                     })}
-                    className="px-2 py-1 text-accent hover:underline text-sm"
+                    className="btn-small btn-secondary"
                   >
                     Open in ANSI editor
                   </button>
@@ -788,7 +788,7 @@ export function ScreenScopeTables() {
                   ))}
                 </select>
                 <button
-                  className="underline"
+                  className="btn-small btn-secondary"
                   disabled={!sharedDir}
                   onClick={() => previewShare(group.paths)}
                 >
@@ -810,12 +810,12 @@ export function ScreenScopeTables() {
                 </p>
               ))}
               {shareSummary.canShare.length > 0 && (
-                <button className="underline" onClick={() => applyShare(shareSummary.canShare)}>
+                <button className="btn-small btn-secondary" onClick={() => applyShare(shareSummary.canShare)}>
                   Point {shareSummary.canShare.length} node
                   {shareSummary.canShare.length === 1 ? '' : 's'} at {sharedDir}
                 </button>
               )}
-              <button className="block text-content-secondary underline" onClick={() => setShareSummary(null)}>
+              <button className="btn-small btn-secondary" onClick={() => setShareSummary(null)}>
                 cancel
               </button>
             </div>

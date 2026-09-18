@@ -150,8 +150,58 @@
     @apply bg-status-danger hover:bg-status-danger/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors;
   }
 
+  /*
+   * A TOOLBAR-SIZED BUTTON. Use with a variant: `btn-small btn-secondary`.
+   *
+   * Added 2026-09-18 because there was nothing between "a full-size button"
+   * and "a word with an underline on it", so every toolbar in the editor and
+   * its dialog was built out of underlined text - 35 of them: "underlined
+   * text instead of real components creating a pretty shitty ux experience",
+   * and "i have tried to make you improve ux for days now".
+   *
+   * An icon sits inside it, so it lays out as a row and carries its own gap.
+   */
+  .btn-small {
+    @apply inline-flex items-center gap-1 text-sm py-1 px-2 rounded transition-colors;
+  }
+
+  /* Disabled reads as disabled on every variant, not per call site. */
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-danger:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
   .input-field {
     @apply bg-surface-0 border border-border-strong text-content-primary rounded px-3 py-2 focus:outline-none focus:border-accent;
+  }
+
+  /*
+   * A SELECT'S ARROW NEEDS ROOM, AND THE SAME ROOM EVERYWHERE.
+   *
+   * `.input-field` is shared by inputs and selects and gives both `px-3`, so
+   * the arrow was jammed against the border - "there is no spacing to the
+   * right of the down arrow", and the sysop has seen it in every project
+   * (2026-09-18). Native arrows also differ per browser, so the same control
+   * looked different on each.
+   *
+   * So the native one is turned off and the chevron is drawn here: 0.75rem
+   * from the right edge - the same inset as the text on the left - with the
+   * padding to match, so a long option can never run underneath it. Drawn in
+   * --text-secondary, the ink a label uses, because the arrow is furniture
+   * rather than content.
+   */
+  select.input-field {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' stroke='%23a3adbf' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 0.75rem 0.5rem;
+  }
+
+  /* A multiple/size select is a list, not a dropdown: no chevron, no inset. */
+  select.input-field[multiple],
+  select.input-field[size]:not([size='1']) {
+    @apply bg-none pr-3;
   }
 
   /*

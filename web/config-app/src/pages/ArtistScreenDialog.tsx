@@ -864,7 +864,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           {onSwitchTheme && (
             <button
               type="button"
-              className="mt-1 underline text-content-primary"
+              className="btn-small btn-secondary mt-1"
               onClick={() => onSwitchTheme(ownerSlug)}
             >
               {ownerSlug === 'default' ? 'Switch to Board screens' : `Switch to ${ownerSlug}`}
@@ -888,7 +888,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                   could draw itself. */}
               <button
                 type="button"
-                className="inline-flex items-center gap-1 underline"
+                className="btn-small btn-secondary"
                 onClick={() => replaceInput.current?.click()}
               >
                 <Upload size={14} /> Upload a drawing
@@ -944,7 +944,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                 <>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 underline"
+                    className="btn-small btn-secondary"
                     onClick={() => svgInput.current?.click()}
                     disabled={importSvg.isPending}
                   >
@@ -972,7 +972,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               {"error":"Access token required"}. */}
           <button
             type="button"
-            className="inline-flex items-center gap-1 underline"
+            className="btn-small btn-secondary"
             onClick={async () => {
               if (!path) return;
               try {
@@ -990,7 +990,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
 
           <button
             type="button"
-            className="inline-flex items-center gap-1 underline"
+            className="btn-small btn-secondary"
             onClick={() => setShowRevisions(open => !open)}
           >
             <History size={14} /> {showRevisions ? 'Hide history' : 'History'}
@@ -1012,7 +1012,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
              */
             <button
               type="button"
-              className="inline-flex items-center gap-1 underline text-status-danger"
+              className="btn-small btn-danger"
               onClick={async () => {
                 if (!path) return;
                 const name = path.split('/').pop();
@@ -1084,7 +1084,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
             >
               Write it to {pendingSvg.target.split('/').pop()}
             </button>
-            <button type="button" className="underline" onClick={() => setPendingSvg(null)}>
+            <button type="button" className="btn-small btn-secondary" onClick={() => setPendingSvg(null)}>
               Cancel
             </button>
           </div>
@@ -1144,7 +1144,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
             </button>
             <button
               type="button"
-              className="underline text-content-secondary"
+              className="btn-small btn-secondary"
               onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
             >
               Cancel
@@ -1211,7 +1211,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           ) : (
             <button
               type="button"
-              className="text-content-secondary underline"
+              className="btn-small btn-secondary"
               onClick={() => setKindOpen(true)}
             >
               Not art?
@@ -1233,7 +1233,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
           {sysop && file.problems.includes('colour-codes-without-escape') && (
             <button
               type="button"
-              className="underline"
+              className="btn-small btn-secondary"
               onClick={async () => {
                 if (!path) return;
                 setActionError(null);

@@ -200,7 +200,7 @@ export function MciPicker({
             <div>
               <span className="font-mono text-content-primary">~{chosen.code}</span>
               <span className="text-content-secondary"> - {chosen.summary}</span>
-              <button type="button" className="ml-2 underline" onClick={() => setChosen(null)}>
+              <button type="button" className="btn-small btn-secondary" onClick={() => setChosen(null)}>
                 pick another
               </button>
             </div>

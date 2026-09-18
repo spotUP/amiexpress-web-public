@@ -61,7 +61,7 @@ export function ArtUploadButton({
     <>
       <button
         type="button"
-        className="inline-flex items-center gap-1 underline"
+        className="btn-small btn-secondary"
         disabled={disabled}
         onClick={() => input.current?.click()}
       >

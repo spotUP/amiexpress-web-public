@@ -496,7 +496,7 @@ export function RipScreenEditor({
 
               <button
                 type="button"
-                className="inline-flex items-center gap-1 text-sm underline text-status-danger"
+                className="btn-small btn-danger"
                 onClick={() => {
                   setDoc(removeRipHotspot(doc, chosen));
                   setSelected(null);

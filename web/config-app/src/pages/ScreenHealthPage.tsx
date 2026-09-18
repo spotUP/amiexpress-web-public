@@ -440,7 +440,7 @@ export function ScreenHealthPage() {
               {' '}
               <button
                 type="button"
-                className="underline text-content-secondary hover:text-content-primary"
+                className="btn-small btn-secondary"
                 onClick={() => setShowAllDuplicates(v => !v)}
               >
                 {showAllDuplicates ? 'show only drift' : 'show all'}
@@ -514,7 +514,7 @@ export function ScreenHealthPage() {
       <div className="flex items-center gap-4 text-sm">
         <button
           type="button"
-          className="inline-flex items-center gap-1 underline"
+          className="btn-small btn-secondary"
           onClick={() => downloadScreen('/api/screens/export?scope=all', 'screens.zip')}
         >
           <Download size={14} /> Export every screen
@@ -530,10 +530,10 @@ export function ScreenHealthPage() {
             e.target.value = '';
           }}
         />
-        <button className="inline-flex items-center gap-1 underline" onClick={() => importInput.current?.click()}>
+        <button className="btn-small btn-secondary" onClick={() => importInput.current?.click()}>
           <Upload size={14} /> Import an archive
         </button>
-        <button className="inline-flex items-center gap-1 underline" onClick={repairAll}>
+        <button className="btn-small btn-secondary" onClick={repairAll}>
           <AlertTriangle size={14} /> Repair every damaged screen
         </button>
       </div>
@@ -548,8 +548,8 @@ export function ScreenHealthPage() {
               </li>
             ))}
           </ul>
-          <button className="underline" onClick={applyImport}>Import them</button>
-          <button className="block text-content-secondary underline" onClick={() => { setImportPlan(null); setImportFile(null); }}>
+          <button className="btn-small btn-primary" onClick={applyImport}>Import them</button>
+          <button className="btn-small btn-secondary" onClick={() => { setImportPlan(null); setImportFile(null); }}>
             cancel
           </button>
         </div>
