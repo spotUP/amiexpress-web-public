@@ -33,7 +33,7 @@ import {
   duplicateGroups, describeGroup, partitionDuplicates, type DuplicateGroup,
 } from './screen-duplicates';
 import {
-  describeProblem, isDoorArt, isCommandsOnly, isNotArt,
+  describeProblem, isDoorArt, isCommandsOnly, isNotArt, breaksC64Rules,
   type ScreenFileShape, type ScreenIndexShape,
 } from './screen-index-view';
 
@@ -318,6 +318,12 @@ export function ScreenHealthPage() {
         .sort((a, b) => a.relPath.localeCompare(b.relPath)),
       notArt: all.filter(f => !isDoorArt(f) && isNotArt(f))
         .sort((a, b) => a.relPath.localeCompare(b.relPath)),
+      /*
+       * Every PETSCII screen that breaks one of the two C64 rules, door art
+       * included - a door's `.seq` reaches the same caller's screen.
+       */
+      c64Rules: all.filter(breaksC64Rules)
+        .sort((a, b) => a.relPath.localeCompare(b.relPath)),
     };
   }, [data]);
 
@@ -382,6 +388,41 @@ export function ScreenHealthPage() {
             isLoading={isLoading}
             error={error as Error | null}
             emptyMessage="Nothing on this board is a leftover."
+            onRowClick={item => setOpenFile(item.relPath)}
+          />
+        </div>
+      ),
+    },    {
+      /*
+       * THE TWO RULES A C64 BOARD RUNS, and who on this board breaks them.
+       *
+       * "only lowercase characters are allowed and only black background ...
+       * this should apply bbs wide" (sysop, 2026-09-14). A save that breaks
+       * either is refused now, so this list can only shrink - and it is a
+       * list, not a repair: these files go on reaching callers exactly as
+       * they are until an artist redraws one.
+       */
+      id: 'c64-rules',
+      label: `C64 rules ${buckets.c64Rules.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            PETSCII screens a C64 board would not accept today: art drawn in
+            the graphics bank instead of the lowercase one, or a screen that
+            asks for a background colour. Nothing here is corrected - the
+            board serves each of these exactly as its artist saved it, and a
+            file changing shape on the way to a caller is the bug nobody can
+            find. Redraw one in the editor and it leaves this list.
+          </p>
+          <DataTable
+            columns={unusedColumns}
+            rows={buckets.c64Rules.filter(item =>
+              !query.trim() || item.relPath.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.relPath}
+            initialSort={[{ id: 'path', desc: false }]}
+            isLoading={isLoading}
+            error={error as Error | null}
+            emptyMessage="Every PETSCII screen on this board follows the C64 rules."
             onRowClick={item => setOpenFile(item.relPath)}
           />
         </div>

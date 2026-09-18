@@ -26,6 +26,7 @@ import {
   QUESTIONNAIRE_SCREEN, isQuestionnaireScript, preferredScript, baudOf,
 } from './questionnaire-script';
 import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog';
+import { checkPetsciiBoardRules } from './petscii-board-rules';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { screenIsProgram } from './screen-blankness';
@@ -112,6 +113,10 @@ export interface ScreenFileFacts {
    *   gone, so a caller sees the codes printed instead of the colour. 47 files
    *   on the live board are in that state; the editor showing them as plain
    *   text was right, and nothing said why.
+   * `petscii-graphics-bank` / `petscii-non-black-background` - a `.seq` that
+   *   breaks one of the two rules a C64 board runs (sysop, 2026-09-14). A save
+   *   that breaks them is refused; one already on the board is REPORTED here
+   *   and served exactly as its artist drew it.
    */
   problems: ScreenProblem[];
   /**
@@ -191,7 +196,11 @@ export interface ScreenFileFacts {
   theme?: string;
 }
 
-export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
+export type ScreenProblem =
+  | 'empty'
+  | 'colour-codes-without-escape'
+  | 'petscii-graphics-bank'
+  | 'petscii-non-black-background';
 
 export interface ScopeResolution {
   scope: 'node' | 'conf' | 'board';
@@ -622,6 +631,23 @@ function fileProblems(buf: Buffer, text: string, format: ScreenFormat): ScreenPr
     const hasEscape = text.includes('\x1b');
     const hasBareCsi = /\[[0-9][0-9;]*m/.test(text);
     if (!hasEscape && hasBareCsi) problems.push('colour-codes-without-escape');
+  }
+
+  /*
+   * THE TWO C64 RULES, for the files they are about.
+   *
+   * Reported, never corrected: a screen already on the board that draws in the
+   * graphics bank goes on reaching callers exactly as its artist saved it. The
+   * refusal that stops a NEW one arriving lives on the write endpoints
+   * (`petscii-board-rules.ts`); this is how a sysop finds the ones that were
+   * there before the rules were.
+   */
+  if (format === 'petscii' && buf.length > 0) {
+    for (const violation of checkPetsciiBoardRules(buf)) {
+      problems.push(violation.rule === 'graphics-bank'
+        ? 'petscii-graphics-bank'
+        : 'petscii-non-black-background');
+    }
   }
 
   return problems;

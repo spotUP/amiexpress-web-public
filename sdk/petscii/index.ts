@@ -28,6 +28,10 @@ export {
 export { writeSeq, writeSeqWithOffsets, type SeqWriteOptions, type SeqWriteResult } from './seq-writer';
 export * from './editor-surface';
 export {
+  checkBoardRules, boardRulesReason,
+  type BoardRuleCode, type BoardRuleViolation,
+} from './board-rules';
+export {
   AnsiToPetsciiTransducer,
   type AnsiToPetsciiOptions,
   petsciiMoveTo,

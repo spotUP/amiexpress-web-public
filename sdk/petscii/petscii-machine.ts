@@ -224,7 +224,7 @@ export class PetsciiMachine {
    * pen colour, advance the cursor. The one place a glyph reaches the screen,
    * so the count can never be paid twice or missed.
    */
-  private putScreenCode(sc: number): boolean {
+  protected putScreenCode(sc: number): boolean {
     const s = this.state;
     if (this.insertCount > 0) this.insertCount--;
     const idx = s.cursorY * this.cols + s.cursorX;

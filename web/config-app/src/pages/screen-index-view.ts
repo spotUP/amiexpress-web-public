@@ -68,7 +68,11 @@ export interface ScreenFileShape {
   theme?: string;
   /** Nothing but the codes the board runs - plumbing, not art. */
   codesOnly?: boolean;
-  /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */
+  /**
+   * What is wrong with the bytes: 'empty', 'colour-codes-without-escape',
+   * and for a `.seq` the two C64 rules - 'petscii-graphics-bank',
+   * 'petscii-non-black-background'.
+   */
   problems?: string[];
 }
 
@@ -77,7 +81,27 @@ export const PROBLEM_LABELS: Record<string, string> = {
   empty: 'Empty - draws nothing',
   'colour-codes-without-escape':
     'Colour codes lost their escape byte - a caller sees the codes as text',
+  'petscii-graphics-bank':
+    'Drawn in the graphics bank - a C64 board shows the lowercase one',
+  'petscii-non-black-background':
+    'Asks for a background colour - a C64 board runs on a black screen',
 };
+
+/** The two C64 rules, as the index reports them. */
+export const PETSCII_RULE_PROBLEMS = [
+  'petscii-graphics-bank', 'petscii-non-black-background',
+] as const;
+
+/**
+ * A `.seq` the board shows as its artist drew it, and would no longer accept.
+ *
+ * Reported rather than repaired, on the sysop's own terms: the rules stop a
+ * NEW screen breaking them, and a file that predates them keeps reaching
+ * callers unchanged until somebody redraws it.
+ */
+export function breaksC64Rules(file: ScreenFileShape): boolean {
+  return (file.problems ?? []).some(p => (PETSCII_RULE_PROBLEMS as readonly string[]).includes(p));
+}
 
 export function describeProblem(problem: string): string {
   return PROBLEM_LABELS[problem] ?? problem;

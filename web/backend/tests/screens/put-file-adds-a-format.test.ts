@@ -62,9 +62,12 @@ test('a RIP file becomes the screen\'s .rip on every node it is asked for', asyn
 });
 
 test('a PETSCII file becomes the screen\'s .seq', async () => {
+  // `$0E` first: a `.seq` that does not select the lowercase bank draws in the
+  // graphics one, and the board refuses to save that
+  // (`screens/petscii-board-rules.ts`).
   const res = await request(app())
     .put('/api/screens/file?path=Node1/BBSTITLE.seq')
-    .send({ content: b64('\x93\x05hello\r'), targets: ['Node1/BBSTITLE.seq'], carryCodes: 'none' });
+    .send({ content: b64('\x0e\x93\x05hello\r'), targets: ['Node1/BBSTITLE.seq'], carryCodes: 'none' });
 
   expect(res.status).toBe(200);
   expect(fs.existsSync(path.join(root, 'Node1', 'BBSTITLE.seq'))).toBe(true);

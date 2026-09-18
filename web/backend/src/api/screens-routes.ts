@@ -54,6 +54,7 @@ import { planMciCarry, applyMciCarry, splitScreenCodes, type MciPlacement } from
 import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
 import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
 import { findScreenReferences, removeScreenReferences } from '../screens/screen-references';
+import { petsciiRuleRefusal } from '../screens/petscii-board-rules';
 
 export const screensRouter = express.Router();
 
@@ -841,6 +842,18 @@ screensRouter.put('/file', (req: Request, res: Response) => {
   for (const target of targets) {
     const mismatch = ripMismatch(target, Buffer.from(uploaded, 'latin1'));
     if (mismatch) return res.status(400).json({ success: false, error: `${target}: ${mismatch}` });
+    /*
+     * THE C64 RULES ARE REFUSED HERE, not corrected here.
+     *
+     * "only lowercase characters are allowed and only black background ...
+     * this should apply bbs wide" (sysop, 2026-09-14). A save that breaks
+     * either is turned away with the reason - the editor holds its own
+     * surface to the rules already, so what reaches this is an IMPORT, and
+     * silently rewriting an artist's file on the way in is the failure
+     * nobody can debug later.
+     */
+    const refusal = petsciiRuleRefusal(target, Buffer.from(uploaded, 'latin1'));
+    if (refusal) return res.status(400).json({ success: false, error: `${target}: ${refusal}` });
   }
   const plans = planCarryForTargets(targets, uploaded, placement);
 
@@ -1338,12 +1351,21 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
   const mismatch = ripMismatch(rel, file.buffer);
   if (mismatch) return res.status(400).json({ success: false, error: mismatch });
 
+
   let targets: string[] = [rel];
   try {
     const raw = (req.body || {}).targets;
     if (raw) targets = typeof raw === 'string' ? JSON.parse(raw) : raw;
   } catch {
     return res.status(400).json({ success: false, error: 'targets must be a JSON array of paths' });
+  }
+
+  // The C64 rules, on the way in - see the note in PUT /file. Per target: an
+  // upload writes the same bytes to several paths and only the `.seq` ones
+  // are judged.
+  for (const target of targets) {
+    const refusal = petsciiRuleRefusal(target, file.buffer);
+    if (refusal) return res.status(400).json({ success: false, error: `${target}: ${refusal}` });
   }
 
   const placement = readPlacement((req.body || {}).carryCodes);
