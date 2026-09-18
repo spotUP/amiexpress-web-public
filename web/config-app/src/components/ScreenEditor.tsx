@@ -80,6 +80,16 @@ export interface ScreenEditorProps {
    * `{"error":"Access token required"}`. Absent means no Download button.
    */
   onDownload?: () => void;
+  /**
+   * The page around this editor already offers a way to bring a file in, so
+   * this one must not put a second next to it - "these two panels are weird
+   * and doubled" (sysop, 2026-09-18), the same complaint he made about the
+   * PETSCII editor in September and which `PetsciiScreenEditor` has honoured
+   * since. Loading onto the canvas and REPLACING the file on the board are
+   * two different jobs, but two file pickers side by side is one job as far
+   * as anybody reading the toolbar is concerned.
+   */
+  hostOffersUpload?: boolean;
   /** What the index knows about this file's MCI codes - which of them resolve. */
   mci?: MciReferenceShape[];
   onChange?: (surface: EditorSurface) => void;
@@ -106,7 +116,10 @@ export interface ScreenEditorProps {
 
 export function ScreenEditor({
   surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false, saving = false,
+  hostOffersUpload = false,
 }: ScreenEditorProps) {
+  /** Whether the MCI list is unfolded. Shut by default: an artist draws. */
+  const [codesOpen, setCodesOpen] = useState(false);
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   /**
@@ -750,16 +763,40 @@ export function ScreenEditor({
         }}
       />
 
+      {/*
+        THE CODES ARE BEHIND A TOGGLE, and off by default.
+
+        "the artists dont need to see the codes, but we could have a toggle
+        button for showing them" (sysop, 2026-09-18). An artist redraws a
+        picture; `~CC_gwall|` is the board's plumbing and a list of nine of
+        them above the canvas is nine things to scroll past. A sysop editing
+        what a screen DOES still needs them one click away, and a code that
+        points at nothing is worth saying out loud even when the list is shut.
+      */}
       {tokens.length > 0 && (
         <div className="text-sm space-y-1">
-          <h4 className="text-content-primary">
-            This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
+          <h4 className="flex flex-wrap items-center gap-2 text-content-primary">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 underline"
+              aria-expanded={codesOpen}
+              onClick={() => setCodesOpen(open => !open)}
+            >
+              {codesOpen ? 'Hide' : 'Show'} the codes
+            </button>
+            <span className="text-content-secondary">
+              This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
+              {tokens.filter(token => token.resolves === false).length > 0
+                ? `, ${tokens.filter(token => token.resolves === false).length} pointing at nothing`
+                : ''}
+            </span>
           </h4>
           {/*
             Broken first. A code pointing at nothing is a menu item that fails
             only when a caller presses the key, so it is the one worth finding
             in a list of nine.
           */}
+          {codesOpen && (
           <ul className="space-y-1">
             {[...tokens]
               .sort((a, b) => Number(a.resolves) - Number(b.resolves))
@@ -806,11 +843,12 @@ export function ScreenEditor({
                 </li>
               ))}
           </ul>
+          )}
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        {onLoadFile && !readOnly && (
+        {onLoadFile && !readOnly && !hostOffersUpload && (
           <label className="inline-flex items-center gap-1 underline cursor-pointer">
             <Upload size={14} /> Open a file into the editor
             <input

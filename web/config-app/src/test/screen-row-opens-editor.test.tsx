@@ -11,14 +11,13 @@
  * into the canvas the same way a sysop would have replaced the file.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 const ansiBytes = new TextEncoder().encode('\x1b[31mHI');
-const uploadBytes = new TextEncoder().encode('\x1b[32mUP');
 
 let fileFormat = 'ansi';
 
@@ -135,24 +134,25 @@ describe('opening a screen from its row', () => {
     download.mockRestore();
   });
 
-  it('loads a local ANSI file into the canvas it is editing', async () => {
+  it('brings a file in through ONE control, not two', async () => {
+    /*
+     * The editor's own "Open a file into the editor" is hidden here: the
+     * dialog's "Upload a drawing" sits directly below it, and two file
+     * pickers side by side read as one control that does not work - "these
+     * two panels are weird and doubled, some buttons dont work" (sysop,
+     * 2026-09-18). PETSCII has hidden its own since September; ANSI does now
+     * too, and the remaining control is the one that REPLACES the file on the
+     * board, with its carry verdict and its confirmation.
+     */
     const user = userEvent.setup();
     render(<ScreenScopeTables />, { wrapper });
 
     await openScreenTab(user);
-
     await user.click(await screen.findByText('BBSTITLE'));
-    await user.click(await screen.findByText('Node1/BBSTITLE.txt'));
+    await user.click((await screen.findAllByText('Node1/BBSTITLE.txt'))[0]);
     const dialog = await screen.findByRole('dialog');
 
-    const file = new File([uploadBytes], 'newtitle.ans', { type: 'application/octet-stream' });
-    await user.upload(within(dialog).getByLabelText(/open a file into the editor/i), file);
-
-    // The canvas is replaced by what the file holds - saving still goes out
-    // through the same fan-out, so nothing is written yet.
-    await waitFor(() => {
-      expect(within(dialog).getByTestId('ansi-canvas').getAttribute('data-cols')).toBeTruthy();
-    });
-    expect(fetchMock.mock.calls.some(call => call[1]?.method === 'PUT')).toBe(false);
+    expect(within(dialog).queryByLabelText(/open a file into the editor/i)).toBeNull();
+    expect(within(dialog).getByLabelText('Upload a drawing')).toBeTruthy();
   });
 });

@@ -11,6 +11,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 const calls: string[] = [];
@@ -28,9 +29,24 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
   return envelope({});
 }));
 
+/*
+ * A restore invalidates what the open editor is drawing from, so the panel
+ * takes a query client - and asks in the board's own dialog rather than
+ * `window.confirm`.
+ */
+vi.mock('../contexts/NotificationContext', () => ({
+  useNotification: () => ({
+    showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true),
+  }),
+}));
+
 import { ScreenRevisionsPanel } from '../pages/ScreenRevisionsPanel';
 
-function wrapper({ children }: { children: ReactNode }) { return <>{children}</>; }
+function wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
 
 describe('the revisions panel', () => {
   beforeEach(() => { calls.length = 0; });

@@ -814,9 +814,14 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                * ScreenEditor already had. PETSCII keeps only the dialog's,
                * through hostOffersUpload.
                */
-              onLoadFile={async chosen => {
-                setEditing(createSurface(await screenToCanvas(await readAsBase64(chosen))));
-              }}
+              /*
+                ONE WAY TO BRING A FILE IN. This dialog's "Upload a drawing"
+                is right below the editor, and two file pickers side by side
+                read as one control that does not work: "these two panels are
+                weird and doubled" (sysop, 2026-09-18). PETSCII has hidden its
+                own since September; ANSI does now too.
+              */
+              hostOffersUpload
               onChange={setEditing}
               onSave={async base64 => { if (await confirmAuditWrite('This drawing')) save.mutate(base64); }}
               onCancel={onClose}

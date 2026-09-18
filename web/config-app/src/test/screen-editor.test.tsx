@@ -132,6 +132,14 @@ async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
   // path appears in the row and again in the dialog title, so take the row's.
   const rows = await screen.findAllByText('Node1/BBSTITLE.txt');
   await user.click(rows[0]);
+
+  /*
+   * The codes are behind a toggle and shut by default - "the artists dont
+   * need to see the codes" (sysop, 2026-09-18). These cases are the SYSOP
+   * editing what a screen does, so they open it, which is the click he makes.
+   */
+  const show = screen.queryByRole('button', { name: /show the codes/i });
+  if (show) await user.click(show);
 }
 
 /**
@@ -246,6 +254,7 @@ describe('editing a screen in the browser', () => {
     await user.click(await screen.findByRole('button', { name: /~CL/ }));
     await user.click(await screen.findByRole('button', { name: 'Insert it' }));
 
+    await user.click(await screen.findByRole('button', { name: /show the codes/i }));
     expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CL\./)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /undo/i }));
@@ -263,6 +272,7 @@ describe('editing a screen in the browser', () => {
     await user.selectOptions(await screen.findByRole('combobox'), 'gwall');
     await user.click(screen.getByRole('button', { name: 'Insert it' }));
 
+    await user.click(await screen.findByRole('button', { name: /show the codes/i }));
     expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CC_gwall/)).toBeTruthy();
   });
 

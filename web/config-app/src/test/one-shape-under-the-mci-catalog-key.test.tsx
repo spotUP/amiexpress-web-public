@@ -134,6 +134,9 @@ describe('the MCI catalog cache', () => {
     await user.click(await screen.findByText('BBSTITLE'));
     await user.click((await screen.findAllByText('Node1/BBSTITLE.txt'))[0]);
 
+    // The codes are behind a toggle now, shut by default: an artist draws,
+    // and changing one is the sysop opening the plumbing.
+    await user.click(await screen.findByRole('button', { name: /show the codes/i }));
     await user.click(await screen.findByRole('button', { name: 'change' }));
 
     // Open ON the code: the picker read `codes` off the editor's envelope and
