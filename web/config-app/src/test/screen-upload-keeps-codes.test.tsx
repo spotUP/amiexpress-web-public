@@ -64,6 +64,10 @@ const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
         targets: [{
           path: 'Node1/LOGON.TXT',
           carried: ['~SS_BBS:Node1/BBSTITLE.txt| ~SP', '~CC_gwall|'],
+          // The board reports the two blocks separately: a code means what it
+          // means because of the side it is on.
+          carriedAbove: ['~SS_BBS:Node1/BBSTITLE.txt| ~SP'],
+          carriedBelow: ['~CC_gwall|'],
           lost: [{ text: '~SP', line: 4 }],
           uploadHasCodes: false,
         }],
@@ -151,7 +155,12 @@ describe('replacing a screen that carries codes', () => {
     // elements; the chips are the part a sysop reads, and they are the pin.
     expect(await screen.findByText('~CC_gwall|')).toBeTruthy();
     const verdict = screen.getByText('~CC_gwall|').closest('div')!;
-    expect(verdict.textContent).toMatch(/Kept:/);
+    // NAMED BY SIDE. "Kept: four chips" did not answer the question a sysop
+    // was actually asking - "they need to be kept where they are in the logo i
+    // replace" - because `~f` above the art and `~SP` below it do different
+    // things.
+    expect(verdict.textContent).toMatch(/Kept above the art:/);
+    expect(verdict.textContent).toMatch(/Kept below the art:/);
     expect(verdict.textContent).toMatch(/Lost unless you keep them:/);
   });
 
@@ -192,6 +201,8 @@ describe('replacing a screen that carries codes', () => {
     await user.click(screen.getByRole('button', { name: /^Write it$/i }));
 
     await waitFor(() => expect(puts.some(p => p.body.dryRun !== true)).toBe(true));
-    expect(puts.filter(p => p.body.dryRun !== true).pop()!.body.carryCodes).toBe('above');
+    // `keep`: head back above the art, tail back below it. It was spelled
+    // `above` until 2026-09-18, which read as "move them all to the top".
+    expect(puts.filter(p => p.body.dryRun !== true).pop()!.body.carryCodes).toBe('keep');
   });
 });

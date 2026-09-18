@@ -119,6 +119,34 @@ test('a code among the art is reported as lost rather than placed somewhere it n
   expect(res.body.data.targets[0].lost).toEqual([{ text: '~CC_gwall|', line: 3 }]);
 });
 
+test('the dry run says which side each code lands on, not just that it survives', async () => {
+  fs.writeFileSync(
+    path.join(root, 'Node1', 'LOGON.TXT'),
+    ['~f', '\x1b[36mTHE LOGO', '~SP', '~CC_gwall|', ''].join('\r\n'),
+    'latin1'
+  );
+
+  const res = await upload({ path: 'Node1/LOGON.TXT', carryCodes: 'keep', dryRun: 'true' });
+
+  // `~f` clears BEFORE the logo and `~SP` pauses AFTER it: the dialog has to
+  // be able to say so before a sysop agrees to the replace.
+  expect(res.body.data.targets[0].carriedAbove).toEqual(['~f']);
+  expect(res.body.data.targets[0].carriedBelow).toEqual(['~SP', '~CC_gwall|']);
+});
+
+test('`below` reports every carried code below, because that is where it puts them', async () => {
+  fs.writeFileSync(
+    path.join(root, 'Node1', 'LOGON.TXT'),
+    ['~f', '\x1b[36mTHE LOGO', '~SP', ''].join('\r\n'),
+    'latin1'
+  );
+
+  const res = await upload({ path: 'Node1/LOGON.TXT', carryCodes: 'below', dryRun: 'true' });
+
+  expect(res.body.data.targets[0].carriedAbove).toEqual([]);
+  expect(res.body.data.targets[0].carriedBelow).toEqual(['~f', '~SP']);
+});
+
 test('an unknown placement is refused rather than silently treated as none', async () => {
   const res = await upload({ path: 'Node1/LOGON.TXT', carryCodes: 'sideways' });
 

@@ -27,7 +27,22 @@
 
 import { scanMciCodes, type ScannedMciCode } from './mci-catalog';
 
-export type MciPlacement = 'none' | 'above' | 'below';
+/**
+ * Where a carried code goes when new art replaces old.
+ *
+ * `keep` - EACH CODE STAYS ON THE SIDE IT WAS ON. The head block goes back
+ *   above the drawing and the tail block back below it, which is how a screen
+ *   was written and what it means: a `~f` clears before the logo, and a `~SP`
+ *   pauses after it. "they need to be kept where they are in the logo i
+ *   replace" (sysop, 2026-09-18).
+ * `below` - everything after the art, for a screen whose codes are a tail
+ *   anyway and whose new drawing wants the top row.
+ * `none` - the upload as it is, codes dropped.
+ * `above` - the old spelling of `keep`, kept because a browser holding the
+ *   previous admin bundle still sends it. It never meant "all of them above":
+ *   it put the head above and the tail below, which is what `keep` says.
+ */
+export type MciPlacement = 'none' | 'keep' | 'below' | 'above';
 
 /** A code that cannot be carried, and where it was, so a sysop can put it back. */
 export interface LostMciCode {
@@ -179,9 +194,9 @@ export function planMciCarry(oldText: string, newText: string): CarryPlan {
 /**
  * The uploaded bytes with the old file's codes put back around them.
  *
- * `placement` says which block leads: `above` puts the head where it was and
- * appends the tail after the art, `below` puts everything after the art.
- * Neither ever writes into the art itself.
+ * `placement` says where they land: `keep` puts each block back on the side it
+ * was written on - head above the art, tail below it - and `below` puts every
+ * carried code after the art. Neither ever writes into the art itself.
  *
  * The enabling tilde is not optional. The board parses codes only when the
  * first line starts with one, so a carry whose codes would all land BELOW the
@@ -219,8 +234,10 @@ export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPl
   const body = newText.slice(0, cut);
   const trailer = newText.slice(cut);
 
-  const above = placement === 'above' ? plan.head : [];
-  const below = placement === 'above' ? plan.tail : carried;
+  // `keep` (and its old spelling `above`): each block back on its own side.
+  const asWritten = placement !== 'below';
+  const above = asWritten ? plan.head : [];
+  const below = asWritten ? plan.tail : carried;
 
   const lines: string[] = [...above];
   // MCI runs only when the FIRST line starts with a tilde. With everything

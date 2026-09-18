@@ -804,7 +804,7 @@ screensRouter.put('/file', (req: Request, res: Response) => {
 
   const placement = readPlacement((req.body || {}).carryCodes);
   if (!placement) {
-    return res.status(400).json({ success: false, error: 'carryCodes must be none, above or below' });
+    return res.status(400).json({ success: false, error: 'carryCodes must be none, keep or below' });
   }
 
   // Latin1 both ways: a screen carries Amiga high-bit bytes, and a UTF-8 round
@@ -862,8 +862,8 @@ screensRouter.put('/file', (req: Request, res: Response) => {
   if ((req.body || {}).dryRun === true) {
     return sendOk(res, {
       dryRun: true,
-      targets: plans.map(({ path: target, carried, lost, uploadHasCodes }) =>
-        ({ path: target, carried, lost, uploadHasCodes })),
+      targets: plans.map(({ path: target, carried, carriedAbove, carriedBelow, lost, uploadHasCodes }) =>
+        ({ path: target, carried, carriedAbove, carriedBelow, lost, uploadHasCodes })),
     });
   }
 
@@ -1316,9 +1316,24 @@ function planCarryForTargets(targets: string[], uploaded: string, placement: Mci
     const before = full && fs.existsSync(full) ? fs.readFileSync(full).toString('latin1') : '';
     const plan = planMciCarry(before, uploaded);
 
+    /*
+     * WHICH SIDE each code lands on, not just that it survives.
+     *
+     * "i can only select to keep the codes over or under when i replace, that
+     * will not work, they need to be kept where they are in the logo i
+     * replace" (sysop, 2026-09-18). The carry has always put the head back
+     * above and the tail back below; the dialog could not SAY so, because
+     * this answered one flat list. Reported separately, the sysop reads the
+     * screen's own shape back before agreeing to it.
+     */
+    const asWritten = placement !== 'below';
     return {
       path: target,
       carried: placement === 'none' ? [] : [...plan.head, ...plan.tail],
+      carriedAbove: placement === 'none' || !asWritten ? [] : plan.head,
+      carriedBelow: placement === 'none'
+        ? []
+        : asWritten ? plan.tail : [...plan.head, ...plan.tail],
       lost: placement === 'none' ? [] : plan.lost,
       uploadHasCodes: plan.uploadHasCodes,
       plan,
@@ -1329,7 +1344,11 @@ function planCarryForTargets(targets: string[], uploaded: string, placement: Mci
 /** `carryCodes` off the request, or an error naming what it may be. */
 function readPlacement(raw: unknown): MciPlacement | null {
   const placement = String(raw || 'none');
-  return ['none', 'above', 'below'].includes(placement) ? placement as MciPlacement : null;
+  // `above` is the old spelling of `keep` and still arrives from a browser
+  // holding the previous admin bundle. It has always meant the same thing.
+  return ['none', 'keep', 'below', 'above'].includes(placement)
+    ? placement as MciPlacement
+    : null;
 }
 
 /** Uploads are held in memory: a screen is kilobytes, and the bytes go straight to disk. */
@@ -1372,7 +1391,7 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
   if (!placement) {
     return res.status(400).json({
       success: false,
-      error: 'carryCodes must be none, above or below',
+      error: 'carryCodes must be none, keep or below',
     });
   }
   const dryRun = String((req.body || {}).dryRun || '') === 'true';
@@ -1390,8 +1409,8 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
   if (dryRun) {
     return sendOk(res, {
       dryRun: true,
-      targets: plans.map(({ path: target, carried, lost, uploadHasCodes }) =>
-        ({ path: target, carried, lost, uploadHasCodes })),
+      targets: plans.map(({ path: target, carried, carriedAbove, carriedBelow, lost, uploadHasCodes }) =>
+        ({ path: target, carried, carriedAbove, carriedBelow, lost, uploadHasCodes })),
     });
   }
 

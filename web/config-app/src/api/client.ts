@@ -417,17 +417,19 @@ class ApiClient {
 
   /**
    * `carryCodes` keeps the replaced file's MCI codes around the new art -
-   * 'above' puts its head block back on top and its tail below, 'below' puts
-   * everything after. Default 'none' writes exactly what was sent.
+   * 'keep' puts each block back on the side it was written on (head above the
+   * art, tail below it), 'below' puts every carried code after the art.
+   * Default 'none' writes exactly what was sent. The board still accepts
+   * 'above', the old spelling of 'keep'.
    *
-   * `dryRun` answers what WOULD be carried and lost, per target, and writes
-   * nothing.
+   * `dryRun` answers what WOULD be carried and lost, per target and per side,
+   * and writes nothing.
    */
   async putScreenFile(
     filePath: string,
     contentBase64: string,
     targets?: string[],
-    options?: { carryCodes?: 'none' | 'above' | 'below'; dryRun?: boolean },
+    options?: { carryCodes?: 'none' | 'keep' | 'below'; dryRun?: boolean },
   ) {
     return this.putJson<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
       content: contentBase64,

@@ -170,6 +170,13 @@ export interface CarryVerdict {
   path: string;
   /** Whole lines of codes that would be kept around the new art. */
   carried: string[];
+  /**
+   * The same lines, split by the side each one lands on - head above the art,
+   * tail below it. Absent from a board that predates the split, which is why
+   * the dialog falls back to `carried`.
+   */
+  carriedAbove?: string[];
+  carriedBelow?: string[];
   /** Codes that sat among the art and cannot be placed around new art. */
   lost: { text: string; line: number }[];
   /** The replacement has codes of its own, so it is the whole truth. */

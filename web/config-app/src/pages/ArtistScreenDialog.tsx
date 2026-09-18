@@ -128,7 +128,17 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
    * working. The board answers what would be carried; the artist decides.
    */
   const [carryVerdict, setCarryVerdict] = useState<CarryVerdict | null>(null);
-  const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
+  /*
+   * WHERE THEY WERE, by default and by name.
+   *
+   * The choice used to read "above the art" / "below the art", and the first
+   * of those is what the carry has always done: head above, tail below. A
+   * sysop reading the menu could only conclude that every code was about to
+   * be moved to one end of his screen - "i can only select to keep the codes
+   * over or under when i replace, that will not work, they need to be kept
+   * where they are in the logo i replace" (2026-09-18).
+   */
+  const [carryCodes, setCarryCodes] = useState<'none' | 'keep' | 'below'>('keep');
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
 
   // The same key the gallery card draws its thumbnail from, so a save repaints
@@ -427,7 +437,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
 
   const save = useMutation({
     mutationFn: (base64: string) =>
-      apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'above' }),
+      apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'keep' }),
     onSuccess: async () => {
       showSuccess(writeTargets.length > 1 ? `Saved ${writeTargets.length} copies` : 'Saved');
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
@@ -494,8 +504,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
   });
 
   const writeBytes = useMutation({
-    mutationFn: ({ target, bytes, carry, targets }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below'; targets?: string[] }) =>
-      apiClient.putScreenFile(target, bytes, targets ?? (target === path ? writeTargets : [target]), { carryCodes: carry ?? 'above' }),
+    mutationFn: ({ target, bytes, carry, targets }: { target: string; bytes: string; carry?: 'none' | 'keep' | 'below'; targets?: string[] }) =>
+      apiClient.putScreenFile(target, bytes, targets ?? (target === path ? writeTargets : [target]), { carryCodes: carry ?? 'keep' }),
     onSuccess: async (_answer, { target }) => {
       setPendingUpload(null);
       setCarryVerdict(null);
@@ -920,7 +930,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                   // A dry run: the board answers what it would carry and
                   // writes nothing, so it is safe the moment a file is picked.
                   try {
-                    const res = await apiClient.putScreenFile(path, bytes, writeTargets, { carryCodes: 'above', dryRun: true });
+                    const res = await apiClient.putScreenFile(path, bytes, writeTargets, { carryCodes: 'keep', dryRun: true });
                     setCarryVerdict(((res.data?.targets ?? [])[0] ?? null) as typeof carryVerdict);
                   } catch {
                     // A verdict is an aid, not a gate.
@@ -1078,7 +1088,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               onClick={async () => {
                 if (!pendingSvg) return;
                 if (!(await confirmAuditWrite(pendingSvg.name))) return;
-                writeBytes.mutate({ target: pendingSvg.target, bytes: pendingSvg.bytes, carry: 'above' });
+                writeBytes.mutate({ target: pendingSvg.target, bytes: pendingSvg.bytes, carry: 'keep' });
                 setPendingSvg(null);
               }}
             >
@@ -1100,7 +1110,29 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               <p className="text-content-secondary">
                 This screen carries codes the board runs. Your drawing has none of its own.
               </p>
-              {carryVerdict.carried.length > 0 && (
+              {/*
+                THE SIDES ARE NAMED, because that is the question being asked.
+                A screen's codes mean different things at each end - `~f`
+                clears before the logo, `~SP` pauses after it - so "Kept: four
+                chips" did not answer whether the screen would still work.
+                The board reports the two blocks (`carriedAbove`,
+                `carriedBelow`); a verdict from an older board has neither and
+                falls back to the flat list.
+              */}
+              {carryVerdict.carriedAbove?.length ? (
+                <p>
+                  Kept above the art:{' '}
+                  {carryVerdict.carriedAbove.map(code => <CodeChip key={`a:${code}`}>{code}</CodeChip>)}
+                </p>
+              ) : null}
+              {carryVerdict.carriedBelow?.length ? (
+                <p>
+                  Kept below the art:{' '}
+                  {carryVerdict.carriedBelow.map(code => <CodeChip key={`b:${code}`}>{code}</CodeChip>)}
+                </p>
+              ) : null}
+              {carryVerdict.carried.length > 0
+                && !carryVerdict.carriedAbove && !carryVerdict.carriedBelow && (
                 <p>Kept: {carryVerdict.carried.map(code => <CodeChip key={code}>{code}</CodeChip>)}</p>
               )}
               {carryVerdict.lost.length > 0 && (
@@ -1125,10 +1157,10 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                   className="input-field"
                   aria-label="Keep these codes"
                   value={carryCodes}
-                  onChange={event => setCarryCodes(event.target.value as 'none' | 'above' | 'below')}
+                  onChange={event => setCarryCodes(event.target.value as 'none' | 'keep' | 'below')}
                 >
-                  <option value="above">above the art</option>
-                  <option value="below">below the art</option>
+                  <option value="keep">where they were</option>
+                  <option value="below">all of them below the art</option>
                   <option value="none">not at all</option>
                 </select>
               </label>
