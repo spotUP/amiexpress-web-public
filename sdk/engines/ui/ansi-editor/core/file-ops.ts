@@ -146,22 +146,33 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   // Parse SAUCE record (if present)
   const sauce = parseSAUCE(data) || undefined;
 
-  // Get content (without SAUCE).
-  //
-  // SAUCE's fileSize says where the art ends, but plenty of files carry a
-  // zero (or a nonsense value) there. Taking it literally loads nothing and
-  // renders a blank screen, so fall back to everything up to the SAUCE
-  // record itself, less the EOF marker that conventionally precedes it.
+  /*
+   * Get content (without SAUCE) - EVERYTHING before the record, and SAUCE's
+   * own fileSize is not allowed to shorten it.
+   *
+   * fileSize says where the DRAWING ends, and on a BBS screen that is not
+   * where the file ends. The board writes its codes on the lines BELOW the
+   * art and does not restamp the record an art program left - `Conf2/bull20.txt`
+   * on the live board is 3542 bytes with fileSize 3378, and the 35 bytes
+   * between them are `~SP`, `~f`, `~CC_ctop` and `~XISUBSCAN`. Cutting at
+   * fileSize hid all four from the editor ("i only see the tag above the logo
+   * not the ones under it", sysop 2026-09-18) - and saving then wrote back
+   * only the rows it had, which DELETED them.
+   *
+   * The board's own reader strips the record and nothing else
+   * (`amiga-text-decode.util.ts` - it finds the marker and cuts there), so
+   * this is also what a caller is actually served. The editor has to see the
+   * same bytes or it is editing a different file.
+   *
+   * The same lesson as the row count below: SAUCE is the artist's note about
+   * their drawing, not a description of the screen the board built around it.
+   */
   let contentLength = data.length;
   if (sauce) {
     const beforeSauce = Math.max(0, data.length - 128);
-    const trimmed = beforeSauce > 0 && data[beforeSauce - 1] === 0x1a
+    contentLength = beforeSauce > 0 && data[beforeSauce - 1] === 0x1a
       ? beforeSauce - 1
       : beforeSauce;
-
-    contentLength = sauce.fileSize > 0 && sauce.fileSize <= trimmed
-      ? sauce.fileSize
-      : trimmed;
   }
   const content = data.slice(0, contentLength);
 
