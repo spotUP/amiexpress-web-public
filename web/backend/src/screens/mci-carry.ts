@@ -89,7 +89,22 @@ function isCodeLine(line: string): boolean {
   for (const found of codes) {
     blanked = blanked.slice(0, found.at) + ' '.repeat(found.text.length) + blanked.slice(found.at + found.text.length);
   }
-  return blanked.trim().length === 0;
+  /*
+   * AN ESCAPE SEQUENCE IS NOT ART EITHER.
+   *
+   * The ANSI editor pads every row to the canvas width and closes the file
+   * with `ESC[0m`, so a code the sysop typed on the last row is saved as
+   * `~XISUBSCAN` + spaces + a reset. That reset is what was left after the
+   * codes were blanked, so the line read as ART - and on the live board
+   * `Conf2/bull20.txt` therefore split as head `~f`, tail NOTHING, which is
+   * why a themed bulletin could not be given the board's codes and why a
+   * replace of that screen would have dropped `~XISUBSCAN` as "among the
+   * drawing".
+   *
+   * A colour with nothing coloured draws nothing. `isCodesOnly` in the screen
+   * index has taken the same view since it was written.
+   */
+  return blanked.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trim().length === 0;
 }
 
 /**
