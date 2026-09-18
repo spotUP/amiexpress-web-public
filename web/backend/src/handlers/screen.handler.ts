@@ -1776,7 +1776,26 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
        * board DOES - `Themes/607080/Conf/4/bull20.txt` adds `~XISUBSCAN` to
        * the board's include - and that is the thing a theme may not do.
        */
-      const themeCopy = findCaseInsensitive(location.dir, path.basename(screenName))
+      /*
+       * THE THEME'S COPY IS FOUND THE WAY THE SCREEN IS SERVED - through the
+       * security walk first.
+       *
+       * `CONF_BULL` resolves to a screen named BULL, and the file a level-20
+       * caller is served is `bull20.txt`: the SECURITY VARIANT, which only
+       * `findSecurityScreen` knows how to name. Looking for the screen's own
+       * name and then the plain variations found neither, so every themed
+       * conference bulletin on this board read as "the theme has no copy" and
+       * the board's file was served - for any theme, since themes shipped.
+       * The live log said it in as many words once it was asked to:
+       * "skipping h7: Conf/2: it has no CONF_BULL of its own", about
+       * `Themes/h7/Conf/2/bull20.txt`, which is right there.
+       */
+      const themeCopy = (isAssignPath ? null : findSecurityScreen(
+        path.join(location.dir, screenBaseNoExt), userSecLevel, null,
+        session?.ripMode ?? false, false, servesPetsciiArt(session),
+        session?.texttvMode ?? false, { hollow },
+      ))
+        ?? findCaseInsensitive(location.dir, path.basename(screenName))
         ?? filenameVariations.map(v => findCaseInsensitive(location.dir, v)).find(Boolean);
       let sameBehaviour = false;
       if (themeCopy) {

@@ -112,6 +112,40 @@ describe('a conference bulletin that runs the SUBS digest', () => {
     clearBulletins();
   });
 
+  it("finds a THEME's copy of the bulletin, which is a security variant too", () => {
+    /*
+     * `CONF_BULL` is served as `bull20.txt` - BULL plus the caller's security
+     * band - and the themed lookup asked for the SCREEN's name and then the
+     * plain variations, so it found neither. Every themed conference bulletin
+     * on this board therefore read as "the theme has no copy of this" and the
+     * board's file was served, for every theme, since themes shipped. The live
+     * board said it once the log was asked to name the reason: "skipping h7:
+     * Conf/2: it has no CONF_BULL of its own", about a file that is right
+     * there.
+     *
+     * The theme's ART is drawn with the BOARD's codes around it, so the digest
+     * the board runs is still the board's.
+     */
+    writeBulletin('BULL20.TXT', `~f\r\nBOARDBULLETIN\r\n${TOKEN}\r\n`);
+    fs.writeFileSync(path.join(BOARD, 'Themes.info'), [
+      'TYPE.0=t1', 'TITLE.0=T1', 'DIR.0=Themes/t1', 'STATUS.0=live', 'WIDTHS.0=80', '',
+    ].join('\n'), 'latin1');
+    const themeConf = path.join(BOARD, 'Themes', 't1', 'Conf', String(CONF));
+    fs.mkdirSync(themeConf, { recursive: true });
+    fs.writeFileSync(path.join(themeConf, 'BULL20.TXT'),
+      '~f\r\nTHEMEBULLETIN\r\n~SS_BBS:Screens/elsewhere.txt\r\n', 'latin1');
+
+    const session = makeSession(20);
+    session.user.screenTheme = 't1';
+    const loaded = screens.loadScreenFile('CONF_BULL', CONF, 1, session);
+
+    expect(loaded?.content).toContain('THEMEBULLETIN');
+    expect(loaded?.content).not.toContain('BOARDBULLETIN');
+    // The board's digest still runs; the theme's include does not.
+    expect(loaded?.content).toContain(TOKEN);
+    expect(loaded?.content).not.toContain('elsewhere.txt');
+  });
+
   it('CONF_BULL resolves to BULL<sec> before BULL', () => {
     // Both on disk, and the one with the caller's security band wins. This is
     // why "I edited BULL.TXT and nothing happened" is the report to expect.
