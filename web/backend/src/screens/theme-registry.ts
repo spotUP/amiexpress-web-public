@@ -209,7 +209,15 @@ export function findTheme(bbsRoot: string, slug: string): ThemeEntry | null {
  * `removeTheme` has always found the index this way. One way of asking, now.
  */
 function registryIndexFor(file: string, slug: string): string {
-  const tooltypes = readTooltypeMap(file);
+  // A board with no registry yet: the first theme takes index 0. `readTooltypeMap`
+  // throws ENOENT rather than answering empty, and a theme is created before
+  // the file it will live in exists.
+  let tooltypes: Map<string, string>;
+  try {
+    tooltypes = readTooltypeMap(file);
+  } catch {
+    return '0';
+  }
   let highest = -1;
 
   for (const [key, value] of tooltypes.entries()) {

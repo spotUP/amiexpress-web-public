@@ -17,7 +17,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { fileFindings } from '../../src/screens/theme-validation';
+import { fileFindings, validateTheme } from '../../src/screens/theme-validation';
+import { type ThemeEntry } from '../../src/screens/theme-registry';
 import { parseMciReferences } from '../../src/screens/mci-references';
 import { invalidateScreenIndex } from '../../src/screens/screen-index.service';
 import { config } from '../../src/config';
@@ -104,5 +105,57 @@ describe('an include names the file it names', () => {
 
     expect(refs.map(r => ({ code: r.code, target: r.target })))
       .toEqual([{ code: 'SR', target: 'WORK:bbs/Screens/logoff/logoff' }]);
+  });
+});
+
+/**
+ * A THEME CAN BE PUBLISHED AND STILL NOT BE SHOWN.
+ *
+ * `loadScreenFile` serves the BOARD's copy where a theme's screen runs
+ * different codes - a theme owns art, not behaviour - and said so only in a
+ * debug log. So `h7` published clean, was worn, and four of its screens went
+ * on showing the board's art: `Conf<n>/bull20.txt` includes bull9 where the
+ * board runs `~CC_ctop` and `~XISUBSCAN`, `logon20.txt` lost the board's
+ * `~5SR_` pool, `awaitscreen.txt` lost `~CC_TELNET-FRONT`, and `Logoff.txt`
+ * picks from two logoff screens where the board picks from three.
+ */
+describe('a theme is told which screens the board will refuse to show', () => {
+  const themeEntry = (): ThemeEntry => ({
+    slug: 'h7', title: "h7's screens", author: 'h7', owner: 'h7',
+    dir: 'Themes/h7', widths: [80], doorTheme: '', status: 'draft',
+  });
+
+  const boardScreen = (rel: string, bytes: string) => {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, bytes, 'latin1');
+  };
+
+  it('names the screen, the board file it disagrees with, and does not block on it', () => {
+    // The board's bulletin RUNS two things; the theme's includes a bulletin.
+    boardScreen('Node1/BULL.TXT', '~f\r\nTHE BOARD LOGO\r\n~CC_ctop\r\n~XISUBSCAN\r\n');
+    write('Node/BULL.TXT', '~f\r\nH7 LOGO\r\n~SS_BBS:bulletins/bull9.txt\r\n');
+    invalidateScreenIndex();
+
+    const report = validateTheme(root, themeEntry());
+    const finding = report.advisory.find(f => f.rule === 'runs-different-codes');
+
+    expect(finding).toBeTruthy();
+    expect(finding!.message).toMatch(/will not be used/);
+    expect(finding!.message).toMatch(/BULL\.TXT/);
+    expect(report.blocking.filter(f => f.rule === 'runs-different-codes')).toEqual([]);
+  });
+
+  it('says nothing when the theme runs exactly what the board runs', () => {
+    boardScreen('Node1/BULL.TXT', '~f\r\nTHE BOARD LOGO\r\n~CC_ctop\r\n');
+    write('Node/BULL.TXT', '~f\r\nH7 LOGO, SAME PROGRAM\r\n~CC_ctop\r\n');
+    invalidateScreenIndex();
+
+    const report = validateTheme(root, themeEntry());
+
+    expect(report.advisory.filter(f => f.rule === 'runs-different-codes')).toEqual([]);
+    // Not vacuous: the theme really does cover a screen here, so silence is a
+    // verdict rather than an empty walk.
+    expect(report.coverage.provided).toBeGreaterThan(0);
   });
 });

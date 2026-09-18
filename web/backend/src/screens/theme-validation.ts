@@ -30,6 +30,7 @@ import {
 } from './screen-index.service';
 import { getScreenFileName } from './screen-resolution';
 import { SCREEN_DIR_MAP, SCREEN_EXTENSIONS, ScreenDirType, isScreenFile } from './screen-tables';
+import { screenIsProgram, screenProgramSignature } from './screen-blankness';
 import { THEME_FILES_DIR, themeDirectory, type ThemeEntry } from './theme-registry';
 
 export type ThemeRule =
@@ -38,6 +39,7 @@ export type ThemeRule =
   | 'unresolved-reference'
   | 'scope-specific-reference'
   | 'shadows-security-variant'
+  | 'runs-different-codes'
   | 'width-without-evidence'
   | 'art-wider-than-the-caller'
   | 'coverage';
@@ -318,6 +320,52 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
       }
       if (themeLevels.size === 0) continue;
       themeHasScreen = true;
+
+      /*
+       * Rule 9 - THE LOADER WILL SKIP THIS SCREEN, and nothing said so.
+       *
+       * A theme owns art, not behaviour: `loadScreenFile` compares the codes
+       * in the theme's copy with the codes in the board's, and where they
+       * differ it serves the BOARD's file and writes a line to a debug log
+       * nobody reads. So `h7` published clean, was worn, and four of its
+       * screens went on showing the board's art - "i switched to h7's theme
+       * on the live bbs, most screens show old ones" (sysop, 2026-09-18).
+       *
+       * Measured on that theme: `Conf<n>/bull20.txt` includes bull9 where the
+       * board runs `~CC_ctop` and `~XISUBSCAN`; `logon20.txt` has lost the
+       * board's `~5SR_` flash pool; `awaitscreen.txt` has lost `~CC_TELNET-FRONT`;
+       * `Logoff.txt` picks from 2 logoff screens where the board picks from 3.
+       *
+       * Advisory, not blocking: a caller is served the board's screen, which
+       * works. What is broken is the artist's expectation, and that is fixed
+       * by being told.
+       *
+       * The comparison is `screenProgramSignature`, the function the LOADER
+       * uses. Two ways of asking would drift, and the drift would be a gate
+       * that promises art the board then refuses.
+       */
+      // A scope that resolves to nothing has no board copy to differ from.
+      const boardRel = resolution.file;
+      for (const [, name] of boardRel ? themeLevels : []) {
+        const boardFile = path.join(baseDir, boardRel as string);
+        const themeFile = path.join(root, scope, name);
+        let boardBytes: Buffer;
+        let themeBytes: Buffer;
+        try {
+          boardBytes = fs.readFileSync(boardFile);
+          themeBytes = fs.readFileSync(themeFile);
+        } catch { continue; }
+
+        if (!screenIsProgram(boardBytes)) continue;
+        if (screenProgramSignature(boardBytes) === screenProgramSignature(themeBytes)) continue;
+
+        advisory.push({
+          rule: 'runs-different-codes',
+          severity: 'advisory',
+          file: path.join(scope, name),
+          message: `${path.join(scope, name)} will not be used: it runs different codes from the board's ${boardRel}, and a theme owns art rather than behaviour. Give it the board's codes - replace the board's screen with this art instead, which carries them across - or leave it and the board's screen is what callers see.`,
+        });
+      }
 
       const base = themeLevels.get(null);
       if (!base) continue;
