@@ -15,6 +15,7 @@
 
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { locateMciReferences, type MciReference } from '@bbs/screens/mci-references';
+import { scanMciCodes } from '@bbs/screens/mci-catalog';
 
 /** What the index knows about a file's references - the shape the API sends. */
 export type MciReferenceShape = MciReference;
@@ -47,9 +48,14 @@ export function findMciTokens(canvas: Cell[][], known: MciReferenceShape[]): Mci
   canvas.forEach((row, line) => {
     const text = row.map(cell => cell.char ?? ' ').join('');
 
+    const covered: number[] = [];
+
+    // The codes that NAME something - `~CC_door`, `~SS_screen`, `~<n>SR_` -
+    // because only those have a target the index can say resolves or not.
     for (const found of locateMciReferences(text)) {
       const fact = known.find(k => k.code === found.ref.code && k.target === found.ref.target);
 
+      covered.push(found.at);
       tokens.push({
         code: found.ref.code,
         target: found.ref.target,
@@ -57,6 +63,37 @@ export function findMciTokens(canvas: Cell[][], known: MciReferenceShape[]): Mci
         column: found.at,
         length: found.text.length,
         resolves: fact?.resolves ?? false,
+      });
+    }
+
+    /*
+     * AND EVERY OTHER CODE IN THE LINE.
+     *
+     * This used to find FOUR shapes, so a screen whose codes are `~f`, `~SP`
+     * or anything the board added later showed an empty list and - once the
+     * list gained a toggle - no toggle either: "i see only the F code and i
+     * see no code toggle" (sysop, 2026-09-18).
+     *
+     * `scanMciCodes` is the board's own scanner, the one the carry uses: it
+     * takes any `~token` whether the catalog knows it or not, which is why
+     * `~XISUBSCAN` - in no catalog anywhere - is carried correctly on a
+     * replace. "screen files can have a big variety of mci codes", and the
+     * editor now sees the same variety the board does.
+     *
+     * These name nothing, so there is nothing to resolve and they are not
+     * drawn as broken.
+     */
+    for (const found of scanMciCodes(text)) {
+      if (covered.includes(found.at)) continue;
+      if (found.text === '~~') continue;
+
+      tokens.push({
+        code: (found.entry?.code ?? found.text.replace(/^~\d*/, '')) as MciToken['code'],
+        target: '',
+        line,
+        column: found.at,
+        length: found.text.length,
+        resolves: true,
       });
     }
   });

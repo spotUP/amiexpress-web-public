@@ -221,4 +221,22 @@ describe('art that carries a SAUCE record', () => {
 
     expect(written.endsWith('~SP\r\n')).toBe(true);
   });
+
+  it('carries the codes below the art even when the file ends in SAUCE', () => {
+    /*
+     * Every screen an ANSI editor has saved carries a SAUCE record, and this
+     * read it as the last line of ART - so `lastArt` landed on the metadata
+     * and every code BELOW the drawing was "among the art" and reported lost.
+     * Met on the live board replacing Conf2/bull20.txt: ~SP, ~f, ~CC_ctop and
+     * ~XISUBSCAN all lost, only the ~f at the top surviving.
+     */
+    const sauce = '\x1a' + 'SAUCE00'.padEnd(128, '\0');
+    const installed = '~f\r\nTHE ART\r\n~SP\r\n~CC_ctop\r\n~XISUBSCAN\r\n' + sauce;
+
+    const plan = planMciCarry(installed, NEW_ART);
+
+    expect(plan.lost).toEqual([]);
+    expect(plan.tail).toEqual(['~SP', '~CC_ctop', '~XISUBSCAN']);
+    expect(plan.head).toEqual(['~f']);
+  });
 });

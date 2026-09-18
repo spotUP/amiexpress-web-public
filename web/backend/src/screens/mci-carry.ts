@@ -124,7 +124,21 @@ export function planMciCarry(oldText: string, newText: string): CarryPlan {
   /** The upload brought its own clear, so a carried one would fire twice. */
   const uploadClears = uploadCodes.some(isClearScreen);
 
-  const lines = oldText.split('\n').map(l => l.replace(/\r$/, ''));
+  /*
+   * THE OLD FILE'S SAUCE IS NOT ITS LAST LINE OF ART.
+   *
+   * `applyMciCarry` has always cut the record off the NEW text before putting
+   * codes back. This did not cut it off the OLD one, so the 128 bytes of
+   * metadata - "SAUCE00 ... Amiga Topaz 1+" - read as a line that is neither
+   * blank nor code, `lastArt` landed on IT, and every code sitting BELOW the
+   * drawing was therefore "among the art" and reported lost.
+   *
+   * Every screen an ANSI editor has ever saved carries one, so this quietly
+   * dropped the tail of the most-edited files on the board. Met head-on when
+   * replacing `Conf2/bull20.txt`: `~SP`, `~f`, `~CC_ctop` and `~XISUBSCAN`
+   * all reported lost, with only the `~f` at the top surviving.
+   */
+  const lines = oldText.slice(0, sauceOffset(oldText)).split('\n').map(l => l.replace(/\r$/, ''));
   const codeLine = lines.map(isCodeLine);
 
   let firstArt = 0;
