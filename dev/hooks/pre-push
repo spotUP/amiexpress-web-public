@@ -35,6 +35,69 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 [ -n "$REPO_ROOT" ] || exit 0
 cd "$REPO_ROOT" || exit 0
 
+# THE COMMIT BEING PUSHED, not the files lying about in the tree.
+#
+# This gate used to type-check the WORKING TREE, which is not what leaves the
+# machine. On 2026-09-18 that let a broken line reach `main`: the commit
+# carried an unused parameter (TS6133), the working copy beside it had been
+# corrected, and the gate went green on the correction while pushing the
+# fault. The tree is also where OTHER sessions' half-finished files live, so
+# the old behaviour refused clean pushes for dirt that was never going out.
+#
+# So: check out the pushed commit into a throwaway worktree, sparse to the
+# three directories the type-checks read, borrow this checkout's node_modules
+# and run the steps there. Removed in a trap, whatever happens.
+#
+# Falls back to the working tree - LOUDLY - if any of that cannot be done. A
+# gate that dies on its own machinery teaches people to reach for
+# --no-verify, which costs more than the gate is worth.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
+PUSHED_SHA=""
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    ""|0000000000000000000000000000000000000000) continue ;;   # a branch deletion
+  esac
+  PUSHED_SHA="$local_sha"
+done
+
+CHECK_ROOT="$REPO_ROOT"
+SCRATCH=""
+cleanup() {
+  [ -n "$SCRATCH" ] || return 0
+  git -C "$REPO_ROOT" worktree remove --force "$SCRATCH" >/dev/null 2>&1 || rm -rf "$SCRATCH"
+  git -C "$REPO_ROOT" worktree prune >/dev/null 2>&1
+}
+trap cleanup EXIT
+
+if [ -n "$PUSHED_SHA" ]; then
+  SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/pre-push-XXXXXX")" || SCRATCH=""
+fi
+
+if [ -n "$SCRATCH" ] && git -C "$REPO_ROOT" worktree add --detach --no-checkout "$SCRATCH" "$PUSHED_SHA" >/dev/null 2>&1; then
+  # Only what the type-checks read. The board's own directories - Conf, Doors,
+  # Node<n> - are thousands of files this never opens.
+  if git -C "$SCRATCH" sparse-checkout set --no-cone web sdk packages >/dev/null 2>&1 \
+     && git -C "$SCRATCH" checkout --quiet >/dev/null 2>&1; then
+    # tsc needs the toolchain, and a fresh worktree has none. Borrowed, not
+    # installed: an install here would cost minutes and a gigabyte.
+    for dir in . web/backend web/config-app packages/terminal sdk; do
+      if [ -d "$REPO_ROOT/$dir/node_modules" ] && [ ! -e "$SCRATCH/$dir/node_modules" ]; then
+        mkdir -p "$SCRATCH/$dir" 2>/dev/null
+        ln -s "$REPO_ROOT/$dir/node_modules" "$SCRATCH/$dir/node_modules" 2>/dev/null
+      fi
+    done
+    CHECK_ROOT="$SCRATCH"
+    echo "[pre-push] checking the COMMIT ${PUSHED_SHA:0:9}, not the working tree"
+  else
+    echo "[pre-push] WARNING: could not lay out ${PUSHED_SHA:0:9}; checking the WORKING TREE instead"
+  fi
+elif [ -n "$PUSHED_SHA" ]; then
+  echo "[pre-push] WARNING: no throwaway worktree available; checking the WORKING TREE instead"
+fi
+
+cd "$CHECK_ROOT" || exit 0
+
 FAILED=""
 SKIPPED=""
 
@@ -66,7 +129,7 @@ have_deps() { [ -d "$1/node_modules" ]; }
 if have_deps web/backend; then
   step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
 else
-  echo "[pre-push] backend types ... [SKIPPED] no node_modules in $REPO_ROOT/web/backend"
+  echo "[pre-push] backend types ... [SKIPPED] no node_modules in $CHECK_ROOT/web/backend"
   SKIPPED=yes
 fi
 
@@ -77,7 +140,7 @@ if have_deps web/config-app; then
     src/test/tailwind-tokens.test.ts \
     src/test/modal-semantics.test.tsx
 else
-  echo "[pre-push] admin checks ... [SKIPPED] no node_modules in $REPO_ROOT/web/config-app"
+  echo "[pre-push] admin checks ... [SKIPPED] no node_modules in $CHECK_ROOT/web/config-app"
   SKIPPED=yes
 fi
 
