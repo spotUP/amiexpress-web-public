@@ -187,6 +187,41 @@ export function findTheme(bbsRoot: string, slug: string): ThemeEntry | null {
  * Map and rewriting the file destroys the icon and produces something
  * AmiExpress cannot read (`info-file.util.ts:889-908`).
  */
+/**
+ * THE INDEX A THEME OCCUPIES IN THE FILE, which is not its place in the list.
+ *
+ * `TYPE.0`, `TYPE.4`, `TYPE.5`, `TYPE.6`, `TYPE.2` is a perfectly ordinary
+ * registry: `removeTheme` leaves holes on purpose, and the parser walks the
+ * keys rather than counting from zero. This used to write at the entry's
+ * POSITION in the parsed array, and both branches were wrong.
+ *
+ * Publishing `h7` on the live board wrote `TYPE.2`/`STATUS.2=live` while the
+ * real entry sat at `TYPE.5` with `STATUS.5=draft`. The reader takes the first
+ * TYPE line for a slug, which was still the draft, so the theme never went
+ * live: the sysop wore it and was served the board default instead - "i
+ * switched to h7's theme on the live bbs, most screens show old ones"
+ * (2026-09-18).
+ *
+ * A NEW theme was worse than wrong: `themes.length` on that same registry is
+ * 4, and `TYPE.4` already belonged to `607080` - so the next artist's theme
+ * would have overwritten theirs line for line.
+ *
+ * `removeTheme` has always found the index this way. One way of asking, now.
+ */
+function registryIndexFor(file: string, slug: string): string {
+  const tooltypes = readTooltypeMap(file);
+  let highest = -1;
+
+  for (const [key, value] of tooltypes.entries()) {
+    const match = /^TYPE\.(\d+)$/i.exec(key);
+    if (!match) continue;
+    if (value.trim().toLowerCase() === slug) return match[1];
+    highest = Math.max(highest, Number(match[1]));
+  }
+
+  return String(highest + 1);
+}
+
 export function writeTheme(bbsRoot: string, entry: ThemeEntry): void {
   if (!isValidSlug(entry.slug)) {
     throw new Error(`Not a usable theme slug: "${entry.slug}"`);
@@ -196,9 +231,7 @@ export function writeTheme(bbsRoot: string, entry: ThemeEntry): void {
   }
 
   const file = registryPath(bbsRoot);
-  const registry = readThemeRegistry(bbsRoot);
-  const existing = registry.themes.findIndex(theme => theme.slug === entry.slug);
-  const index = existing === -1 ? registry.themes.length : existing;
+  const index = registryIndexFor(file, entry.slug);
 
   applyTooltypes(file, [
     [`TYPE.${index}`, entry.slug],
