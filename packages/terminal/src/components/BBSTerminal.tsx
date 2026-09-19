@@ -20,7 +20,9 @@ import {
   lineHeightFor,
   readCachedFont,
 } from '../utils/session-font';
-import { readCookieModemSpeed, writeCookieModemSpeed } from '../utils/session-cookie';
+import {
+  readCookieModemSpeed, writeCookieModemSpeed, writeCookieScreenTheme,
+} from '../utils/session-cookie';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
@@ -2875,6 +2877,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           localStorage.removeItem(BBS_AUTH_TOKEN_KEY);
           localStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
         }
+      }
+
+      /*
+       * REMEMBER THE THEME FOR THE SCREENS BEFORE THE NEXT LOGIN.
+       *
+       * The board draws its title screen before it knows who is calling, so
+       * it cannot ask this caller's stored preference - it reads this cookie
+       * off the handshake instead ("we save cookies so it should remember the
+       * theme", sysop 2026-09-18). The slug is the one the BOARD resolved,
+       * not the raw preference, so a theme the caller may no longer wear is
+       * never the one their browser asks for.
+       */
+      if (typeof data?.screenTheme === 'string' && data.screenTheme) {
+        writeCookieScreenTheme(data.screenTheme);
       }
 
       // Save session state for reconnection persistence

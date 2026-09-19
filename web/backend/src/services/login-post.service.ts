@@ -16,6 +16,8 @@
  */
 
 import type { BBSSession } from "../index";
+import { resolveCallerTheme } from '../screens/caller-theme';
+import { config } from '../config';
 import type { LoginEmitter } from "../types/login-emitter";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
@@ -201,6 +203,21 @@ export async function runPostAuthLogin(
         },
         token: accessToken,
         refreshToken,
+        /*
+         * THE THEME THIS CALLER WEARS, so the browser can remember it.
+         *
+         * The screens before login are drawn with no user to ask, so the
+         * terminal keeps the slug in a cookie and the handshake hands it back
+         * at the next connect (`screens/remembered-theme.ts`). Sent from here
+         * because this is the moment the board KNOWS - and it is the resolved
+         * slug, not the raw preference, so a theme the caller may no longer
+         * wear is not the one their browser remembers.
+         */
+        screenTheme: resolveCallerTheme(config.get('dataDir'), {
+          username: user.username,
+          secLevel: user.secLevel,
+          screenTheme: (user as { screenTheme?: string }).screenTheme,
+        }),
       });
     } catch (err) {
       // A token is a convenience, not the login: the caller is authenticated

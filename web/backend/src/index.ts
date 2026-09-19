@@ -93,6 +93,7 @@ import {
 } from "./server/session-manager";
 import { app } from "./server/app";
 import { warmScreenIndex } from "./screens/screen-index.service";
+import { rememberedTheme } from "./screens/remembered-theme";
 import { TelnetServer, TelnetConnection } from "./server/telnet-server";
 import {
   attachWSTerminalServer,
@@ -301,6 +302,15 @@ export interface BBSSession {
    * with the requester's real identity and puts the answer here.
    */
   screenThemeResolved?: string;
+  /**
+   * The theme this BROWSER remembers wearing, off the handshake cookie.
+   *
+   * Used only while there is no user: the screens before login. A caller who
+   * logs in is judged on their own stored preference, which wins from that
+   * moment - see `remembered-theme.ts` for why a cookie is a preference and
+   * never a credential.
+   */
+  preLoginTheme?: string;
   state: BBSState;
   subState?: LoggedOnSubState;
   skipNextDisplayFlowMenu?: boolean;
@@ -1489,6 +1499,22 @@ console.log(
     connectionPort: bbsConfig.port,
     connectionBaud: DEFAULT_CONNECTION_BAUD
   });
+  /*
+   * THE THEME THIS BROWSER LAST WORE, for the screens drawn before login.
+   *
+   * BBSTITLE goes out in the pre-login sequence, when the session has no user
+   * and `resolveCallerTheme` therefore answers the board default - so a caller
+   * wearing h7 was shown tango's title and only saw their own theme from the
+   * first screen after logging in. The terminal keeps the slug in a cookie
+   * (as it already does for font and modem speed) and the handshake carries
+   * it here.
+   *
+   * Stored as a WANT, not a verdict: `loadScreenFile` passes it to the same
+   * judge, with no username beside it, so a draft theme in a cookie is
+   * refused exactly as a draft is refused to anyone who does not own it.
+   */
+  session.preLoginTheme = rememberedTheme(socket.handshake.headers.cookie) ?? undefined;
+
   setSession(socket.id, session); // Use helper to store by nodeId
   // The terminal reports its size when it mounts, which is before this
   // session existed; without this the board never learns the caller's real

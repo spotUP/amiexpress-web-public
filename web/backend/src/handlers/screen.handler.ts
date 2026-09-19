@@ -1425,7 +1425,18 @@ export function loadScreenFile(
   const callerThemeSlug = session?.screenThemeResolved ?? resolveCallerTheme(baseDir, {
     username: session?.user?.username,
     secLevel: session?.user?.secLevel,
-    screenTheme: session?.user?.screenTheme,
+    /*
+     * A CALLER'S OWN PREFERENCE FIRST, and the browser's memory of it only
+     * while there is nobody to ask.
+     *
+     * BBSTITLE is drawn before login, so this used to be undefined there and
+     * the board default was served - "i switched to h7's theme on the live
+     * bbs, most screens show old ones" (sysop, 2026-09-18). `preLoginTheme`
+     * is the slug off the handshake cookie, and it goes to the SAME judge: no
+     * username beside it means a draft theme is refused, as it is for any
+     * caller who does not own it.
+     */
+    screenTheme: session?.user?.screenTheme ?? session?.preLoginTheme,
   });
 
   const normalizeAbsoluteCaseInsensitive = (absPath: string): string => {
