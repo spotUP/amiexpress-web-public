@@ -333,6 +333,27 @@ function GalleryCard(
             {item.badge.label}
           </span>
         )}
+        {!item.placeholder && (
+          /*
+           * THE FILE THIS CARD STANDS FOR.
+           *
+           * A screen with a theme's redraw beside the board's own gets TWO
+           * cards, which is the point - you can see what a caller is served
+           * with the theme and without it. Both were captioned with the same
+           * screen and the same scope, so the only thing telling them apart
+           * was the badge: "still why is there two conf bulls for amiga demos
+           * listed? doesnt make sense?" (sysop, 2026-09-19). The path is the
+           * answer to that question and it was the one thing the card did not
+           * say.
+           */
+          <span
+            className="block truncate font-mono text-content-muted"
+            title={item.path}
+            data-testid="card-path"
+          >
+            {item.path}
+          </span>
+        )}
         {item.formats && (
           <span className="mt-1 flex gap-1" data-testid="format-chips">
             {([

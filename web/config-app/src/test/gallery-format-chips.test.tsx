@@ -133,6 +133,19 @@ describe('the chips on a gallery card', () => {
     expect(screen.getByTestId('chip-rip-missing')).toBeTruthy();
   });
 
+  it('names the file it stands for, so two cards for one screen are told apart', async () => {
+    /*
+     * A screen with a theme's redraw beside the board's own gets two cards,
+     * both captioned with the same screen and the same scope: "still why is
+     * there two conf bulls for amiga demos listed? doesnt make sense?" (sysop,
+     * 2026-09-19). The badge said WHOSE; nothing said WHICH FILE.
+     */
+    render(<ScreenScopeTables />, { wrapper });
+
+    const path = await screen.findByTestId('card-path');
+    expect(path.textContent).toBe('Node1/BBSTITLE.txt');
+  });
+
   it('says what a missing format costs, for anyone who hovers', async () => {
     render(<ScreenScopeTables />, { wrapper });
 
