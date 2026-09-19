@@ -23,6 +23,14 @@ import { createInactivityFuse, type InactivityFuse } from "./inactivity-fuse.js"
  * back the same evening.
  */
 const DOOR_ABSOLUTE_TIMEOUT_SECONDS = 3600;
+/**
+ * How long a door may say NOTHING when its registration names no timeout.
+ *
+ * Five minutes, the figure the inactivity fuse was written around: long enough
+ * to read a teletext page, short enough that a door which has wedged gives the
+ * node back without a restart.
+ */
+const DOOR_DEFAULT_SILENCE_SECONDS = 300;
 import { TIMDoorMessageHandler } from "./TIMDoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
@@ -408,14 +416,38 @@ debugLog("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door exe
      * died on the same schedule as a door that had wedged. TEXTTV went down
      * at +310s with the sysop mid-page, five minutes being precisely how
      * long a teletext reader is meant to be sat in (2026-09-13). Every XIM
-     * message and every keystroke pushes it back now; only silence burns it.
+     * message, every keystroke and every library call pushes it back now; only
+     * silence burns it.
+     *
+     * ALWAYS ARMED, even for a door whose registration names no timeout.
+     *
+     * The fuse was optional, so a door with no `timeout` in its settings had
+     * NOTHING watching it - and GWall is one. When `scenewall.bbs.io` stopped
+     * answering (2026-09-19: it accepts the connection and sends no byte), the
+     * door's error path spun at pc 0x8184 for ever and held the node until the
+     * container was restarted. The sysop could not reach the menu, and since
+     * `~CC_gwall` runs from `logon20.txt`, could not log in: "i am stuck on the
+     * live bbs now", "fix gwall first i cant log in".
+     *
+     * A default silence of five minutes is the figure the fuse was already
+     * written around (TEXTTV, 2026-09-13) - long enough to read a page, short
+     * enough that a wedged door gives the node back on its own.
+     *
+     * `??`, not `||`: a door registered with `timeout: 0` is asking for NO
+     * timeout and still gets none. Only a door that names nothing gets the
+     * default.
      */
-    if (this.lifecycleConfig.timeout) {
+    {
       this.inactivityFuse = createInactivityFuse({
-        seconds: this.lifecycleConfig.timeout,
+        seconds: this.lifecycleConfig.timeout ?? DOOR_DEFAULT_SILENCE_SECONDS,
         maxSeconds: DOOR_ABSOLUTE_TIMEOUT_SECONDS,
         onExpire: () => {
-debugLog(`[DoorLifecycleManager] No door activity for ${this.lifecycleConfig.timeout}s - terminating`);
+          const silence = this.lifecycleConfig.timeout ?? DOOR_DEFAULT_SILENCE_SECONDS;
+          const stuckPc = (this.emulator.getRegister(16) >>> 0).toString(16);
+          console.warn(
+            `[DoorLifecycleManager] No door activity for ${silence}s at pc=0x${stuckPc}`
+            + ` (iters=${this.executionState.iterationCount}) - terminating so the node comes back`,
+          );
           this.socket.emit("door:error", { message: "Execution timeout" });
           this.terminate();
         },
@@ -949,6 +981,19 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
           // Handle the trap
           const trapHandled = this.trapDispatcher.checkAndHandleLibraryTrap(pc);
           if (trapHandled) {
+            /*
+             * A door CALLING THE BOARD is a door that is alive.
+             *
+             * The fuse was pushed back by XIM messages alone, so a door doing
+             * a long stretch of ordinary library work - reading files, drawing
+             * through dos.library - burned it down while working perfectly.
+             * The other half of the same rule: a door that has stopped making
+             * library calls entirely is the one the fuse is FOR. GWall spins
+             * ~80 million instructions every five seconds after its server
+             * stops answering, and asks the board for nothing at all.
+             */
+            this.inactivityFuse?.touch();
+            this.executionState.libraryCallsInLoop++;
             this.trapDispatcher.handleTrapExecution(pc);
 
             // === STEP 4B: Check if WaitPort returned 0 (no messages) ===

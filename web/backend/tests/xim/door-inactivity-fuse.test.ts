@@ -150,10 +150,36 @@ describe('DoorLifecycleManager arms the fuse rather than a wall clock', () => {
 
   it('builds the execution timeout through createInactivityFuse', () => {
     expect(src).toContain('createInactivityFuse({');
-    expect(src).toContain('seconds: this.lifecycleConfig.timeout,');
+    expect(src).toMatch(/seconds: this\.lifecycleConfig\.timeout\b/);
     expect(src).toContain('maxSeconds: DOOR_ABSOLUTE_TIMEOUT_SECONDS,');
     // The shape it replaced: a timer armed once, for the whole timeout.
     expect(src).not.toContain('}, this.lifecycleConfig.timeout * 1000);');
+  });
+
+  it('arms it even for a door whose registration names no timeout', () => {
+    /*
+     * It used to be `if (this.lifecycleConfig.timeout)`, so a door with none -
+     * GWall is one - had nothing watching it at all. When its server stopped
+     * answering, its error path spun at pc 0x8184 and held the node until the
+     * container was restarted: "fix gwall first i cant log in" (sysop,
+     * 2026-09-19).
+     */
+    expect(src).not.toContain('if (this.lifecycleConfig.timeout) {');
+    expect(src).toContain('this.lifecycleConfig.timeout ?? DOOR_DEFAULT_SILENCE_SECONDS');
+  });
+
+  it('touches it on every library call, not only on XIM messages', () => {
+    /*
+     * A door doing a long stretch of ordinary library work - reading files,
+     * drawing through dos.library - was burning the fuse down while working
+     * perfectly. The other half of the same rule is what catches GWall: a door
+     * that has stopped calling the board entirely.
+     */
+    const trapBlock = src.slice(
+      src.indexOf('const trapHandled ='),
+      src.indexOf('const trapHandled =') + 1200,
+    );
+    expect(trapBlock).toContain('this.inactivityFuse?.touch()');
   });
 
   it('touches it on every XIM message the door handles', () => {
