@@ -829,16 +829,58 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
   const scopesOf = (copies: ScreenFileShape[]): number =>
     copies.reduce((n, f) => n + (f.readBy?.length ?? 0), 0);
 
+  /**
+   * The same key with the THEME dimension dropped, plus the file's own name:
+   * one screen, one scope, one drawing.
+   *
+   * The name matters. A theme that ships `Board/MENU.TXT` where the board has
+   * `Screens/BULL.TXT` has drawn something ELSE for that screen, not a redraw
+   * of it, and the board's own must stay on the wall.
+   */
+  const screenSlotOf = (copies: ScreenFileShape[]): string => {
+    const parts = screenKeyOf(copies).split('|');
+    parts[3] = '';
+    const name = (copies[0]?.relPath ?? '').split('/').pop()?.toLowerCase() ?? '';
+    return [...parts, name].join('|');
+  };
+
   const byScreen = new Map<string, ScreenFileShape[][]>();
+  /** Which screen slots the artist's own theme has a drawing for. */
+  const redrawnSlots = new Set<string>();
   for (const copies of groups) {
     const key = screenKeyOf(copies);
     byScreen.set(key, [...(byScreen.get(key) ?? []), copies]);
+    if (opts.ownedBy && copies[0]?.theme === opts.ownedBy) {
+      redrawnSlots.add(screenSlotOf(copies));
+    }
   }
+
+  /*
+   * A SCREEN THE ARTIST HAS ALREADY REDRAWN SHOWS ONE CARD, NOT TWO.
+   *
+   * The theme is a dimension of the key, so a theme's drawing and the board's
+   * own are two versions of one screen and each gets a card. That is right
+   * while the theme is a DRAFT - the board's copy is still what callers see,
+   * and the card says so - and it is wrong the moment the theme goes live:
+   * the board's copy is superseded, nothing about it is left to do, and it was
+   * still badged "Board's - not redrawn yet" beside the artist's own redraw of
+   * the same screen. "still why is there two conf bulls for amiga demos listed?
+   * doesnt make sense?" - and it did not (sysop, 2026-09-19).
+   *
+   * A screen the theme has NOT redrawn keeps the board's card: that one is the
+   * work, and hiding it would hide the gap.
+   */
+  const supersededByTheTheme = (versions: ScreenFileShape[][]): boolean =>
+    Boolean(opts.ownedBy)
+    && !opts.themeIsDraft
+    && (versions[0]?.[0]?.theme ?? '') !== opts.ownedBy
+    && redrawnSlots.has(screenSlotOf(versions[0] ?? []));
 
   /** The versions of one screen, the most-read first - that is the one an
    *  edit should change, and the one the card stands for. */
-  const ranked = [...byScreen.values()].map(versions =>
-    [...versions].sort((a, b) => scopesOf(b) - scopesOf(a)));
+  const ranked = [...byScreen.values()]
+    .map(versions => [...versions].sort((a, b) => scopesOf(b) - scopesOf(a)))
+    .filter(versions => !supersededByTheTheme(versions));
 
   return ranked
     .map(versions => {

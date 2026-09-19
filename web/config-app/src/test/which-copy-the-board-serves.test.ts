@@ -105,11 +105,38 @@ it('says the theme own copy is not served yet', () => {
   expect(mine.badge?.label).toMatch(/draft, not served yet/);
 });
 
-it('says neither of those once the theme is live', () => {
-  const items = studio(false);
+/**
+ * A LIVE theme is what callers are served, so its copy carries the readers -
+ * which is the shape the live board's own index has for h7.
+ */
+const livePair = {
+  files: {
+    'Conf3/bull20.txt': {
+      relPath: 'Conf3/bull20.txt', sha256: 'a', bytes: 900, format: 'ansi',
+      readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 3, via: 'shadowed' }],
+    },
+    'Themes/607080/Conf/3/bull20.txt': {
+      relPath: 'Themes/607080/Conf/3/bull20.txt', sha256: 'b', bytes: 912, format: 'ansi',
+      theme: '607080',
+      readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 3, via: 'resolved' }],
+    },
+  },
+};
 
-  expect(items.find(i => i.path === 'Conf3/bull20.txt')?.badge)
-    .toEqual({ label: "Board's - not redrawn yet", kind: 'theirs' });
+it("drops the board's copy once the theme is live and has redrawn it", () => {
+  /*
+   * "still why is there two conf bulls for amiga demos listed? doesnt make
+   * sense?" (sysop, 2026-09-19). While the theme is a draft the board's copy
+   * is still what callers see and the card above says so. Once it is live the
+   * board's copy is superseded: there is nothing left to do about it, and it
+   * was sitting beside the artist's own redraw badged "not redrawn yet".
+   */
+  const items = buildGalleryItems(livePair as never, {
+    theme: '607080', showGenerated: false, showUnread: false,
+    ownedBy: '607080', themeIsDraft: false,
+  } as never);
+
+  expect(items.find(i => i.path === 'Conf3/bull20.txt')).toBeUndefined();
   expect(items.find(i => i.path === 'Themes/607080/Conf/3/bull20.txt')?.badge?.label)
     .toBe('Yours');
 });
