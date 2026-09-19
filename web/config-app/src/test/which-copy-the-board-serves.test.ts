@@ -81,9 +81,18 @@ const draftPair = {
       relPath: 'Conf3/bull20.txt', sha256: 'a', bytes: 900, format: 'ansi',
       readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 3, via: 'resolved' }],
     },
+    /*
+     * A draft theme's copy CARRIES THE READERS in a themed index - measured
+     * against the live board's own index for `tango-2`, which is a draft and
+     * whose conference bulletins resolve to the theme's files. The fixture
+     * said `readBy: []`, which is why the pair below used to survive the
+     * one-card rule and the sysop still saw two: "seems correct for h7 now
+     * wrong for tango" (2026-09-19).
+     */
     'Themes/607080/Conf/3/bull20.txt': {
       relPath: 'Themes/607080/Conf/3/bull20.txt', sha256: 'b', bytes: 912, format: 'ansi',
-      theme: '607080', readBy: [],
+      theme: '607080',
+      readBy: [{ screen: 'CONF_BULL', scope: 'conf', id: 3, via: 'resolved' }],
     },
   },
 };
@@ -93,10 +102,13 @@ const studio = (themeIsDraft: boolean) => buildGalleryItems(draftPair as never, 
   ownedBy: '607080', themeIsDraft,
 } as never);
 
-it("says the board's copy is still what callers see, while the theme is a draft", () => {
-  const board = studio(true).find(i => i.path === 'Conf3/bull20.txt')!;
+it("shows one card for a screen the artist has redrawn, draft or not", () => {
+  // The artist's own card says "draft, not served yet"; a second card for the
+  // board's copy of the same bulletin is the duplicate the sysop kept seeing.
+  const items = studio(true);
 
-  expect(board.badge).toEqual({ label: "Board's - still what callers see", kind: 'theirs' });
+  expect(items.find(i => i.path === 'Conf3/bull20.txt')).toBeUndefined();
+  expect(items.map(i => i.path)).toEqual(['Themes/607080/Conf/3/bull20.txt']);
 });
 
 it('says the theme own copy is not served yet', () => {

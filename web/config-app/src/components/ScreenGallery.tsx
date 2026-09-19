@@ -170,7 +170,13 @@ function Thumbnail({ content, format }: { content: string; format?: GalleryItem[
       </div>
     );
   }
-  return <ScreenArt content={content} scale={0.28} />;
+  /*
+   * A SCREENFUL, in both directions. `Conf1/bull20.txt` on this board is 25
+   * rows padded to 2807 characters: without the width cap its card is a canvas
+   * 2807 cells wide showing its own top-left corner, which reads as a blank
+   * screen next to a theme's card that draws fine.
+   */
+  return <ScreenArt content={content} scale={0.28} maxRows={25} maxCols={80} />;
 }
 
 interface ScreenGalleryProps {

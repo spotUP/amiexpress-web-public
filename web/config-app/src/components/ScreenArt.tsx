@@ -21,6 +21,18 @@ export interface ScreenArtProps {
   /** Passed to the canvas, so a thumbnail is distinguishable from the editor. */
   testId?: string;
   /**
+   * Draw at most this many COLUMNS.
+   *
+   * A screen is 80 columns by convention and a thumbnail wants that much. This
+   * board has a file that is not: `Conf1/bull20.txt` is 68 KB of 25 rows
+   * padded to 2807 characters, so its card built a canvas 2807 cells wide and
+   * showed the top-left corner of it - `~f` and black, which reads as an empty
+   * screen (sysop, 2026-09-19: "one is black one has art").
+   *
+   * Absent means the whole width, which is what the EDITOR needs.
+   */
+  maxCols?: number;
+  /**
    * Draw at most this many rows.
    *
    * A screen is 25 rows by convention and the loader stopped capping at 25 on
@@ -35,7 +47,7 @@ export interface ScreenArtProps {
   maxRows?: number;
 }
 
-export function ScreenArt({ content, scale = 1, className, testId, maxRows }: ScreenArtProps) {
+export function ScreenArt({ content, scale = 1, className, testId, maxRows, maxCols }: ScreenArtProps) {
   const [canvas, setCanvas] = useState<Cell[][] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -68,7 +80,13 @@ export function ScreenArt({ content, scale = 1, className, testId, maxRows }: Sc
 
   // Sliced AFTER parsing, so the rows a preview does not show cost pixels
   // rather than a canvas the browser refuses to allocate.
-  const shown = maxRows && canvas.length > maxRows ? canvas.slice(0, maxRows) : canvas;
+  const rows = maxRows && canvas.length > maxRows ? canvas.slice(0, maxRows) : canvas;
+  // The width is capped the same way and for the same reason: a row 2807 cells
+  // wide is a screen nobody drew, and a preview of its first 80 columns is the
+  // picture. Sliced AFTER parsing, so nothing about the file is guessed.
+  const shown = maxCols
+    ? rows.map(row => (row.length > maxCols ? row.slice(0, maxCols) : row))
+    : rows;
 
   /*
    * The scale goes to the CANVAS, not to a CSS transform around it.

@@ -859,20 +859,23 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
    * A SCREEN THE ARTIST HAS ALREADY REDRAWN SHOWS ONE CARD, NOT TWO.
    *
    * The theme is a dimension of the key, so a theme's drawing and the board's
-   * own are two versions of one screen and each gets a card. That is right
-   * while the theme is a DRAFT - the board's copy is still what callers see,
-   * and the card says so - and it is wrong the moment the theme goes live:
-   * the board's copy is superseded, nothing about it is left to do, and it was
-   * still badged "Board's - not redrawn yet" beside the artist's own redraw of
-   * the same screen. "still why is there two conf bulls for amiga demos listed?
-   * doesnt make sense?" - and it did not (sysop, 2026-09-19).
+   * own were two versions of one screen and each got a card - the artist's
+   * redraw beside the board's copy of the same bulletin, twice over, captioned
+   * with the same screen and the same conference. "still why is there two conf
+   * bulls for amiga demos listed? doesnt make sense?" (sysop, 2026-09-19).
+   *
+   * DRAFT OR LIVE, one card. The first pass kept the pair while the theme was
+   * a draft, on the grounds that the board's copy is still what callers see -
+   * and the sysop's answer to that was "seems correct for h7 now wrong for
+   * tango", h7 being live and tango-2 a draft. He is right: the card already
+   * SAYS "draft, not served yet", so the second card adds a thumbnail of what
+   * callers see and a second entry for a screen there is one of.
    *
    * A screen the theme has NOT redrawn keeps the board's card: that one is the
    * work, and hiding it would hide the gap.
    */
   const supersededByTheTheme = (versions: ScreenFileShape[][]): boolean =>
     Boolean(opts.ownedBy)
-    && !opts.themeIsDraft
     && (versions[0]?.[0]?.theme ?? '') !== opts.ownedBy
     && redrawnSlots.has(screenSlotOf(versions[0] ?? []));
 
