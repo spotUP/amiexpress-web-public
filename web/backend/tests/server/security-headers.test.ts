@@ -126,8 +126,17 @@ describe('Security headers (helmet)', () => {
       expect(csp).toMatch(/connect-src 'self'/);
     });
 
-    it('frame-ancestors none (modern X-Frame-Options DENY)', () => {
-      expect(csp).toMatch(/frame-ancestors 'none'/);
+    it("frame-ancestors self - the board frames its own pages, and nobody else's", () => {
+      /*
+       * It was `'none'` until 6e7d87509, which put a BBC Micro on the board as
+       * its own page: the emulator is served standalone and the terminal frames
+       * it, so a policy of `none` would have blanked it. `'self'` keeps the
+       * property this test exists for - no CROSS-origin site may frame the
+       * board, which is what clickjacking needs - and allows the one embed the
+       * board does of itself.
+       */
+      expect(csp).toMatch(/frame-ancestors 'self'/);
+      expect(csp).not.toMatch(/frame-ancestors [^;]*\*/);
     });
 
     it('object-src none (defang plugin injection)', () => {

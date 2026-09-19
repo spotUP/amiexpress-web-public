@@ -34,6 +34,8 @@ describe('the content security policy', () => {
     // Adding media-src must not loosen the rest.
     expect(app).toMatch(/defaultSrc: \["'self'"\]/);
     expect(app).toMatch(/objectSrc: \["'none'"\]/);
-    expect(app).toMatch(/frameAncestors: \["'none'"\]/);
+    // `'self'` since 6e7d87509, which serves the BBC Micro as its own page for
+    // the terminal to frame. Still nothing cross-origin, which is the point.
+    expect(app).toMatch(/frameAncestors: \["'self'"\]/);
   });
 });
