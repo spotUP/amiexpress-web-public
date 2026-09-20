@@ -53,6 +53,12 @@ import { repairOneFile } from '../screens/screen-repair';
 import { planMciCarry, applyMciCarry, splitScreenCodes, type MciPlacement } from '../screens/mci-carry';
 import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
 import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
+import {
+  planGlobalScreenDelete,
+  performGlobalScreenDelete,
+  isPlainScreenName,
+  screenNameFromPath,
+} from '../screens/global-screen-delete';
 import { findScreenReferences, removeScreenReferences } from '../screens/screen-references';
 import { petsciiRuleRefusal } from '../screens/petscii-board-rules';
 
@@ -1061,6 +1067,87 @@ screensRouter.get('/references', (req: Request, res: Response) => {
   return sendOk(res, {
     references,
     removable: references.filter(r => r.removable).length,
+  });
+});
+
+/**
+ * GET /api/screens/screen-delete-plan?screen=BULL
+ *
+ * Everything a global delete would remove, BEFORE it removes any of it.
+ *
+ * Its own route for the same reason `/references` is: the sysop confirms
+ * first, and "23 files across 4 themes, and the board asks for this screen at
+ * step 2 of the login walk" is what makes that a decision instead of a leap.
+ */
+screensRouter.get('/screen-delete-plan', (req: Request, res: Response) => {
+  /*
+   * `path` is how the dialog asks - it has a file open, not a name - and the
+   * stem rule that turns one into the other is the index's, not a second copy
+   * of it written here.
+   */
+  const fromPath = String(req.query.path || '');
+  const screen = fromPath ? screenNameFromPath(fromPath) : String(req.query.screen || '');
+  if (!isPlainScreenName(screen)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Give a screen NAME (BULL), not a path - a single file has its own delete.',
+    });
+  }
+  return sendOk(res, planGlobalScreenDelete(config.get('dataDir'), screen));
+});
+
+/**
+ * DELETE /api/screens/screen?screen=BULL[&fixReferences=1]
+ *
+ * The screen leaves the board: every security variant, in the board's own
+ * directory, every node and conference directory, and under every live theme.
+ * Each file is backed up beside itself first, and archived theme folders are
+ * left exactly as they are.
+ *
+ * Sysop only. `mayWriteScreen` guards a single path and this one crosses every
+ * theme at once, including other artists' - which is precisely the thing an
+ * artist may not do.
+ */
+screensRouter.delete('/screen', requireSysop(), (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const screen = String(req.query.screen || '');
+  if (!isPlainScreenName(screen)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Give a screen NAME (BULL), not a path - a single file has its own delete.',
+    });
+  }
+
+  const plan = planGlobalScreenDelete(baseDir, screen);
+  if (plan.targets.length === 0) {
+    return res.status(404).json({ success: false, error: `No screen named ${plan.screen}` });
+  }
+
+  const outcome = performGlobalScreenDelete(baseDir, plan);
+  invalidateScreenIndex();
+
+  // Mending is opt-in and only ever the unambiguous lines - the same rule the
+  // single delete follows, and the sysop's own (2026-09-15): a sentinel that
+  // shares its line with art is part of a composition nothing here can read.
+  const fixed = String(req.query.fixReferences ?? '') === '1'
+    ? removeScreenReferences(baseDir, plan.references, saveRevision)
+    : [];
+  if (fixed.length > 0) invalidateScreenIndex();
+
+  console.log(
+    `[screens] Global delete of ${plan.screen}: ${outcome.deleted.length} file(s)`
+    + (plan.themes.length ? ` across themes ${plan.themes.join(', ')}` : '')
+    + (outcome.failed.length ? `, ${outcome.failed.length} refused` : '')
+    + (fixed.length ? `, ${fixed.length} include(s) mended` : ''),
+  );
+
+  return sendOk(res, {
+    ...outcome,
+    fixed,
+    themes: plan.themes,
+    archivedThemesSkipped: plan.archivedThemesSkipped,
+    referencedBy: plan.references,
+    loginStep: plan.loginStep,
   });
 });
 

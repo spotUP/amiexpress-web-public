@@ -1043,7 +1043,7 @@ const SCREEN_TYPES = ['GR', 'IBM', 'ANS', 'ASC', 'SEQ', 'RIP'];
  *
  * Returns null when the name is a different screen entirely.
  */
-function variantOf(screenFile: string, fileName: string): { securityLevel?: number; screenType?: string } | null {
+export function variantOf(screenFile: string, fileName: string): { securityLevel?: number; screenType?: string } | null {
   const base = screenFile.toLowerCase().replace(/\.[^.]*$/, '');
   const lower = fileName.toLowerCase();
 
@@ -1062,7 +1062,8 @@ function variantOf(screenFile: string, fileName: string): { securityLevel?: numb
   return { securityLevel: level, screenType };
 }
 
-function variantStem(fileName: string): string {
+/** The stem a security variant shares with its base screen: LOGON20.TXT -> logon. */
+export function variantStem(fileName: string): string {
   return fileName.toLowerCase().replace(/\.[^.]*$/, '').replace(/\d+$/, '');
 }
 

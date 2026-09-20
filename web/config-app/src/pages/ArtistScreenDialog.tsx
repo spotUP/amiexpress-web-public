@@ -94,6 +94,17 @@ export interface ArtistScreenDialogProps {
   auditing?: boolean;
 }
 
+/** What `screen-delete-plan` answers - see screens/global-screen-delete.ts. */
+interface GlobalDeletePlan {
+  screen: string;
+  targets: { path: string; theme?: string }[];
+  themes: string[];
+  archivedThemesSkipped: string[];
+  references: { from: string; line: number; removable: boolean }[];
+  removableReferences: number;
+  loginStep: { screen: string; label: string } | null;
+}
+
 export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, onSwitchTheme, sysop = false, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
@@ -1049,6 +1060,97 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               }}
             >
               <Trash2 size={14} /> {mine && theme.slug !== 'default' ? 'Drop mine' : 'Delete'}
+            </button>
+          )}
+
+          {sysop && path && (
+            /*
+             * A THIRD ACT, and the only one that ends a screen.
+             *
+             * "if the sysop changes his mind and wants to entirely remove a
+             * screen entirely from the bbs he needs to be able to delete it
+             * globally from all themes and the default theme" (sysop,
+             * 2026-09-20). Delete above takes THIS file; Drop mine takes a
+             * theme's version of it. Neither can finish the job, because a
+             * screen is a name with several security variants in every node
+             * and conference directory and again under every theme - and the
+             * copies a sysop does not know about are exactly the ones that go
+             * on being served.
+             *
+             * The plan is fetched BEFORE the confirm and read out in it: how
+             * many files, which themes, whether the login walk asks for this
+             * screen, and what includes it. The name has to be typed back,
+             * because this is the one delete with no single file to restore.
+             */
+            <button
+              type="button"
+              className="btn-small btn-danger"
+              onClick={async () => {
+                setActionError(null);
+                let plan: GlobalDeletePlan;
+                try {
+                  const response = await apiClient.screenDeletePlan(path);
+                  plan = (response as { data: GlobalDeletePlan }).data;
+                } catch (error) {
+                  setActionError(`Could not work out what that would delete: ${(error as Error).message}`);
+                  return;
+                }
+
+                if (plan.targets.length === 0) {
+                  setActionError(`Nothing on this board is named ${plan.screen}.`);
+                  return;
+                }
+
+                const lines = [
+                  `${plan.targets.length} file${plan.targets.length === 1 ? '' : 's'} go, each backed up beside itself:`,
+                  plan.targets.slice(0, 12).map(target => `  ${target.path}`).join('\n'),
+                  plan.targets.length > 12 ? `  ...and ${plan.targets.length - 12} more` : '',
+                  plan.themes.length
+                    ? `Themes losing their version: ${plan.themes.join(', ')}.`
+                    : 'No theme has redrawn it.',
+                  plan.archivedThemesSkipped.length
+                    ? `Archived themes keep their copy: ${plan.archivedThemesSkipped.join(', ')}.`
+                    : '',
+                  plan.loginStep
+                    ? `THE LOGIN WALK ASKS FOR THIS SCREEN - ${plan.loginStep.label}. Every caller sees the gap.`
+                    : '',
+                  plan.references.length
+                    ? `${plan.references.length} screen line${plan.references.length === 1 ? '' : 's'} pull it in; ${plan.removableReferences} can be dropped on their own.`
+                    : '',
+                ].filter(Boolean);
+
+                const answer = await confirm({
+                  title: `Remove ${plan.screen} from the whole board?`,
+                  message: lines.join('\n'),
+                  confirmText: 'Remove it everywhere',
+                  requireTypedConfirmation: plan.screen,
+                  checkbox: {
+                    label: 'Also drop the lines that only pull this screen in',
+                    description: 'A line sharing its row with art is never rewritten. Each file gets a revision first.',
+                    defaultChecked: false,
+                  },
+                });
+                if (!answer.confirmed) return;
+
+                try {
+                  const result = await apiClient.deleteScreenEverywhere(plan.screen, answer.checked);
+                  const done = (result as { data: { deleted: string[]; failed: { path: string }[] } }).data;
+                  if (done.failed.length > 0) {
+                    showError(`Removed ${done.deleted.length}, but ${done.failed.length} would not go.`);
+                    setActionError(done.failed.map(f => f.path).join(', '));
+                  } else {
+                    showSuccess(`${plan.screen} is off the board - ${done.deleted.length} file(s) removed.`);
+                  }
+                  await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+                  await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+                  onClose();
+                } catch (error) {
+                  setActionError(`That did not work: ${(error as Error).message}`);
+                  showError((error as Error).message);
+                }
+              }}
+            >
+              <Trash2 size={14} /> Delete everywhere
             </button>
           )}
         </div>

@@ -460,6 +460,30 @@ class ApiClient {
    * saving a revision of each file first. Lines where the include shares its
    * row with art are never touched, whatever this is set to.
    */
+  /**
+   * What a global delete would take: every variant of this screen NAME, in
+   * every scope and every live theme, plus what includes it and whether the
+   * login walk asks for it. Read before the confirm, never after.
+   */
+  async screenDeletePlan(filePath: string) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/screens/screen-delete-plan?path=${encodeURIComponent(filePath)}`,
+    );
+  }
+
+  /**
+   * Removes the screen from the board entirely - all variants, all scopes,
+   * every live theme, each file backed up beside itself. Sysop only; archived
+   * theme folders keep their copy.
+   */
+  async deleteScreenEverywhere(screen: string, fixReferences = false) {
+    const fix = fixReferences ? '&fixReferences=1' : '';
+    return this.request<ApiResponse>(
+      `${API_BASE}/screens/screen?screen=${encodeURIComponent(screen)}${fix}`,
+      { method: 'DELETE' },
+    );
+  }
+
   async deleteScreenFile(filePath: string, fixReferences = false) {
     const fix = fixReferences ? '&fixReferences=1' : '';
     return this.request<ApiResponse>(

@@ -39,8 +39,29 @@ const envelope = (data: unknown) => Promise.resolve({
   text: async () => JSON.stringify({ success: true, data }),
 } as unknown as Response);
 
+let globalDeleted = false;
+
 const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
+  if (url.includes('/api/screens/screen-delete-plan')) {
+    return envelope({
+      screen: 'LOGON',
+      targets: [
+        { path: 'Screens/DOOMED.TXT' },
+        { path: 'Themes/neon/Board/DOOMED.TXT', theme: 'neon' },
+      ],
+      themes: ['neon'],
+      archivedThemesSkipped: [],
+      references: [],
+      removableReferences: 0,
+      loginStep: { screen: 'LOGON', label: 'Logon screen' },
+    });
+  }
+  if (url.includes('/api/screens/screen?') && init?.method === 'DELETE') {
+    globalDeleted = true;
+    deleted = true;
+    return envelope({ screen: 'LOGON', deleted: ['Screens/DOOMED.TXT'], backups: [], failed: [], fixed: [] });
+  }
   if (url.includes('/api/screens/file') && init?.method === 'DELETE') {
     if (refuse) {
       return Promise.resolve({
@@ -69,7 +90,15 @@ const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
 vi.stubGlobal('fetch', fetchMock);
 
 vi.mock('../contexts/NotificationContext', () => ({
-  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
+  useNotification: () => ({
+    showSuccess: vi.fn(),
+    showError: vi.fn(),
+    // A confirm carrying a checkbox answers {confirmed, checked}; a plain one
+    // answers a boolean. Standing in for one with the other is how a delete
+    // with an unticked box would read as a cancel.
+    confirm: vi.fn(async (options: { checkbox?: unknown }) =>
+      options?.checkbox ? { confirmed: true, checked: false } : true),
+  }),
 }));
 
 
@@ -116,7 +145,7 @@ describe('deleting a screen file', () => {
 
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: /delete/i }));
+    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
 
     expect(await within(dialog).findByText(/That did not work/)).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -129,7 +158,7 @@ describe('deleting a screen file', () => {
     await user.click(await screen.findByText('LOGON'));
     const dialog = await screen.findByRole('dialog');
 
-    await user.click(within(dialog).getByRole('button', { name: /delete/i }));
+    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(screen.queryByText('LOGON')).toBeNull());
@@ -177,5 +206,46 @@ describe('repairing a damaged screen', () => {
     const dialog = await screen.findByRole('dialog');
 
     expect(within(dialog).queryByRole('button', { name: /escape byte/i })).toBeNull();
+  });
+});
+
+/**
+ * "if the sysop changes his mind and wants to entirely remove a screen
+ * entirely from the bbs he needs to be able to delete it globally from all
+ * themes and the default theme" (sysop, 2026-09-20).
+ *
+ * Delete takes this file and Drop mine takes a theme's version; neither ends
+ * a screen. The third button does, and it must ask the board WHAT it would
+ * take before the sysop confirms - the count, the themes and the login
+ * warning are the whole of that decision.
+ */
+describe('removing a screen from the whole board', () => {
+  beforeEach(() => { deleted = false; globalDeleted = false; fetchMock.mockClear(); });
+
+  it('asks what would go, then deletes by screen name', async () => {
+    const user = userEvent.setup();
+    render(<ScreenScopeTables />, { wrapper });
+
+    await user.click(await screen.findByText('LOGON'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /delete everywhere/i }));
+
+    // The plan is read from the board, keyed by the open FILE - the rule for
+    // which variants share a screen name lives there, not in this dialog.
+    await waitFor(() => {
+      const planned = fetchMock.mock.calls.find(([url]) =>
+        String(url).includes('/api/screens/screen-delete-plan'));
+      expect(planned).toBeTruthy();
+      expect(String(planned?.[0])).toContain('path=');
+    });
+
+    await waitFor(() => expect(globalDeleted).toBe(true));
+    const call = fetchMock.mock.calls.find(([url, init]) =>
+      String(url).includes('/api/screens/screen?') && (init as RequestInit)?.method === 'DELETE');
+    // By NAME, and without mending includes unless the box was ticked.
+    expect(String(call?.[0])).toContain('screen=LOGON');
+    expect(String(call?.[0])).not.toContain('fixReferences');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
