@@ -82,7 +82,7 @@ import { doorDropFileManager } from '../../../src/services/DoorDropFileManager';
 import { loadCommandFromInfo } from '../../../src/utils/amiga-command-parser.util';
 import { buildConnectionEmitter } from '../../../src/server/connection-emitter';
 import { PetsciiMachine, WideScreenMachine } from '@amiexpress/bbs-door-sdk/petscii';
-import { screenShows } from '../../petscii-frame/helpers/screen-oracle';
+import { screenShows, everShowed, inChunks } from '../../petscii-frame/helpers/screen-oracle';
 import * as amigafs from '../../../src/utils/amigafs';
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
@@ -215,16 +215,24 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
     expect(run.adapter.columns).toBe(40);
   });
 
-  it('WALL: the screen is 80x25, every row 80 cells, and the empty slots are still on it', async () => {
+  it('WALL: the screen is 80x25, every row 80 cells, and the empty slots reach the caller', async () => {
     replay.text = fs.readFileSync(path.join(FIXTURES, 'wall.ans'), 'latin1');
     const run = await open('WALL', wideSession(), root);
     const glass = glassOf(run.bytes, 80);
 
     expect(glass.state.screen.length).toBe(2000);
     expect([glass.state.cols, glass.state.rows]).toEqual([80, 25]);
-    // The placeholder rows are a TEXT rule, blanked only because they cost a
-    // 40-column caller rows. This caller has the rows.
-    expect(screenShows(glass, PLACEHOLDER)).toBe(true);
+    /*
+     * ASKED OF THE RUN, NOT OF THE LAST FRAME.
+     *
+     * The placeholder rows are a TEXT rule, blanked only because they cost a
+     * 40-column caller rows - so this caller must be shown them. They are
+     * NOT on the final screen, and that is not the adapter's doing: the door
+     * paints more rows than a 25-row screen holds, so its opening scrolls
+     * off under its own later output, exactly as it would on a real
+     * terminal. This case asked the last frame and read a scroll as a loss.
+     */
+    expect(everShowed(glassOf(Buffer.alloc(0), 80), inChunks(run.bytes), PLACEHOLDER)).toBe(true);
     // ...because nothing folded them: there is no adapter on this caller.
     expect(run.adapter ?? null).toBeNull();
   });
@@ -245,11 +253,23 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
   it('ctop: the empty-conference notice reaches an 80-column caller, and never a 40-column one', async () => {
     replay.text = fs.readFileSync(path.join(FIXTURES, 'ctop.ans'), 'latin1');
 
-    const wide = glassOf((await open('ctop', wideSession(), root)).bytes, 80);
-    expect(screenShows(wide, NOTICE)).toBe(true);
+    /*
+     * The door centres this sentence on slot 5 of a screen ~32 rows tall
+     * (manifest note, `ctop`), so on a 25-row glass it is painted and then
+     * scrolled off by the door's own totals block. The caller at 80 READ it;
+     * asking the final frame would ask about arithmetic instead.
+     */
+    const wideBytes = (await open('ctop', wideSession(), root)).bytes;
+    expect(everShowed(glassOf(Buffer.alloc(0), 80), inChunks(wideBytes), NOTICE)).toBe(true);
 
-    const narrow = glassOf((await open('ctop', narrowSession(), root)).bytes, 40);
-    expect(screenShows(narrow, NOTICE)).toBe(false);
+    /*
+     * And never at 40, at any point in the run - the 40-column rung reshapes
+     * that line rather than keeping it whole, which is the whole reason the
+     * pair is here. Progressive on this side too, so "never" means never
+     * rather than "not at the end".
+     */
+    const narrowBytes = (await open('ctop', narrowSession(), root)).bytes;
+    expect(everShowed(glassOf(Buffer.alloc(0), 40), inChunks(narrowBytes), NOTICE)).toBe(false);
   });
 });
 
@@ -289,7 +309,7 @@ describe('an 80-column PETSCII caller reads the door the ANSI caller reads', () 
     // with spacing in it.
     replay.text = fs.readFileSync(path.join(FIXTURES, 'gwall.ans'), 'latin1');
 
-    const wide = glassOf((await open('GWALL', wideSession(), root)).bytes, 80);
+    const wideBytes = (await open('GWALL', wideSession(), root)).bytes;
     const ansi = (await open('GWALL', ansiSession(), root)).bytes.toString('latin1');
 
     // Every row the ANSI caller was sent is a row this caller can be sent too:
@@ -300,7 +320,12 @@ describe('an 80-column PETSCII caller reads the door the ANSI caller reads', () 
     for (const row of painted) {
       const word = row.trim().split(/\s+/).find((w) => /^[A-Za-z]{4,}$/.test(w));
       if (!word) continue;
-      expect({ word, shown: screenShows(wide, word) }).toEqual({ word, shown: true });
+      // Over the RUN: a wall is longer than the screen, so its first entries
+      // scroll under its last ones. What has to be true is that the
+      // 80-column caller was sent every line the ANSI caller was, not that
+      // all of them are on the glass at the same moment.
+      const shown = everShowed(glassOf(Buffer.alloc(0), 80), inChunks(wideBytes), word);
+      expect({ word, shown }).toEqual({ word, shown: true });
     }
   });
 

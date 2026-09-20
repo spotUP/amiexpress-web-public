@@ -56,7 +56,7 @@ import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 // The screen-code oracle and the row search live beside this suite, shared
 // with the 80-column end-to-end test in tests/doors/petscii-80: one copy of
 // "what would a PETSCII terminal be showing", at either width.
-import { expectedScreenCode, screenShows } from './helpers/screen-oracle';
+import { expectedScreenCode, screenShows, everShowed as sharedEverShowed } from './helpers/screen-oracle';
 import { buildConnectionEmitter } from '../../src/server/connection-emitter';
 import {
   installC64DoorAdapter,
@@ -355,13 +355,14 @@ const unmappable = (frame: Frame) =>
 
 
 /** Did the caller's screen EVER show `text` during the run? (frame by frame, in order) */
+/**
+ * The same question `helpers/screen-oracle` answers, on a 40-column machine:
+ * was the text EVER on the caller's screen, not just at the end. The helper
+ * moved there when the 80-column suite needed it too - two copies of "did the
+ * caller see it" is exactly the second opinion an oracle must not have.
+ */
 function everShowed(writes: ReadonlyArray<Buffer>, text: string): boolean {
-  const machine = new PetsciiMachine();
-  for (const chunk of writes) {
-    machine.feed(chunk);
-    if (screenShows(machine, text)) return true;
-  }
-  return false;
+  return sharedEverShowed(new PetsciiMachine(), writes, text);
 }
 
 // ------------------------------------------------- corpus rule invariants

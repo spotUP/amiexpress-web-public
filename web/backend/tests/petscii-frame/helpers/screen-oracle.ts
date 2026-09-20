@@ -53,3 +53,36 @@ export function screenShows(machine: PetsciiMachine, text: string): boolean {
   }
   return false;
 }
+
+/**
+ * Was `text` EVER on the screen while these bytes arrived?
+ *
+ * A door that paints more rows than the screen has scrolls its own opening
+ * off the glass: `ctop` centres `- NO UPLOADERS ARE AVAILABLE IN THIS
+ * CONFERENCE -` on slot 5 of a ~32-row screen, and by the time its totals
+ * block lands, slot 5 is gone. Asking the FINAL screen whether the caller was
+ * told is then a question about arithmetic, not about the door - the caller
+ * read it and scrolled past it, exactly as they would on a real terminal.
+ *
+ * The machine is passed in rather than built here: the same question is asked
+ * of a C64's 40x25 screen and the web terminal's 80x25 one, and the caller
+ * knows which they have.
+ */
+export function everShowed(
+  machine: PetsciiMachine,
+  chunks: Iterable<Buffer | Uint8Array>,
+  text: string,
+): boolean {
+  for (const chunk of chunks) {
+    machine.feed(chunk as Buffer);
+    if (screenShows(machine, text)) return true;
+  }
+  return false;
+}
+
+/** `bytes` in `size`-byte pieces, for feeding a machine the way the wire did. */
+export function inChunks(bytes: Buffer, size = 64): Buffer[] {
+  const out: Buffer[] = [];
+  for (let i = 0; i < bytes.length; i += size) out.push(bytes.subarray(i, i + size));
+  return out;
+}
