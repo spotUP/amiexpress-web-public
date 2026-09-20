@@ -54,10 +54,25 @@ describe('menu brackets survive addAnsiEscapes', () => {
     const fs = require('fs');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require('path');
-    const seed = fs.readFileSync(
-      path.resolve(__dirname, '../../../../Conf2/Menu.ttx'),
-      'latin1',
-    );
+    /*
+     * A TRACKED menu, not whatever happens to be on this disk.
+     *
+     * This read `Conf2/Menu.ttx` until `e73551d5c` - "the template ships one
+     * conference screen, not fourteen" - deleted it, and the suite has been
+     * red ever since with an ENOENT from inside a write guard, which reads
+     * like a mock problem and is not one. `Conf1/Menu.ttx` carries the same
+     * variant-B menu and the repo tracks it; `tests/repo/tracked-fixtures`
+     * is the rule this broke.
+     */
+    const MENU = 'Conf1/Menu.ttx';
+    const menuPath = path.resolve(__dirname, '../../../../', MENU);
+    if (!fs.existsSync(menuPath)) {
+      throw new Error(
+        `${MENU} is gone. This test needs a shipped variant-B menu - point it `
+        + 'at another one the repo tracks rather than deleting the case.',
+      );
+    }
+    const seed = fs.readFileSync(menuPath, 'latin1');
     const out = addAnsiEscapes(seed);
     expect(out).toBe(seed);
     expect(out).toContain('[FR]');

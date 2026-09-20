@@ -127,6 +127,7 @@ import {
   visibleWidth,
 } from './lib';
 import { buildActivityHints } from './lib/activity-hints';
+import { humanPlayers, syncBotsForTable as syncBots } from './lib/table-bots';
 import { emitLiveChatAnnouncement } from './lib/live-chat';
 import { Scores } from './managers/Scores';
 import { hasRoomForEverything } from './lib/desktop-layout';
@@ -866,7 +867,7 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
   }
 
   public getHumanPlayers(table: LobbyTable): TablePlayer[] {
-    return table.players.filter((player) => player.role === 'player' && !isBotPlayer(player));
+    return humanPlayers(table);
   }
 
   public getOpenHumanSeats(table: LobbyTable): number {
@@ -875,52 +876,7 @@ console.log(`[CardLobby] Cleared ${pruned.removed.length} stale table(s): ${name
   }
 
   public syncBotsForTable(table: LobbyTable): boolean {
-    const humans = this.getHumanPlayers(table);
-    const bustedBots = table.players.filter((player) => player.role === 'player' && isBotPlayer(player) && player.stack <= 0);
-    if (bustedBots.length > 0) {
-      const bustedIds = new Set(bustedBots.map((bot) => bot.userId));
-      table.players = table.players.filter((player) => !bustedIds.has(player.userId));
-    }
-
-    const bots = table.players.filter((player) => player.role === 'player' && isBotPlayer(player));
-    const targetBots = Math.max(0, table.maxPlayers - humans.length);
-
-    let changed = false;
-
-    if (bustedBots.length > 0) changed = true;
-
-    if (bots.length > targetBots) {
-      const removeCount = bots.length - targetBots;
-      const botIds = bots.slice(-removeCount).map((bot) => bot.userId);
-      table.players = table.players.filter((player) => !botIds.includes(player.userId));
-      changed = true;
-    }
-
-    if (bots.length < targetBots) {
-      const takenSeats = new Set(table.players.map((player) => player.seat));
-      for (let seat = 0; seat < table.maxPlayers; seat += 1) {
-        if (table.players.filter((p) => p.role === 'player' && isBotPlayer(p)).length >= targetBots) {
-          break;
-        }
-        if (takenSeats.has(seat)) continue;
-
-        const botId = buildBotId(table.id, seat);
-        table.players.push({
-          userId: botId,
-          username: buildBotName(seat),
-          seat,
-          stack: table.buyIn,
-          buyIn: table.buyIn,
-          role: 'player',
-          joinedAt: Date.now(),
-          isBot: true,
-        });
-        takenSeats.add(seat);
-        changed = true;
-      }
-    }
-
-    return changed;
+    return syncBots(table);
   }
 
   public updateTableStatus(table: LobbyTable): void {

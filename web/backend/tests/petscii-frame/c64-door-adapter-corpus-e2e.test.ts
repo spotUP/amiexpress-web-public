@@ -130,6 +130,13 @@ const SIGNATURES: Record<string, Signature> = {
   kd_confstats: { door: 'All code by Json / KiNGDoM RoYaL' },
   color_wall: { door: 'cOLORWALL v1.3' },
   who: { door: 'WHo V2.0 by Spy' },
+  /*
+   * Added 2026-09-20. `glc` joined the corpus with the windowed-door work and
+   * its signature line was never written here, so this table and the manifest
+   * disagreed by one and every glc case died on `sig.fromBbsMenu` of
+   * undefined - a missing row reading as a broken assertion.
+   */
+  glc: { door: 'GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX' },
   ratiorep: { door: 'Ratio Report V1.7' },
   super_stats: { door: 'SEC LEVEL...: Sysop' },
   hststat: { door: 'Up and Download statistics' },

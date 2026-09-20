@@ -492,6 +492,55 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
    */
   const UNMARKED = 'mrcstat2';
 
+  /**
+   * The unmarked control, BUILT rather than borrowed.
+   *
+   * It used to be `mrcstat2.info`'s own bytes, and there is no longer a 68K
+   * registration on this board that declares nothing: `19143adc0` put
+   * `C64_ADAPT=40` on 37 icons as collateral (the sysop kept them, 2026-09-20)
+   * and the five that escaped all declare `MIN_COLUMNS=40`, which opens them
+   * at forty by the other route. A control that depends on the board
+   * happening to own an undeclared door is a control that expires.
+   *
+   * So the icon is copied and its two declarations are taken off it through
+   * the board's own reader/writer - not hand-built bytes - leaving a real
+   * registration that promises nothing. What it proves is unchanged: a 68K
+   * door that declared nothing is refused at 40.
+   */
+  async function registerUnmarked68K(): Promise<void> {
+    const { commandCache, loadCommands } = require('../../src/handlers/command-execution.handler');
+    const { parseInfoFile, writeInfoFile } = require("../../src/utils/info-file.util");
+    commandCache.bbscmd.clear();
+    commandCache.syscmd.clear();
+    const cmdDir = path.join(root, 'Commands', 'BBSCmd');
+    fs.rmSync(cmdDir, { recursive: true, force: true });
+    fs.mkdirSync(cmdDir, { recursive: true });
+
+    const target = path.join(cmdDir, `${UNMARKED}.info`);
+    fs.copyFileSync(realInfoPath(UNMARKED), target);
+    const info = parseInfoFile(target);
+    info.tooltypes = info.tooltypes.filter(
+      (t: { key: string }) => t.key !== 'C64_ADAPT' && t.key !== 'MIN_COLUMNS',
+    );
+    writeInfoFile(info);
+
+    const def = require('../../src/utils/amiga-command-parser.util').loadCommandFromInfo(target);
+    if (def?.toolTypes?.['C64_ADAPT'] !== undefined || def?.toolTypes?.['MIN_COLUMNS'] !== undefined) {
+      throw new Error('the control still declares a width - the strip did not take');
+    }
+
+    // The binary executeAmigaDoor refuses to launch without, and the same
+    // registration walk `registerFromDisk` does - without it the control is
+    // not in `getDoors()` at all and every assertion about it reads
+    // `undefined`, which is not the same answer as "unmarked".
+    const full = path.join(root, ...def.location.split('/'));
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+    loadCommands(root);
+    await initializeDoors();
+    setDoorsForCommandHandler(getDoors());
+  }
+
   function definitionFromDisk(command: string) {
     const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
     const def = loadCommandFromInfo(realInfoPath(command));
@@ -570,7 +619,18 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     expect(ADAPTED_DOOR_TYPES.has(def.type)).toBe(true);
   });
 
-  it('nothing else in Commands/BBSCmd claims C64_ADAPT', () => {
+  /*
+   * REPORTED, NOT REFUSED, since 2026-09-20.
+   *
+   * This asserted that the manifest was the whole of the board's C64 marks.
+   * `19143adc0` - a commit about deploy art - put `C64_ADAPT=40` on 37 more
+   * registrations as collateral, and asked whether to strip them or keep
+   * them, the sysop kept them. The corpus can only vouch for what it has
+   * captures for, so what is left here is a census a reader can act on, not
+   * a gate. The other direction (a captured door that STOPPED claiming the
+   * mark) is still asserted, in compact-40's suite.
+   */
+  it('says which registrations claim C64_ADAPT without a capture behind them', () => {
     // Uppercased on both sides: the command a registration answers to is the
     // uppercased filename (or its BBSCMD tooltype), so `ulist.info` IS the
     // ULIST in this list and must not read as an unlisted extra.
@@ -585,7 +645,15 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
         })();
         return def?.toolTypes?.['C64_ADAPT'] !== undefined;
       });
-    expect(others).toEqual([]);
+    if (others.length > 0) {
+      console.log(
+        `[door-min-columns] ${others.length} registration(s) claim C64_ADAPT with no `
+        + `capture in the corpus manifest: ${others.join(', ')}`,
+      );
+    }
+    // The census still has to RUN - a scan that silently reads nothing would
+    // report an empty board as a clean one.
+    expect(fs.readdirSync(BBSCMD).filter((f) => f.endsWith('.info')).length).toBeGreaterThan(50);
   });
 
   /**
@@ -677,7 +745,7 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
   );
 
   it('the DOORS list marks every marked door [C64] and marks nothing else', async () => {
-    await registerFromDisk([...MARKED.map(([c]) => c), UNMARKED]);
+    await registerFromDisk([...MARKED.map(([c]) => c)]);
     // Uppercased on both sides, for the reason the neighbouring case gives: the
     // command a registration answers to is the uppercased filename, while the
     // manifest's `installed` is the filename as it is spelled on disk (which is
@@ -690,13 +758,21 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     // list can no longer answer one way for one command and the other way for
     // its twin.
     expect(marks.get('WHO')).toBe(marks.get('RTW'));
-    // An unmarked 68K registration is still unmarked - the mark is a
-    // per-registration promise, never inherited from the board's other doors.
+  });
+
+  it('does not inherit the mark onto a registration that declares nothing', async () => {
+    // The mark is a per-registration promise, never taken from the board's
+    // other doors - proved on the built control, because no registration on
+    // this board declares nothing any more (see registerUnmarked68K).
+    await registerUnmarked68K();
+    const marks = new Map(
+      getDoors().map((d) => [d.command.toUpperCase(), formatDoorLine(d, false).includes('[C64]')]),
+    );
     expect(marks.get(UNMARKED.toUpperCase())).toBe(false);
   });
 
   it(`${UNMARKED} - a 68K door that declared nothing - is still refused at 40`, async () => {
-    await registerFromDisk([UNMARKED]);
+    await registerUnmarked68K();
     const socket = makeSocket();
 
     await handleCommand(socket as any, sysopC64(UNMARKED), '');

@@ -247,7 +247,10 @@ function cellDiff(a: TestTerminal, b: TestTerminal): string[] {
 // Screens the board READS: MENU is a conference screen, so the old
 // `Screens/MENU*.TXT` copies here were dead files the template stopped
 // carrying (2026-09-08).
-const REAL_SCREENS = ['Conf1/Menu.txt', 'Conf1/MENU250.TXT', 'Conf2/Menu.txt'];
+// `Conf2/Menu.txt` was here until `e73551d5c` deleted it with the other
+// thirteen conference copies; every case below died on a missing file rather
+// than on anything about wipes. Both survivors are tracked.
+const REAL_SCREENS = ['Conf1/Menu.txt', 'Conf1/MENU250.TXT'];
 
 /**
  * What screen.handler hands `getWipeFrames`: the decoded file, wipe code

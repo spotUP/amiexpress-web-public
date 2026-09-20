@@ -19,7 +19,10 @@ import {
   installC64DoorAdapter,
   uninstallC64DoorAdapter,
 } from '../../src/server/c64-door-adapter';
-import { doorOpensForC64, resolveDoorAdaptColumns } from '../../src/utils/door-min-columns.util';
+import { doorOpensForC64, resolveDoorAdaptColumns,
+  resolveDoorMinColumns,
+  sessionColumns,
+} from '../../src/utils/door-min-columns.util';
 import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { doorViewportsAt40 } from '../../src/utils/door-min-columns.util';
 import { routeDoorInput, panKeyOf } from '../../src/services/door-input-routing';
@@ -173,22 +176,51 @@ describe('GL is the worked example', () => {
   );
   const INFO = path.resolve(__dirname, '../../../../Commands/BBSCmd/gl.info');
 
-  test('the door declares it, and declaring it is what opens the door to a C64', () => {
-    const tools = readTooltypeMap(INFO);
-    expect(tools.get('C64_VIEWPORT')).toBe('1');
-    // No C64_ADAPT on this door: the viewport declaration IS the claim, or
-    // the tooltype would leave the door gated and the adapter uninstalled -
-    // a feature that does nothing, which is the failure this repo keeps
-    // finding.
-    expect(tools.get('C64_ADAPT')).toBeUndefined();
+  /*
+   * THE WORKED EXAMPLE MOVED, AND NO DOOR DECLARES THE WINDOW ANY MORE.
+   *
+   * This read `gl.info` and required `C64_VIEWPORT=1` on it, because GL was
+   * the first windowed door - a 68K binary whose positioned UI nothing could
+   * fold. On 2026-09-16 the sysop replaced it: "wire it up so i can test,
+   * replace the 68k door" (`1ba3bbc37`), and `GL` is now `TYPE=TS` at
+   * `Doors/glc-viewer`, opening to a C64 through `MIN_COLUMNS=40` because the
+   * port lays itself out at forty. `GLC` followed it later.
+   *
+   * So NOTHING in `Commands/BBSCmd` declares `C64_VIEWPORT` today, and the
+   * adapter's window code (c64-door-adapter.ts, transport-session.ts,
+   * socket-handlers.ts) is reachable only from a door that asks for it. That
+   * is worth knowing rather than asserting away: the rule is still tested
+   * here, on a door shaped like the one it is for, and the BOARD's side of it
+   * is pinned as what it actually is.
+   */
+  test('a door that declares the window opens to a C64, and one that declares nothing does not', () => {
+    const windowed: any = { type: 'XIM', toolTypes: { TYPE: 'XIM', C64_VIEWPORT: '1' } };
+    expect(resolveDoorAdaptColumns(windowed)).toBe(40);
+    expect(doorOpensForC64(windowed, { petsciiMode: true, screenWidth: 40 })).toBe(true);
 
-    const door: any = { type: 'XIM', toolTypes: Object.fromEntries(tools) };
-    expect(resolveDoorAdaptColumns(door)).toBe(40);
-    expect(doorOpensForC64(door, { petsciiMode: true, screenWidth: 40 })).toBe(true);
-
-    // And a door that declares neither is still gated.
+    // A door that declares neither is still gated.
     const plain: any = { type: 'XIM', toolTypes: { TYPE: 'XIM' } };
     expect(doorOpensForC64(plain, { petsciiMode: true, screenWidth: 40 })).toBe(false);
+  });
+
+  test('GL still opens for a C64 caller, by the declaration it carries now', () => {
+    const tools = readTooltypeMap(INFO);
+    // The port's own route: it lays itself out at forty, so it needs no
+    // adapter and no window - `C64_ADAPT` would put a frame adapter over a
+    // screen that is already the right width.
+    expect(tools.get('MIN_COLUMNS')).toBe('40');
+    expect(tools.get('C64_ADAPT')).toBeUndefined();
+
+    /*
+     * By the WIDTH gate, not the adapter gate. `doorOpensForC64` answers for
+     * the types the adapter seam sees - XIM, DD, SIM, FIM - and GL is TS
+     * now: it is not adapted, it is already forty, so what has to be true of
+     * it is that the board's minimum-width rule lets a 40-column caller in.
+     */
+    const door: any = { type: tools.get('TYPE'), toolTypes: Object.fromEntries(tools) };
+    expect(resolveDoorMinColumns(door)).toBe(40);
+    expect(sessionColumns({ petsciiMode: true, screenWidth: 40 }))
+      .toBeGreaterThanOrEqual(resolveDoorMinColumns(door));
   });
 
   test('the fold breaks its records; the window keeps them whole', async () => {

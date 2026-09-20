@@ -27,6 +27,7 @@ const CardButtons_1 = require("./managers/CardButtons");
 const games_1 = require("./lib/games");
 const lib_1 = require("./lib");
 const activity_hints_1 = require("./lib/activity-hints");
+const table_bots_1 = require("./lib/table-bots");
 const live_chat_1 = require("./lib/live-chat");
 const Scores_1 = require("./managers/Scores");
 const desktop_layout_1 = require("./lib/desktop-layout");
@@ -656,54 +657,14 @@ class CardLobbyApp {
         table.updatedAt = Date.now();
     }
     getHumanPlayers(table) {
-        return table.players.filter((player) => player.role === 'player' && !(0, lib_1.isBotPlayer)(player));
+        return (0, table_bots_1.humanPlayers)(table);
     }
     getOpenHumanSeats(table) {
         const humans = this.getHumanPlayers(table).length;
         return Math.max(0, table.maxPlayers - humans);
     }
     syncBotsForTable(table) {
-        const humans = this.getHumanPlayers(table);
-        const bustedBots = table.players.filter((player) => player.role === 'player' && (0, lib_1.isBotPlayer)(player) && player.stack <= 0);
-        if (bustedBots.length > 0) {
-            const bustedIds = new Set(bustedBots.map((bot) => bot.userId));
-            table.players = table.players.filter((player) => !bustedIds.has(player.userId));
-        }
-        const bots = table.players.filter((player) => player.role === 'player' && (0, lib_1.isBotPlayer)(player));
-        const targetBots = Math.max(0, table.maxPlayers - humans.length);
-        let changed = false;
-        if (bustedBots.length > 0)
-            changed = true;
-        if (bots.length > targetBots) {
-            const removeCount = bots.length - targetBots;
-            const botIds = bots.slice(-removeCount).map((bot) => bot.userId);
-            table.players = table.players.filter((player) => !botIds.includes(player.userId));
-            changed = true;
-        }
-        if (bots.length < targetBots) {
-            const takenSeats = new Set(table.players.map((player) => player.seat));
-            for (let seat = 0; seat < table.maxPlayers; seat += 1) {
-                if (table.players.filter((p) => p.role === 'player' && (0, lib_1.isBotPlayer)(p)).length >= targetBots) {
-                    break;
-                }
-                if (takenSeats.has(seat))
-                    continue;
-                const botId = (0, lib_1.buildBotId)(table.id, seat);
-                table.players.push({
-                    userId: botId,
-                    username: (0, lib_1.buildBotName)(seat),
-                    seat,
-                    stack: table.buyIn,
-                    buyIn: table.buyIn,
-                    role: 'player',
-                    joinedAt: Date.now(),
-                    isBot: true,
-                });
-                takenSeats.add(seat);
-                changed = true;
-            }
-        }
-        return changed;
+        return (0, table_bots_1.syncBotsForTable)(table);
     }
     updateTableStatus(table) {
         if (table.hand) {

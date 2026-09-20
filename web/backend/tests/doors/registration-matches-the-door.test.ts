@@ -88,13 +88,18 @@ function manifestCommand(doorDir: string): string | null {
 const DECLARED_ALIASES = new Map<string, string>([
   ['irc.info', 'LIVECHAT'],
   /*
-   * GL and gl are short forms of GLC, and all three icons carry the same
-   * LOCATION - Doors/glc/glcviewer. One binary reading one GLCViewer.cfg, so
-   * the admin drawing GLC's settings under GL is right rather than crossed:
-   * a sysop who changes STYLE under either name has changed it for both.
+   * GL, gl and GLC are one door under three icons - the TypeScript viewer in
+   * `Doors/glc-viewer`, reading one GLCViewer.cfg. A sysop who changes STYLE
+   * under any of those names has changed it for all of them, so the admin
+   * drawing the same settings form under each is right rather than crossed.
+   *
+   * The DECLARED name moved: the manifest said `GLC` when this list was
+   * written and says `GL` now, which is what `~CC_gl` in logon20.txt runs and
+   * what the CallersLog records. So the long form is the alias today, and the
+   * short ones need no entry at all. Kept as a map rather than deleted,
+   * because the pairing is the point: three icons, one settings form.
    */
-  ['gl.info', 'GLC'],
-  ['GL.info', 'GLC'],
+  ['glc.info', 'GL'],
   /*
    * SUBSCAN is the SAME BINARY as SUBS under a second name, on purpose: it is
    * how one door tells its full screen from the three-line digest a

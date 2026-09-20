@@ -80,6 +80,7 @@
  *
  * NO `any` crosses this module's boundary, and it imports nothing at all.
  */
+import { MEDIA_RULINGS } from './transport-event-rulings.media';
 /**
  * What happens to one event name on a byte transport.
  *
@@ -239,103 +240,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "branch (server/connection-emitter.ts:92-116) and never reaches this table; " +
     "the entry exists so the census is total and so a reader of EVENT_RULINGS " +
     "finds every name in one place. 1832 emit sites in web/backend/src.",
-  },
-  "audio-speaking-status": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:1147. Door-side listener: " +
-    "Doors/voice-chat/src/index.ts, Doors/livechat/features/voice-chat.ts. A " +
-    "byte terminal has no media stack at all, so there is nothing to translate " +
-    "this into.",
-  },
-  "audio:data": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:257. Browser consumer: " +
-    "packages/terminal/src/utils/media-handler.ts. Door-side listener: " +
-    "Doors/voice-chat/src/client.ts, Doors/grandmaster/app.ts. A byte terminal " +
-    "has no media stack at all, so there is nothing to translate this into.",
-  },
-  "audio:levels": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:220. Door-side listener: " +
-    "Doors/neo-blessed-showcase/app.ts, Doors/voice-chat/src/index.ts. A byte " +
-    "terminal has no media stack at all, so there is nothing to translate this " +
-    "into.",
-  },
-  "audio:muted": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:157. Browser consumer: " +
-    "packages/terminal/src/utils/media-handler.ts. A byte terminal has no media " +
-    "stack at all, so there is nothing to translate this into.",
-  },
-  "audio:play-sfx": {
-    kind: "web-only",
-    note:
-    "A real session-socket emit the backend census could never see: the SDK " +
-    "audio engine writes it to `this.socket`, the caller's own socket, assigned " +
-    "from the constructor argument (sdk/engines/audio/audio-engine.ts:102). " +
-    "Sites: sdk/engines/audio/audio-engine.ts:1196, :1214, :1231. A byte " +
-    "terminal has no Web Audio context, so there is nothing to play.",
-  },
-  "audio:set-ui-sounds": {
-    kind: "web-only",
-    note:
-    "A real session-socket emit the backend census could never see: the SDK " +
-    "audio engine writes it to `this.socket`, the caller's own socket, assigned " +
-    "from the constructor argument (sdk/engines/audio/audio-engine.ts:102). " +
-    "Sites: sdk/engines/audio/audio-engine.ts:243. A byte terminal has no Web " +
-    "Audio context, so there is nothing to play.",
-  },
-  "audio:set-volume": {
-    kind: "web-only",
-    note:
-    "A real session-socket emit the backend census could never see: the SDK " +
-    "audio engine writes it to `this.socket`, the caller's own socket, assigned " +
-    "from the constructor argument (sdk/engines/audio/audio-engine.ts:102). " +
-    "Sites: sdk/engines/audio/audio-engine.ts:266. A byte terminal has no Web " +
-    "Audio context, so there is nothing to play.",
-  },
-  "audio:start-streaming": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:115. Browser consumer: " +
-    "packages/terminal/src/components/BBSTerminal.tsx. Door-side listener: " +
-    "Doors/neo-blessed-showcase/client.ts, Doors/voice-chat/src/client.ts. A " +
-    "byte terminal has no media stack at all, so there is nothing to translate " +
-    "this into.",
-  },
-  "audio:stop-streaming": {
-    kind: "web-only",
-    note:
-    "Browser media API channel. Emitted by a DOOR onto the caller's socket - " +
-    "Doors/neo-blessed-showcase/app.ts:3445, whose own comment says \"Tell " +
-    "browser client to start audio capture\" three lines above the start half. " +
-    "The backend also registers an INBOUND handler of the same name " +
-    "(handlers/audio-video.handler.ts:131) and the browser an outbound one " +
-    "(packages/terminal/src/components/BBSTerminal.tsx:1558). A byte terminal " +
-    "has no capture device and no Web Audio context.",
-  },
-  "audio:stream-started": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:120. A byte terminal has no media stack at " +
-    "all, so there is nothing to translate this into.",
-  },
-  "audio:stream-stopped": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/audio-video.handler.ts:141. A byte terminal has no media stack at " +
-    "all, so there is nothing to translate this into.",
   },
   "bbs:event": {
     kind: "not-transport",
@@ -1338,6 +1242,26 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "its canvas). A byte caller has no canvas: a real C64 paints its own " +
     "palette and a PETSCII-over-telnet terminal has its own setting for it.",
   },
+  "emulator:open": {
+    kind: "web-only",
+    note:
+    "Opens the browser's EMULATOR PANE over the terminal, with the machine " +
+    "and program to run in the payload (Doors/beeb/app.ts:246, " +
+    "Doors/teletext/app.ts:621; consumer " +
+    "packages/terminal/src/components/EmulatorOverlay.tsx). The door hands " +
+    "the browser a second screen and goes on writing to the first. A byte " +
+    "caller has nowhere to put one - there is no pane, and the BBC Micro is " +
+    "not something a telnet stream can carry - so the door's own text path " +
+    "is the whole of what reaches them.",
+  },
+  "emulator:close": {
+    kind: "web-only",
+    note:
+    "Takes the pane away again (Doors/beeb/app.ts:118, " +
+    "Doors/teletext/app.ts:194, both on the door's way out). The other half " +
+    "of `emulator:open` and web-only for the same reason: closing a window " +
+    "that was never opened is nothing to translate.",
+  },
   "petscii-charset": {
     kind: "web-only",
     note:
@@ -1914,67 +1838,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "terminal has no media stack at all, so there is nothing to translate this " +
     "into.",
   },
-  "voice:joined": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:140, " +
-    "handlers/voice-channel.handler.ts:283. Door-side listener: " +
-    "Doors/livechat/features/voice-chat.ts, " +
-    "Doors/livechat/features/voice-channel-ux.ts. A byte terminal has no media " +
-    "stack at all, so there is nothing to translate this into.",
-  },
-  "voice:left": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:183, " +
-    "handlers/voice-channel.handler.ts:330, " +
-    "handlers/voice-channel.handler.ts:438. Door-side listener: " +
-    "Doors/livechat/features/voice-chat.ts, " +
-    "Doors/livechat/features/voice-channel-ux.ts. A byte terminal has no media " +
-    "stack at all, so there is nothing to translate this into.",
-  },
-  "voice:mute": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:209. Door-side listener: " +
-    "Doors/livechat/features/voice-channel-ux.ts. A byte terminal has no media " +
-    "stack at all, so there is nothing to translate this into.",
-  },
-  "voice:mute-remote": {
-    kind: "web-only",
-    note:
-    "LiveChat asks the caller's browser to mute one remote participant's audio " +
-    "(Doors/livechat/server.ts:1604). Browser WebRTC; a byte terminal has no " +
-    "media stack at all.",
-  },
-  "voice:screenshare-toggle": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:387. A byte terminal has no media stack " +
-    "at all, so there is nothing to translate this into.",
-  },
-  "voice:speaking": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:413. Door-side listener: " +
-    "Doors/livechat/features/voice-chat.ts, " +
-    "Doors/grandmaster/ui/versus-screen.ts. A byte terminal has no media stack " +
-    "at all, so there is nothing to translate this into.",
-  },
-  "voice:video-toggle": {
-    kind: "web-only",
-    note:
-    "Browser media API channel (WebRTC / Web Audio), emitted at " +
-    "handlers/voice-channel.handler.ts:232. Door-side listener: " +
-    "Doors/livechat/features/voice-chat.ts, " +
-    "Doors/livechat/features/voice-channel-ux.ts. A byte terminal has no media " +
-    "stack at all, so there is nothing to translate this into.",
-  },
   "window-size": {
     kind: "not-transport",
     owner: "TelnetConnection / SSHConnection",
@@ -1994,6 +1857,7 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
  */
 export const EVENT_RULINGS: Readonly<Record<string, EventRuling>> = Object.freeze({
   ...NAMED_RULINGS,
+  ...MEDIA_RULINGS,
   ...Object.fromEntries(
     Object.entries(BROKER_SITES).map(([name, site]) => [name, brokerRuling(site)]),
   ),

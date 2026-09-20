@@ -126,6 +126,8 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'door:ready',
   'door:status',
   'download-file',
+  'emulator:close',
+  'emulator:open',
   'error',
   'example-data',
   'example-result',
@@ -587,7 +589,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // the table from 247 to 248. `petscii-off` needed no new ruling; it had
     // one already and was simply missing from PINNED_EVENT_NAMES, which is
     // why the table was 247 against a pin of 246.
-    expect(ruled.length).toBe(248);
+    // 250 as of 2026-09-20: `emulator:open` and `emulator:close`, both
+    // web-only - the BBC Micro pane the beeb and teletext doors raise over
+    // the terminal. Emitted from committed code with no ruling; the arm-B
+    // census is what caught them.
+    expect(ruled.length).toBe(250);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -648,7 +654,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // direction of the PETSCII switch, which had carried a ruling since
       // 2026-09-15 without the census being able to see its optional-chained
       // call site).
-      'web-only': 118,
+      // 120 (2026-09-20): `emulator:open` and `emulator:close` - see the
+      // arm-B note below. A byte caller has no pane to open.
+      'web-only': 120,
       'not-transport': 104,
     });
   });
@@ -748,7 +756,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // the board also sends, not a name that went missing. Measured against
     // HEAD's own tree before the number moved: both answer 98, so the pin
     // had gone stale on committed code rather than on anything in flight.
-    expect(fromB.length).toBe(98);
+    // 100 as of 2026-09-20: `emulator:open` and `emulator:close`, the BBC
+    // Micro pane the beeb and teletext doors raise over the terminal
+    // (Doors/beeb/app.ts, Doors/teletext/app.ts). They were emitted from
+    // committed code with no ruling at all, and this pin is what said so -
+    // the fix is the web-only ruling beside `petscii-charset`, not this
+    // number moving on its own.
+    expect(fromB.length).toBe(100);
 
     const live = [...new Set([...fromA, ...fromB])].sort();
     const pinned = [...PINNED_EVENT_NAMES].sort();

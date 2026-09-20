@@ -275,7 +275,23 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
    * door marked on disk and forgotten here would be silently untested, which
    * is exactly how RTW spent Phase 3 marked in the docs and unmarked on disk.
    */
-  it('is exactly the set of commands claiming C64_ADAPT on this board', () => {
+  /*
+   * ONE DIRECTION, BY THE SYSOP'S RULING (2026-09-20).
+   *
+   * This used to assert set EQUALITY: every mark on the board had to have a
+   * capture behind it and every capture a mark in front of it. The board has
+   * drifted the other way - 37 registrations gained `C64_ADAPT=40` as
+   * collateral in `19143adc0`, a commit about deploy art that never mentions
+   * C64 - and asked whether to strip them or widen this, the sysop kept the
+   * marks.
+   *
+   * So the half that still bites is PROOF -> MARK: a door with a capture
+   * that stopped claiming the tooltype is a door whose C64 support was
+   * withdrawn without anyone saying so, and that is still red. MARK ->
+   * PROOF is now only reported, because a mark the corpus cannot vouch for
+   * is the board's business and no longer this suite's.
+   */
+  it('marks every door the corpus can vouch for, and says which marks it cannot', () => {
     const onDisk = fs
       .readdirSync(BBSCMD)
       .filter((f) => f.endsWith('.info'))
@@ -285,8 +301,22 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
         catch { return false; }
       });
     // Uppercased on both sides: `ulist.info` answers to the command ULIST.
-    expect(onDisk.map((c) => c.toUpperCase()).sort())
-      .toEqual(C64_MARKED.map((c) => c.toUpperCase()).sort());
+    const marked = new Set(onDisk.map((c) => c.toUpperCase()));
+    const proven = C64_MARKED.map((c) => c.toUpperCase());
+
+    const withdrawn = proven.filter((command) => !marked.has(command));
+    expect({ withdrawn }).toEqual({ withdrawn: [] });
+
+    // Reported, not asserted: the board may mark what it likes, and a reader
+    // of this suite should still be able to see how far ahead of the corpus
+    // it has gone.
+    const unproven = [...marked].filter((command) => !proven.includes(command)).sort();
+    if (unproven.length > 0) {
+      console.log(
+        `[compact-40] ${unproven.length} registration(s) claim C64_ADAPT with no capture `
+        + `behind them: ${unproven.join(', ')}`,
+      );
+    }
   });
 
   it.each(C64_MARKED)('a C64 session opens %s and the adapter is on the wire inside the run', async (command) => {
