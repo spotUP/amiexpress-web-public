@@ -1179,6 +1179,23 @@ debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${s
 
     this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
+    /*
+     * THE ANSWER AS THE DOOR WILL READ IT.
+     *
+     * GWall's colour prompt rejects the caller's key on the live board and
+     * accepts the same key, from the same binary, under the harness - so the
+     * byte written here is the one thing that can still differ, along with
+     * WHERE it was written and WHICH port was stamped beside it. Printed
+     * after the reply, from memory rather than from the variable, because a
+     * value that was right until reply() overwrote it looks identical in a
+     * log that trusts the variable.
+     */
+    console.log(
+      `[JH_HK] replied ${JSON.stringify(char)} -> 0x${keyCode.toString(16)} ` +
+        `at 0x${stringAddr.toString(16)} (read back 0x${this.emulator.readMemory(stringAddr).toString(16)}), ` +
+        `port=${ximPort} msg=0x${msg.msgAddr.toString(16)} strPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'}`,
+    );
+
     // DEBUG: Verify character is still there after reply
     const verifyChar = this.emulator.readMemory(stringAddr);
     debugLog(`[DEBUG JH_HK completeHotkey] AFTER reply: msg.string[0] = 0x${verifyChar.toString(16)} (expected 0x${keyCode.toString(16)})`);
