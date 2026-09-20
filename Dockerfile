@@ -569,6 +569,16 @@ EXPOSE 3001 2323 2222 8080 1541
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:3001/ || exit 1
 
+# When the event loop stops, the watchdog (server/event-loop-watchdog.ts)
+# sends SIGUSR2 before it kills the process. With this flag node answers that
+# signal from its own reporting thread - which a blocked loop does not stop -
+# and writes a diagnostic report carrying the JS stack of the thread that is
+# stuck. On 2026-09-20 the board froze inside a 68K door for two hours forty-
+# seven minutes and left nothing behind but its last log line, because nothing
+# inside a blocked process can write down where it is. This is how the next
+# one gets diagnosed instead of guessed at.
+ENV NODE_OPTIONS="--report-on-signal --report-directory=/app/logs"
+
 # Set working directory to backend
 WORKDIR /app/web/backend
 

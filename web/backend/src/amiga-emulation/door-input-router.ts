@@ -69,6 +69,24 @@ export function routeAmigaDoorInput(
 ): void {
   if (!shared) return;
 
+  /*
+   * EVERY BYTE A 68K DOOR IS GIVEN, NAMED AT THE DOOR.
+   *
+   * GWall's colour prompt reprinted itself five times for a caller on
+   * 2026-09-20 ("Kan inte valja farg. Kommer inte vidare") and nothing in
+   * the log said what the door had been handed - the door reprints on any
+   * key it does not know, so the bytes ARE the diagnosis and they were the
+   * one thing not written down. This is the same class of line as the
+   * bsdsocket send/recv traces: one line per keystroke, at a rate a human
+   * generates, and it is what makes an input bug reproducible from a log
+   * instead of from a guess.
+   */
+  console.log(
+    `[DoorInput] ${JSON.stringify(data)} -> ` +
+      `fim=${!!shared.fimProtocol} dd=${!!shared.dreamDoorLibrary?.isActive?.()} ` +
+      `xim=${!!shared.ximProtocol} tim=${!!shared.timHandler?.isWaitingForInput?.()}`,
+  );
+
   if (shared.fimProtocol) {
     shared.fimProtocol.queueInput(data);
     return;

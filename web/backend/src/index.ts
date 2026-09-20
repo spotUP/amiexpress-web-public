@@ -1,4 +1,5 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
+import { startEventLoopWatchdog } from "./server/event-loop-watchdog";
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
 import type { WidthGateFallThrough } from './utils/door-min-columns.util';
@@ -848,6 +849,22 @@ const heartbeatTimer = setInterval(() => {
   }
 }, MEMORY_LOG_INTERVAL);
 heartbeatTimer.unref?.();
+
+/*
+ * The heartbeat above only PRINTS that the loop is turning. Nothing acted on
+ * its silence, and on 2026-09-20 it went quiet at 14:27 inside a 68K door and
+ * the board answered nobody until it was restarted by hand at 17:14. The
+ * watchdog below is the thing that acts: it lives on a worker thread, off the
+ * event loop, and kills the process when the loop stops so Docker's
+ * restart=unless-stopped brings the board back in about a minute. See
+ * server/event-loop-watchdog.ts for why a kill is the only move available.
+ */
+const eventLoopWatchdog = startEventLoopWatchdog();
+if (!eventLoopWatchdog) {
+  console.log(
+    "[EventLoopWatchdog] Not watching (set EVENT_LOOP_WATCHDOG_SECONDS to arm it outside production).",
+  );
+}
 
 // SIGUSR1 - the deploy workflow's "you are about to be replaced" signal.
 //

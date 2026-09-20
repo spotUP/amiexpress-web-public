@@ -907,6 +907,22 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       const token = this.inputQueue.shift()!;
       const keyData = this.processHotkeyToken(token);
 
+      /*
+       * WHICH KEY ANSWERED THIS PROMPT, AND WAS IT THE CALLER'S LAST ONE.
+       *
+       * A hotkey is answered out of the TYPE-AHEAD QUEUE, so the key a door
+       * acts on is not necessarily the key the caller just pressed - it is
+       * the oldest one nobody has consumed. When GWall's colour prompt kept
+       * reprinting on 2026-09-20 there was no way to tell a key that never
+       * arrived from a stale one arriving in its place, because neither the
+       * token nor the depth behind it was written anywhere. Both, once per
+       * prompt.
+       */
+      console.log(
+        `[JH_HK] answered with ${JSON.stringify(token)} -> ` +
+          `${JSON.stringify(keyData)} (${this.inputQueue.length} more queued)`,
+      );
+
       // Skip ignored escape sequences (Home, End, Page Up/Down, etc.)
       if (keyData === '') {
 debugLog(`[XIMIOHandler] JH_HK: Skipping ignored key sequence, waiting for next input`);
