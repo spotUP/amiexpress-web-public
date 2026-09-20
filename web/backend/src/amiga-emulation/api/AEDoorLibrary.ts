@@ -91,7 +91,8 @@ const MESSAGE_STRING_CAPACITY = 198;
  * so that 68K doors see exactly what they expect.
  * ============================================================================
  */
-import { waitBudgetMs, asyncWaitEnabled } from './wait-budget';
+import { waitBudgetMs, asyncWaitEnabled, HUMAN_WAIT_CEILING_MS } from './wait-budget';
+import { StaleReplyLedger } from './stale-reply-ledger';
 export { waitBudgetMs, asyncWaitEnabled };
 
 export class AEDoorLibrary {
@@ -105,6 +106,12 @@ export class AEDoorLibrary {
   // Callback to process XIM messages synchronously during waitForReply
   // This is needed because trap handlers are synchronous and can't yield to async polling
   private processXIMMessageCallback: ((bbsPortAddr: number) => void) | null = null;
+
+  /** Is the board parked on the CALLER? Null = nobody wired it. */
+  private callerWaitProbe: (() => boolean) | null = null;
+
+  /** Replies owed to waits that gave up - see StaleReplyLedger. */
+  private readonly staleReplies = new StaleReplyLedger();
 
   constructor(
     socket: Socket,
@@ -130,6 +137,16 @@ export class AEDoorLibrary {
    */
   setXIMProcessor(callback: (bbsPortAddr: number) => void): void {
     this.processXIMMessageCallback = callback;
+  }
+
+  /** How the wait loop asks whether a person is being waited for. */
+  setCallerWaitProbe(probe: () => boolean): void {
+    this.callerWaitProbe = probe;
+  }
+
+  /** True when a previous wait gave up and its reply has not arrived yet. */
+  hasStaleRepliesOwed(): boolean {
+    return this.staleReplies.owed();
   }
 
   /**
@@ -1877,7 +1894,11 @@ console.warn(
         // hold a node for ever - but at a length that only a wedged door
         // reaches. The board's own inactivity timer is what disconnects an
         // idle caller, and it owns that decision, not this loop.
-        const deadline = Date.now() + waitBudgetMs(command);
+        let deadline = Date.now() + waitBudgetMs(command);
+        // The deadline measures the BOARD, never the caller - it is pushed
+        // along while the XIM layer is parked on a person, and `hardStop`
+        // ends it regardless. Why, and what it cost: see wait-budget.ts.
+        const hardStop = Date.now() + HUMAN_WAIT_CEILING_MS;
         // This loop OWNS the pump while it runs. The XIM processor it calls
         // below drains its own handler promises with deasync too, and two
         // pumps must not nest - see api/pump-owner.ts. Registered here, read
@@ -1898,12 +1919,18 @@ console.warn(
           if (this.processXIMMessageCallback && state.bbsPortAddr) {
             this.processXIMMessageCallback(state.bbsPortAddr);
           }
+          const now = Date.now();
+          if (this.callerWaitProbe?.()) {
+            // Parked on the caller: the board is not slow, the person is.
+            deadline = Math.min(now + waitBudgetMs(command), hardStop);
+          }
           const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
           if (msgAddr !== 0) {
+            if (this.staleReplies.take()) return now < deadline;
             replied = true;
             return false;
           }
-          return Date.now() < deadline;
+          return now < deadline && now < hardStop;
         }));
       } else {
         // Default sync loop — holds the JS event loop. See
@@ -1916,6 +1943,9 @@ console.warn(
             this.processXIMMessageCallback(state.bbsPortAddr);
           }
           const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
+          if (msgAddr !== 0 && this.staleReplies.take()) {
+            continue;   // that one belonged to a wait that already gave up
+          }
           if (msgAddr !== 0) {
             if (i > 0) {
               console.log(`[AEDoorLibrary] waitForReply cmd=${diagCmd} got reply after ${i+1} iters replyPort=0x${state.replyPortAddr.toString(16)}`);
@@ -1930,6 +1960,10 @@ console.warn(
         }
       }
       if (!replied) {
+        // The board still owes this message an answer, and will deliver it
+        // to the reply port whenever it comes. Remember it so the next wait
+        // does not mistake it for its own.
+        this.staleReplies.owe();
         console.warn(
           `[AEDoorLibrary] No reply for command ${command} after ${iterations} iterations ` +
           `(${asyncWait ? 'async' : 'sync'} wait)` +

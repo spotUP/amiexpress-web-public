@@ -28,10 +28,58 @@ const MACHINE_WAIT_MS = 5000;
 const HUMAN_WAIT_MS = 10 * 60 * 1000;
 
 /**
- * The two commands whose reply is a keystroke: `JH_LI` (line input, 0) and
- * `JH_HK` (hotkey, 6). Everything else is the board answering the door.
+ * The end of every wait, whatever it is waiting for.
+ *
+ * The deadline below is held off while the board is parked on the CALLER
+ * (see AEDoorLibrary.waitForReply), which is correct while they are reading
+ * and typing and wrong if they have gone. This is the line under it: a node
+ * comes back on its own even when nobody answers the prompt at all.
  */
-const WAITS_FOR_A_PERSON = new Set<number>([XIMCommand.JH_LI, XIMCommand.JH_HK]);
+export const HUMAN_WAIT_CEILING_MS = HUMAN_WAIT_MS;
+
+/*
+ * WHY THE DEADLINE IS HELD WHILE A CALLER IS BEING WAITED FOR.
+ *
+ * A budget per command cannot tell a slow BOARD from a slow PERSON, and the
+ * list below was incomplete by exactly one: `JH_PM`, which is what E's
+ * `Prompt()` sends and what GWall reads its comment with. On 2026-09-20 a
+ * caller typed for thirteen seconds, the five-second machine stop expired on
+ * him, and the board answered that message afterwards - onto the reply port
+ * the door's NEXT wait polls. Every command from then on was answered by the
+ * previous command's reply: `HotKey()` returned a millisecond after each
+ * prompt with an unfilled buffer, the door read character 0, rejected it as a
+ * colour and redrew its menu for ever, at 100% CPU.
+ *
+ * So `AEDoorLibrary.waitForReply` asks the XIM layer whether it is parked on
+ * the caller and holds the deadline while it is. That covers the commands
+ * this list cannot: a `JH_SM` whose own output raises `(Pause)` is a person
+ * too. `HUMAN_WAIT_CEILING_MS` above is the end of it either way, so a caller
+ * who walks away still gives the node back.
+ */
+
+/**
+ * The commands whose reply is a keystroke: `JH_LI` (line input, 0), `JH_PM`
+ * (prompt-then-read, 5), `JH_HK` (hotkey, 6) and `JH_ExtHK` (extended
+ * hotkey, 15). Everything else is the board answering the door.
+ *
+ * `JH_PM` was missing until 2026-09-20 and that omission is the whole of
+ * GWall's looping colour prompt: E's `Prompt()` - which the door reads its
+ * comment with - sends `JH_PM`, so a caller who took longer than five
+ * seconds to type blew the machine stop, and every command after it was
+ * answered by the previous one's late reply. `HotKey()` then returned
+ * character 0 instantly, for ever.
+ *
+ * The list is no longer the only defence - the wait also holds its deadline
+ * while the XIM layer says it is parked on the caller, which covers a
+ * `(Pause)` raised mid-write by a command that is usually instant - but a
+ * command known to read a person should not depend on that.
+ */
+const WAITS_FOR_A_PERSON = new Set<number>([
+  XIMCommand.JH_LI,
+  XIMCommand.JH_PM,
+  XIMCommand.JH_HK,
+  XIMCommand.JH_ExtHK,
+]);
 
 /**
  * WHETHER A WAITING DOOR PUMPS THE EVENT LOOP - on unless a board says no.

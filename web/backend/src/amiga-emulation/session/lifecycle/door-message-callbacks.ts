@@ -118,6 +118,16 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
     deadline: number;
   } | null = null;
 
+  /*
+   * Let the wait loop ask whether the board is parked on the CALLER.
+   * Without this the deadline expires on a person typing, and the reply
+   * that arrives afterwards answers the door's NEXT command - which is how
+   * GWall's colour prompt came to loop for ever (2026-09-20).
+   */
+  libraryManager.aedoorLibrary.setCallerWaitProbe(
+    () => getXimProtocol()?.isWaitingForCaller() === true,
+  );
+
   libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
     const callStart = XIM_TIMING ? Date.now() : 0;
 

@@ -8,6 +8,7 @@
  */
 
 import * as amigafs from '../../utils/amigafs';
+import { logHotkeyFromTypeAhead, logHotkeyReply } from './hotkey-trace';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
@@ -200,6 +201,27 @@ export class XIMIOHandler {
    */
   isKeyPressed(key: string): boolean {
     return this.keyState[key] === true;
+  }
+
+  /**
+   * True while the board is holding a door's message open FOR THE CALLER.
+   *
+   * `waitForReply`'s deadline is a stop for a wedged BOARD, and it cannot
+   * tell that from a caller who is still typing - so it used to expire on
+   * the person. Every prompt that parks answers here, whatever command
+   * carried it: a hotkey, a line, a secure line, an extended hotkey, and the
+   * `(Pause)` a door's own output can raise mid-write. One question instead
+   * of a list of command numbers, because the list was the bug: JH_HK and
+   * JH_LI were on it and JH_PM, which is what `Prompt()` sends and what
+   * GWall reads its comment with, was not.
+   */
+  isWaitingForCaller(): boolean {
+    return (
+      this.waitingForHotkey ||
+      this.waitingForLineInput ||
+      this.waitingForExtHotkey ||
+      this.waitingForPause
+    );
   }
 
   /**
@@ -907,21 +929,7 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       const token = this.inputQueue.shift()!;
       const keyData = this.processHotkeyToken(token);
 
-      /*
-       * WHICH KEY ANSWERED THIS PROMPT, AND WAS IT THE CALLER'S LAST ONE.
-       *
-       * A hotkey is answered out of the TYPE-AHEAD QUEUE, so the key a door
-       * acts on is not necessarily the key the caller just pressed - it is
-       * the oldest one nobody has consumed. When GWall's colour prompt kept
-       * reprinting on 2026-09-20 there was no way to tell a key that never
-       * arrived from a stale one arriving in its place, because neither the
-       * token nor the depth behind it was written anywhere. Both, once per
-       * prompt.
-       */
-      console.log(
-        `[JH_HK] answered with ${JSON.stringify(token)} -> ` +
-          `${JSON.stringify(keyData)} (${this.inputQueue.length} more queued)`,
-      );
+      logHotkeyFromTypeAhead(token, keyData, this.inputQueue.length);
 
       // Skip ignored escape sequences (Home, End, Page Up/Down, etc.)
       if (keyData === '') {
@@ -1179,22 +1187,7 @@ debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${s
 
     this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
-    /*
-     * THE ANSWER AS THE DOOR WILL READ IT.
-     *
-     * GWall's colour prompt rejects the caller's key on the live board and
-     * accepts the same key, from the same binary, under the harness - so the
-     * byte written here is the one thing that can still differ, along with
-     * WHERE it was written and WHICH port was stamped beside it. Printed
-     * after the reply, from memory rather than from the variable, because a
-     * value that was right until reply() overwrote it looks identical in a
-     * log that trusts the variable.
-     */
-    console.log(
-      `[JH_HK] replied ${JSON.stringify(char)} -> 0x${keyCode.toString(16)} ` +
-        `at 0x${stringAddr.toString(16)} (read back 0x${this.emulator.readMemory(stringAddr).toString(16)}), ` +
-        `port=${ximPort} msg=0x${msg.msgAddr.toString(16)} strPtr=${stringPtr ? '0x' + stringPtr.toString(16) : 'NULL'}`,
-    );
+    logHotkeyReply(char, keyCode, stringAddr, this.emulator.readMemory(stringAddr), ximPort, msg.msgAddr, stringPtr);
 
     // DEBUG: Verify character is still there after reply
     const verifyChar = this.emulator.readMemory(stringAddr);

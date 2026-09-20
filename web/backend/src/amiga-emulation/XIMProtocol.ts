@@ -13,6 +13,7 @@
  */
 
 import { conferenceAmigaPath } from '../conferences/conference-paths';
+import { isIOCommand, isDataQueryCommand } from './xim/command-classes';
 import { config as appConfig } from '../config';
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
@@ -279,6 +280,11 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
    * Queue input from terminal for door to read via GETKEY or JH_LI
    * Called from AmigaDoorSession when 'door:input' event received
    */
+  /** True while a prompt is parked on the caller - see XIMIOHandler. */
+  isWaitingForCaller(): boolean {
+    return this.ioHandler.isWaitingForCaller();
+  }
+
   queueInput(data: string): void {
     this.ioHandler.queueInput(data);
   }
@@ -657,7 +663,7 @@ debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (corr
     }
 
     if (process.env.DREWALL_TRACE === '1' && msg.command === 100) {
-      console.log(`[DT_NAME_DEBUG] router: cmd=${msg.command} shuttingDown=${this.state.shuttingDown} isSystem=${this.isSystemCommand(msg.command)} isIO=${this.isIOCommand(msg.command)} isDataQ=${this.isDataQueryCommand(msg.command)}`);
+      console.log(`[DT_NAME_DEBUG] router: cmd=${msg.command} shuttingDown=${this.state.shuttingDown} isSystem=${this.isSystemCommand(msg.command)} isIO=${isIOCommand(msg.command)} isDataQ=${isDataQueryCommand(msg.command)}`);
     }
     // Handle system commands first (register/shutdown and others)
     if (this.isSystemCommand(msg.command)) {
@@ -690,13 +696,13 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     }
 
     // I/O Commands - handled by XIMIOHandler
-    if (this.isIOCommand(msg.command)) {
+    if (isIOCommand(msg.command)) {
       await this.handleIOCommand(msg);
       return;
     }
 
     // Data Query Commands (DT_*) - handled by XIMDataQueryHandler
-    if (this.isDataQueryCommand(msg.command)) {
+    if (isDataQueryCommand(msg.command)) {
       this.dataQueryHandler.handleDataQuery(msg);
       return;
     }
@@ -904,52 +910,6 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
     }
   }
 
-  /**
-   * Check if command is an I/O command
-   */
-  private isIOCommand(command: number): boolean {
-    const ioList = [
-      XIMCommand.JH_LI,
-      XIMCommand.JH_WRITE,
-      XIMCommand.JH_SM,
-      XIMCommand.JH_SMPTR,
-      XIMCommand.JH_PM,
-      XIMCommand.JH_HK,
-      XIMCommand.JH_SG,
-      XIMCommand.JH_SF,
-      XIMCommand.JH_MCI,
-      XIMCommand.JH_ExtHK,
-      XIMCommand.JH_FetchKey,
-      XIMCommand.JH_CO,
-      XIMCommand.JH_SO,
-      XIMCommand.JH_20,
-      XIMCommand.QUICK_KEY,
-      XIMCommand.GETKEY,
-      XIMCommand.DISPLAY_FILE,
-      XIMCommand.CHECK_TO_DISPLAY,
-      // THIS BOARD'S OWN, above express.e's MAX_CMD (1003).
-      //
-      // THIS LINE IS THE STEP THAT GETS FORGOTTEN. AEW_THEME was implemented
-      // in xim/data-query.ts and left out of `isDataQueryCommand`, so the C
-      // theme picker asked on every open, got "UNHANDLED COMMAND: 10100" and
-      // an empty reply, and drew every theme in the classic palette. The
-      // handler was fine; the route was missing.
-      // AEW_SETPOINTER writes the caller's pointer through loadMsgPointers /
-      // saveMsgPointers, so it is asynchronous too and belongs here for the
-      // same reason - and this is the line the comment above warns about.
-      XIMCommand.AEW_SETPOINTER,
-      // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
-      // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
-    ];
-    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-debugLog(
-        `[XIMProtocol][IOCheckDebug] command=${command} inIO=${ioList.includes(
-          command
-        )}`
-      );
-    }
-    return ioList.includes(command);
-  }
 
   /**
    * Handle I/O commands
@@ -1053,57 +1013,6 @@ debugLog(
     }
   }
 
-  /**
-   * Check if command is a data query command
-   */
-  private isDataQueryCommand(command: number): boolean {
-    // BB_* commands in 126-146 range should NOT be treated as data queries
-    // They are BBS info commands handled by bbsInfoHandler
-    // Also exclude MULTICOM (531) which is in the 527-548 range but handled by bbsInfoHandler
-    const isBBSInfo = [
-      XIMCommand.BB_CONFNAME,    // 126
-      XIMCommand.BB_CONFLOCAL,   // 127
-      XIMCommand.BB_LOCAL,       // 128
-      XIMCommand.BB_MAINLINE,    // 131
-      XIMCommand.BB_TASKPRI,     // 140
-      XIMCommand.BB_CHATFLAG,    // 142
-      XIMCommand.BB_PCONFNAME,   // 146
-      XIMCommand.BB_PCONFLOCAL,  // 147
-      XIMCommand.MULTICOM,       // 531
-    ].includes(command);
-
-    if (isBBSInfo) {
-      return false; // Not a data query - let it fall through to BBS info handler
-    }
-
-    const inRange =
-      (command >= 100 && command <= 146) ||
-      (command >= 527 && command <= 548) ||  // Extended to include MOD_TYPE, EDITOR_STRUCT, BYPASS_CSI_CHECK, SENTBY
-      command === 606 ||                      // DT_REALNAME
-      (command >= 637 && command <= 639) ||   // DT_INTERNETNAME, DT_TRANSLATOR, DT_HOST_LANGUAGE
-      (command >= 700 && command <= 704) ||   // DT_HOSTNAME, DT_HOSTIP, DT_GEOGRAPHIC, DT_SIZEUPLOAD, DT_SIZEDOWNLOAD
-      (command >= 900 && command <= 906) ||   // DT_CONFACCESS2, DT_CBYTESUPLOAD, DT_CBYTESDOWNLOAD, DT_CFILESUPLOAD, DT_CFILESDOWNLOAD, DT_CALLEDTODAY
-      (command >= 1000 && command <= 1002) || // DT_ADDBIT, DT_REMBIT, DT_QUERYBIT
-      // THIS BOARD'S OWN user fields, above express.e's MAX_CMD (1003).
-      //
-      // AEW_THEME reads and writes user.themePreference, which is what every
-      // DT_* case in data-query.ts does, so it is routed there. It was
-      // implemented in that handler and never added here, and this predicate
-      // is the only thing that reaches it: the C theme picker asked for the
-      // caller's theme on every open, got "UNHANDLED COMMAND: 10100" and an
-      // empty reply, and drew all seven themes in the classic palette with
-      // nothing marked (sysop, 2026-09-06: "themec is not using our themes").
-      command === XIMCommand.AEW_THEME ||
-      // The same route, and the same warning as above: a handler nothing
-      // reaches is a handler that does not exist.
-      command === XIMCommand.AEW_DISPLAYMODE;
-    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-debugLog(
-        `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`
-      );
-    }
-    return inRange;
-  }
 
   /**
    * Check if command is a BBS info command

@@ -48,13 +48,30 @@ describe('how long a door waits for a reply', () => {
     expect(waitBudgetMs(XIMCommand.JH_HK)).toBeLessThanOrEqual(60 * 60 * 1000);
   });
 
+  it('outlasts a caller typing at a PROMPT, which is not the same command', () => {
+    /*
+     * 2026-09-20, and the reason this test changed. `JH_PM` was on the
+     * machine list above as "post message". It is E's `Prompt()` - prompt,
+     * then read a line - and GWall reads its comment with it. A caller who
+     * took longer than five seconds to type therefore blew the stop, the
+     * board answered that message afterwards, and every command from then
+     * on was answered by the previous one's reply: `HotKey()` returned
+     * character 0 one millisecond after each prompt, the door rejected it
+     * as a colour, redrew the menu and spun. "it loops again".
+     */
+    expect(waitBudgetMs(XIMCommand.JH_PM)).toBeGreaterThan(A_HUMAN_PAUSE_MS);
+  });
+
+  it('outlasts a caller at an extended hotkey prompt', () => {
+    expect(waitBudgetMs(XIMCommand.JH_ExtHK)).toBeGreaterThan(A_HUMAN_PAUSE_MS);
+  });
+
   it('keeps the short stop for a command the board answers itself', () => {
     // These do not wait for a person, so a long stall IS a fault worth
     // stopping. Widening the budget for everything would have hidden those.
     for (const command of [
       XIMCommand.JH_SM,   // send message
       XIMCommand.JH_SG,   // show gfile
-      XIMCommand.JH_PM,   // post message
       XIMCommand.JH_SF,   // send file
     ]) {
       expect(waitBudgetMs(command)).toBe(5000);
@@ -74,17 +91,15 @@ describe('how long a door waits for a reply', () => {
      * the loop kept its hardcoded 5000, which is the exact shape of a green
      * test over a live bug.
      *
-     * The behaviour was proved by hand, with the real 68K binary through
-     * `run-amiga-door.ts`: a colour key pressed 26 s after the prompt drew
-     * GWall's menu twice before this change and once after. That cannot run
-     * in CI - it needs the emulator and half a minute - so this stands in
-     * for it and fails if the deadline stops consulting the command.
+     * The behaviour itself is driven through the real loop in
+     * `the-wait-measures-the-board-not-the-caller.test.ts`; this only keeps
+     * the deadline consulting the command at all.
      */
     const source = fs.readFileSync(
       path.join(__dirname, '../../src/amiga-emulation/api/AEDoorLibrary.ts'),
       'utf8',
     );
 
-    expect(source).toMatch(/const deadline = Date\.now\(\) \+ waitBudgetMs\(command\)/);
+    expect(source).toMatch(/deadline = Date\.now\(\) \+ waitBudgetMs\(command\)/);
   });
 });
