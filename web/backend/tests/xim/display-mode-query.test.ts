@@ -11,6 +11,7 @@ process.env.SKIP_DB_INIT = '1';
 import { displayModeOf } from '../../src/amiga-emulation/xim/display-mode.util';
 import { XIMProtocol } from '../../src/amiga-emulation/XIMProtocol';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
+import { isDataQueryCommand } from '../../src/amiga-emulation/xim/command-classes';
 
 /** Memory the message and its string live in, addressed the way a door does. */
 function makeEmulator() {
@@ -142,8 +143,9 @@ describe('the display mode a door is told', () => {
   });
 
   it('is routed as a data query, which is the line that gets forgotten', () => {
-    const { protocol } = makeProtocol({});
-    const isDataQuery = (protocol as any).isDataQueryCommand.bind(protocol);
-    expect(isDataQuery(XIMCommand.AEW_DISPLAYMODE)).toBe(true);
+    // The classifier left XIMProtocol on 2026-09-20 (it consults nothing but
+    // the command number, and that file was at its line ceiling), so this
+    // asks the function rather than a private method that no longer exists.
+    expect(isDataQueryCommand(XIMCommand.AEW_DISPLAYMODE)).toBe(true);
   });
 });

@@ -19,6 +19,7 @@ process.env.SKIP_DB_INIT = '1';
 
 import { XIMProtocol } from '../../src/amiga-emulation/XIMProtocol';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
+import { isDataQueryCommand } from '../../src/amiga-emulation/xim/command-classes';
 
 /** Memory the message and its string live in, addressed the way a door does. */
 function makeEmulator() {
@@ -101,7 +102,10 @@ describe('a door asking for the caller\'s theme', () => {
     // The predicate itself, by name: the handler has always been there and
     // this is the only line that reaches it.
     const { protocol } = makeProtocol({ id: 1 });
-    const isDataQuery = (protocol as any).isDataQueryCommand.bind(protocol);
+    // The classifier left XIMProtocol on 2026-09-20 - it consults nothing
+    // but the command number - so this asks the function, not a private
+    // method that no longer exists.
+    const isDataQuery = isDataQueryCommand;
     expect(isDataQuery(XIMCommand.AEW_THEME)).toBe(true);
   });
 });

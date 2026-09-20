@@ -124,7 +124,13 @@ function installXIMProcessor(deps: MessageCallbackDeps): void {
    * that arrives afterwards answers the door's NEXT command - which is how
    * GWall's colour prompt came to loop for ever (2026-09-20).
    */
-  libraryManager.aedoorLibrary.setCallerWaitProbe(
+  // Optional on purpose, and `?.` for a reason: the probe is a seam, and a
+  // library without it behaves exactly as it did before (the wait falls back
+  // to its command budget). Several suites build an `aedoorLibrary` double
+  // with only the members they exercise, and a hard call here turned every
+  // one of them into `setCallerWaitProbe is not a function` - a wiring line
+  // failing tests that have nothing to do with the wiring.
+  libraryManager.aedoorLibrary.setCallerWaitProbe?.(
     () => getXimProtocol()?.isWaitingForCaller() === true,
   );
 

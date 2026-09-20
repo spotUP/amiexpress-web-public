@@ -27,6 +27,7 @@ jest.mock('../../src/utils/message-pointers.util', () => ({
 }));
 
 import { handleSetPointer } from '../../src/amiga-emulation/xim/msgpointer';
+import { isIOCommand } from '../../src/amiga-emulation/xim/command-classes';
 
 /** A session in a conference, with pointers where the board left them. */
 function sessionAt(lastRead: number, lastScanned: number) {
@@ -201,7 +202,8 @@ describe('AEW_SETPOINTER, through the door entry point', () => {
 
   it('is routed, which is the step that gets forgotten', () => {
     const { protocol } = makeProtocol({});
-    const isIO = (protocol as any).isIOCommand.bind(protocol);
+    // Same move as `isDataQueryCommand`: the classifier is a function now.
+    const isIO = isIOCommand;
 
     expect(isIO(XIMCommand.AEW_SETPOINTER)).toBe(true);
   });
