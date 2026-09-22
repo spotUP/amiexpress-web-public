@@ -90,11 +90,25 @@ export interface PetsciiCanvasProps {
 
 /** A pointer over a cell of the 40x25 screen. Never over the border. */
 export interface PetsciiCellPointer {
-  type: 'down' | 'move' | 'up';
+  type: 'down' | 'move' | 'up' | 'wheel';
   x: number;
   y: number;
   /** The buttons held, as the DOM reports them - so a move can tell a drag from a hover. */
   buttons: number;
+  /**
+   * WHICH button, and what was held down with it.
+   *
+   * A door reads a click the way blessed does - left, middle or right, plus
+   * the modifiers - and the canvas is the only thing that knows. Before this
+   * the pointer carried neither, because its one consumer was the selection
+   * rectangle and a selection has no button.
+   */
+  button: number;
+  shift: boolean;
+  ctrl: boolean;
+  alt: boolean;
+  /** Wheel only: how far, in the DOM's units. */
+  deltaY?: number;
 }
 
 /** A rectangle of cells to outline, and what it means. */
@@ -524,12 +538,35 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   }, [width, height, border, cellW, cellH, cols, rows]);
 
   const reportCell = useCallback((
-    type: PetsciiCellPointer['type'],
+    type: 'down' | 'move' | 'up',
   ) => (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!onCellPointer) return;
     const cell = cellAt(e.clientX, e.clientY);
     if (!cell) return;
-    onCellPointer({ type, x: cell.x, y: cell.y, buttons: e.buttons });
+    onCellPointer({
+      type, x: cell.x, y: cell.y, buttons: e.buttons,
+      button: e.button, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey,
+    });
+  }, [onCellPointer, cellAt]);
+
+  /**
+   * The wheel, over a cell.
+   *
+   * A door that scrolls - a chat log, a file list - is scrolled with this on
+   * every other terminal the board serves; on the C64 screen the page moved
+   * instead and the door never heard. `preventDefault` because the canvas IS
+   * the surface the caller is pointing at.
+   */
+  const reportWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (!onCellPointer) return;
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell) return;
+    e.preventDefault();
+    onCellPointer({
+      type: 'wheel', x: cell.x, y: cell.y, buttons: e.buttons,
+      button: 0, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey,
+      deltaY: e.deltaY,
+    });
   }, [onCellPointer, cellAt]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
@@ -583,6 +620,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
         onPointerDown={onCellPointer ? reportCell('down') : undefined}
         onPointerMove={onCellPointer ? reportCell('move') : undefined}
         onPointerUp={onCellPointer ? reportCell('up') : undefined}
+        onWheel={onCellPointer ? reportWheel : undefined}
         style={{
           imageRendering: 'pixelated',
           // `width`/`height` set the backing-store resolution via the

@@ -30,6 +30,7 @@ import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat } from '../utils/ke
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
+import { mouseReportFor } from '../petscii/petscii-mouse';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
@@ -3970,6 +3971,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             }}
             highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'brush' as const }] : undefined}
             onCellPointer={(event) => {
+              /*
+               * THE DOOR'S POINTER, OR THE CALLER'S SELECTION.
+               *
+               * While a door is listening the pointer is the DOOR's - that is
+               * what makes LiveChat's menu bar and DOORMAN's rows clickable
+               * on a C64 screen at all - and SHIFT is how the caller takes it
+               * back to select and copy, which is xterm's own rule. The
+               * board drops these unless the door asked for mouse
+               * (`session.mouseEventsEnabled`), so sending them while a door
+               * is up costs a door that never asked for them nothing.
+               */
+              const report = mouseReportFor(event, doorActive.current || gameMode.current);
+              if (report && socketRef.current?.connected) {
+                socketRef.current.emit(report.event, report.payload);
+                return;
+              }
+
               const held = (event.buttons & 1) !== 0;
               if (event.type === 'down') {
                 if (!held) return;
