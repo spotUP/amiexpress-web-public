@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import {
   PetsciiCanvas, PetsciiMachine, C64_PALETTE_COLODORE,
-  type PetsciiHighlight,
+  type PetsciiHighlight, type PetsciiCellPointer,
 } from '@amiexpress/terminal';
 import {
   blankSurface, surfaceFromBytes, stamp, stampChar, colorize, floodFill,
@@ -189,7 +189,12 @@ export function PetsciiScreenEditor({
     }
   }, [tool, surface, brush, region]);
 
-  const onCellPointer = useCallback((event: { type: 'down' | 'move' | 'up'; x: number; y: number; buttons: number }) => {
+  /*
+   * The canvas's own type, not a copy of it. The pointer carries the button,
+   * the modifiers and the wheel now - that is how a C64 caller clicks a door
+   * - and a hand-written shape here went stale the day that landed.
+   */
+  const onCellPointer = useCallback((event: PetsciiCellPointer) => {
     if (readOnly) return;
     setCursor({ x: event.x, y: event.y });
 
