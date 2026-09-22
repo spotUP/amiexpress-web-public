@@ -750,13 +750,35 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     session: Session,
     lines: string[]
   ): Promise<boolean> {
+    /*
+     * A DESCRIPTION'S COLOUR STOPS AT ITS OWN ENTRY.
+     *
+     * The rows are the DIR file's bytes, and a FILE_ID.DIZ can leave an
+     * unterminated colour code in one: `Conf1/DIR1` line 232, inside
+     * `ht-hc3.txt`, ends `in the world\x1b[36m` with nothing after it. Every
+     * row the board wrote afterwards - filenames, sizes, dates, other
+     * people's art - came out cyan, all the way down the listing (sysop,
+     * 2026-09-22: "ansi colors in the file list that should not be there").
+     *
+     * express.e sketched the same guard and never wired it: `displayIt3`
+     * carries `DEF color = 0` and `IF(color=1) THEN aePuts('[0m')`, and
+     * nothing ever sets `color`, so a real /X bleeds too. This is one of the
+     * places where matching the original would mean shipping the bug.
+     *
+     * Only when the entry actually opened a sequence, so a listing of plain
+     * entries is byte-for-byte what it always was.
+     */
+    let openedAnsi = false;
     for (const line of lines) {
+      if (line.includes('\x1b')) openedAnsi = true;
       socket.emit('ansi-output', line + '\r\n');
       const shouldContinue = await flagPause(socket, session, 1);
       if (!shouldContinue) {
+        if (openedAnsi) socket.emit('ansi-output', '\x1b[0m');
         return false;
       }
     }
+    if (openedAnsi) socket.emit('ansi-output', '\x1b[0m');
     return true;
   }
 
@@ -771,7 +793,11 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
   ): void {
 console.error(`[FileListing] Failed to read ${dirDisplayName} directory file:`, error);
     const sysopName = config.get('sysopName') || 'Sysop';
+    // 'ansi-output' was missing, so this emitted an EVENT NAMED after the
+    // message and the caller was told nothing at all - a listing that failed
+    // to read simply stopped.
     socket.emit(
+      'ansi-output',
       `\x1b[31mThere is a problem with File listings, please tell ${sysopName}\x1b[0m\r\n`
     );
     session.menuPause = true;
