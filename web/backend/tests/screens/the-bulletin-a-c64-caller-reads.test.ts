@@ -1,0 +1,134 @@
+/**
+ * THE BULLETIN SCREEN, DRIVEN THE WAY THE BOARD DRIVES IT.
+ *
+ * The sysop photographed the same broken table twice. The second time was
+ * AFTER the two-column stacker had shipped and gone live - ` 1. EALL/HT
+ * 49,246 16. discord-bridge 0`, two columns squeezed onto one row - and his
+ * words were "the right columns is collapsed to the left".
+ *
+ * The stacker worked on the file. It was never REACHED: the board's own
+ * screen is `Screens/BULL.TXT`, six `~SS_BBS:Bulletins/bullN.txt` includes
+ * separated by `~SP`, and what the caller reads comes out of that walk.
+ *
+ * So this drives `displayScreen('BULL')` with a forty-column PETSCII
+ * session against a board laid out like the live one, and asks the WIRE
+ * what the caller saw. A test that adapted the file directly is what let
+ * the first fix ship while the screen stayed broken.
+ */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { displayScreen } from '../../src/handlers/screen.handler';
+import { config } from '../../src/config';
+
+/**
+ * The LIVE `Bulletins/bull1.txt`, byte for byte off the volume - not a
+ * fixture of my own. The first version of this test used a small one and
+ * passed against the broken board, which is exactly the trap: the shape
+ * that decides the ladder's answer is the real file's.
+ */
+const BULLETIN = fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'multitop-bull1-live.txt'),
+  'latin1',
+);
+
+/** Kept for reference: the small table the first version of this test used. */
+const SMALL_BULLETIN = [
+  '\x1b[4;33m' + ' '.repeat(77) + '\x1b[0m',
+  '\x1b[4;33;44m  MultiTop-II' + ' '.repeat(29) + 'Design Created (c)1994 Bobo/Mystic\x1b[0m',
+  '',
+  '\x1b[35mNo# Username (Handle)   Uploaded Bytes No# Username (Handle)   Uploaded Bytes\x1b[0m',
+  '\x1b[34m===-===================-==============-===-===================-==============\x1b[0m',
+  '\x1b[33m 1.\x1b[0m EALL/HT                 49,246 \x1b[33m 3.\x1b[0m discord-bridge               0',
+  '\x1b[33m 2.\x1b[0m orlingo                      0 \x1b[33m 4.\x1b[0m h7                           0',
+  '',
+].join('\r\n');
+
+let root = '';
+let previousDataDir: string;
+
+beforeAll(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bulletin-'));
+  fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'Bulletins'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Bulletins', 'bull1.txt'), BULLETIN, 'binary');
+  // The live screen, shape and all: an include and the pause after it.
+  fs.writeFileSync(
+    path.join(root, 'Screens', 'BULL.TXT'),
+    '~f\r\n~SS_BBS:Bulletins/bull1.txt ~SP\r\n',
+    'binary',
+  );
+  previousDataDir = config.get('dataDir');
+  config.set('dataDir', root);
+});
+
+afterAll(() => {
+  config.set('dataDir', previousDataDir);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+/** Everything the caller's terminal received, escapes stripped, as rows. */
+async function rowsFor(session: Record<string, unknown>): Promise<string[]> {
+  const wire: string[] = [];
+  const socket: any = {
+    id: 'bulletin-test',
+    session,
+    emit: (event: string, payload: unknown) => {
+      if (event === 'ansi-output' && typeof payload === 'string') wire.push(payload);
+      return true;
+    },
+    on: () => socket, once: () => socket, off: () => socket,
+    removeListener: () => socket, removeAllListeners: () => socket,
+  };
+  await displayScreen(socket, session as never, 'BULL', true, true);
+  return wire.join('')
+    .split(/\r?\n/)
+    .map(row => row.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\s+$/, ''));
+}
+
+const c64 = () => ({
+  user: { id: 1, username: 'sysop', secLevel: 255 },
+  currentConf: 1, nodeId: 1,
+  petsciiMode: true, terminalType: 'c64', screenWidth: 40, screenHeight: 25,
+  tempData: {},
+});
+
+describe('a C64 caller reading the bulletins', () => {
+  it('gets one place per row, never two squeezed onto one', async () => {
+    const rows = await rowsFor(c64());
+    const entries = rows.filter(row => /^\s*\d+\.\s/.test(row));
+
+    expect(entries.length).toBeGreaterThan(0);
+    for (const row of entries) {
+      // Two places on one row is the defect, and it shows as a SECOND
+      // number-and-dot after the first.
+      expect(row.replace(/^\s*\d+\.\s/, '')).not.toMatch(/\s\d+\.\s/);
+    }
+  });
+
+  it('keeps every row inside the forty columns he has', async () => {
+    for (const row of await rowsFor(c64())) {
+      expect(row.length).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('shows the top of the chart, which is what survives the cut', async () => {
+    const rows = await rowsFor(c64());
+
+    // The live file's first place. Everything past the cut is gone rather
+    // than squeezed onto a row with somebody else - see the cut's own test.
+    expect(rows.some(row => /^\s*1\.\s+\S/.test(row))).toBe(true);
+    expect(rows.some(row => row.startsWith('No# Username'))).toBe(true);
+  });
+});
+
+describe('an eighty-column caller reading the same screen', () => {
+  it('gets the table as it has always been, two columns across', async () => {
+    const rows = await rowsFor({ ...c64(), petsciiMode: false, terminalType: 'ansi', screenWidth: 80 });
+    const wide = rows.find(row => row.includes('EALL/HT'));
+
+    expect(wide).toBeDefined();
+    expect(wide).toContain('discord-bridge');
+  });
+});
