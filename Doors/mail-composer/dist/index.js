@@ -10,6 +10,7 @@ import { Textbox, Box, Text, List, AutocompleteTextbox, Message } from '@amiexpr
 import { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { T, S, CURRENT, applyTheme } from './door-theme';
+import { headerDialog, noticeWidth, headerHints } from './layout';
 import { attachDoorChrome, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 const door = new Door({
     name: 'Mail Composer',
@@ -241,12 +242,17 @@ async function showComposer(screen, bbs, username, ctx) {
  */
 async function showHeaderEditor(screen, initialTo, initialSubject, draft, usernames = []) {
     return new Promise((resolve) => {
+        /*
+         * Sized to the screen - `./layout.ts`. A seventy-column dialog on a C64
+         * puts its right border, and the buttons anchored to it, off the glass.
+         */
+        const dialog = headerDialog(screen.width, screen.height);
         const container = new Box({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 70,
-            height: 12,
+            width: dialog.width,
+            height: dialog.height,
             border: S.frame.border,
             style: S.frame.style,
             label: ` ${S.accentAlt('New Message')} `,
@@ -262,7 +268,7 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             top: 2,
             left: 2,
-            width: 64,
+            width: dialog.inner,
             height: 1,
             inputOnFocus: true,
             mouse: true,
@@ -300,7 +306,7 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             top: 5,
             left: 2,
-            width: 64,
+            width: dialog.inner,
             height: 1,
             inputOnFocus: true,
             mouse: true,
@@ -315,7 +321,9 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             bottom: 1,
             left: 2,
-            content: `${S.key('Tab')}: Next field  ${S.key('Enter')}: Continue  ${S.key('ESC')}: Cancel`,
+            // The words shorten at forty columns, never the keys: a caller who
+            // cannot see `ESC` has lost the way out of the box (`./layout.ts`).
+            content: headerHints(screen.width).map(h => `${S.key(h.key)}: ${h.does}`).join('  '),
             style: { fg: T.accentAlt },
         });
         const inputs = [toInput, subjectInput];
@@ -354,12 +362,13 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
  */
 async function confirmExitAction(screen) {
     return new Promise((resolve) => {
+        const exitDialog = headerDialog(screen.width, screen.height);
         const box = new Box({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 60,
-            height: 12,
+            width: Math.min(60, exitDialog.width),
+            height: exitDialog.height,
             border: 'line',
             style: { ...S.frame.style, border: { fg: T.accent } },
             label: ` ${S.accent('Exit Editor')} `,
@@ -408,7 +417,7 @@ async function showMsg(screen, title, message) {
             parent: screen,
             top: 'center',
             left: 'center',
-            width: '50%',
+            width: noticeWidth(screen.width),
             height: 'shrink',
             border: 'line',
             style: S.frame.style,

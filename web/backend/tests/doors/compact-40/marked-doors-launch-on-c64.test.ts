@@ -138,8 +138,12 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * its three panels and BUILT them at `width: '50%'`, so the handler that
  * stacks them only ever ran on a resize a C64 caller never performs. Pinned
  * in `dashboard-layout.test.ts`.
+ *
+ * PROMPTCOMPLETE earns the mark by having no layout at all: it prints nine
+ * lines about itself through `bbs.write()`, which is the choke, and draws
+ * nothing else ever. See `promptcomplete-is-prose.test.ts`.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
