@@ -35,6 +35,7 @@ import blessed, {
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { isCompactWidth } from '@amiexpress/bbs-door-sdk';
+import { commandPaletteItems } from './ui/command-palette';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { createTerminalModeSwitch, type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
@@ -505,25 +506,11 @@ export async function createApp(session: DoorSession) {
       return;
     }
 
-    // Format command items with name, usage, and description
+    // Format command items with name, usage, and description - the ROWS are
+    // `ui/command-palette`, because the eighty-column field widths do not fit
+    // a C64 and a row that wraps is a row the caller cannot read.
     const chatWidth = (screen as any).width || 80;
-    const nameWidth = 12;
-    const usageWidth = 20;
-    const descWidth = Math.max(10, chatWidth - nameWidth - usageWidth - 6);
-
-    const items = filteredCommands.map(cmd => {
-      const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
-      const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
-      const desc = (cmd.description || '').slice(0, descWidth);
-      // Don't hardcode `{${T.accent}-fg}` for the slash-name -- blessed's tag
-      // parser respects the latest color tag, so an inline cyan-fg
-      // overrides the List's `selected: { fg: T.ink }` wrapper and
-      // keeps the name cyan-on-cyan (invisible) when the row is the
-      // current selection. Let the base style's `fg: T.accent` colour the
-      // name on non-selected rows and the selected style's white-fg
-      // take over when highlighted.
-      return `/${name} {${T.dim}-fg}${usage}{/${T.dim}-fg} ${desc}`;
-    });
+    const items = commandPaletteItems(filteredCommands, chatWidth, T.dim);
 
     // Ensure list width is updated to match screen
     commandSuggestions.position.width = chatWidth;

@@ -187,6 +187,27 @@ export const PETSCII_UNIT_FOOTPRINT = {
  * character ROM look stays crisp at any zoom level instead of blurring like a
  * font rendered at a fractional size would.
  */
+/**
+ * A KEY THIS CANVAS HAS TAKEN DOES NOT ALSO GO TO THE WINDOW.
+ *
+ * `BBSTerminal` keeps a window-level keydown listener for game mode, and on
+ * an xterm session it never sees a typed key: xterm consumes the event
+ * before it bubbles. A canvas does not, so with a hybrid door in game mode
+ * ONE press was delivered twice - once here, through `onData` and the shared
+ * input path, and once again at the window - and the sysop typing `test`
+ * into LiveChat on a PETSCII session read `tteesstt` (2026-09-22). The
+ * board's own trace named both deliveries `route=key-down`.
+ *
+ * `preventDefault` was never going to stop that; it stops the BROWSER, not
+ * the propagation. Bubble-phase listeners are what must not run - and only
+ * those: the mouse-report toggle and the Tab trap listen in the CAPTURE
+ * phase, which has already run by the time a key reaches this handler.
+ */
+function consumed(e: React.KeyboardEvent<HTMLCanvasElement>): void {
+  e.stopPropagation();
+  e.nativeEvent.stopImmediatePropagation();
+}
+
 export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>(({
   machine,
   palette,
@@ -524,6 +545,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       const selected = typeof window !== 'undefined' && !window.getSelection()?.isCollapsed;
       if (!selected) {
         e.preventDefault();
+        consumed(e);
         onData?.([0x03]);
         return;
       }
@@ -535,6 +557,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish);
     if (bytes) {
       e.preventDefault();
+      consumed(e);
       onData?.(bytes);
     }
   }, [onData, swedish]);

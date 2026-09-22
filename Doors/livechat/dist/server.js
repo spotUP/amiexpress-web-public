@@ -49,6 +49,7 @@ exports.createApp = createApp;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const command_palette_1 = require("./ui/command-palette");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 // Local helper to strip blessed tags from text
@@ -438,24 +439,11 @@ async function createApp(session) {
             screen.render();
             return;
         }
-        // Format command items with name, usage, and description
+        // Format command items with name, usage, and description - the ROWS are
+        // `ui/command-palette`, because the eighty-column field widths do not fit
+        // a C64 and a row that wraps is a row the caller cannot read.
         const chatWidth = screen.width || 80;
-        const nameWidth = 12;
-        const usageWidth = 20;
-        const descWidth = Math.max(10, chatWidth - nameWidth - usageWidth - 6);
-        const items = filteredCommands.map(cmd => {
-            const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
-            const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
-            const desc = (cmd.description || '').slice(0, descWidth);
-            // Don't hardcode `{${T.accent}-fg}` for the slash-name -- blessed's tag
-            // parser respects the latest color tag, so an inline cyan-fg
-            // overrides the List's `selected: { fg: T.ink }` wrapper and
-            // keeps the name cyan-on-cyan (invisible) when the row is the
-            // current selection. Let the base style's `fg: T.accent` colour the
-            // name on non-selected rows and the selected style's white-fg
-            // take over when highlighted.
-            return `/${name} {${door_theme_1.T.dim}-fg}${usage}{/${door_theme_1.T.dim}-fg} ${desc}`;
-        });
+        const items = (0, command_palette_1.commandPaletteItems)(filteredCommands, chatWidth, door_theme_1.T.dim);
         // Ensure list width is updated to match screen
         commandSuggestions.position.width = chatWidth;
         commandSuggestions.position.left = 0;

@@ -18,6 +18,7 @@ import {
   MIN_CHAT_WIDTH,
   type LayoutConstants,
 } from '../../../../../Doors/livechat/ui/layout-solver';
+import { commandPaletteItems } from '../../../../../Doors/livechat/ui/command-palette';
 
 /** The door's own chrome, from server.ts. */
 const CHROME: LayoutConstants = {
@@ -104,5 +105,38 @@ describe('LiveChat on the screens it has always drawn', () => {
     expect(solved.chatHidden).toBe(false);
     expect(solved.sidebar!.width).toBe(20);
     expect(solved.chat.width).toBe(112);
+  });
+});
+
+/**
+ * "this is how the command palette looks, it looks broken to me" (the sysop,
+ * 2026-09-22, with `/mode` over `Set channe` and `/msg` over `Send a dir`).
+ *
+ * Three fixed fields - twelve, twenty and the rest - is forty-five columns
+ * before the list's frame, so every row wrapped onto a second one and was
+ * cut mid-word.
+ */
+describe('the slash-command palette', () => {
+  const COMMANDS = [
+    { name: 'mode', usage: '/mode <modes> [param]', description: 'Set channel modes' },
+    { name: 'msg', usage: '/msg @user [@user2 ...]', description: 'Send a direct message' },
+  ];
+
+  it('gives a C64 one command to a row, inside his screen', () => {
+    const rows = commandPaletteItems(COMMANDS, 40, 'gray');
+
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expect(row.length).toBeLessThanOrEqual(36);
+      // No usage column at forty: the name and what it does, nothing else.
+      expect(row).not.toContain('{gray-fg}');
+    }
+    expect(rows[0]).toBe('/mode Set channel modes');
+  });
+
+  it('leaves the eighty-column palette exactly as it was', () => {
+    const rows = commandPaletteItems(COMMANDS, 80, 'gray');
+
+    expect(rows[0]).toBe('/mode         {gray-fg}/mode <modes> [param{/gray-fg} Set channel modes');
   });
 });
