@@ -315,6 +315,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
+  /** Who called pressGameKey last, for the board's `[DOOR-INPUT]` trace. */
+  const pressSource = useRef<string>('window');
   const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers, by physical key
   const keyLastSeen = useRef<Record<string, number>>({});
   /**
@@ -1637,7 +1639,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
         const canRepeat = keyState.current[id] && gameMode.current && socketRef.current?.connected;
         if (canRepeat) {
-          socketRef.current!.emit('key-down', { key: keyNames.current[id] ?? key, code, repeat: true });
+          socketRef.current!.emit('key-down', { key: keyNames.current[id] ?? key, code, repeat: true, src: 'repeat' });
           keyRepeatTimers.current[id] = setTimeout(repeatKey, keyRepeatRateRef.current);
         }
       };
@@ -1672,6 +1674,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Single entry point for a game-mode key press. Both the window keydown
     // listener and the on-screen game controls (via the imperative ref) call
     // this, so a touch press is indistinguishable from a physical one.
+    /**
+     * WHO PRESSED IT - for the board's `[DOOR-INPUT]` trace only.
+     *
+     * A PETSCII caller's keystroke reached LiveChat twice and both
+     * deliveries said `route=key-down`, which names the socket event and not
+     * the caller: `pressGameKey` is reached from the window listener, from
+     * the shared input path (canvas and on-screen keyboard) and from the
+     * mobile game pads. Labelling the press is what tells those apart.
+     */
     const pressGameKey = (key: string, code: string, mods?: { alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
       if (!gameMode.current || !socketRef.current?.connected) return;
       // Physical identity (see trackKeyId): 'L'-down and 'l'-up are one key.
@@ -1685,7 +1696,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
       // "select" - so the size toggle could not work there however well the
       // door was wired (2026-09-02).
-      socketRef.current.emit('key-down', { key, code, ...mods });
+      socketRef.current.emit('key-down', { key, code, ...mods, src: pressSource.current });
       startKeyRepeat(key, code);
     };
 
@@ -1732,6 +1743,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           return;
         }
 
+        pressSource.current = 'window';
         pressGameKey(ev.key, ev.code, { alt: ev.altKey, ctrl: ev.ctrlKey, shift: ev.shiftKey });
         ev.preventDefault();
       }
@@ -3332,6 +3344,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (gameMode.current) {
         const event = injectedKeyEvent(key);
         if (event) {
+          pressSource.current = 'input-path';
           gameKeyPressRef.current?.(event.key, event.code);
           gameKeyReleaseRef.current?.(event.key, event.code);
           return;

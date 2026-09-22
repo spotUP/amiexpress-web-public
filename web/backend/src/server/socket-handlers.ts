@@ -561,7 +561,7 @@ console.log('[socket-handlers] keys:state received:', data);
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)
-  socket.on('key-down', (data: { key: string; code: string; alt?: boolean; ctrl?: boolean; shift?: boolean; repeat?: boolean }) => {
+  socket.on('key-down', (data: { key: string; code: string; alt?: boolean; ctrl?: boolean; shift?: boolean; repeat?: boolean; src?: string }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -613,7 +613,7 @@ console.log('[socket-handlers] keys:state received:', data);
         // the punctuation is typed: `@` on a Nordic layout is Option+2. See
         // composed-key.ts - prefixing there spells ESCAPE, and cost the sysop
         // his dialog and then his door while typing an email address.
-        traceDoorInput(session, 'key-down', base);
+        traceDoorInput(session, `key-down/${data.src ?? '?'}${data.repeat ? '/repeat' : ''}`, base);
         session.doorInputHandler(keyBytesFor(base, data.key, data.code, data.alt));
       }
     }
