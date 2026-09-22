@@ -31,7 +31,7 @@
  * unchanged: the session's transducer turns it into Commodore glyphs on the
  * way out, as it does for every other screen this board serves a C64.
  */
-import { FrameReconstructor, adaptRows } from '@amiexpress/bbs-door-sdk/petscii/frame';
+import { FrameReconstructor, adaptRows, solidifyRules } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import type { Cell } from '@amiexpress/bbs-door-sdk/petscii/frame';
 
 import { twoColumnTableBlock } from './two-column-table';
@@ -89,7 +89,12 @@ export function adaptAnsiScreenToForty(content: string, cols = FORTY): string | 
     cols,
     blockRenderer: (f, y) => twoColumnTableBlock(f, y, cols),
   });
-  const rows = adapted.rows.map((r) => rowToAnsi(r.cells));
+  /*
+   * A RUN OF DASHES IS A LINE, and a C64 can draw a line - see
+   * `solid-rules.ts`. On the ADAPTED rows, so an eighty-column caller's
+   * screen is byte-identical and only the forty-column one changes.
+   */
+  const rows = adapted.rows.map((r) => rowToAnsi(solidifyRules(r.cells)));
 
   // Trailing blank rows are the grid's, not the screen's: the reconstructor
   // pads to its own height and a caller should not page through that.

@@ -8,6 +8,7 @@
  * tests/doors/door-min-columns-gate.test.ts; the byte-identity proof for ANSI
  * sessions lives in c64-door-adapter-identity.test.ts.
  */
+import { RULE_GLYPH } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import {
   C64_ADAPT_MAX_FRAME_MS,
   C64_ADAPT_TICK_MS,
@@ -419,8 +420,15 @@ describe('C64DoorFrameAdapter', () => {
     f.socket.emit('ansi-output', '\x1b[2J\x1b[H' + '-'.repeat(78) + '\r\n');
     jest.advanceTimersByTime(C64_ADAPT_TICK_MS);
     const frame = f.ansi();
-    expect(frame).not.toContain('-'.repeat(41));
-    expect(frame).toContain('-'.repeat(40));
+    /*
+     * FORTY CELLS OF RULE, drawn with the PETSCII line rather than the
+     * hyphen the door sent: a run of dashes is a line and a C64 can draw one
+     * (`solid-rules.ts`, the sysop's report of 2026-09-22). The width is
+     * still the property this test is about - forty, not forty-one.
+     */
+    expect(frame).not.toContain(RULE_GLYPH.repeat(41));
+    expect(frame).toContain(RULE_GLYPH.repeat(40));
+    expect(frame).not.toContain('-'.repeat(3));
     uninstallC64DoorAdapter(f.socket);
   });
 });

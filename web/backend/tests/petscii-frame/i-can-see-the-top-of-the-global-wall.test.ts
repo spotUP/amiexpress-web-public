@@ -62,6 +62,7 @@ import {
 import {
   FrameReconstructor,
   adaptRows,
+  solidifyRules,
   isBlank,
   rowText,
   type AdaptedRow,
@@ -127,13 +128,22 @@ function expectedScreenCode(ch: string): number | null {
 }
 
 /** The screen codes an adapted row should light, `null` where PETSCII has none. */
-const wantCodes = (row: AdaptedRow | undefined): Array<number | null> =>
-  Array.from({ length: COLS }, (_, x) => {
-    const cell = row?.cells[x];
+const wantCodes = (row: AdaptedRow | undefined): Array<number | null> => {
+  /*
+   * THE ADAPTER SOLIDIFIES A RUN OF DASHES before it paints (`solid-rules.ts`,
+   * 2026-09-22): a run of three or more is a rule, and a C64 draws a rule with
+   * its own line glyph rather than with hyphens. The expectation is built from
+   * the rows the adapter PAINTS, so it applies the same transform - otherwise
+   * this oracle measures the ladder and the glass against different screens.
+   */
+  const cells = row ? solidifyRules(row.cells) : undefined;
+  return Array.from({ length: COLS }, (_, x) => {
+    const cell = cells?.[x];
     if (!cell) return printablePetsciiToScreenCode(0x20);
     const sc = expectedScreenCode(cell.ch);
     return sc === null ? null : sc | (cell.rvs ? 0x80 : 0);
   });
+};
 
 /**
  * A live C64 fed the wire in order, the way connection-emitter.ts feeds one.

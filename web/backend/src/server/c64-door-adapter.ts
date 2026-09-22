@@ -91,6 +91,7 @@ import { config } from '../config';
 import {
   FrameReconstructor,
   adaptRows,
+  solidifyRules,
   blankCell,
   isBlank,
   makeFrame,
@@ -629,6 +630,17 @@ export class C64DoorFrameAdapter {
     // top, so the window is measured against the PAINTED height instead.
     let contentEnd = rows.length;
     while (contentEnd > 0 && rows[contentEnd - 1].cells.every(isBlank)) contentEnd--;
+    /*
+     * A RUN OF DASHES IS A LINE, and a C64 can draw a line. `-` is a hyphen
+     * in the middle of its cell with a gap either side, so a door's rule
+     * comes out dotted; PETSCII has a glyph that meets its neighbours and the
+     * transducer already maps it (see `solid-rules.ts` for what is left
+     * alone, and why the run has to be three). The sysop asked for it looking
+     * at JoinCnf on a C64, 2026-09-22.
+     *
+     * On the ADAPTED rows, so an eighty-column caller is untouched.
+     */
+    for (const row of rows) row.cells = solidifyRules(row.cells);
     const view: AdaptedView = { seq: this.writeSeq, rows, cursor, contentEnd };
     this.adaptedCache = view;
     return view;
