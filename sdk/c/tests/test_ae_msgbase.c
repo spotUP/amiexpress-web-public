@@ -704,27 +704,100 @@ TEST(it_appends_to_a_real_amiexpress_base)
     ASSERT_EQ(st.unreadable, 0, "st.unreadable");
 }
 
+/** Write `text` into ./MailLock, as another node's lock file. */
+static void put_lock(const char *text)
+{
+    ae_file *f = ae_dos_open("./MailLock", AE_DOS_WRITE);
+    long len = 0;
+    while (text[len] != 0) len++;
+    if (f != 0) {
+        if (len > 0) ae_dos_write(f, text, len);
+        ae_dos_close(f);
+    }
+}
+
 TEST(a_held_lock_stops_a_second_write)
 {
     ae_msg_new msg;
-    ae_file *f;
 
     empty_base();
     ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
 
     /* Another node's lock, as a file - which is the only kind a different
-       process can see. */
-    f = ae_dos_open("./MailLock", AE_DOS_WRITE);
-    ASSERT_TRUE(f != 0, "f != 0");
-    ae_dos_close(f);
+       process can see - carrying the second it was taken at, which is what
+       says the holder is still alive. */
+    put_lock("1000");
 
     msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
-    msg.status = AE_MSG_PUBLIC; msg.date = 1L;
+    msg.status = AE_MSG_PUBLIC; msg.date = 1010L;    /* ten seconds later */
     ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write(&msg, \"x\n\", 2)");
 
     /* And it did NOT free a lock it never took. */
     ae_msg_unlock();
     ASSERT_TRUE(ae_dos_exists("./MailLock"), "ae_dos_exists(\"./MailLock\")");
+    ae_dos_delete("./MailLock");
+}
+
+/*
+ * The live board's bug, 2026-09-22: "[INFO] Another task has the MsgBase
+ * locked. Not posted." in SUBS, with nothing holding anything. A door killed
+ * between take and unlock - the inactivity fuse, a dropped carrier, a node
+ * restart - leaves MailLock on disk, and a lock read by EXISTENCE never
+ * expires. Three conferences were refusing every post that way, one of them
+ * for eight days.
+ *
+ * express.e does not read it that way: it holds an exclusive AmigaDOS Lock()
+ * on the file and CREATES the file when it is missing (express.e:11944-11964),
+ * so the file outliving its holder is normal there and harmless.
+ */
+TEST(a_lock_nobody_is_holding_does_not_block_for_ever)
+{
+    ae_msg_new msg;
+    ae_msg_stat st;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    /* Exactly what was on the live volume: a lock file with nothing in it. */
+    put_lock("");
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1000L;
+    ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "ae_msg_write over an empty lock");
+    ASSERT_EQ(ae_msg_stat_read(&st), AE_MSG_OK, "ae_msg_stat_read(&st)");
+    ASSERT_EQ(st.total, 1, "st.total");
+    ae_dos_delete("./MailLock");
+}
+
+TEST(a_lock_older_than_the_stale_window_is_taken)
+{
+    ae_msg_new msg;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    put_lock("1000");                                /* taken at second 1000 */
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1031L;    /* 31 s later: gone */
+    ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "ae_msg_write over a stale lock");
+    ae_dos_delete("./MailLock");
+}
+
+/*
+ * A door that cannot read the board's clock cannot tell a live lock from a
+ * dead one, and posting over a live holder corrupts the base. Refuse instead.
+ */
+TEST(without_a_clock_any_lock_is_respected)
+{
+    ae_msg_new msg;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    put_lock("1000");
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 0L;       /* ae_now() would not say */
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write with no clock");
     ae_dos_delete("./MailLock");
 }
 
@@ -823,6 +896,9 @@ int main(void)
     RUN_TEST(it_refuses_a_base_holding_port_records);
     RUN_TEST(it_appends_to_a_real_amiexpress_base);
     RUN_TEST(a_held_lock_stops_a_second_write);
+    RUN_TEST(a_lock_nobody_is_holding_does_not_block_for_ever);
+    RUN_TEST(a_lock_older_than_the_stale_window_is_taken);
+    RUN_TEST(without_a_clock_any_lock_is_respected);
     RUN_TEST(the_lock_is_released_after_a_write);
     RUN_TEST(a_status_the_board_does_not_use_is_refused);
     RUN_TEST(an_overlong_name_is_cut_not_overrun);

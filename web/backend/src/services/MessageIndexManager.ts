@@ -546,6 +546,30 @@ console.log(`[MessageIndexManager] Updated MailStats after delete: lowestNotDel=
    * Acquire lock for message operations
    * Returns true if lock acquired, false if already locked
    */
+  /**
+   * The moment a MailLock was taken, in milliseconds, whoever wrote it.
+   *
+   * TWO WRITERS, ONE FILE. This manager stamps `Date.now()` - milliseconds,
+   * thirteen digits. The C door SDK (`sdk/c/src/ae_msgbase.c`) stamps SECONDS,
+   * because a 68K `long` is 32 bits and a millisecond stamp does not fit in
+   * one. Read either as the other and a live lock looks decades old, which is
+   * exactly the way to post over a holder that is still writing.
+   *
+   * Null for a file that says nothing - absent, empty, or not a number. Each
+   * means the same thing: nobody who is still running wrote it, so the lock
+   * is free. That is what express.e gets from AmigaOS dropping an exclusive
+   * `Lock()` when its holder exits (express.e:11944-11964); this port has no
+   * such handle and has to read it off the disk.
+   */
+  private mailLockMillisFrom(text: string): number | null {
+    const digits = text.trim().match(/^\d+/);
+    if (!digits) return null;
+    const value = Number(digits[0]);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    // Ten digits or fewer is a seconds stamp; thirteen is milliseconds.
+    return digits[0].length <= 10 ? value * 1000 : value;
+  }
+
   acquireMailLock(confNumber: number, nodeId: number): boolean {
     this.ensureMsgBaseDir(confNumber);
     const lockPath = this.getMailLockPath(confNumber);
@@ -554,11 +578,11 @@ console.log(`[MessageIndexManager] Updated MailStats after delete: lowestNotDel=
     if (fs.existsSync(lockPath)) {
       try {
         const lockData = fs.readFileSync(lockPath, 'utf8');
-        const timestamp = parseInt(lockData, 10);
+        const timestamp = this.mailLockMillisFrom(lockData);
         const now = Date.now();
 
         // If lock is older than 30 seconds, consider it stale
-        if (!isNaN(timestamp) && (now - timestamp) < 30000) {
+        if (timestamp !== null && (now - timestamp) < 30000) {
 console.log(`[MessageIndexManager] MailLock already held for Conf${confNumber}`);
           return false;
         }

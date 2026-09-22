@@ -663,25 +663,102 @@ static int every_record_is_amiga_shaped(void)
     return clean;
 }
 
+/** A lock older than this is a dead holder's, not a live one's. */
+#define AE_MSG_LOCK_STALE_SECONDS 30
+
+/**
+ * The seconds this lock was taken at, or 0 when the file says nothing.
+ *
+ * 0 covers all three ways a lock file can be uninformative: absent, empty, or
+ * holding something that is not a number. Each means the same thing here -
+ * nobody who is still running wrote it.
+ */
+static long lock_stamp(const char *path)
+{
+    char text[32];
+    ae_file *f;
+    long got, value = 0;
+    int i = 0;
+
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f == 0) return 0;
+    got = ae_dos_read(f, text, (long)sizeof(text) - 1);
+    ae_dos_close(f);
+    if (got <= 0) return 0;
+    text[got] = 0;
+
+    /*
+     * SECONDS, from a stamp that may be written in MILLISECONDS.
+     *
+     * The board's own writer (services/MessageIndexManager.ts) stamps
+     * `Date.now()`, which is 13 digits and does not fit in a 32-bit long on
+     * this machine at all. The first ten digits of a millisecond stamp ARE
+     * its second stamp, so read those and stop: the two writers then judge
+     * each other's locks on the same scale, and neither posts over a holder
+     * that is still alive.
+     */
+    while (text[i] >= '0' && text[i] <= '9') {
+        if (i < 10) value = (value * 10) + (text[i] - '0');
+        i++;
+    }
+    if (i == 0) return 0;
+    /* Fewer than ten digits is a small clock (the tests use one), not a
+       truncated stamp - take it as the seconds it is. */
+    return value;
+}
+
 /**
  * Take MailLock, or report that somebody else has it.
  *
  * File-based, because that is what express.e uses and what another NODE can
  * see - a flag in this door's memory would not stop the board itself posting.
- * There is a window between the exists-check and the create; express.e has the
- * same one, and a single caller per node makes it narrow enough that the board
- * has lived with it for thirty years.
+ *
+ * THE FILE EXISTING IS NOT THE LOCK, and reading it that way is what broke
+ * posting on the live board. express.e holds an exclusive AmigaDOS `Lock()`
+ * on MailLock (express.e:11944-11964) and CREATES the file when it is missing:
+ * the file is the thing being locked, not the lock, and it is left on disk for
+ * ever by design - AmigaOS drops the handle when the holder exits. This port
+ * has no such handle, so it does what the board's own writer does
+ * (services/MessageIndexManager.ts): the file carries the SECOND it was taken
+ * at, and a stamp older than AE_MSG_LOCK_STALE_SECONDS belongs to a holder
+ * that is gone.
+ *
+ * Without that, a door killed between take and unlock - the inactivity fuse,
+ * a dropped carrier, a node restart - left a zero-byte MailLock that refused
+ * every later post in that conference for ever. Three conferences on the live
+ * board were in that state for up to eight days (Conf1 and Conf3 from
+ * 2026-09-14, Conf5 from 2026-09-18), and the caller only ever saw
+ * "Another task has the MsgBase locked".
+ *
+ * `now` is the board's clock in Unix seconds, the same value the caller is
+ * about to stamp the message with. 0 means the board would not say what time
+ * it is, and then a lock file can only be judged by its existence again -
+ * refuse, rather than post over somebody.
  */
-static int take_lock(void)
+static int take_lock(long now)
 {
     char path[AE_MSG_PATH_MAX];
+    char stamp[16];
+    long held;
+    int len;
     ae_file *f;
 
     if (!join_path(path, (int)sizeof(path), "MailLock")) return 0;
-    if (ae_dos_exists(path)) return 0;
+
+    if (ae_dos_exists(path)) {
+        held = lock_stamp(path);
+        if (now <= 0) return 0;
+        /* A stamp from the future is a clock that moved, not a live holder;
+           only the window between `now` and `now - stale` is somebody's. */
+        if (held > 0 && held <= now && (now - held) < AE_MSG_LOCK_STALE_SECONDS) return 0;
+    }
 
     f = ae_dos_open(path, AE_DOS_WRITE);
     if (f == 0) return 0;
+    number_to_name(stamp, now > 0 ? now : 0);   /* decimal, same as a msg name */
+    len = 0;
+    while (stamp[len] != 0) len++;
+    if (len > 0) ae_dos_write(f, stamp, (long)len);
     ae_dos_close(f);
     lock_held = 1;
     return 1;
@@ -782,7 +859,7 @@ long ae_msg_write(const ae_msg_new *msg, const char *body, unsigned long body_le
     if (!body) { body = ""; body_len = 0; }
 
     if (!every_record_is_amiga_shaped()) return AE_MSG_ERR_MIXED;
-    if (!take_lock()) return AE_MSG_ERR_LOCKED;
+    if (!take_lock(msg->date)) return AE_MSG_ERR_LOCKED;
 
     number = next_number();
 
