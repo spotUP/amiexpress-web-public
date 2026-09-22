@@ -143,14 +143,16 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * lines about itself through `bbs.write()`, which is the choke, and draws
  * nothing else ever. See `promptcomplete-is-prose.test.ts`.
  *
- * LINKWALL and BBSLINK are the two that cannot promise forty columns at all -
- * one prints a wall fetched from bbslink.net, the other is a telnet proxy to
- * a remote DOS game - and they are marked anyway, deliberately: their OWN
- * chrome fits now, and they say once that what follows is drawn for eighty.
- * A door a C64 caller cannot open is worse than a game he has to squint at.
- * See `bbslink-doors-tell-the-truth.test.ts`.
+ * LINKWALL and BBSLINK are NOT here and will not be: one prints a wall
+ * fetched from bbslink.net, the other is a telnet proxy to a remote DOS
+ * game, and neither lays out what it shows. They were marked for one
+ * afternoon on the argument that a door a caller cannot open is worse than
+ * a game he has to squint at; the sysop's answer was "bbslink and linkwall
+ * can be skipped" (2026-09-22), so they stay refused at forty. The chrome
+ * fixes they got are kept - see `bbslink-doors-tell-the-truth.test.ts` -
+ * because they were wrong at EVERY width.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LINKWALL', 'BBSLINK'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

@@ -6,11 +6,16 @@
  * columns. LINKWALL prints a wall fetched from the same place. Neither door
  * lays that content out and neither can.
  *
- * So "adapt them" means two things they CAN do: stop adding eighty-column
- * furniture of their own - LINKWALL's banner was a fifty-column rule, ten
- * past the edge of a C64 - and say ONCE, before the wide content arrives,
- * that it is wide. The caller is let in, because a door he cannot open is
- * worse than a game he has to squint at.
+ * THEY ARE NOT MARKED, and will not be: "bbslink and linkwall can be
+ * skipped" (the sysop, 2026-09-22). A PETSCII caller is refused at the gate
+ * as he was before.
+ *
+ * What is kept is the chrome, because it was wrong at EVERY width: the
+ * banner was a fifty-column rule - ten past the edge of a C64 - and its
+ * middle row carried double-escaped sequences that printed a literal
+ * `\x1b[0m` to an eighty-column caller as well. The width notice is kept
+ * with it, unused at the gate today and correct the day either door learns
+ * to draw its own content.
  */
 import { banner, screenColumns, widthNotice } from '../../../../../Doors/bbslinkwall/layout';
 
