@@ -97,6 +97,39 @@ describe('an entry that opens a colour', () => {
   });
 });
 
+describe("the board's own row under a drawing", () => {
+  /*
+   * The second half of the same report. The first fix closed the pen at the
+   * END of the entry, and the sysop sent a screenshot back with `Sent by:
+   * DiNO` still cyan under the drawing that opened it (2026-09-22: "i still
+   * see colors in the file list on the live bbs"). `Sent by:` is written
+   * into the DIR by the upload path, so it is the board's row, not the
+   * author's.
+   */
+  it('is written with a clean pen, though the drawing above it left one open', async () => {
+    const wire = await wireFor(80);
+
+    const opened = wire.indexOf('\x1b[36m');
+    const sentBy = wire.indexOf('Sent by: sysop');
+    expect(opened).toBeGreaterThan(-1);
+    expect(sentBy).toBeGreaterThan(opened);
+
+    const reset = wire.indexOf('\x1b[0m', opened);
+    expect(reset).toBeGreaterThan(-1);
+    expect(reset).toBeLessThan(sentBy);
+  });
+
+  it("does not repaint the description's own rows, which are the author's", async () => {
+    const wire = await wireFor(80);
+
+    // Between the pen opening and the end of that same art row there is no
+    // reset: the drawing really is half white and half cyan.
+    const opened = wire.indexOf('\x1b[36m');
+    const endOfRow = wire.indexOf('\r\n', opened);
+    expect(wire.slice(opened, endOfRow)).not.toContain('\x1b[0m');
+  });
+});
+
 describe('an entry with no colour in it', () => {
   it('is written exactly as the DIR file holds it', async () => {
     const wire = await wireFor(80);

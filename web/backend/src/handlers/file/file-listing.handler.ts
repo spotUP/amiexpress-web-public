@@ -767,9 +767,26 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
      *
      * Only when the entry actually opened a sequence, so a listing of plain
      * entries is byte-for-byte what it always was.
+     *
+     * AND THE BOARD'S OWN ROW IS NOT THE ART'S TO PAINT. The first fix closed
+     * the pen at the END of the entry, which left `Sent by: DiNO` cyan under
+     * that same drawing - the sysop, 2026-09-22 with a screenshot: "i still
+     * see colors in the file list on the live bbs". `Sent by:` is written
+     * into the DIR by the UPLOAD path, not by whoever drew the FILE_ID.DIZ,
+     * so it is furniture and gets a clean pen.
+     *
+     * The description's own rows keep the colour, because inside its own box
+     * it is the author's: this drawing really is half white and half cyan,
+     * and a board that decided otherwise would be repainting art it did not
+     * make.
      */
+    const isBoardFurniture = (line: string): boolean => /^\s*Sent by:/i.test(line);
     let openedAnsi = false;
     for (const line of lines) {
+      if (openedAnsi && isBoardFurniture(line)) {
+        socket.emit('ansi-output', '\x1b[0m');
+        openedAnsi = false;
+      }
       if (line.includes('\x1b')) openedAnsi = true;
       socket.emit('ansi-output', line + '\r\n');
       const shouldContinue = await flagPause(socket, session, 1);
