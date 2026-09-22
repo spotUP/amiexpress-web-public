@@ -22,6 +22,10 @@ exports.nodeColumns = nodeColumns;
  * mode". This one had half of one.
  */
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+/** Border, CPU, Memory, Disk, border. */
+const SYSTEM_ROWS = 5;
+/** Border, two statistics, border. */
+const STATS_ROWS = 4;
 /**
  * The three panels at a caller's width.
  *
@@ -31,10 +35,21 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
  */
 function dashboardPanels(width) {
     if ((0, bbs_door_sdk_1.isCompactWidth)(width)) {
+        /*
+         * SIZED TO WHAT THEY HOLD, not to a third of the screen each.
+         *
+         * A third of twenty-five rows is eight, and the system panel has three
+         * lines in it - CPU, Memory, Disk - so the caller was given a nearly
+         * empty box, then another, and a node list squeezed under them (the
+         * sysop, 2026-09-22: "the dashboard petscii layout needs a lot of
+         * work"). Five rows hold the three gauges and their border; four hold
+         * the two statistics and theirs; the node list takes everything left,
+         * which is the panel that grows with the board.
+         */
         return {
-            system: { left: 0, top: 1, width: '100%', height: '33%' },
-            stats: { left: 0, top: '34%', width: '100%', height: '33%' },
-            nodes: { left: 0, top: '67%', width: '100%', bottom: 1 },
+            system: { left: 0, top: 1, width: '100%', height: SYSTEM_ROWS },
+            stats: { left: 0, top: 1 + SYSTEM_ROWS, width: '100%', height: STATS_ROWS },
+            nodes: { left: 0, top: 1 + SYSTEM_ROWS + STATS_ROWS, width: '100%', bottom: 1 },
             stacked: true,
         };
     }
@@ -73,8 +88,15 @@ function gaugeWidth(width) {
     // columns of one gauge.
     if (!(0, bbs_door_sdk_1.isCompactWidth)(width))
         return 20;
+    /*
+     * The row is `CPU Usage:  100%  ` - seventeen columns - and then the bar,
+     * which `makeProgressBar` draws with a BRACKET AT EACH END on top of the
+     * width it is given. Nineteen columns of the panel's interior are spoken
+     * for before a single bar is drawn; a first cut subtracted eighteen and
+     * the closing bracket wrapped onto a row of its own.
+     */
     const interior = Math.max(8, width - 4);
-    return Math.max(6, Math.min(20, interior - 18));
+    return Math.max(4, Math.min(20, interior - 19));
 }
 /**
  * The node row at a caller's width.

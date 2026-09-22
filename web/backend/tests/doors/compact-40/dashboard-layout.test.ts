@@ -39,6 +39,37 @@ describe('the three panels', () => {
     }
   });
 
+  /*
+   * "the dashboard petscii layout needs a lot of work" (the sysop,
+   * 2026-09-22). A third of twenty-five rows is eight, and the system panel
+   * holds THREE lines - CPU, Memory, Disk - so a C64 caller was given a
+   * nearly empty box, then another, and a node list squeezed under them.
+   */
+  it('are sized to what they hold, not to a third of the screen each', () => {
+    const panels = dashboardPanels(40);
+
+    expect(panels.system.height).toBe(5);   // border, three gauges, border
+    expect(panels.stats.height).toBe(4);    // border, two statistics, border
+    expect(panels.nodes.height).toBeUndefined();
+    expect(panels.nodes.bottom).toBe(1);    // ...and the list takes the rest
+  });
+
+  it('stack without a gap and without overlapping', () => {
+    const panels = dashboardPanels(40);
+
+    expect(panels.stats.top).toBe(Number(panels.system.top) + Number(panels.system.height));
+    expect(panels.nodes.top).toBe(Number(panels.stats.top) + Number(panels.stats.height));
+    // ...and the masthead's row is still the masthead's.
+    expect(Number(panels.system.top)).toBe(1);
+  });
+
+  it('leave the node list the rows a board with callers on it needs', () => {
+    const panels = dashboardPanels(40);
+    const rows = 25 - Number(panels.nodes.top) - 1;   // less the status row
+
+    expect(rows).toBeGreaterThanOrEqual(12);
+  });
+
   it('keeps the status row: the node list is anchored to the bottom either way', () => {
     expect(dashboardPanels(40).nodes.bottom).toBe(1);
     expect(dashboardPanels(80).nodes.bottom).toBe(1);
@@ -56,10 +87,14 @@ describe('a gauge beside a percentage', () => {
 
   it('fits the panel on a C64 - label, percentage, brackets and all', () => {
     const width = gaugeWidth(40);
-    // `CPU Usage:  100%  ` is eighteen columns, and the panel's interior at
-    // forty is thirty-six.
-    expect(18 + width + 2).toBeLessThanOrEqual(36 + 2);
-    expect(width).toBeGreaterThanOrEqual(6);
+
+    /*
+     * The row is `CPU Usage:  100%  ` - seventeen columns - then the bar,
+     * which `makeProgressBar` draws with a bracket at EACH END on top of the
+     * width it is handed. The panel's text box has thirty-six.
+     */
+    expect(17 + width + 2).toBeLessThanOrEqual(36);
+    expect(width).toBeGreaterThanOrEqual(4);
   });
 });
 
