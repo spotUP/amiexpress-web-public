@@ -48,7 +48,7 @@ const MIN_BLOCK_ROWS = 3;
  * page through a top-fifteen list to reach a second top-fifteen list is
  * reading two screens where the door meant one.
  */
-const FITS_ONE_SCREEN = 13;
+const FITS_ONE_SCREEN = 15;
 
 /** How different the two halves may be and still be the same table twice. */
 const HALF_WIDTH_SLACK = 2;
@@ -130,6 +130,20 @@ export function twoColumnTableBlock(frame: Frame, y: number, cols: number): { ro
   while (end + 1 < frame.rows && splitsAt(frame.cells[end + 1], gutter, cols)) end++;
   const consumed = end - y + 1;
   if (consumed < MIN_BLOCK_ROWS) return null;
+
+  /*
+   * A TABLE HAS A RULE UNDER ITS HEADER. A MENU DOES NOT.
+   *
+   * Splitting into two halves that each fit is a weak test, and the corpus
+   * proved it the moment these rules were offered to a door: BBSLINK's game
+   * list is `[BRE] BARREN REALMS ELITE` printed twice across the page, it
+   * divides exactly like a chart, and stacking it swallowed the menu's own
+   * title. MultiTop draws `===-===============-====` under its header and
+   * every board table of this shape does; a menu has nothing there.
+   */
+  let hasRule = false;
+  for (let k = y; k <= end && !hasRule; k++) hasRule = isRule(frame.cells[k]);
+  if (!hasRule) return null;
 
   const rows: Cell[][] = [];
   /*

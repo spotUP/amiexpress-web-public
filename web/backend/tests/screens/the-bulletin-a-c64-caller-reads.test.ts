@@ -183,6 +183,37 @@ describe('a C64 caller reading a bulletin that starts with a form feed', () => {
  * ABSOLUTE PATH rather than a screen name. That is a second entry point into
  * the same screen, and the sysop reads his bulletins through it.
  */
+/**
+ * "its still too tall - you consolidate the headline 'Multitop-II Design
+ * created ....' to Multitop-II (c)1994 Bobo/Mystic", "then it will fit on
+ * one row" (the sysop, 2026-09-22).
+ */
+describe('the masthead a C64 caller reads', () => {
+  it('is one row, and names the door and whose work it is', async () => {
+    const rows = await rowsFor(c64());
+    const masthead = rows.find(row => row.includes('MultiTop-II'));
+
+    expect(masthead).toBeDefined();
+    expect(masthead!.trim()).toBe('MultiTop-II (c)1994 Bobo/Mystic');
+    // One row: nothing else on the screen carries the title.
+    expect(rows.filter(row => row.includes('MultiTop-II')).length).toBe(2);
+  });
+
+  it('leaves the whole bulletin inside one C64 screen', async () => {
+    const rows = await rowsFor(c64());
+    // Two bulletins behind one pause; the first runs from its own masthead
+    // to the second one's. Slicing from row zero measured an empty line.
+    const mastheads = rows.reduce<number[]>((at, row, i) => (row.includes('MultiTop-II') ? [...at, i] : at), []);
+    expect(mastheads.length).toBe(2);
+    const first = rows.slice(mastheads[0], mastheads[1]);
+
+    expect(first.filter(row => row.trim().length > 0).length).toBeGreaterThan(5);
+    // Twenty-five rows of glass, and the board writes its own pause prompt
+    // under the screen.
+    expect(first.length).toBeLessThanOrEqual(23);
+  });
+});
+
 describe('a C64 caller who types B and a number', () => {
   it('gets the chart stacked, one place per row', async () => {
     const rows = await rowsFor(c64(), path.join(root, 'Bulletins', 'bull1.txt'));

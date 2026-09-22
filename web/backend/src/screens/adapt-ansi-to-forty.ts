@@ -35,6 +35,7 @@ import { FrameReconstructor, adaptRows, solidifyRules } from '@amiexpress/bbs-do
 import type { Cell } from '@amiexpress/bbs-door-sdk/petscii/frame';
 
 import { twoColumnTableBlock } from './two-column-table';
+import { mastheadBlock } from './banner-row';
 
 /** A C64's screen. */
 export const FORTY = 40;
@@ -74,6 +75,69 @@ function rowToAnsi(cells: Cell[]): string {
  * case where the caller is better served by the notice than by a blank.
  */
 export function adaptAnsiScreenToForty(content: string, cols = FORTY): string | null {
+  /*
+   * The table is asked FIRST. Its header row has a margin-sized gap in it
+   * too - `No# Username (Handle) Uploaded Bytes` printed twice - and the
+   * masthead rule would otherwise read that as a title and a credit.
+   */
+  return adaptAnsiScreenToFortyWith(content, cols, (frame, y) =>
+    twoColumnTableBlock(frame, y, cols) ?? mastheadBlock(frame, y, cols));
+}
+
+/**
+ * THE BLOCK RULES ALONE, ON A FILE A DOOR IS ABOUT TO SHOW.
+ *
+ * `B` on this board is a 68K door that hands `Bulletins/bullN.txt` back
+ * through JH_SF, so MultiTop's chart reaches the caller down the DOOR
+ * adapter's ladder and never meets the rules that fold it. Running the whole
+ * screen adaptation over the file first was the obvious answer and the wrong
+ * one: the door's ladder then adapted already-adapted rows, and BBSLINK's
+ * games menu - twenty-five rows that used to pause part-way - came out a
+ * different height.
+ *
+ * So this applies the BLOCK rules and nothing else. A row no rule claims is
+ * left exactly as the frame holds it, and when no rule fires at all the
+ * caller gets the file untouched (`null`), which is every screen on the
+ * board that is not one of these charts.
+ */
+export function foldScreenBlocks(content: string, cols = FORTY): string | null {
+  const lines = content.split(/\r?\n/);
+  const reconstructor = new FrameReconstructor({ cols: 80, rows: Math.max(25, lines.length + 4) });
+  reconstructor.write(content.replace(/\r?\n/g, '\r\n'));
+  const frame = reconstructor.snapshot();
+
+  const out: string[] = [];
+  let fired = false;
+  for (let y = 0; y < frame.rows; ) {
+    const block = twoColumnTableBlock(frame, y, cols) ?? mastheadBlock(frame, y, cols);
+    if (block) {
+      fired = true;
+      for (const row of block.rows) out.push(rowToAnsi(solidifyRules(row)));
+      y += Math.max(1, block.consumed);
+      continue;
+    }
+    out.push(rowToAnsi(frame.cells[y].map((c) => ({ ...c }))));
+    y++;
+  }
+  if (!fired) return null;
+
+  // The blank tail of the grid is not content.
+  while (out.length > 0 && out[out.length - 1].trim() === '') out.pop();
+  return out.join('\r\n') + '\r\n';
+}
+
+/**
+ * The same adaptation with the caller's OWN block hook.
+ *
+ * Split out so a caller can find out WHETHER a block fired - the screen plan
+ * sends a text screen down the prose path, and a table has to be recognised
+ * before it can be rescued from it (`two-column-table.ts`).
+ */
+export function adaptAnsiScreenToFortyWith(
+  content: string,
+  cols: number,
+  blockRenderer: (frame: Parameters<typeof adaptRows>[0], y: number) => { rows: Cell[][]; consumed: number } | null,
+): string | null {
   const lines = content.split(/\r?\n/);
   const reconstructor = new FrameReconstructor({ cols: 80, rows: Math.max(25, lines.length + 4) });
   reconstructor.write(content.replace(/\r?\n/g, '\r\n'));
@@ -85,10 +149,7 @@ export function adaptAnsiScreenToForty(content: string, cols = FORTY): string | 
    * can read that as two records - see `two-column-table.ts` for the rows the
    * sysop was handed before this.
    */
-  const adapted = adaptRows(frame, {
-    cols,
-    blockRenderer: (f, y) => twoColumnTableBlock(f, y, cols),
-  });
+  const adapted = adaptRows(frame, { cols, blockRenderer });
   /*
    * A RUN OF DASHES IS A LINE, and a C64 can draw a line - see
    * `solid-rules.ts`. On the ADAPTED rows, so an eighty-column caller's

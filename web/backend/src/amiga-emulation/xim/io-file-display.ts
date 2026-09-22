@@ -15,6 +15,7 @@ import { XIMMessage } from './types';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { buildGFileCandidates } from './user-info-handlers';
+import { foldScreenBlocks } from '../../screens/adapt-ansi-to-forty';
 import { c64AdapterFor } from '../../server/c64-door-adapter';
 import { C64_COLUMNS } from './screen-width.util';
 import { narrowVariants } from '../../utils/narrow-art.util';
@@ -149,6 +150,41 @@ export async function handleCheckToDisplay(self: any, msg: XIMMessage): Promise<
 // ---------------------------------------------------------------------------
 
 /**
+ * A SCREEN FILE A DOOR HANDS BACK IS A SCREEN, NOT THE DOOR'S LAYOUT.
+ *
+ * `B` on this board is a 68K door (`Doors/EmP_Tools/Bulls`) that shows
+ * `Bulletins/bullN.txt` through JH_SF. Those bytes leave the emulator and
+ * meet the C64 door adapter, whose rule ladder is row-local by design - so
+ * MultiTop's chart, one table printed twice across eighty columns, arrived
+ * squeezed onto single rows however many times the SCREEN path was fixed.
+ * The sysop, 2026-09-22, after two of those fixes were live: "the multitop
+ * bulls may not have regenerated? they look the same", then "its still too
+ * tall".
+ *
+ * The rules that fold a chart belong to the FILE, so they are applied here,
+ * to the file, before the door's own ladder ever sees it - the BLOCK rules
+ * only, never the whole screen adaptation, because adapting a file the
+ * door's own ladder is about to adapt again changes the height of screens
+ * that were right. Installing them in that ladder instead was tried and
+ * reverted the same hour: they fired on dRE!WAll's wall, GWALL's masthead
+ * and the games menu, which are a DOOR's layout and not a screen's.
+ *
+ * Only a forty-column PETSCII caller is affected; everyone else gets the
+ * file byte for byte, which is what the identity suites pin.
+ */
+function forFortyColumnFile(self: any, content: string): string {
+  if (!c64AdapterFor(self.socket)) return content;
+  try {
+    return foldScreenBlocks(content) ?? content;
+  } catch (error) {
+    // A screen the adapter cannot read is still a screen the caller asked
+    // for: hand it over unchanged rather than showing him nothing.
+    console.warn(`[XIMIOHandler] 40-column screen adaptation failed: ${String(error)}`);
+    return content;
+  }
+}
+
+/**
  * Display a resolved file.
  *
  * Fast path (no MCI): synchronously emit and reply before returning.
@@ -205,7 +241,7 @@ async function displayResolvedFile(
     // (server/c64-door-adapter.ts c64AdapterDrives).
     const frameAdapted = !!c64AdapterFor(self.socket);
     const shouldAutoPause = !forceNonStop && (frameAdapted || newlineCount > pauseLines);
-    self.emitText(content, false, shouldAutoPause, shouldAutoPause, msg);
+    self.emitText(forFortyColumnFile(self, content), false, shouldAutoPause, shouldAutoPause, msg);
     if (!self.waitingForPause) {
       self.reply(msg, 1);
     }
