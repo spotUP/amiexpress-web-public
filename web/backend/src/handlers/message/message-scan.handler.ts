@@ -55,6 +55,28 @@ export function setMessageScanDependencies(
 }
 
 /**
+ * `Scanning Conference: <name> - `, and it starts at the LEFT MARGIN.
+ *
+ * The sysop, 2026-09-22, joining a conference on a C64: "the amiga demoscene
+ * conference has a cut off up rough internal no new mail today line". What
+ * reached him was `ough Internal - No mail today!` - the TAIL of this line,
+ * its first twenty-five characters gone. Fed the whole string the transducer
+ * wraps it correctly; the head was never on a row of its own, because the
+ * line began at column fifteen and simply carried on from wherever the
+ * cursor had been left.
+ *
+ * The leading CR is free on every terminal this board serves and makes that
+ * screen impossible, whichever screen left the cursor there. A line that
+ * announces which conference is being scanned has no business starting
+ * halfway across one.
+ *
+ * Exported so the test drives THIS string rather than a copy of it.
+ */
+export function scanningConferenceLine(confName: string): string {
+  return `\r\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `;
+}
+
+/**
  * One mail-scan row (C64/40-col Task 5d).
  *
  * 80 columns: express.e:11720's single row, byte-identical.
@@ -780,7 +802,25 @@ console.warn('[advanceConferenceScan] no confScanState found');
       // The fix predates the 2026-05-04 rewrite of this module and did not
       // survive it (audit D-11).
       if (mbIdx === 0) {
-        socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
+        /*
+         * THE LINE STARTS AT THE LEFT MARGIN, whatever the cursor was doing.
+         *
+         * The sysop, 2026-09-22, on a C64: "the amiga demoscene conference
+         * has a cut off up rough internal no new mail today line" - what he
+         * saw was `ough Internal - No mail today!`, the TAIL of this line,
+         * because it began at column fifteen and wrapped. Fed the whole
+         * string, the transducer wraps it correctly; the head was lost
+         * because something before it left the cursor mid-row, and this line
+         * simply carried on from there.
+         *
+         * A leading CR is free on every terminal this board serves and makes
+         * that screen impossible, whichever screen leaves the cursor where.
+         * It is a GUARD rather than a guess about the culprit - the scan is
+         * the one place the caller reported, and a line that announces which
+         * conference is being scanned has no business starting halfway
+         * across the screen.
+         */
+        socket.emit('ansi-output', scanningConferenceLine(confName));
       }
 
       // express.e:11673-11679 - the base's own name, when the board declared

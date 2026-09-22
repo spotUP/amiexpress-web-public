@@ -105,7 +105,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, petsciiColumnsOf, C64_COLUMNS, DEFAULT_DOOR_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
-import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit, dropLastEntriesToFit } from './c64-door-fit';
+import { collapseBlankRunsToFit, collapseHollowRuns, collapseLongBlankRuns, dropOldestEntriesToFit, dropLastEntriesToFit } from './c64-door-fit';
 
 /** Quiet gap after the last write that ends a frame. */
 export const C64_ADAPT_TICK_MS = 30;
@@ -576,7 +576,17 @@ export class C64DoorFrameAdapter {
     const fit = { cols: this.cols, rows: ROWS };
     const snapshot = this.screen.snapshot();
     const stripped = collapseBlankRunsToFit(
-      collapseLongBlankRuns(this.cols <= C64_COLUMNS ? stripNarrowNoise(snapshot) : snapshot),
+      /*
+       * AND THE EMPTY INTERIOR OF A BOX, at forty columns only. A run of
+       * `|` ... `|` rows is the box's body on an eighty-column screen and
+       * two lone rails on a C64's - see `collapseHollowRuns` for the
+       * JoinCnf report that found it.
+       */
+      collapseLongBlankRuns(
+        this.cols <= C64_COLUMNS
+          ? collapseHollowRuns(stripNarrowNoise(snapshot))
+          : snapshot,
+      ),
       fit,
     );
     return this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;

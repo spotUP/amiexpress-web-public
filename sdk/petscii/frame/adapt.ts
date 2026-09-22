@@ -745,6 +745,29 @@ const BOX_RAILS = ['|', '\u00a6', '!'];
 const isBoxRail = (ch: string) => BOX_RAILS.includes(ch);
 
 /**
+ * A row with nothing in it but the box it is inside.
+ *
+ * `|` at each end and blanks between: the empty interior of a framed door.
+ * On an eighty-column screen those rows are the box's body and cost
+ * nothing; on a C64 they are two lone rails on a row of forty, and a door
+ * that leaves three of them above its list and two below has spent five of
+ * twenty-five rows saying "this is a box".
+ *
+ * Exported because two things need the same answer: the adapter, which
+ * collapses runs of them, and the tests that pin what it collapsed.
+ */
+export function isHollowRow(cells: Row): boolean {
+  let rails = 0;
+  for (const cell of cells) {
+    if (isBlank(cell)) continue;
+    if (!isBoxRail(cell.ch)) return false;
+    rails += 1;
+    if (rails > 2) return false;
+  }
+  return rails > 0;
+}
+
+/**
  * The two fields of a RECORD row: a left field and one compact right-hand
  * field, in SOURCE columns `[start, end)`, both trimmed.
  */

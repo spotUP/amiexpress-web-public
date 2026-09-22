@@ -142,8 +142,15 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * PROMPTCOMPLETE earns the mark by having no layout at all: it prints nine
  * lines about itself through `bbs.write()`, which is the choke, and draws
  * nothing else ever. See `promptcomplete-is-prose.test.ts`.
+ *
+ * LINKWALL and BBSLINK are the two that cannot promise forty columns at all -
+ * one prints a wall fetched from bbslink.net, the other is a telnet proxy to
+ * a remote DOS game - and they are marked anyway, deliberately: their OWN
+ * chrome fits now, and they say once that what follows is drawn for eighty.
+ * A door a C64 caller cannot open is worse than a game he has to squint at.
+ * See `bbslink-doors-tell-the-truth.test.ts`.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LINKWALL', 'BBSLINK'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

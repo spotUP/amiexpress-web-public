@@ -54,6 +54,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const config_1 = require("./config");
+const layout_1 = require("./layout");
 const crypto = __importStar(require("crypto"));
 const http = __importStar(require("http"));
 // Metadata
@@ -260,11 +261,22 @@ door.onStart(async (ctx) => {
             return;
         }
         const userId = parseInt(user?.id || '0');
-        // Display header
+        /*
+         * The door's OWN chrome, as wide as the caller's screen - it was a
+         * fifty-column rule, which runs off a C64 by ten, and its middle row
+         * carried DOUBLE-escaped sequences that printed as literal `\x1b[0m`
+         * text. What follows it is the wall itself, drawn for eighty columns by
+         * bbslink.net; a caller at forty is told so rather than promised
+         * otherwise (`./layout.ts`).
+         */
+        const columns = (0, layout_1.screenColumns)(ctx);
         socket.emit('ansi-output', '\x1b[2J\x1b[H');
-        socket.emit('ansi-output', '\x1b[36m+================================================+\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[36m|\\x1b[0m            \\x1b[32mBBSLINK GRAFFITI WALL\\x1b[0m             \\x1b[36m|\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[36m+================================================+\x1b[0m\r\n\r\n');
+        for (const row of (0, layout_1.banner)('BBSLINK GRAFFITI WALL', columns)) {
+            socket.emit('ansi-output', `${row}\r\n`);
+        }
+        const notice = (0, layout_1.widthNotice)(columns);
+        if (notice)
+            socket.emit('ansi-output', `${notice}\r\n`);
         socket.emit('ansi-output', '\r\nReading the wall...\r\n');
         // Show the wall
         await showWall(socket, config);

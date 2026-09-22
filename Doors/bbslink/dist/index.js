@@ -193,6 +193,18 @@ function httpGet(host, port, path, timeout) {
  */
 async function connectToGame(socket, config, userSlot, bbsSession) {
     return new Promise((resolve) => {
+        /*
+         * WHAT THIS DOOR CAN PROMISE A C64. From here on the bytes are a remote
+         * game's screen, drawn on games.bbslink.net for eighty columns: this
+         * door is a telnet PROXY and lays out nothing. A caller at forty is
+         * told so once, before the connection, rather than left to work out why
+         * LORD is wrapping - and he is let IN, because a door he cannot open is
+         * worse than a game he has to squint at.
+         */
+        const columns = Number(bbsSession?.screenWidth ?? 80) || 80;
+        if (columns < 60) {
+            socket.emit('ansi-output', '\r\n\x1b[33mThese games are drawn for 80 columns - they will wrap.\x1b[0m\r\n');
+        }
         socket.emit('ansi-output', `\r\n\x1b[36mConnecting to ${config.serverHost}:${config.telnetPort}...\x1b[0m\r\n`);
         const telnetSocket = net.createConnection({ host: config.serverHost, port: config.telnetPort, timeout: 30000 });
         let connected = false;

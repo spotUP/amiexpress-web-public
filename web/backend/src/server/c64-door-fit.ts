@@ -26,6 +26,7 @@ import {
   adaptRows,
   blankCell,
   isBlank,
+  isHollowRow,
   isRuleRow,
   makeFrame,
   type Cell,
@@ -215,6 +216,53 @@ export function dropOldestEntriesToFit(frame: Frame, opts: FitOptions): Frame {
     ).length;
     if (oldest < 0 || remaining <= 1) return current;
     current = withoutRow(current, oldest);
+  }
+  return current;
+}
+
+/**
+ * A RUN OF EMPTY BOX-INTERIOR ROWS BECOMES ONE.
+ *
+ * `collapseLongBlankRuns` above reads a row as a gap only when it is wholly
+ * blank, and the empty interior of a FRAMED door is not: it is `|` at each
+ * end with blanks between. On an eighty-column screen those rows are the
+ * box's body and cost nothing. On a C64 they are two lone rails on a row of
+ * forty, and JoinCnf leaves three of them above its conference list and two
+ * below - five of twenty-five rows spent saying "this is a box".
+ *
+ * WHY IT MATTERS MORE THAN THE ROWS. The sysop, 2026-09-22, with two
+ * screenshots: "the join conferences door adds an empty line between the
+ * conference list and the stuff under it when i press arrow down". The door
+ * pins its SELECTED row to a fixed screen row and slides the list around it,
+ * so the five entries shift up one and the hollow rows redistribute from
+ * three-above/two-below to two-above/three-below. Nothing is added - the
+ * gap MOVES - and a caller reads that as a line appearing. With every run
+ * taken down to one, both frames are identical and the slide is invisible.
+ *
+ * ONE row is kept, never zero, for the same reason the blank-run collapse
+ * keeps one: the box still has a body, and the things either side of the gap
+ * are still separate.
+ *
+ * TWO is the threshold rather than three. A single hollow row is a door's
+ * own spacing; two is already a hole at this width, and every case measured
+ * over the corpus is a box interior rather than a deliberate gap.
+ */
+export function collapseHollowRuns(frame: Frame, minRun = 2): Frame {
+  let current = frame;
+  for (let guard = 0; guard < frame.rows; guard += 1) {
+    const hollow = current.cells.map((row) => isHollowRow(row));
+    let found = -1;
+    for (let y = 0; y < hollow.length; ) {
+      if (!hollow[y]) { y += 1; continue; }
+      let end = y;
+      while (end < hollow.length && hollow[end]) end += 1;
+      // The run must END inside the frame: a hollow TAIL is the bottom of the
+      // box, not a gap inside it.
+      if (end - y >= minRun && end < hollow.length) { found = y; break; }
+      y = end;
+    }
+    if (found < 0) return current;
+    current = withoutRow(current, found);
   }
   return current;
 }
