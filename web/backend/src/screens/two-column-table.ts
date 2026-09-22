@@ -32,6 +32,24 @@ import type { Cell, Frame } from '@amiexpress/bbs-door-sdk/petscii/frame';
 /** Rows a candidate block must have before it is one: header, rule, a row. */
 const MIN_BLOCK_ROWS = 3;
 
+/**
+ * How many rows of a stacked table a C64 screen can hold.
+ *
+ * Rows of the BLOCK - its header, its rule and the entries under them - not
+ * rows of the screen. Thirteen is what leaves a whole MultiTop bulletin at
+ * twenty-three adapted rows, measured on the live `bull1.txt` and
+ * `bull3.txt`: the masthead is three, the totals block wraps to four at
+ * forty columns, and the board writes its own `(Pause)` prompt under all of
+ * it. Fifteen fits the glass exactly and leaves the prompt nowhere to go.
+ *
+ * The sysop, 2026-09-22, looking at the stacked table: "the multitop bulls
+ * are too tall cut the last positions in the chart to fit it". Thirty
+ * entries stacked are forty rows with the chrome, and a caller who has to
+ * page through a top-fifteen list to reach a second top-fifteen list is
+ * reading two screens where the door meant one.
+ */
+const FITS_ONE_SCREEN = 13;
+
 /** How different the two halves may be and still be the same table twice. */
 const HALF_WIDTH_SLACK = 2;
 
@@ -114,11 +132,29 @@ export function twoColumnTableBlock(frame: Frame, y: number, cols: number): { ro
   if (consumed < MIN_BLOCK_ROWS) return null;
 
   const rows: Cell[][] = [];
-  for (let k = y; k <= end; k++) {
+  /*
+   * The first rows of the left column, and then the block's LAST row
+   * whatever happens: that row is the rule under the table, and a table
+   * that stops without one reads as a screen that was cut off rather than a
+   * chart with a bottom.
+   */
+  for (let k = y; k <= end && rows.length < FITS_ONE_SCREEN; k++) {
     rows.push(half(frame.cells[k], 0, gutter, cols));
   }
-  for (let k = y; k <= end; k++) {
-    rows.push(half(frame.cells[k], gutter + 1, contentWidth(frame.cells[k]), cols));
+  const cut = rows.length < end - y + 1;
+  if (cut) rows.push(half(frame.cells[end], 0, gutter, cols));
+  /*
+   * THE SECOND HALF ONLY WHEN IT FITS. A table long enough to fill a C64's
+   * screen with its left column alone is cut there: the caller reads the top
+   * of the chart, which is what a top-N chart is for, instead of paging to a
+   * second copy of the header and fifteen more places. A SHORT table - four
+   * names printed twice across an eighty-column page - still gets both
+   * halves, because both fit.
+   */
+  if (!cut) {
+    for (let k = y; k <= end; k++) {
+      rows.push(half(frame.cells[k], gutter + 1, contentWidth(frame.cells[k]), cols));
+    }
   }
   return { rows, consumed };
 }

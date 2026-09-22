@@ -108,7 +108,15 @@ async function showMainMenu(screen, user, dataManager) {
          * at forty the list takes the whole width and the stats go underneath,
          * because twenty columns do not hold `[D] My Profile (Discord name)`.
          */
-        const contentRows = Math.max(0, screen.height - (barH + 7));
+        /*
+         * THE CONTENT PANE'S INTERIOR, not its height. `createBox` draws a line
+         * border when the caller names no `border` key, so this container has
+         * one, and its children start a row lower and end a row higher than the
+         * box does. Reading its HEIGHT here put the stats panel's bottom edge on
+         * the footer's row (the sysop, with a screenshot: "the stats panel
+         * overlaps other panels").
+         */
+        const contentRows = Math.max(0, screen.height - (barH + 7) - 2);
         const panes = (0, layout_1.whipPanes)(screen.width, contentRows);
         // Menu box with border - 10 items + 2 border + 1 spare = 13
         const menuBox = (0, blessed_helpers_1.createBox)({
@@ -132,7 +140,14 @@ async function showMainMenu(screen, user, dataManager) {
             parent: menuBox,
             top: 1,
             left: 1,
-            width: '100%-4',
+            /*
+             * THE LONGEST ITEM MUST NOT WRAP. `[D] My Profile (Discord name)` is
+             * twenty-nine columns and the selection marker the list prepends takes
+             * two more; at forty the old `'100%-4'` and a column of padding left
+             * thirty-two, so the item wrapped and pushed the last entry out of the
+             * box.
+             */
+            width: panes.stacked ? '100%-2' : '100%-4',
             // Every item, or as many rows as the box has interior - the list is
             // ten entries and a C64's box is not always thirteen rows tall.
             height: Math.min(menuItems.length, Math.max(1, Number(panes.main.height) - 3)),
@@ -142,11 +157,22 @@ async function showMainMenu(screen, user, dataManager) {
             vi: true,
             mouse: true,
             focusable: true,
+            /*
+             * THE SELECTED ROW IS REVERSED ON A C64, not painted.
+             *
+             * PETSCII has no per-cell background: the transducer drops `bg` and
+             * keeps the pen, so `{ bg: accent, fg: ground }` arrives as BLACK TEXT
+             * ON A BLACK SCREEN and the caller's own row disappears (the sysop,
+             * 2026-09-22: "the active row is black"). Reverse video is the one way
+             * to fill a cell there, and it is what the transducer maps SGR 7 to.
+             */
             style: {
-                selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
+                selected: panes.stacked
+                    ? { inverse: true, bold: true }
+                    : { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
                 item: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground }
             },
-            padding: { left: 1 },
+            padding: panes.stacked ? { left: 0 } : { left: 1 },
         });
         // Build stats content
         const completedTasks = tasks.filter(t => t.status === 'done').length;
@@ -154,16 +180,21 @@ async function showMainMenu(screen, user, dataManager) {
         let statsContent = '';
         if (panes.stacked) {
             /*
-             * TWO ROWS, because that is what is left under the menu on a C64 - and
-             * two rows can still carry all four numbers. A label per row and the
-             * numbers beside them is the same information in a quarter of the
-             * height; what goes is the blank line and the one-per-row spacing,
-             * which are luxuries of an eighty-column screen.
+             * AS MANY ROWS AS THE PANEL HAS, and on a C64 that is often ONE: the
+             * menu's thirteen rows and a three-row panel are exactly a twenty-five
+             * row screen's content pane. All four numbers still fit one row of
+             * thirty-six columns - what goes is the blank line and the one-per-row
+             * spacing, which are luxuries of an eighty-column screen.
              */
-            statsContent += `{${door_theme_1.T.accent}-fg}Projects{/${door_theme_1.T.accent}-fg} {bold}${projects.length}{/bold}  `
-                + `{${door_theme_1.T.accent}-fg}Tasks{/${door_theme_1.T.accent}-fg} {bold}${tasks.length}{/bold}\n`;
-            statsContent += `{${door_theme_1.T.accent}-fg}Active{/${door_theme_1.T.accent}-fg} {bold}${activeTasks}{/bold}  `
-                + `{${door_theme_1.T.accent}-fg}Done{/${door_theme_1.T.accent}-fg} {bold}${completedTasks}{/bold}`;
+            const pairs = [
+                `{${door_theme_1.T.accent}-fg}Proj{/${door_theme_1.T.accent}-fg} {bold}${projects.length}{/bold}`,
+                `{${door_theme_1.T.accent}-fg}Tasks{/${door_theme_1.T.accent}-fg} {bold}${tasks.length}{/bold}`,
+                `{${door_theme_1.T.accent}-fg}Act{/${door_theme_1.T.accent}-fg} {bold}${activeTasks}{/bold}`,
+                `{${door_theme_1.T.accent}-fg}Done{/${door_theme_1.T.accent}-fg} {bold}${completedTasks}{/bold}`,
+            ];
+            statsContent += panes.sideContentRows >= 2
+                ? `${pairs[0]}  ${pairs[1]}\n${pairs[2]}  ${pairs[3]}`
+                : pairs.join(' ');
         }
         else {
             statsContent += `{${door_theme_1.T.accent}-fg}Projects:{/${door_theme_1.T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
@@ -202,7 +233,14 @@ async function showMainMenu(screen, user, dataManager) {
                 border: { fg: door_theme_1.T.accentAlt },
                 bg: door_theme_1.T.ground
             },
-            padding: { left: 1, top: 1 },
+            /*
+             * NO TOP PADDING WHEN THERE IS ONE ROW. A three-row panel has a single
+             * interior row, and a row of padding above the content pushes the
+             * numbers out of the box - the panel drew its label and nothing else.
+             */
+            padding: panes.stacked && panes.sideContentRows <= 1
+                ? { left: 1 }
+                : { left: 1, top: 1 },
             focusable: false,
             mouse: false,
             clickable: false,

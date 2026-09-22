@@ -80,11 +80,28 @@ describe('a screen with no room left under the list', () => {
     // Eight rows of content: the list takes them and there is nothing under.
     // THE LIST WINS THE ROWS - it is what the caller came for, and a panel
     // that has to take four of the menu's rows to exist is not worth having.
-    const panes = whipPanes(40, 8);
+    // Seven rows: the menu takes them and a three-row panel cannot follow.
+    const panes = whipPanes(40, 7);
 
     expect(sideFits(panes)).toBe(false);
     expect(panes.side.height).toBe(0);
-    expect(Number(panes.main.height)).toBe(8);
+    expect(Number(panes.main.height)).toBe(7);
+  });
+
+  it('gives the panel the remainder once there is room for one', () => {
+    // Eight rows: five for the menu and the smallest panel worth drawing.
+    const panes = whipPanes(40, 8);
+
+    expect(sideFits(panes)).toBe(true);
+    expect(panes.side.height).toBe(3);
+    expect(panes.sideContentRows).toBe(1);
+  });
+
+  it('never runs the panel past the rows it was given', () => {
+    for (const rows of [4, 7, 8, 12, 16, 18, 25]) {
+      const panes = whipPanes(40, rows);
+      expect(panes.side.top + panes.side.height).toBeLessThanOrEqual(rows);
+    }
   });
 
   it('never gives the list more rows than the screen has', () => {

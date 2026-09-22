@@ -52,27 +52,34 @@ function whipPanes(width, rows, mainRows = 13) {
     /*
      * Forty columns. The list keeps its border - a C64 draws one cleanly and
      * the label is where the screen says what it is - and takes the whole
-     * width; the panel goes underneath with whatever rows are left, and gives
-     * up its border when there are not enough for one. Two rows of content is
-     * the floor: a panel that cannot say two things is not worth the rows.
+     * width; the panel goes underneath with whatever rows are left.
+     *
+     * THE LIST WINS THE ROWS, and the panel gets the remainder. A first cut
+     * reserved four rows for the panel whatever the screen had, so a short
+     * content pane gave the menu four rows - one of them interior - and the
+     * panel three. The menu is what the caller came for.
+     *
+     * A panel needs THREE rows to say anything: two of border and one of
+     * content. Below that there is no panel and the menu takes everything.
+     * The two sit FLUSH - a blank row between them is a luxury of a screen
+     * with rows to spare, and a C64's sixteen interior rows are exactly the
+     * menu's thirteen plus the smallest panel worth drawing.
      */
-    /*
-     * THE LIST WINS THE ROWS. A first cut reserved four rows for the panel
-     * whatever the screen had, so a short content pane gave the menu four rows
-     * - one of them interior - and the panel three. The menu is what the
-     * caller came for; the panel is what is LEFT, and on a screen with nothing
-     * left there is no panel at all.
-     */
-    const profile = (0, bbs_door_sdk_1.getCompactProfile)(width);
-    const room = rows >= mainRows + 4;
-    const mainHeight = room ? mainRows : Math.max(3, Math.min(mainRows, rows));
-    const sideTop = mainHeight + 1;
+    const SMALLEST_PANEL = 3;
+    const room = rows >= SMALLEST_PANEL + 5;
+    const mainHeight = room
+        ? Math.max(5, Math.min(mainRows, rows - SMALLEST_PANEL))
+        : Math.max(3, Math.min(mainRows, rows));
+    const sideTop = mainHeight;
     const sideHeight = room ? Math.max(0, rows - sideTop) : 0;
     return {
         main: { top: 0, left: 0, width: '100%', height: mainHeight },
         side: { top: sideTop, left: 0, width: '100%', height: sideHeight },
         stacked: true,
-        sideContentRows: Math.max(0, sideHeight - (profile.borders ? 2 : 0)),
+        // ALWAYS less its two border rows: the panel is drawn with a frame at
+        // both tiers, and `profile.borders` is false at forty - reading it here
+        // said a three-row box had three rows of content.
+        sideContentRows: Math.max(0, sideHeight - 2),
     };
 }
 /**

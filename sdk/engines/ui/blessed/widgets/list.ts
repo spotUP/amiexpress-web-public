@@ -14,7 +14,7 @@ import { wrapAnsiText as wrapAnsi } from '../core/wrap-text';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
-import { MIN_TOUCH_HEIGHT, SWIPE_THRESHOLD } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT, SWIPE_THRESHOLD, isCompactWidth } from '../core/responsive-constants';
 
 // Use String.fromCharCode(27) for ESC to survive Terser minification
 const ESC = String.fromCharCode(27);
@@ -274,10 +274,31 @@ export class List extends Element {
          * It used to leave the row's own colours in place on top of the
          * highlight, which is the same unreadable row by another route.
          */
-        const highlightBg = itemSelectedStyle.bg;
-        const highlightFg = highlightBg
-          ? snapToReadable(itemSelectedStyle.fg, highlightBg)
-          : itemSelectedStyle.fg;
+        /*
+         * A C64 HAS NO BACKGROUND TO HIGHLIGHT WITH.
+         *
+         * PETSCII colour is per-cell FOREGROUND only; the transducer drops
+         * `bg` on the way out and keeps the pen. So the highlight every door
+         * writes - a background with a contrasting foreground - reaches a
+         * forty-column caller as `fg: ground` alone, which is BLACK TEXT ON A
+         * BLACK SCREEN, and his own row is the one he cannot read (the sysop
+         * on WHIP, 2026-09-22: "the active row is black"; DOORMAN, BUGS and
+         * GMASTER all carry the same style and the same defect).
+         *
+         * Reverse video is the one way to fill a cell there. It is decided
+         * HERE rather than in each door because the door cannot know - it
+         * asks for a highlight, and what a highlight IS depends on the screen
+         * it lands on. An eighty-column board keeps its colours exactly.
+         */
+        const noBackgrounds = isCompactWidth((this.screen as { width?: number } | undefined)?.width ?? 80);
+        const reverseInstead = noBackgrounds && !!itemSelectedStyle.bg;
+
+        const highlightBg = reverseInstead ? undefined : itemSelectedStyle.bg;
+        const highlightFg = reverseInstead
+          ? undefined
+          : highlightBg
+            ? snapToReadable(itemSelectedStyle.fg, highlightBg)
+            : itemSelectedStyle.fg;
 
         if (highlightFg) {
           itemText = itemText.replace(/\{\/?[^}]*-fg\}/g, '');
@@ -296,6 +317,26 @@ export class List extends Element {
           closeTags = `{/${highlightBg}-bg}` + closeTags;
         }
         
+        /*
+         * REVERSE VIDEO IS A SELECTION A C64 CAN SHOW.
+         *
+         * PETSCII has no per-cell background: the transducer drops `bg` and
+         * keeps the pen, so a highlight written as `{ bg: accent, fg: ground }`
+         * reaches a C64 caller as BLACK TEXT ON A BLACK SCREEN and his own
+         * row disappears (the sysop, 2026-09-22, on WHIP: "the active row is
+         * black"). Reverse video is the one way to fill a cell there, and it
+         * is what the transducer maps SGR 7 to - so a door drawing for forty
+         * columns asks for `inverse` and gets a selection that survives the
+         * trip.
+         *
+         * Only when the door asks. A list that sets a background keeps it,
+         * which is every list on an eighty-column board.
+         */
+        if (itemSelectedStyle.inverse || reverseInstead) {
+          openTags += '{inverse}';
+          closeTags = '{/inverse}' + closeTags;
+        }
+
         // Highlight active selection with BOLD when focused
         if (this.focused) openTags += '{bold}';
         if (itemSelectedStyle.underline) openTags += '{underline}';

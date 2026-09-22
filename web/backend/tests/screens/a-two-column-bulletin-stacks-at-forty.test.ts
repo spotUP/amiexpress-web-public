@@ -50,7 +50,10 @@ describe('the bulletin at forty columns', () => {
   it('gives every caller a row of their own, in order', () => {
     const numbers = entryRows(rowsAtForty()).map(row => parseInt(row.trim(), 10));
 
-    expect(numbers).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    // The TOP of the chart, one place per row. The chart is cut where a C64
+    // screen ends rather than paged - see the cut test below.
+    expect(numbers).toEqual(Array.from({ length: numbers.length }, (_, i) => i + 1));
+    expect(numbers.length).toBeGreaterThanOrEqual(10);
   });
 
   it('puts every message count in the same column - the report itself', () => {
@@ -59,22 +62,33 @@ describe('the bulletin at forty columns', () => {
     expect([...ends]).toHaveLength(1);
   });
 
-  it('keeps the header and the rule above each half', () => {
+  it('keeps the header above the table and the rule under it', () => {
     const rows = rowsAtForty();
 
-    expect(rows.filter(row => row.startsWith('No# Username'))).toHaveLength(2);
+    expect(rows.filter(row => row.startsWith('No# Username'))).toHaveLength(1);
     expect(rows.filter(row => /^===-=+/.test(row)).length).toBeGreaterThanOrEqual(2);
   });
 
-  it('carries every name across, and none of them twice', () => {
+  /*
+   * "the multitop bulls are too tall cut the last positions in the chart to
+   * fit it" (the sysop, 2026-09-22). Thirty entries stacked are forty rows
+   * with the masthead and the totals, so the caller pages through a
+   * top-fifteen list to reach a second one. The chart is cut instead, and
+   * what is left fits the glass with the board's own `(Pause)` prompt still
+   * to come.
+   */
+  it('fits one C64 screen, prompt and all', () => {
+    expect(rowsAtForty().length).toBeLessThanOrEqual(23);
+  });
+
+  it('carries the names it keeps, each on its own row', () => {
     const names = entryRows(rowsAtForty()).map(row => row.replace(/^\s*\d+\.\s+/, '').replace(/\s+\d+$/, ''));
 
-    expect(names).toContain('Phantasm');
-    expect(names).toContain('K.A.L.L.E.ab');
-    expect(names).toContain('discord-bridge');
-    // `Creep` really is on this board twice, at 15 and 16; everything else is
-    // one caller, one row.
-    expect(new Set(names).size).toBe(names.length - 1);
+    expect(names[0]).toBe('Phantasm');
+    expect(new Set(names).size).toBe(names.length);
+    // ...and the places past the cut are gone rather than squeezed onto a row
+    // with somebody else.
+    expect(rowsAtForty().some(row => row.includes('K.A.L.L.E.ab'))).toBe(false);
   });
 });
 

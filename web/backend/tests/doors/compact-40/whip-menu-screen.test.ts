@@ -88,6 +88,36 @@ describe('the WHIP main menu on a C64', () => {
     expect(coords(menu).xl - coords(menu).xi).toBeGreaterThanOrEqual(38);
   });
 
+  it('keeps every box inside the content pane, not on the footer\'s row', async () => {
+    /*
+     * The content pane has a BORDER - `createBox` draws one when the caller
+     * names no `border` key - so its children live between its edges, not on
+     * them. Reading its height instead of its interior put the stats panel's
+     * bottom edge one row past it, on the footer's row (the sysop, with a
+     * screenshot: "the stats panel overlaps other panels").
+     */
+    const drawn = await openAt(40, 25);
+    const container = drawn.find(el => el.children?.some((c: any) => String(c.options?.label ?? '').includes('MAIN MENU')));
+    const stats = drawn.find(el => String(el.options?.label ?? '').includes('STATS'));
+
+    expect(container).toBeDefined();
+    if (stats) {
+      expect(coords(stats).yl).toBeLessThanOrEqual(coords(container).yl - 1);
+    }
+  });
+
+  it('paints the selected row in REVERSE, which is the only fill a C64 has', async () => {
+    const drawn = await openAt(40, 25);
+    const list = drawn.find(el => el.type === 'list' || Array.isArray((el as any).items));
+
+    expect(list).toBeDefined();
+    const selected = (list as any).options?.style?.selected;
+    // PETSCII has no per-cell background: `bg` is dropped on the way out and
+    // `fg: ground` arrives as black text on a black screen.
+    expect(selected.inverse).toBe(true);
+    expect(selected.bg).toBeUndefined();
+  });
+
   it('keeps the stats under the menu, never beside it', async () => {
     const drawn = await openAt(40, 25);
     const menu = drawn.find(el => String(el.options?.label ?? '').includes('MAIN MENU'));
@@ -107,5 +137,25 @@ describe('the WHIP main menu on a C64', () => {
     expect(stats).toBeDefined();
     expect(coords(stats).xi).toBeGreaterThan(coords(menu).xl - 1);
     expect(coords(stats).yi).toBe(coords(menu).yi);
+  });
+
+  it('paints the selected row with a background on an eighty-column board', async () => {
+    const drawn = await openAt(80, 24);
+    const list = drawn.find(el => el.type === 'list' || Array.isArray((el as any).items));
+
+    expect((list as any).options?.style?.selected?.bg).toBeDefined();
+    expect((list as any).options?.style?.selected?.inverse).toBeUndefined();
+  });
+
+  it('gives the menu every one of its ten entries, unwrapped', async () => {
+    const drawn = await openAt(40, 25);
+    const list: any = drawn.find(el => Array.isArray((el as any).items));
+
+    // `[D] My Profile (Discord name)` is twenty-nine columns and the marker
+    // takes two more; the first cut left thirty-two and the row wrapped,
+    // pushing the last entry out of the box.
+    const coordsOf = coords(list);
+    expect(coordsOf.xl - coordsOf.xi).toBeGreaterThanOrEqual(31);
+    expect(list.items).toHaveLength(10);
   });
 });
