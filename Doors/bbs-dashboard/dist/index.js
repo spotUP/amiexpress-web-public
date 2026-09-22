@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const layout_1 = require("./layout");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 /** The caller's tokens, for the stats lines' inline tags. */
@@ -133,18 +134,24 @@ class BBSDashboard {
             content: '',
             style: this.s.bar.style,
         });
-        // System Resources Panel (top-left)
+        /*
+         * WHERE THE PANELS GO, from the caller's width - `./layout.ts`. This was
+         * `width: '50%'` with the stacking left to a resize that a C64 caller
+         * never performs, so he opened the door on two twenty-column panels.
+         */
+        const panels = (0, layout_1.dashboardPanels)(this.screen.width);
+        // System Resources Panel (top-left, or the top third at forty columns)
         this.systemPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             label: ' SYSTEM RESOURCES ',
-            left: 0,
-            top: 1, // below the masthead
-            width: '50%',
+            left: panels.system.left,
+            top: panels.system.top,
+            width: panels.system.width,
             // Full half-height. Taking the masthead's row out of HERE cost this
             // panel its last line, and the Disk gauge silently fell off the
             // bottom - the row comes out of Node Status below instead, which has
             // space to spare.
-            height: '50%',
+            height: panels.system.height,
             fixed: true, // Static panel for BBS environment
             focusable: false, // Display-only panel
             clickable: false, // Don't capture mouse events
@@ -164,10 +171,10 @@ class BBSDashboard {
         this.statsPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             label: ' BBS STATISTICS ',
-            left: '50%',
-            top: 1, // below the masthead
-            width: '50%',
-            height: '50%', // matches the system panel
+            left: panels.stats.left,
+            top: panels.stats.top,
+            width: panels.stats.width,
+            height: panels.stats.height, // matches the system panel
             fixed: true, // Static panel for BBS environment
             focusable: false, // Display-only panel
             clickable: false, // Don't capture mouse events
@@ -187,10 +194,10 @@ class BBSDashboard {
         this.nodesPanel = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             label: ' NODE STATUS ',
-            left: 0,
-            top: '50%+1', // one row down, to pay for the masthead
-            width: '100%',
-            bottom: 1, // Reserve 1 line for status bar
+            left: panels.nodes.left,
+            top: panels.nodes.top, // one row down, to pay for the masthead
+            width: panels.nodes.width,
+            bottom: panels.nodes.bottom, // Reserve 1 line for status bar
             fixed: true, // Static panel for BBS environment
             focusable: false, // Display-only panel
             clickable: false, // Don't capture mouse events
@@ -251,39 +258,27 @@ class BBSDashboard {
         });
         // Responsive breakpoint handling
         this.resizeHandler = (width, height) => {
-            const breakpoint = this.screen.responsiveLayout.getBreakpoint();
-            if (breakpoint === 'small') {
-                // Stack panels vertically on small screens
-                this.systemPanel.width = '100%';
-                this.systemPanel.height = '33%';
-                this.systemPanel.left = 0;
-                this.systemPanel.top = 0;
-                this.statsPanel.left = 0;
-                this.statsPanel.top = '33%';
-                this.statsPanel.width = '100%';
-                this.statsPanel.height = '33%';
-                this.nodesPanel.left = 0;
-                this.nodesPanel.top = '66%';
-                this.nodesPanel.width = '100%';
-                this.nodesPanel.bottom = 1; // Always reserve space for status bar
-                delete this.nodesPanel.height; // Remove height when using bottom constraint
-            }
-            else {
-                // Side-by-side layout for medium/large screens
-                this.systemPanel.width = '50%';
-                this.systemPanel.height = '50%';
-                this.systemPanel.left = 0;
-                this.systemPanel.top = 0;
-                this.statsPanel.left = '50%';
-                this.statsPanel.top = 0;
-                this.statsPanel.width = '50%';
-                this.statsPanel.height = '50%';
-                this.nodesPanel.left = 0;
-                this.nodesPanel.top = '50%';
-                this.nodesPanel.width = '100%';
-                this.nodesPanel.bottom = 1; // Always reserve space for status bar
-                delete this.nodesPanel.height; // Remove height when using bottom constraint
-            }
+            /*
+             * THE SAME FUNCTION THE PANELS WERE BUILT FROM. This handler used to
+             * carry its own copy of both layouts, and the copies disagreed with
+             * the build - the masthead's row, which the build pays for and the
+             * handler did not - so a resize moved every panel up one and the
+             * status row was painted over.
+             */
+            const next = (0, layout_1.dashboardPanels)(width);
+            this.systemPanel.left = next.system.left;
+            this.systemPanel.top = next.system.top;
+            this.systemPanel.width = next.system.width;
+            this.systemPanel.height = next.system.height;
+            this.statsPanel.left = next.stats.left;
+            this.statsPanel.top = next.stats.top;
+            this.statsPanel.width = next.stats.width;
+            this.statsPanel.height = next.stats.height;
+            this.nodesPanel.left = next.nodes.left;
+            this.nodesPanel.top = next.nodes.top;
+            this.nodesPanel.width = next.nodes.width;
+            this.nodesPanel.bottom = next.nodes.bottom;
+            delete this.nodesPanel.height; // the bottom anchor owns the height
             if (this.screen && !this.screen.destroyed) {
                 // Don't await here to avoid blocking resize handler
                 this.renderDashboard().catch(() => {
@@ -322,11 +317,14 @@ class BBSDashboard {
         const memUsage = sysStats.memory;
         const diskUsage = sysStats.disk;
         systemLines.push('');
-        systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 20, this.s.accent)}`);
+        // The gauge is what the panel has left after the label - twenty columns
+        // of it ran off a C64's screen, closing bracket and all.
+        const gauge = (0, layout_1.gaugeWidth)(this.screen.width);
+        systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, gauge, this.s.accent)}`);
         systemLines.push('');
-        systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, 20, this.s.accentAlt)}`);
+        systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, gauge, this.s.accentAlt)}`);
         systemLines.push('');
-        systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, 20, this.s.warn)}`);
+        systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, gauge, this.s.warn)}`);
         this.systemText.setContent(systemLines.join('\n'));
         // Render BBS Statistics Panel
         const statsLines = [];
@@ -346,15 +344,31 @@ class BBSDashboard {
         // Render Node Status Panel
         const nodesLines = [];
         nodesLines.push('');
-        nodesLines.push(`{bold}  Node    User              Status      Location{/bold}`);
-        nodesLines.push(`{${T.accent}-fg}` + '─'.repeat(60) + `{/${T.accent}-fg}`);
+        /*
+         * THE HEADER IS BUILT FROM THE SAME COLUMNS AS THE ROWS. It was a
+         * literal, so at forty columns it named a Location column the rows below
+         * it no longer have - and ran off the screen saying so.
+         */
+        const headCols = (0, layout_1.nodeColumns)(this.screen.width);
+        const head = `  Node   ${this.padRight('User', headCols.handle)}  ${this.padRight('Status', headCols.status)}`;
+        nodesLines.push(`{bold}${headCols.showLocation ? `${head}  Location` : head}{/bold}`);
+        // The panel's own interior, not sixty columns: this rule ran twenty past
+        // the right edge of a C64's screen.
+        nodesLines.push(`{${T.accent}-fg}` + '─'.repeat((0, layout_1.panelRuleWidth)(this.screen.width)) + `{/${T.accent}-fg}`);
         // Fetch real node status
         const nodes = await this.fetchNodeStatus();
         for (const node of nodes) {
             const userName = node.user || 'Waiting';
             // Active is the theme's "good" role; anything else is ordinary text.
             const paint = node.status === 'Active' ? this.s.ok : this.s.ink;
-            nodesLines.push(paint(`  ${node.id}       ${this.padRight(userName, 16)}  ${this.padRight(node.status, 10)}  ${node.location}`));
+            /*
+             * The columns are the panel's, not a constant: at forty the location
+             * goes rather than all four fields being squeezed until none of them
+             * is legible (`./layout.ts`).
+             */
+            const cols = (0, layout_1.nodeColumns)(this.screen.width);
+            const row = `  ${node.id}   ${this.padRight(userName, cols.handle)}  ${this.padRight(node.status, cols.status)}`;
+            nodesLines.push(paint(cols.showLocation ? `${row}  ${node.location}` : row));
         }
         this.nodesText.setContent(nodesLines.join('\n'));
         // Update status line. The hints belong to the chrome; only the clock

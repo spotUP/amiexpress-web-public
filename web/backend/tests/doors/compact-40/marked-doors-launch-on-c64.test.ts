@@ -133,8 +133,13 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * slides, and its two editor modals - `width: 68` and `width: 70` - are
  * sized to the screen instead. Proven on a real 40x25 screen in
  * `whip-menu-screen.test.ts` and by geometry in `whip-layout.test.ts`.
+ *
+ * DASHBOARD came with it, same day and the same shape: it knew how to stack
+ * its three panels and BUILT them at `width: '50%'`, so the handler that
+ * stacks them only ever ran on a resize a C64 caller never performs. Pinned
+ * in `dashboard-layout.test.ts`.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
