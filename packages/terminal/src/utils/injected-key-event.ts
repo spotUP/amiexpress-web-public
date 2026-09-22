@@ -35,6 +35,40 @@ const SEQUENCES: Readonly<Record<string, InjectedKeyEvent>> = {
   '\x1bOB': { key: 'ArrowDown', code: 'ArrowDown' },
   '\x1bOC': { key: 'ArrowRight', code: 'ArrowRight' },
   '\x1bOD': { key: 'ArrowLeft', code: 'ArrowLeft' },
+  /*
+   * THE FUNCTION KEYS, WHICH A C64 HAS AND THIS TABLE DID NOT.
+   *
+   * A PETSCII caller's F2 arrives here as SS3 Q - the canvas reads the key,
+   * `petsciiInputToAscii` turns $89 into `\x1bOQ`, and the shared input path
+   * asks for the KeyboardEvent to press. With no entry it got null, fell
+   * through to `sendInput`, and `sendInput` drops everything while game mode
+   * is on: the key vanished between the caller and the door. "F2 doesnt work
+   * in petscii mode for some reason" (the sysop, 2026-09-22) - it is
+   * LiveChat's sidebar toggle, and on a C64 the sidebar is the whole screen.
+   *
+   * The names are the ones `getSpecialKeyChar` turns back into these very
+   * bytes on the board (server/socket-handlers.ts), so the round trip is one
+   * table read each way. Home and the edit keys travel with them, for the
+   * same reason and by the same route.
+   */
+  '\x1bOP': { key: 'F1', code: 'F1' },
+  '\x1bOQ': { key: 'F2', code: 'F2' },
+  '\x1bOR': { key: 'F3', code: 'F3' },
+  '\x1bOS': { key: 'F4', code: 'F4' },
+  '\x1b[15~': { key: 'F5', code: 'F5' },
+  '\x1b[17~': { key: 'F6', code: 'F6' },
+  '\x1b[18~': { key: 'F7', code: 'F7' },
+  '\x1b[19~': { key: 'F8', code: 'F8' },
+  '\x1b[20~': { key: 'F9', code: 'F9' },
+  '\x1b[21~': { key: 'F10', code: 'F10' },
+  '\x1b[23~': { key: 'F11', code: 'F11' },
+  '\x1b[24~': { key: 'F12', code: 'F12' },
+  '\x1b[H': { key: 'Home', code: 'Home' },
+  '\x1b[F': { key: 'End', code: 'End' },
+  '\x1b[5~': { key: 'PageUp', code: 'PageUp' },
+  '\x1b[6~': { key: 'PageDown', code: 'PageDown' },
+  '\x1b[2~': { key: 'Insert', code: 'Insert' },
+  '\x1b[3~': { key: 'Delete', code: 'Delete' },
 };
 
 /** The single control characters, named the way a KeyboardEvent names them. */
