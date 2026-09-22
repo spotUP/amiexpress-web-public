@@ -58,7 +58,22 @@ class DoormanLayout {
         this.stopMasthead = null;
         this.screen = screen;
         const screenWidth = screen.width || 80;
-        this.compact = (0, blessed_2.getCompactProfile)(screenWidth);
+        /*
+         * THE FRAMES STAY ON A C64, and they are where this door's colour is.
+         *
+         * The SDK's compact profile answers `borders: false` at forty columns -
+         * two columns bought back, which is the right default for a door whose
+         * colour is in its TEXT. This door's is not: its accents live on the
+         * borders (`border: { fg: T.accent }` on every panel), so dropping them
+         * left the sysop a screen of ink grey with no frames at all
+         * ("doorman is only grey and has no borders", 2026-09-22).
+         *
+         * A C64 draws a box natively - PETSCII has the glyphs and the board's
+         * own rule turns a run of dashes into a line - so the two columns are
+         * worth spending here. WHIP keeps its frames at forty for the same
+         * reason and is the screen he called perfect.
+         */
+        this.compact = { ...(0, blessed_2.getCompactProfile)(screenWidth), borders: true };
         this.narrow = this.compact.singleColumn;
         // The list's inner text width. Side by side it is 35% of the screen
         // less the frames; stacked it is the whole row less the gutter.

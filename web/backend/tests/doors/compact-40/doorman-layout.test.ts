@@ -320,3 +320,43 @@ describe('DOORMAN at 80x24 paints exactly what it painted before', () => {
     }
   });
 });
+
+describe('DOORMAN keeps its frames on a C64', () => {
+  /*
+   * "doorman is only grey and has no borders ... doesnt the petscii doors
+   * use themes like the ansi doors?" (the sysop, 2026-09-22).
+   *
+   * They do - the transducer maps the theme's colours onto the sixteen
+   * VIC-II ones, measured: orange lands on 8, cyan on 3, yellow on 7. What
+   * went missing was the thing carrying them. This door paints its accents
+   * on BORDERS (`border: { fg: T.accent }` on every panel), and the SDK's
+   * compact profile answers `borders: false` at forty columns - the right
+   * default for a door whose colour is in its text, and the wrong one here.
+   * With the frames gone, every panel collapsed to ink grey.
+   */
+  it('overrides the profile and draws its panels framed', () => {
+    const screen = new Screen({ width: 40, height: 25, responsive: true } as any);
+    const layout = new DoormanLayout(screen, 1);
+    try {
+      expect(layout.compact.borders).toBe(true);
+      // ...and the rest of the compact profile is untouched.
+      expect(layout.compact.singleColumn).toBe(true);
+      expect(layout.narrow).toBe(true);
+    } finally {
+      try { layout.stopMasthead?.(); } catch { /* leaving anyway */ }
+      try { screen.destroy(); } catch { /* leaving anyway */ }
+    }
+  });
+
+  it('still leaves an eighty-column board exactly as it was', () => {
+    const screen = new Screen({ width: 80, height: 25, responsive: true } as any);
+    const layout = new DoormanLayout(screen, 1);
+    try {
+      expect(layout.compact.borders).toBe(true);
+      expect(layout.narrow).toBe(false);
+    } finally {
+      try { layout.stopMasthead?.(); } catch { /* leaving anyway */ }
+      try { screen.destroy(); } catch { /* leaving anyway */ }
+    }
+  });
+});
