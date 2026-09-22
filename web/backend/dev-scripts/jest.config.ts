@@ -60,6 +60,15 @@ module.exports = {
     '^@amiexpress/bbs-door-sdk/teletext/render-native$': '<rootDir>/../../sdk/teletext/render-native.ts',
     '^@amiexpress/bbs-door-sdk/teletext/tti-lexer$': '<rootDir>/../../sdk/teletext/tti-lexer.ts',
     '^@amiexpress/bbs-door-sdk/common/run-diff$': '<rootDir>/../../sdk/common/run-diff.ts',
+    // The Amiga file formats a door and the board both read. Source, for the
+    // same reason as the rest: a RED/GREEN cycle must not ride on sdk/dist.
+    '^@amiexpress/bbs-door-sdk/formats/ctop-data$': '<rootDir>/../../sdk/formats/ctop-data.ts',
+    '^@amiexpress/bbs-door-sdk/formats/estringf$': '<rootDir>/../../sdk/formats/estringf.ts',
+    '^@amiexpress/bbs-door-sdk/utils/narrow-art$': '<rootDir>/../../sdk/utils/narrow-art.ts',
+    // Tone.js is ESM and jest cannot parse it. A test that imports a DOOR's
+    // entry point gets the SDK root, which reaches the audio engine, which
+    // imports Tone - see tests/stubs/tone.ts.
+    '^tone$': '<rootDir>/tests/stubs/tone.ts',
     // The terminal's key policy, from source: no runner exists for the
     // terminal package itself, and the game-mode stuck-key regression
     // (2026-09-10) pins pure helpers, not a mounted component.

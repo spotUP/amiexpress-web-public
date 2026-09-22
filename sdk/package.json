@@ -35,6 +35,21 @@
       "require": "./dist/common/index.js",
       "default": "./dist-esm/common/index.js"
     },
+    "./utils/narrow-art": {
+      "types": "./dist/utils/narrow-art.d.ts",
+      "require": "./dist/utils/narrow-art.js",
+      "default": "./dist/utils/narrow-art.js"
+    },
+    "./formats/estringf": {
+      "types": "./dist/formats/estringf.d.ts",
+      "require": "./dist/formats/estringf.js",
+      "default": "./dist/formats/estringf.js"
+    },
+    "./formats/ctop-data": {
+      "types": "./dist/formats/ctop-data.d.ts",
+      "require": "./dist/formats/ctop-data.js",
+      "default": "./dist/formats/ctop-data.js"
+    },
     "./common/run-diff": {
       "types": "./dist/common/run-diff.d.ts",
       "import": "./dist-esm/common/run-diff.js",

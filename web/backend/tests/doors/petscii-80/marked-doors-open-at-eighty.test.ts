@@ -250,16 +250,25 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
     expect(run.adapter.unseenRows()).toBe(0);
   });
 
-  it('ctop: the empty-conference notice reaches an 80-column caller, and never a 40-column one', async () => {
-    replay.text = fs.readFileSync(path.join(FIXTURES, 'ctop.ans'), 'latin1');
+  /*
+   * CONFTOP, not CTOP, since 2026-09-22. They are two registrations of the
+   * same table - Conftop-II under `ctop`, the v2.3 build under `conftop` -
+   * and `ctop` is a TypeScript door now (`Doors/ctop-viewer`, MIN_COLUMNS=40)
+   * with a forty-column layout of its own, so there is no adapter on it to
+   * ask about. `conftop` is still the 68K binary behind the adapter and still
+   * centres the same sentence, so the property keeps its proof and its
+   * fixture (`conftop.ans`, the corpus's own capture).
+   */
+  it('conftop: the empty-conference notice reaches an 80-column caller, and never a 40-column one', async () => {
+    replay.text = fs.readFileSync(path.join(FIXTURES, 'conftop.ans'), 'latin1');
 
     /*
      * The door centres this sentence on slot 5 of a screen ~32 rows tall
-     * (manifest note, `ctop`), so on a 25-row glass it is painted and then
+     * (manifest note, `conftop`), so on a 25-row glass it is painted and then
      * scrolled off by the door's own totals block. The caller at 80 READ it;
      * asking the final frame would ask about arithmetic instead.
      */
-    const wideBytes = (await open('ctop', wideSession(), root)).bytes;
+    const wideBytes = (await open('conftop', wideSession(), root)).bytes;
     expect(everShowed(glassOf(Buffer.alloc(0), 80), inChunks(wideBytes), NOTICE)).toBe(true);
 
     /*
@@ -268,7 +277,7 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
      * pair is here. Progressive on this side too, so "never" means never
      * rather than "not at the end".
      */
-    const narrowBytes = (await open('ctop', narrowSession(), root)).bytes;
+    const narrowBytes = (await open('conftop', narrowSession(), root)).bytes;
     expect(everShowed(glassOf(Buffer.alloc(0), 40), inChunks(narrowBytes), NOTICE)).toBe(false);
   });
 });

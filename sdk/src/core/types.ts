@@ -262,8 +262,33 @@ export interface BBSApi {
   /** Get all online users */
   getOnlineUsers(): Promise<User[]>;
 
-  /** Send message to user */
-  sendMessage(userId: string, message: string): Promise<void>;
+  /*
+   * NOTE, 2026-09-22: this is the SECOND declaration of `BBSApi` in the SDK
+   * - `core/types.ts` has the other, and `server/index.ts` reaches this one
+   * through `src/core/Door`. They drift, and a door written against the
+   * wrong copy fails to compile with two types of the same name. Converging
+   * them is its own job; until then, a change to one belongs in both.
+   */
+
+  /**
+   * Send a PRIVATE message to a user, in the caller's conference. Three
+   * arguments, as the board has always implemented it.
+   */
+  sendMessage(toUsername: string, subject: string, body: string): Promise<boolean>;
+
+  /**
+   * Where the caller's conference keeps its files, as a host path - through
+   * the board's own resolver, so it is `LOCATION.n` and never `Conf<n>`
+   * built from the number. Optional: an older backend has no such method.
+   */
+  getConferencePath?(conferenceNumber?: number): string;
+
+  /**
+   * The ENABLED tooltypes of a `.info` file under the board's directory. A
+   * flag tooltype with no `=` comes back with an empty value; a disabled
+   * one - `(KEY=value)` or `!KEY=value` - is not there at all.
+   */
+  readTooltypes?(relativePath: string): Record<string, string>;
 
   /** Broadcast message to all users */
   broadcast(message: string): Promise<void>;

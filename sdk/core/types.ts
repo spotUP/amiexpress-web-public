@@ -896,14 +896,39 @@ export interface BBSApi {
   /** Get all online users */
   getOnlineUsers(): Promise<User[]>;
 
-  /** Send message to user */
-  sendMessage(userId: string, message: string): Promise<void>;
+  /**
+   * Send a PRIVATE message to a user, in the caller's conference.
+   *
+   * Three arguments, as the board has always implemented it
+   * (`BBSApi.sendMessage`) - the declaration said two until 2026-09-22 and
+   * any door that believed it posted a message with no body.
+   */
+  sendMessage(toUsername: string, subject: string, body: string): Promise<boolean>;
 
   /** Broadcast message to all users */
   broadcast(message: string): Promise<void>;
 
   /** Check user access level */
   hasAccess(userId: string, level: number): Promise<boolean>;
+
+  /**
+   * Where the caller's conference keeps its files, as a host path.
+   *
+   * The board's own resolver answers: a conference's directory is whatever
+   * `LOCATION.n` says, not `Conf<n>` built from the number. Optional, because
+   * a door may be running against an older backend - one that cannot answer
+   * this cannot run a conference-scoped door at all, and the door should say
+   * so rather than guess a path.
+   */
+  getConferencePath?(conferenceNumber?: number): string;
+
+  /**
+   * The ENABLED tooltypes of a `.info` file under the board's directory, as
+   * `KEY` to value. A flag tooltype with no `=` comes back with an empty
+   * value; a disabled one - `(KEY=value)` or `!KEY=value` - is not there at
+   * all. Optional for the same reason as `getConferencePath`.
+   */
+  readTooltypes?(relativePath: string): Record<string, string>;
 
   /** Read file from BBS data directory */
   readFile(filename: string): Promise<string | null>;

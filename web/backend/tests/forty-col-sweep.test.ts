@@ -486,6 +486,35 @@ describe('40-column sweep: the adapted doors', () => {
     }
   });
 
+  it('CTOP: the conference table, with adversarial names and gigabyte totals', () => {
+    const {
+      renderNarrowScreen,
+    } = require('../../../Doors/ctop-viewer/src/narrow');
+    const {
+      aggregateCtop, decodeCtopHeader,
+    } = require('../../../sdk/formats/ctop-data');
+
+    const header = decodeCtopHeader(Buffer.alloc(96));
+    header.topUpName = LONG;
+    header.topUpBytes = 9_999_999_999_999n;
+    header.topUpFiles = 999_999;
+    header.periodUpName = EMPTY;
+    const period = aggregateCtop(header, [
+      { userName: LONG, location: LONG, bytes: 0x7fffffff },
+      { userName: EMPTY, location: EMPTY, bytes: 0 },
+    ]);
+
+    fits(renderNarrowScreen({
+      period,
+      conferenceName: LONG,
+      today: 17_796,
+      rows: 30,
+      skipEmpty: false,
+      minLimit: 0n,
+      showResetDate: true,
+    }));
+  });
+
   it('phreakwars: every emitted row goes through say()', () => {
     const ui = require('../../../Doors/phreakwars/lib/ui');
     const rows: string[] = [];

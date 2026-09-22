@@ -117,7 +117,16 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * three lines and exits, which is what a conference bulletin's ~XISUBSCAN
  * runs, so there is no 40-column layout to prove.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP'];
+/*
+ * CTOP is the newest, added 2026-09-22, and it is here because it STOPPED
+ * being a C64_ADAPT door: the conference upload table was a 68K binary served
+ * through the frame adapter, and the corpus manifest's own note called its
+ * header unfixable at forty columns - six labels over five fields, no rung
+ * able to put a label above the column it names. It is a TypeScript port now
+ * (`Doors/ctop-viewer`) with a forty-column layout of its own, so it earns
+ * MIN_COLUMNS the way THEMEC does rather than the adapter's mark.
+ */
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

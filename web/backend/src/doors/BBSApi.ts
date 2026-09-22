@@ -39,6 +39,7 @@ import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { listOnlineNodes, type OnlineNode } from './who-is-online';
+import { doorConferencePath, doorTooltypes } from './conference-access';
 
 // applyInstallMetadata and the list build moved to ./door-list on 2026-08-31
 // so the door list and its metadata rule live together and the HTTP route can
@@ -1052,6 +1053,27 @@ console.log('[BBSApi] Mouse events disabled');
    */
   getCurrentConference(): number {
     return this.session.currentConf || 1;
+  }
+
+  /**
+   * WHERE this conference's files are, as a host path - see
+   * `./conference-access`, which is also where the rule lives that it comes
+   * from `LOCATION.n` and never from the conference's number.
+   */
+  getConferencePath(conferenceNumber?: number): string {
+    return doorConferencePath(
+      appConfig.get('dataDir'),
+      conferenceNumber ?? this.getCurrentConference(),
+    );
+  }
+
+  /**
+   * The ENABLED tooltypes of an icon under the board's directory - a door's
+   * own settings, read the way the board reads them. See
+   * `./conference-access`.
+   */
+  readTooltypes(relativePath: string): Record<string, string> {
+    return doorTooltypes(appConfig.get('dataDir'), relativePath);
   }
 
   /**
