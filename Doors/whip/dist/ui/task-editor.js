@@ -7,6 +7,7 @@ exports.createTask = createTask;
 exports.editTask = editTask;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const layout_1 = require("./layout");
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
 const CATEGORIES = ['code', 'music', 'gfx', 'design', 'effects', 'engine', '3d', 'bug'];
@@ -95,12 +96,18 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // project, and the task "vanished" - it was in Backlog all along).
         // The label follows the Project picker below, so it stays true.
         const labelFor = (name) => `${isNew ? ' New Task' : ' Edit Task'}${name ? ` - ${name} ` : ' '}`;
+        /*
+         * THE FIELDS ARE PLACED FOR THE SCREEN, not by literals - `ui/layout.ts`
+         * holds the decision for both widths. A `width: 68` modal cannot open on
+         * a C64 at all, which is half of why this door was refused there.
+         */
+        const fields = (0, layout_1.taskEditorLayout)(screen.width, screen.height);
         const modal = blessed_1.default.box({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 68,
-            height: 24,
+            width: fields.modal.width,
+            height: fields.modal.height,
             border: { type: 'line' },
             style: {
                 border: { fg: door_theme_1.T.accentAlt },
@@ -112,10 +119,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Title input - bordered textbox with label on border (WORKING PATTERN)
         const titleInput = blessed_1.default.textbox({
             parent: modal,
-            top: 1,
-            left: 1,
-            right: 1,
-            height: 3,
+            ...fields.title,
             border: { type: 'line' },
             label: ' Title ',
             keys: true,
@@ -131,10 +135,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Category list
         const categoryList = blessed_1.default.list({
             parent: modal,
-            top: 4,
-            left: 1,
-            width: '48%',
-            height: 5,
+            ...fields.category,
             border: { type: 'line' },
             label: ' Category ',
             tags: true,
@@ -154,10 +155,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Priority list
         const priorityList = blessed_1.default.list({
             parent: modal,
-            top: 4,
-            left: '50%',
-            right: 1,
-            height: 5,
+            ...fields.priority,
             border: { type: 'line' },
             label: ' Priority ',
             tags: true,
@@ -179,10 +177,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // re-home, so Backlog tasks were stuck (2026-09-10).
         const projectList = blessed_1.default.list({
             parent: modal,
-            top: 9,
-            left: 1,
-            right: 1,
-            height: 4,
+            ...fields.project,
             border: { type: 'line' },
             label: ' Project ',
             tags: true,
@@ -208,10 +203,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // to assign at all: new tasks silently took the creator.
         const assigneeList = blessed_1.default.list({
             parent: modal,
-            top: 13,
-            left: 1,
-            width: '48%',
-            height: 3,
+            ...fields.assignee,
             border: { type: 'line' },
             label: ' Assignee ',
             tags: true,
@@ -231,10 +223,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Points input - bordered textbox
         const pointsInput = blessed_1.default.textbox({
             parent: modal,
-            top: 13,
-            left: '50%',
-            right: 1,
-            height: 3,
+            ...fields.points,
             border: { type: 'line' },
             label: ' Points ',
             keys: true,
@@ -250,10 +239,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Description input - bordered textbox
         const descInput = blessed_1.default.textbox({
             parent: modal,
-            top: 16,
-            left: 1,
-            right: 1,
-            height: 3,
+            ...fields.description,
             border: { type: 'line' },
             label: ' Description (optional) ',
             keys: true,
@@ -270,9 +256,9 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // 1-row buttons never painted (reported with a screenshot, 2026-09-09).
         const saveBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
-            left: 15,
-            width: 14,
+            top: fields.buttonsTop,
+            left: fields.buttons.ok.left,
+            width: fields.buttons.ok.width,
             height: 3,
             content: '[ Save ]',
             align: 'center',
@@ -290,9 +276,9 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         });
         const cancelBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
-            left: 38,
-            width: 14,
+            top: fields.buttonsTop,
+            left: fields.buttons.cancel.left,
+            width: fields.buttons.cancel.width,
             height: 3,
             content: '[ Cancel ]',
             align: 'center',

@@ -7,6 +7,7 @@ exports.createProject = createProject;
 exports.editProject = editProject;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const layout_1 = require("./layout");
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
 const PROJECT_TYPES = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
@@ -36,12 +37,17 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             .filter(p => new Date(p.date) >= new Date())
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         // Modal container
+        /*
+         * The fields are placed for the screen - `ui/layout.ts`. A `width: 70`
+         * modal is two columns wider than a C64 screen has, twice over.
+         */
+        const fields = (0, layout_1.projectEditorLayout)(screen.width, screen.height);
         const modal = blessed_1.default.box({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 70,
-            height: 24,
+            width: fields.modal.width,
+            height: fields.modal.height,
             border: { type: 'line' },
             style: {
                 border: { fg: door_theme_1.T.accentAlt },
@@ -53,10 +59,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         // Name input with border (height 3 = border + content + border)
         const nameInput = blessed_1.default.textbox({
             parent: modal,
-            top: 1,
-            left: 1,
-            right: 1,
-            height: 3,
+            ...fields.name,
             border: { type: 'line' },
             label: ' Name ',
             keys: true,
@@ -72,10 +75,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         // Type list
         const typeList = blessed_1.default.list({
             parent: modal,
-            top: 5,
-            left: 1,
-            width: '48%',
-            height: 9,
+            ...fields.type,
             border: { type: 'line' },
             label: ' Type ',
             tags: true,
@@ -95,10 +95,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         // Status list
         const statusList = blessed_1.default.list({
             parent: modal,
-            top: 5,
-            left: '50%',
-            right: 1,
-            height: 5,
+            ...fields.status,
             border: { type: 'line' },
             label: ' Status ',
             tags: true,
@@ -122,10 +119,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             : 0;
         const partyList = blessed_1.default.list({
             parent: modal,
-            top: 11,
-            left: '50%',
-            right: 1,
-            height: 5,
+            ...fields.party,
             border: { type: 'line' },
             label: ' Target Party ',
             tags: true,
@@ -145,10 +139,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         // Description input with border
         const descInput = blessed_1.default.textbox({
             parent: modal,
-            top: 15,
-            left: 1,
-            right: 1,
-            height: 3,
+            ...fields.description,
             border: { type: 'line' },
             label: ' Description (optional) ',
             keys: true,
@@ -166,9 +157,9 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         // editors share the proven shape.
         const saveBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
-            left: 17,
-            width: 14,
+            top: fields.buttonsTop,
+            left: fields.buttons.ok.left,
+            width: fields.buttons.ok.width,
             height: 3,
             content: '[ Save ]',
             align: 'center',
@@ -186,9 +177,9 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         });
         const cancelBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
-            left: 40,
-            width: 14,
+            top: fields.buttonsTop,
+            left: fields.buttons.cancel.left,
+            width: fields.buttons.cancel.width,
             height: 3,
             content: '[ Cancel ]',
             align: 'center',

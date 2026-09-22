@@ -8,6 +8,7 @@ exports.normalizeDiscordName = normalizeDiscordName;
 exports.showMyProfile = showMyProfile;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const layout_1 = require("./layout");
 const door_theme_1 = require("../door-theme");
 exports.DISCORD_NAME_MAX = 32;
 /** Pure: what the door stores for a typed Discord name. */
@@ -22,12 +23,16 @@ function normalizeDiscordName(raw) {
 async function showMyProfile(screen, user) {
     return new Promise((resolve) => {
         let closed = false;
+        // Never wider than the screen, and the buttons go one to a row when
+        // three of them will not fit across it - see `ui/layout.ts`.
+        const size = (0, layout_1.modalSize)(62, 15, screen.width, screen.height);
+        const buttons = (0, layout_1.buttonRow)(3, size.width - 2, 10);
         const modal = blessed_1.default.box({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 62,
-            height: 15,
+            width: size.width,
+            height: size.height,
             border: { type: 'line' },
             style: {
                 border: { fg: door_theme_1.T.accent },
@@ -85,9 +90,9 @@ async function showMyProfile(screen, user) {
         };
         const saveBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 10,
-            left: 4,
-            width: 14,
+            top: buttons[0].top,
+            left: buttons[0].left,
+            width: buttons[0].width,
             height: 3,
             content: '[ Save ]',
             align: 'center',
@@ -105,9 +110,9 @@ async function showMyProfile(screen, user) {
         });
         const clearBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 10,
-            left: 24,
-            width: 14,
+            top: buttons[1].top,
+            left: buttons[1].left,
+            width: buttons[1].width,
             height: 3,
             content: '[ Clear ]',
             align: 'center',
@@ -125,9 +130,9 @@ async function showMyProfile(screen, user) {
         });
         const cancelBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 10,
-            left: 44,
-            width: 14,
+            top: buttons[2].top,
+            left: buttons[2].left,
+            width: buttons[2].width,
             height: 3,
             content: '[ Cancel ]',
             align: 'center',

@@ -5,6 +5,7 @@ import {
   retreatFocus,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { projectEditorLayout } from './layout';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Project, ProjectType, ProjectStatus } from '../types/project';
 import type { Party } from '../types/party';
@@ -64,12 +65,17 @@ async function showProjectEditor(
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Modal container
+    /*
+     * The fields are placed for the screen - `ui/layout.ts`. A `width: 70`
+     * modal is two columns wider than a C64 screen has, twice over.
+     */
+    const fields = projectEditorLayout(screen.width, screen.height);
     const modal = blessed.box({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 70,
-      height: 24,
+      width: fields.modal.width,
+      height: fields.modal.height,
       border: { type: 'line' },
       style: {
         border: { fg: T.accentAlt },
@@ -82,10 +88,7 @@ async function showProjectEditor(
     // Name input with border (height 3 = border + content + border)
     const nameInput = blessed.textbox({
       parent: modal,
-      top: 1,
-      left: 1,
-      right: 1,
-      height: 3,
+      ...fields.name,
       border: { type: 'line' },
       label: ' Name ',
       keys: true,
@@ -102,10 +105,7 @@ async function showProjectEditor(
     // Type list
     const typeList = blessed.list({
       parent: modal,
-      top: 5,
-      left: 1,
-      width: '48%',
-      height: 9,
+      ...fields.type,
       border: { type: 'line' },
       label: ' Type ',
       tags: true,
@@ -126,10 +126,7 @@ async function showProjectEditor(
     // Status list
     const statusList = blessed.list({
       parent: modal,
-      top: 5,
-      left: '50%',
-      right: 1,
-      height: 5,
+      ...fields.status,
       border: { type: 'line' },
       label: ' Status ',
       tags: true,
@@ -155,10 +152,7 @@ async function showProjectEditor(
 
     const partyList = blessed.list({
       parent: modal,
-      top: 11,
-      left: '50%',
-      right: 1,
-      height: 5,
+      ...fields.party,
       border: { type: 'line' },
       label: ' Target Party ',
       tags: true,
@@ -179,10 +173,7 @@ async function showProjectEditor(
     // Description input with border
     const descInput = blessed.textbox({
       parent: modal,
-      top: 15,
-      left: 1,
-      right: 1,
-      height: 3,
+      ...fields.description,
       border: { type: 'line' },
       label: ' Description (optional) ',
       keys: true,
@@ -201,9 +192,9 @@ async function showProjectEditor(
     // editors share the proven shape.
     const saveBtn = createButton({
       parent: modal,
-      top: 19,
-      left: 17,
-      width: 14,
+      top: fields.buttonsTop,
+      left: fields.buttons.ok.left,
+      width: fields.buttons.ok.width,
       height: 3,
       content: '[ Save ]',
       align: 'center',
@@ -222,9 +213,9 @@ async function showProjectEditor(
 
     const cancelBtn = createButton({
       parent: modal,
-      top: 19,
-      left: 40,
-      width: 14,
+      top: fields.buttonsTop,
+      left: fields.buttons.cancel.left,
+      width: fields.buttons.cancel.width,
       height: 3,
       content: '[ Cancel ]',
       align: 'center',

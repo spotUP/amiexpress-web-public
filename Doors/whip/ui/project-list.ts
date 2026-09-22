@@ -5,6 +5,7 @@ import {
   createButton
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { modalSize } from './layout';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Project, ProjectType, ProjectStatus } from '../types/project';
 import type { UserStats } from '../types/user';
@@ -275,14 +276,16 @@ async function showProjectEditor(
   return new Promise((resolve) => {
     screen.program.enableMouse();
 
-    // Modal container - NOT focusable (children are)
+    // Modal container - NOT focusable (children are). Never wider than the
+    // screen it opens on (`ui/layout.ts`).
+    const pickerSize = modalSize(70, 22, screen.width, screen.height);
     const modal = createBox({
       fixed: true,
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 70,
-      height: 22,  // Increased from 20 for more comfortable spacing
+      width: pickerSize.width,
+      height: pickerSize.height,  // 22 at eighty columns, the screen's own below that
       border: { type: 'line' },
       style: {
         border: { fg: T.accentAlt },

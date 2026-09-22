@@ -9,6 +9,7 @@ exports.formatKanbanCard = formatKanbanCard;
 exports.showKanbanBoard = showKanbanBoard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const layout_1 = require("./layout");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
@@ -719,12 +720,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
 }
 async function selectMoveDestination(screen) {
     return new Promise((resolve) => {
+        const moveSize = (0, layout_1.modalSize)(40, 10, screen.width, screen.height);
         const modal = (0, blessed_helpers_1.createBox)({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 40,
-            height: 10,
+            width: moveSize.width,
+            height: moveSize.height,
             fixed: true,
             border: { type: 'line' },
             label: ' Move Task To ',
@@ -831,12 +833,13 @@ async function moveTask(screen, task, newStatus, dataManager, achievementManager
 }
 async function showAchievementUnlock(screen, achievement) {
     return new Promise((resolve) => {
+        const noticeSize = (0, layout_1.modalSize)(60, 10, screen.width, screen.height);
         const msg = blessed_1.default.message({
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 60,
-            height: 10,
+            width: noticeSize.width,
+            height: noticeSize.height,
             border: { type: 'line' },
             style: {
                 border: { fg: door_theme_1.T.accentAlt },

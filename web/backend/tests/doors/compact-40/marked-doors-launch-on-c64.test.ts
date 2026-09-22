@@ -126,7 +126,15 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * (`Doors/ctop-viewer`) with a forty-column layout of its own, so it earns
  * MIN_COLUMNS the way THEMEC does rather than the adapter's mark.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP'];
+/*
+ * WHIP is the newest, 2026-09-22, and it is here because the sysop named it:
+ * "some of our typescript doors dont have a 40 column mode, whip for
+ * example". Its panes stack, its kanban shows one full-width column that
+ * slides, and its two editor modals - `width: 68` and `width: 70` - are
+ * sized to the screen instead. Proven on a real 40x25 screen in
+ * `whip-menu-screen.test.ts` and by geometry in `whip-layout.test.ts`.
+ */
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

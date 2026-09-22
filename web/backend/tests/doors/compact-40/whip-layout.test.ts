@@ -17,7 +17,9 @@
  * drew before this change, and a compact change that moves an eighty-column
  * board's boxes is a regression rather than a feature.
  */
-import { whipPanes, sideFits } from '../../../../../Doors/whip/ui/layout';
+import {
+  whipPanes, sideFits, taskEditorLayout, projectEditorLayout, modalSize, buttonRow,
+} from '../../../../../Doors/whip/ui/layout';
 import { columnGeometry } from '../../../../../Doors/whip/ui/kanban-board';
 
 /** The content pane of a WHIP screen at 80x24: menu bar 1, header 3, footer 3. */
@@ -125,5 +127,143 @@ describe('the kanban board', () => {
   it('leaves a card enough room to be a card', () => {
     // The interior of the box, borders off.
     expect(columnGeometry(40, 0, 4).colWidth - 2).toBeGreaterThanOrEqual(36);
+  });
+});
+
+
+describe('the task editor modal', () => {
+  it('is the size it always was on an eighty-column board', () => {
+    const fields = taskEditorLayout(80, 24);
+
+    expect(fields.modal).toEqual({ width: 68, height: 24 });
+    expect(fields.category).toEqual({ top: 4, left: 1, width: '48%', height: 5 });
+    expect(fields.priority).toEqual({ top: 4, left: '50%', right: 1, height: 5 });
+    expect(fields.buttons).toEqual({ ok: { left: 15, width: 14 }, cancel: { left: 38, width: 14 } });
+  });
+
+  it('fits a C64 screen - the whole reason the door was refused there', () => {
+    const fields = taskEditorLayout(40, 25);
+
+    expect(fields.modal.width).toBeLessThanOrEqual(40);
+    expect(fields.modal.height).toBeLessThanOrEqual(25);
+  });
+
+  it('stacks the two wide lists and shrinks them to one visible row', () => {
+    const fields = taskEditorLayout(40, 25);
+
+    expect(fields.category.width).toBeUndefined();
+    expect(fields.category.right).toBe(1);
+    expect(fields.priority.top).toBe(fields.category.top + fields.category.height);
+    expect(fields.category.height).toBe(3);
+    expect(fields.priority.height).toBe(3);
+  });
+
+  it('keeps Assignee and Points side by side, because a handle and a number fit', () => {
+    const fields = taskEditorLayout(40, 25);
+
+    expect(fields.assignee.top).toBe(fields.points.top);
+    expect(fields.assignee.width).toBe('48%');
+  });
+
+  it('puts every field and both buttons inside the modal', () => {
+    const fields = taskEditorLayout(40, 25);
+    const boxes = [fields.title, fields.category, fields.priority, fields.project,
+      fields.assignee, fields.points, fields.description];
+
+    for (const box of boxes) {
+      expect(box.top + box.height).toBeLessThanOrEqual(fields.modal.height - 1);
+    }
+    expect(fields.buttonsTop + 3).toBeLessThanOrEqual(fields.modal.height - 1);
+    for (const button of [fields.buttons.ok, fields.buttons.cancel]) {
+      expect(button.left + button.width).toBeLessThanOrEqual(fields.modal.width - 2);
+    }
+  });
+
+  it('never overlaps two fields', () => {
+    const fields = taskEditorLayout(40, 25);
+    const stacked = [fields.title, fields.category, fields.priority, fields.project];
+
+    for (let i = 1; i < stacked.length; i++) {
+      expect(stacked[i].top).toBeGreaterThanOrEqual(stacked[i - 1].top + stacked[i - 1].height);
+    }
+  });
+});
+
+
+describe('the project editor modal', () => {
+  it('is the size it always was on an eighty-column board', () => {
+    const fields = projectEditorLayout(80, 24);
+
+    expect(fields.modal).toEqual({ width: 70, height: 24 });
+    expect(fields.type).toEqual({ top: 5, left: 1, width: '48%', height: 9 });
+    expect(fields.buttons.cancel).toEqual({ left: 40, width: 14 });
+  });
+
+  it('fits a C64 screen, fields, buttons and all', () => {
+    const fields = projectEditorLayout(40, 25);
+    const boxes = [fields.name, fields.type, fields.status, fields.party, fields.description];
+
+    expect(fields.modal.width).toBeLessThanOrEqual(40);
+    for (const box of boxes) {
+      expect(box.width).toBeUndefined();          // stacked, full width
+      expect(box.top + box.height).toBeLessThanOrEqual(fields.modal.height - 1);
+    }
+    expect(fields.buttonsTop + 3).toBeLessThanOrEqual(fields.modal.height - 1);
+    for (const button of [fields.buttons.ok, fields.buttons.cancel]) {
+      expect(button.left + button.width).toBeLessThanOrEqual(fields.modal.width - 2);
+    }
+  });
+
+  it('stacks its fields in order, none of them overlapping', () => {
+    const fields = projectEditorLayout(40, 25);
+    const stacked = [fields.name, fields.type, fields.status, fields.party, fields.description];
+
+    for (let i = 1; i < stacked.length; i++) {
+      expect(stacked[i].top).toBe(stacked[i - 1].top + stacked[i - 1].height);
+    }
+  });
+});
+
+
+describe('every dialog WHIP opens', () => {
+  it('keeps its size on an eighty-column board', () => {
+    expect(modalSize(70, 22, 80, 24)).toEqual({ width: 70, height: 22 });
+    expect(modalSize(62, 15, 80, 24)).toEqual({ width: 62, height: 15 });
+    expect(modalSize(60, 10, 80, 24)).toEqual({ width: 60, height: 10 });
+  });
+
+  it('is never wider or taller than a C64 screen', () => {
+    for (const [w, h] of [[70, 22], [62, 15], [60, 10], [40, 10]] as Array<[number, number]>) {
+      const size = modalSize(w, h, 40, 25);
+      expect(size.width).toBeLessThanOrEqual(40);
+      expect(size.height).toBeLessThanOrEqual(25);
+    }
+  });
+});
+
+describe('a row of buttons', () => {
+  it('spreads across the modal when they fit', () => {
+    const row = buttonRow(3, 60, 10);
+
+    expect(row.every(b => b.top === 10)).toBe(true);
+    expect(row[0].left).toBeGreaterThanOrEqual(0);
+    expect(row[2].left + row[2].width).toBeLessThanOrEqual(60);
+  });
+
+  it('goes one to a row when three will not fit across forty', () => {
+    // Three buttons of fourteen need forty-two; a C64 modal has thirty-eight.
+    const row = buttonRow(3, 38, 10);
+
+    expect(row.map(b => b.top)).toEqual([10, 13, 16]);
+    for (const button of row) {
+      expect(button.left + button.width).toBeLessThanOrEqual(38);
+    }
+  });
+
+  it('still fits two buttons across a C64 modal', () => {
+    const row = buttonRow(2, 38, 19);
+
+    expect(row.map(b => b.top)).toEqual([19, 19]);
+    expect(row[1].left + row[1].width).toBeLessThanOrEqual(38);
   });
 });

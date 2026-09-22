@@ -515,6 +515,38 @@ describe('40-column sweep: the adapted doors', () => {
     }));
   });
 
+  it('WHIP: the menu and the stats on a real 40x25 screen', () => {
+    const { Screen } = require('../../../sdk/engines/ui/blessed');
+    const { showMainMenu } = require('../../../Doors/whip/ui/main-menu');
+
+    const screen = new Screen({ width: 40, height: 25, responsive: true } as any);
+    try {
+      void showMainMenu(screen, {
+        userId: '1', handle: LONG, xp: 999999, level: 99, tasksCompleted: 99999,
+        tasksCreated: 99999, projectsCreated: 99999, achievements: [], streak: 0,
+      } as never, {
+        loadProjects: async () => ([{ id: 'p', name: LONG, type: 'demo', status: 'active', tasks: [] }]),
+        loadTasks: async () => ([{ id: 't', title: LONG, status: 'todo', priority: 'high', points: 99999 }]),
+        getUser: async () => ({}),
+        loadParties: async () => [],
+      } as never);
+      screen.render();
+      // Every box the door put up, measured on the glass rather than in a
+      // string: this door paints widgets, and a widget that hangs off the
+      // right edge emits nothing a row-based sweep could see.
+      const walk = (node: any, out: any[] = []): any[] => {
+        for (const child of node.children ?? []) { out.push(child); walk(child, out); }
+        return out;
+      };
+      for (const el of walk(screen)) {
+        const c = el._getCoords(true) || el._getCoords();
+        if (c) expect(c.xl).toBeLessThanOrEqual(40);
+      }
+    } finally {
+      try { screen.destroy(); } catch { /* leaving anyway */ }
+    }
+  });
+
   it('phreakwars: every emitted row goes through say()', () => {
     const ui = require('../../../Doors/phreakwars/lib/ui');
     const rows: string[] = [];

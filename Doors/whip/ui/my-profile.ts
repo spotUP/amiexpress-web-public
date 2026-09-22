@@ -2,6 +2,7 @@ import {
   createButton,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { modalSize, buttonRow } from './layout';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import { T } from '../door-theme';
@@ -25,12 +26,16 @@ export async function showMyProfile(
   return new Promise((resolve) => {
     let closed = false;
 
+    // Never wider than the screen, and the buttons go one to a row when
+    // three of them will not fit across it - see `ui/layout.ts`.
+    const size = modalSize(62, 15, screen.width, screen.height);
+    const buttons = buttonRow(3, size.width - 2, 10);
     const modal = blessed.box({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 62,
-      height: 15,
+      width: size.width,
+      height: size.height,
       border: { type: 'line' },
       style: {
         border: { fg: T.accent },
@@ -92,9 +97,9 @@ export async function showMyProfile(
 
     const saveBtn = createButton({
       parent: modal,
-      top: 10,
-      left: 4,
-      width: 14,
+      top: buttons[0].top,
+      left: buttons[0].left,
+      width: buttons[0].width,
       height: 3,
       content: '[ Save ]',
       align: 'center',
@@ -113,9 +118,9 @@ export async function showMyProfile(
 
     const clearBtn = createButton({
       parent: modal,
-      top: 10,
-      left: 24,
-      width: 14,
+      top: buttons[1].top,
+      left: buttons[1].left,
+      width: buttons[1].width,
       height: 3,
       content: '[ Clear ]',
       align: 'center',
@@ -134,9 +139,9 @@ export async function showMyProfile(
 
     const cancelBtn = createButton({
       parent: modal,
-      top: 10,
-      left: 44,
-      width: 14,
+      top: buttons[2].top,
+      left: buttons[2].left,
+      width: buttons[2].width,
       height: 3,
       content: '[ Cancel ]',
       align: 'center',

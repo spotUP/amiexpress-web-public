@@ -3,6 +3,7 @@ import {
   createList
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { modalSize } from './layout';
 import { isCompactWidth } from '@amiexpress/bbs-door-sdk';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Project, Task, TaskStatus } from '../types/project';
@@ -803,12 +804,13 @@ export async function showKanbanBoard(
 
 async function selectMoveDestination(screen: Screen): Promise<TaskStatus | null> {
   return new Promise((resolve) => {
+    const moveSize = modalSize(40, 10, screen.width, screen.height);
     const modal = createBox({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 40,
-      height: 10,
+      width: moveSize.width,
+      height: moveSize.height,
       fixed: true,
       border: { type: 'line' },
       label: ' Move Task To ',
@@ -950,12 +952,13 @@ async function moveTask(
 
 async function showAchievementUnlock(screen: Screen, achievement: Achievement): Promise<void> {
   return new Promise((resolve) => {
+    const noticeSize = modalSize(60, 10, screen.width, screen.height);
     const msg = blessed.message({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 60,
-      height: 10,
+      width: noticeSize.width,
+      height: noticeSize.height,
       border: { type: 'line' },
       style: {
         border: { fg: T.accentAlt },

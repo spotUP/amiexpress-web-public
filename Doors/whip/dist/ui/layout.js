@@ -2,6 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.whipPanes = whipPanes;
 exports.sideFits = sideFits;
+exports.taskEditorLayout = taskEditorLayout;
+exports.projectEditorLayout = projectEditorLayout;
+exports.modalSize = modalSize;
+exports.buttonRow = buttonRow;
 /**
  * WHERE WHIP'S PANES GO, as one decision per screen rather than fifteen.
  *
@@ -80,4 +84,127 @@ function whipPanes(width, rows, mainRows = 13) {
  */
 function sideFits(panes) {
     return panes.side.height >= 3 && panes.sideContentRows >= 1;
+}
+/**
+ * THE TASK EDITOR'S FIELDS, for the screen they are on.
+ *
+ * The modal was `width: 68, height: 24` - literals, which is why WHIP could
+ * not open on a C64 at all: sixty-eight columns do not fit on forty, so the
+ * caller's first keystroke went into a box he could not see the sides of.
+ *
+ * At forty the two WIDE pairs stack and shrink: Category and Priority are
+ * five-row lists side by side at eighty, and at forty they are three-row
+ * lists - one visible entry each, walked with up and down, which is the key
+ * the caller already uses there. What does NOT stack is Assignee and Points:
+ * a handle and a number fit eighteen columns each, and spending six rows to
+ * give them forty would cost the Description its own.
+ *
+ * The sum at forty: title 3, category 3, priority 3, project 3, the
+ * assignee/points pair 3, description 3, buttons 3 - twenty-one rows inside
+ * a two-row border, which leaves two spare on a twenty-five row screen.
+ */
+function taskEditorLayout(width, height) {
+    if (!(0, bbs_door_sdk_1.isCompactWidth)(width)) {
+        return {
+            modal: { width: Math.min(68, width), height: Math.min(24, height) },
+            title: { top: 1, left: 1, right: 1, height: 3 },
+            category: { top: 4, left: 1, width: '48%', height: 5 },
+            priority: { top: 4, left: '50%', right: 1, height: 5 },
+            project: { top: 9, left: 1, right: 1, height: 4 },
+            assignee: { top: 13, left: 1, width: '48%', height: 3 },
+            points: { top: 13, left: '50%', right: 1, height: 3 },
+            description: { top: 16, left: 1, right: 1, height: 3 },
+            buttonsTop: 19,
+            buttons: { ok: { left: 15, width: 14 }, cancel: { left: 38, width: 14 } },
+        };
+    }
+    return {
+        modal: { width: Math.min(68, width), height: Math.min(24, height) },
+        title: { top: 1, left: 1, right: 1, height: 3 },
+        category: { top: 4, left: 1, right: 1, height: 3 },
+        priority: { top: 7, left: 1, right: 1, height: 3 },
+        project: { top: 10, left: 1, right: 1, height: 3 },
+        assignee: { top: 13, left: 1, width: '48%', height: 3 },
+        points: { top: 13, left: '50%', right: 1, height: 3 },
+        description: { top: 16, left: 1, right: 1, height: 3 },
+        buttonsTop: 19,
+        /*
+         * BOTH BUTTONS INSIDE THE BORDER. At eighty they sit at 15 and 38; the
+         * second of those is past the right edge of a forty-column modal, so the
+         * caller could not see - or click - Cancel at all.
+         */
+        buttons: { ok: { left: 2, width: 14 }, cancel: { left: 20, width: 14 } },
+    };
+}
+/**
+ * THE PROJECT EDITOR'S FIELDS, on the same rule as the task editor's.
+ *
+ * Its modal was `width: 70, height: 24`, two more columns than a C64 screen
+ * has twice over. At forty everything stacks at three rows a field - Type is
+ * a nine-row list at eighty and one visible entry here, walked with up and
+ * down - which comes to eighteen rows inside the border and leaves five
+ * spare.
+ */
+function projectEditorLayout(width, height) {
+    if (!(0, bbs_door_sdk_1.isCompactWidth)(width)) {
+        return {
+            modal: { width: Math.min(70, width), height: Math.min(24, height) },
+            name: { top: 1, left: 1, right: 1, height: 3 },
+            type: { top: 5, left: 1, width: '48%', height: 9 },
+            status: { top: 5, left: '50%', right: 1, height: 5 },
+            party: { top: 11, left: '50%', right: 1, height: 5 },
+            description: { top: 15, left: 1, right: 1, height: 3 },
+            buttonsTop: 19,
+            buttons: { ok: { left: 17, width: 14 }, cancel: { left: 40, width: 14 } },
+        };
+    }
+    return {
+        modal: { width: Math.min(70, width), height: Math.min(24, height) },
+        name: { top: 1, left: 1, right: 1, height: 3 },
+        type: { top: 4, left: 1, right: 1, height: 3 },
+        status: { top: 7, left: 1, right: 1, height: 3 },
+        party: { top: 10, left: 1, right: 1, height: 3 },
+        description: { top: 13, left: 1, right: 1, height: 3 },
+        buttonsTop: 16,
+        buttons: { ok: { left: 2, width: 14 }, cancel: { left: 20, width: 14 } },
+    };
+}
+/**
+ * A MODAL NEVER WIDER THAN THE SCREEN IT OPENS ON.
+ *
+ * WHIP's dialogs were sized with literals - 70x22 for the project picker,
+ * 62x15 for the profile, 60x10 for the kanban's notice - and every one of
+ * them is wider than a C64's forty columns. A modal wider than the screen
+ * does not merely spill: its right border, and anything anchored to it, is
+ * off the glass, so the caller types into a box he cannot see the edge of.
+ */
+function modalSize(preferredWidth, preferredHeight, width, height) {
+    return {
+        width: Math.max(10, Math.min(preferredWidth, width)),
+        height: Math.max(3, Math.min(preferredHeight, height)),
+    };
+}
+/**
+ * A ROW OF BUTTONS, laid across the modal's interior or stacked down it.
+ *
+ * Three buttons of fourteen columns need forty-two and a C64's modal has
+ * thirty-eight, so at the compact tier they go one to a row. `interior` is
+ * the modal's width less its two border columns.
+ */
+function buttonRow(count, interior, firstRow, buttonWidth = 14) {
+    const across = count * buttonWidth + (count - 1) * 2 <= interior;
+    if (across) {
+        const gap = Math.floor((interior - count * buttonWidth) / (count + 1));
+        return Array.from({ length: count }, (_, i) => ({
+            top: firstRow,
+            left: gap + i * (buttonWidth + gap),
+            width: buttonWidth,
+        }));
+    }
+    const fitted = Math.min(buttonWidth, interior);
+    return Array.from({ length: count }, (_, i) => ({
+        top: firstRow + i * 3,
+        left: Math.max(0, Math.floor((interior - fitted) / 2)),
+        width: fitted,
+    }));
 }

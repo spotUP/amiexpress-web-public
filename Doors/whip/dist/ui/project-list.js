@@ -7,6 +7,7 @@ exports.showProjectList = showProjectList;
 exports.createProject = createProject;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const layout_1 = require("./layout");
 const menu_1 = require("./menu");
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
@@ -218,14 +219,16 @@ async function editProject(screen, project, dataManager, bbsApi) {
 async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
     return new Promise((resolve) => {
         screen.program.enableMouse();
-        // Modal container - NOT focusable (children are)
+        // Modal container - NOT focusable (children are). Never wider than the
+        // screen it opens on (`ui/layout.ts`).
+        const pickerSize = (0, layout_1.modalSize)(70, 22, screen.width, screen.height);
         const modal = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
             top: 'center',
             left: 'center',
-            width: 70,
-            height: 22, // Increased from 20 for more comfortable spacing
+            width: pickerSize.width,
+            height: pickerSize.height, // 22 at eighty columns, the screen's own below that
             border: { type: 'line' },
             style: {
                 border: { fg: door_theme_1.T.accentAlt },
