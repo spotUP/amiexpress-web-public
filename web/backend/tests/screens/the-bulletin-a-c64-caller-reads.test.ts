@@ -19,7 +19,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { displayScreen } from '../../src/handlers/screen.handler';
+import { displayScreen, processNextScreenSegment } from '../../src/handlers/screen.handler';
 import { config } from '../../src/config';
 
 /**
@@ -30,6 +30,18 @@ import { config } from '../../src/config';
  */
 const BULLETIN = fs.readFileSync(
   path.join(__dirname, 'fixtures', 'multitop-bull1-live.txt'),
+  'latin1',
+);
+
+/**
+ * `Bulletins/bull3.txt`, also off the volume, and NOT the same shape:
+ * MultiTop writes bull2 to bull5 with a leading FORM FEED, and bull1
+ * without one. Everything the board decides about a screen - whether it is
+ * art, whether it is adapted, whether it is skipped - it decides from the
+ * bytes, so the two files are two cases and only one of them was tested.
+ */
+const BULLETIN_FF = fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'multitop-bull3-live.txt'),
   'latin1',
 );
 
@@ -53,10 +65,11 @@ beforeAll(() => {
   fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Bulletins'), { recursive: true });
   fs.writeFileSync(path.join(root, 'Bulletins', 'bull1.txt'), BULLETIN, 'binary');
+  fs.writeFileSync(path.join(root, 'Bulletins', 'bull3.txt'), BULLETIN_FF, 'binary');
   // The live screen, shape and all: an include and the pause after it.
   fs.writeFileSync(
     path.join(root, 'Screens', 'BULL.TXT'),
-    '~f\r\n~SS_BBS:Bulletins/bull1.txt ~SP\r\n',
+    '~f\r\n~SS_BBS:Bulletins/bull1.txt ~SP\r\n~SS_BBS:Bulletins/bull3.txt ~SP\r\n',
     'binary',
   );
   previousDataDir = config.get('dataDir');
@@ -69,7 +82,7 @@ afterAll(() => {
 });
 
 /** Everything the caller's terminal received, escapes stripped, as rows. */
-async function rowsFor(session: Record<string, unknown>): Promise<string[]> {
+async function rowsFor(session: Record<string, unknown>, screen = 'BULL'): Promise<string[]> {
   const wire: string[] = [];
   const socket: any = {
     id: 'bulletin-test',
@@ -81,7 +94,21 @@ async function rowsFor(session: Record<string, unknown>): Promise<string[]> {
     on: () => socket, once: () => socket, off: () => socket,
     removeListener: () => socket, removeAllListeners: () => socket,
   };
-  await displayScreen(socket, session as never, 'BULL', true, true);
+  await displayScreen(socket, session as never, screen, true, true);
+  /*
+   * THE PAUSE IS PART OF THE SCREEN.
+   *
+   * The live `Screens/BULL.TXT` is six includes with a `~SP` between them,
+   * so what the caller reads after the first bulletin comes off
+   * `session.screenSegments` - a different code path from the one that drew
+   * the first. A test that stopped at the first segment could not see it.
+   */
+  for (let guard = 0; guard < 12; guard++) {
+    const segState = (session as any).screenSegments;
+    if (!segState || segState.segments.length === 0) break;
+    (session as any).paginatedScreen = undefined;
+    await processNextScreenSegment(socket, session as never);
+  }
   return wire.join('')
     .split(/\r?\n/)
     .map(row => row.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\s+$/, ''));
@@ -120,6 +147,57 @@ describe('a C64 caller reading the bulletins', () => {
     // than squeezed onto a row with somebody else - see the cut's own test.
     expect(rows.some(row => /^\s*1\.\s+\S/.test(row))).toBe(true);
     expect(rows.some(row => row.startsWith('No# Username'))).toBe(true);
+  });
+});
+
+/**
+ * The file MultiTop writes with a form feed in front of it. Same table, same
+ * two columns across eighty, and the caller's forty columns have to hold it
+ * one place to a row exactly as bull1 does.
+ */
+describe('a C64 caller reading a bulletin that starts with a form feed', () => {
+  it('gets one place per row there too', async () => {
+    const rows = await rowsFor(c64());
+    const entries = rows.filter(row => /^\s*\d+\.\s/.test(row));
+    // The second bulletin is the one behind the pause.
+    expect(rows.some(row => row.includes('Phantasm'))).toBe(true);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const row of entries) {
+      expect(row.replace(/^\s*\d+\.\s/, '')).not.toMatch(/\s\d+\.\s/);
+    }
+  });
+
+  it('keeps every row inside forty columns', async () => {
+    for (const row of await rowsFor(c64())) {
+      expect(row.length).toBeLessThanOrEqual(40);
+    }
+  });
+});
+
+/**
+ * THE `B` COMMAND'S OWN ROUTE.
+ *
+ * `Screens/BULL.TXT` is the flow's bulletin walk. A caller who types `B` and
+ * a number reaches `display-file-commands.handler`, which resolves the file
+ * itself (`_findSecurityScreen(Bulletins/Bull1)`) and hands displayScreen an
+ * ABSOLUTE PATH rather than a screen name. That is a second entry point into
+ * the same screen, and the sysop reads his bulletins through it.
+ */
+describe('a C64 caller who types B and a number', () => {
+  it('gets the chart stacked, one place per row', async () => {
+    const rows = await rowsFor(c64(), path.join(root, 'Bulletins', 'bull1.txt'));
+    const entries = rows.filter(row => /^\s*\d+\.\s/.test(row));
+
+    expect(entries.length).toBeGreaterThan(0);
+    for (const row of entries) {
+      expect(row.replace(/^\s*\d+\.\s/, '')).not.toMatch(/\s\d+\.\s/);
+    }
+  });
+
+  it('keeps every row inside forty columns', async () => {
+    for (const row of await rowsFor(c64(), path.join(root, 'Bulletins', 'bull1.txt'))) {
+      expect(row.length).toBeLessThanOrEqual(40);
+    }
   });
 });
 
