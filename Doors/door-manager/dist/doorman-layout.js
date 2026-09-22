@@ -86,6 +86,16 @@ class DoormanLayout {
         // default border (and its colour) is untouched byte for byte.
         const frame = this.compact.borders ? {} : { border: undefined };
         const chromeH = this.compact.collapseChrome ? 1 : 3;
+        /**
+         * A frame costs two rows, and the header, the footer and the filter are
+         * ONE row tall once the chrome collapses. Framing them leaves no interior
+         * for the text: blessed paints the corners and the title never appears -
+         * "it has parts of frames under and over the interface" (the sysop,
+         * 2026-09-22). Bars carry their colour in their INK, so they take the
+         * frame only when they are tall enough to hold one.
+         */
+        const barBorders = this.compact.borders && chromeH >= 3;
+        const barFrame = barBorders ? {} : { border: undefined };
         // Stacked at XXS: the list takes the top half, the info pane the bottom.
         const listGeom = this.narrow
             ? { top: chromeH, left: 0, width: '100%', height: '50%-1' }
@@ -98,13 +108,13 @@ class DoormanLayout {
             ? { top: 1, left: 1, width: '100%-2', height: '100%-2' }
             : { top: 0, left: 0, width: '100%', height: '100%' };
         this.header = new blessed_1.Panel({ parent: screen, top: 0, left: 0, width: '100%', height: chromeH,
-            ...frame,
+            ...barFrame,
             tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
         // The animated slash rail, on the header's first row. A child keeps it
         // out of the outer geometry - nothing below moves, and a theme with no
         // rail (classic) gets the plain title it always had.
         const mastheadRow = new blessed_1.Box({ parent: this.header, top: 0, left: 0,
-            width: this.compact.borders ? '100%-2' : '100%',
+            width: barBorders ? '100%-2' : '100%',
             height: 1, tags: true, content: '', focusable: false,
             style: door_theme_1.S.bar.style });
         /**
@@ -126,8 +136,9 @@ class DoormanLayout {
             width: screenWidth,
             title: 'DOORMAN',
             masthead: mastheadRow,
-            // Two columns less again: the masthead sits inside a framed header.
-            mastheadWidth: Math.max(1, (screen.width || 80) - 3),
+            // Two columns less again when the header is framed; one for the cursor
+            // cell when it is a bare bar.
+            mastheadWidth: Math.max(1, (screen.width || 80) - (barBorders ? 3 : 1)),
             glitch: () => this.doorList ?? null,
             glitchOptions: { tickMs: 400 },
             styles: door_theme_1.S,
@@ -135,11 +146,11 @@ class DoormanLayout {
         });
         this.stopMasthead = () => this.chrome?.stop();
         this.footer = new blessed_1.Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: chromeH,
-            ...frame,
+            ...barFrame,
             tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });
         this.filterPanel = new blessed_1.Panel({ parent: screen, top: chromeH, left: 0,
             width: this.narrow ? '100%' : '35%', height: chromeH,
-            ...frame,
+            ...barFrame,
             tags: true, style: { border: { fg: door_theme_1.T.dim } }, focusable: false });
         // keys:false + inputOnFocus:false make this a DISPLAY-ONLY widget — see
         // sdk/engines/ui/blessed/widgets/textbox.ts:58-60 (keys:false skips
@@ -156,7 +167,7 @@ class DoormanLayout {
         // before this depended on catching every path that could focus it —
         // keys:false removes the capability structurally instead.
         this.filterBox = new blessed_1.Textbox({ parent: this.filterPanel, top: 0,
-            left: this.compact.borders ? 1 : 0, width: this.compact.borders ? '100%-2' : '100%',
+            left: barBorders ? 1 : 0, width: barBorders ? '100%-2' : '100%',
             height: 1, mouse: true, keys: false, inputOnFocus: false,
             style: { fg: door_theme_1.T.ink, focus: { fg: door_theme_1.T.warn } } });
         this.filterPanel.hide();

@@ -90,6 +90,33 @@ describe('DOORMAN layout on a 40x25 screen', () => {
     expect(footer.yl - footer.yi).toBe(1);
   });
 
+  /**
+   * "it has parts of frames under and over the interface" (the sysop,
+   * 2026-09-22). A one-row bar with a border has no interior: blessed paints
+   * the corners at the top and the bottom of the screen and the title never
+   * lands. The panels keep their frames; the bars do not get one.
+   */
+  it('the one-row bars carry no frame, so no corner stubs float above and below', () => {
+    screen = new Screen({ width: 40, height: 25, responsive: true } as any);
+    layout = new DoormanLayout(screen, 1);
+    expect((layout.header as any).border).toBeFalsy();
+    expect((layout.footer as any).border).toBeFalsy();
+    // ...while the panels the colour lives on still have theirs.
+    expect((layout.listPanel as any).border).toBeTruthy();
+    expect((layout.infoPanel as any).border).toBeTruthy();
+  });
+
+  it('the masthead row fills the bare header bar', () => {
+    screen = new Screen({ width: 40, height: 25, responsive: true } as any);
+    layout = new DoormanLayout(screen, 1);
+    const header = coords(layout.header);
+    const masthead = coords((layout.header as any).children[0]);
+    // No frame to sit inside of: the row starts at the bar's own first column.
+    expect(masthead.xi).toBe(header.xi);
+    expect(masthead.yi).toBe(header.yi);
+    expect(masthead.xl - masthead.xi).toBe(40);
+  });
+
   it('the list text column is sized from the screen, not from 35% of 80', () => {
     screen = new Screen({ width: 40, height: 25, responsive: true } as any);
     layout = new DoormanLayout(screen, 1);
