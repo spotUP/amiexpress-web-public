@@ -7,6 +7,7 @@ exports.showMainMenu = showMainMenu;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const menu_1 = require("./menu");
+const layout_1 = require("./layout");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -101,13 +102,21 @@ async function showMainMenu(screen, user, dataManager) {
             { key: 'D', label: 'My Profile (Discord name)', value: 'my-profile' },
             { key: 'Q', label: 'Quit', value: 'quit' }
         ];
+        /*
+         * WHERE THE TWO PANES GO, from the LIVE width - see `ui/layout.ts`. At
+         * eighty columns this is the 50%/45% pair the screen has always drawn;
+         * at forty the list takes the whole width and the stats go underneath,
+         * because twenty columns do not hold `[D] My Profile (Discord name)`.
+         */
+        const contentRows = Math.max(0, screen.height - (barH + 7));
+        const panes = (0, layout_1.whipPanes)(screen.width, contentRows);
         // Menu box with border - 10 items + 2 border + 1 spare = 13
         const menuBox = (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
-            top: 1,
-            left: 1,
-            width: '50%',
-            height: 13,
+            top: panes.main.top,
+            left: panes.main.left,
+            width: panes.main.width,
+            height: panes.main.height,
             border: { type: 'line' },
             label: ' MAIN MENU ',
             style: {
@@ -124,7 +133,9 @@ async function showMainMenu(screen, user, dataManager) {
             top: 1,
             left: 1,
             width: '100%-4',
-            height: 9, // 9 menu items - exact fit, no scrolling needed
+            // Every item, or as many rows as the box has interior - the list is
+            // ten entries and a C64's box is not always thirteen rows tall.
+            height: Math.min(menuItems.length, Math.max(1, Number(panes.main.height) - 3)),
             items: menuItems.map(item => `[{bold}${item.key}{/bold}] ${item.label}`),
             tags: true,
             keys: true,
@@ -138,29 +149,52 @@ async function showMainMenu(screen, user, dataManager) {
             padding: { left: 1 },
         });
         // Build stats content
-        let statsContent = '';
-        statsContent += `{${door_theme_1.T.accent}-fg}Projects:{/${door_theme_1.T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
-        statsContent += `{${door_theme_1.T.accent}-fg}Tasks:{/${door_theme_1.T.accent}-fg}     {bold}${tasks.length}{/bold}\n`;
         const completedTasks = tasks.filter(t => t.status === 'done').length;
         const activeTasks = tasks.filter(t => t.status !== 'done').length;
-        statsContent += `{${door_theme_1.T.accent}-fg}Active:{/${door_theme_1.T.accent}-fg}    {bold}${activeTasks}{/bold}\n`;
-        statsContent += `{${door_theme_1.T.accent}-fg}Completed:{/${door_theme_1.T.accent}-fg} {bold}${completedTasks}{/bold}\n`;
-        statsContent += '\n';
-        if (upcomingParty && daysUntilParty !== null) {
-            statsContent += `{${door_theme_1.T.accentAlt}-fg}UPCOMING PARTY:{/${door_theme_1.T.accentAlt}-fg}\n`;
-            statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
-            statsContent += `in {bold}${daysUntilParty}{/bold} days`;
+        let statsContent = '';
+        if (panes.stacked) {
+            /*
+             * TWO ROWS, because that is what is left under the menu on a C64 - and
+             * two rows can still carry all four numbers. A label per row and the
+             * numbers beside them is the same information in a quarter of the
+             * height; what goes is the blank line and the one-per-row spacing,
+             * which are luxuries of an eighty-column screen.
+             */
+            statsContent += `{${door_theme_1.T.accent}-fg}Projects{/${door_theme_1.T.accent}-fg} {bold}${projects.length}{/bold}  `
+                + `{${door_theme_1.T.accent}-fg}Tasks{/${door_theme_1.T.accent}-fg} {bold}${tasks.length}{/bold}\n`;
+            statsContent += `{${door_theme_1.T.accent}-fg}Active{/${door_theme_1.T.accent}-fg} {bold}${activeTasks}{/bold}  `
+                + `{${door_theme_1.T.accent}-fg}Done{/${door_theme_1.T.accent}-fg} {bold}${completedTasks}{/bold}`;
         }
         else {
-            statsContent += `{${door_theme_1.T.dim}-fg}No upcoming parties{/${door_theme_1.T.dim}-fg}`;
+            statsContent += `{${door_theme_1.T.accent}-fg}Projects:{/${door_theme_1.T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
+            statsContent += `{${door_theme_1.T.accent}-fg}Tasks:{/${door_theme_1.T.accent}-fg}     {bold}${tasks.length}{/bold}\n`;
+            statsContent += `{${door_theme_1.T.accent}-fg}Active:{/${door_theme_1.T.accent}-fg}    {bold}${activeTasks}{/bold}\n`;
+            statsContent += `{${door_theme_1.T.accent}-fg}Completed:{/${door_theme_1.T.accent}-fg} {bold}${completedTasks}{/bold}\n`;
+            statsContent += '\n';
         }
-        // Stats box on right side - same height as menu box (12)
-        const statsBox = (0, blessed_helpers_1.createBox)({
+        if (!panes.stacked) {
+            // The party block is three more rows, which a stacked screen has
+            // already spent on the menu. The Party Timeline screen is a keypress
+            // away and says the same thing at length.
+            if (upcomingParty && daysUntilParty !== null) {
+                statsContent += `{${door_theme_1.T.accentAlt}-fg}UPCOMING PARTY:{/${door_theme_1.T.accentAlt}-fg}\n`;
+                statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
+                statsContent += `in {bold}${daysUntilParty}{/bold} days`;
+            }
+            else {
+                statsContent += `{${door_theme_1.T.dim}-fg}No upcoming parties{/${door_theme_1.T.dim}-fg}`;
+            }
+        }
+        // The stats: beside the menu at eighty columns, under it at forty, and
+        // left out when the rows underneath cannot hold a box with anything in
+        // it (`sideFits`) - a one-row frame with a label and no numbers is worse
+        // than no box.
+        const statsBox = (0, layout_1.sideFits)(panes) ? (0, blessed_helpers_1.createBox)({
             parent: mainContainer,
-            top: 1,
-            right: 1,
-            width: '45%',
-            height: 12,
+            top: panes.side.top,
+            ...(panes.side.left !== undefined ? { left: panes.side.left } : { right: panes.side.right }),
+            width: panes.side.width,
+            height: panes.side.height,
             border: { type: 'line' },
             label: ' STATS ',
             content: statsContent,
@@ -172,10 +206,12 @@ async function showMainMenu(screen, user, dataManager) {
             focusable: false,
             mouse: false,
             clickable: false,
-        });
-        // Getting started hint if no projects
+        }) : null;
+        // Getting started hint if no projects. At forty columns the menu and the
+        // stats have already taken the content pane, and the first two entries
+        // of the menu ARE the getting-started advice.
         let gettingStarted = null;
-        if (projects.length === 0) {
+        if (projects.length === 0 && !panes.stacked) {
             gettingStarted = (0, blessed_helpers_1.createBox)({
                 parent: mainContainer,
                 bottom: 1,

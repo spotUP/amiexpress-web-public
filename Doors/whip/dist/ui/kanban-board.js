@@ -9,6 +9,7 @@ exports.formatKanbanCard = formatKanbanCard;
 exports.showKanbanBoard = showKanbanBoard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
+const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
 const menu_1 = require("./menu");
@@ -92,11 +93,31 @@ function wrapTitle(title, width) {
  * across the full width, so a widened terminal spreads the board
  * instead of leaving it narrow. Pure - the board recomputes it on
  * resize; the probe is width in, widths out.
+ *
+ * FORTY COLUMNS HOLD ONE COLUMN, NOT FOUR (2026-09-22). Quartering a C64's
+ * screen leaves ten cells a column and eight inside its border, which is not
+ * a card - it is a column of single letters. So at the compact tier the board
+ * shows the FOCUSED column at full width and slides the others off the edges;
+ * left and right still walk between them, which is how the board already
+ * moves, and the column's own label says which one the caller is on.
+ *
+ * `focused` is therefore part of the geometry rather than something the
+ * caller applies afterwards: at eighty columns it changes nothing, and at
+ * forty it is the whole layout.
  */
-function columnGeometry(screenWidth) {
+function columnGeometry(screenWidth, focused = 0, columns = 4) {
+    if ((0, bbs_door_sdk_1.isCompactWidth)(screenWidth)) {
+        const colWidth = Math.max(10, screenWidth);
+        return {
+            totalWidth: colWidth,
+            colWidth,
+            leftOf: (i) => (i - focused) * colWidth,
+            onePerScreen: true,
+        };
+    }
     const totalWidth = Math.max(40, screenWidth - 1);
-    const colWidth = Math.max(10, Math.floor(totalWidth / 4));
-    return { totalWidth, colWidth, leftOf: (i) => i * colWidth };
+    const colWidth = Math.max(10, Math.floor(totalWidth / columns));
+    return { totalWidth, colWidth, leftOf: (i) => i * colWidth, onePerScreen: false };
 }
 /**
  * One task as a multi-line card: full wrapped title rows, then the meta
@@ -205,7 +226,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         // Column containers - full width, recomputed on resize so a
         // widened terminal spreads the board (2026-09-10). paintLists
         // re-wraps cards from the same numbers, so one relayout covers all.
-        let { colWidth } = columnGeometry(screen.width);
+        let { colWidth } = columnGeometry(screen.width, 0, COLUMNS.length);
         const columnBoxes = [];
         const columnLists = [];
         const leftMargin = 0;
@@ -375,7 +396,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         await updateLists(true);
         // Get column index from screen X position
         const getColumnFromX = (x) => {
-            const geo = columnGeometry(screen.width);
+            const geo = columnGeometry(screen.width, currentColumn, COLUMNS.length);
             for (let i = 0; i < COLUMNS.length; i++) {
                 const colLeft = leftMargin + geo.leftOf(i);
                 const colRight = colLeft + geo.colWidth;
@@ -388,7 +409,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         // A widened (or narrowed) terminal re-lays the columns instead of
         // leaving them at their opening width with dead space beside them.
         const relayout = () => {
-            const geo = columnGeometry(screen.width);
+            const geo = columnGeometry(screen.width, currentColumn, COLUMNS.length);
             colWidth = geo.colWidth;
             for (let i = 0; i < COLUMNS.length; i++) {
                 columnBoxes[i].left = leftMargin + geo.leftOf(i);
@@ -590,6 +611,16 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 }
                 else {
                     currentColumn = Math.min(COLUMNS.length - 1, currentColumn + 1);
+                }
+                /*
+                 * ON A C64 THE BOARD SLIDES. One column fills the screen at the
+                 * compact tier (`columnGeometry`), so walking left or right is a
+                 * re-layout rather than a change of focus inside a visible row of
+                 * four - without this the caller moved to a column parked off the
+                 * edge and watched an unchanged screen.
+                 */
+                if (columnGeometry(screen.width, currentColumn, COLUMNS.length).onePerScreen) {
+                    relayout();
                 }
                 if (carried) {
                     // Carry along, unsaved: the drop persists, ESC drops the carry.

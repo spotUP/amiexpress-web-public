@@ -2,6 +2,7 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { attachWhipMenu, menuBarHeight, type WhipMenuBar } from './menu';
+import { whipPanes, sideFits } from './layout';
 import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
@@ -113,13 +114,22 @@ export async function showMainMenu(
       { key: 'Q', label: 'Quit', value: 'quit' as MenuSelection }
     ];
 
+    /*
+     * WHERE THE TWO PANES GO, from the LIVE width - see `ui/layout.ts`. At
+     * eighty columns this is the 50%/45% pair the screen has always drawn;
+     * at forty the list takes the whole width and the stats go underneath,
+     * because twenty columns do not hold `[D] My Profile (Discord name)`.
+     */
+    const contentRows = Math.max(0, screen.height - (barH + 7));
+    const panes = whipPanes(screen.width, contentRows);
+
     // Menu box with border - 10 items + 2 border + 1 spare = 13
     const menuBox = createBox({
       parent: mainContainer,
-      top: 1,
-      left: 1,
-      width: '50%',
-      height: 13,
+      top: panes.main.top,
+      left: panes.main.left,
+      width: panes.main.width,
+      height: panes.main.height,
       border: { type: 'line' },
       label: ' MAIN MENU ',
       style: {
@@ -137,7 +147,9 @@ export async function showMainMenu(
       top: 1,
       left: 1,
       width: '100%-4',
-      height: 9,  // 9 menu items - exact fit, no scrolling needed
+      // Every item, or as many rows as the box has interior - the list is
+      // ten entries and a C64's box is not always thirteen rows tall.
+      height: Math.min(menuItems.length, Math.max(1, Number(panes.main.height) - 3)),
       items: menuItems.map(item => `[{bold}${item.key}{/bold}] ${item.label}`),
       tags: true,
       keys: true,
@@ -152,31 +164,52 @@ export async function showMainMenu(
     } as any);
 
     // Build stats content
-    let statsContent = '';
-    statsContent += `{${T.accent}-fg}Projects:{/${T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
-    statsContent += `{${T.accent}-fg}Tasks:{/${T.accent}-fg}     {bold}${tasks.length}{/bold}\n`;
-
     const completedTasks = tasks.filter(t => t.status === 'done').length;
     const activeTasks = tasks.filter(t => t.status !== 'done').length;
-    statsContent += `{${T.accent}-fg}Active:{/${T.accent}-fg}    {bold}${activeTasks}{/bold}\n`;
-    statsContent += `{${T.accent}-fg}Completed:{/${T.accent}-fg} {bold}${completedTasks}{/bold}\n`;
-    statsContent += '\n';
-
-    if (upcomingParty && daysUntilParty !== null) {
-      statsContent += `{${T.accentAlt}-fg}UPCOMING PARTY:{/${T.accentAlt}-fg}\n`;
-      statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
-      statsContent += `in {bold}${daysUntilParty}{/bold} days`;
+    let statsContent = '';
+    if (panes.stacked) {
+      /*
+       * TWO ROWS, because that is what is left under the menu on a C64 - and
+       * two rows can still carry all four numbers. A label per row and the
+       * numbers beside them is the same information in a quarter of the
+       * height; what goes is the blank line and the one-per-row spacing,
+       * which are luxuries of an eighty-column screen.
+       */
+      statsContent += `{${T.accent}-fg}Projects{/${T.accent}-fg} {bold}${projects.length}{/bold}  `
+        + `{${T.accent}-fg}Tasks{/${T.accent}-fg} {bold}${tasks.length}{/bold}\n`;
+      statsContent += `{${T.accent}-fg}Active{/${T.accent}-fg} {bold}${activeTasks}{/bold}  `
+        + `{${T.accent}-fg}Done{/${T.accent}-fg} {bold}${completedTasks}{/bold}`;
     } else {
-      statsContent += `{${T.dim}-fg}No upcoming parties{/${T.dim}-fg}`;
+      statsContent += `{${T.accent}-fg}Projects:{/${T.accent}-fg}  {bold}${projects.length}{/bold}\n`;
+      statsContent += `{${T.accent}-fg}Tasks:{/${T.accent}-fg}     {bold}${tasks.length}{/bold}\n`;
+      statsContent += `{${T.accent}-fg}Active:{/${T.accent}-fg}    {bold}${activeTasks}{/bold}\n`;
+      statsContent += `{${T.accent}-fg}Completed:{/${T.accent}-fg} {bold}${completedTasks}{/bold}\n`;
+      statsContent += '\n';
     }
 
-    // Stats box on right side - same height as menu box (12)
-    const statsBox = createBox({
+    if (!panes.stacked) {
+      // The party block is three more rows, which a stacked screen has
+      // already spent on the menu. The Party Timeline screen is a keypress
+      // away and says the same thing at length.
+      if (upcomingParty && daysUntilParty !== null) {
+        statsContent += `{${T.accentAlt}-fg}UPCOMING PARTY:{/${T.accentAlt}-fg}\n`;
+        statsContent += `{bold}${upcomingParty.name}{/bold}\n`;
+        statsContent += `in {bold}${daysUntilParty}{/bold} days`;
+      } else {
+        statsContent += `{${T.dim}-fg}No upcoming parties{/${T.dim}-fg}`;
+      }
+    }
+
+    // The stats: beside the menu at eighty columns, under it at forty, and
+    // left out when the rows underneath cannot hold a box with anything in
+    // it (`sideFits`) - a one-row frame with a label and no numbers is worse
+    // than no box.
+    const statsBox = sideFits(panes) ? createBox({
       parent: mainContainer,
-      top: 1,
-      right: 1,
-      width: '45%',
-      height: 12,
+      top: panes.side.top,
+      ...(panes.side.left !== undefined ? { left: panes.side.left } : { right: panes.side.right }),
+      width: panes.side.width,
+      height: panes.side.height,
       border: { type: 'line' },
       label: ' STATS ',
       content: statsContent,
@@ -188,11 +221,13 @@ export async function showMainMenu(
       focusable: false,
       mouse: false,
       clickable: false,
-    });
+    }) : null;
 
-    // Getting started hint if no projects
+    // Getting started hint if no projects. At forty columns the menu and the
+    // stats have already taken the content pane, and the first two entries
+    // of the menu ARE the getting-started advice.
     let gettingStarted: any = null;
-    if (projects.length === 0) {
+    if (projects.length === 0 && !panes.stacked) {
       gettingStarted = createBox({
         parent: mainContainer,
         bottom: 1,
