@@ -34,6 +34,8 @@
 import { FrameReconstructor, adaptRows } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import type { Cell } from '@amiexpress/bbs-door-sdk/petscii/frame';
 
+import { twoColumnTableBlock } from './two-column-table';
+
 /** A C64's screen. */
 export const FORTY = 40;
 
@@ -77,7 +79,16 @@ export function adaptAnsiScreenToForty(content: string, cols = FORTY): string | 
   reconstructor.write(content.replace(/\r?\n/g, '\r\n'));
   const frame = reconstructor.snapshot();
 
-  const adapted = adaptRows(frame, { cols });
+  /*
+   * THE BLOCK HOOK IS WHERE A BULLETIN'S SHAPE IS DECIDED, not the ladder.
+   * MultiTop prints one table twice across the page, and no row-local rung
+   * can read that as two records - see `two-column-table.ts` for the rows the
+   * sysop was handed before this.
+   */
+  const adapted = adaptRows(frame, {
+    cols,
+    blockRenderer: (f, y) => twoColumnTableBlock(f, y, cols),
+  });
   const rows = adapted.rows.map((r) => rowToAnsi(r.cells));
 
   // Trailing blank rows are the grid's, not the screen's: the reconstructor
