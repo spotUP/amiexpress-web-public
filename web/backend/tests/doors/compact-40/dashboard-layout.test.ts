@@ -17,6 +17,7 @@ import {
   gaugeWidth,
   nodeColumns,
   panelRuleWidth,
+  panelTextPlacement,
 } from '../../../../../Doors/bbs-dashboard/layout';
 
 describe('the three panels', () => {
@@ -114,5 +115,38 @@ describe('the node list', () => {
   it('draws its rule to the panel, not to sixty columns', () => {
     expect(panelRuleWidth(80)).toBe(60);
     expect(panelRuleWidth(40)).toBe(36);
+  });
+});
+
+
+describe("a panel's text inside it", () => {
+  /*
+   * "dashboard has no content" (the sysop, 2026-09-22) - after the panels
+   * had been sized to what they hold and the CONTENT had not been told. Two
+   * things were wrong at once: the rows were written with a blank spacer
+   * above each gauge, the spacing of an eight-row panel, and the text box
+   * was inset by `top: 1`, which in a bordered box is one row BELOW the
+   * first interior row. Three gauges in three rows survived neither.
+   */
+  it('starts at the first interior row on a C64, and takes all of it', () => {
+    expect(panelTextPlacement(true)).toEqual({ top: 0, height: '100%' });
+  });
+
+  it('keeps the inset it always had on a wide board', () => {
+    expect(panelTextPlacement(false)).toEqual({ top: 1, height: '100%-2' });
+  });
+
+  it('leaves the system panel exactly the rows its three gauges need', () => {
+    const panels = dashboardPanels(40);
+    const interior = Number(panels.system.height) - 2;   // two border rows
+
+    expect(interior).toBe(3);
+    expect(panelTextPlacement(panels.stacked).top).toBe(0);
+  });
+
+  it('leaves the statistics panel the two it shows', () => {
+    const panels = dashboardPanels(40);
+
+    expect(Number(panels.stats.height) - 2).toBe(2);
   });
 });

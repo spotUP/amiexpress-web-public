@@ -133,3 +133,20 @@ export function nodeColumns(width: number): NodeColumns {
   if (isCompactWidth(width)) return { handle: 14, status: 9, showLocation: false };
   return { handle: 16, status: 10, showLocation: true };
 }
+
+/**
+ * WHERE A PANEL'S TEXT SITS INSIDE IT.
+ *
+ * `top: 1` in a bordered box is one row BELOW the first interior row - a row
+ * of air an eighty-column panel can afford and a five-row one cannot. With
+ * three gauges to draw in three rows that offset cost two of them, and the
+ * sysop got a panel holding CPU alone: "dashboard has no content"
+ * (2026-09-22), after the panels had been sized to their content and the
+ * content had not been told.
+ *
+ * So at the compact tier the text starts at the interior's first row and
+ * takes all of it. An eighty-column board keeps the inset it always had.
+ */
+export function panelTextPlacement(stacked: boolean): { top: number; height: string } {
+  return stacked ? { top: 0, height: '100%' } : { top: 1, height: '100%-2' };
+}

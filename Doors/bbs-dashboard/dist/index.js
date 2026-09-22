@@ -16,6 +16,7 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const layout_1 = require("./layout");
+const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 /** The caller's tokens, for the stats lines' inline tags. */
@@ -158,12 +159,21 @@ class BBSDashboard {
             mouse: false, // Don't listen for mouse events
             ...this.s.panel,
         });
+        /*
+         * THE TEXT STARTS AT THE PANEL'S FIRST INTERIOR ROW when the rows are
+         * scarce. `top: 1` inside a bordered box is one row BELOW the interior,
+         * which is a row of air an eighty-column panel can afford and a
+         * five-row one cannot: with three gauges to draw in three rows, that
+         * offset cost two of them and the sysop got a panel holding CPU alone
+         * ("dashboard has no content", 2026-09-22).
+         */
+        const { top: textTop, height: textHeight } = (0, layout_1.panelTextPlacement)(panels.stacked);
         this.systemText = new blessed_1.Text({
             parent: this.systemPanel,
-            top: 1,
+            top: textTop,
             left: 1,
             right: 1,
-            height: '100%-2',
+            height: textHeight,
             content: '',
             tags: true,
         });
@@ -183,10 +193,10 @@ class BBSDashboard {
         });
         this.statsText = new blessed_1.Text({
             parent: this.statsPanel,
-            top: 1,
+            top: textTop,
             left: 1,
             right: 1,
-            height: '100%-2',
+            height: textHeight,
             content: '',
             tags: true,
         });
@@ -206,10 +216,10 @@ class BBSDashboard {
         });
         this.nodesText = new blessed_1.Text({
             parent: this.nodesPanel,
-            top: 1,
+            top: textTop,
             left: 1,
             right: 1,
-            height: '100%-2',
+            height: textHeight,
             content: '',
             tags: true,
         });
@@ -316,34 +326,58 @@ class BBSDashboard {
         const cpuUsage = sysStats.cpu;
         const memUsage = sysStats.memory;
         const diskUsage = sysStats.disk;
-        systemLines.push('');
+        /*
+         * NO SPACERS WHERE THERE ARE NO ROWS TO SPARE.
+         *
+         * These rows are written with a blank line above each gauge - the
+         * spacing of an eight-row panel. The panel is FIVE rows at forty
+         * columns now (`./layout.ts`, sized to what it holds), which leaves
+         * three, and three gauges with a blank above each is six: what the
+         * caller got was an empty box, because the first line of the content is
+         * the blank. Sizing the box and not its CONTENT is half a job.
+         */
+        const compact = (0, bbs_door_sdk_2.isCompactWidth)(this.screen.width);
+        const gap = () => { if (!compact)
+            systemLines.push(''); };
         // The gauge is what the panel has left after the label - twenty columns
         // of it ran off a C64's screen, closing bracket and all.
         const gauge = (0, layout_1.gaugeWidth)(this.screen.width);
+        gap();
         systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, gauge, this.s.accent)}`);
-        systemLines.push('');
+        gap();
         systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, gauge, this.s.accentAlt)}`);
-        systemLines.push('');
+        gap();
         systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, gauge, this.s.warn)}`);
         this.systemText.setContent(systemLines.join('\n'));
-        // Render BBS Statistics Panel
+        /*
+         * Render BBS Statistics Panel. Six statistics with a blank line between
+         * each is thirteen rows; the panel is FOUR at forty columns, which
+         * leaves two. So at that width the two a sysop opens this door for -
+         * how many users there are and how many are on RIGHT NOW - are the two
+         * it shows, and the rest are a keypress away in the board's own stats.
+         */
         const statsLines = [];
-        statsLines.push('');
+        const statGap = () => { if (!compact)
+            statsLines.push(''); };
+        statGap();
         statsLines.push(`Total Users:    {${T.ink}-fg}${this.stats.totalUsers.toLocaleString()}{/${T.ink}-fg}`);
-        statsLines.push('');
+        statGap();
         statsLines.push(`Active Now:     {${T.ok}-fg}${this.stats.activeUsers}{/${T.ok}-fg}`);
-        statsLines.push('');
-        statsLines.push(`Total Calls:    {${T.ink}-fg}${this.stats.totalCalls.toLocaleString()}{/${T.ink}-fg}`);
-        statsLines.push('');
-        statsLines.push(`Messages:       {${T.ink}-fg}${this.stats.totalMessages.toLocaleString()}{/${T.ink}-fg}`);
-        statsLines.push('');
-        statsLines.push(`Files:          {${T.ink}-fg}${this.stats.totalFiles.toLocaleString()}{/${T.ink}-fg}`);
-        statsLines.push('');
-        statsLines.push(`Uptime:         {${T.ink}-fg}${this.formatUptime(this.stats.systemUptime)}{/${T.ink}-fg}`);
+        if (!compact) {
+            statsLines.push('');
+            statsLines.push(`Total Calls:    {${T.ink}-fg}${this.stats.totalCalls.toLocaleString()}{/${T.ink}-fg}`);
+            statsLines.push('');
+            statsLines.push(`Messages:       {${T.ink}-fg}${this.stats.totalMessages.toLocaleString()}{/${T.ink}-fg}`);
+            statsLines.push('');
+            statsLines.push(`Files:          {${T.ink}-fg}${this.stats.totalFiles.toLocaleString()}{/${T.ink}-fg}`);
+            statsLines.push('');
+            statsLines.push(`Uptime:         {${T.ink}-fg}${this.formatUptime(this.stats.systemUptime)}{/${T.ink}-fg}`);
+        }
         this.statsText.setContent(statsLines.join('\n'));
         // Render Node Status Panel
         const nodesLines = [];
-        nodesLines.push('');
+        if (!compact)
+            nodesLines.push('');
         /*
          * THE HEADER IS BUILT FROM THE SAME COLUMNS AS THE ROWS. It was a
          * literal, so at forty columns it named a Location column the rows below
