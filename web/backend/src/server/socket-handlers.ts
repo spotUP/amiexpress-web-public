@@ -398,6 +398,29 @@ console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
     return false;
   };
 
+  /**
+   * WHICH ROUTE A KEYSTROKE TOOK INTO THE DOOR.
+   *
+   * The web path feeds `session.doorInputHandler` from more than one socket
+   * event - `key-down` for SDK doors, `command` for everything else, and
+   * `door:input` as a fallback - and `markDoorInput` is a no-op, so nothing
+   * stops one press arriving twice. The sysop typing `test` into LiveChat on
+   * a PETSCII session read `tteesstt` (2026-09-22), and only there, which is
+   * a routing question and not a door one.
+   *
+   * Instrumentation, not a fix: it names the route and the byte so the log
+   * says which two fired for one press.
+   */
+  const traceDoorInput = (session: BBSSession, route: string, data: string): void => {
+    // On by default for a PETSCII caller, which is where the doubling is;
+    // TRACE_DOOR_INPUT turns it on for everyone else.
+    if (!process.env.TRACE_DOOR_INPUT && !session.petsciiMode) return;
+    console.log(
+      `[DOOR-INPUT] route=${route} data=${JSON.stringify(data)} node=${session.nodeId}` +
+      ` door=${String((session as any).currentDoorName ?? '')} petscii=${session.petsciiMode ? 'Y' : 'N'}`,
+    );
+  };
+
   // Handle door input (for TypeScript doors)
   socket.on('door:input', (data: string) => {
     const session = getSession(socket.id);
@@ -417,6 +440,7 @@ console.log('[socket-handlers] door:input received:', JSON.stringify(data));
         return;
       }
 console.log('[socket-handlers] Calling doorInputHandler from door:input');
+      traceDoorInput(session, 'door:input', data);
       session.doorInputHandler(data);
     } else {
 console.log('[socket-handlers] door:input received but no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
@@ -589,6 +613,7 @@ console.log('[socket-handlers] keys:state received:', data);
         // the punctuation is typed: `@` on a Nordic layout is Option+2. See
         // composed-key.ts - prefixing there spells ESCAPE, and cost the sysop
         // his dialog and then his door while typing an email address.
+        traceDoorInput(session, 'key-down', base);
         session.doorInputHandler(keyBytesFor(base, data.key, data.code, data.alt));
       }
     }
@@ -708,6 +733,7 @@ console.error('No session found for socket:', socket.id);
       // clientDoorActive is already true by the time the user needs to type.
       if (session.inDoorManager && session.doorInputHandler) {
         console.log('[socket-handlers] clientDoorActive=true BUT server doorInputHandler set — routing to server modal');
+        traceDoorInput(session, 'command/client-door', data);
         session.doorInputHandler(data);
       }
       return;
@@ -730,6 +756,7 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
           if (markDoorInput(session, data)) {
             return;
           }
+          traceDoorInput(session, 'command/bbs-pause', data);
           session.doorInputHandler(data);
           return;
         }
@@ -756,6 +783,7 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
           return;
         }
         logDoorDebug(`CMD->door handler dispatch`);
+        traceDoorInput(session, 'command', data);
         session.doorInputHandler(data);
         return;
       } else {
