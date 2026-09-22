@@ -779,11 +779,18 @@ class EnhancedVoiceChannel {
                 zIndex: 99998,
             });
             // Dialog container
+            /*
+             * Fifty-two columns is an eighty-column screen's dialog. A C64 has
+             * forty, so the box takes what there is and its rows follow it - the
+             * two text rows were literal `48`, which is `52` minus its frame
+             * spelled out as a number.
+             */
+            const dialogWidth = Math.min(52, Math.max(20, Number(this.screen.width || 80) - 2));
             const dialog = blessed_1.default.box({
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 52,
+                width: dialogWidth,
                 height: 11,
                 border: { type: 'line' },
                 style: {
@@ -802,7 +809,7 @@ class EnhancedVoiceChannel {
                 parent: dialog,
                 top: 1,
                 left: 2,
-                width: 48,
+                width: '100%-4',
                 content: 'Enable audio and video for this call?',
                 tags: true,
                 style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
@@ -812,7 +819,7 @@ class EnhancedVoiceChannel {
                 parent: dialog,
                 top: 2,
                 left: 2,
-                width: 48,
+                width: '100%-4',
                 content: `{${door_theme_1.T.dim}-fg}Tab to navigate, Space/Enter to toggle/select{/${door_theme_1.T.dim}-fg}`,
                 tags: true,
                 style: { bg: door_theme_1.T.ground },

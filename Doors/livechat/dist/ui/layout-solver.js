@@ -1,4 +1,7 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MIN_USABLE_HEIGHT = exports.MIN_USABLE_WIDTH = exports.MIN_SIDEBAR_WIDTH = exports.MIN_CHAT_WIDTH = void 0;
+exports.solveLayout = solveLayout;
 /**
  * Where every panel goes, for any terminal size.
  *
@@ -19,9 +22,7 @@
  * Pure, so every shape of window can be checked in a test instead of by
  * dragging a browser corner.
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.MIN_USABLE_HEIGHT = exports.MIN_USABLE_WIDTH = exports.MIN_SIDEBAR_WIDTH = exports.MIN_CHAT_WIDTH = void 0;
-exports.solveLayout = solveLayout;
+const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 /**
  * Narrowest chat panel worth keeping.
  *
@@ -63,11 +64,28 @@ function solveLayout(request, constants) {
     // The sidebar is the part that yields. It is clamped to whatever leaves the
     // chat panel a usable width, and dropped entirely when that leaves nothing
     // worth showing.
+    const docked = request.sidebarDock === 'left' || request.sidebarDock === 'right';
+    /*
+     * A C64 DOES NOT DOCK.
+     *
+     * `MIN_CHAT_WIDTH` keeps a docked sidebar honest on a wide window. It
+     * cannot help at forty: the sidebar clamps to sixteen columns, the chat
+     * keeps twenty-four, and the log inside it is twenty-one - a column of
+     * broken words. So at the compact tier the panels STACK the only way two
+     * full-width panels can stack on one screen: whichever one the caller
+     * asked for is the one he gets, and F2 swaps them.
+     */
+    const stacked = (0, bbs_door_sdk_1.isCompactWidth)(width) && docked;
     let sidebarWidth = 0;
-    if (request.sidebarVisible && (request.sidebarDock === 'left' || request.sidebarDock === 'right')) {
-        const affordable = width - exports.MIN_CHAT_WIDTH;
-        const clamped = Math.min(Math.floor(request.sidebarWidth), affordable);
-        sidebarWidth = clamped >= exports.MIN_SIDEBAR_WIDTH ? clamped : 0;
+    if (request.sidebarVisible && docked) {
+        if (stacked) {
+            sidebarWidth = width;
+        }
+        else {
+            const affordable = width - exports.MIN_CHAT_WIDTH;
+            const clamped = Math.min(Math.floor(request.sidebarWidth), affordable);
+            sidebarWidth = clamped >= exports.MIN_SIDEBAR_WIDTH ? clamped : 0;
+        }
     }
     const dockedLeft = request.sidebarDock === 'left';
     const sidebar = sidebarWidth > 0
@@ -78,9 +96,13 @@ function solveLayout(request, constants) {
             height: contentHeight,
         }
         : null;
-    const chatWidth = atLeastOne(width - sidebarWidth);
+    // The sidebar owning the screen is the one case where the chat has no
+    // columns left. It keeps valid geometry - nothing downstream may be handed
+    // a zero - and the door hides it instead.
+    const chatHidden = sidebarWidth >= width;
+    const chatWidth = atLeastOne(chatHidden ? width : width - sidebarWidth);
     const chat = {
-        left: sidebar && dockedLeft ? sidebarWidth : 0,
+        left: !chatHidden && sidebar && dockedLeft ? sidebarWidth : 0,
         top: menuHeight,
         width: chatWidth,
         height: contentHeight,
@@ -111,5 +133,6 @@ function solveLayout(request, constants) {
         },
         statusBar: { width },
         usable: width >= exports.MIN_USABLE_WIDTH && height >= exports.MIN_USABLE_HEIGHT,
+        chatHidden,
     };
 }

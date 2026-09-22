@@ -2,10 +2,11 @@ import blessed, { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blesse
 import { PANEL_BORDER } from '../ui/theme';
 import type { AppState } from '../core/state';
 import { T } from '../door-theme';
+import { fitWidth } from '../ui/fit-width';
 
 export function createProfileOverlay(s: Screen, ib: any, users: any, uname: string, st: AppState, getColor: any, getChan: any, showMsg: any, showDM: any, show: any, hide: any) {
   let target = '';
-  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: 48, height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, trapFocus: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } }, zIndex: 9990 });
+  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: fitWidth(s, 48), height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, trapFocus: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } }, zIndex: 9990 });
   o.enableResize();
 
   const n = blessed.box({ parent: o, top: 1, left: 2, tags: true });

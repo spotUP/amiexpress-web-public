@@ -1,3 +1,5 @@
+import { isCompactWidth } from '@amiexpress/bbs-door-sdk';
+
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element: any) {
   element._coordsCacheValid = false;
@@ -9,7 +11,12 @@ function invalidateCache(element: any) {
 }
 
 export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: () => string, chl: any, ul: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any, menuBar?: any, relayout?: () => void) {
-  let sv = true;
+  /*
+   * Shown by default, EXCEPT on a C64: at forty columns the sidebar takes
+   * the whole screen when it is up (ui/layout-solver's `stacked`), and a
+   * caller who opened LiveChat wants the chat first. F2 swaps them.
+   */
+  let sv = !isCompactWidth(Number(s?.width) || 80);
 
   function ucl() {
     // Hide the PANEL, not just the lists inside it.

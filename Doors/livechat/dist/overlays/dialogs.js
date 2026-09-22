@@ -7,6 +7,7 @@ exports.createDialogs = createDialogs;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const theme_1 = require("../ui/theme");
 const door_theme_1 = require("../door-theme");
+const fit_width_1 = require("../ui/fit-width");
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element) {
     element._coordsCacheValid = false;
@@ -38,9 +39,9 @@ function createDialogs(s, ib) {
         ib.focus();
         s.render();
     }
-    const md = new (require('@amiexpress/bbs-door-sdk').Message)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
-    const pd = new (require('@amiexpress/bbs-door-sdk').Prompt)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
-    const qd = new (require('@amiexpress/bbs-door-sdk').Question)({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
+    const md = new (require('@amiexpress/bbs-door-sdk').Message)({ parent: s, top: 'center', left: 'center', width: (0, fit_width_1.fitWidth)(s, 50), trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
+    const pd = new (require('@amiexpress/bbs-door-sdk').Prompt)({ parent: s, top: 'center', left: 'center', width: (0, fit_width_1.fitWidth)(s, 50), trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
+    const qd = new (require('@amiexpress/bbs-door-sdk').Question)({ parent: s, top: 'center', left: 'center', width: (0, fit_width_1.fitWidth)(s, 45), title: ' Confirm ', trapFocus: true, overlay: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
     function showMessageDialog(t, cb) {
         md.display(t, () => {
             if (cb)

@@ -59,13 +59,25 @@ export class FormatPicker {
   constructor(screen: Screen) {
     this.screen = screen;
 
+    /*
+     * Forty-five columns do not exist on a C64.
+     *
+     * The picker is an overlay, so it is the one widget that cannot yield
+     * to a neighbour - it just hangs off the right of the screen. Sized
+     * from the screen it is the same box it has always been at eighty and
+     * fits at forty, where the category column gives up its width first
+     * because the format NAMES are what the caller is reading.
+     */
+    const screenWidth = Number((screen as any).width) || 80;
+    const pickerWidth = Math.min(45, Math.max(20, screenWidth - 2));
+
     this.picker = new CategoryPicker({
       parent: screen,
       title: 'Format',
-      width: 45,
+      width: pickerWidth,
       height: 10,
       categories: CATEGORIES,
-      categoryWidth: 14,
+      categoryWidth: Math.min(14, Math.max(8, pickerWidth - 24)),
       debounceMs: 80,
       borderColor: PANEL_BORDER,
       categoryStyle: {

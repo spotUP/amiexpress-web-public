@@ -12,7 +12,12 @@ const settings_status_radio_1 = require("./settings-status-radio");
 const settings_save_1 = require("./settings-save");
 const door_theme_1 = require("../door-theme");
 function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
-    const w = Math.min(72, Math.max(46, s.width - 6));
+    /*
+     * The floor was 46, which is wider than a C64's whole screen - the
+     * overlay and every row inside it ended past column 40. Seventy-two stays
+     * the ceiling, so an eighty-column caller sees the box he always saw.
+     */
+    const w = Math.min(72, Math.max(20, s.width - 4));
     const h = Math.min(22, Math.max(18, s.height - 4));
     const l = 2;
     const o = blessed_1.default.box({

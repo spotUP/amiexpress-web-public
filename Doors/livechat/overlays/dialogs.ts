@@ -1,6 +1,7 @@
 import blessed, { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PANEL_BORDER } from '../ui/theme';
 import { T } from '../door-theme';
+import { fitWidth } from '../ui/fit-width';
 
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element: any) {
@@ -37,9 +38,9 @@ export function createDialogs(s: Screen, ib: any) {
     s.render();
   }
 
-  const md = new (require('@amiexpress/bbs-door-sdk').Message)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
-  const pd = new (require('@amiexpress/bbs-door-sdk').Prompt)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
-  const qd = new (require('@amiexpress/bbs-door-sdk').Question)({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
+  const md = new (require('@amiexpress/bbs-door-sdk').Message)({ parent: s, top: 'center', left: 'center', width: fitWidth(s, 50), trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
+  const pd = new (require('@amiexpress/bbs-door-sdk').Prompt)({ parent: s, top: 'center', left: 'center', width: fitWidth(s, 50), trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
+  const qd = new (require('@amiexpress/bbs-door-sdk').Question)({ parent: s, top: 'center', left: 'center', width: fitWidth(s, 45), title: ' Confirm ', trapFocus: true, overlay: true, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
 
   function showMessageDialog(t: string, cb?: () => void) {
     md.display(t, () => {

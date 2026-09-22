@@ -151,14 +151,19 @@ async function registerLiveChat(opts: { minColumns?: string } = {}) {
 }
 
 describe('the chat-only LiveChat launch and the MIN_COLUMNS gate', () => {
-  it('the board registers LiveChat from Commands/BBSCmd/LIVECHAT.info, unmarked today', async () => {
+  it('the board registers LiveChat from Commands/BBSCmd/LIVECHAT.info, marked for forty', async () => {
     const registered = await registerLiveChat();
     expect(registered).toBeDefined();
     // TYPE=TS in the .info; initializeDoors registers it as 'typescript'.
     expect(registered.type).toBe('typescript');
-    // The repo's registration carries neither mark: a C64 chat caller is
-    // refused by the closed default, on Enter and on the auto-launch alike.
-    expect(registered.minColumns).toBeUndefined();
+    /*
+     * The mark landed 2026-09-22, when the door's layout solver learned to
+     * stop docking the sidebar at forty (`Doors/livechat/ui/layout-solver`,
+     * proven on a driven 40x25 screen). It is a TypeScript door with a
+     * layout of its own, so it earns MIN_COLUMNS and never the adapter's
+     * C64_ADAPT.
+     */
+    expect(registered.minColumns).toBe(40);
     expect(registered.c64Adapt).toBeUndefined();
   });
 
@@ -177,7 +182,13 @@ describe('the chat-only LiveChat launch and the MIN_COLUMNS gate', () => {
     expect(session.currentDoorName).toBeUndefined();
   });
 
-  it('a C64 chat-only caller gets exactly the refusal the Enter path gives for the registered door', async () => {
+  /*
+   * The point of this case has never been the verdict - it is that the two
+   * paths give the SAME one. It was written while the door was refused; the
+   * door is marked now, so both must OPEN, and a regression that closed one
+   * path and not the other would still be caught here.
+   */
+  it('a C64 chat-only caller gets exactly what the Enter path gives for the registered door', async () => {
     const registered = await registerLiveChat();
 
     const viaEnter = makeSocket();
@@ -185,9 +196,9 @@ describe('the chat-only LiveChat launch and the MIN_COLUMNS gate', () => {
     const viaAutoLaunch = makeSocket();
     await launchChatOnlyLiveChat(viaAutoLaunch as any, petsciiChatOnlySession());
 
-    expect(output(viaEnter)).toContain(DOOR_NEEDS_80_NOTICE);
+    expect(output(viaEnter)).not.toContain(DOOR_NEEDS_80_NOTICE);
     expect(output(viaAutoLaunch)).toBe(output(viaEnter));
-    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalled();
   });
 
   it('a LiveChat registration marked MIN_COLUMNS=40 opens for a C64 chat-only caller (the gate reads the registration)', async () => {

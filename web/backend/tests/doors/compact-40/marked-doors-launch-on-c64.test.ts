@@ -143,6 +143,17 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * lines about itself through `bbs.write()`, which is the choke, and draws
  * nothing else ever. See `promptcomplete-is-prose.test.ts`.
  *
+ * LIVECHAT and IRC are the same door (`Doors/livechat`) under two names,
+ * 2026-09-22. Its geometry was already one pure function - `ui/layout-solver`
+ * - which yields the sidebar on a narrow window and could not yield it far
+ * enough: at forty the sidebar clamped to sixteen columns and the chat log
+ * inside the remaining twenty-four was twenty-one, a column of broken words.
+ * Now the two stop sharing the row - whichever the caller asked for owns the
+ * screen, F2 swaps them, and he lands in the chat. Its overlays are sized
+ * through `ui/fit-width` rather than the eighty-column numbers they were
+ * written with. Pinned by geometry in `livechat-layout.test.ts` and on a
+ * DRIVEN 40x25 screen in the door's own `tests/forty-columns.test.ts`.
+ *
  * LINKWALL and BBSLINK are NOT here and will not be: one prints a wall
  * fetched from bbslink.net, the other is a telnet proxy to a remote DOS
  * game, and neither lays out what it shows. They were marked for one
@@ -152,7 +163,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * fixes they got are kept - see `bbslink-doors-tell-the-truth.test.ts` -
  * because they were wrong at EVERY width.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LIVECHAT', 'IRC'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

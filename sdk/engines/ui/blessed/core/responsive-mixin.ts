@@ -110,6 +110,38 @@ export class ResponsiveBehavior {
       );
     }
 
+    /*
+     * A WIDGET BORN BELOW THE FOLD NEVER SAW A CHANGE.
+     *
+     * Every responsive widget here sizes itself in `_handleBreakpointChange`,
+     * and that only ran when the breakpoint CHANGED - a browser being
+     * dragged narrower. A door opened at forty columns is already there, so
+     * its dialogs kept the desktop width they were constructed with and hung
+     * off the right of the screen: LiveChat's emoji picker ended at column
+     * 45 on a 40-column C64, measured 2026-09-22 by driving the real door.
+     *
+     * So the initial state is APPLIED, once, and only when the screen is
+     * narrower than the widget assumes. An eighty-column screen is
+     * `medium` and is left exactly as it was - this must not move a single
+     * cell on the board's own terminal.
+     */
+    if (this.options.responsive && isMobileWidth(this.state.screenWidth)) {
+      /*
+       * On the next tick, not here: `initialize()` runs from the base
+       * Element constructor, so a widget's own children do not exist yet -
+       * ConfirmModal's `_setMobileLayout` reaches for `_confirmButton` and
+       * throws. By the tick the subclass constructor has finished.
+       */
+      setImmediate(() => {
+        if (this.element.destroyed) return;
+        this.handleBreakpointChange(this.state.breakpoint, 'large');
+        if (typeof this.element._enterMobileMode === 'function') {
+          this.element._enterMobileMode();
+        }
+        this.element.screen?.render();
+      });
+    }
+
     // Apply touch-friendly sizing
     if (this.options.touchFriendly) {
       this.applyTouchFriendlySizing();

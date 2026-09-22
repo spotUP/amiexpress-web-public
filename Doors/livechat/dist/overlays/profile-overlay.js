@@ -7,9 +7,10 @@ exports.createProfileOverlay = createProfileOverlay;
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const theme_1 = require("../ui/theme");
 const door_theme_1 = require("../door-theme");
+const fit_width_1 = require("../ui/fit-width");
 function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMsg, showDM, show, hide) {
     let target = '';
-    const o = blessed_1.default.box({ parent: s, top: 'center', left: 'center', width: 48, height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, trapFocus: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } }, zIndex: 9990 });
+    const o = blessed_1.default.box({ parent: s, top: 'center', left: 'center', width: (0, fit_width_1.fitWidth)(s, 48), height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, trapFocus: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } }, zIndex: 9990 });
     o.enableResize();
     const n = blessed_1.default.box({ parent: o, top: 1, left: 2, tags: true });
     const nd = blessed_1.default.box({ parent: o, top: 3, left: 2, tags: true });

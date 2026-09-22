@@ -34,6 +34,7 @@ import blessed, {
   openThemeMenu,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { isCompactWidth } from '@amiexpress/bbs-door-sdk';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { createTerminalModeSwitch, type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
@@ -434,14 +435,24 @@ export async function createApp(session: DoorSession) {
   });
 
   // Ghost text overlay for inline completion preview
+  /** The caller's real width, and where the input box's content starts in it. */
+  const SCREEN_COLUMNS = Number((screen as any).width) || 80;
+  const GHOST_LEFT = isCompactWidth(SCREEN_COLUMNS) ? 2 : 10;
+
   const ghostText = createBox({
     // A bar, not a frame: Panel borders when the caller names none, and a
     // one-row box with a frame has no interior - its content never renders.
     border: undefined,
     parent: screen, // Parent to screen to avoid panel clipping
     bottom: STATUS_HEIGHT + 1,  // Align with input field content
-    left: 10,
-    width: 70,
+    /*
+     * Ten plus seventy is an eighty-column screen spelled out. On a C64 it
+     * is thirty columns past the right edge, so both come off the screen:
+     * the ghost text starts where the input's own content starts and runs
+     * to the edge.
+     */
+    left: GHOST_LEFT,
+    width: Math.max(10, SCREEN_COLUMNS - GHOST_LEFT),
     height: 1,
     focusable: false,
     mouse: false,
@@ -669,6 +680,18 @@ export async function createApp(session: DoorSession) {
       ...PANEL_FOCUS_STYLE,
     },
   });
+
+  /*
+   * A C64 LANDS IN THE CHAT, NOT IN THE LISTS.
+   *
+   * At forty columns the sidebar owns the whole screen when it is shown
+   * (the solver's `stacked`), so showing it at startup would put a caller
+   * into the channel list with no chat behind it. F2 brings it up when he
+   * wants it.
+   */
+  if (isCompactWidth(Number((screen as any).width) || 80)) {
+    sidebarPanel.hide();
+  }
 
   // ========== CHANNEL LIST (Inside Sidebar) ==========
   const channelList = createList({
@@ -1090,7 +1113,19 @@ export async function createApp(session: DoorSession) {
       sidebarPanel.hide();
     }
 
-    // 2. Chat Panel Layout
+    /*
+     * 2. Chat Panel Layout
+     *
+     * At forty columns the chat and the lists do not share the screen (see
+     * the solver's `stacked`). When the lists have it, the chat panel is
+     * hidden rather than squeezed - a chat log twenty-one columns wide is
+     * not a narrow window, it is an unreadable one.
+     */
+    if (solved.chatHidden) {
+      if (!chatPanel.hidden) chatPanel.hide();
+    } else if (chatPanel.hidden) {
+      chatPanel.show();
+    }
     chatPanel.position.left = solved.chat.left;
     chatPanel.position.top = solved.chat.top;
     chatPanel.position.width = solved.chat.width;
