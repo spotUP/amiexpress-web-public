@@ -8,11 +8,11 @@
  * answering lives - BBSApi is at its line ceiling and these are two pure
  * functions with no session in them.
  */
-import * as fs from 'fs';
 import * as path from 'path';
 
 import { conferenceDir } from '../conferences/conference-paths';
 import { parseInfoFile } from '../utils/info-file.util';
+import * as amigafs from '../utils/amigafs';
 
 /**
  * WHERE a conference's files are, as a host path.
@@ -42,6 +42,13 @@ export function doorConferencePath(boardRoot: string, conferenceNumber: number):
  *
  * The path may be relative to the board's directory or absolute inside it,
  * and may not leave it.
+ *
+ * Resolved THROUGH amigafs, as every other reader on this board resolves a
+ * board path. This tree came off a case-insensitive filesystem and the live
+ * volume carries `Doors/Conftop.info` where a door asks for
+ * `Doors/conftop.info`; a plain `existsSync` finds it on a Mac and finds
+ * nothing on the Linux host, which is the shape that has made a setting read
+ * as absent in production and present in every test.
  */
 export function doorTooltypes(boardRoot: string, candidate: string): Record<string, string> {
   const root = path.resolve(boardRoot);
@@ -51,9 +58,10 @@ export function doorTooltypes(boardRoot: string, candidate: string): Record<stri
     return {};
   }
   try {
-    if (!fs.existsSync(full)) return {};
+    const actual = amigafs.resolvePath(full);
+    if (!actual) return {};
     const out: Record<string, string> = {};
-    for (const tooltype of parseInfoFile(full).tooltypes) {
+    for (const tooltype of parseInfoFile(actual).tooltypes) {
       if (tooltype.commented) continue;
       if (tooltype.key in out) continue;
       out[tooltype.key] = tooltype.value;
