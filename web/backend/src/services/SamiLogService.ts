@@ -1002,8 +1002,21 @@ console.warn('[SamiLog] Failed to read templates:', e);
       }
     }
 
-    // 1. Header (ASCII Art)
+    /*
+     * 1. Header (ASCII Art), AND THE NEWLINE IT MAY NOT CARRY.
+     *
+     * `Utils/samilog/samilog.header.txt.gr` on the live board ends
+     * `...________/   \x1b[0m` with no newline after it, so the credits line
+     * was written onto the END of the art's last row: 80 columns of art plus
+     * 76 of credits made one 156-column row, which a telnet caller's 80-column
+     * screen wrapped, and every row under it came out one line low (sysop,
+     * 2026-09-22: "one line is to long and the first line is offset").
+     *
+     * The art is the sysop's and a trailing newline is not something a drawing
+     * program promises. The JOIN is this tool's, so the tool makes it.
+     */
     let output = header;
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n';
 
     // 2. Credits Line (with optional ANSI)
     const creditsLine = ` Super-AmiLog by P0T-NOoDLE of ANTHROX                    (C)1993 Gods'Gift `;
@@ -1106,6 +1119,9 @@ console.warn('[SamiLog] Failed to read templates:', e);
     }
 
     // 8. Tailer
+    // The same join, at the other end: a tailer whose art carries no leading
+    // newline would otherwise land on the last caller's row.
+    if (tailer.length > 0 && !output.endsWith('\n')) output += '\n';
     output += tailer;
 
     /*

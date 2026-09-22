@@ -93,6 +93,49 @@ describe('the last callers bulletin', () => {
     for (const dir of boards) fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  /*
+   * A HEADER THAT DOES NOT END IN A NEWLINE.
+   *
+   * `Utils/samilog/samilog.header.txt.gr` on the live board ends
+   * `...________/  ESC[0m` with nothing after it, so the credits bar was
+   * written onto the END of the art's last row: 80 columns of logo plus 76 of
+   * credits, one 156-column row, which an 80-column telnet wraps - and every
+   * row below it arrives one line low (sysop, 2026-09-22: "one line is to
+   * long and the first line is offset").
+   *
+   * A drawing program does not promise a trailing newline and the art is the
+   * sysop's; the JOIN belongs to this tool.
+   */
+  test('is joined to the credits bar even when the art carries no newline', () => {
+    const dir = boardWith(6);
+    boards.push(dir);
+    const header = path.join(dir, 'Utils', 'samilog', 'samilog.header.txt');
+    fs.writeFileSync(header, fs.readFileSync(header, 'latin1').replace(/\n$/, ''), 'latin1');
+
+    const text = serviceFor(dir).generateBulletin(20, {});
+
+    /*
+     * WIDTH UP TO THE FIRST CURSOR MOVE, not the whole stripped line.
+     *
+     * `samilog.tailer.txt` draws TWO screen rows in one file line: it prints
+     * the first, then `\x1b[75D\x1b[B` walks the cursor back and down and
+     * prints the second. Stripping every escape and measuring what is left
+     * calls that a 150-column row, which is a fault in the measurement - the
+     * art renders correctly and always has. What actually overflows a screen
+     * is a run of PRINTABLE text with no cursor move in it.
+     */
+    const widestRun = (line: string) =>
+      line
+        .split(/\x1b\[[0-9;?]*[ABCDEFGHJKfnsu]/)          // cursor motion ends a run
+        .map((run) => run.replace(/\x1b\[[0-9;?]*m/g, '').replace(/\r$/, '').length)
+        .reduce((a: number, b: number) => Math.max(a, b), 0);
+
+    const tooWide = text.split('\n').filter((l: string) => widestRun(l) > 80);
+    expect({ tooWide }).toEqual({ tooWide: [] });
+    // And the bar is still there - joined, not dropped.
+    expect(text).toContain("Super-AmiLog by P0T-NOoDLE of ANTHROX");
+  });
+
   test('without a budget it is as long as it is - the case that paginated', () => {
     const dir = board(12);
     const text = serviceFor(dir).generateBulletin(20, {});
