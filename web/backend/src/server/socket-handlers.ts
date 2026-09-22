@@ -412,9 +412,14 @@ console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
    * says which two fired for one press.
    */
   const traceDoorInput = (session: BBSSession, route: string, data: string): void => {
-    // On by default for a PETSCII caller, which is where the doubling is;
-    // TRACE_DOOR_INPUT turns it on for everyone else.
-    if (!process.env.TRACE_DOOR_INPUT && !session.petsciiMode) return;
+    /*
+     * OFF unless asked for. It was on by default for a PETSCII caller while
+     * the doubling was open, and it answered the question - one press, two
+     * `key-down` deliveries, both from the browser - but every line it
+     * writes is a caller's keystroke, which is his MESSAGE, in the
+     * container's log. That is not a thing to leave running.
+     */
+    if (!process.env.TRACE_DOOR_INPUT) return;
     console.log(
       `[DOOR-INPUT] route=${route} data=${JSON.stringify(data)} node=${session.nodeId}` +
       ` door=${String((session as any).currentDoorName ?? '')} petscii=${session.petsciiMode ? 'Y' : 'N'}`,
