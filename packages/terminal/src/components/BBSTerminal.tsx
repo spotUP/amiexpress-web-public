@@ -4015,6 +4015,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             machine={petsciiMachine}
             palette={petsciiPaletteFor(petsciiPalette)}
             cursorVisible={doorOwnsScreen ? false : undefined}
+            /*
+             * THE CURSOR SAYS WHICH COLOUR THE NEXT CHARACTER WILL BE.
+             *
+             * A PETSCII caller types in sixteen colours now, and a colour
+             * chord prints nothing - so without this the only way to find out
+             * what Ctrl+3 did was to type a character and look. "the cursor
+             * needs to change color so i see that i change color" (the sysop,
+             * 2026-09-23), which supersedes his earlier ask for a red cursor
+             * matching the ANSI terminal.
+             */
+            cursorColour="pen"
             focusable
             focusOnMount
             onData={(bytes) => {

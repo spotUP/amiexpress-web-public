@@ -10,8 +10,14 @@
  *
  * It takes the ANSI terminal's own theme colour now, from the same constant,
  * so the two modes cannot drift apart again. An editor can still ask for the
- * old behaviour with `cursorColour="ink"`, which is right when the cursor is
- * showing the colour you are about to draw with.
+ * old behaviour with `cursorColour="ink"`.
+ *
+ * AND A LIVE SESSION ASKS FOR `"pen"`, which is a third thing: the colour the
+ * NEXT character will be. A PETSCII caller types in sixteen colours now and a
+ * colour chord prints nothing, so `"ink"` cannot answer it - colour RAM only
+ * moves when something is printed. "the cursor needs to change color so i see
+ * that i change color" (the sysop, 2026-09-23), which supersedes the red
+ * cursor he asked for above.
  *
  * jsdom has no rasterizer, so this asserts on the recording context double:
  * the cursor's fill is the only one a single character cell wide.
@@ -74,6 +80,24 @@ describe('PetsciiCanvas: the cursor is the board\'s cursor colour', () => {
     // RED on the old code: the colour RAM of a fresh screen is white.
     expect(styles.every((s) => s.toLowerCase() === XTERM_CONFIG.theme.cursor.toLowerCase())).toBe(true);
     expect(styles[0].toLowerCase()).not.toBe('#ffffff');
+  });
+
+  it('takes the PEN when a live session asks, so a colour chord is visible', async () => {
+    const { ctx, machine } = await mount({ cursorColour: 'pen' });
+    const before = cursorFillStyles(ctx).length;
+
+    // Ctrl+3 on a C64 keyboard: the RED colour byte. Nothing is printed by
+    // it, which is the whole reason `ink` cannot show it.
+    await act(async () => {
+      machine.feed([0x1c]);
+      await Promise.resolve();
+    });
+    vi.advanceTimersByTime(600);
+    await act(async () => { await Promise.resolve(); });
+
+    const styles = cursorFillStyles(ctx);
+    expect(styles.length).toBeGreaterThan(before);
+    expect(styles[styles.length - 1].toLowerCase()).not.toBe(styles[0].toLowerCase());
   });
 
   it('still takes the cell\'s own ink when an editor asks for it', async () => {

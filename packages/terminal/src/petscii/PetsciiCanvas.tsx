@@ -66,10 +66,21 @@ export interface PetsciiCanvasProps {
    * said - so the cursor changed colour as the caller typed.
    *
    * An EDITOR may want the old behaviour back: pass `'ink'` and the cell's
-   * own colour is used again, which is the right thing when the cursor is
-   * showing you the colour you are about to draw with.
+   * own colour is used again.
+   *
+   * `'pen'` is the one that answers "which colour am I about to draw in":
+   * the machine's CURRENT PEN, which is what a colour chord changes.
+   * `'ink'` cannot do it - colour RAM only changes when something is
+   * PRINTED, and pressing Ctrl+3 prints nothing, so the cursor would sit
+   * there in the old colour until the caller typed a character and found
+   * out. "the cursor needs to change color so i see that i change color"
+   * (the sysop, 2026-09-23).
+   *
+   * That supersedes his 2026-09-15 ask for a red cursor matching the ANSI
+   * terminal: a PETSCII caller can now type in sixteen colours, and being
+   * told which one is worth more than the two modes looking alike.
    */
-  cursorColour?: string | 'ink';
+  cursorColour?: string | 'ink' | 'pen';
   /**
    * The cell under the pointer, for an editor drawing on this canvas.
    *
@@ -384,7 +395,9 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       const cursorIdx = s.cursorY * cols + s.cursorX;
       ctx.fillStyle = cursorColour === 'ink'
         ? colours[s.colorRam[cursorIdx] & 0x0F]
-        : cursorColour;
+        : cursorColour === 'pen'
+          ? colours[s.pen & 0x0F]
+          : cursorColour;
       ctx.fillRect(border + s.cursorX * destW, border + s.cursorY * destH, destW, destH);
     }
     // THE EDITOR'S TWO OVERLAYS, and they are drawn last so nothing paints
