@@ -171,3 +171,54 @@ describe('a wrapped line a caller coloured', () => {
     expect(wrapped).toContain(colourMarker(2));
   });
 });
+
+
+describe('the cursor a C64 shows', () => {
+  let screen: any;
+  let writes: string[];
+  let input: any;
+
+  beforeEach(() => {
+    writes = [];
+    screen = new Screen({ width: 80, height: 25, responsive: true, output: (d: string) => writes.push(d) } as any);
+    screen.resize(40, 25);
+    // The input line sits low on the screen, the way a chat door puts it.
+    input = new Textbox({ parent: screen, top: 20, left: 0, width: 40, height: 1 } as any);
+    input.focus();
+    input.setValue('');
+    writes.length = 0;
+  });
+
+  afterEach(() => { try { screen?.destroy(); } catch { /* leaving anyway */ } });
+
+  it('rests on the line being typed, not where the paint stopped', () => {
+    input.insertChar(colourMarker(ORANGE));
+    for (const ch of 'hej') input.insertChar(ch);
+    screen.render();
+
+    const { machine } = glass(writes);
+    expect({ x: machine.state.cursorX, y: machine.state.cursorY }).toEqual({ x: 3, y: 20 });
+  });
+
+  it('sits in the colour the caller picked', () => {
+    input.insertChar(colourMarker(ORANGE));
+    for (const ch of 'hej') input.insertChar(ch);
+    screen.render();
+
+    const { machine } = glass(writes);
+    const cell = machine.state.cursorY * 40 + machine.state.cursorX;
+    expect(machine.state.colorRam[cell]).toBe(ORANGE);
+  });
+
+  it('follows the caret as it moves', () => {
+    for (const ch of 'hello') input.insertChar(ch);
+    screen.render();
+    writes.length = 0;
+    input.cursorLeft();
+    input.cursorLeft();
+    screen.render();
+
+    const { machine } = glass(writes);
+    expect(machine.state.cursorX).toBe(3);
+  });
+});

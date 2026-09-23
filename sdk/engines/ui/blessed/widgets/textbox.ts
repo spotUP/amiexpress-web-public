@@ -76,6 +76,7 @@ export class Textbox extends Element {
 
     this.on('blur', () => {
       this._updateContent();  // Hide cursor when unfocused
+      (this.screen as any)?.setCursorTarget?.(null);
     });
 
     // Click to focus and position cursor (but not if we just finished a drag selection)
@@ -720,6 +721,7 @@ export class Textbox extends Element {
       }
 
       this.setContent(display);
+      this._parkRealCursor();
       if (this.screen) this.screen.render();
       return;
     }
@@ -794,6 +796,27 @@ export class Textbox extends Element {
 
     this.setContent(display);
     if (this.screen) this.screen.render();
+  }
+
+  /**
+   * THE REAL CURSOR FOLLOWS THE CARET THIS WIDGET DRAWS.
+   *
+   * The reversed cell above is the caret a caller sees, but the terminal's
+   * own cursor stays wherever the paint ended - and a PETSCII canvas draws
+   * that as a filled cell in the pen colour, so a block sat in the chat log
+   * while the caller typed in the input line, never moving and never
+   * changing colour ("the cursor in the chat log does not change color", the
+   * sysop, 2026-09-23). Naming the cell here puts the two in the same place.
+   */
+  private _parkRealCursor(): void {
+    const screen: any = this.screen;
+    if (!screen?.setCursorTarget) return;
+    if (!this.focused) return;
+    // `ileft`/`itop` are ABSOLUTE in this fork - the element's own corner plus
+    // its border and padding - which is exactly the first cell of the content,
+    // and the same pair the click handler converts a column with.
+    const column = this.ileft + (this.cursorPos - this.viewOffset);
+    screen.setCursorTarget(column, this.itop);
   }
 
   insertChar(ch: string): void {

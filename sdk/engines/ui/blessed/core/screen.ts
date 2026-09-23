@@ -64,6 +64,8 @@ export class Screen extends Element {
 
   // Cursor state
   private cursorHidden: boolean = true;
+  /** The cell a focused input wants the real cursor on; see setCursorTarget. */
+  private _cursorTarget: { x: number; y: number } | null = null;
   private cursorX: number = 0;
   private cursorY: number = 0;
   private _cursorStyle: string = 'default';  // CSS cursor style for web frontend
@@ -1064,6 +1066,17 @@ export class Screen extends Element {
     // when the mouse is disabled and nothing ever queries the index.
     // getElementsAt() rebuilds on demand (and has a tree-walk fallback).
     this._mouseIndexValid = false;
+
+    /*
+     * The cursor rests where the typing is, not where the paint stopped.
+     * `_diff()` leaves it after the last cell it wrote - the bottom of the
+     * screen, usually - and a C64 draws that as a filled cell in the pen
+     * colour. A focused input names its caret cell (`setCursorTarget`), and
+     * the render ends by putting the cursor there.
+     */
+    if (this._cursorTarget) {
+      this.write(ESC + `[${this._cursorTarget.y + 1};${this._cursorTarget.x + 1}H`);
+    }
 
     this.emit('render');
   }
@@ -2400,6 +2413,24 @@ export class Screen extends Element {
   // ============================================================================
   // Cursor
   // ============================================================================
+
+  /**
+   * WHERE THE REAL CURSOR RESTS WHEN THE RENDER IS DONE.
+   *
+   * A widget that draws its own caret - a Textbox does, as a reversed cell -
+   * leaves the terminal's cursor wherever the paint finished, which is the
+   * bottom of whatever was drawn last. On a C64 that is not invisible: the
+   * canvas draws the cursor as a filled cell in the pen colour, so the caller
+   * saw a block parked in the chat log while he typed somewhere else, and it
+   * never moved ("the cursor in the chat log does not change color", the
+   * sysop, 2026-09-23).
+   *
+   * A focused input names the cell it wants the cursor on; the render ends by
+   * putting it there. One cursor, where the typing is.
+   */
+  setCursorTarget(x: number | null, y = 0): void {
+    this._cursorTarget = x === null ? null : { x, y };
+  }
 
   showCursor(): void {
     if (this.cursorHidden) {
