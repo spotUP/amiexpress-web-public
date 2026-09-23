@@ -3141,6 +3141,23 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
       // When we DON'T throttle, use socket.emit so ModemEmulator can intercept if it's enabled
       const directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
 
+      /*
+       * NOTHING MAY OVERTAKE WHAT IS ALREADY QUEUED.
+       *
+       * `_directEmit` goes straight to the wire, under the ModemEmulator's
+       * queue - which is right, because this path does its OWN pacing and
+       * must not be throttled twice. What it must not do is JUMP: with
+       * emulation on, the prompt or the screen before this one can still be
+       * draining, and a direct write lands in front of it. That is the
+       * "output arrives out of order" a caller sees at 56k and never at full
+       * speed, where the queue is always empty (the sysop, 2026-09-24).
+       *
+       * So the queue is drained first, at the caller's own modem speed. The
+       * animation starts a beat later and in the right order.
+       */
+      const pacer = (socket as any)._modemEmulator;
+      if (pacer?.hasPendingData?.()) await pacer.drain();
+
       // Check CURRENT session state for modem emulation (not captured value)
       // This allows the user to enable modem emulation mid-session
       const currentModemEnabled = session.modemEmulationEnabled;
@@ -3450,6 +3467,9 @@ console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
       // Get direct socket emit (bypasses modem emulator wrapper if installed)
       // This ensures wipe animation controls its own timing without modem interference
       const directSocketEmit = (socket as any)._directEmit || socket.emit.bind(socket);
+      // As above: a direct write must not overtake the throttle queue.
+      const pendingPacer = (socket as any)._modemEmulator;
+      if (pendingPacer?.hasPendingData?.()) await pendingPacer.drain();
 
       // Play each frame with timing
       // IMPORTANT: We emit directly to socket (bypass modem emulator) and use
