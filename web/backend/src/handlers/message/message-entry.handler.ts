@@ -17,7 +17,7 @@ import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
-import { messageIndent, messageRule } from '../../utils/table-format.util';
+import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
 import { reportMessage } from '../../achievements/sites';
 
 
@@ -578,8 +578,17 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
     return;
   }
 
-  // Add line to body — truncate at 75 chars (express.e: maxLineLen=75, edit() enforces via word-wrap)
-  const truncated = line.length > 75 ? line.substring(0, 75) : line;
+  /*
+   * Add line to body, cut to what this caller's screen holds.
+   *
+   * express.e's `maxLineLen` is 75 and an eighty-column caller keeps it. A
+   * C64 caller was given 75 too, under a thirty-seven column ruler - so he
+   * could type a line his own screen cannot hold, and the wrap downstream
+   * had to cut it. A run of PETSCII graphics has no spaces, so that cut
+   * lands mid-figure. `messageBodyLineLimit` is the one place that decides.
+   */
+  const limit = messageBodyLineLimit(session);
+  const truncated = line.length > limit ? line.substring(0, limit) : line;
   session.tempData.messageEntry.body.push(truncated);
   session.tempData.messageEntry.currentLine++;
 
@@ -635,10 +644,16 @@ function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): v
 
 /** Line prompt exactly matching express.e: " N> " format */
 function emitLinePrompt(socket: any, lineNum: number): void {
+  emitText(socket, linePromptFor(lineNum));
+}
+
+/** The ` N> ` a body line is typed behind, as text - so a caller listing an
+ * existing line can send the prompt and the line as ONE row. */
+function linePromptFor(lineNum: number): string {
   const n = lineNum <= 99
     ? String(lineNum).padStart(2)
     : String(lineNum).padStart(3);
-  emitText(socket, `${n}> `);
+  return `${n}> `;
 }
 
 /**
@@ -1664,11 +1679,19 @@ export function promptForMessageBody(socket: any, session: BBSSession): void {
     entry.currentLine = entry.body.length + 1;
   }
 
-  // Show any pre-existing lines (e.g. quote preamble inserted before editor)
+  /*
+   * Show any pre-existing lines (a quote preamble, or the lines already
+   * typed), PROMPT AND TEXT IN ONE CALL.
+   *
+   * Two calls is two chances for the width choke to measure: it sees ` 5> `
+   * alone, then a forty-column line alone, and wraps the second because it
+   * cannot know four columns are already spent. A prompt assembled in
+   * pieces defeats the choke by construction - the same ruling as the
+   * message reader's nav prompt.
+   */
   if (entry.body.length > 0) {
     entry.body.forEach((bodyLine: string, index: number) => {
-      emitLinePrompt(socket, index + 1);
-      emitText(socket, `${bodyLine}\r\n`);
+      emitText(socket, `${linePromptFor(index + 1)}${bodyLine}\r\n`);
     });
   }
 

@@ -367,6 +367,30 @@ export function messageRule(
   return `${' '.repeat(indent)}${paint.open}(${paint.inner}${shape.fill(inner)}${paint.close})${paint.reset}`;
 }
 
+/**
+ * THE LONGEST BODY LINE THIS CALLER MAY TYPE.
+ *
+ * express.e keeps 75 (`maxLineLen`), and an eighty-column caller keeps that
+ * number exactly. A C64 caller was given it too, while being shown a
+ * thirty-seven column ruler above the very same editor: he could type past
+ * the guide, past his screen, and past the point where the wrap has to cut
+ * the line to fit - and a run of PETSCII graphics has no spaces in it, so
+ * `sdk/petscii/wrap.ts` splits it mid-figure.
+ *
+ * So the cap is the caller's own row, less the ` N> ` the editor prints in
+ * front of it. Cap it here and the wrap downstream is identity for a body,
+ * which is what lets a picture survive the trip.
+ */
+export function messageBodyLineLimit(
+  session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean } | null | undefined
+): number {
+  if (!isNarrow(session)) return MESSAGE_RULES.bodyRuler.wideInner;
+  return Math.max(8, sessionColumns(session ?? {}) - BODY_LINE_PROMPT_WIDTH);
+}
+
+/** ` N> `, the prompt every body line is listed behind. */
+export const BODY_LINE_PROMPT_WIDTH = 4;
+
 export type MessageIndentKind =
   /** express.e:10000, :9882, :11623 - `     To: (Enter)='ALL'? `. */
   | 'to'

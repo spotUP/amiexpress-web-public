@@ -327,6 +327,23 @@ export function tipDoorBeforeMenu(
   );
 }
 
+/** Printable ASCII: the characters express.e's editor has always taken. */
+function isTypableAscii(data: string): boolean {
+  return data >= ' ' && data <= '~';
+}
+
+/**
+ * A PETSCII cell a caller drew, carried as its bank-1 marker.
+ *
+ * Bank 0 is refused: the board runs one charset board-wide
+ * (`sdk/petscii/board-rules.ts`), and a bank-0 glyph makes the transducer
+ * emit `$8E`, which reflows every letter already on the caller's screen.
+ */
+function isPetsciiGlyph(data: string): boolean {
+  const code = data.codePointAt(0) ?? 0;
+  return code >= 0xe100 && code <= 0xe1ff;
+}
+
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
@@ -475,8 +492,17 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       } else if (data === '\x1b') {
         // ESC alone — ignored. Multi-byte escape sequences are matched
         // explicitly above (cursor/Home/End/DEL).
-      } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        // Insert printable char at cursor position.
+      } else if (data.length === 1 && (isTypableAscii(data) || isPetsciiGlyph(data))) {
+        /*
+         * Insert printable char at cursor position.
+         *
+         * A PETSCII glyph counts as printable HERE, and only here. It is a
+         * cell a caller drew - the markers the board carries PETSCII in -
+         * and a message body is the one place they belong; a graphic in a
+         * filename or a recipient's name is meaningless, so
+         * `line-input.util.ts` stays ASCII-only. One UTF-16 unit either
+         * way, so every cursor and column count above is unchanged.
+         */
         const cur = buf();
         const before = cur.slice(0, x);
         const after = cur.slice(x);
@@ -3818,34 +3844,16 @@ console.log(' In conference selection state');
     return;
   }
 
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_BODY) {
-    // Initialize inputBuffer if needed
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
-    }
-
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const line = session.inputBuffer;
-      session.inputBuffer = '';
-      emitText(socket, '\r\n'); // Move to next line
-      await handleMessageBodyInput(socket, session, line);
-    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
-      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
-        // This moves cursor back, overwrites char with space, moves cursor back again
-        emitText(socket, '\b \b');
-      }
-      // If buffer is empty, ignore backspace (prevents erasing prompt)
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      emitText(socket, data);
-    }
-    return;
-  }
+  /*
+   * POST_MESSAGE_BODY WAS HANDLED TWICE, AND THE SECOND ONE NEVER RAN.
+   *
+   * A whole line editor lived here - its own buffer, its own backspace, its
+   * own `' '..'~'` gate - and `handleCommand` dispatches that state to
+   * `handleMessageEntryInput` and RETURNS long before reaching this point.
+   * Removed 2026-09-23, while teaching the live gate to accept a PETSCII
+   * glyph: a second gate that cannot run is the thing that makes the next
+   * reader fix the wrong one and watch nothing change.
+   */
 
   // Handle message editor delete line prompt
   if (session.subState === LoggedOnSubState.POST_MESSAGE_DELETE_LINE) {
