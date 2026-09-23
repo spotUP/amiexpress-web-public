@@ -32,7 +32,7 @@ import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
 import { mouseReportFor } from '../petscii/petscii-mouse';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, vicColorToPetscii, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 
@@ -388,6 +388,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * what a C64's own screen editor does when the key is pressed, and it
    * cannot double up with the board's echo the way a printable byte would.
    */
+  /**
+   * The same thing for text that has already become authored markers.
+   *
+   * `U+E200 + vic` is the colour a caller picked; the machine speaks PETSCII
+   * colour bytes, so the marker is turned back into one. Glyph markers are
+   * left alone - the board echoes those, and drawing them here would print
+   * every typed character twice.
+   */
+  const feedLocalPetsciiMarkers = useCallback((text: string) => {
+    const machine = petsciiMachineRef.current;
+    if (!machine) return;
+    for (const ch of text) {
+      const code = ch.codePointAt(0)!;
+      if (code < 0xe200 || code > 0xe20f) continue;
+      machine.feed([vicColorToPetscii(code - 0xe200)]);
+    }
+  }, []);
+
   const feedLocalPetsciiPen = useCallback((bytes: Uint8Array | number[]) => {
     const machine = petsciiMachineRef.current;
     if (!machine) return;
@@ -3377,6 +3395,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Post-login input to the server (was the tail of term.onData).
     const sendInput = (data: string) => {
       if (!socket.connected) { console.error('[Terminal] Socket not connected, cannot send data'); return; }
+      /*
+       * THE PEN, AT THE ONE PLACE EVERY KEYSTROKE ENDS UP.
+       *
+       * A colour chord sets the pen locally the way a C64's screen editor
+       * does: the board echoes nothing for a chord, so nothing ever comes
+       * back to move it. Doing it in the canvas's own `onData` was not
+       * enough - xterm's `onData` calls this function DIRECTLY, so a caller
+       * whose focus is on the hidden terminal never went through the canvas
+       * at all, and his cursor stayed the board's colour whatever he
+       * pressed ("the cursor stays red in petscii mode", twice on
+       * 2026-09-23).
+       *
+       * By here the chord is the AUTHORED marker, `U+E200 + vic`, which is
+       * what the board is about to be sent.
+       */
+      if (surfaceRef.current === 'canvas') feedLocalPetsciiMarkers(data);
       if (gameMode.current) return; // keydown/keyup are sent separately in game mode
       if (data === '\x03' && doorActive.current) {
         console.log('[BBSTerminal] Ctrl+C pressed while door active - sending door:terminate');
@@ -3399,6 +3433,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (surfaceRef.current === 'canvas' && petsciiTransducerRef.current) {
         enqueuePetscii(petsciiTransducerRef.current.flush());
       }
+
 
       /*
        * IN GAME MODE, PRESS THE KEY INSTEAD OF TYPING IT.

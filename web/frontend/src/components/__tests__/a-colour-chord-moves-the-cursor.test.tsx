@@ -16,6 +16,7 @@
  * Driven through the real component and a real canvas, the way the P-session
  * mount test does.
  */
+import { createRef } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act, waitFor } from '@testing-library/react';
 import { installFakeCanvasContext, stubDocumentFonts, ctxByCanvas, type FakeCtx } from './helpers/fake-canvas-ctx';
@@ -90,14 +91,15 @@ function sentBytes(): number[] {
 }
 
 async function petsciiSession() {
-  const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+  const handle = createRef<any>();
+  const { container } = render(<BBSTerminal ref={handle} backendUrl="http://localhost:3001" />);
   act(() => { socket.fire('terminal-resize', { cols: 40, rows: 25 }); });
   const canvas = await waitFor(() => {
     const c = container.querySelector('canvas');
     expect(c).not.toBeNull();
     return c as HTMLCanvasElement;
   });
-  return { container, canvas };
+  return { container, canvas, handle };
 }
 
 /** CTRL+3 on a C64 keyboard: red. CTRL+6: green. */
@@ -132,6 +134,23 @@ describe('a colour chord on a PETSCII session', () => {
     // every terminal renders in its own way - not an ESC sequence.
     // U+E202 is VIC 2, red.
     await waitFor(() => { expect(sentBytes()).toContain(0xe202); });
+  });
+
+  it('moves the cursor for a keystroke that never touched the canvas', async () => {
+    // The canvas's own `onData` is NOT the only way in: xterm's `onData`
+    // calls `sendInput` directly, and so does the on-screen keyboard, which
+    // is the path this drives. The sysop's focus was on one of those the
+    // second time the cursor stayed red, so the pen is fed at `sendInput` -
+    // the one place every keystroke ends up.
+    const { canvas, handle } = await petsciiSession();
+    const ctx = ctxByCanvas.get(canvas)!;
+    const before = lastCursorFill(ctx);
+
+    // U+E207 is VIC 7, yellow - the authored marker a Ctrl+8 chord becomes.
+    act(() => { handle.current?.injectInput('\u{E207}'); });
+    act(() => { canvas.dispatchEvent(new Event('blur')); });
+
+    await waitFor(() => { expect(lastCursorFill(ctx)).not.toBe(before); });
   });
 
   it('moves the cursor without waiting for the board to answer', async () => {
