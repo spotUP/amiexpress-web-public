@@ -89,6 +89,8 @@ export type {
   ANSIEditorOptions, HostMenu, HostToolbarItem, HostToolbarGroup,
 } from './widgets/ansi-editor';
 export { menuItemLabel, menuWidthFor, MENU_ITEM_COLUMNS } from './widgets/ansi-editor';
+export { PetsciiEditor, petsciiEditor, PETSCII_TOOL_LABELS } from './widgets/petscii-editor';
+export type { PetsciiEditorOptions, PetsciiTool } from './widgets/petscii-editor';
 export { DocModal } from './widgets/doc-modal';
 export type { DocModalOptions } from './widgets/doc-modal';
 export { LoginModal, loginModal } from './widgets/login-modal';

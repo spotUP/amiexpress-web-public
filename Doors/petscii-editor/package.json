@@ -1,0 +1,27 @@
+{
+  "name": "petscii-editor",
+  "category": "utility",
+  "version": "1.0.0",
+  "description": "PETSCII art editor - draw a C64 screen from the BBS",
+  "main": "dist/index.js",
+  "bbsCommand": "PETSCII-EDIT",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx --watch index.ts",
+    "start": "node dist/index.js",
+    "test": "tsx tests/run-tests.ts"
+  },
+  "author": "AmiExpress BBS",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.0.0"
+  }
+}

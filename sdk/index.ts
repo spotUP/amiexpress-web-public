@@ -333,6 +333,9 @@ export {
   StackedGauge,
   ColorPicker as BlessedColorPicker,
   FileExplorer,
+  PetsciiEditor,
+  petsciiEditor,
+  PETSCII_TOOL_LABELS,
 } from './engines/ui/blessed/index';
 
 export type {

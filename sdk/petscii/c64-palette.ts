@@ -94,6 +94,87 @@ export function vicToSgrForeground(vic: number, palette: readonly string[] = C64
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
+/** The VIC colour this RGB is nearest to. An exact hit wins outright. */
+export function nearestVicForRgb(r: number, g: number, b: number, palette: readonly string[] = C64_PALETTE_COLODORE): number {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let vic = 0; vic < 16; vic++) {
+    const [pr, pg, pb] = hexToRgb(palette[vic]);
+    if (pr === r && pg === g && pb === b) return vic;
+    const d = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
+    if (d < bestDist) { bestDist = d; best = vic; }
+  }
+  return best;
+}
+
+/**
+ * A VIC COLOUR AS AN SGR A CELL BUFFER CAN HOLD WITHOUT LOSING IT.
+ *
+ * `vicToSgrForeground` spells the pen as truecolor, which is right on the wire
+ * - an ANSI caller gets the exact C64 hue. It is WRONG into a cell buffer:
+ * blessed keeps a palette index per cell, and its matcher is neo-blessed's
+ * luminance-weighted one, which puts VIC red (#813338) on xterm 238, a dark
+ * grey. A colour a caller picked came out grey on a C64 for that reason alone.
+ *
+ * The 16-colour SGR pair cannot carry the pen either: `SGR_DIM`/`SGR_BRIGHT`
+ * between them name thirteen of the sixteen VIC colours, and the three they
+ * miss are orange, brown and mid grey - three colours this board's art uses.
+ *
+ * So the pen is spelled as xterm-256, chosen HERE by plain Euclidean distance
+ * over the 6x6x6 cube and the grey ramp. The index is only ever read back by
+ * the transducer's own `xterm256ToRgb` + `nearestVicForRgb`, and the round
+ * trip is pinned by a test for all sixteen.
+ */
+const SGR256_FOR_VIC = new Map<string, number>();
+
+export function vicToSgr256(vic: number, palette: readonly string[] = C64_PALETTE_COLODORE): string {
+  return `\x1b[38;5;${vicToXterm256(vic, palette)}m`;
+}
+
+/** The xterm-256 index nearest this VIC colour, from the cube and the grey ramp. */
+export function vicToXterm256(vic: number, palette: readonly string[] = C64_PALETTE_COLODORE): number {
+  const key = `${palette[0]}:${vic & 0x0f}`;
+  const cached = SGR256_FOR_VIC.get(key);
+  if (cached !== undefined) return cached;
+
+  const [r, g, b] = hexToRgb(palette[vic & 0x0f]);
+  let best = -1;
+  let bestDistance = Infinity;
+  let fallback = 16;
+  let fallbackDistance = Infinity;
+  // 0-15 are skipped on purpose: what those sixteen look like is the caller's
+  // theme, not a colour anyone can measure from here.
+  for (let index = 16; index <= 255; index++) {
+    const [r2, g2, b2] = xterm256Rgb(index);
+    const distance = (r - r2) ** 2 + (g - g2) ** 2 + (b - b2) ** 2;
+    if (distance < fallbackDistance) { fallbackDistance = distance; fallback = index; }
+    /*
+     * NEAREST IS NOT ENOUGH - IT HAS TO COME BACK.
+     *
+     * The index is read back by nearest-VIC, so the only ones worth choosing
+     * are those that land on THIS colour again. Plain nearest put VIC red
+     * (129,51,56) on xterm 95 (135,95,95), which is nearer to grey than to
+     * red and came back as grey.
+     */
+    if (nearestVicForRgb(r2, g2, b2, palette) !== (vic & 0x0f)) continue;
+    if (distance < bestDistance) { bestDistance = distance; best = index; }
+  }
+  if (best < 0) best = fallback;
+  SGR256_FOR_VIC.set(key, best);
+  return best;
+}
+
+/** The 6x6x6 cube (16-231) and the grey ramp (232-255), by the xterm formula. */
+function xterm256Rgb(n: number): [number, number, number] {
+  if (n <= 231) {
+    const i = n - 16;
+    const v = (c: number) => (c === 0 ? 0 : 55 + c * 40);
+    return [v(Math.floor(i / 36)), v(Math.floor(i / 6) % 6), v(i % 6)];
+  }
+  const grey = 8 + 10 * (n - 232);
+  return [grey, grey, grey];
+}
+
 export function vicToSgrBackground(vic: number, palette: readonly string[] = C64_PALETTE_COLODORE): string {
   const [r, g, b] = hexToRgb(palette[vic & 0x0F]);
   return `\x1b[48;2;${r};${g};${b}m`;

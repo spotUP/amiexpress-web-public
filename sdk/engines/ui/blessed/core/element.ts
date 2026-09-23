@@ -1000,7 +1000,7 @@ export class Element extends EventEmitter {
      * those really is one cell, and a PETSCII caller's own transducer draws
      * it better than any fold could.
      */
-    content = puaToUnicode(content, { glyphs: false });
+    content = puaToUnicode(content, { glyphs: false, pen: 'xterm256' });
 
     // Process {center} tags before storing content
     content = this.processCenterTags(content);

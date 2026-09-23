@@ -17,7 +17,10 @@
  */
 import { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
 import { WideScreenMachine } from './wide-screen-machine';
-import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
+import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb, nearestVicForRgb } from './c64-palette';
+// Re-exported where it has always been imported from; it LIVES in c64-palette,
+// because which VIC colour an RGB is nearest to is a fact about the palette.
+export { nearestVicForRgb };
 import { swedishPetsciiFor } from './swedish-charset';
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
@@ -79,17 +82,6 @@ export function vicColorToPetscii(vic: number): number {
 }
 
 /** Nearest VIC index by squared RGB distance; an exact palette match wins immediately. */
-export function nearestVicForRgb(r: number, g: number, b: number, palette: readonly string[] = C64_PALETTE_COLODORE): number {
-  let best = 0;
-  let bestDist = Infinity;
-  for (let vic = 0; vic < 16; vic++) {
-    const [pr, pg, pb] = hexToRgb(palette[vic]);
-    if (pr === r && pg === g && pb === b) return vic;
-    const d = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
-    if (d < bestDist) { bestDist = d; best = vic; }
-  }
-  return best;
-}
 
 // SGR 30-37 -> VIC (dim), 90-97 -> VIC (bright). 33/93 both yellow (C64 has one), 37 -> light grey, 97 -> white.
 const SGR_DIM: number[] = [0, 2, 5, 7, 6, 4, 3, 15];

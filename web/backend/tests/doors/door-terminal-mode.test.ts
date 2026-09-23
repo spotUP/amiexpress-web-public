@@ -31,6 +31,7 @@ const DOORS: Array<[string, string]> = [
   ['grandmaster', 'app.ts'],
   ['sprite-editor', 'studio.ts'],
   ['ansi-editor', 'index.ts'],
+  ['petscii-editor', 'studio.ts'],
   ['livechat', 'server.ts'],
   ['bug-tracker', 'app.ts'],
   ['bbs-dashboard', 'index.ts'],

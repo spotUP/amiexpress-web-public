@@ -24,7 +24,7 @@
  * changing shape on the way out.
  */
 import { SCREENCODE_TO_UNICODE } from './screencode-unicode';
-import { vicToSgrForeground } from './c64-palette';
+import { vicToSgrForeground, vicToSgr256 } from './c64-palette';
 
 /** The first PetMe64 codepoint of each bank. */
 export const PUA_BANK0 = 0xe000;
@@ -94,8 +94,20 @@ export function screenCodeGlyph(code: number): { glyph: string; reverse: boolean
  * Text with no marker in it comes back IDENTICAL - the same string object -
  * so this is safe to call on everything the board emits.
  */
-export function puaToUnicode(text: string, options: { glyphs?: boolean } = {}): string {
+export function puaToUnicode(
+  text: string,
+  options: { glyphs?: boolean; pen?: 'truecolor' | 'xterm256' } = {},
+): string {
   const glyphs = options.glyphs !== false;
+  /*
+   * HOW THE PEN IS SPELLED, and why there is a choice.
+   *
+   * On the WIRE, truecolor: a terminal that can show 16 million colours should
+   * show the C64's own. Into a CELL BUFFER, xterm-256: blessed keeps a palette
+   * index per cell and reduces anything else with neo-blessed's luminance
+   * matcher, which turns VIC red into a dark grey (`vicToSgr256`).
+   */
+  const asPen = options.pen === 'xterm256' ? vicToSgr256 : vicToSgrForeground;
   if (!hasPuaMarker(text)) return text;
 
   let out = '';
@@ -115,7 +127,7 @@ export function puaToUnicode(text: string, options: { glyphs?: boolean } = {}): 
     const pen = colourOfMarker(code);
     if (pen !== null) {
       if (reversed) { out += '\x1b[27m'; reversed = false; }
-      out += vicToSgrForeground(pen);
+      out += asPen(pen);
       continue;
     }
 

@@ -40,6 +40,7 @@ const THEME_AWARE_DOORS = [
   'rip-browser',
   'sprite-editor',
   'ansi-editor',
+  'petscii-editor',
   'livechat',
   'voice-chat',
   'whip',
