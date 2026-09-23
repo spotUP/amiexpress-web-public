@@ -342,6 +342,28 @@ export class AnsiToPetsciiTransducer {
       }
       if (code < 0x20) { i++; continue; }
       if (code >= 0xE000 && code <= 0xE1FF) { this.printPua(out, code); i++; continue; }
+      /*
+       * THE PEN MARKER IS A COLOUR, NOT A GLYPH.
+       *
+       * `U+E200 + vic` is how a colour a caller picked travels through the
+       * board (`sdk/petscii/pua.ts`). Everything the BOARD emits folds it to
+       * SGR before it reaches here, but a DOOR's output does not go through
+       * that fold - so LIVE CHAT printed the marker as a character, and a
+       * character with no PETSCII code is a `?`: "ctrl+number in livechat
+       * prints ?" (the sysop, 2026-09-23).
+       *
+       * Reading it here rather than adding a second fold keeps one rule:
+       * whoever hands this transducer a pen marker gets the pen, and nobody
+       * gets a question mark for a colour.
+       */
+      if (code >= 0xE200 && code <= 0xE20F) {
+        const vic = code - 0xE200;
+        this.ansiPen = vic;
+        this.penIsFill = false;
+        this.setPen(vic, out);
+        i++;
+        continue;
+      }
       this.printChar(out, code);
       i += code > 0xFFFF ? 2 : 1;
     }

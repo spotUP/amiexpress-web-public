@@ -36,6 +36,8 @@ import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 import { doorScreenHeight, doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
+import { puaToUnicode } from '@amiexpress/bbs-door-sdk/petscii';
+import { sessionWantsPetscii } from '../utils/petscii-session-model';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { listOnlineNodes, type OnlineNode } from './who-is-online';
@@ -196,7 +198,22 @@ export class BBSApi {
    * byte.
    */
   write(text: string): void {
-    this.socket.emit('ansi-output', wrapDoorTextForSession(text, this.session));
+    /*
+     * A DOOR'S PROSE CARRIES AUTHORED MARKERS TOO.
+     *
+     * A colour a caller picked is `U+E200 + vic` and a glyph he drew is
+     * `U+E1xx` (`sdk/petscii/pua.ts`). The board's own output folds those on
+     * the way out (`ansi-buffer.util`); a door's did not, so a chat line with
+     * a colour in it reached an eighty-column reader as a private-use
+     * codepoint - tofu in xterm, `?` from iconv on a telnet Amiga.
+     *
+     * Same rule as the board's: the PEN is folded for everyone, because the
+     * transducer turns SGR into the C64's colour byte anyway; the GLYPHS are
+     * held back for a PETSCII caller, whose own transducer draws them
+     * exactly.
+     */
+    const readable = puaToUnicode(text, { glyphs: !sessionWantsPetscii(this.session) });
+    this.socket.emit('ansi-output', wrapDoorTextForSession(readable, this.session));
   }
 
   /**
