@@ -9,6 +9,7 @@ exports.addBBSEvent = addBBSEvent;
  * Main chat message display area
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const menu_bar_1 = require("./menu-bar");
 const status_bar_1 = require("./status-bar");
@@ -34,8 +35,23 @@ function createChatLog(screen, sidebarWidth) {
         height: screenHeight - menu_bar_1.MENU_HEIGHT - status_bar_1.STATUS_HEIGHT - input_box_1.INPUT_HEIGHT,
         dockPosition: 'float',
         showMinimizeButton: true,
-        resizable: true,
-        draggable: true,
+        /*
+         * A C64 SCREEN IS ALL EDGE.
+         *
+         * A resize handle is three columns by two rows at every corner. On
+         * eighty by twenty-four that is a corner; on forty by twenty-five it is
+         * most of the panel, so an ordinary click on the chat log grabs one and
+         * drags the window smaller - over the menu bar, which then only appears
+         * when the caller happens to hover it (the sysop, 2026-09-23, the first
+         * walk after a C64 caller could click anything at all).
+         *
+         * The layout solver owns the geometry at that tier anyway: the panels
+         * are full width and stacked, and there is nowhere to drag one TO. So
+         * the affordances go, rather than being made smaller - a C64 caller has
+         * no way to put a panel back where it was.
+         */
+        resizable: !(0, bbs_door_sdk_1.isCompactWidth)(screenWidth),
+        draggable: !(0, bbs_door_sdk_1.isCompactWidth)(screenWidth),
         minWidth: 40,
         minHeight: 10,
         zIndex: 1,

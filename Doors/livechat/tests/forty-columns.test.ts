@@ -131,6 +131,46 @@ export async function theChatHasTheWholeWidthAndTheListsAreDown(): Promise<void>
   h.fire('disconnect', 'transport close');
 }
 
+/**
+ * "when i clicked the chat log it shrinked and the menu is not visible until
+ * i hover it" (the sysop, 2026-09-23, the first walk after a C64 caller
+ * could click anything at all).
+ *
+ * A resize handle is three columns by two rows at every corner. On eighty
+ * by twenty-four that is a corner; on forty by twenty-five it is most of
+ * the panel, so an ordinary click grabbed one and dragged the window
+ * smaller - over the menu bar.
+ */
+export async function aC64CallerCannotDragHisChatWindowAway(): Promise<void> {
+  const h = await openAt(40, 25);
+  const panels: any[] = [];
+  const walk = (el: any) => { for (const child of el.children ?? []) { panels.push(child); walk(child); } };
+  walk(h.screen);
+
+  // By its persistence key, not its label: the label becomes the channel
+  // name as soon as one is joined.
+  const chat = panels.find(p => p.options?.persistenceKey === 'chat-main');
+  assert.ok(chat, 'the chat panel must exist');
+  assert.strictEqual(!!chat.options.resizable, false, 'a C64 screen is all edge - no resize handles');
+  assert.strictEqual(!!chat.options.draggable, false, 'and nowhere to drag a full-width panel to');
+
+  h.fire('disconnect', 'transport close');
+}
+
+export async function anEightyColumnCallerKeepsHisDraggableWindow(): Promise<void> {
+  const h = await openAt(80, 25);
+  const panels: any[] = [];
+  const walk = (el: any) => { for (const child of el.children ?? []) { panels.push(child); walk(child); } };
+  walk(h.screen);
+
+  const chat = panels.find(p => p.options?.persistenceKey === 'chat-main');
+  assert.ok(chat, 'the chat panel must exist');
+  assert.strictEqual(!!chat.options.resizable, true);
+  assert.strictEqual(!!chat.options.draggable, true);
+
+  h.fire('disconnect', 'transport close');
+}
+
 export async function theEightyColumnScreenIsUnchanged(): Promise<void> {
   const h = await openAt(80, 25);
   const screen: any = h.screen;
