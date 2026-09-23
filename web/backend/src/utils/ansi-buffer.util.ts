@@ -18,6 +18,8 @@
  */
 
 import { Socket } from 'socket.io';
+import { puaToUnicode } from '@amiexpress/bbs-door-sdk/petscii';
+import { sessionWantsPetscii } from './petscii-session-model';
 import { wrapForSession } from './wrap-for-session.util';
 import { foldColoursForBoard } from './eight-colour-session.util';
 import { foldTrueColourToAnsi } from './true-colour-fold.util';
@@ -255,7 +257,23 @@ export function emitText(socket: Socket, text: string, immediate: boolean = fals
   const forBytes = session?.connectionType && session.connectionType !== 'web';
   const coloured = forBytes ? foldTrueColourToAnsi(text) : text;
 
-  buffer.append(foldColoursForBoard(wrapForSession(coloured, session)));
+  /*
+   * A CALLER'S OWN PETSCII, FOR SOMEBODY WHO IS NOT ON A C64.
+   *
+   * PETSCII a caller typed travels as PetMe64 private-use codepoints, one
+   * per cell - the convention the transducer already speaks, so a C64 reader
+   * needs nothing here and must not be touched. Everybody else has no such
+   * font: xterm draws tofu, and an Amiga telnet client gets `?` from iconv.
+   * So the markers are folded to the Unicode glyphs the normative table
+   * names, with reverse video spelled as SGR 7.
+   *
+   * BEFORE the width fold. The replacements can be astral (`U+1FBxx`), and
+   * wrapping counts UTF-16 units - fold first and the wrap measures the
+   * glyph the caller will actually see.
+   */
+  const readable = sessionWantsPetscii(session) ? coloured : puaToUnicode(coloured);
+
+  buffer.append(foldColoursForBoard(wrapForSession(readable, session)));
 
   if (immediate) {
     buffer.flushImmediate();

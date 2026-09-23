@@ -135,6 +135,24 @@ function buildSubstitutions(): ReadonlyMap<number, string> {
   map.set(0x2265, ">");
   map.set(0x00d7, "x");   // multiplication sign - Latin-1 has it, cp437 does not
 
+  /*
+   * THE EIGHTH BLOCKS A C64 DRAWS WITH.
+   *
+   * Unicode 13 added "Symbols for Legacy Computing" so PETSCII could be
+   * written down, and nine of the C64's lowercase-bank graphics live there
+   * (`U+1FB82`-`U+1FB99`). They are what a caller draws a meter, a gradient
+   * or a shaded edge with - and every one of them reached iconv as `?` on an
+   * Amiga telnet wire, because this table stops at the Block Elements.
+   *
+   * Folded by WEIGHT, the way the shades above are: the taller the block,
+   * the heavier the mark.
+   */
+  for (const cp of [0x1fb82, 0x1fb83, 0x1fb87, 0x1fb88]) map.set(cp, "-");
+  for (const cp of [0x1fb8c, 0x1fb8f]) map.set(cp, ":");
+  map.set(0x1fb96, ":");  // inverse chequerboard
+  map.set(0x1fb98, "/");  // upper left to lower right fill
+  map.set(0x1fb99, "\\"); // upper right to lower left fill
+
   return map;
 }
 
