@@ -32,7 +32,7 @@ import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
 import { mouseReportFor } from '../petscii/petscii-mouse';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 
@@ -379,6 +379,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
   const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
+
+  /**
+   * The bytes a chord sends that the LOCAL machine must see too.
+   *
+   * The sixteen colour codes and reverse on/off. They change the pen and
+   * nothing else - no glyph, no cursor movement - so feeding them here is
+   * what a C64's own screen editor does when the key is pressed, and it
+   * cannot double up with the board's echo the way a printable byte would.
+   */
+  const feedLocalPetsciiPen = useCallback((bytes: Uint8Array | number[]) => {
+    const machine = petsciiMachineRef.current;
+    if (!machine) return;
+    for (const byte of bytes) {
+      const isColour = PETSCII_COLOR_TO_VIC[byte] !== undefined;
+      const isReverse = byte === 0x12 || byte === 0x92;
+      if (isColour || isReverse) machine.feed([byte]);
+    }
+  }, []);
   // The same instance as petsciiMachineRef, held in state so the render
   // reads it from state instead of a ref (a ref read during render is not
   // safe under concurrent rendering). Written next to the ref, always.
@@ -4029,6 +4047,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             focusable
             focusOnMount
             onData={(bytes) => {
+              /*
+               * A COLOUR CHORD IS LOCAL FIRST, exactly as it is on a C64.
+               *
+               * Pressing CTRL+3 on a real machine sets the screen editor's
+               * pen THERE - the cursor changes colour under your hand - and
+               * the byte goes down the wire as well. Here only the second
+               * half happened, and the board has nothing to echo: a chord
+               * prints no character, so no colour byte ever came back and the
+               * display machine's pen never moved. The cursor sat there in
+               * the board's colour while the caller typed chord after chord
+               * ("the cursor stays red in petscii mode", the sysop,
+               * 2026-09-23).
+               *
+               * Only the pen and reverse bytes are fed. A printable byte
+               * would be drawn twice - once here and once when the board
+               * echoes it.
+               */
+              feedLocalPetsciiPen(bytes);
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
               // function keys included), then the one input path.
