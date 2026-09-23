@@ -630,7 +630,10 @@ async function clearDraft(username, ctx) {
 }
 async function sendMessage(bbs, message) {
     try {
-        await bbs.postMessage(message.to, message.subject, message.content);
+        // (subject, body, to) - the board's own order. Called as (to, subject,
+        // body) this posted the recipient's name as the title and threw the
+        // message away.
+        await bbs.postMessage(message.subject, message.content, message.to);
         // Board webhooks the sysop subscribed to `door_announcement`
         // (web/backend/src/services/bbs-event-emitter.ts) - the same bridge
         // grandmaster's score broadcast uses. Best-effort: the mail is sent,

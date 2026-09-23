@@ -1425,8 +1425,24 @@ console.error('[BBSApi] Error sending message:', error);
    * Post message to current conference
    * Equivalent to AEDoor JH_SM command
    */
-  async postMessage(subject: string, body: string): Promise<boolean> {
+  /**
+   * Post a message, optionally TO SOMEBODY.
+   *
+   * The recipient is the third argument and used to be missing entirely, so
+   * the mail composer - the one door that sends mail - called this with
+   * `(to, subject, body)` and had its arguments read as `(subject, body)`:
+   * the recipient became the SUBJECT, the subject became the BODY, and what
+   * the caller actually wrote was dropped on the floor. It arrived as a
+   * public message to ALL with the recipient's name as its title (the sysop,
+   * 2026-09-23, reading back a message he had sent to dino).
+   *
+   * A message addressed to a name is PRIVATE, which is express.e's own rule;
+   * `ALL` is the public case and the default when no name is given.
+   */
+  async postMessage(subject: string, body: string, to?: string): Promise<boolean> {
     try {
+      const recipient = (to ?? '').trim();
+      const addressed = recipient.length > 0 && recipient.toUpperCase() !== 'ALL';
       const messageData = {
         subject,
         body,
@@ -1434,8 +1450,8 @@ console.error('[BBSApi] Error sending message:', error);
         timestamp: getSystemTime(),
         conferenceId: this.getCurrentConference(),
         messageBaseId: 1, // Default to first message base
-        isPrivate: false,
-        toUser: undefined,
+        isPrivate: addressed,
+        toUser: addressed ? recipient : undefined,
         parentId: undefined,
         attachments: [],
         edited: false,
@@ -1444,7 +1460,7 @@ console.error('[BBSApi] Error sending message:', error);
       };
 
       await db.createMessage(messageData);
-console.log(`[BBSApi] Posted message to conference ${this.getCurrentConference()}: ${subject}`);
+console.log(`[BBSApi] Posted message to conference ${this.getCurrentConference()}: ${subject}${addressed ? ` (to ${recipient})` : ''}`);
       return true;
     } catch (error) {
 console.error('[BBSApi] Error posting message:', error);

@@ -186,6 +186,20 @@ describe('the New Message dialog on a C64', () => {
   });
 });
 
+describe('what the composer hands the board', () => {
+  it('calls postMessage in the board\'s own order', () => {
+    /*
+     * `(subject, body, to)`. Called as `(to, subject, body)` - which is what
+     * it did - the recipient became the title, the subject became the body,
+     * and the message was dropped: "topic is dino not recipiemt" (the sysop,
+     * 2026-09-23).
+     */
+    const source = readFileSync(join(REPO, 'Doors', 'mail-composer', 'index.ts'), 'utf8');
+
+    expect(source).toContain('bbs.postMessage(message.subject, message.content, message.to)');
+  });
+});
+
 describe('the composer on an eighty-column board', () => {
   it('still builds the ANSI editor, and the send path is shared', () => {
     const source = readFileSync(join(REPO, 'Doors', 'mail-composer', 'index.ts'), 'utf8');

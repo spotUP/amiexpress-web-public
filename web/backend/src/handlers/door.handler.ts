@@ -4455,7 +4455,7 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
 
       // Message functions
       sendMessage: (toUsername: string, subject: string, body: string) => bbsApi.sendMessage(toUsername, subject, body),
-      postMessage: (subject: string, body: string) => bbsApi.postMessage(subject, body),
+      postMessage: (subject: string, body: string, to?: string) => bbsApi.postMessage(subject, body, to),
 
       // Utility functions
       logActivity: (action: string, details?: string) => bbsApi.logActivity(action, details),
