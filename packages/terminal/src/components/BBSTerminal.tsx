@@ -407,6 +407,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const petsciiSelectAnchor = useRef<{ x: number; y: number } | null>(null);
   const petsciiSelectionRef = useRef<CellRect | null>(null);
   const [petsciiSelection, setPetsciiSelection] = useState<CellRect | null>(null);
+  /** ROM 325018-02, from the board's `petscii-mode` event. */
+  const [petsciiSwedish, setPetsciiSwedish] = useState(false);
+  const petsciiSwedishRef = useRef(false);
+  petsciiSwedishRef.current = petsciiSwedish;
   const showPetsciiSelection = useCallback((rect: CellRect | null) => {
     petsciiSelectionRef.current = rect;
     setPetsciiSelection(rect);
@@ -2654,11 +2658,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.reset();
       fitTerminal();
     });
-    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
-      console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
+    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string; charset?: string }) => {
+      console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '', shape.charset ?? '');
       // The colours travel with the shape: a C64 is a VIC-II, and the wide
       // screen is a C128's VDC unless the caller has said otherwise.
       setPetsciiPalette(shape.palette === 'vic' ? 'vic' : shape.cols === 80 ? 'vdc' : 'vic');
+      /*
+       * AND SO DOES THE CHARACTER ROM. The board has sent it since the
+       * graphics prompt and this handler dropped it on the floor, so a
+       * Swedish caller drew from the American ROM: the canvas had no glyph
+       * for a-ring, and his own keystrokes came back as `aao` (the sysop,
+       * 2026-09-23).
+       */
+      setPetsciiSwedish(shape.charset === 'swedish');
       ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
     });
 
@@ -3966,9 +3978,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
               // function keys included), then the one input path.
-              const text = petsciiInputToAscii(bytes);
+              const text = petsciiInputToAscii(bytes, petsciiSwedishRef.current);
               if (text) processInputKeyRef.current(text);
             }}
+            swedish={petsciiSwedish}
             highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'brush' as const }] : undefined}
             onCellPointer={(event) => {
               /*

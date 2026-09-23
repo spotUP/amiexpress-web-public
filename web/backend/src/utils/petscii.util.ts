@@ -610,6 +610,6 @@ export function convertAsciiToPetsciiOutput(text: string, opts?: { charsetPrelud
  * @param data - Buffer containing raw PETSCII bytes from terminal
  * @returns ASCII/ANSI string suitable for processing as user input
  */
-export function convertPetsciiInputToAscii(data: Buffer): string {
-  return petsciiInputToAscii(data);
+export function convertPetsciiInputToAscii(data: Buffer, swedish = false): string {
+  return petsciiInputToAscii(data, swedish);
 }

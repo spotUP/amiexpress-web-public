@@ -18,6 +18,7 @@
 import { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
 import { WideScreenMachine } from './wide-screen-machine';
 import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
+import { swedishPetsciiFor } from './swedish-charset';
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
 
@@ -50,6 +51,20 @@ export interface AnsiToPetsciiOptions {
    * the graphics prompt.
    */
   columns?: 40 | 80;
+
+  /**
+   * The caller's character ROM.
+   *
+   * A C64 sold in Sweden shipped ROM 325018-02, which puts a-ring and the
+   * umlauts where the bracket/pound trio sits. Without this the ordinary
+   * Latin-1 fold applies and a caller's own name comes back as `aao` - the
+   * right answer for a machine that has no glyph for the letter, and the
+   * wrong one for a machine that does (the sysop, 2026-09-23).
+   *
+   * Defaults to the standard set, so `$5C` stays the pound sign this
+   * board's MCI uses for its column tab.
+   */
+  swedish?: boolean;
 }
 
 /** VIC index -> PETSCII color control byte (inverse of PETSCII_COLOR_TO_VIC; every index has exactly one byte). */
@@ -133,6 +148,8 @@ export class AnsiToPetsciiTransducer {
   private readonly cols: number;
   private readonly rows: number;
   private readonly palette: readonly string[];
+  /** ROM 325018-02: a-ring and the umlauts where the bracket trio sits. */
+  private swedish = false;
   /** Incomplete escape sequence or trailing CR held until the next chunk. */
   private pending = '';
   private bold = false;
@@ -185,6 +202,7 @@ export class AnsiToPetsciiTransducer {
 
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
+    this.swedish = opts.swedish === true;
     // The wide screen is a model of its own (wide-screen-machine.ts): no
     // logical lines, and $02 is not a background prefix there.
     this.machine = opts.columns === 80 ? new WideScreenMachine() : new PetsciiMachine();
@@ -529,6 +547,16 @@ export class AnsiToPetsciiTransducer {
    * unconditionally and the table's bank-0 fold never applies.
    */
   private printChar(out: number[], code: number): void {
+    /*
+     * A SWEDISH CALLER'S OWN LETTERS, before the Latin-1 fold gets them.
+     * `unicode-to-petscii.ts` folds every accented letter onto its base -
+     * correct for a machine with no glyph for it, wrong for one whose ROM
+     * has the glyph exactly where this byte puts it.
+     */
+    if (this.swedish) {
+      const swede = swedishPetsciiFor(String.fromCodePoint(code));
+      if (swede !== null) return this.printByte(out, swede);
+    }
     const { byte, needsReverse } = asciiToPetsciiByte(code, 1);
     if (!needsReverse) return this.printByte(out, byte);
     // Glyph only exists as the inverse of another PETSCII glyph.

@@ -14,6 +14,7 @@
  */
 import { printablePetsciiToScreenCode } from './screen-codes';
 import { PUA_BANK1, colourMarker } from './pua';
+import { SWEDISH_PETSCII_TO_CHAR } from './swedish-charset';
 import { PETSCII_COLOR_TO_VIC } from './c64-palette';
 
 const CONTROL_KEYS: { [byte: number]: string } = {
@@ -37,15 +38,11 @@ const CONTROL_KEYS: { [byte: number]: string } = {
 };
 
 /**
- * The Swedish trio, read back as the Latin-1 letters the board already speaks
- * everywhere else. A session that is not Swedish keeps [, pound and ].
+ * The Swedish trio, read back as the Latin-1 letters the board already
+ * speaks everywhere else. ONE table, in `./swedish-charset` - the output
+ * side needs the same one to stop folding a caller's own name onto `aao`.
  */
-const SWEDISH_IN: { [byte: number]: string } = {
-  0x5B: '\u00e4', 0x5C: '\u00f6', 0x5D: '\u00e5',
-  // Shifted, which character ROM 325018-02 gives its own glyphs in the text
-  // bank - so case survives the wire instead of depending on the bank.
-  0x7B: '\u00c4', 0x7C: '\u00d6', 0x7D: '\u00c5',
-};
+const SWEDISH_IN = SWEDISH_PETSCII_TO_CHAR;
 
 export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): string {
   let out = '';

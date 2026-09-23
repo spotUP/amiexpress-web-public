@@ -51,10 +51,30 @@ export function sessionWantsPetscii(session: any): boolean {
  * somehow changed width mid-flight would keep a stale model, which is what
  * disposePetsciiSessionModel() below exists for.
  */
+/**
+ * Does this caller's machine have the Swedish character ROM?
+ *
+ * The setting is the caller's own (W row 22), and a session that has not
+ * said otherwise gets the standard set - which keeps `$5C` the pound sign
+ * this board's MCI uses for its column tab.
+ */
+export function sessionWantsSwedishPetscii(session: any): boolean {
+  return session?.user?.petsciiCharset === 'swedish' || session?.petsciiSwedish === true;
+}
+
 export function petsciiTerminalModelFor(session: any): AnsiToPetsciiTransducer {
   if (!session.petsciiTransducer) {
     session.petsciiTransducer = new AnsiToPetsciiTransducer({
       columns: petsciiColumnsOf(session) === 80 ? 80 : 40,
+      /*
+       * The caller's CHARACTER ROM travels with the shape. A C64 sold in
+       * Sweden puts a-ring and the umlauts where the bracket trio sits, and
+       * without telling the transducer, the ordinary Latin-1 fold turns a
+       * caller's own name into `aao` (the sysop, 2026-09-23). The board has
+       * known this preference since the graphics prompt
+       * (`command-handler/pre-login.ts`); nothing had asked it.
+       */
+      swedish: sessionWantsSwedishPetscii(session),
     });
   }
   return session.petsciiTransducer;

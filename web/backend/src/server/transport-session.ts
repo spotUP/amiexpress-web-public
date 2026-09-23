@@ -29,7 +29,7 @@ import {
   registerConnectionEmitter,
   unregisterConnectionEmitter,
 } from "./session-emitter-registry";
-import { sessionWantsPetscii } from "../utils/petscii-session-model";
+import { sessionWantsSwedishPetscii, sessionWantsPetscii } from "../utils/petscii-session-model";
 import { routeDoorInput } from "../services/door-input-routing";
 import { c64AdapterFor } from "./c64-door-adapter";
 
@@ -264,7 +264,9 @@ console.log(
     if (sessionWantsPetscii(connection.session)) {
       // PETSCII terminals send characters in PETSCII encoding, not ASCII
       // e.g., lowercase 'a' is 0xC1 in PETSCII, not 0x61 like ASCII
-      input = convertPetsciiInputToAscii(data);
+      // The caller's own character ROM goes with it: a Swedish machine sends
+      // `$5D` for a-ring where an American one sends `]`.
+      input = convertPetsciiInputToAscii(data, sessionWantsSwedishPetscii(connection.session));
     } else {
       input = data.toString("utf-8");
     }
