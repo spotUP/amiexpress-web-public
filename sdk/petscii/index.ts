@@ -6,7 +6,7 @@
  * both test suites through `@amiexpress/bbs-door-sdk/petscii`.
  */
 export { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
-export { type PetsciiScreenShape } from './petscii-machine';
+export { type PetsciiScreenShape, type PetsciiHistoryRow } from './petscii-machine';
 export { WideScreenMachine, WIDE_SCREEN_SHAPE } from './wide-screen-machine';
 export { type PetsciiScreenModel } from './screen-model';
 export {

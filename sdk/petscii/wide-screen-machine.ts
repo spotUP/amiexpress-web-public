@@ -28,7 +28,7 @@ import { PetsciiMachine } from './petscii-machine';
 import type { PetsciiScreenShape } from './petscii-machine';
 
 /** The wide screen's shape: 80x25, no logical lines, no background prefix. */
-export const WIDE_SCREEN_SHAPE: Required<PetsciiScreenShape> = {
+export const WIDE_SCREEN_SHAPE: Omit<Required<PetsciiScreenShape>, 'historyRows'> = {
   cols: 80,
   rows: 25,
   logicalLines: false,
@@ -36,7 +36,12 @@ export const WIDE_SCREEN_SHAPE: Required<PetsciiScreenShape> = {
 };
 
 export class WideScreenMachine extends PetsciiMachine {
-  constructor() {
-    super(WIDE_SCREEN_SHAPE);
+  /**
+   * The SHAPE is fixed - that is what this class is - so the only thing a
+   * caller may choose is how much history the screen keeps, exactly as on
+   * the 40-column machine.
+   */
+  constructor(options: { historyRows?: number } = {}) {
+    super({ ...WIDE_SCREEN_SHAPE, historyRows: options.historyRows });
   }
 }

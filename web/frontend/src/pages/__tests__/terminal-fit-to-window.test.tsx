@@ -51,6 +51,16 @@ const harness = vi.hoisted(() => ({
   term: null as TerminalDouble | null,
 }));
 
+/**
+ * The props the mocked terminal was last handed, read THROUGH A CALL.
+ *
+ * A case that resets `harness.props = null` and then mounts narrows the
+ * property to `null` for the rest of its block - a function call does not
+ * widen it back - so reading it directly is a type error rather than a
+ * value. Going through this returns the declared type.
+ */
+const handedProps = () => harness.props;
+
 vi.mock('@amiexpress/terminal', async () => ({
   ...(await import('../../../../../packages/terminal/src/utils/terminal-zoom')),
   // The real one: a stub would pin the stub, and a MISSING export is
@@ -321,7 +331,7 @@ describe('the size handed to the terminal seams on neither axis', () => {
       harness.term = makeTerminal();
       mountAt(width, height);
 
-      const handed = harness.props?.fontSize as number;
+      const handed = handedProps()?.fontSize as number;
       expect(handed).toBeGreaterThan(0);
       // Down: the row box is the font size, so a fraction is a hairline.
       expect(Math.abs(handed - Math.round(handed))).toBeLessThan(1e-9);

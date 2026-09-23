@@ -4,6 +4,7 @@ import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
 import { controlChordToPetscii, keyEventToPetscii, pastedTextToPetscii } from './keymap';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
+import { clampScrollOffset } from './scrollback';
 
 export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
@@ -97,6 +98,15 @@ export interface PetsciiCanvasProps {
   gridVisible?: boolean;
   /** Cells to outline: the MCI tokens the editor found, and a lifted brush. */
   highlight?: readonly PetsciiHighlight[];
+  /**
+   * HOW FAR BACK IN THE HISTORY THE GLASS IS LOOKING, in rows. 0 is live.
+   *
+   * The machine keeps the rows that leave the screen (`historyRows`); this
+   * says which window of them to draw. Anything past the end of the history
+   * is clamped, so a caller may keep asking to scroll up for ever and simply
+   * stops moving.
+   */
+  scrollOffset?: number;
 }
 
 /** A pointer over a cell of the 40x25 screen. Never over the border. */
@@ -246,6 +256,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   onCellPointer,
   gridVisible = false,
   highlight,
+  scrollOffset = 0,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -364,12 +375,27 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     ctx.fillStyle = colours[s.background & 0x0F];
     ctx.fillRect(border, border, cols * destW, rows * destH);
 
+    /*
+     * WHICH ROWS THE GLASS SHOWS.
+     *
+     * At rest (`scrolled === 0`) every row is the live screen's, which is
+     * what a C64 has and all this drew before. Scrolled back by n, the top n
+     * rows come out of the machine's history - the rows it retired when it
+     * scrolled or when the board cleared the screen - and the rest are the
+     * live screen shifted down by n. Clamped to the history that exists, so
+     * a wheel that keeps turning simply stops moving the picture.
+     */
+    const scrolled = clampScrollOffset(scrollOffset, machine.historyLength);
+
     for (let y = 0; y < rows; y++) {
+      const back = scrolled - y;
+      const historyRow = back > 0 ? machine.historyRow(back) : undefined;
+      const liveBase = (y - scrolled) * cols;
       for (let x = 0; x < cols; x++) {
-        const idx = y * cols + x;
-        const screenCode = s.screen[idx];
+        const idx = liveBase + x;
+        const screenCode = historyRow ? historyRow.screen[x] : s.screen[idx];
         if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
-        const color = colours[s.colorRam[idx] & 0x0F];
+        const color = colours[(historyRow ? historyRow.color[x] : s.colorRam[idx]) & 0x0F];
         const tinted = atlasCache.get(color);
         const sx = glyphCellIndex(s.charsetBank, screenCode) * ATLAS_PX_SIZE;
         const dx = border + x * destW;
@@ -390,8 +416,12 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     // that now, because the canvas is what draws the cursor and a full-screen
     // door still got one blinking over its playfield ("i see a blinking petscii
     // cursor in game", 2026-09-06).
+    //
+    // And a screen that is scrolled back shows no cursor at all: the cursor
+    // is where the next character goes, and nothing is going anywhere on a
+    // row that left the screen minutes ago.
     const effectiveCursorOn = s.cursorShown === false ? false : (cursorVisible ?? cursorOn);
-    if (effectiveCursorOn) {
+    if (effectiveCursorOn && scrolled === 0) {
       const cursorIdx = s.cursorY * cols + s.cursorX;
       ctx.fillStyle = cursorColour === 'ink'
         ? colours[s.colorRam[cursorIdx] & 0x0F]
@@ -437,7 +467,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     // `draw`'s identity, so a prop the memo does not watch cannot reach the
     // glass until something else happens to change. `gridVisible` and
     // `highlight` are here for exactly the same reason.
-  }, [machine, colours, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows, gridVisible, highlight]);
+  }, [machine, colours, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows, gridVisible, highlight, scrollOffset]);
 
   // Keep a ref to the latest draw() so the onUpdate subscription below
   // doesn't need to be torn down and rebuilt every cursor blink.

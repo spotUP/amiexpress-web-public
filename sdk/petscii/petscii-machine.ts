@@ -65,6 +65,25 @@ export interface PetsciiScreenShape {
    * it there.
    */
   backgroundPrefix?: boolean;
+  /**
+   * HOW MANY RETIRED ROWS TO KEEP, which is what scrollback IS.
+   *
+   * Zero - the default - keeps none, which is a real C64 exactly. A screen
+   * that is DRAWN by something with a history (the web terminal's canvas)
+   * asks for a depth here and gets every row that leaves the screen, whether
+   * it left by scrolling or because the screen was cleared underneath it.
+   *
+   * Off by default because a session holds two machines: the one on the
+   * glass and the transducer's private oracle, and only the first of them is
+   * ever looked at.
+   */
+  historyRows?: number;
+}
+
+/** A row that has left the screen: its screen codes, and its colour RAM. */
+export interface PetsciiHistoryRow {
+  screen: Uint8Array;
+  color: Uint8Array;
 }
 
 export interface PetsciiMachineState {
@@ -110,6 +129,10 @@ export class PetsciiMachine {
   protected readonly backgroundPrefix: boolean;
   /** rowLinked[y] = true when row y is the continuation of row y-1 (logical 80-char line) */
   private rowLinked: boolean[];
+  /** How deep the history goes. 0 - the default - is a real C64: none. */
+  protected readonly historyRows: number;
+  /** Rows that have left the screen, oldest first. Empty when `historyRows` is 0. */
+  private history: PetsciiHistoryRow[] = [];
 
   constructor(shape: PetsciiScreenShape = {}) {
     this.cols = shape.cols ?? COLS;
@@ -117,6 +140,7 @@ export class PetsciiMachine {
     this.cells = this.cols * this.rows;
     this.logicalLines = shape.logicalLines ?? true;
     this.backgroundPrefix = shape.backgroundPrefix ?? true;
+    this.historyRows = Math.max(0, Math.floor(shape.historyRows ?? 0));
     this.state = {
       cols: this.cols, rows: this.rows,
       screen: new Uint8Array(this.cells).fill(0x20),
@@ -317,8 +341,78 @@ export class PetsciiMachine {
     return true;
   }
 
+  /**
+   * How many retired rows stand above the live screen.
+   *
+   * Always 0 unless the machine was built with `historyRows`.
+   */
+  get historyLength(): number {
+    return this.history.length;
+  }
+
+  /**
+   * A row that has left the screen. `back` is 1 for the row that left most
+   * recently; undefined past the end of the history.
+   *
+   * The arrays are the machine's own and must not be written to.
+   */
+  historyRow(back: number): PetsciiHistoryRow | undefined {
+    return this.history[this.history.length - back];
+  }
+
+  /** Forget every retired row. A fresh session on a machine that is kept. */
+  clearHistory(): void {
+    this.history = [];
+  }
+
+  /** Copy one visible row into the history, dropping the oldest once full. */
+  private retireRow(y: number): void {
+    if (this.historyRows === 0) return;
+    const start = y * this.cols;
+    const end = start + this.cols;
+    this.history.push({
+      screen: this.state.screen.slice(start, end),
+      color: this.state.colorRam.slice(start, end),
+    });
+    if (this.history.length > this.historyRows) {
+      this.history.splice(0, this.history.length - this.historyRows);
+    }
+  }
+
+  /** Whether a row holds nothing but spaces - either spelling of one. */
+  private rowIsBlank(y: number): boolean {
+    const s = this.state.screen;
+    const start = y * this.cols;
+    for (let i = start; i < start + this.cols; i++) {
+      if (s[i] !== 0x20 && s[i] !== 0x60) return false;
+    }
+    return true;
+  }
+
+  /**
+   * PUT THE WHOLE VISIBLE SCREEN IN THE HISTORY, then let the caller wipe it.
+   *
+   * `$93` erases and keeps nothing - that is what the byte means on a C64,
+   * and it is why a caller on the PETSCII surface could scroll back to
+   * nothing at all while the ANSI surface kept everything (the sysop,
+   * 2026-09-24). The byte on the wire is unchanged: one byte, and a real C64
+   * behaves exactly as it did. What changes is that a screen which is DRAWN
+   * from a model keeps the rows the model is about to throw away.
+   *
+   * Trailing blank rows are dropped, so a half-filled screen does not pad the
+   * history with empties and a clear on an already-clear screen retires
+   * nothing at all.
+   */
+  private retireScreen(): void {
+    if (this.historyRows === 0) return;
+    let last = this.rows - 1;
+    while (last >= 0 && this.rowIsBlank(last)) last--;
+    for (let y = 0; y <= last; y++) this.retireRow(y);
+  }
+
   /** CLR: fills the screen with spaces in the current pen color, homes the cursor, and clears all link flags. */
   private clear(): void {
+    this.retireScreen();
     const s = this.state;
     s.screen.fill(0x20);
     s.colorRam.fill(s.pen);
@@ -330,6 +424,7 @@ export class PetsciiMachine {
   /** Shifts screen + colorRam up one physical row, shifts the link-flag table with it, and clears the new bottom row. */
   private scroll(): void {
     const s = this.state;
+    this.retireRow(0); // the row leaving the top, which is what scrollback IS
     s.screen.copyWithin(0, this.cols, this.cells);
     s.colorRam.copyWithin(0, this.cols, this.cells);
     s.screen.fill(0x20, this.cells - this.cols, this.cells);

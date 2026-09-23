@@ -35,6 +35,7 @@ import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, vicColorToPetscii, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
+import { scrollOffsetForWheel } from '../petscii/scrollback';
 
 // RIP Graphics.
 //
@@ -49,6 +50,12 @@ import { armRipLinger, type RipLinger } from '../rip/rip-linger';
 
 const RIP_WIDTH = 640;
 const RIP_HEIGHT = 350;
+
+/**
+ * How many retired rows a PETSCII session keeps, so that the canvas surface
+ * remembers exactly as much as the xterm one does.
+ */
+const PETSCII_SCROLLBACK_ROWS = XTERM_CONFIG.options.scrollback;
 
 const SHARED_AUTH_TOKEN_KEY = 'authToken';
 const BBS_AUTH_TOKEN_KEY = 'bbs_auth_token';
@@ -451,11 +458,39 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     petsciiSelectionRef.current = rect;
     setPetsciiSelection(rect);
   }, []);
+  /*
+   * THE PETSCII SURFACE'S OWN SCROLLBACK.
+   *
+   * "scrollback does not work petscii" (the sysop, 2026-09-24), the day
+   * after the ANSI surface got its history back. It never worked: a PETSCII
+   * session does not run on xterm - the canvas IS the surface, and the
+   * screen model under it threw every row away. The model keeps them now
+   * (`historyRows`), this is how deep, and `petsciiScrollOffset` is how far
+   * back the glass is looking. The depth matches xterm's own
+   * (`XTERM_CONFIG.scrollback`) so the two surfaces remember equally much.
+   */
+  const [petsciiScrollOffset, setPetsciiScrollOffset] = useState(0);
+  const petsciiScrollOffsetRef = useRef(0);
+  const scrollPetsciiByWheel = useCallback((deltaY: number) => {
+    const history = petsciiMachineRef.current?.historyLength ?? 0;
+    const next = scrollOffsetForWheel(petsciiScrollOffsetRef.current, deltaY, history);
+    if (next === petsciiScrollOffsetRef.current) return;
+    petsciiScrollOffsetRef.current = next;
+    setPetsciiScrollOffset(next);
+  }, []);
+  /** Back to the live screen. Every key does this, the way xterm does. */
+  const petsciiScrollToLive = useCallback(() => {
+    if (petsciiScrollOffsetRef.current === 0) return;
+    petsciiScrollOffsetRef.current = 0;
+    setPetsciiScrollOffset(0);
+  }, []);
   const clearPetsciiSession = useCallback(() => {
     surfaceRef.current = 'xterm';
     petsciiMachineRef.current = null;
     setPetsciiMachine(null);
     petsciiTransducerRef.current = null;
+    petsciiScrollOffsetRef.current = 0;
+    setPetsciiScrollOffset(0);
     dispatchSurface({ type: 'session-reset' });
   }, []);
   // Published by the init effect so injectInput (imperative handle) and the
@@ -1172,7 +1207,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // The screen's SHAPE, from the server's petscii-mode event. 40 is a
         // C64; 80 is this board's wide PETSCII screen (WideScreenMachine:
         // no logical lines, and $02 is not a background prefix there).
-        petsciiMachineRef.current = columns === 80 ? new WideScreenMachine() : new PetsciiMachine();
+        petsciiMachineRef.current = columns === 80
+          ? new WideScreenMachine({ historyRows: PETSCII_SCROLLBACK_ROWS })
+          : new PetsciiMachine({ historyRows: PETSCII_SCROLLBACK_ROWS });
         setPetsciiMachine(petsciiMachineRef.current);
       }
       if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer({ columns });
@@ -4099,6 +4136,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                * would be drawn twice - once here and once when the board
                * echoes it.
                */
+              // A KEY PUTS THE GLASS BACK ON THE LIVE SCREEN, which is
+              // xterm's own rule (`scrollOnUserInput`): the caller is
+              // answering a prompt he cannot see otherwise.
+              petsciiScrollToLive();
               feedLocalPetsciiPen(bytes);
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
@@ -4108,6 +4149,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             }}
             swedish={petsciiSwedish}
             highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'brush' as const }] : undefined}
+            scrollOffset={petsciiScrollOffset}
             onCellPointer={(event) => {
               /*
                * THE DOOR'S POINTER, OR THE CALLER'S SELECTION.
@@ -4125,6 +4167,28 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                 socketRef.current.emit(report.event, report.payload);
                 return;
               }
+
+              /*
+               * THE WHEEL, WHEN NO DOOR WANTED IT, IS THE SCROLLBACK.
+               *
+               * It reached this handler before and fell straight through:
+               * the code below answers `down`, `move` and `up`, so a wheel
+               * outside a door was dropped on the floor. That is half of
+               * "scrollback does not work petscii" - the other half being
+               * that there was nothing in the history to show.
+               *
+               * Up the screen is back in time, which is a NEGATIVE deltaY
+               * in the DOM and a LARGER offset here.
+               */
+              if (event.type === 'wheel') {
+                scrollPetsciiByWheel(event.deltaY ?? 0);
+                return;
+              }
+
+              // A drag selects from the LIVE screen, so it is not offered on
+              // a screen that is scrolled back - the cells under the pointer
+              // are not the cells `screenTextInRect` would read.
+              if (petsciiScrollOffsetRef.current !== 0) return;
 
               const held = (event.buttons & 1) !== 0;
               if (event.type === 'down') {
