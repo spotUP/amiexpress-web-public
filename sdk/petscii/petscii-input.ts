@@ -12,6 +12,9 @@
  * uppercase). This is the inverse of the pre-SDK backend
  * convertPetsciiInputToAscii, which disagreed with the web keymap.
  */
+import { printablePetsciiToScreenCode } from './screen-codes';
+import { PUA_BANK1 } from './pua';
+
 const CONTROL_KEYS: { [byte: number]: string } = {
   0x0D: '\r', 0x8D: '\r',
   // Not C64 keys - no C64 keyboard has Tab or Escape - but the web PETSCII
@@ -45,15 +48,61 @@ const SWEDISH_IN: { [byte: number]: string } = {
 
 export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): string {
   let out = '';
+  /*
+   * REVERSE IS A LATCH, not a character.
+   *
+   * `$12`/`$92` turn reverse on and off for everything typed after them, so
+   * they are carried in bit 7 of each screen code that follows rather than
+   * as marks of their own - the same place the transducer reads it from.
+   */
+  let reverse = false;
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
+    if (b === RVS_ON) { reverse = true; continue; }
+    if (b === RVS_OFF) { reverse = false; continue; }
     const control = CONTROL_KEYS[b];
     if (control !== undefined) { out += control; continue; }
     if (swedish && SWEDISH_IN[b] !== undefined) { out += SWEDISH_IN[b]; continue; }
     if (b >= 0x41 && b <= 0x5A) { out += String.fromCharCode(b + 0x20); continue; } // unshifted -> a-z
     if (b >= 0xC1 && b <= 0xDA) { out += String.fromCharCode(b - 0x80); continue; } // shifted -> A-Z
     if ((b >= 0x20 && b <= 0x40) || (b >= 0x5B && b <= 0x5F) || (b >= 0x61 && b <= 0x7A)) { out += String.fromCharCode(b); continue; }
-    // LF, CLR, colors, every other control/graphics byte: no input meaning.
+    if (isGraphicsByte(b)) { out += graphicMarker(b, reverse); continue; }
+    // LF, CLR, colours, every other control byte: no input meaning YET -
+    // colour is its own phase, and it needs a form that survives a chat
+    // message, where ESC is stripped.
   }
   return out;
+}
+
+/** `$12` RVS ON, `$92` RVS OFF - a latch over what follows, not a glyph. */
+const RVS_ON = 0x12;
+const RVS_OFF = 0x92;
+
+/**
+ * THE GRAPHICS A C64 KEYBOARD CAN ACTUALLY TYPE.
+ *
+ * Two runs, and they are the two the KEYBOARD reaches: `$A0-$BF` is the
+ * Commodore key with a letter or a digit, `$C0` and `$DB-$DF` are SHIFT with
+ * the punctuation keys (`* - + £ @ ^ =`). Everything between - `$C1-$DA` -
+ * is SHIFT with a LETTER, which on a real C64 is the same byte in either
+ * charset and is A-Z on this board, so it is decoded above and never here.
+ * There is no third run: a caller cannot type a right-hand graphic
+ * distinguishably, which is the reason the board runs one charset bank.
+ */
+function isGraphicsByte(b: number): boolean {
+  return (b >= 0xA0 && b <= 0xC0) || (b >= 0xDB && b <= 0xFF);
+}
+
+/**
+ * A graphics byte as the marker that carries it through the board.
+ *
+ * BANK 1 ONLY (`U+E1xx`). The board runs the lowercase charset board-wide -
+ * "only lowercase characters are allowed and only black background ... this
+ * should apply bbs wide" (the sysop, 2026-09-14, `board-rules.ts`) - and a
+ * bank-0 marker would make the transducer emit `$8E`, which reflows every
+ * letter already on the caller's screen.
+ */
+function graphicMarker(b: number, reverse: boolean): string {
+  const sc = printablePetsciiToScreenCode(b) & 0x7F;
+  return String.fromCodePoint(PUA_BANK1 + (reverse ? sc | 0x80 : sc));
 }
