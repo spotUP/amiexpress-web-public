@@ -41,6 +41,14 @@ const ZRINIT_RAW_21 = Buffer.concat([
   Buffer.from([0x0d, 0x8a, 0x11]), // CR + high-bit LF + XON trailer
 ]);
 
+// What a ZRINIT looks like on its way out NOW: the header exactly as `rz`
+// wrote it, and only the trailer normalized (\r \x8a \x11 -> \r \n \x11),
+// which is a delimiter and not a capability.
+const ZRINIT_FORWARDED_21 = Buffer.concat([
+  Buffer.from('2a2a18423031303030303030323362653530', 'hex'),
+  Buffer.from([0x0d, 0x0a, 0x11]),
+]);
+
 // After patchZrinitFlags + normalizeHexHeaderTrailers:
 //   header bytes 12..17 swap "23be50" → "039a32" (clear CANFC32)
 //   trailer byte 19 swaps 0x8a → 0x0a
@@ -78,29 +86,32 @@ describe('LrzszTransferManager.processStdoutChunk — behavior', () => {
     const twoZrinits = Buffer.concat([ZRINIT_RAW_21, ZRINIT_RAW_21]);
     mgr.processStdoutChunk(twoZrinits);
 
-    // After my fix: 1 forwarded, 1 suppressed (both ZRINITs).
-    // Without the split + suppression, the browser Sentry would see
-    // a 42-byte chunk and fail detection.
+    // 1 forwarded, 1 suppressed (both ZRINITs). Without the split +
+    // suppression, the browser Sentry would see a 42-byte chunk and fail
+    // detection.
     expect(sent.length).toBe(1);
-    // The forwarded one must be patched.
-    expect(sent[0]).toEqual(ZRINIT_PATCHED_21);
+    // AND IT GOES OUT AS `rz` WROTE IT. It used to be rewritten to clear
+    // CANFC32, which told the sender "no CRC32" while `rz` went on
+    // verifying as CRC32 - the two then disagreed about every subpacket.
+    // That is the "Bad CRC" loop DiNO's SyncTerm upload died in on
+    // 2026-09-23. See the withdrawn patchZrinitFlags.
+    expect(sent[0]).toEqual(ZRINIT_FORWARDED_21);
   });
 
-  test('patches every ZRINIT occurrence in a multi-header chunk', () => {
+  test('never rewrites the receiver\'s own capabilities', () => {
+    // A sender is told what `rz` can do, by `rz`. Changing those bytes on
+    // the way out leaves the two ends disagreeing about how every later
+    // subpacket is framed, which is not a thing a byte rewrite can fix.
     const sent: Buffer[] = [];
     const mgr = makeManager('upload', sent);
-    const twoZrinits = Buffer.concat([ZRINIT_RAW_21, ZRINIT_RAW_21]);
-    mgr.processStdoutChunk(twoZrinits);
 
-    // Even though only 1 is forwarded (the second is suppressed),
-    // verify the manager's internal state shows both were patched
-    // by feeding a fresh manager with a single chunk and inspecting.
-    const sent2: Buffer[] = [];
-    const mgr2 = makeManager('upload', sent2);
-    // Send ONE ZRINIT: should be forwarded + patched.
-    mgr2.processStdoutChunk(ZRINIT_RAW_21);
-    expect(sent2.length).toBe(1);
-    expect(sent2[0]).toEqual(ZRINIT_PATCHED_21);
+    mgr.processStdoutChunk(ZRINIT_RAW_21);
+
+    expect(sent.length).toBe(1);
+    expect(sent[0]).toEqual(ZRINIT_FORWARDED_21);
+    expect(sent[0]).not.toEqual(ZRINIT_PATCHED_21);
+    // The capability byte is `rz`'s own: 0x23, CANFC32 still set.
+    expect(sent[0].slice(0, 18).toString('ascii')).toContain('00000023');
   });
 
   test('suppresses duplicate ZRINIT keepalives', () => {

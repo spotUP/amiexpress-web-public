@@ -573,20 +573,30 @@ export class LrzszTransferManager {
    * binary file content.
    */
   /**
-   * lrzsz advertises CANFC32 (0x20) in its ZRINIT capabilities, then
-   * incorrectly rejects subpackets sent with ZBIN (CRC16) framing as
-   * "Bad CRC" — it tries to verify them as CRC32. SyncTerm avoids
-   * this by always sending ZBIN32; MuffinTerm (and other strict
-   * clients) correctly use ZBIN per-frame, hit the rz bug, and the
-   * transfer dies in a ZNAK loop. Strip CANFC32 from rz's ZRINIT so
-   * senders never opt into CRC32 mode in the first place.
+   * WITHDRAWN 2026-09-23, kept only so the reason is on the record.
    *
-   * ZRINIT on wire is the HEX header:
-   *   ** \x18 B 01 00000023 XXXX \r \x8a \x11
-   * Replace ZF0 byte (the "23") with "03" (clears bit 0x20 = CANFC32,
-   * keeps CANFDX 0x01 + CANOVIO 0x02) and recompute the CRC16.
-   * New header CRC for type=0x01, flags=0x00000003 is 0x9a32.
+   * This rewrote rz's own ZRINIT on the wire to clear CANFC32, meaning to
+   * stop senders opting into CRC32. It cannot work, and the shape of the
+   * mistake is worth keeping: the bytes going OUT were changed and `rz` was
+   * not. The receiver still believed it had advertised CANFC32 and went on
+   * verifying subpackets as CRC32, while the sender - told CRC32 was
+   * unavailable - framed them as ZBIN/CRC16. The two then disagreed about
+   * every subpacket, which is precisely the "Bad CRC" it was written to
+   * avoid.
+   *
+   * Measured, not argued: DiNO uploading UP-SABBS.LHA from SyncTerm over
+   * telnet, 2026-09-23. `rz` stderr took the file to about 7 KB and then
+   * repeated `Retry 0: Bad CRC` / `Garbage count exceeded` / `Got ERROR`
+   * until `Got ZCAN`, `rz: UP-SABBS.LHA removed`, `Transfer incomplete` -
+   * and the client's own panel said `Block: 128/CRC-16`, the mode this
+   * patch had forced it into. SyncTerm sends ZBIN32 when it is allowed to,
+   * which is the mode `rz` actually verifies.
+   *
+   * MuffinTerm's ZBIN/CRC16 upload is the case this was aimed at. It is a
+   * real lrzsz bug and it needs a fix that changes what the RECEIVER does,
+   * not one that lies to the sender about it.
    */
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   /**
    * Process a stdout chunk from the lrzsz child: patch ZRINIT flags,
    * normalize hex-header trailers, split at hex-header boundaries so
@@ -596,7 +606,7 @@ export class LrzszTransferManager {
    * full transport pipeline can be exercised without spawning rz.
    */
   private processStdoutChunk(chunk: Buffer): void {
-    const normalized = this.normalizeHexHeaderTrailers(this.patchZrinitFlags(chunk));
+    const normalized = this.normalizeHexHeaderTrailers(chunk);
     if (process.env.LRZSZ_DEBUG) {
       const preview = normalized.slice(0, 64).toString('hex');
       console.log(`[lrzsz ${this.direction}] stdout -> ${normalized.length}B: ${preview}${normalized.length > 64 ? '...' : ''}`);
