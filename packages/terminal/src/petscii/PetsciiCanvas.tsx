@@ -587,11 +587,22 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
         return;
       }
     }
-    // Every other Ctrl/Cmd/Alt chord still passes through untouched:
-    // keyEventToPetscii knows only `key` + shift, so without this guard a
-    // Cmd+R would resolve to a mapped letter byte and eat the reload.
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish);
+    /*
+     * ALT IS THE COMMODORE KEY, and it is the one chord this canvas keeps.
+     *
+     * A C64 keyboard has a key an ASCII keyboard does not, and it is the one
+     * that draws boxes; without it the machine this board emulates cannot
+     * type the characters it is famous for. `keymap.ts` resolves the chord
+     * through `e.code`, because on a Mac the browser has already turned
+     * Alt+a into a letter.
+     *
+     * Cmd and Ctrl still go to the browser untouched - Cmd+R must reload,
+     * and Ctrl+C is handled above as the board's abort key. An Alt chord the
+     * keymap does not know is handed back too, so a browser shortcut this
+     * board has no use for still works.
+     */
+    if (e.ctrlKey || e.metaKey) return;
+    const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish, e.code, e.altKey);
     if (bytes) {
       e.preventDefault();
       consumed(e);

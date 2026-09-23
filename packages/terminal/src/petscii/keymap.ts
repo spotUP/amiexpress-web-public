@@ -13,6 +13,65 @@ import { SWEDISH_KEY_TO_PETSCII } from './swedish';
  * unit-testable without jsdom/canvas.
  */
 
+/**
+ * THE COMMODORE KEY, PLAYED BY ALT.
+ *
+ * A C64 keyboard has a key an ASCII keyboard does not, and it is the one
+ * that draws: C= with a letter gives the left-hand graphics `$A1-$BF`, and
+ * SHIFT with the punctuation keys gives `$C0` and `$DB-$DF`. This board had
+ * neither, so the machine it emulates could not type the characters it is
+ * famous for - "we want full petscii input <3" (the sysop, 2026-09-22).
+ *
+ * KEYED BY `code`, NEVER BY `key`. On macOS Alt+a reports `e.key === 'a\u030a'`
+ * and Alt+s reports `'\u00df'` - the browser has already applied the modifier -
+ * and those are letters a Swedish caller types for their own sake. `code`
+ * names the PHYSICAL key and is the same on every layout.
+ *
+ * The values cross-check against the glyph table the other direction is
+ * built from: C=+A is `$B0` and `unicode-to-petscii.ts` maps the top-left
+ * corner to `$B0`; C=+S is `$AE`, C=+Z is `$AD`, C=+X is `$BD` - the four
+ * corners of a box, on the four keys a C64 artist reaches for.
+ */
+const COMMODORE_KEYS: { [code: string]: number } = {
+  KeyA: 0xB0, KeyB: 0xBF, KeyC: 0xBC, KeyD: 0xAC, KeyE: 0xB1,
+  KeyF: 0xBB, KeyG: 0xA5, KeyH: 0xB4, KeyI: 0xA2, KeyJ: 0xB5,
+  KeyK: 0xA1, KeyL: 0xB6, KeyM: 0xA7, KeyN: 0xAA, KeyO: 0xB9,
+  KeyP: 0xAF, KeyQ: 0xAB, KeyR: 0xB2, KeyS: 0xAE, KeyT: 0xA3,
+  KeyU: 0xB8, KeyV: 0xBE, KeyW: 0xB3, KeyX: 0xBD, KeyY: 0xB7,
+  KeyZ: 0xAD,
+  /*
+   * The graphics a C64 gets from SHIFT and a punctuation key. Its keyboard
+   * has keys a PC does not, so they are reached from the keys a PC has, and
+   * all of them sit behind the same modifier - one rule for the caller to
+   * learn instead of two.
+   */
+  Backslash: 0xC0,      // horizontal line
+  Minus: 0xDD,          // vertical line
+  BracketLeft: 0xDB,    // cross
+  BracketRight: 0xDC,
+  Quote: 0xDE,
+  Equal: 0xDF,
+  Space: 0xA0,          // shift-space: a blank that is not a space
+};
+
+/** RVS ON / RVS OFF, the only fill a C64 has. */
+const REVERSE_KEYS: { [code: string]: number } = {
+  Digit9: 0x12,
+  Digit0: 0x92,
+};
+
+/**
+ * The byte the Commodore key sends for this physical key, or null.
+ *
+ * Exported so the canvas can ask whether a chord is the board's before it
+ * hands the keystroke to the browser.
+ */
+export function commodoreKeyToPetscii(code: string): number | null {
+  if (code in COMMODORE_KEYS) return COMMODORE_KEYS[code];
+  if (code in REVERSE_KEYS) return REVERSE_KEYS[code];
+  return null;
+}
+
 // Named keys that don't depend on shift state.
 const NAMED_KEYS: { [key: string]: number } = {
   Enter: 0x0D,
@@ -50,7 +109,22 @@ const SHIFTABLE_NAMED_KEYS: { [key: string]: [unshifted: number, shifted: number
   Home: [0x13, 0x93],
 };
 
-export function keyEventToPetscii(key: string, shiftKey: boolean, swedish = false): number[] | null {
+export function keyEventToPetscii(
+  key: string,
+  shiftKey: boolean,
+  swedish = false,
+  code?: string,
+  altKey = false,
+): number[] | null {
+  /*
+   * The Commodore key first, resolved through `code`: on a Mac the browser
+   * has already turned Alt+a into a letter, and that letter is one somebody
+   * types for its own sake.
+   */
+  if (altKey && code) {
+    const graphic = commodoreKeyToPetscii(code);
+    return graphic === null ? null : [graphic];
+  }
   // A Swedish caller's own letters, where a Swedish C64 keeps them. Off by
   // default: in an ordinary session those bytes are [, pound and ].
   if (swedish && key in SWEDISH_KEY_TO_PETSCII) return [SWEDISH_KEY_TO_PETSCII[key]!];
@@ -63,11 +137,12 @@ export function keyEventToPetscii(key: string, shiftKey: boolean, swedish = fals
   }
   if (key.length !== 1) return null;
 
-  const code = key.charCodeAt(0);
-  if (code >= 0x61 && code <= 0x7A) return [code - 0x20]; // a-z -> $41-$5A
-  if (code >= 0x41 && code <= 0x5A) return [code + 0x80]; // A-Z -> $C1-$DA
-  if (code >= 0x20 && code <= 0x3F) return [code];        // digits/punctuation
-  if (code === 0x40 || (code >= 0x5B && code <= 0x5F)) return [code]; // @[\]^_
+  // `charCode`, not `code`: the parameter above names the physical key.
+  const charCode = key.charCodeAt(0);
+  if (charCode >= 0x61 && charCode <= 0x7A) return [charCode - 0x20]; // a-z -> $41-$5A
+  if (charCode >= 0x41 && charCode <= 0x5A) return [charCode + 0x80]; // A-Z -> $C1-$DA
+  if (charCode >= 0x20 && charCode <= 0x3F) return [charCode];        // digits/punctuation
+  if (charCode === 0x40 || (charCode >= 0x5B && charCode <= 0x5F)) return [charCode]; // @[\]^_
   return null;
 }
 
