@@ -17,11 +17,29 @@ interface SessionLog {
   lastActivity: Date;
   output: string[];  // Array of ANSI output strings
   maxLines: number;  // Maximum lines to keep in memory
+  /** Bytes currently held, so the budget is measured in what was actually written. */
+  outputBytes: number;
 }
 
 class SessionLogManager {
   private logs: Map<string, SessionLog> = new Map();
-  private readonly MAX_LINES_PER_SESSION = 5000;  // Keep last 5000 lines
+  /**
+   * WHY THE BUDGET IS BYTES, NOT CHUNKS.
+   *
+   * This kept the last 5000 CHUNKS, and a chunk is whatever one `emit` wrote
+   * - which for a blessed door is a handful of cells. A door repainting its
+   * screen produces thousands of them a second, so opening one door evicted
+   * the caller's whole session and left a tail of cursor fragments that
+   * rendered as nothing at all: "no typescript doors seem logged at all... or
+   * no doors at all", and "a lot of stuff is still wiped from the scrollback"
+   * (the sysop, 2026-09-24).
+   *
+   * Two megabytes is about a full evening of a caller's screen and costs less
+   * than a single screenshot; the line cap stays as a ceiling on how many
+   * pieces are held, far above what any door produces in a sitting.
+   */
+  private readonly MAX_BYTES_PER_SESSION = 2 * 1024 * 1024;
+  private readonly MAX_LINES_PER_SESSION = 200000;
   private readonly LOG_RETENTION_MS = 3600000;    // Keep logs for 1 hour after disconnect
 
   /**
@@ -36,7 +54,8 @@ class SessionLogManager {
       startTime: getSystemTime(),
       lastActivity: getSystemTime(),
       output: [],
-      maxLines: this.MAX_LINES_PER_SESSION
+      maxLines: this.MAX_LINES_PER_SESSION,
+      outputBytes: 0,
     });
 console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${username || 'guest'})`);
   }
@@ -53,11 +72,22 @@ console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${usern
     }
 
     log.output.push(output);
+    log.outputBytes += output.length;
     log.lastActivity = getSystemTime();
+    this.trim(log);
+  }
 
-    // Trim if exceeds max lines
-    if (log.output.length > log.maxLines) {
-      log.output = log.output.slice(-log.maxLines);
+  /**
+   * Drop the OLDEST chunks until the log is inside its budget.
+   *
+   * From the front, chunk by chunk: the log is a transcript, and the end of
+   * it - what the caller is looking at now - is the part worth keeping.
+   */
+  private trim(log: SessionLog): void {
+    while (log.output.length > 0
+      && (log.outputBytes > this.MAX_BYTES_PER_SESSION || log.output.length > log.maxLines)) {
+      const dropped = log.output.shift();
+      log.outputBytes -= dropped ? dropped.length : 0;
     }
   }
 
@@ -86,13 +116,11 @@ console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${usern
       displayInput = `[CTRL-${String.fromCharCode(input.charCodeAt(0) + 64)}]`;
     }
 
-    log.output.push(`\x1b[33m[INPUT: ${displayInput}]\x1b[0m`);
+    const marked = `\x1b[33m[INPUT: ${displayInput}]\x1b[0m`;
+    log.output.push(marked);
+    log.outputBytes += marked.length;
     log.lastActivity = getSystemTime();
-
-    // Trim if exceeds max lines
-    if (log.output.length > log.maxLines) {
-      log.output = log.output.slice(-log.maxLines);
-    }
+    this.trim(log);
   }
 
   /**
