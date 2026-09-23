@@ -101,6 +101,28 @@ export function chatTakesTheWholeChunk(subState: unknown, input: string): boolea
   return !isStrayMouseReport(input);
 }
 
+/**
+ * The LF half of a telnet RETURN, when it arrives in its OWN packet.
+ *
+ * `splitInputForDispatch` collapses `CR LF` inside one chunk, which covers a
+ * client that writes its line terminator in one go. A client that flushes
+ * between the two bytes - or a network that splits the segment - hands the
+ * board a chunk ending in CR and then a chunk that is just LF, and the second
+ * one submits again at whatever prompt the first one opened. That is the
+ * "each second time" in the report: it depends on packet boundaries, so it
+ * happens on some presses and not others.
+ *
+ * The latch is the caller's, not the module's: two sessions interleave on one
+ * process, and a shared flag would let one caller's CR eat another's LF.
+ */
+export function swallowTelnetLineFeed(session: BBSSession, input: string): string {
+  const state = session as unknown as { lastInputEndedWithCr?: boolean };
+  const held = state.lastInputEndedWithCr === true;
+  const text = held && input.startsWith('\n') ? input.slice(1) : input;
+  state.lastInputEndedWithCr = text.endsWith('\r') || (input === '\r');
+  return text;
+}
+
 export function splitInputForDispatch(input: string): string[] {
   if (input.startsWith('\x1b[') && input.length >= 2) return [input];
   /*

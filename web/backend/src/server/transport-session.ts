@@ -40,7 +40,7 @@ import { c64AdapterFor } from "./c64-door-adapter";
  * the join, and one column at a time is a key a caller would hold down.
  */
 const PAN_COLUMNS = 8;
-import { classifyTerminalInput, clearPauseHandler, commandPieces } from "./terminal-input";
+import { classifyTerminalInput, clearPauseHandler, commandPieces, swallowTelnetLineFeed } from "./terminal-input";
 import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
 import { convertPetsciiInputToAscii } from "../utils/petscii.util";
@@ -274,6 +274,13 @@ console.log(
     // Telnet clients may send CR NUL sequences; strip NUL padding
     if (type === "telnet") {
       input = input.replace(/\0/g, "");
+      // And the CR LF form, when its two bytes arrive in different packets -
+      // see swallowTelnetLineFeed. The same-packet case is collapsed in
+      // splitInputForDispatch, below the door routing.
+      if (connection.session) {
+        input = swallowTelnetLineFeed(connection.session, input);
+        if (input === "") return;
+      }
     }
 
     // ONE INPUT PIPELINE (TP-8). Everything that can claim a keystroke before

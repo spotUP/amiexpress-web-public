@@ -32,3 +32,45 @@ describe('a telnet caller pressing RETURN', () => {
     expect(commandPieces('\x1b[A')).toEqual(['\x1b[A']);
   });
 });
+
+/**
+ * And when the two bytes arrive in DIFFERENT packets, which is what made the
+ * report read as "each second time": a client that flushes between CR and LF,
+ * or a network that splits the segment, leaves the collapse above nothing to
+ * see.
+ */
+import { swallowTelnetLineFeed } from '../../src/server/terminal-input';
+
+describe('a RETURN split across two packets', () => {
+  const session = () => ({}) as any;
+
+  it('is still one RETURN', () => {
+    const s = session();
+    expect(swallowTelnetLineFeed(s, '\r')).toBe('\r');
+    expect(swallowTelnetLineFeed(s, '\n')).toBe('');
+  });
+
+  it('leaves the LF alone when no CR came before it', () => {
+    expect(swallowTelnetLineFeed(session(), '\n')).toBe('\n');
+  });
+
+  it('only swallows the LF that FOLLOWS, not a later one', () => {
+    const s = session();
+    swallowTelnetLineFeed(s, '\r');
+    expect(swallowTelnetLineFeed(s, 'W')).toBe('W');
+    expect(swallowTelnetLineFeed(s, '\n')).toBe('\n');
+  });
+
+  it('keeps each caller\'s latch to himself', () => {
+    const a = session();
+    const b = session();
+    swallowTelnetLineFeed(a, '\r');
+    expect(swallowTelnetLineFeed(b, '\n')).toBe('\n');
+  });
+
+  it('holds the latch across a chunk that ENDS in CR', () => {
+    const s = session();
+    expect(swallowTelnetLineFeed(s, 'W\r')).toBe('W\r');
+    expect(swallowTelnetLineFeed(s, '\nX')).toBe('X');
+  });
+});
