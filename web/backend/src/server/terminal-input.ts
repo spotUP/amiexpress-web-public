@@ -103,7 +103,22 @@ export function chatTakesTheWholeChunk(subState: unknown, input: string): boolea
 
 export function splitInputForDispatch(input: string): string[] {
   if (input.startsWith('\x1b[') && input.length >= 2) return [input];
-  return Array.from(input);
+  /*
+   * CR LF IS ONE RETURN, NOT TWO.
+   *
+   * Every prompt on this board treats `\r` and `\n` alike - a menu, a hot
+   * key, a line editor - so a telnet client that ends its line with CR LF
+   * submitted TWICE, and the second one was an empty line at whatever prompt
+   * the first had opened: "main prompt behave weird, making a empty return
+   * each second time" (a caller over telnet, relayed 2026-09-23).
+   *
+   * The NUL half of the other convention is already stripped in the
+   * transport (CR NUL, RFC 854); this is the half that survived because both
+   * of its bytes are printable to the dispatcher. Only an LF that FOLLOWS a
+   * CR is dropped - a lone LF is still a RETURN, which is what a Unix client
+   * sends.
+   */
+  return Array.from(input.replace(/\r\n/g, '\r'));
 }
 
 /**
