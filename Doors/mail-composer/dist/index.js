@@ -1,13 +1,25 @@
 /**
- * Mail Composer - ANSI Message Editor
+ * Mail Composer - the message editor, in whichever art the caller's terminal
+ * speaks.
  *
- * Uses the ANSIEditor widget directly (same as the ansi-editor door) with
- * message recipient/subject header bolted on. Draw ANSI art and send it
- * as messages to other users.
+ * It has always been the ANSIEditor widget with a recipient/subject header
+ * bolted on - the same widget the ansi-editor door hosts. A PETSCII caller
+ * could not reach it at all: the door gated at eighty columns, and an ANSI
+ * canvas is not a C64 screen anyway.
+ *
+ * So the widget is chosen by the terminal, the way this board chooses
+ * everything else a caller authors: `PetsciiEditor` for a C64, `ANSIEditor`
+ * for everyone else, one door and one command. The ANSI path is untouched.
+ *
+ * WHAT A PETSCII MESSAGE IS. Not a `.seq` - a message body is TEXT, and the
+ * board carries authored PETSCII as glyph and pen markers precisely because
+ * every ESC is stripped out of a message before it is stored. So the body is
+ * `editor.toPua()`, which an eighty-column reader gets folded to Unicode
+ * blocks in the same colours.
  */
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import { Textbox, Box, Text, List, AutocompleteTextbox, Message } from '@amiexpress/bbs-door-sdk';
-import { ANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { ANSIEditor, PetsciiEditor } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { T, S, CURRENT, applyTheme } from './door-theme';
 import { headerDialog, noticeWidth, headerHints } from './layout';
@@ -130,7 +142,19 @@ async function showComposer(screen, bbs, username, ctx) {
     }
     // Autosave interval handle
     let autosaveInterval = null;
+    /*
+     * WHICH EDITOR THIS CALLER GETS.
+     *
+     * One door, a renderer per terminal. A C64 draws PETSCII and everyone else
+     * draws ANSI; the header, the drafts and the send path below do not care
+     * which, because both hand back a string and that string is the body.
+     */
+    const petscii = bbs.isPetsciiMode?.() === true;
     return new Promise((resolve) => {
+        if (petscii) {
+            buildPetsciiComposer();
+            return;
+        }
         // Create the full ANSIEditor widget - same as the ansi-editor door
         const editor = new ANSIEditor({
             parent: screen,
@@ -178,11 +202,21 @@ async function showComposer(screen, bbs, username, ctx) {
         }, 5 * 60 * 1000);
         screen.render();
         async function handleExit() {
+            await finishWith(editor.getContent(), () => editor.destroy());
+        }
+        /**
+         * Send, keep or throw away - the same three answers whichever editor drew
+         * the body.
+         *
+         * It takes the CONTENT rather than reading it, because an ANSI body is
+         * `getContent()` and a PETSCII one is `toPua()`; everything after that
+         * sentence is identical, and was worth not having twice.
+         */
+        async function finishWith(content, destroyEditor) {
             if (autosaveInterval) {
                 clearInterval(autosaveInterval);
                 autosaveInterval = null;
             }
-            const content = editor.getContent();
             if (content.trim()) {
                 const action = await confirmExitAction(screen);
                 if (action === 'send') {
@@ -205,7 +239,7 @@ async function showComposer(screen, bbs, username, ctx) {
                             savedAt: new Date(),
                         }, ctx);
                     }
-                    editor.destroy();
+                    destroyEditor();
                     ctx.close();
                     resolve();
                 }
@@ -217,23 +251,62 @@ async function showComposer(screen, bbs, username, ctx) {
                         savedAt: new Date(),
                     }, ctx);
                     await showMsg(screen, 'Draft Saved', 'Your message has been saved as a draft.');
-                    editor.destroy();
+                    destroyEditor();
                     ctx.close();
                     resolve();
                 }
                 else if (action === 'discard') {
                     await clearDraft(username, ctx);
-                    editor.destroy();
+                    destroyEditor();
                     ctx.close();
                     resolve();
                 }
                 // 'cancel' - do nothing, return to editor
             }
             else {
-                editor.destroy();
+                destroyEditor();
                 ctx.close();
                 resolve();
             }
+        }
+        /**
+         * THE SAME COMPOSER, DRAWN ON A C64.
+         *
+         * Forty columns by twenty-five is the whole of the caller's glass, so
+         * there is no sidebar and no menu bar: the canvas is the message, F5 keeps
+         * a draft and Escape asks what to do with it. The body is authored text -
+         * glyph and pen markers - which is the form a message and a chat line both
+         * carry, and which an eighty-column reader gets folded to Unicode.
+         */
+        function buildPetsciiComposer() {
+            const editor = new PetsciiEditor({
+                parent: screen,
+                top: 0,
+                left: 0,
+                width: 40,
+                height: Math.min(25, screen.height),
+            });
+            if (draft?.content)
+                editor.fromPua(draft.content);
+            editor.focus();
+            bbs.enableMouseEvents?.();
+            const keep = async () => {
+                await saveDraft(username, {
+                    to: headerInfo.to,
+                    subject: headerInfo.subject,
+                    content: editor.toPua(),
+                    savedAt: new Date(),
+                }, ctx);
+            };
+            autosaveInterval = setInterval(() => {
+                if (editor.toPua().trim())
+                    void keep();
+            }, 5 * 60 * 1000);
+            screen.key(['f5'], () => { void keep(); });
+            screen.key(['escape'], () => {
+                void finishWith(editor.toPua(), () => editor.destroy());
+            });
+            screen.render();
         }
     });
 }

@@ -31,10 +31,10 @@ function elements(screen: any): any[] {
   return out;
 }
 
-function context(width: number, height: number, accessLevel = 100) {
+function context(width: number, height: number, accessLevel = 100, wire: string[] = []) {
   return {
     bbs: {
-      write: () => {}, writeLine: () => {}, on: () => {},
+      write: (data: string) => { wire.push(data); }, writeLine: () => {}, on: () => {},
       getTerminalSize: () => ({ width, height }),
       enableWideMode: () => {}, disableWideMode: () => {},
       enableMouseEvents: () => {}, disableMouseEvents: () => {},
@@ -52,9 +52,9 @@ function context(width: number, height: number, accessLevel = 100) {
   } as any;
 }
 
-async function openedAt(width: number, height: number): Promise<any> {
+async function openedAt(width: number, height: number, wire: string[] = []): Promise<any> {
   const door: any = new PetsciiStudioDoor();
-  door.setContext(context(width, height));
+  door.setContext(context(width, height, 100, wire));
   // start() resolves only when the door exits; everything measured here is
   // built synchronously before it waits.
   await Promise.race([door.start(), new Promise((r) => setTimeout(r, 250))]);
@@ -97,6 +97,26 @@ describe('the PETSCII studio at forty columns', () => {
 
     door.screen.dialogOpen = false;
     void opening;                                // it resolves when the door closes
+  });
+
+  it('spends a stamp on one cell, not on a frame', async () => {
+    /*
+     * A door repaints what CHANGED. The canvas rewrites its whole content on
+     * every stroke - which is fine, and deliberate - because blessed's cell
+     * buffer is differential and only the cells that differ reach the wire.
+     * This is the measurement that keeps that true: a full 40x25 frame is
+     * over a thousand cells, and a stamp is one.
+     */
+    const wire: string[] = [];
+    door = await openedAt(40, 25, wire);
+    wire.length = 0;
+
+    door.editor.setBrush({ screenCode: 0x51, color: 2, reverse: false });
+    door.editor.applyAt(10, 10);
+
+    const bytes = wire.join('').length;
+    expect(bytes).toBeGreaterThan(0);
+    expect(bytes).toBeLessThan(200);
   });
 
   it('carries no permanent chrome', async () => {
