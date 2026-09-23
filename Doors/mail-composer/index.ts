@@ -357,6 +357,10 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
         showTools: true,
         showStatusBar: true,
         hostMenus: [messageMenu],
+        // A message is SENT, not saved to a file. Without this the bar led
+        // with File > Open / Save as / Leave and, at forty columns, had no
+        // room left for the menu that actually sends anything.
+        showFileMenu: false,
         onSave: () => { void keep(); },
         onExit: () => { void finishWith(editor.toPua(), () => editor.destroy()); },
         onHelp: () => { void showMsg(screen, 'Sending', 'Escape asks whether to send, keep or throw away.\nF5 shows the menu bar, which has the same three.'); },

@@ -113,8 +113,16 @@ export interface PetsciiEditorOptions extends ElementOptions {
   showSidebar?: boolean;
   showStatusBar?: boolean;
 
-  /** Menus of the host's own, appended to the bar (File > its own items). */
+  /** Menus of the host's own. They lead the bar, ahead of the generic ones. */
   hostMenus?: MenuBarItem[];
+
+  /**
+   * Offer File > Open / Save / Save as / Leave.
+   *
+   * A host that edits a FILE wants it; the mail composer does not - a message
+   * is sent, not saved, and its own menu says so.
+   */
+  showFileMenu?: boolean;
 
   /** Save the screen as it is. */
   onSave?: () => void;
@@ -235,6 +243,7 @@ export class PetsciiEditor extends Box {
   private dock: any = null;
   private statusBar: any = null;
   private hostMenus: MenuBarItem[] = [];
+  private showFileMenu = true;
   private hideUIHotkey = 'f2';
   private hooks: {
     onSave?: () => void; onSaveAs?: () => void; onOpen?: () => void;
@@ -247,7 +256,7 @@ export class PetsciiEditor extends Box {
   constructor(options: PetsciiEditorOptions = {}) {
     const {
       surface, readOnly, tool, brush,
-      showMenuBar, showToolbar, showSidebar, showTools, showStatusBar, hostMenus, hideUIHotkey,
+      showMenuBar, showToolbar, showSidebar, showTools, showStatusBar, hostMenus, showFileMenu, hideUIHotkey,
       onSave, onSaveAs, onOpen, onExit, onHelp,
       ...boxOptions
     } = options;
@@ -266,6 +275,7 @@ export class PetsciiEditor extends Box {
     this.tool = tool ?? 'draw';
     this.brush = brush ? { ...brush } : { screenCode: DEFAULT_SCREEN_CODE, color: 1, reverse: false };
     this.hostMenus = hostMenus ?? [];
+    this.showFileMenu = showFileMenu !== false;
     this.hideUIHotkey = hideUIHotkey ?? 'f2';
     this.hooks = { onSave, onSaveAs, onOpen, onExit, onHelp };
 
@@ -781,7 +791,26 @@ export class PetsciiEditor extends Box {
       items: [{ label: 'Keys', action: this.fromMenu(() => this.hooks.onHelp?.()) }],
     };
 
-    return [file, edit, tools, colour, view, ...this.hostMenus, help];
+    /*
+     * THE HOST'S OWN MENUS COME FIRST, AND THE BAR HAS TO FIT.
+     *
+     * `MenuBar` lays its labels out left to right at fixed positions and does
+     * nothing about running out of glass - so on a C64, `File Edit Tools
+     * Colour View` filled the forty columns and everything after it was off
+     * the edge, unreachable. The mail composer's own Message menu was there
+     * the whole time and the caller could not get at it: "ae doesnt let me
+     * send messages only save files like the normal editor" (the sysop,
+     * 2026-09-23).
+     *
+     * So a host's menus lead - they are why the door exists - and the two
+     * that duplicate the dock's own pickers, Tools and Colour, stand down on
+     * a narrow screen. Nothing is lost: both rows ARE those menus, and the
+     * caller can click or key them.
+     */
+    const roomy = (this.width as number) >= CHROME_FROM_WIDTH;
+    const generic = roomy ? [edit, tools, colour, view] : [edit, view];
+    const menus = [...this.hostMenus, ...(this.showFileMenu ? [file] : []), ...generic, help];
+    return fittingMenus(menus, this.width as number);
   }
 
   /**
@@ -1096,6 +1125,25 @@ export class PetsciiEditor extends Box {
     }
     this.setSurface(next);
   }
+}
+
+/**
+ * As many menus as the bar can actually show.
+ *
+ * `MenuBar` positions each label at a fixed column and lets the rest run off
+ * the glass, where no caller can reach them. Counted the way it counts:
+ * ` Label ` plus one column of spacing.
+ */
+function fittingMenus(menus: MenuBarItem[], width: number): MenuBarItem[] {
+  const out: MenuBarItem[] = [];
+  let used = 0;
+  for (const menu of menus) {
+    const cost = menu.label.length + 3;
+    if (used + cost > width) break;
+    out.push(menu);
+    used += cost;
+  }
+  return out;
 }
 
 /** blessed's lowercase factory, the way every other widget offers one. */

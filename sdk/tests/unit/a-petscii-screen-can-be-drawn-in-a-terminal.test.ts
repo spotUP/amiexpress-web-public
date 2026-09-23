@@ -594,6 +594,37 @@ describe('the interface, and hiding it', () => {
     setActiveTheme(themeById('classic'));
   });
 
+  it('shows only as many menus as the bar can hold', () => {
+    /*
+     * `MenuBar` puts each label at a fixed column and lets the rest run off
+     * the glass. On a C64 `File Edit Tools Colour View` filled forty columns
+     * and everything after it was unreachable - which is how the mail
+     * composer's own Send menu went missing: "ae doesnt let me send messages
+     * only save files like the normal editor" (the sysop, 2026-09-23).
+     */
+    const editor = editorAt(40);
+    const menus = (editor as any).menuItems();
+    const columns = menus.reduce((sum: number, menu: any) => sum + menu.label.length + 3, 0);
+
+    expect(columns).toBeLessThanOrEqual(40);
+  });
+
+  it('puts a host\'s own menu first, where it cannot be pushed off', () => {
+    const editor = editorAt(40, {
+      hostMenus: [{ label: 'Message', items: [{ label: 'Send it', action: () => {} }] }],
+    });
+    const menus = (editor as any).menuItems();
+
+    expect(menus[0].label).toBe('Message');
+  });
+
+  it('drops the File menu for a host that has no files', () => {
+    const editor = editorAt(40, { showFileMenu: false });
+    const labels = (editor as any).menuItems().map((menu: any) => menu.label);
+
+    expect(labels).not.toContain('File');
+  });
+
   it('lets a host ask for its own arrangement', () => {
     const editor = editorAt(40, { showStatusBar: true });
 
