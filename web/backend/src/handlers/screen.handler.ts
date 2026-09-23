@@ -246,6 +246,20 @@ export function doorExitOwesThePause(session: BBSSession): boolean {
  * @returns true when a pause was armed, false when no segments remain and the
  *          screen is simply over.
  */
+/**
+ * Is this segment something the caller would see, or hear about?
+ *
+ * Glyphs, an MCI code, or any escape that is not a plain colour/attribute
+ * reset all count. The rest is blank rows and the SGR the art left behind.
+ */
+function nothingLeftToShow(segment: string): boolean {
+  if (segment.includes('~')) return false;
+  const bare = segment
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/[\r\n\t ]/g, '');
+  return bare.length === 0;
+}
+
 export function armSegmentBoundaryPause(
   socket: any,
   session: BBSSession,
@@ -317,6 +331,25 @@ export function armSegmentBoundaryPause(
     && (gate.kind === 'doPause' || gate.nextIndex < gate.lines.length);
   if (theCallerIsStillReadingIt) {
     return true;
+  }
+
+  /*
+   * A PAUSE IS FOR SOMETHING THE CALLER HAS NOT SEEN YET.
+   *
+   * A `~SP` at the END of a screen - the board's own `Conf1/uploadmsg.txt`
+   * carries one, after ten blank rows - splits off a segment with nothing in
+   * it. The caller was stopped in front of a black field and made to press a
+   * key to be shown blank lines: "kommer dessutom ett extra ställe här, där
+   * man måste trycka return... bara ett svart fält där det ligger en dold
+   * press return" (the sysop, 2026-09-23).
+   *
+   * MCI COUNTS AS CONTENT, and that is the load-bearing half: a segment that
+   * looks blank but carries `~CC_gl` runs a door which draws the screen the
+   * pause is protecting. Only a segment with no glyphs, no `~`, and no `\x1b`
+   * beyond plain SGR is nothing at all.
+   */
+  if (segState.segments.every(nothingLeftToShow)) {
+    return false;
   }
 
   session.paginatedScreen = {
