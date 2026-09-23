@@ -42,7 +42,7 @@ const BLUE = 6;
 const reversed = (code: number) => (code & 0x80) !== 0;
 
 describe('a bar of dark ink on a coloured bar', () => {
-  it('is drawn as a filled cell, not as invisible ink', () => {
+  it('is drawn as a filled cell when the ink would be invisible', () => {
     const { display } = run('\x1b[30;41mM\x1b[0m');
     expect(reversed(cell(display, 0, 0))).toBe(true);
     expect(color(display, 0, 0)).toBe(RED);
@@ -56,10 +56,18 @@ describe('a bar of dark ink on a coloured bar', () => {
     expect(color(display, 1, 0)).toBe(RED);
   });
 
-  it('inverts the fill when the stream also asked for reverse video', () => {
-    const { display } = run('\x1b[7m\x1b[44mM');
+  it('leaves a background alone when the text on it can be seen', () => {
+    // White on blue: a C64 has ONE colour per cell, so one of the two goes.
+    // The caller's TEXT is the half worth keeping - and the board kept it for
+    // years. Only ink that would be invisible is worth a fill.
+    const { display } = run('\x1b[44mM');
     expect(reversed(cell(display, 0, 0))).toBe(false);
-    expect(color(display, 0, 0)).toBe(BLUE);
+    expect(color(display, 0, 0)).not.toBe(BLUE);
+  });
+
+  it('still honours reverse video the stream asked for itself', () => {
+    const { display } = run('\x1b[7m\x1b[44mM');
+    expect(reversed(cell(display, 0, 0))).toBe(true);
   });
 
   it('leaves an ERASE plain: a fill is something a door prints, not something it clears', () => {

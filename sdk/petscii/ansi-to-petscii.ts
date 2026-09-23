@@ -422,12 +422,28 @@ export class AnsiToPetsciiTransducer {
   /**
    * Is the stream asking for a cell the C64 must FILL?
    *
-   * Only a background that differs from the one the screen already carries.
-   * The board is black-background board-wide, so a door that paints on the
-   * ground asks for nothing here and emits not one byte more than before.
+   * A background that differs from the screen's own AND a foreground that
+   * would be INVISIBLE on the screen - the glyph painted in the very colour
+   * behind it. That is the case a fill rescues, and it is the only one.
+   *
+   * IT USED TO BE ANY BACKGROUND, and that was too much. Every door element
+   * that sets one - a message row, a highlighted name, a panel's own ground -
+   * came out as a solid bar with black letters cut into it: "i get black
+   * blocks and red pink blocks in the log", then "if i type i get blinking
+   * backgrounds in one color and colored text" (the sysop, 2026-09-23, on
+   * LIVE CHAT). A C64 has ONE colour per cell, so a background and a
+   * foreground cannot both survive; dropping the background and keeping the
+   * caller's text is the right half to keep, which is what the board did for
+   * years.
+   *
+   * The menu bar this was written for is the other case: `bg: accent,
+   * fg: ground` is black ink on the ground, invisible whichever half is
+   * dropped. There the fill is not a preference, it is the only way the row
+   * exists at all.
    */
   private get fillsCell(): boolean {
-    return this.ansiBg !== null && this.ansiBg !== this.screenBg;
+    if (this.ansiBg === null || this.ansiBg === this.screenBg) return false;
+    return this.ansiPen === this.screenBg;
   }
 
   /**

@@ -73,14 +73,23 @@ describe('AnsiToPetsciiTransducer core', () => {
     expect(color(display, 2, 0)).toBe(1);  // SGR 0 -> white
   });
 
-  it('a background is the cell FILL: the colour RAM takes it and the cell is reversed', () => {
-    // A C64 has no per-cell background; reverse video with the pen set to the
-    // background IS one. See a-bar-is-visible-on-a-c64.test.ts.
+  it('drops a background the caller\'s own text can be read on', () => {
+    // One colour per cell: the TEXT is the half worth keeping, and dropping
+    // the background is what the board did for years.
     const { display } = run('\x1b[31mR\x1b[44;33mY\x1b[0mW');
-    expect(color(display, 1, 0)).toBe(6);              // blue, the fill
-    expect(cell(display, 1, 0) & 0x80).toBe(0x80);     // reversed
-    expect(color(display, 2, 0)).toBe(1);              // SGR 0 gives the pen back
-    expect(cell(display, 2, 0) & 0x80).toBe(0);
+    expect(color(display, 1, 0)).toBe(7);              // yellow, the text
+    expect(cell(display, 1, 0) & 0x80).toBe(0);        // not reversed
+  });
+
+  it('fills the cell when the ink on that background would be invisible', () => {
+    // Black on blue is nothing at all on a black screen, so the background
+    // becomes the fill and the glyph is cut out of it - which is how a menu
+    // bar exists on a C64. See a-bar-is-visible-on-a-c64.test.ts.
+    const { display } = run('\x1b[30;44mY\x1b[0mW');
+    expect(color(display, 0, 0)).toBe(6);              // blue, the fill
+    expect(cell(display, 0, 0) & 0x80).toBe(0x80);     // reversed
+    expect(color(display, 1, 0)).toBe(1);              // SGR 0 gives the pen back
+    expect(cell(display, 1, 0) & 0x80).toBe(0);
   });
 
   it('bold + basic color selects the bright VIC color; truecolor and 256-color snap to nearest', () => {
@@ -328,9 +337,11 @@ describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () =>
     // $02 <colour> is the SCREEN background, which only a full clear commits.
     // A per-cell background is drawn instead as reverse video in that colour,
     // so the two bytes here are the pen and the reverse latch, never $02.
-    const { out, display } = run('\x1b[44mhi');
+    const { out, display } = run('\x1b[30;44mhi');
     expect(out.filter((b) => b === 0x02)).toEqual([]);
-    expect(out).toEqual([0x0E, 0x1F, 0x12, 0x48, 0x49]);
+    // $90 black (the ink SGR 30 asked for), $0E bank 1, $1F blue (the fill),
+    // $12 reverse on, then the two letters cut out of it.
+    expect(out).toEqual([0x90, 0x0E, 0x1F, 0x12, 0x48, 0x49]);
     expect(display.state.background).toBe(0);
   });
 

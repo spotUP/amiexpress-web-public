@@ -69,11 +69,12 @@ function screenCodeToChar(sc: number, bank: 0 | 1): string {
 /**
  * `rvs` IS THE FILLED BIT, NOT THE SGR.
  *
- * A C64 has one colour per cell, so a background is drawn as reverse video in
- * that colour (`sdk/petscii/ansi-to-petscii.ts`, `inkForCell`) - a menu bar
- * black on the ground is otherwise invisible. An xterm has both, so the
- * reference model keeps fg and bg. The two agree on WHICH CELLS ARE FILLED,
- * which is what this comparison is about.
+ * A C64 has one colour per cell. It keeps the caller's TEXT and drops the
+ * background - except where the text would be invisible on it, black ink on a
+ * coloured bar, which is the one case drawn as reverse video in the
+ * background's colour (`sdk/petscii/ansi-to-petscii.ts`, `fillsCell`). An
+ * xterm has both colours, so the reference model keeps fg and bg; the two
+ * agree on WHICH CELLS ARE FILLED, which is what this comparison is about.
  */
 interface Glyph { ch: string; rvs: boolean }
 const DEFAULT_BG = 0;
@@ -94,7 +95,7 @@ function c64Grid(m: PetsciiMachine): Glyph[][] {
 function ansiGrid(r: FrameReconstructor): Glyph[][] {
   return r.snapshot().cells.map((row) => row.map((c) => ({
     ch: c.ch,
-    rvs: c.bg === DEFAULT_BG ? c.rvs : !c.rvs,
+    rvs: c.bg !== DEFAULT_BG && c.fg === DEFAULT_BG ? !c.rvs : c.rvs,
   })));
 }
 
