@@ -46,6 +46,8 @@ export class Button extends Element {
   private _tapFeedbackDuration: number;
   private _desktopHeight: number | string | undefined;
   private _mobileHeight: number;
+  /** Compact, not a touch target: `inline` survives a breakpoint change. */
+  private _inline = false;
   private _originalStyle: Colors;
 
   constructor(options: ExtendedButtonOptions = {}) {
@@ -107,6 +109,7 @@ export class Button extends Element {
 
     this._tapFeedback = options.tapFeedback !== false;  // Default: enabled
     this._tapFeedbackDuration = options.tapFeedbackDuration ?? 100;
+    this._inline = isInline;
     this._desktopHeight = options.height;
     this._mobileHeight = options.mobileHeight ?? MIN_TOUCH_HEIGHT;
     this._originalStyle = { ...this.style };
@@ -235,6 +238,18 @@ export class Button extends Element {
    * Set mobile-friendly height
    */
   private _setMobileHeight(): void {
+    /*
+     * AN INLINE BUTTON IS NEVER PROMOTED, at any width.
+     *
+     * `touchFriendly: !isInline` turns the promotion off in the constructor,
+     * and this hook did not ask - so the first breakpoint change put it back.
+     * A dialog's Yes/No pair lives in a ONE-row container, and three-row
+     * buttons in it are clipped to nothing while their coordinates still
+     * hit-test: invisible and clickable, reported on CARD LOBBY in 2026-09-02
+     * and again on LIVE CHAT's quit prompt at forty columns on 2026-09-23
+     * ("no buttons here in petscii mode"), where 40 IS the mobile breakpoint.
+     */
+    if (this._inline) return;
     const currentHeight = typeof this.height === 'number' ? this.height : 1;
     if (currentHeight < this._mobileHeight) {
       this.height = this._mobileHeight;

@@ -20,7 +20,7 @@ import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
-import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
+import { calculateDialogWidth } from '../core/responsive-constants';
 
 export interface QuestionOptions extends ElementOptions {
   text?: string;
@@ -71,8 +71,22 @@ export class Question extends Box {
   private _mobileWidth: number | string | undefined;
   private _desktopButtonWidth: number = 10;
   private _mobileButtonWidth: number = 12;
-  private _desktopButtonHeight: number = 3;
-  private _mobileButtonHeight: number = MIN_TOUCH_HEIGHT;
+  /*
+   * NO BUTTON HEIGHT HERE, AT EITHER WIDTH.
+   *
+   * The two buttons live in a ONE-row container and draw no frame, so a
+   * height is the container's to decide. These fields used to carry three
+   * rows for the desktop layout and the touch floor for the mobile one, and
+   * both branches re-assigned it on a breakpoint change - putting back, from
+   * a second place, exactly the defect the constructor's `inline: true`
+   * removed on 2026-09-02: three-row buttons clipped to nothing inside a
+   * one-row box, invisible but still clickable.
+   *
+   * Forty columns IS the xxs breakpoint, so every PETSCII caller took the
+   * mobile branch and got an empty dialog (the sysop, 2026-09-23, on LIVE
+   * CHAT's quit prompt: "no buttons here in petscii mode"). A terminal has
+   * no touch target; the width may change with the screen, the row may not.
+   */
 
   constructor(options: QuestionOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -423,11 +437,9 @@ export class Question extends Box {
     const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
     this.width = mobileWidth;
 
-    // Larger touch-friendly buttons
+    // Wider buttons, still one row each - see the fields above.
     this.yesButton.width = this._mobileButtonWidth;
-    this.yesButton.height = this._mobileButtonHeight;
     this.noButton.width = this._mobileButtonWidth;
-    this.noButton.height = this._mobileButtonHeight;
 
     // Adjust button container for larger buttons
     this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
@@ -443,11 +455,9 @@ export class Question extends Box {
       this.width = this._desktopWidth;
     }
 
-    // Restore desktop button sizes
+    // Restore desktop button widths; the row keeps its one row.
     this.yesButton.width = this._desktopButtonWidth;
-    this.yesButton.height = this._desktopButtonHeight;
     this.noButton.width = this._desktopButtonWidth;
-    this.noButton.height = this._desktopButtonHeight;
 
     // Restore button container width
     this.buttonBox.width = 22;

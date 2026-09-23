@@ -77,6 +77,17 @@ export function petsciiTerminalModelFor(session: any): AnsiToPetsciiTransducer {
       swedish: sessionWantsSwedishPetscii(session),
     });
   }
+  /*
+   * RE-ASSERTED, NOT JUST CONSTRUCTED.
+   *
+   * The model is built the first time this session needs PETSCII output,
+   * which on a `P` session is the GRAPHICS PROMPT - before login, with no
+   * `session.user` to read a preference from. The caller then logs in, or
+   * changes `W` row 22, and the model must follow without being replaced:
+   * it carries the oracle for his screen, so a new one would measure every
+   * later cursor walk against a blank screen nobody is looking at.
+   */
+  session.petsciiTransducer.setSwedish(sessionWantsSwedishPetscii(session));
   return session.petsciiTransducer;
 }
 

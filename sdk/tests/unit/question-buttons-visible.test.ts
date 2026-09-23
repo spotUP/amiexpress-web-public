@@ -15,6 +15,16 @@
  *
  * `inline: true` is the widget's own way of saying "compact, not a touch
  * target", and it turns the promotion off.
+ *
+ * IT CAME BACK AT FORTY COLUMNS (the sysop, 2026-09-23, on LIVE CHAT's quit
+ * dialog: "no buttons here in petscii mode"). The constructor was not the only
+ * thing that sets a button's height: `_setMobileLayout` and
+ * `_setDesktopLayout` both re-assign one when the breakpoint changes, and both
+ * asked for three rows in the same one-row container. A C64 screen is 40
+ * columns, which is the xxs breakpoint, so every PETSCII caller got the
+ * mobile branch and the invisible buttons back. The row is ONE row at every
+ * width - a terminal has no touch target - so neither branch sets a height
+ * any more.
  */
 
 import { Screen } from '../../engines/ui/blessed/core/screen';
@@ -60,6 +70,31 @@ describe("a question dialog's buttons", () => {
     const painted = paintedText(writes);
     expect(painted).toContain('Yes');
     expect(painted).toContain('No');
+  });
+
+  it('are still there after the screen narrows to a C64', () => {
+    // The dialog is built once when the door starts; the screen then becomes
+    // 40 columns, which is the xxs breakpoint - "mobile" - and that is the
+    // branch that used to put three-row buttons back in the one-row box.
+    const wide: any = new Screen({
+      title: 'question', width: 80, height: 25, responsive: true,
+      output: (d: string) => writes.push(d),
+    } as any);
+    try {
+      const q: any = new Question({ parent: wide, width: 45, title: ' Confirm ' } as any);
+      wide.resize(40, 25);
+      writes.length = 0;
+      q.ask('Are you sure you want to quit LiveChat?');
+
+      const container = q.children.find((c: any) => c.children?.length === 2);
+      for (const button of container.children) {
+        expect(button.position.height).toBeLessThanOrEqual(container.position.height);
+      }
+      expect(paintedText(writes)).toContain('Yes');
+      expect(paintedText(writes)).toContain('No');
+    } finally {
+      wide.destroy();
+    }
   });
 
   it('still answer when pressed', () => {

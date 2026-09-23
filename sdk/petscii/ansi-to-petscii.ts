@@ -236,6 +236,22 @@ export class AnsiToPetsciiTransducer {
     this.rows = this.machine.state.rows;
   }
 
+  /**
+   * Which character ROM this caller's machine has, RE-READ, not latched.
+   *
+   * The board keeps one transducer per session because it is also the oracle
+   * for that caller's screen, so it long outlives any one preference: it is
+   * built at the graphics prompt, before anybody has logged in, and the
+   * caller's `W` row 22 comes later. Latching the ROM in the constructor gave
+   * a Swedish caller `aao` for the whole call (the sysop, 2026-09-23: "my
+   * petscii character set is set to swedish in W", with the letters still
+   * folded). Nothing about the SCREEN changes here - only which byte draws a
+   * letter next.
+   */
+  setSwedish(on: boolean): void {
+    this.swedish = on;
+  }
+
   /** How wide this caller's screen is. 40 for a C64, 80 for the wide screen. */
   get columns(): number {
     return this.cols;
