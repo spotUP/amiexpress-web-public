@@ -592,9 +592,16 @@ export class LrzszTransferManager {
    * patch had forced it into. SyncTerm sends ZBIN32 when it is allowed to,
    * which is the mode `rz` actually verifies.
    *
-   * MuffinTerm's ZBIN/CRC16 upload is the case this was aimed at. It is a
-   * real lrzsz bug and it needs a fix that changes what the RECEIVER does,
-   * not one that lies to the sender about it.
+   * MuffinTerm's ZBIN/CRC16 upload is the case this was aimed at, and the
+   * sysop's ruling on 2026-09-23 is that it stays unfixed here: "is it a
+   * problem in muffin term then its muffin terms issue". Per the withdrawn
+   * comment's own account the fault is `rz` mis-verifying ZBIN subpackets
+   * as CRC32 - nobody has measured that - but either way it is not this
+   * board's to paper over, and the paper tore the working clients.
+   *
+   * So: do not reintroduce a wire rewrite for it. A fix belongs in the
+   * receiver (a patched lrzsz, or the in-process zmodem.js path) or
+   * nowhere.
    */
   /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   /**
