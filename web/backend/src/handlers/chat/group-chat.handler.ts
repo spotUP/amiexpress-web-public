@@ -12,6 +12,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { sanitizeChatMessage } from './sanitize-message';
 import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-manager';
 import { emitterForSession, socketIoSocketFor } from '../../server/session-emitter-registry';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -92,11 +93,11 @@ function sanitizeRoomName(name: string): string {
 }
 
 /**
- * Sanitize message (remove ANSI escape codes for security)
+ * Sanitize a message. ONE copy, in `./sanitize-message` - this file and
+ * `dm.handler.ts` each had their own, and the rule grew when a caller could
+ * type PETSCII.
  */
-function sanitizeMessage(message: string): string {
-  return message.replace(/\x1b/g, '');
-}
+const sanitizeMessage = sanitizeChatMessage;
 
 /**
  * Send room error to client (shows as dialog in LiveChat UI)

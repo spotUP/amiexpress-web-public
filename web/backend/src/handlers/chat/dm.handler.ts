@@ -6,17 +6,17 @@
  * Modern enhancement beyond original AmiExpress BBS (no express.e counterpart).
  */
 import type { Socket, Server as IOServer } from 'socket.io';
+import { sanitizeChatMessage } from './sanitize-message';
 import type { BBSSession } from '../../index';
 import { db } from '../../database';
 import { getSystemTime } from '../../utils/date-time.util';
 
 /**
- * Sanitize message (strip ANSI escape sequences for security).
- * Mirrors the inline sanitizer used by group-chat.handler.ts.
+ * Sanitize a message. ONE copy, in `./sanitize-message` - this file and
+ * `dm.handler.ts` each had their own, and the rule grew when a caller could
+ * type PETSCII.
  */
-function sanitizeMessage(message: string): string {
-  return message.replace(/\x1b/g, '');
-}
+const sanitizeMessage = sanitizeChatMessage;
 
 export interface RecipientInfo { userId: string; socketId: string | null; }
 export type RecipientResolver = (username: string) => Promise<RecipientInfo | null> | RecipientInfo | null;
