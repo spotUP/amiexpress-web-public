@@ -102,6 +102,12 @@ describe('FrameReconstructor SGR resolves into the VIC index space', () => {
   });
 
   it('picks the SAME VIC index the transducer picks for every SGR it understands', () => {
+    // A CELL FILL IS WHERE THE TWO MODELS SPEAK DIFFERENTLY, and agree.
+    // This model keeps `fg` and `bg` because an xterm has both. A C64 has
+    // one colour per cell, so a background is drawn as reverse video in the
+    // background colour - which is why a filled cell's colour RAM holds the
+    // frame's `bg`, not its `fg`.
+    const onTheGlass = (c: { fg: number; bg: number }) => (c.bg === 0 ? c.fg : c.bg);
     const sgrs = ['\x1b[30m', '\x1b[31m', '\x1b[32m', '\x1b[33m', '\x1b[34m', '\x1b[35m', '\x1b[36m', '\x1b[37m',
       '\x1b[1;30m', '\x1b[1;31m', '\x1b[1;32m', '\x1b[1;33m', '\x1b[1;34m', '\x1b[1;35m', '\x1b[1;36m', '\x1b[1;37m',
       '\x1b[90m', '\x1b[97m', '\x1b[39m', '\x1b[0m', '\x1b[38;5;208m', '\x1b[38;5;244m', '\x1b[38;2;10;200;10m', '\x1b[44;33m'];
@@ -109,7 +115,7 @@ describe('FrameReconstructor SGR resolves into the VIC index space', () => {
       const frame = run(sgr + 'X').f;
       const t = new AnsiToPetsciiTransducer();
       t.transduce(sgr + 'X');
-      expect({ sgr, fg: at(frame, 0, 0).fg }).toEqual({ sgr, fg: t.machine.state.colorRam[0] });
+      expect({ sgr, fg: onTheGlass(at(frame, 0, 0)) }).toEqual({ sgr, fg: t.machine.state.colorRam[0] });
     }
   });
 });

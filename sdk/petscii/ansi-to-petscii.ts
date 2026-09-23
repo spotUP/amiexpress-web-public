@@ -182,11 +182,37 @@ export class AnsiToPetsciiTransducer {
   private pendingWrap: PendingWrap = 'none';
   /**
    * VIC index the ANSI stream currently asks the BACKGROUND to be (SGR
-   * 40-47/100-107/48;5/48;2), or null for "default". Per-cell background has
-   * no C64 equivalent and is dropped (plan decision 5); this latch only
-   * matters at the moment of a full clear.
+   * 40-47/100-107/48;5/48;2), or null for "default".
+   *
+   * A C64 has no per-cell background, so this used to be dropped everywhere
+   * but a full clear - which made the whole class of "dark ink on a coloured
+   * bar" designs INVISIBLE: black on the black screen. The sysop, on LIVE
+   * CHAT at forty columns, 2026-09-23: "there is no menu bar i think the
+   * texts are black when not hovered."
+   *
+   * What the machine does have is REVERSE VIDEO, which is precisely a fill:
+   * the cell takes the pen and the glyph is drawn in the screen background.
+   * So a background that differs from the committed screen background is
+   * rendered as that fill (`fillsCell`/`inkForCell`), and one that equals it
+   * is nothing to draw - which is the common case, since the board is
+   * black-background board-wide.
    */
   private ansiBg: number | null = null;
+  /**
+   * The pen the ANSI stream last asked for, kept beside the machine's own.
+   *
+   * They are the same except inside a filled cell, where the machine's pen is
+   * the FILL colour; this is what the cell after the fill goes back to.
+   */
+  private ansiPen = 1;
+  /**
+   * Is the machine's pen the FILL colour rather than the stream's own?
+   *
+   * The pen is emitted lazily, exactly as it was before there were fills: a
+   * stream that never asks for a background never sends a colour byte it did
+   * not ask for, and the one after a filled run is the pen going back.
+   */
+  private penIsFill = false;
   /**
    * The screen-level background committed by the last full clear (or reset).
    * Never null: "no ANSI background" is not "no opinion", it is the TERMINAL
@@ -223,6 +249,8 @@ export class AnsiToPetsciiTransducer {
     this.savedCursor = null;
     this.pendingWrap = 'none';
     this.ansiBg = null;
+    this.ansiPen = 1;
+    this.penIsFill = false;
     this.screenBg = 0;
   }
 
@@ -354,6 +382,44 @@ export class AnsiToPetsciiTransducer {
   }
 
   /**
+   * Is the stream asking for a cell the C64 must FILL?
+   *
+   * Only a background that differs from the one the screen already carries.
+   * The board is black-background board-wide, so a door that paints on the
+   * ground asks for nothing here and emits not one byte more than before.
+   */
+  private get fillsCell(): boolean {
+    return this.ansiBg !== null && this.ansiBg !== this.screenBg;
+  }
+
+  /**
+   * Put the machine into the pen and reverse this cell needs.
+   *
+   * A filled cell is reverse video with the pen set to the FILL colour: the
+   * cell comes out in that colour and the glyph is drawn in the screen
+   * background, which is what a C64 can say and an ANSI background means.
+   * The stream's own reverse still counts, so `ESC[7m` over a fill takes the
+   * fill back off - the same double negative an ANSI terminal draws.
+   */
+  private inkForCell(out: number[]): void {
+    const fill = this.fillsCell;
+    if (fill) {
+      this.setPen(this.ansiBg as number, out);
+      this.penIsFill = true;
+    } else {
+      this.restorePen(out);
+    }
+    this.setReverse(fill !== this.ansiReverse, out);
+  }
+
+  /** Put the stream's own pen back, and only when a fill took it away. */
+  private restorePen(out: number[]): void {
+    if (!this.penIsFill) return;
+    this.setPen(this.ansiPen, out);
+    this.penIsFill = false;
+  }
+
+  /**
    * Emit one printable byte and latch a deferred wrap when it crossed the
    * right edge. Every path that puts a glyph on the screen goes through here
    * so the latch can never be missed (plain text, inverse-only glyphs, PUA,
@@ -456,7 +522,7 @@ export class AnsiToPetsciiTransducer {
   /** Print one PETSCII byte as text: bank 1, reverse re-asserted from the ANSI state (RETURN cancels it on the C64). */
   private printByte(out: number[], byte: number): void {
     this.ensureBank(1, out);
-    this.setReverse(this.ansiReverse, out);
+    this.inkForCell(out);
     this.emitPrintable(out, byte);
   }
 
@@ -561,6 +627,9 @@ export class AnsiToPetsciiTransducer {
     if (!needsReverse) return this.printByte(out, byte);
     // Glyph only exists as the inverse of another PETSCII glyph.
     this.ensureBank(1, out);
+    // The glyph's own shape wins over the fill: it EXISTS only as an inverse,
+    // so a cell fill cannot have the reverse bit as well.
+    this.restorePen(out);
     this.setReverse(true, out);
     this.emitPrintable(out, byte);
     this.setReverse(this.ansiReverse, out);
@@ -571,6 +640,9 @@ export class AnsiToPetsciiTransducer {
     const bank: 0 | 1 = code >= 0xE100 ? 1 : 0;
     const sc = code & 0xFF;
     this.ensureBank(bank, out);
+    // Authored PETSCII carries its own reverse bit, which IS its fill - a
+    // cell fill underneath it would cancel the glyph the caller drew.
+    this.restorePen(out);
     this.setReverse((sc & 0x80) !== 0, out);
     this.emitPrintable(out, screenCodeToPetscii(sc & 0x7F));
   }
@@ -720,7 +792,7 @@ export class AnsiToPetsciiTransducer {
     let p = 0;
     while (p < codes.length) {
       const c = codes[p];
-      if (c === 0) { this.bold = false; this.ansiReverse = false; this.ansiBg = null; this.setReverse(false, out); this.setPen(1, out); p++; continue; }
+      if (c === 0) { this.bold = false; this.ansiReverse = false; this.ansiBg = null; this.ansiPen = 1; this.penIsFill = false; this.setReverse(false, out); this.setPen(1, out); p++; continue; }
       if (c === 1) { this.bold = true; p++; continue; }
       if (c === 22) { this.bold = false; p++; continue; }
       if (c === 7) { this.ansiReverse = true; this.setReverse(true, out); p++; continue; }
@@ -735,7 +807,7 @@ export class AnsiToPetsciiTransducer {
         // trailing '0' is a color component, never a reset.
         if (!rgb) break;
         const vic = nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette);
-        if (c === 38) this.setPen(vic, out);
+        if (c === 38) { this.ansiPen = vic; this.penIsFill = false; this.setPen(vic, out); }
         else this.ansiBg = vic;
         p += mode === 2 ? 5 : 3;
         continue;
@@ -746,7 +818,7 @@ export class AnsiToPetsciiTransducer {
       if (c === 49) { this.ansiBg = null; p++; continue; }
       if ((c >= 40 && c <= 47) || (c >= 100 && c <= 107)) { this.ansiBg = sgrColorToVic(c - 10, false); p++; continue; }
       const vic = sgrColorToVic(c, this.bold);
-      if (vic !== null) this.setPen(vic, out);
+      if (vic !== null) { this.ansiPen = vic; this.penIsFill = false; this.setPen(vic, out); }
       p++; // 2/3/4/5/24/25 ... : no C64 equivalent, dropped
     }
   }
@@ -773,6 +845,18 @@ export class AnsiToPetsciiTransducer {
     const last = Math.min(x1, this.cols - 1);
     if (last < x0) return;
     this.moveTo(x0, r, out);
+    /*
+     * AN ERASE PAINTS NO FILL, deliberately.
+     *
+     * A printed cell takes the ANSI background as reverse video (`inkForCell`)
+     * because that is how a bar or a highlight reaches a C64 at all. An ERASE
+     * is the other way round: the repo's reference terminal blanks with
+     * default cells (`frame/ansi-screen.ts` `blankRow`), the adapter's rule
+     * ladder reads that model, and a full clear already commits its colour as
+     * the SCREEN background through `$02`. Filling here would put the two
+     * models out of step for every door that clears a row under a colour it
+     * is about to paint over anyway.
+     */
     this.setReverse(false, out);
     for (let x = x0; x <= last; x++) this.emitPrintable(out, 0x20);
   }

@@ -66,11 +66,21 @@ describe('AnsiToPetsciiTransducer core', () => {
     expect(display.state.cursorX).toBe(1);
   });
 
-  it('SGR foreground colors land in color RAM; bg and unknown SGR are dropped', () => {
-    const { display } = run('\x1b[31mR\x1b[44;33mY\x1b[0mW');
+  it('SGR foreground colors land in color RAM; unknown SGR is dropped', () => {
+    const { display } = run('\x1b[31mR\x1b[33mY\x1b[0mW');
     expect(color(display, 0, 0)).toBe(2);  // red
-    expect(color(display, 1, 0)).toBe(7);  // yellow (bg 44 ignored)
+    expect(color(display, 1, 0)).toBe(7);  // yellow
     expect(color(display, 2, 0)).toBe(1);  // SGR 0 -> white
+  });
+
+  it('a background is the cell FILL: the colour RAM takes it and the cell is reversed', () => {
+    // A C64 has no per-cell background; reverse video with the pen set to the
+    // background IS one. See a-bar-is-visible-on-a-c64.test.ts.
+    const { display } = run('\x1b[31mR\x1b[44;33mY\x1b[0mW');
+    expect(color(display, 1, 0)).toBe(6);              // blue, the fill
+    expect(cell(display, 1, 0) & 0x80).toBe(0x80);     // reversed
+    expect(color(display, 2, 0)).toBe(1);              // SGR 0 gives the pen back
+    expect(cell(display, 2, 0) & 0x80).toBe(0);
   });
 
   it('bold + basic color selects the bright VIC color; truecolor and 256-color snap to nearest', () => {
@@ -314,9 +324,13 @@ describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () =>
     expect(display.state.background).toBe(0);
   });
 
-  it('a per-cell background without a clear sends no $02 (plan decision 5: per-cell bg is dropped)', () => {
+  it('a per-cell background without a clear sends no $02 - it is a fill, not the screen', () => {
+    // $02 <colour> is the SCREEN background, which only a full clear commits.
+    // A per-cell background is drawn instead as reverse video in that colour,
+    // so the two bytes here are the pen and the reverse latch, never $02.
     const { out, display } = run('\x1b[44mhi');
-    expect(out).toEqual([0x0E, 0x48, 0x49]);
+    expect(out.filter((b) => b === 0x02)).toEqual([]);
+    expect(out).toEqual([0x0E, 0x1F, 0x12, 0x48, 0x49]);
     expect(display.state.background).toBe(0);
   });
 

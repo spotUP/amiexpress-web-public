@@ -297,8 +297,14 @@ export class FrameReconstructor {
       }
       if (c === 49) { this.attrs.bg = DEFAULT_BG; p++; continue; }
       if ((c >= 40 && c <= 47) || (c >= 100 && c <= 107)) {
-        // Same table as the foreground, shifted by 10 (40 -> 30, 100 -> 90).
-        const vic = sgrColorToVic(c - 10, this.attrs.bold);
+        // Same table as the foreground, shifted by 10 (40 -> 30, 100 -> 90),
+        // and NEVER brightened: bold is a foreground attribute, which is what
+        // the transducer has always said (`ansi-to-petscii.ts` sgr()). While a
+        // background was dropped on the C64 side the disagreement was
+        // invisible; now that a background is drawn as a fill, `ESC[1;40m`
+        // meant dark grey to this model and black to the machine, and the
+        // parity test between them saw a bar that was not there.
+        const vic = sgrColorToVic(c - 10, false);
         if (vic !== null) this.attrs.bg = vic;
         p++;
         continue;
