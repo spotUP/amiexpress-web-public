@@ -288,6 +288,16 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   const page = wMenuPage(rows, columns, height - 2, (session as any).wMenuPage || 1);
   (session as any).wMenuPage = page.page;
 
+  /*
+   * A PAGE REPLACES THE ONE BEFORE IT.
+   *
+   * The whole reason this menu is paged is that a C64 has no scrollback, so
+   * printing the next page UNDER the last one leaves the caller looking at
+   * the tail of both and the top of neither - which is what the sysop's
+   * screenshot shows: options 20-26 three times over, one prompt buried in
+   * the middle of them.
+   */
+  emitText(socket, '\x1b[2J\x1b[H');
   emitText(socket, page.rows.join('\r\n'));
   emitText(socket, '\r\n');
   emitText(socket, wMenuPrompt(page));

@@ -120,15 +120,16 @@ export interface WMenuPage {
 /**
  * The menu, squeezed and cut into pages of `rows` painted rows.
  *
- * `page` is clamped rather than rejected: a caller who asks for the page
- * after the last one gets the last one, which is what `+` on the final page
- * should do.
+ * `page` WRAPS rather than clamping. Clamping meant `+` on the last page
+ * repainted the last page, so a caller pressing it saw the screen change and
+ * nothing move - there is no third page to explain itself with, and no way
+ * back to the first but to leave the menu and come in again.
  */
 export function wMenuPage(lines: string[], cols: number, rows: number, page: number): WMenuPage {
   const squeezed = lines.map((line) => squeezeRow(line, cols));
   const perPage = Math.max(1, rows);
   const pages = Math.max(1, Math.ceil(squeezed.length / perPage));
-  const wanted = Math.min(Math.max(1, page), pages);
+  const wanted = ((Math.round(page) - 1) % pages + pages) % pages + 1;
   return {
     rows: squeezed.slice((wanted - 1) * perPage, wanted * perPage),
     page: wanted,

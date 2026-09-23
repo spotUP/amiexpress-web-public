@@ -60,8 +60,12 @@ describe('the settings menu on a screen that does not scroll', () => {
     expect(second.rows[7]).toContain('OPTION 27');
   });
 
-  it('stays on the last page when the caller asks for one past it', () => {
-    expect(wMenuPage(lines, 40, 20, 9).page).toBe(2);
+  it('wraps round to the first page when the caller asks for one past the last', () => {
+    // Clamping meant `+` on the last page repainted the last page: the screen
+    // changed and nothing moved, with no way back to the top but to leave.
+    expect(wMenuPage(lines, 40, 20, 3).page).toBe(1);
+    expect(wMenuPage(lines, 40, 20, 4).page).toBe(2);
+    expect(wMenuPage(lines, 40, 20, 0).page).toBe(2);   // `-` from the first
   });
 
   it('says how to reach the rest, and says nothing when there is no rest', () => {
@@ -113,13 +117,14 @@ function caller(width: number, height: number) {
     emit(event: string, data: unknown) { if (event === 'ansi-output') emitted.push(String(data)); return true; },
     on() { return socket; },
   };
+  let raw = '';
   const rows = () => {
     flushOutput(socket);
-    const text = emitted.join('').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+    raw = emitted.join('');
     emitted.length = 0;
-    return text.split('\r\n');
+    return raw.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').split('\r\n');
   };
-  return { socket, session, rows };
+  return { socket, session, rows, lastRaw: () => raw };
 }
 
 describe('the settings menu a C64 caller is handed', () => {
@@ -143,6 +148,21 @@ describe('the settings menu a C64 caller is handed', () => {
     // The PETSCII character set is the row he could not reach.
     expect(second).toContain('PETSCII CHARACTER SET');
     expect(second).toContain('page 2/2');
+    // And the page REPLACES the one before it: a C64 has no scrollback, so
+    // printing under the last page leaves the caller reading the tail of both.
+    expect(d.lastRaw()).toContain('\u001b[2J');
+  });
+
+  it('comes back round to the first page', async () => {
+    const d = caller(40, 25);
+    handleWriteUserParamsCommand(d.socket, d.session);
+    d.rows();
+
+    await handleWOptionSelectInput(d.socket, d.session, '+');
+    d.rows();
+    await handleWOptionSelectInput(d.socket, d.session, '+');
+
+    expect(d.rows().join('\n')).toContain('page 1/2');
   });
 
   it('still takes the number he types, from whichever page he is on', async () => {
