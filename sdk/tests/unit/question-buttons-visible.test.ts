@@ -97,6 +97,30 @@ describe("a question dialog's buttons", () => {
     }
   });
 
+  it('do not touch each other on a C64', () => {
+    // "i see them but they need a 1 char spacing between them" (the sysop,
+    // 2026-09-23). The narrow layout widens both buttons and left the second
+    // one's column where the narrower pair had put it, so `[ Yes ][ No ]` ran
+    // together.
+    const wide: any = new Screen({
+      title: 'question', width: 80, height: 25, responsive: true,
+      output: (d: string) => writes.push(d),
+    } as any);
+    try {
+      const q: any = new Question({ parent: wide, width: 45, title: ' Confirm ' } as any);
+      wide.resize(40, 25);
+      q.ask('Are you sure you want to quit LiveChat?');
+
+      const container = q.children.find((c: any) => c.children?.length === 2);
+      const [yes, no] = container.children;
+      expect(no.position.xi - yes.position.xl).toBe(1);
+      expect(container.position.width).toBeGreaterThanOrEqual(
+        yes.position.width + no.position.width + 1);
+    } finally {
+      wide.destroy();
+    }
+  });
+
   it('still answer when pressed', () => {
     const q: any = new Question({ parent: screen, title: ' Private Table? ' } as any);
     let answer: boolean | undefined;

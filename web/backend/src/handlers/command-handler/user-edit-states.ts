@@ -145,6 +145,21 @@ export async function handleUserEditInput(
     return true;
   }
 
+  /*
+   * `+` AND `-` TURN THE PAGE THE MOMENT THEY ARE PRESSED.
+   *
+   * The settings menu is paged on a screen that does not scroll, and its
+   * prompt says `+=page 1/2`, which reads as a key rather than as something
+   * to type and then RETURN - "if + shall do something in W i dont think it
+   * works" (the sysop, 2026-09-23). Only on an EMPTY buffer, so a caller
+   * halfway through typing a number is never interrupted by one.
+   */
+  if (subState === LoggedOnSubState.W_OPTION_SELECT && session.inputBuffer === ''
+      && (data === '+' || data === '-')) {
+    await handler(socket, session, data);
+    return true;
+  }
+
   // Handle printable characters
   if (data.length === 1 && data >= ' ' && data <= '~') {
     session.inputBuffer += data;

@@ -31,6 +31,12 @@ export interface QuestionOptions extends ElementOptions {
   mobileWidth?: number | string;
 }
 
+/** The No button's column on an eighty-column screen: ten wide, two apart. */
+const DESKTOP_BUTTON_LEFT = 12;
+
+/** One blank column between the two, which is what a C64's dialog has room for. */
+const MOBILE_BUTTON_GAP = 1;
+
 export class Question extends Box {
   private messageText: Box;
   private yesButton: Button;
@@ -204,7 +210,7 @@ export class Question extends Box {
     this.noButton = new Button({
       parent: this.buttonBox,
       top: 0,
-      left: 12,
+      left: DESKTOP_BUTTON_LEFT,
       width: 10,
       height: 1,
       content: '[ No ]',
@@ -437,12 +443,17 @@ export class Question extends Box {
     const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
     this.width = mobileWidth;
 
-    // Wider buttons, still one row each - see the fields above.
+    /*
+     * Wider buttons, still one row each - and the second one MOVES with the
+     * first one's width. Its column was written down once, for the narrow
+     * pair, so widening both ran them together: `[ Yes ][ No ]` with nothing
+     * between them (the sysop, 2026-09-23: "i see them but they need a 1
+     * char spacing between them").
+     */
     this.yesButton.width = this._mobileButtonWidth;
     this.noButton.width = this._mobileButtonWidth;
-
-    // Adjust button container for larger buttons
-    this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
+    this.noButton.left = this._mobileButtonWidth + MOBILE_BUTTON_GAP;
+    this.buttonBox.width = (this._mobileButtonWidth * 2) + MOBILE_BUTTON_GAP;
 
     if (this.screen) this.screen.render();
   }
@@ -458,8 +469,7 @@ export class Question extends Box {
     // Restore desktop button widths; the row keeps its one row.
     this.yesButton.width = this._desktopButtonWidth;
     this.noButton.width = this._desktopButtonWidth;
-
-    // Restore button container width
+    this.noButton.left = DESKTOP_BUTTON_LEFT;
     this.buttonBox.width = 22;
 
     if (this.screen) this.screen.render();

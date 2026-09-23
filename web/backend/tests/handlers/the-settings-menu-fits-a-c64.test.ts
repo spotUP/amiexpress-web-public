@@ -167,3 +167,35 @@ describe('the settings menu on the board\'s own screen', () => {
     expect(text).not.toContain('=page');
   });
 });
+
+/**
+ * And the page key itself, from the keystroke rather than from the handler:
+ * "if + shall do something in W i dont think it works" (the sysop,
+ * 2026-09-23). The prompt says `+=page 1/2`, which reads as a KEY.
+ */
+import { handleUserEditInput } from '../../src/handlers/command-handler/user-edit-states';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
+
+describe('the page key', () => {
+  it('turns the page on the keystroke, with no RETURN after it', async () => {
+    const d = caller(40, 25);
+    handleWriteUserParamsCommand(d.socket, d.session);
+    d.rows();
+
+    await handleUserEditInput(d.socket, d.session, '+');
+
+    expect(d.rows().join('\n')).toContain('PETSCII CHARACTER SET');
+  });
+
+  it('is still a character when the caller is typing a number', async () => {
+    const d = caller(40, 25);
+    handleWriteUserParamsCommand(d.socket, d.session);
+    d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    d.rows();
+
+    await handleUserEditInput(d.socket, d.session, '2');
+    await handleUserEditInput(d.socket, d.session, '+');
+
+    expect(d.session.inputBuffer).toBe('2+');
+  });
+});

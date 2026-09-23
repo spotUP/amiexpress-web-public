@@ -1140,11 +1140,39 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         setPetsciiMachine(petsciiMachineRef.current);
       }
       if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer({ columns });
+      /*
+       * THE CHARACTER ROM, RE-ASSERTED - this is the transducer that draws.
+       *
+       * The board keeps one of these too, but only as the oracle for the
+       * caller's screen; what the caller SEES is rendered here, in the
+       * browser. It is built when the PETSCII session starts, which is the
+       * graphics prompt - before login, and long before `W` row 22 - so a
+       * charset latched at construction stayed standard for the whole call
+       * and a Swedish caller's own letters came back folded to `aao` (the
+       * sysop, 2026-09-23, twice). `petsciiSwedishRef` is updated by the
+       * `petscii-mode` and `petscii-charset` events; this is where it
+       * reaches the glyphs.
+       */
+      petsciiTransducerRef.current.setSwedish(petsciiSwedishRef.current);
       if (surfaceRef.current !== 'canvas') {
         surfaceRef.current = 'canvas';
         dispatchSurface({ type: 'petscii-session-start' });
       }
     };
+    /**
+     * The caller's character ROM, in the three places that draw from it.
+     *
+     * The REF is written first and by hand: `setPetsciiSwedish` is a state
+     * update, so `petsciiSwedishRef.current` would still hold the old value
+     * for the rest of this handler - and the transducer is re-asserted from
+     * the ref inside `ensurePetsciiSession`, which runs in that same tick.
+     */
+    const applyPetsciiCharset = (swedish: boolean) => {
+      petsciiSwedishRef.current = swedish;
+      setPetsciiSwedish(swedish);
+      petsciiTransducerRef.current?.setSwedish(swedish);
+    };
+
     // ONE seam for every direct xterm write in this effect: identical bytes
     // to xterm when it is the surface; transduced onto the canvas otherwise.
     const writeTerm = (text: string) => {
@@ -2670,8 +2698,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
        * for a-ring, and his own keystrokes came back as `aao` (the sysop,
        * 2026-09-23).
        */
-      setPetsciiSwedish(shape.charset === 'swedish');
+      applyPetsciiCharset(shape.charset === 'swedish');
       ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
+    });
+
+    /*
+     * THE CALLER CHANGED HIS CHARACTER ROM WHILE HE WAS SITTING THERE.
+     *
+     * `W` row 22 emits this, and nothing here listened - so a caller who
+     * turned the Swedish ROM on mid-call kept drawing from the American one
+     * until his next login, which is precisely what was reported twice on
+     * 2026-09-23 ("my petscii character set is set to swedish in W", then
+     * "aao still shows"). The board's own model already follows the setting;
+     * this is the half that draws.
+     */
+    socket.on('petscii-charset', (set: { charset?: string }) => {
+      console.log('[Terminal] PETSCII character set:', set?.charset ?? 'standard');
+      applyPetsciiCharset(set?.charset === 'swedish');
     });
 
     // Teletext session mode (T answer at the graphics prompt). Stays on the
