@@ -1336,7 +1336,9 @@ export const displayMainMenu = menuDisplayMainMenu;
 async function repaintMenuIfPending(socket: any, session: BBSSession): Promise<void> {
   if ((session.subState as LoggedOnSubState) !== LoggedOnSubState.DISPLAY_MENU) return;
   session.menuPause = false;
-  await menuDisplayMainMenu(socket, session);
+  // Same bypass, same reason: this exists because a caller was left looking
+  // at a screen with no prompt on it.
+  await menuDisplayMainMenu(socket, session, false, true);
 }
 export const displayMenuPrompt = menuDisplayMenuPrompt;
 
@@ -1354,7 +1356,12 @@ function showMenuAfterCommand(socket: any, session: BBSSession, menuPauseDefault
   if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     session.menuPause = menuPauseDefault;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    menuDisplayMainMenu(socket, session);
+    // BYPASS: the caller typed a command and is waiting for his prompt back.
+    // The 500ms guards are for duplicate renders from door-completion and
+    // state-transition races; a caller pressing RETURN twice quickly is
+    // neither, and without this the second press is echo with no prompt
+    // behind it (`promptDebounceBlocks`).
+    menuDisplayMainMenu(socket, session, false, true);
   }
 }
 
@@ -3111,7 +3118,8 @@ console.log(' [DOWNLOAD] User confirming download');
     // Actually display the menu when transitioning from DISPLAY_MENU
     // This ensures the menu is shown after pressing any key
     session.menuPause = false;
-    await displayMainMenu(socket, session);
+    // The caller pressed a key at the menu; his prompt is not a duplicate.
+    await displayMainMenu(socket, session, false, true);
     return;
   }
 

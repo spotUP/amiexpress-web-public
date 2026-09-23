@@ -166,8 +166,10 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   // mid-door or between a prompt and its answer. Non-throwing.
   drainAchievementNotices(socket, session as any);
 
-  // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display)
-  displayMenuPrompt(socket, session);
+  // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display).
+  // A display the caller asked for carries its bypass through to the prompt:
+  // the menu screen may be a duplicate, the prompt he is waiting on is not.
+  displayMenuPrompt(socket, session, bypassDebounce || forceMenuDisplay);
 
   // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
   // After prompt, choose input mode based on MENU.keys
@@ -179,7 +181,33 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
  * Display menu prompt (displayMenuPrompt equivalent)
  * Shows BBS name, conference info, and time remaining
  */
-export function displayMenuPrompt(socket: any, session: BBSSession) {
+/**
+ * THE 500ms GUARD, AND THE ONE THING IT MUST NEVER SWALLOW.
+ *
+ * Two of these exist - one on the menu SCREEN, one here on the prompt - and
+ * both were added against duplicate renders from door-completion and
+ * state-transition races. The screen's could be bypassed; this one could not,
+ * so a prompt the CALLER had just asked for was dropped whenever a second one
+ * followed inside half a second.
+ *
+ * That is what the sysop saw, 2026-09-23: "the prompt jumps down to the next
+ * line sometimes instead of drawing a new prompt". RETURN at the menu echoes
+ * `\r\n` first (`handleReadCommand`) and the prompt is supposed to follow it;
+ * press twice quickly and the echo went out with nothing behind it, so the
+ * cursor walked down the screen a line at a time. The faster he typed, the
+ * more of them piled up, which is why it read as random.
+ *
+ * `force` is the caller's own keystroke. A caller is always owed a prompt; a
+ * race is not.
+ */
+export function promptDebounceBlocks(session: BBSSession, force = false, now = Date.now()): boolean {
+  const last = (session as unknown as { _lastMenuPromptTime?: number })._lastMenuPromptTime || 0;
+  if (!force && now - last < 500) return true;
+  (session as unknown as { _lastMenuPromptTime?: number })._lastMenuPromptTime = now;
+  return false;
+}
+
+export function displayMenuPrompt(socket: any, session: BBSSession, force = false) {
   // Put the colours back, unconditionally and before anything else.
   //
   // displayMainMenu() resets too, but it returns early in several cases -
@@ -215,14 +243,10 @@ console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
     return;
   }
 
-  // WEB_: MODERN_* — 500ms debounce prevents duplicate menu prompts on rapid state-transition races; no express.e equivalent
-  const now = Date.now();
-  const lastPromptTime = (session as any)._lastMenuPromptTime || 0;
-  if (now - lastPromptTime < 500) {
-console.log('[menu] displayMenuPrompt SKIPPED (debounce - last prompt was', now - lastPromptTime, 'ms ago)');
+  if (promptDebounceBlocks(session, force)) {
+console.log('[menu] displayMenuPrompt SKIPPED (debounce)');
     return;
   }
-  (session as any)._lastMenuPromptTime = now;
 
 console.log(`[menu] displayMenuPrompt called subState=${session.subState}`);
 console.log(`[menu]   stack: ${new Error().stack?.split('\n').slice(2, 12).join('\n          ')}`);
