@@ -18,6 +18,7 @@ import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
+import { wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
 import { reportMessage } from '../../achievements/sites';
 
 
@@ -579,18 +580,32 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
   }
 
   /*
-   * Add line to body, cut to what this caller's screen holds.
+   * Add line to body, WRAPPED to what this caller's screen holds.
    *
    * express.e's `maxLineLen` is 75 and an eighty-column caller keeps it. A
    * C64 caller was given 75 too, under a thirty-seven column ruler - so he
    * could type a line his own screen cannot hold, and the wrap downstream
    * had to cut it. A run of PETSCII graphics has no spaces, so that cut
    * lands mid-figure. `messageBodyLineLimit` is the one place that decides.
+   *
+   * IT USED TO TRUNCATE, and threw the rest of the sentence away. The
+   * caller never saw it happen: his own screen WRAPS the echo, so the words
+   * were in front of him while the board kept the first 36 characters. The
+   * sysop found it by writing a message on a PETSCII session and reading it
+   * back on an ANSI one, 2026-09-23: "the text is cut off ... i discovered
+   * it when i logged in with ansi to read it".
+   *
+   * `wrapLineToWidth` is the board's own wrap (the one the C64 door adapter
+   * and `wrapForSession` use), so a word moves to the next line whole and a
+   * spaceless run of graphics is split at the screen edge - which is where
+   * his screen broke it anyway.
    */
   const limit = messageBodyLineLimit(session);
-  const truncated = line.length > limit ? line.substring(0, limit) : line;
-  session.tempData.messageEntry.body.push(truncated);
-  session.tempData.messageEntry.currentLine++;
+  const parts = line.length > limit ? wrapLineToWidth(line, limit) : [line];
+  for (const part of parts) {
+    session.tempData.messageEntry.body.push(part);
+    session.tempData.messageEntry.currentLine++;
+  }
 
   // 800-line hard limit (express.e: maxMsgLines = 800)
   if (session.tempData.messageEntry.body.length >= 800) {

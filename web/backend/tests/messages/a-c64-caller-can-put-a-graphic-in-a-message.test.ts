@@ -88,22 +88,30 @@ describe('a C64 caller writing a message', () => {
     expect(stored).toBe('ab');
   });
 
-  it('cuts a line at the width of the screen he is looking at, not at 75', async () => {
+  it('breaks a line at the width of the screen he is looking at, not at 75', async () => {
     const session = bodySession();
     const limit = messageBodyLineLimit(session);
 
     expect(limit).toBeLessThan(75);
-    const stored = await typeLine(session, 'x'.repeat(limit + 12));
+    await typeLine(session, 'x'.repeat(limit + 12));
+    const body: string[] = session.tempData.messageEntry.body;
 
-    expect(stored.length).toBe(limit);
+    // Broken at his screen's width, and NOT thrown away past it: the tail is
+    // on the next line. It used to be truncated, and the caller could not see
+    // it happen because his own screen wraps the echo (the sysop, 2026-09-23:
+    // "the text is cut off"). See a-long-line-keeps-its-tail.test.ts.
+    expect(body[0].length).toBe(limit);
+    expect(body.join('')).toBe('x'.repeat(limit + 12));
   });
 
   it('still gives an eighty-column caller the 75 express.e has always given', async () => {
     const wide = bodySession({ petsciiMode: false, terminalType: 'ansi', screenWidth: 80 });
 
     expect(messageBodyLineLimit(wide)).toBe(75);
-    const stored = await typeLine(wide, 'y'.repeat(90));
+    await typeLine(wide, 'y'.repeat(90));
+    const body: string[] = wide.tempData.messageEntry.body;
 
-    expect(stored.length).toBe(75);
+    expect(body[0].length).toBe(75);
+    expect(body.join('')).toBe('y'.repeat(90));
   });
 });
