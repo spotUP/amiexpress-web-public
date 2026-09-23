@@ -40,6 +40,12 @@ export class ZmodemTransferManager {
   private active: boolean = false;
   private onComplete?: (success: boolean, detail: { received: string[]; sent: string[]; skipped: string[] }) => void;
   private receivedFiles: string[] = [];
+  /** How much has come off the wire, for a transfer that never finishes. */
+  private bytesIn = 0;
+  private chunksIn = 0;
+  private bytesWritten = 0;
+  /** How many times the sender has offered a file in this session. */
+  private offers = 0;
   private sentFiles: string[] = [];
   /** Names answered with ZSKIP - express's `skipdFiles`. */
   private skippedFiles: string[] = [];
@@ -75,6 +81,18 @@ export class ZmodemTransferManager {
     if (!this.active && !this.session.transferRawActive) {
       return;
     }
+    // A TRANSFER THAT FAILS LEAVES NOTHING BEHIND TO READ.
+    //
+    // "uploading via zmodem via telnet is broken it retries the file over and
+    // over" (2026-09-23) - and the service had one log line in it, so the
+    // attempt was undiagnosable after the fact. These are counts, not bytes:
+    // enough to say WHERE a transfer stopped without putting a caller's file
+    // in the log.
+    this.bytesIn += data.length;
+    this.chunksIn += 1;
+    if (this.chunksIn === 1 || this.chunksIn % 200 === 0) {
+console.log(`[ZMODEM] ${this.direction}: ${this.chunksIn} chunks in, ${this.bytesIn} bytes`);
+    }
     try {
       this.sentry.consume(data);
     } catch (err) {
@@ -88,6 +106,7 @@ console.error('[ZMODEM] Sentry consume failed:', err, 'data(hex)=', preview);
    * Begin monitoring for a ZMODEM negotiation.
    */
   start(): void {
+console.log(`[ZMODEM] start ${this.direction}, paths=${JSON.stringify(this.paths)}`);
     this.active = true;
     this.session.transferRawActive = true;
     (this.session as any).transferManager = this;
@@ -212,19 +231,28 @@ console.error('[ZMODEM] Failed to create target dir:', targetDir, err);
     zsession.on('offer', (xfer: any) => {
       const details = xfer.get_details ? xfer.get_details() : {};
       const safeName = this.sanitizeFilename(details.name || 'upload.bin');
+      // The offer COUNT is the whole question when a caller reports a file
+      // retried over and over: a sender that never hears ZRINIT/ZACK offers
+      // the same file again, and each one arrives here.
+      this.offers += 1;
+console.log(`[ZMODEM] offer #${this.offers}: ${safeName} size=${details.size ?? '?'} `
+        + `mtime=${details.mtime ?? '?'} target=${targetDir}`);
 
       const accept = () => {
         const dest = path.join(targetDir, safeName);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         const writer = fs.createWriteStream(dest);
+console.log(`[ZMODEM] accepting ${safeName} -> ${dest}`);
         xfer.on('input', (octets: Uint8Array) => {
+          this.bytesWritten += octets.length;
           writer.write(Buffer.from(octets));
         });
         xfer.accept().then(() => {
           writer.end();
           this.receivedFiles.push(dest);
+console.log(`[ZMODEM] received ${safeName}: ${this.bytesWritten} bytes written`);
         }).catch((err: any) => {
-console.error('[ZMODEM] Offer accept failed:', err);
+console.error(`[ZMODEM] Offer accept failed for ${safeName} after ${this.bytesWritten} bytes:`, err);
           writer.end();
         });
       };
@@ -277,6 +305,9 @@ console.error('[ZMODEM] duplicate check failed, accepting file:', err);
 
   private finish(success: boolean): void {
     if (!this.active) return;
+console.log(`[ZMODEM] finish ${this.direction} success=${success} offers=${this.offers} in=${this.bytesIn}B/${this.chunksIn} chunks `
+      + `written=${this.bytesWritten}B received=${JSON.stringify(this.receivedFiles)} `
+      + `skipped=${JSON.stringify(this.skippedFiles)}`);
     this.active = false;
     this.session.transferRawActive = false;
     (this.session as any).transferManager = undefined;
