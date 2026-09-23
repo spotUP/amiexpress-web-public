@@ -4,6 +4,32 @@
 
 import { ANSI, LINE_ENDING } from '../constants/ansi-codes';
 
+/**
+ * How far a scroll-clear scrolls: more than one screen, so nothing visible
+ * survives on the glass and all of it lands in the caller's history.
+ */
+export const SCROLL_CLEAR_LINES = 30;
+
+/**
+ * THE CLEAR A CALLER'S TERMINAL SHOULD GET.
+ *
+ * `ESC[2J` erases the viewport and pushes NOTHING into the scrollback - in
+ * xterm.js and in every real terminal - so each menu repaint threw the last
+ * screen away and a caller could scroll back "a few lines" at best (the
+ * sysop, 2026-09-24, and callers on telnet before him). Scrolling the screen
+ * off instead puts it in the history of every client, telnet included,
+ * without asking the client for anything.
+ *
+ * A C64 IS THE EXCEPTION and keeps the hard clear. It has no scrollback to
+ * preserve, its clear is one byte (`$93`, which the transducer makes of
+ * `ESC[2J`), and thirty newlines at forty columns would be thirty rows of
+ * scrolling for nothing. Teletext the same.
+ */
+export function clearScreenFor(session: { petsciiMode?: boolean; texttvMode?: boolean } | null | undefined): string {
+  const noScrollback = session?.petsciiMode === true || session?.texttvMode === true;
+  return noScrollback ? ANSI.CLEAR_SCREEN : ('\r\n'.repeat(SCROLL_CLEAR_LINES) + '\x1b[H');
+}
+
 export class AnsiUtil {
   /**
    * Map color names to ANSI codes
@@ -78,7 +104,7 @@ export class AnsiUtil {
    * hard clear use ANSI.CLEAR_SCREEN ('\x1b[2J\x1b[H') directly.
    */
   static clearScreen(): string {
-    return '\r\n'.repeat(30) + '\x1b[H';
+    return '\r\n'.repeat(SCROLL_CLEAR_LINES) + '\x1b[H';
   }
 
   /**

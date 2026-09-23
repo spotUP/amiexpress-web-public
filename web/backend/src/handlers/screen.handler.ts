@@ -6,6 +6,7 @@
  */
 
 import { utf8ChunkEnd } from '../utils/utf8-chunk.util';
+import { clearScreenFor } from '../utils/ansi.util';
 import { applyAuthoredWrap } from '../screens/authored-wrap';
 import { C64_COLUMNS, petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import * as fs from 'fs';
@@ -1103,10 +1104,15 @@ export async function parseMciCodes(
         return true;
       },
       // express.e:5469-5471 sendCLS(). Buffered, like the text around it.
-      emitCls: () => emitText(socket, '\x1b[2J\x1b[H'),
+      //
+      // A SCROLL-CLEAR for anyone with a scrollback: `ESC[2J` erases the
+      // viewport and saves nothing, so the board's own repaints were eating
+      // the caller's history (`clearScreenFor`). A C64 still gets the hard
+      // clear - it has no history to keep.
+      emitCls: () => emitText(socket, clearScreenFor(session)),
       // The pre-clear ~SR_ sends before a full-screen art file: direct, not
       // buffered, exactly as it was written.
-      emitClsBeforeRandomFile: () => socket.emit('ansi-output', '\x1b[2J\x1b[H'),
+      emitClsBeforeRandomFile: () => socket.emit('ansi-output', clearScreenFor(session)),
     });
     if (walk.hasPause) {
       hasPause = true;
@@ -2633,7 +2639,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         // cursor is where the previous screen's art left it.
         emitPetsciiChunk(socket, session, { machine: petsciiMachineFor(session) }, PETSCII_CLS);
       } else {
-        socket.emit('ansi-output', '\x1b[2J\x1b[H');
+        socket.emit('ansi-output', clearScreenFor(session));
       }
     }
 
