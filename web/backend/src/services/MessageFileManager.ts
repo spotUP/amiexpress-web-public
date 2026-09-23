@@ -46,10 +46,23 @@ export class MessageFileManager {
       this.ensureMsgBaseDir(confNumber);
       const filePath = this.getMessagePath(confNumber, msgNumber);
 
-      // express.e:10700-10703 — body lines only
+      /*
+       * express.e:10700-10703 — body lines only.
+       *
+       * UTF-8, because that is what READS it back
+       * (`utils/message-file.util.ts:288`). This wrote `'binary'` - latin1 -
+       * and latin1 takes `charCode & 0xFF`, so every character above U+00FF
+       * was stored as a different, entirely plausible one: `é` became `i`,
+       * and a PETSCII glyph carried as `U+E141` became the letter `A`. Not
+       * mojibake, which somebody would have reported - a wrong letter,
+       * which nobody can see is wrong.
+       *
+       * This class calls itself a thin wrapper around that util module; the
+       * encodings disagreeing was the one place it was not.
+       */
       const body = message.body || '';
       const content = body.endsWith('\n') ? body : body + '\n';
-      fs.writeFileSync(filePath, content, 'binary');
+      fs.writeFileSync(filePath, content, 'utf-8');
 
       // Append HeaderFile entry (skip if one already exists for this msgNum —
       // saveMessage in message-entry.handler may have written it already).
