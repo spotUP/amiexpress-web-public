@@ -51,3 +51,9 @@ export { petsciiInputToAscii } from './petscii-input';
 export { printableLength, wrapLineToWidth } from './wrap';
 export { SCREENCODE_TO_UNICODE } from './screencode-unicode';
 export { puaToUnicode, hasPuaScreenCode, hasPuaMarker, colourMarker, colourOfMarker, PUA_COLOUR, screenCodeGlyph, puaForScreenCode, isPuaScreenCode, PUA_BANK0, PUA_BANK1 } from './pua';
+
+/**
+ * A session's output read back as the lines the caller actually saw.
+ * Used by the admin session log, which has no terminal of its own.
+ */
+export { ansiTranscript, type TranscriptOptions } from './frame/transcript';

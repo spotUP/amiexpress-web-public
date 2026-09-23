@@ -33,9 +33,28 @@ export interface FrameReconstructorOptions {
   rows?: number;
   /** VIC-II palette used for truecolor/256-color nearest matching. Defaults to Colodore, like the transducer. */
   palette?: readonly string[];
+
+  /**
+   * A ROW LEAVING THE SCREEN, which is what scrollback is made of.
+   *
+   * Called with the text of each row as it is retired - scrolled off the top,
+   * or wiped by a clear - so a consumer can keep the history a terminal keeps.
+   * Nothing in the model changes: it is told, it does not remember.
+   *
+   * The admin session log is what asked for it. It stripped the escapes and
+   * printed what was left, so every repaint appended ANOTHER whole screen and
+   * the frames piled up on each other: "its also the same in the logs in the
+   * web admin ui, mangled by screen clears" (the sysop, 2026-09-24).
+   */
+  onRetire?: (line: string) => void;
 }
 
 interface Attrs { fg: number; bg: number; bold: boolean; rvs: boolean; }
+
+/** A row's text, trailing blanks trimmed - what a caller would have read on it. */
+function rowText(row: Cell[]): string {
+  return row.map((cell) => cell.ch ?? ' ').join('').replace(/\s+$/, '');
+}
 
 export class FrameReconstructor {
   readonly cols: number;
@@ -49,11 +68,13 @@ export class FrameReconstructor {
   private saved: Cursor | null = null;
   private pending = '';
   private dirty = new Set<number>();
+  private readonly onRetire?: (line: string) => void;
 
   constructor(opts: FrameReconstructorOptions = {}) {
     this.cols = opts.cols ?? 80;
     this.rows = opts.rows ?? 25;
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
+    this.onRetire = opts.onRetire;
     this.reset();
     // A power-on frame has changed nothing yet: the first snapshot() is the
     // consumer's baseline. A reset() mid-stream (ESC c) does change every row,
@@ -152,6 +173,7 @@ export class FrameReconstructor {
   }
 
   private scrollUp(): void {
+    if (this.onRetire) this.onRetire(rowText(this.grid[0]));
     this.grid.shift();
     this.grid.push(this.blankRow());
     for (let y = 0; y < this.rows; y++) this.dirty.add(y);
@@ -177,6 +199,15 @@ export class FrameReconstructor {
   }
 
   private clear(): void {
+    if (this.onRetire) {
+      // A clear retires the whole screen, the way a scroll retires one row.
+      // Trailing blank rows are not history, they are the empty part of the
+      // screen, so the retirement stops at the last row with anything on it.
+      const rows = this.grid.map(rowText);
+      let last = rows.length - 1;
+      while (last >= 0 && rows[last].trim() === '') last--;
+      for (let y = 0; y <= last; y++) this.onRetire(rows[y]);
+    }
     for (let y = 0; y < this.rows; y++) this.grid[y] = this.blankRow();
     for (let y = 0; y < this.rows; y++) this.dirty.add(y);
   }

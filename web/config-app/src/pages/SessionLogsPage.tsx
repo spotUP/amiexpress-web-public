@@ -5,7 +5,7 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import type { SessionInfo } from '../types';
 import { SessionLogTerminal } from '../components/SessionLogTerminal';
-import { stripAnsiCodes, wrapAt80Columns } from '../utils/ansi-parser';
+import { ansiTranscript } from '@amiexpress/bbs-door-sdk/petscii';
 
 export function SessionLogsPage() {
   const queryClient = useQueryClient();
@@ -251,8 +251,19 @@ export function SessionLogsPage() {
                 className="border border-border rounded-lg overflow-auto bg-surface-0 p-4 font-mono text-sm whitespace-pre text-status-ok"
                 style={{ height: '600px', maxWidth: '100%' }}
               >
+                {/*
+                  * REPLAYED, NOT STRIPPED.
+                  *
+                  * The board's output is a film - cells rewritten, cursors
+                  * jumped, screens cleared and drawn again - so stripping the
+                  * escapes and printing the rest stacked every frame on the
+                  * one before it. `ansiTranscript` runs the stream through
+                  * the board's own reference terminal and writes each row
+                  * down as it leaves the screen, which is what the caller's
+                  * scrollback would have held.
+                  */}
                 <div style={{ width: '80ch' }}>
-                  {wrapAt80Columns(stripAnsiCodes(sessionLog.output.join('')))}
+                  {ansiTranscript(sessionLog.output.join('')).join('\n')}
                 </div>
               </div>
             )
