@@ -40,4 +40,15 @@ function applyTheme(source) {
     exports.THEME = theme;
     exports.T = theme.tokens;
     exports.S = (0, theme_1.themeStyles)(theme);
+    /*
+     * AND TELL THE SDK, which is what the widgets read.
+     *
+     * A widget cannot ask the door what its theme is, so the SDK keeps one
+     * answer for the door that is running and every widget built afterwards
+     * follows it (`engines/ui/theme/live.ts`). Without this line the editor's
+     * own menu bar drew in the SDK's default colours while everything the door
+     * painted itself used the caller's - "the door theme does not use our theme
+     * colors" (the sysop, 2026-09-23).
+     */
+    (0, theme_1.setActiveTheme)(theme);
 }

@@ -279,17 +279,6 @@ async function showComposer(screen, bbs, username, ctx) {
          * carry, and which an eighty-column reader gets folded to Unicode.
          */
         function buildPetsciiComposer() {
-            const editor = new PetsciiEditor({
-                parent: screen,
-                top: 0,
-                left: 0,
-                width: 40,
-                height: Math.min(25, screen.height),
-            });
-            if (draft?.content)
-                editor.fromPua(draft.content);
-            editor.focus();
-            bbs.enableMouseEvents?.();
             const keep = async () => {
                 await saveDraft(username, {
                     to: headerInfo.to,
@@ -298,11 +287,97 @@ async function showComposer(screen, bbs, username, ctx) {
                     savedAt: new Date(),
                 }, ctx);
             };
+            /*
+             * A MESSAGE HAS TO SAY HOW TO SEND IT.
+             *
+             * The first cut handed the caller a bare canvas with no menu and no
+             * hooks, so File > Leave did nothing and the only way out was a key
+             * nothing told him about - "ae opens the normal petscii editor? how do
+             * i send my message?" (the sysop, 2026-09-23).
+             *
+             * So the composer gives the editor its own menu - Send, Save as draft,
+             * Discard - and shows the menu bar even on a C64, where the studio
+             * hides it. One row of the picture is what a caller pays for being able
+             * to send what he drew.
+             */
+            const messageMenu = {
+                label: 'Message',
+                items: [
+                    { label: 'Send it', action: () => { void finish('send'); } },
+                    { label: 'Save as a draft', action: () => { void finish('draft'); } },
+                    { label: 'Throw it away', action: () => { void finish('discard'); } },
+                ],
+            };
+            const editor = new PetsciiEditor({
+                parent: screen,
+                top: 0,
+                left: 0,
+                width: screen.width,
+                height: screen.height,
+                /*
+                 * THE SAME EDITOR THE STUDIO GIVES, not a stripped one.
+                 *
+                 * The first cut asked for the menu bar and the status line only, so a
+                 * caller composing a message had no character picker and no colour
+                 * row - "the ae is not on par with petscii-edit no panels etc" (the
+                 * sysop, 2026-09-23). Both doors host the same widget; they should
+                 * hand the caller the same tools. F2 takes the lot away when he wants
+                 * the whole screen for the picture.
+                 */
+                showMenuBar: true,
+                showToolbar: true,
+                showTools: true,
+                showStatusBar: true,
+                hostMenus: [messageMenu],
+                onSave: () => { void keep(); },
+                onExit: () => { void finishWith(editor.toPua(), () => editor.destroy()); },
+                onHelp: () => { void showMsg(screen, 'Sending', 'Escape asks whether to send, keep or throw away.\nF5 shows the menu bar, which has the same three.'); },
+            });
+            /** Send, keep or throw away, straight from the menu. */
+            async function finish(action) {
+                const content = editor.toPua();
+                if (action === 'draft') {
+                    await keep();
+                    await showMsg(screen, 'Draft Saved', 'Your message has been saved as a draft.');
+                    editor.destroy();
+                    ctx.close();
+                    resolve();
+                    return;
+                }
+                if (action === 'discard') {
+                    await clearDraft(username, ctx);
+                    editor.destroy();
+                    ctx.close();
+                    resolve();
+                    return;
+                }
+                const sent = await sendMessage(bbs, {
+                    from: username,
+                    to: headerInfo.to,
+                    subject: headerInfo.subject,
+                    content,
+                });
+                if (sent) {
+                    await showMsg(screen, 'Message Sent!', 'Your message has been sent successfully.');
+                    await clearDraft(username, ctx);
+                }
+                else {
+                    await showMsg(screen, 'Send Failed', 'Failed to send message. Draft has been saved.');
+                    await keep();
+                }
+                editor.destroy();
+                ctx.close();
+                resolve();
+            }
+            if (draft?.content)
+                editor.fromPua(draft.content);
+            editor.focus();
+            bbs.enableMouseEvents?.();
             autosaveInterval = setInterval(() => {
                 if (editor.toPua().trim())
                     void keep();
             }, 5 * 60 * 1000);
-            screen.key(['f5'], () => { void keep(); });
+            // Escape asks the same three questions the ANSI path asks.
             screen.key(['escape'], () => {
                 void finishWith(editor.toPua(), () => editor.destroy());
             });
@@ -335,6 +410,17 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             top: 1,
             left: 2,
+            /*
+             * HEIGHT 1, OR IT EATS THE DIALOG.
+             *
+             * A `Text` with no height fills its parent, and a later sibling paints
+             * its blanks over everything already there. The hint row at the foot of
+             * this box is built LAST, so it covered the To and Subject labels and
+             * both inputs: the caller saw a titled frame with one line of key hints
+             * and nowhere to type ("missing inputs for receiver etc?", the sysop,
+             * 2026-09-23). Every label here is one row and now says so.
+             */
+            height: 1,
             content: S.accent('To:') + (usernames.length > 0 ? ' ' + S.dim('(type to search users)') : ''),
         });
         const toInput = new AutocompleteTextbox({
@@ -347,9 +433,19 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             mouse: true,
             keys: true,
             value: draft?.to || initialTo,
+            /*
+             * A FIELD A C64 CAN SEE.
+             *
+             * `selectionInk on selectionBg` is white on blue, and a PETSCII cell
+             * has ONE colour - the background is dropped - so an empty field was a
+             * blank line on a black screen with nothing to say "type here". Black
+             * ink on a coloured ground is the one pairing that survives: the
+             * transducer renders it as a filled bar in that colour, which is how
+             * the board's own menu bar stays visible on a C64.
+             */
             style: {
-                fg: T.selectionInk,
-                bg: T.selectionBg,
+                fg: T.ground,
+                bg: T.chrome,
             },
             suggestions: usernames,
             minLength: 1,
@@ -373,6 +469,7 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             parent: container,
             top: 4,
             left: 2,
+            height: 1,
             content: S.accent('Subject:'),
         });
         const subjectInput = new Textbox({
@@ -385,15 +482,26 @@ async function showHeaderEditor(screen, initialTo, initialSubject, draft, userna
             mouse: true,
             keys: true,
             value: draft?.subject || initialSubject,
+            /*
+             * A FIELD A C64 CAN SEE.
+             *
+             * `selectionInk on selectionBg` is white on blue, and a PETSCII cell
+             * has ONE colour - the background is dropped - so an empty field was a
+             * blank line on a black screen with nothing to say "type here". Black
+             * ink on a coloured ground is the one pairing that survives: the
+             * transducer renders it as a filled bar in that colour, which is how
+             * the board's own menu bar stays visible on a C64.
+             */
             style: {
-                fg: T.selectionInk,
-                bg: T.selectionBg,
+                fg: T.ground,
+                bg: T.chrome,
             },
         });
         new Text({
             parent: container,
             bottom: 1,
             left: 2,
+            height: 1,
             // The words shorten at forty columns, never the keys: a caller who
             // cannot see `ESC` has lost the way out of the box (`./layout.ts`).
             content: headerHints(screen.width).map(h => `${S.key(h.key)}: ${h.does}`).join('  '),

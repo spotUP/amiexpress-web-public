@@ -1074,6 +1074,9 @@ export class ANSIEditor extends Box {
       items: [
         { label: 'Toggle Sidebar', action: () => this.toggleSidebar() },
         { label: 'Toggle Toolbar', action: () => this.toggleFkeyToolbar() },
+        { label: 'Toggle Menu Bar', action: () => this.toggleMenuBar() },
+        { label: 'Toggle Status Bar', action: () => this.toggleStatusBar() },
+        { label: menuItemLabel('Hide everything', 'F2'), action: () => this.toggleUI() },
         { label: '────────────────', separator: true },
         { label: menuItemLabel('Text Mode', 'C-m'), action: () => this.mode !== 'text' && this.toggleMode() },
         { label: menuItemLabel('Draw Mode', 'C-m'), action: () => this.mode !== 'draw' && this.toggleMode() },
@@ -2805,6 +2808,57 @@ BBS Door SDK v2.0{/gray-fg}
   /**
    * Toggle F-key toolbar visibility
    */
+  /**
+   * EVERY PART OF THE INTERFACE GOES AWAY, and comes back.
+   *
+   * "all ui should be hideable" (the sysop, 2026-09-23, asking for this door
+   * and the PETSCII studio to behave the same way). The sidebar and the
+   * character row already had toggles; the menu bar and the status line did
+   * not, so a caller could never actually clear the screen to look at his
+   * picture.
+   *
+   * Hiding them ALL already existed as `toggleUI`, on `hideUIHotkey` (F2) -
+   * but bound to the VIEWPORT only, so it did nothing in draw mode, which is
+   * the mode somebody hiding the interface is in. It is bound on the canvas
+   * and on the widget now.
+   */
+  private toggleMenuBar(): void {
+    if (!this.menuBar) return;
+    if (this.menuBar.hidden) this.menuBar.show();
+    else this.menuBar.hide();
+    this.relayoutAfterChrome();
+  }
+
+  private toggleStatusBar(): void {
+    if (!this.statusBar) return;
+    if (this.statusBar.hidden) this.statusBar.show();
+    else this.statusBar.hide();
+    this.relayoutAfterChrome();
+  }
+
+  /**
+   * Put the canvas back where the chrome now leaves room for it.
+   *
+   * The same arithmetic `toggleSidebar` has always done, pulled out so the
+   * three other toggles cannot forget it: the canvas is CENTRED in the room
+   * it has, so a hidden menu bar has to move it up rather than leave a gap.
+   */
+  private relayoutAfterChrome(): void {
+    const sidebarWidth = this.sidebar && !this.sidebar.hidden ? 6 : 0;
+    const topOffset = (this.menuBar && !this.menuBar.hidden ? 1 : 0)
+      + (this.fkeyToolbar && !this.fkeyToolbar.hidden ? 1 : 0);
+    const showStatusBar = !!this.statusBar && !this.statusBar.hidden;
+
+    if (this.viewport) this.viewport.left = sidebarWidth;
+
+    const geom = this.centredCanvasGeometry(topOffset, sidebarWidth, showStatusBar);
+    if (this.drawCanvas) {
+      this.drawCanvas.top = geom.top;
+      this.drawCanvas.left = geom.left;
+    }
+    this.screen?.render();
+  }
+
   private toggleFkeyToolbar(): void {
     if (this.fkeyToolbar) {
       if (this.fkeyToolbar.hidden) {
@@ -2913,11 +2967,17 @@ BBS Door SDK v2.0{/gray-fg}
     this.viewport.key(['escape'], handleExit);
     this.drawCanvas.key(['escape'], handleExit);
 
-    // Toggle UI visibility (F2 by default)
-    this.viewport.key([this.hideUIHotkey], () => {
-      this.toggleUI();
-      return true;
-    });
+    /*
+     * Toggle the whole interface (F2 by default).
+     *
+     * On the CANVAS and on the widget as well as the viewport: it was bound
+     * to the viewport alone, which is text mode, so the caller who wanted the
+     * screen to himself - the one drawing - pressed F2 and nothing happened.
+     */
+    const toggleUI = () => { this.toggleUI(); return true; };
+    this.viewport.key([this.hideUIHotkey], toggleUI);
+    this.drawCanvas.key([this.hideUIHotkey], toggleUI);
+    this.key([this.hideUIHotkey], toggleUI);
 
     // Text mode keys - listen on viewport
     // Modifier key combinations (Ctrl+S, Ctrl+M, etc.) are handled here

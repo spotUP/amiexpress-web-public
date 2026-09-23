@@ -22,37 +22,16 @@
  */
 
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Box, PetsciiEditor, PETSCII_TOOL_LABELS, type PetsciiTool } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { PetsciiEditor, type PetsciiTool } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { createTerminalModeSwitch, type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import { C64_PALETTE_COLODORE } from '@amiexpress/bbs-door-sdk/petscii';
 import { applyTheme, T } from './door-theme';
-import { promptText, chooseFrom, notice, confirm } from './dialogs';
+import { promptText, chooseFrom, notice, helpScreen, confirm } from './dialogs';
 import {
   BBS_SCREEN_DIRS, isSysop, listOwnScreens, loadOwnScreen, saveOwnScreen,
   listBoardScreens, loadBoardScreen, saveBoardScreen, withSeqExtension,
 } from './assets';
-
-/** The colour names a caller picks from, in VIC order. */
-const COLOUR_NAMES = [
-  'Black', 'White', 'Red', 'Cyan', 'Purple', 'Green', 'Blue', 'Yellow',
-  'Orange', 'Brown', 'Light red', 'Dark grey', 'Grey', 'Light green', 'Light blue', 'Light grey',
-];
-
-/** The tools, in the order the requester lists them. */
-const TOOLS: PetsciiTool[] = ['draw', 'characterOnly', 'colourOnly', 'fill', 'brush', 'text'];
-
-/**
- * The characters the requester offers.
- *
- * Bank 1's graphics, which is what this board runs and therefore what a
- * caller may draw with - screen codes `$40` and `$5B-$7F`. Letters and digits
- * are typed, not picked, so they are not in the list.
- */
-const GRAPHIC_CODES: number[] = [0x40, ...Array.from({ length: 0x25 }, (_, i) => 0x5b + i)];
-
-/** An eighty-column terminal has room beside the canvas; a C64 has not. */
-const SIDEBAR_FROM_WIDTH = 60;
 
 export class PetsciiStudioDoor {
   private ctx!: DoorContext;
@@ -62,7 +41,6 @@ export class PetsciiStudioDoor {
 
   /** Public so the door's own test can see the editor was built. */
   editor: any = null;
-  private sidebar: any = null;
 
   /** The name this screen was opened or last saved under. */
   private filename: string | null = null;
@@ -91,6 +69,13 @@ export class PetsciiStudioDoor {
 
     this.openEditor();
     this.bindHotkeys();
+
+    // The first thing a caller sees, because nothing on an empty canvas says
+    // which key draws a corner ("petscii edit needs a help screen when it
+    // starts", the sysop, 2026-09-23). Dismissed with a keypress, and F1 says
+    // it again later.
+    await this.showHelp();
+    this.editor.focus();
 
     await new Promise<void>((resolve) => {
       this.exitResolve = resolve;
@@ -124,17 +109,12 @@ export class PetsciiStudioDoor {
     this.screen.render();
   }
 
-  /** Does this terminal have room for a sidebar beside a forty-column canvas? */
-  private get roomForSidebar(): boolean {
-    return this.screen.width >= SIDEBAR_FROM_WIDTH;
-  }
-
   /**
    * Build the editor at the screen's current size, keeping the art.
    *
-   * The canvas is always the surface's own forty columns - a PETSCII screen
-   * does not stretch to fill a wide terminal, it is a C64 screen wherever it
-   * is being looked at.
+   * The widget decides where its own chrome goes and centres the forty-column
+   * picture in what is left, so this hands it the whole screen and a set of
+   * callbacks rather than laying anything out itself.
    */
   private openEditor(): void {
     const surface = this.editor?.getSurface();
@@ -142,78 +122,64 @@ export class PetsciiStudioDoor {
     const brush = this.editor?.brush;
 
     this.editor?.destroy();
-    this.sidebar?.destroy();
-    this.sidebar = null;
 
+    /*
+     * THE WIDGET TAKES THE WHOLE SCREEN, and lays its own chrome out inside
+     * it - menu bar, character row, sidebar, status line, and the art centred
+     * in what is left. That is the ANSI editor's arrangement, which is what
+     * the sysop asked for ("the same layout as ansi edit but adapted for
+     * petscii"), and it is why this door no longer draws a panel of its own:
+     * two status lines saying the same thing is what the fork base had.
+     */
     this.editor = new PetsciiEditor({
       parent: this.screen,
       top: 0,
       left: 0,
-      width: 40,
-      height: Math.min(25, this.screen.height),
+      width: this.screen.width,
+      height: this.screen.height,
       surface,
       tool,
       brush,
+      hostMenus: isSysop(this.ctx) ? [this.boardMenu()] : [],
+      onOpen: () => { void this.openOwn(); },
+      onSave: () => { void this.save(); },
+      onSaveAs: () => { void this.saveAs(); },
+      onExit: () => { void this.leave(); },
+      onHelp: () => { void this.showHelp(); },
     } as any);
 
-    this.editor.on('change', () => { this.unsaved = true; this.refreshSidebar(); });
-    this.editor.on('tool', () => this.refreshSidebar());
-    this.editor.on('brush', () => this.refreshSidebar());
-    this.editor.on('cursor', () => this.refreshSidebar());
-
-    if (this.roomForSidebar) {
-      this.sidebar = new Box({
-        parent: this.screen,
-        top: 0,
-        left: 41,
-        width: Math.max(18, this.screen.width - 42),
-        height: Math.min(25, this.screen.height),
-        label: ' PETSCII Studio ',
-        tags: false,
-        border: { type: 'line' },
-        style: { border: { fg: T.accent }, fg: T.ink, bg: T.ground },
-      });
-    }
+    this.editor.on('change', () => { this.unsaved = true; });
 
     this.editor.focus();
-    this.refreshSidebar();
     this.screen.render();
+  }
+
+  /** The board's own art, for a sysop: its own menu on the bar. */
+  private boardMenu(): { label: string; items: Array<{ label: string; action: () => void }> } {
+    return {
+      label: 'Board',
+      items: [
+        { label: 'Open a board screen', action: () => { void this.openBoard(); } },
+        { label: 'Save to the board', action: () => { void this.saveToBoard(); } },
+      ],
+    };
   }
 
   private relayout(): void {
     this.openEditor();
   }
 
-  /**
-   * What the caller is holding, for a terminal wide enough to show it.
-   *
-   * At forty columns there is no sidebar and this does nothing: the pen is
-   * visible as the colour of the cursor itself, which is how a C64 has always
-   * answered the same question.
-   */
-  private refreshSidebar(): void {
-    if (!this.sidebar || !this.editor) return;
-    const { brush, cursor } = this.editor;
-    const lines = [
-      `Tool       ${PETSCII_TOOL_LABELS[this.editor.tool as PetsciiTool]}`,
-      `Colour     ${COLOUR_NAMES[brush.color & 0x0f]}`,
-      `Reverse    ${brush.reverse ? 'On' : 'Off'}`,
-      `Cursor     ${cursor.x}, ${cursor.y}`,
-      `File       ${this.filename ?? '(unsaved)'}${this.unsaved ? ' *' : ''}`,
-      '',
-      'F1 Help      F5 File',
-      'F2 Tools     F6 Undo',
-      'F3 Colour    F7 Redo',
-      'F4 Character F8 Clear',
-      '',
-      'Escape       Leave',
-    ];
-    this.sidebar.setContent(lines.join('\n'));
-    this.screen.render();
-  }
-
   // ---- the requesters --------------------------------------------------
 
+  /**
+   * The keys the DOOR owns.
+   *
+   * F2 and F5 to F8 belong to the editor widget - they hide and show its four
+   * parts, and a door that also bound them would fight it. What is left here
+   * is help, the two history keys a caller reaches for constantly, and the way
+   * out. Everything else lives on the menu bar, which F5 puts back when it has
+   * been hidden.
+   */
   private bindHotkeys(): void {
     const guarded = (action: () => void | Promise<void>) => () => {
       if (this.screen.dialogOpen) return;
@@ -221,46 +187,56 @@ export class PetsciiStudioDoor {
     };
 
     this.screen.key(['f1'], guarded(() => this.showHelp()));
-    this.screen.key(['f2'], guarded(() => this.pickTool()));
-    this.screen.key(['f3'], guarded(() => this.pickColour()));
-    this.screen.key(['f4'], guarded(() => this.pickCharacter()));
-    this.screen.key(['f5'], guarded(() => this.fileMenu()));
-    this.screen.key(['f6'], guarded(() => { this.editor?.undo(); }));
-    this.screen.key(['f7'], guarded(() => { this.editor?.redo(); }));
-    this.screen.key(['f8'], guarded(() => this.clearScreen()));
+    this.screen.key(['f3'], guarded(() => { this.editor?.undo(); }));
+    this.screen.key(['f4'], guarded(() => { this.editor?.redo(); }));
     this.screen.key(['escape'], guarded(() => this.leave()));
   }
 
+  /**
+   * The keys, in full words, on one page.
+   *
+   * Written for a C64's own keyboard, because that is what the chords are:
+   * CTRL and a digit for the first eight colours, the Commodore key for the
+   * other eight and for the graphics. On a PC keyboard the Commodore key is
+   * played by Alt, which is the one substitution a caller has to be told.
+   */
+  private helpLines(): string[] {
+    return [
+      '  PETSCII STUDIO',
+      '',
+      '  DRAWING',
+      '   Arrows         Move the cursor',
+      '   Return, Space  Draw at the cursor',
+      '   Mouse          Draw by pointing',
+      '   Delete         Blank the cell',
+      '',
+      '  PICKING',
+      '   The character row is the character',
+      '   picker; the tool row carries the',
+      '   sixteen colours. Click one.',
+      '',
+      '  COLOUR AND CHARACTERS',
+      '   CTRL and 1-8   The first eight colours',
+      '   C= and 1-8     The other eight colours',
+      '   CTRL and 9, 0  Reverse on and off',
+      '   C= and letter  A graphic character',
+      '   (C= is played by Alt on a PC)',
+      '',
+      '  THE INTERFACE',
+      '   F2   Hide it all, or bring it back',
+      '   F5   Open the menu   F6  Characters',
+      '   F7   The tool row    F8  Status line',
+      '',
+      '  THE REST',
+      '   F1 Help   F3 Undo   F4 Redo',
+      '   Escape    Leave the editor',
+      '',
+      '  Press Return to start drawing',
+    ];
+  }
+
   private async showHelp(): Promise<void> {
-    await notice(this.screen, 'Help',
-      'Arrows move. Return or Space draws.\n'
-      + 'CTRL+1..8 and C= +1..8 pick a colour,\n'
-      + 'CTRL+9 and CTRL+0 turn Reverse on and off,\n'
-      + 'C= and a letter picks a graphic.');
-  }
-
-  private async pickTool(): Promise<void> {
-    const index = await chooseFrom(this.screen, 'Tool', TOOLS.map((tool) => PETSCII_TOOL_LABELS[tool]));
-    if (index === null) return;
-    this.editor.setTool(TOOLS[index]);
-    this.editor.focus();
-  }
-
-  private async pickColour(): Promise<void> {
-    const index = await chooseFrom(this.screen, 'Colour', COLOUR_NAMES);
-    if (index === null) return;
-    this.editor.setBrush({ color: index });
-    this.editor.focus();
-  }
-
-  private async pickCharacter(): Promise<void> {
-    // Each row shows the glyph itself, drawn from the same marker the canvas
-    // paints with, so the caller picks what he can see.
-    const items = GRAPHIC_CODES.map((code) => `${String.fromCodePoint(0xe100 + code)}  ${code.toString(16).padStart(2, '0')}`);
-    const index = await chooseFrom(this.screen, 'Character', items);
-    if (index === null) return;
-    this.editor.setBrush({ screenCode: GRAPHIC_CODES[index] });
-    this.editor.focus();
+    await helpScreen(this.screen, this.helpLines());
   }
 
   private async clearScreen(): Promise<void> {
@@ -299,7 +275,6 @@ export class PetsciiStudioDoor {
     this.filename = null;
     this.target = 'own';
     this.unsaved = false;
-    this.refreshSidebar();
   }
 
   private async openOwn(): Promise<void> {
@@ -320,7 +295,7 @@ export class PetsciiStudioDoor {
     this.filename = names[index];
     this.target = 'own';
     this.unsaved = false;
-    this.refreshSidebar();
+    this.editor?.layout();
   }
 
   private async save(): Promise<void> {
@@ -328,7 +303,7 @@ export class PetsciiStudioDoor {
     if (this.target === 'board') { await this.writeToBoard(this.filename); return; }
     await saveOwnScreen(this.ctx, this.filename, this.editor.toSeq());
     this.unsaved = false;
-    this.refreshSidebar();
+    this.editor?.layout();
   }
 
   private async saveAs(): Promise<void> {
@@ -338,7 +313,7 @@ export class PetsciiStudioDoor {
     this.target = 'own';
     await saveOwnScreen(this.ctx, this.filename, this.editor.toSeq());
     this.unsaved = false;
-    this.refreshSidebar();
+    this.editor?.layout();
   }
 
   private async openBoard(): Promise<void> {
@@ -363,7 +338,7 @@ export class PetsciiStudioDoor {
     this.filename = path;
     this.target = 'board';
     this.unsaved = false;
-    this.refreshSidebar();
+    this.editor?.layout();
   }
 
   private async saveToBoard(): Promise<void> {
@@ -391,7 +366,7 @@ export class PetsciiStudioDoor {
     this.filename = path;
     this.target = 'board';
     this.unsaved = false;
-    this.refreshSidebar();
+    this.editor?.layout();
   }
 
   private async pickBoardDirectory(): Promise<string | null> {
@@ -417,8 +392,6 @@ export class PetsciiStudioDoor {
     try { (this.ctx as any).bbs?.disableMouseEvents?.(); } catch { /* leaving anyway */ }
     try { this.editor?.destroy(); } catch { /* leaving anyway */ }
     this.editor = null;
-    try { this.sidebar?.destroy(); } catch { /* leaving anyway */ }
-    this.sidebar = null;
     try { this.screen?.destroy(); } catch { /* leaving anyway */ }
   }
 }

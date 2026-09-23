@@ -38,6 +38,8 @@
  */
 
 import { Box } from './box';
+import { MenuBar, type MenuBarItem } from './menu-bar';
+import { activeTheme } from '../../theme/live.js';
 import type { ElementOptions } from '../core/types';
 import {
   blankSurface, cloneSurface, surfaceFromBytes, stamp, stampChar, colorize,
@@ -79,13 +81,106 @@ export interface PetsciiEditorOptions extends ElementOptions {
   tool?: PetsciiTool;
   /** The brush to start with. */
   brush?: PetsciiBrush;
+
+  /*
+   * THE CHROME, NAMED AS THE ANSI EDITOR NAMES IT.
+   *
+   * "the same layout as ansi edit but adapted for petscii and hotkeys to hide
+   * them ... all ui should be hideable" (the sysop, 2026-09-23). The four
+   * parts are the four that widget has, so a door that hosts both asks for
+   * them the same way.
+   *
+   * Left out, every one of them defaults to the WIDTH: a forty-column screen
+   * is a PETSCII screen exactly, so chrome there would cost the artist a row
+   * of his own picture and starts hidden. An eighty-column terminal has room
+   * beside the canvas and starts with everything showing.
+   */
+  showMenuBar?: boolean;
+  showToolbar?: boolean;
+  /**
+   * The tool, the pen and the reverse latch, as ONE ROW along the bottom.
+   *
+   * A column down the side is what the ANSI editor has, and at forty columns
+   * it cost the picture eight of them: a forty-cell row in a thirty-two-cell
+   * box WRAPPED, so every second line on the glass was the overflow of the
+   * one above - "every other line is black" (the sysop, 2026-09-23, with the
+   * screenshot). A row at the bottom costs one line instead of eight columns
+   * and leaves the art its full width: "it looks like the tools panel would
+   * fit better as one horizontal line at the bottom of the editor instead".
+   */
+  showTools?: boolean;
+  /** The old name for `showTools`, from when it was a column. */
+  showSidebar?: boolean;
+  showStatusBar?: boolean;
+
+  /** Menus of the host's own, appended to the bar (File > its own items). */
+  hostMenus?: MenuBarItem[];
+
+  /** Save the screen as it is. */
+  onSave?: () => void;
+  /** Save it under a new name. */
+  onSaveAs?: () => void;
+  /** Open one. */
+  onOpen?: () => void;
+  /** Leave the editor. */
+  onExit?: () => void;
+  /** Show the host's help page. */
+  onHelp?: () => void;
+
+  /**
+   * The key that hides the whole interface, F2 by default.
+   *
+   * The same option name and the same default the ANSI editor carries, so a
+   * door hosting both sets one key and gets one behaviour.
+   */
+  hideUIHotkey?: string;
 }
+
+/** Which part of the chrome a toggle is about. */
+export type PetsciiChrome = 'menuBar' | 'toolbar' | 'tools' | 'statusBar';
+
+/** Below this width the canvas IS the screen and chrome starts hidden. */
+const CHROME_FROM_WIDTH = 60;
+
+/**
+ * Wide enough to put the characters BESIDE the tools rather than under them.
+ *
+ * The thirty-eight graphics want a column each, and the tool row wants the
+ * sixteen colour swatches and a word - so about eighty columns before the two
+ * fit on one line.
+ */
+const DOCK_SIDE_BY_SIDE_WIDTH = 78;
+
+/** The colours, in VIC order, in full words. */
+export const PETSCII_COLOUR_NAMES = [
+  'Black', 'White', 'Red', 'Cyan', 'Purple', 'Green', 'Blue', 'Yellow',
+  'Orange', 'Brown', 'Light red', 'Dark grey', 'Grey', 'Light green',
+  'Light blue', 'Light grey',
+];
+
+/**
+ * The graphics the toolbar offers at a keystroke.
+ *
+ * Bank 1's own - screen codes `$40` and `$5B-$7F`. Letters and digits are
+ * typed rather than picked, so they are not here.
+ */
+export const PETSCII_TOOLBAR_CODES: number[] = [
+  0x40, ...Array.from({ length: 0x25 }, (_, i) => 0x5b + i),
+];
 
 /** How deep the undo stack goes. A surface is two kilobytes; a hundred is nothing. */
 const UNDO_DEPTH = 100;
 
-/** A filled circle - the studio's own opening brush. */
-const DEFAULT_SCREEN_CODE = 0x51;
+/**
+ * The brush a caller starts with: `$66`, the medium shade.
+ *
+ * NOT `$51`. That is the filled circle in the GRAPHICS bank and the letter Q
+ * in the one this board runs, so the studio opened with a brush that drew
+ * "Q" - which is what the sysop's first drawing came out as. Bank 1's
+ * graphics are `$40` and `$5B-$7F`, and nothing outside that range belongs in
+ * a default here.
+ */
+const DEFAULT_SCREEN_CODE = 0x66;
 
 /**
  * A glyph marker this board accepts: BANK 1 ONLY.
@@ -131,8 +226,31 @@ export class PetsciiEditor extends Box {
    */
   private viewTop = 0;
 
+  /** The art itself. Everything else on this widget is chrome around it. */
+  private canvas: any = null;
+  private menuBar: any = null;
+  private toolbar: any = null;
+  private toolsLine: any = null;
+  /** The frame the two pickers sit in, along the bottom. */
+  private dock: any = null;
+  private statusBar: any = null;
+  private hostMenus: MenuBarItem[] = [];
+  private hideUIHotkey = 'f2';
+  private hooks: {
+    onSave?: () => void; onSaveAs?: () => void; onOpen?: () => void;
+    onExit?: () => void; onHelp?: () => void;
+  } = {};
+  private chromeWanted: Record<PetsciiChrome, boolean> = {
+    menuBar: false, toolbar: false, tools: false, statusBar: false,
+  };
+
   constructor(options: PetsciiEditorOptions = {}) {
-    const { surface, readOnly, tool, brush, ...boxOptions } = options;
+    const {
+      surface, readOnly, tool, brush,
+      showMenuBar, showToolbar, showSidebar, showTools, showStatusBar, hostMenus, hideUIHotkey,
+      onSave, onSaveAs, onOpen, onExit, onHelp,
+      ...boxOptions
+    } = options;
 
     super({
       keys: true,
@@ -147,14 +265,29 @@ export class PetsciiEditor extends Box {
     this.readOnly = readOnly === true;
     this.tool = tool ?? 'draw';
     this.brush = brush ? { ...brush } : { screenCode: DEFAULT_SCREEN_CODE, color: 1, reverse: false };
+    this.hostMenus = hostMenus ?? [];
+    this.hideUIHotkey = hideUIHotkey ?? 'f2';
+    this.hooks = { onSave, onSaveAs, onOpen, onExit, onHelp };
+
+    // Wide enough for chrome, or a C64 screen where the art is the whole of
+    // it. Either way an explicit option wins.
+    const roomy = (this.width as number) >= CHROME_FROM_WIDTH;
+    this.chromeWanted = {
+      menuBar: showMenuBar ?? roomy,
+      toolbar: showToolbar ?? roomy,
+      tools: showTools ?? showSidebar ?? roomy,
+      statusBar: showStatusBar ?? roomy,
+    };
+
+    this.buildChrome();
 
     this.on('keypress', (ch: string, key: any) => this._onKeypress(ch, key));
     this.on('mousedown', (event: any) => this._onPointer(event, 'down'));
     this.on('mousemove', (event: any) => this._onPointer(event, 'move'));
     this.on('mouseup', (event: any) => this._onPointer(event, 'up'));
-    this.on('attach', () => this.repaint());
+    this.on('attach', () => this.layout());
 
-    this.repaint();
+    this.layout();
   }
 
   // ---- the screen being edited ----------------------------------------
@@ -173,11 +306,15 @@ export class PetsciiEditor extends Box {
 
   setTool(tool: PetsciiTool): void {
     this.tool = tool;
+    this.refreshChrome();
+    this.repaint();
     this.emit('tool', tool);
   }
 
   setBrush(brush: Partial<PetsciiBrush>): void {
     this.brush = { ...this.brush, ...brush };
+    this.refreshChrome();
+    this.repaint();
     this.emit('brush', this.brush);
   }
 
@@ -325,6 +462,376 @@ export class PetsciiEditor extends Box {
     return out;
   }
 
+  // ---- the chrome ------------------------------------------------------
+
+  /**
+   * THE SAME FOUR PARTS THE ANSI EDITOR HAS, and every one of them hideable.
+   *
+   * A menu bar across the top, a row of characters under it, a sidebar of
+   * tools and colours down the left, a status line along the bottom - and the
+   * art in what is left, which is where a PETSCII screen differs from an ANSI
+   * one: the picture is forty columns by twenty-five and does not stretch, so
+   * it is CENTRED in the room rather than filling it.
+   */
+  private buildChrome(): void {
+    this.destroyChrome();
+
+    /*
+     * THE BOARD'S COLOURS, not blessed's.
+     *
+     * Every box below used to be built with no style at all, so it drew in
+     * the widget defaults while the door around it used the caller's theme -
+     * "not correct theme colors" (the sysop, 2026-09-23). The SDK holds the
+     * theme the door set (`engines/ui/theme/live.ts`); the chrome reads it
+     * the same way the menu bar does.
+     *
+     * The ART is NOT themed and never will be. A screen drawn in red is red
+     * because the artist chose red.
+     */
+    const tokens = activeTheme().tokens;
+    const chromeStyle = { fg: tokens.ink, bg: tokens.ground };
+    const framed = {
+      border: { type: 'line' as const },
+      style: { ...chromeStyle, border: { fg: tokens.accent }, label: { fg: tokens.accent } },
+    };
+
+    if (this.chromeWanted.menuBar) {
+      this.menuBar = new MenuBar({
+        parent: this,
+        screen: this.screen as any,
+        items: this.menuItems(),
+      } as any);
+    }
+
+    /*
+     * THE DOCK: the tools and the characters, framed, along the bottom.
+     *
+     * "put the petscii chars at the bottom on the right side, dont let them
+     * float on black, frame them same for the tools" (the sysop, 2026-09-23).
+     * Glyphs loose on a black screen read as part of the picture - which is
+     * exactly what a caller is trying to look at - so both pickers sit inside
+     * one border at the foot of the editor.
+     *
+     * Side by side when the terminal is wide enough for the characters to
+     * have their own half, stacked when it is not: thirty-eight graphics do
+     * not fit beside anything in forty columns.
+     */
+    const wantsDock = this.chromeWanted.tools || this.chromeWanted.toolbar;
+    if (wantsDock) {
+      const sideBySide = (this.width as number) >= DOCK_SIDE_BY_SIDE_WIDTH
+        && this.chromeWanted.tools && this.chromeWanted.toolbar;
+      const rows = sideBySide || !(this.chromeWanted.tools && this.chromeWanted.toolbar) ? 1 : 2;
+
+      this.dock = new Box({
+        parent: this,
+        bottom: this.chromeWanted.statusBar ? 1 : 0,
+        left: 0, width: '100%', height: rows + 2,
+        tags: false,
+        label: ' Tools ',
+        ...framed,
+      } as any);
+
+      if (this.chromeWanted.tools) {
+        this.toolsLine = new Box({
+          parent: this.dock,
+          top: 0, left: 0,
+          width: sideBySide ? Math.floor(((this.width as number) - 2) / 2) : '100%-2',
+          height: 1,
+          tags: false, mouse: true, clickable: true,
+          style: chromeStyle,
+        } as any);
+        this.toolsLine.on('click', (event: any) => {
+          const vic = this.colourAtColumn(event.x - this.toolsLine.ileft);
+          if (vic !== null) this.setBrush({ color: vic });
+        });
+      }
+
+      if (this.chromeWanted.toolbar) {
+        const beside = sideBySide && this.toolsLine;
+        this.toolbar = new Box({
+          parent: this.dock,
+          top: beside ? 0 : (this.toolsLine ? 1 : 0),
+          left: beside ? (this.toolsLine.position.width as number) : 0,
+          width: beside
+            ? (this.width as number) - 2 - (this.toolsLine.position.width as number)
+            : '100%-2',
+          height: 1,
+          tags: false, mouse: true, clickable: true,
+          style: chromeStyle,
+        } as any);
+        this.toolbar.on('click', (event: any) => {
+          const code = PETSCII_TOOLBAR_CODES[event.x - this.toolbar.ileft];
+          if (code !== undefined) this.setBrush({ screenCode: code });
+        });
+      }
+    }
+
+    if (this.chromeWanted.statusBar) {
+      this.statusBar = new Box({
+        parent: this,
+        bottom: 0, left: 0, width: '100%', height: 1,
+        tags: false,
+        style: { fg: tokens.dim, bg: tokens.ground },
+      } as any);
+    }
+
+    /*
+     * THE ART, AND A LINE ROUND IT WHERE THERE IS ROOM.
+     *
+     * "the background and canvas have the same color so i dont see where the
+     * canvas ends" (the sysop, 2026-09-23). Both are black, and on this board
+     * they always will be - it is a black-background board and PETSCII has no
+     * per-cell background to shade the desk with. So the edge is drawn, in
+     * the box-drawing glyphs a C64 has (`borderCharsFor` gives the PETSCII
+     * set), rather than implied by a colour a C64 cannot show.
+     *
+     * Only when the editor is at least two columns and two rows wider than
+     * the picture. At exactly forty columns the art IS the glass and there is
+     * nowhere to put a line; the screen's own edge is the canvas's edge.
+     */
+    const room = this.roomForBorder();
+    this.canvas = new Box({
+      parent: this,
+      top: 0, left: 0,
+      width: this.surface.cols + (room ? 2 : 0),
+      height: this.surface.rows + (room ? 2 : 0),
+      tags: false,
+      ...(room ? { border: { type: 'line' }, style: { border: { fg: tokens.chrome } } } : {}),
+    } as any);
+  }
+
+  private destroyChrome(): void {
+    for (const part of [this.toolbar, this.toolsLine, this.dock, this.menuBar, this.statusBar, this.canvas]) {
+      try { part?.destroy(); } catch { /* going away anyway */ }
+    }
+    this.menuBar = null;
+    this.toolbar = null;
+    this.toolsLine = null;
+    this.dock = null;
+    this.statusBar = null;
+    this.canvas = null;
+  }
+
+  /**
+   * Is there room for a line around the picture?
+   *
+   * WIDTH only. A PETSCII screen is twenty-five rows and so is the terminal
+   * showing it, so a line above and below would never fit anywhere - asking
+   * for the height as well meant no border on any session at all, which is
+   * how this was first written and what the test caught. The rows the border
+   * costs come off the VIEWPORT instead: the picture scrolls inside its frame
+   * by a row, which it already does whenever chrome is up.
+   */
+  private roomForBorder(): boolean {
+    return (this.width as number) >= this.surface.cols + 2;
+  }
+
+  /** The first row the canvas may use: only the menu bar sits above it. */
+  private chromeTop(): number {
+    return this.menuBar ? 1 : 0;
+  }
+
+  /**
+   * Put the canvas where the chrome leaves room, centred in it.
+   *
+   * Centred rather than pinned, for the reason the ANSI editor learned:
+   * hiding the sidebar gives the canvas eight more columns of room, and where
+   * the picture sits in that room is arithmetic, not a constant.
+   */
+  layout(): void {
+    if (!this.canvas) return;
+    const top = this.chromeTop();
+    const left = 0;
+    const bottomRows = (this.dock ? (this.dock.position.height as number) : 0)
+      + (this.statusBar ? 1 : 0);
+    const roomWidth = Math.max(1, (this.width as number) - left);
+    const roomHeight = Math.max(1, (this.height as number) - top - bottomRows);
+
+    const frame = this.canvas.options?.border ? 2 : 0;
+    const width = Math.min(this.surface.cols + frame, roomWidth);
+    const height = Math.min(this.surface.rows + frame, roomHeight);
+
+    this.canvas.position.width = width;
+    this.canvas.position.height = height;
+    this.canvas.position.left = left + Math.max(0, Math.floor((roomWidth - width) / 2));
+    this.canvas.position.top = top + Math.max(0, Math.floor((roomHeight - height) / 2));
+
+    this.refreshChrome();
+    this.repaint();
+  }
+
+  /** Is this part of the chrome on the glass? */
+  chromeVisible(part: PetsciiChrome): boolean {
+    return this.chromeWanted[part];
+  }
+
+  /** Show or hide one part, and give the canvas the room back. */
+  setChromeVisible(part: PetsciiChrome, visible: boolean): void {
+    if (this.chromeWanted[part] === visible) return;
+    this.chromeWanted[part] = visible;
+    this.buildChrome();
+    this.layout();
+    this.emit('chrome', { ...this.chromeWanted });
+  }
+
+  toggleChrome(part: PetsciiChrome): void {
+    this.setChromeVisible(part, !this.chromeWanted[part]);
+  }
+
+  /**
+   * One key for the whole screen, and one for it back.
+   *
+   * If anything is showing, everything goes; if nothing is, everything
+   * returns. That is what a caller means by "hide the interface" - not four
+   * presses in the right order.
+   */
+  toggleAllChrome(): void {
+    const anyShowing = Object.values(this.chromeWanted).some(Boolean);
+    for (const part of Object.keys(this.chromeWanted) as PetsciiChrome[]) {
+      this.chromeWanted[part] = !anyShowing;
+    }
+    this.buildChrome();
+    this.layout();
+    this.emit('chrome', { ...this.chromeWanted });
+  }
+
+  /**
+   * OPEN THE MENU, which is not the same as showing the bar.
+   *
+   * A bar on the glass with no way into it is what the first cut shipped:
+   * F5 made it appear and nothing opened, so "no menu items worked" on a
+   * keyboard - and a telnet C64 has no mouse to click them with. `MenuBar`
+   * has `openFirst()` for precisely this; the host has to call it.
+   */
+  openMenu(): void {
+    if (!this.chromeWanted.menuBar) this.setChromeVisible('menuBar', true);
+    this.menuBar?.openFirst?.();
+  }
+
+  /**
+   * Run a menu item, then give the keyboard back to the picture.
+   *
+   * Without it the focus stays on the menu button the caller came from, and
+   * the next arrow key walks the menu instead of moving the cursor.
+   */
+  private fromMenu(action: () => void): () => void {
+    return () => {
+      action();
+      this.menuBar?.closeAll?.();
+      this.focus();
+      this.repaint();
+    };
+  }
+
+  /** The menu bar's own menus, plus whatever the host added. */
+  private menuItems(): MenuBarItem[] {
+    const file: MenuBarItem = {
+      label: 'File',
+      items: [
+        { label: 'Open', action: this.fromMenu(() => this.hooks.onOpen?.()) },
+        { label: 'Save', action: this.fromMenu(() => this.hooks.onSave?.()) },
+        { label: 'Save as', action: this.fromMenu(() => this.hooks.onSaveAs?.()) },
+        { label: '────────────', separator: true },
+        { label: 'Leave', action: this.fromMenu(() => this.hooks.onExit?.()) },
+      ],
+    };
+
+    const edit: MenuBarItem = {
+      label: 'Edit',
+      items: [
+        { label: 'Undo', action: this.fromMenu(() => this.undo()) },
+        { label: 'Redo', action: this.fromMenu(() => this.redo()) },
+        { label: '────────────', separator: true },
+        { label: 'Add line', action: this.fromMenu(() => this.addLine()) },
+        { label: 'Remove line', action: this.fromMenu(() => this.deleteLine()) },
+        { label: 'Clear screen', action: this.fromMenu(() => this.clear()) },
+      ],
+    };
+
+    const tools: MenuBarItem = {
+      label: 'Tools',
+      items: (Object.keys(PETSCII_TOOL_LABELS) as PetsciiTool[]).map((tool) => ({
+        label: PETSCII_TOOL_LABELS[tool],
+        action: this.fromMenu(() => this.setTool(tool)),
+      })),
+    };
+
+    const colour: MenuBarItem = {
+      label: 'Colour',
+      items: PETSCII_COLOUR_NAMES.map((name, vic) => ({
+        label: name,
+        action: this.fromMenu(() => this.setBrush({ color: vic })),
+      })),
+    };
+
+    const view: MenuBarItem = {
+      label: 'View',
+      items: [
+        { label: 'Hide the menu bar', action: this.fromMenu(() => this.setChromeVisible('menuBar', false)) },
+        { label: 'Toggle the character row', action: this.fromMenu(() => this.toggleChrome('toolbar')) },
+        { label: 'Toggle the tool line', action: this.fromMenu(() => this.toggleChrome('tools')) },
+        { label: 'Toggle the status line', action: this.fromMenu(() => this.toggleChrome('statusBar')) },
+        { label: '────────────', separator: true },
+        { label: 'Hide everything', action: this.fromMenu(() => this.toggleAllChrome()) },
+      ],
+    };
+
+    const help: MenuBarItem = {
+      label: 'Help',
+      items: [{ label: 'Keys', action: this.fromMenu(() => this.hooks.onHelp?.()) }],
+    };
+
+    return [file, edit, tools, colour, view, ...this.hostMenus, help];
+  }
+
+  /**
+   * The character row: the graphics themselves, the one in hand REVERSED.
+   *
+   * Reversed rather than bracketed, because a bracket would cost two columns
+   * and move every glyph after it - the caller would be pointing at a moving
+   * target.
+   */
+  private toolbarLine(): string {
+    const inHand = this.brush.screenCode & 0x7f;
+    return PETSCII_TOOLBAR_CODES
+      .map((code) => puaForScreenCode(code === inHand ? (code | 0x80) : code))
+      .join('');
+  }
+
+  /**
+   * The tool in hand, the sixteen colours, and the reverse latch.
+   *
+   * A swatch is a REVERSED SPACE, which is the only way a C64 fills a cell:
+   * the pen colours it, so the row really is the palette rather than a list
+   * of colour names.
+   */
+  private toolsText(): string {
+    const swatches = PETSCII_COLOUR_NAMES
+      .map((_name, vic) => colourMarker(vic) + puaForScreenCode(0xa0))
+      .join('');
+    const tool = PETSCII_TOOL_LABELS[this.tool];
+    const reverse = this.brush.reverse ? ' Reverse' : '';
+    return `${swatches}${colourMarker(this.brush.color & 0x0f)} ${tool}${reverse}`;
+  }
+
+  /** Which swatch is under this column of the tool row, if any. */
+  private colourAtColumn(column: number): number | null {
+    return column >= 0 && column < PETSCII_COLOUR_NAMES.length ? column : null;
+  }
+
+  /** Where the cursor is, and how much of the picture is on the glass. */
+  private statusLine(): string {
+    const rows = `${this.viewTop + 1}-${Math.min(this.surface.rows, this.viewTop + this.visibleRows())}`;
+    return ` ${this.cursor.x}, ${this.cursor.y}   rows ${rows} of ${this.surface.rows}`
+      .slice(0, (this.width as number) || 40);
+  }
+
+  private refreshChrome(): void {
+    this.toolbar?.setContent(this.toolbarLine());
+    this.toolsLine?.setContent(this.toolsText());
+    this.statusBar?.setContent(this.statusLine());
+  }
+
   /**
    * Repaint, and put the caller's own cursor under the brush.
    *
@@ -335,18 +842,24 @@ export class PetsciiEditor extends Box {
    * both where the brush is and what colour it will lay down.
    */
   repaint(): void {
+    if (!this.canvas) return;
     this.scrollToCursor();
-    this.setContent(this.renderRows().join('\n'));
+    this.canvas.setContent(this.renderRows().join('\n'));
     const screen: any = this.screen;
     if (screen?.setCursorTarget && this.focused) {
-      screen.setCursorTarget(this.ileft + this.cursor.x, this.itop + this.cursor.y - this.viewTop);
+      screen.setCursorTarget(
+        this.canvas.ileft + this.cursor.x,
+        this.canvas.itop + this.cursor.y - this.viewTop,
+      );
     }
     screen?.render?.();
   }
 
   /** How many rows of the art this terminal is showing. */
   private visibleRows(): number {
-    const height = this.iheight || this.surface.rows;
+    // `iheight`, not `position.height`: inside the border, which is where the
+    // art actually goes.
+    const height = (this.canvas?.iheight as number) || this.iheight || this.surface.rows;
     return Math.max(1, Math.min(this.surface.rows, height));
   }
 
@@ -363,6 +876,7 @@ export class PetsciiEditor extends Box {
     this.surface = conformToBoard(this.surface);
     this.emit('change', this.surface);
     this.emit('cursor', this.cursor);
+    this.refreshChrome();
     this.repaint();
   }
 
@@ -376,8 +890,9 @@ export class PetsciiEditor extends Box {
    */
   private _onPointer(event: any, phase: 'down' | 'move' | 'up'): boolean {
     if (this.readOnly) return false;
-    const x = event.x - this.ileft;
-    const y = event.y - this.itop + this.viewTop;
+    if (!this.canvas) return false;
+    const x = event.x - this.canvas.ileft;
+    const y = event.y - this.canvas.itop + this.viewTop;
     if (x < 0 || y < 0 || x >= this.surface.cols || y >= this.surface.rows) return false;
 
     if (this.tool === 'brush' && !this.region) {
@@ -441,6 +956,25 @@ export class PetsciiEditor extends Box {
         else this.repaint();
         return true;
       }
+    }
+
+    /*
+     * THE HOTKEYS THAT HIDE THINGS.
+     *
+     * F2 takes the whole interface away and brings it back - one key, because
+     * that is what "hide the interface" means to somebody drawing. The four
+     * parts have a key each after it, in the order they sit on the screen.
+     * They are F-keys because a C64 keyboard HAS eight of them and has no
+     * CTRL+letter at all.
+     */
+    if (key?.name === this.hideUIHotkey) { this.toggleAllChrome(); return true; }
+
+    switch (key?.name) {
+      case 'f5': this.openMenu(); return true;
+      case 'f6': this.toggleChrome('toolbar'); return true;
+      case 'f7': this.toggleChrome('tools'); return true;
+      case 'f8': this.toggleChrome('statusBar'); return true;
+      default: break;
     }
 
     switch (key?.name) {

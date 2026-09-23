@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.promptText = promptText;
 exports.chooseFrom = chooseFrom;
 exports.notice = notice;
+exports.helpScreen = helpScreen;
 exports.confirm = confirm;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const door_theme_1 = require("./door-theme");
@@ -117,6 +118,40 @@ function notice(screen, title, message) {
             resolve();
         };
         box.key(['escape', 'enter', 'space'], finish);
+        box.setFront();
+        box.focus();
+        screen.render();
+    });
+}
+/**
+ * A FULL PAGE OF HELP, which is the first thing this door shows.
+ *
+ * "petscii edit needs a help screen when it starts" (the sysop, 2026-09-23).
+ * Nothing on the canvas says which key draws a corner or picks a colour, and
+ * the answer is a C64's own chords rather than anything a caller can guess
+ * from an empty screen - so the door opens by saying so, once, and F1 says it
+ * again whenever it is asked.
+ *
+ * It takes the whole glass on purpose: at forty columns a bordered box inside
+ * a box would leave thirty-four columns for two columns of key names.
+ */
+function helpScreen(screen, lines) {
+    screen.dialogOpen = true;
+    return new Promise((resolve) => {
+        const box = new blessed_1.Box({
+            parent: screen,
+            top: 0, left: 0, width: screen.width, height: screen.height,
+            content: lines.join('\n'),
+            tags: false,
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
+        });
+        const finish = () => {
+            box.destroy();
+            screen.dialogOpen = false;
+            screen.render();
+            resolve();
+        };
+        box.key(['escape', 'enter', 'space', 'f1'], finish);
         box.setFront();
         box.focus();
         screen.render();

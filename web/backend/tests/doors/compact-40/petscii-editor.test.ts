@@ -52,6 +52,17 @@ function context(width: number, height: number, accessLevel = 100, wire: string[
   } as any;
 }
 
+/**
+ * The door opens ON the help page, which is what the sysop asked for. A test
+ * that wants the canvas has to put it away first, the way a caller does.
+ */
+async function dismissHelp(door: any): Promise<void> {
+  // The way blessed delivers a key: the focused element gets `keypress <name>`,
+  // which is what `Element.key(['enter'], ...)` listens for.
+  door.screen.getFocused()?.emit('keypress enter', '\r', { name: 'enter' });
+  await new Promise((r) => setTimeout(r, 10));
+}
+
 async function openedAt(width: number, height: number, wire: string[] = []): Promise<any> {
   const door: any = new PetsciiStudioDoor();
   door.setContext(context(width, height, 100, wire));
@@ -70,6 +81,11 @@ describe('the PETSCII studio at forty columns', () => {
     door = await openedAt(40, 25);
 
     expect(coords(door.editor)).toEqual({ xi: 0, xl: 40, yi: 0, yl: 25 });
+    // And every part of the interface starts hidden, because on a C64 the
+    // screen IS the picture and a menu bar costs a row of it.
+    for (const part of ['menuBar', 'toolbar', 'tools', 'statusBar']) {
+      expect(door.editor.chromeVisible(part)).toBe(false);
+    }
   });
 
   it('paints nothing off the glass', async () => {
@@ -85,7 +101,7 @@ describe('the PETSCII studio at forty columns', () => {
 
   it('keeps a requester inside the glass too', async () => {
     door = await openedAt(40, 25);
-    const opening = door.pickColour();          // F3, the longest list of the four
+    const opening = door.showHelp();            // the tallest page the door has
     await new Promise((r) => setTimeout(r, 10));
 
     for (const element of elements(door.screen)) {
@@ -109,6 +125,7 @@ describe('the PETSCII studio at forty columns', () => {
      */
     const wire: string[] = [];
     door = await openedAt(40, 25, wire);
+    await dismissHelp(door);
     wire.length = 0;
 
     door.editor.setBrush({ screenCode: 0x51, color: 2, reverse: false });
@@ -119,10 +136,15 @@ describe('the PETSCII studio at forty columns', () => {
     expect(bytes).toBeLessThan(200);
   });
 
-  it('carries no permanent chrome', async () => {
+  it('brings the interface back on a keystroke, and takes it away again', async () => {
     door = await openedAt(40, 25);
 
-    expect(door.sidebar).toBeNull();
+    door.editor.toggleAllChrome();
+    expect(door.editor.chromeVisible('menuBar')).toBe(true);
+    expect(door.editor.chromeVisible('statusBar')).toBe(true);
+
+    door.editor.toggleAllChrome();
+    expect(door.editor.chromeVisible('menuBar')).toBe(false);
   });
 });
 
@@ -131,12 +153,18 @@ describe('the PETSCII studio at eighty columns', () => {
 
   afterEach(() => { try { door?.destroy(); } catch { /* leaving anyway */ } });
 
-  it('keeps the art forty columns wide and puts the tools beside it', async () => {
+  it('shows the whole interface, with the art still forty columns', async () => {
     door = await openedAt(80, 25);
 
-    expect(coords(door.editor)!.xl).toBe(40);
-    expect(door.sidebar).not.toBeNull();
-    expect(coords(door.sidebar)!.xi).toBeGreaterThanOrEqual(40);
-    expect(coords(door.sidebar)!.xl).toBeLessThanOrEqual(80);
+    for (const part of ['menuBar', 'toolbar', 'tools', 'statusBar']) {
+      expect(door.editor.chromeVisible(part)).toBe(true);
+    }
+    // The canvas is the widest child: forty columns of art, plus the line
+    // round it where the terminal has room for one.
+    const canvas = door.editor.children
+      .filter((child: any) => (child.position.width as number) >= 40)
+      .sort((a: any, b: any) => (b.position.width as number) - (a.position.width as number))[0];
+    expect(canvas).toBeDefined();
+    expect(coords(canvas)!.xl).toBeLessThanOrEqual(80);
   });
 });

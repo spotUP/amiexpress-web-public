@@ -66,21 +66,29 @@ export async function theCanvasIsTheWholeGlassAtForty(): Promise<void> {
   const door = await started({ width: 40, height: 25 }, recorded);
   try {
     const position = door.editor.position;
-    assert.strictEqual(position.width, 40, 'a PETSCII screen is forty columns');
-    assert.strictEqual(position.height, 25, 'and twenty-five rows');
-    assert.strictEqual((door as any).sidebar, null, 'no room for chrome beside it on a C64');
+    assert.strictEqual(position.width, 40, 'the editor takes the whole screen');
+    assert.strictEqual(position.height, 25, 'all twenty-five rows of it');
+    // ...and on a C64 that screen IS the picture, so none of the four parts
+    // of the interface is up: they would each cost a row or a column of art.
+    for (const part of ['menuBar', 'toolbar', 'tools', 'statusBar']) {
+      assert.strictEqual(door.editor.chromeVisible(part), false,
+        `${part} must start hidden at forty columns`);
+    }
   } finally {
     door.destroy();
   }
 }
 
-export async function aWideTerminalGetsTheSidebar(): Promise<void> {
+export async function aWideTerminalShowsTheWholeInterface(): Promise<void> {
   const recorded: Recorded = { mouseEnabled: 0 };
   const door = await started({ width: 80, height: 25 }, recorded);
   try {
-    assert.ok((door as any).sidebar, 'eighty columns have room for the tool and the pen');
-    assert.strictEqual(door.editor.position.width, 40,
-      'the art stays forty columns wide however wide the terminal is');
+    for (const part of ['menuBar', 'toolbar', 'tools', 'statusBar']) {
+      assert.strictEqual(door.editor.chromeVisible(part), true,
+        `${part} belongs on an eighty-column terminal`);
+    }
+    assert.strictEqual(door.editor.position.width, 80,
+      'the editor takes the screen; the ART inside it stays forty columns');
   } finally {
     door.destroy();
   }
