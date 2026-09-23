@@ -18,9 +18,12 @@ import { ftpCallersOnline } from '../../ftp/ftp-presence';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { headingIndent, isNarrow } from '../../utils/table-format.util';
+import { sessionColumns } from '../../utils/door-min-columns.util';
+import { wMenuPage, wMenuPrompt, wMenuPageStep } from './w-menu-pager';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
+import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 
@@ -262,7 +265,70 @@ const MODEM_OPTIONS = [
   { bps: 56000, label: '56 kbps' },
 ];
 
+/**
+ * The menu, on the screen the caller actually has.
+ *
+ * Eighty columns paints as it always did. A C64 has 25 rows and NO
+ * SCROLLBACK - "scrollback doesnt work in petscii mode so i cant see all
+ * options in w" (the sysop, 2026-09-23) - and the menu is 28 rows before
+ * five of them wrap, so it is squeezed to the width and handed out a
+ * screenful at a time (`w-menu-pager.ts`). The caller still types the number
+ * he wants from any page.
+ */
 function _displayWCommandMenu(socket: any, session: BBSSession): void {
+  const columns = sessionColumns(session);
+  if (!isNarrow(session)) {
+    _paintWCommandMenu(socket, session);
+    return;
+  }
+
+  const rows = _collectWCommandMenu(socket, session);
+  const height = Math.max(6, (session.screenHeight || 25));
+  // One row for the prompt, one for the line the caller types on.
+  const page = wMenuPage(rows, columns, height - 2, (session as any).wMenuPage || 1);
+  (session as any).wMenuPage = page.page;
+
+  emitText(socket, page.rows.join('\r\n'));
+  emitText(socket, '\r\n');
+  emitText(socket, wMenuPrompt(page));
+}
+
+/**
+ * The menu's rows, as they would be painted on an eighty-column screen.
+ *
+ * Collected rather than re-derived: the menu is built by two hundred and
+ * forty `emitText` calls, and a second renderer for the narrow case would be
+ * a second source of truth for every row and every value in it. The collector
+ * is a prototype proxy carrying a WIDE session, so the buffer does not wrap
+ * what the pager is about to squeeze.
+ */
+function _collectWCommandMenu(socket: any, session: BBSSession): string[] {
+  const captured: string[] = [];
+  const collector = Object.create(socket);
+  // ITS OWN ID, or it shares the caller's output buffer: `getAnsiBuffer` keys
+  // by `socket.id`, and the first object to ask owns the buffer - so a shared
+  // id would send the page this function is collecting FOR into the
+  // collector instead of to the caller.
+  collector.id = `${socket.id}:w-menu`;
+  collector.session = Object.create(session);
+  collector.session.screenWidth = 80;
+  collector.session.petsciiMode = false;
+  collector.session.texttvMode = false;
+  collector.emit = (event: string, data: unknown) => {
+    if (event === 'ansi-output' && typeof data === 'string') captured.push(data);
+    return true;
+  };
+  _paintWCommandMenu(collector, session);
+  flushOutput(collector);
+  releaseAnsiBuffer(collector.id);
+  // The prompt is the pager's to write, so the trailing row goes.
+  const rows = captured.join('').split('\r\n');
+  while (rows.length && rows[rows.length - 1].trim() === '') rows.pop();
+  if (rows.length && rows[rows.length - 1].includes('Which to change')) rows.pop();
+  return rows;
+}
+
+function _paintWCommandMenu(socket: any, session: BBSSession): void {
   const currentUser = session.user!;
   const modemLabel = (() => {
     const bps = session.modemBps || currentUser.baud || 0;
@@ -606,6 +672,8 @@ console.log('[ENV] Stats');
   session.queuedScreenCommands = [];
   session.pendingScreenCommand = undefined;
   session.screenCommandResolver = null;
+  // A fresh `W` opens at the top, whatever page the last visit ended on.
+  (session as any).wMenuPage = 1;
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -671,6 +739,15 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     const { displayMainMenu } = require('../command-handler/menu');
     await displayMainMenu(socket, session, false);
+    return;
+  }
+
+  // A page step is not an option: it is how a caller on a screen that does
+  // not scroll reaches the rows the first screenful could not hold.
+  const step = wMenuPageStep(trimmed);
+  if (step !== null) {
+    (session as any).wMenuPage = Math.max(1, ((session as any).wMenuPage || 1) + step);
+    _displayWCommandMenu(socket, session);
     return;
   }
 
