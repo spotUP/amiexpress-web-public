@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef,
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
-import { keyEventToPetscii, pastedTextToPetscii } from './keymap';
+import { controlColourToPetscii, keyEventToPetscii, pastedTextToPetscii } from './keymap';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 
 export interface PetsciiCanvasProps {
@@ -601,8 +601,15 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
      * keymap does not know is handed back too, so a browser shortcut this
      * board has no use for still works.
      */
-    if (e.ctrlKey || e.metaKey) return;
-    const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish, e.code, e.altKey);
+    /*
+     * CTRL AND A DIGIT IS A COLOUR, which is where a C64 keeps its first
+     * eight. Every other Ctrl chord still goes to the browser: this canvas
+     * has no use for them, and Ctrl+C is the board's abort key, handled
+     * above.
+     */
+    if (e.metaKey) return;
+    if (e.ctrlKey && controlColourToPetscii(e.code) === null) return;
+    const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish, e.code, e.altKey, e.ctrlKey);
     if (bytes) {
       e.preventDefault();
       consumed(e);

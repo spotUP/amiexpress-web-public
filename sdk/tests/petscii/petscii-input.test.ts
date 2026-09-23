@@ -28,7 +28,18 @@ describe('petsciiInputToAscii', () => {
      * not leave the operator chat. It is asserted on its own below; a byte the
      * board now acts on does not belong in a list of bytes with no meaning.
      */
-    expect(petsciiInputToAscii([0x0A, 0x93, 0x05, 0x12])).toBe('');
+    /*
+     * NOR IS 0x05, NOR 0x12. A caller can pick a colour and turn reverse on
+     * now - "we want full petscii input <3" (the sysop, 2026-09-22) - so the
+     * pen becomes the board's own marker and RVS becomes a latch over the
+     * cells after it. Both are asserted where they belong, in
+     * `a-c64-caller-can-type-a-graphic.test.ts` and
+     * `a-colour-a-caller-picked-reaches-every-terminal.test.ts`.
+     *
+     * What is left here is what genuinely has no input meaning: a line feed
+     * a caller cannot type, and a screen clear the board owns.
+     */
+    expect(petsciiInputToAscii([0x0A, 0x93])).toBe('');
   });
   it('RUN/STOP is passed through as ETX, so a PETSCII caller can abort', () => {
     expect(petsciiInputToAscii([0x03])).toBe('\x03');

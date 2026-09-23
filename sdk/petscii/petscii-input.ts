@@ -13,7 +13,8 @@
  * convertPetsciiInputToAscii, which disagreed with the web keymap.
  */
 import { printablePetsciiToScreenCode } from './screen-codes';
-import { PUA_BANK1 } from './pua';
+import { PUA_BANK1, colourMarker } from './pua';
+import { PETSCII_COLOR_TO_VIC } from './c64-palette';
 
 const CONTROL_KEYS: { [byte: number]: string } = {
   0x0D: '\r', 0x8D: '\r',
@@ -67,9 +68,19 @@ export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): 
     if (b >= 0xC1 && b <= 0xDA) { out += String.fromCharCode(b - 0x80); continue; } // shifted -> A-Z
     if ((b >= 0x20 && b <= 0x40) || (b >= 0x5B && b <= 0x5F) || (b >= 0x61 && b <= 0x7A)) { out += String.fromCharCode(b); continue; }
     if (isGraphicsByte(b)) { out += graphicMarker(b, reverse); continue; }
-    // LF, CLR, colours, every other control byte: no input meaning YET -
-    // colour is its own phase, and it needs a form that survives a chat
-    // message, where ESC is stripped.
+    /*
+     * THE PEN. A caller pressing CTRL+1 on real hardware sends `$90`, and
+     * it means the same thing as a chord on the web canvas or a colour a
+     * caller picks on an eighty-column terminal: the ink changes from here
+     * on. It is carried as the board's own marker rather than as SGR,
+     * because a chat message has every ESC stripped out of it before it is
+     * stored - so a form with an ESC in it could not be the one thing a
+     * message and a chat line both carry.
+     */
+    const vic = PETSCII_COLOR_TO_VIC[b];
+    if (vic !== undefined) { out += colourMarker(vic); continue; }
+    // LF, CLR, background, charset: no input meaning. Background is not an
+    // omission - the board is black-background board-wide.
   }
   return out;
 }

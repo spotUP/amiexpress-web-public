@@ -333,15 +333,19 @@ function isTypableAscii(data: string): boolean {
 }
 
 /**
- * A PETSCII cell a caller drew, carried as its bank-1 marker.
+ * A PETSCII cell a caller drew, or the pen he drew it with.
  *
  * Bank 0 is refused: the board runs one charset board-wide
  * (`sdk/petscii/board-rules.ts`), and a bank-0 glyph makes the transducer
  * emit `$8E`, which reflows every letter already on the caller's screen.
+ * The pen markers (`U+E200`+) are accepted for the same reason the glyphs
+ * are - they are what the caller typed, and a body is where they belong.
  */
 function isPetsciiGlyph(data: string): boolean {
   const code = data.codePointAt(0) ?? 0;
-  return code >= 0xe100 && code <= 0xe1ff;
+  const glyph = code >= 0xe100 && code <= 0xe1ff;
+  const pen = code >= 0xe200 && code <= 0xe20f;
+  return glyph || pen;
 }
 
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {

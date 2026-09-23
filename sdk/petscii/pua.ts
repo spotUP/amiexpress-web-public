@@ -24,6 +24,7 @@
  * changing shape on the way out.
  */
 import { SCREENCODE_TO_UNICODE } from './screencode-unicode';
+import { vicToSgrForeground } from './c64-palette';
 
 /** The first PetMe64 codepoint of each bank. */
 export const PUA_BANK0 = 0xe000;
@@ -31,6 +32,32 @@ export const PUA_BANK1 = 0xe100;
 
 /** One past the last PetMe64 codepoint. */
 const PUA_END = 0xe200;
+
+/**
+ * THE PEN, CARRIED THE SAME WAY THE GLYPHS ARE.
+ *
+ * `U+E200 + vic`, one codepoint per VIC colour. It is not SGR, and that is
+ * the whole point: a chat message has every ESC stripped out of it before it
+ * is stored (`group-chat.handler.ts`, and that guard stays - chat is
+ * broadcast into other callers' terminals), so a form with an ESC in it
+ * cannot be the one thing a message and a chat line both carry.
+ *
+ * Sixteen of them, because a C64 has sixteen. BACKGROUND is not here and
+ * will not be: the board is black-background board-wide.
+ */
+export const PUA_COLOUR = 0xe200;
+const PUA_COLOUR_END = 0xe210;
+
+/** The marker that sets the pen to a VIC colour. */
+export function colourMarker(vic: number): string {
+  return String.fromCodePoint(PUA_COLOUR + (vic & 0x0f));
+}
+
+/** The VIC colour this codepoint sets, or null. */
+export function colourOfMarker(code: number): number | null {
+  if (code < PUA_COLOUR || code >= PUA_COLOUR_END) return null;
+  return code - PUA_COLOUR;
+}
 
 /** Is this codepoint a PETSCII screen code carried in a string? */
 export function isPuaScreenCode(code: number): boolean {
@@ -67,14 +94,32 @@ export function screenCodeGlyph(code: number): { glyph: string; reverse: boolean
  * Text with no marker in it comes back IDENTICAL - the same string object -
  * so this is safe to call on everything the board emits.
  */
-export function puaToUnicode(text: string): string {
-  if (!hasPuaScreenCode(text)) return text;
+export function puaToUnicode(text: string, options: { glyphs?: boolean } = {}): string {
+  const glyphs = options.glyphs !== false;
+  if (!hasPuaMarker(text)) return text;
 
   let out = '';
   let reversed = false;
   for (const ch of text) {
     const code = ch.codePointAt(0)!;
-    const cell = screenCodeGlyph(code);
+
+    /*
+     * The pen, for EVERY caller - including a C64's.
+     *
+     * A PETSCII session keeps its glyph markers, because its own transducer
+     * draws them better than any fold could. Colour is the other way round:
+     * the transducer already turns SGR into the PETSCII colour byte, so
+     * spelling the pen as SGR here means one path instead of two, and an
+     * eighty-column reader gets the same colour for free.
+     */
+    const pen = colourOfMarker(code);
+    if (pen !== null) {
+      if (reversed) { out += '\x1b[27m'; reversed = false; }
+      out += vicToSgrForeground(pen);
+      continue;
+    }
+
+    const cell = glyphs ? screenCodeGlyph(code) : null;
     if (!cell) {
       if (reversed) {
         out += '\x1b[27m';
@@ -93,11 +138,20 @@ export function puaToUnicode(text: string): string {
   return out;
 }
 
-/** Does this text carry any PETSCII marker? Cheap enough to ask of every line. */
+/** Does this text carry a PETSCII GLYPH marker? */
 export function hasPuaScreenCode(text: string): boolean {
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     if (code >= PUA_BANK0 && code < PUA_END) return true;
+  }
+  return false;
+}
+
+/** Does this text carry any marker at all - a glyph or a pen? */
+export function hasPuaMarker(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= PUA_BANK0 && code < PUA_COLOUR_END) return true;
   }
   return false;
 }

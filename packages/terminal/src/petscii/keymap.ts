@@ -61,6 +61,48 @@ const REVERSE_KEYS: { [code: string]: number } = {
 };
 
 /**
+ * THE COLOUR KEYS, WHERE A C64 KEEPS THEM.
+ *
+ * On real hardware CTRL and a digit gives the first eight colours and C= and
+ * a digit gives the other eight, and this board asks the same two chords of
+ * every terminal it serves - "let ansi users type colors the same way and it
+ * gets translated to the petscii users" (the sysop, 2026-09-22).
+ *
+ * The values are the PETSCII colour control bytes, so a chord typed in a
+ * browser and a key pressed on a real C64 arrive as the same byte and are
+ * decoded in one place.
+ *
+ * BACKGROUND is deliberately absent. The board is black-background
+ * board-wide (`sdk/petscii/board-rules.ts`).
+ */
+const CONTROL_COLOUR_KEYS: { [code: string]: number } = {
+  Digit1: 0x90, // black
+  Digit2: 0x05, // white
+  Digit3: 0x1C, // red
+  Digit4: 0x9F, // cyan
+  Digit5: 0x9C, // purple
+  Digit6: 0x1E, // green
+  Digit7: 0x1F, // blue
+  Digit8: 0x9E, // yellow
+};
+
+const COMMODORE_COLOUR_KEYS: { [code: string]: number } = {
+  Digit1: 0x81, // orange
+  Digit2: 0x95, // brown
+  Digit3: 0x96, // light red
+  Digit4: 0x97, // dark grey
+  Digit5: 0x98, // grey
+  Digit6: 0x99, // light green
+  Digit7: 0x9A, // light blue
+  Digit8: 0x9B, // light grey
+};
+
+/** The colour CTRL and this physical key asks for, or null. */
+export function controlColourToPetscii(code: string): number | null {
+  return code in CONTROL_COLOUR_KEYS ? CONTROL_COLOUR_KEYS[code] : null;
+}
+
+/**
  * The byte the Commodore key sends for this physical key, or null.
  *
  * Exported so the canvas can ask whether a chord is the board's before it
@@ -68,6 +110,7 @@ const REVERSE_KEYS: { [code: string]: number } = {
  */
 export function commodoreKeyToPetscii(code: string): number | null {
   if (code in COMMODORE_KEYS) return COMMODORE_KEYS[code];
+  if (code in COMMODORE_COLOUR_KEYS) return COMMODORE_COLOUR_KEYS[code];
   if (code in REVERSE_KEYS) return REVERSE_KEYS[code];
   return null;
 }
@@ -115,6 +158,7 @@ export function keyEventToPetscii(
   swedish = false,
   code?: string,
   altKey = false,
+  ctrlKey = false,
 ): number[] | null {
   /*
    * The Commodore key first, resolved through `code`: on a Mac the browser
@@ -124,6 +168,10 @@ export function keyEventToPetscii(
   if (altKey && code) {
     const graphic = commodoreKeyToPetscii(code);
     return graphic === null ? null : [graphic];
+  }
+  if (ctrlKey && code) {
+    const colour = controlColourToPetscii(code);
+    return colour === null ? null : [colour];
   }
   // A Swedish caller's own letters, where a Swedish C64 keeps them. Off by
   // default: in an ordinary session those bytes are [, pound and ].

@@ -270,8 +270,13 @@ export function emitText(socket: Socket, text: string, immediate: boolean = fals
    * BEFORE the width fold. The replacements can be astral (`U+1FBxx`), and
    * wrapping counts UTF-16 units - fold first and the wrap measures the
    * glyph the caller will actually see.
+   *
+   * THE PEN IS FOLDED FOR EVERYONE, a C64 included: the transducer already
+   * turns SGR into the PETSCII colour byte, so one path serves both and an
+   * eighty-column reader gets the same colour for free. Only the GLYPHS are
+   * held back for a PETSCII caller, whose own transducer draws them exactly.
    */
-  const readable = sessionWantsPetscii(session) ? coloured : puaToUnicode(coloured);
+  const readable = puaToUnicode(coloured, { glyphs: !sessionWantsPetscii(session) });
 
   buffer.append(foldColoursForBoard(wrapForSession(readable, session)));
 

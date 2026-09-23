@@ -50,4 +50,4 @@ export { LATIN1_TO_PETSCII_FOLD, UNICODE_TO_PETSCII } from './unicode-to-petscii
 export { petsciiInputToAscii } from './petscii-input';
 export { printableLength, wrapLineToWidth } from './wrap';
 export { SCREENCODE_TO_UNICODE } from './screencode-unicode';
-export { puaToUnicode, hasPuaScreenCode, screenCodeGlyph, puaForScreenCode, isPuaScreenCode, PUA_BANK0, PUA_BANK1 } from './pua';
+export { puaToUnicode, hasPuaScreenCode, hasPuaMarker, colourMarker, colourOfMarker, PUA_COLOUR, screenCodeGlyph, puaForScreenCode, isPuaScreenCode, PUA_BANK0, PUA_BANK1 } from './pua';
