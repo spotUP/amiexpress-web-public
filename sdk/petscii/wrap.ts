@@ -9,10 +9,25 @@
  * imports these two.
  */
 
-const ANSI_TOKEN_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+/*
+ * The two things that carry no column: an escape sequence, and a pen a caller
+ * picked (`U+E200 + vic`, `sdk/petscii/pua.ts`). The pen belongs here because
+ * it is the ESC-FREE spelling of the same thing - chat strips every ESC out
+ * of a message, so authored colour cannot be an escape - and a wrap that
+ * counted one wrapped a column early on every line a caller had coloured.
+ */
+const ZERO_WIDTH_RE = /\x1b\[[0-9;?]*[A-Za-z]|[\uE200-\uE20F]/g;
+const ZERO_WIDTH_SPLIT_RE = /(\x1b\[[0-9;?]*[A-Za-z]|[\uE200-\uE20F])/;
+
+function isZeroWidth(token: string): boolean {
+  if (token.startsWith('\x1b')) return true;
+  if (token.length !== 1) return false;
+  const code = token.charCodeAt(0);
+  return code >= 0xe200 && code <= 0xe20f;
+}
 
 export function printableLength(line: string): number {
-  return line.replace(ANSI_TOKEN_RE, '').length;
+  return line.replace(ZERO_WIDTH_RE, '').length;
 }
 
 /**
@@ -23,7 +38,7 @@ export function printableLength(line: string): number {
 export function wrapLineToWidth(line: string, width: number): string[] {
   if (printableLength(line) <= width) return [line];
 
-  const tokens = line.split(/(\x1b\[[0-9;?]*[A-Za-z])/);
+  const tokens = line.split(ZERO_WIDTH_SPLIT_RE);
   const out: string[] = [];
   let current = '';
   let currentLen = 0;
@@ -31,7 +46,7 @@ export function wrapLineToWidth(line: string, width: number): string[] {
 
   for (const token of tokens) {
     if (!token) continue;
-    if (token.startsWith('\x1b')) { current += token; continue; }
+    if (isZeroWidth(token)) { current += token; continue; }
     for (const piece of token.split(/(\s+)/)) {
       if (!piece) continue;
       if (currentLen + piece.length <= width) { current += piece; currentLen += piece.length; continue; }

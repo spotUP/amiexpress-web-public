@@ -103,6 +103,20 @@ export function controlColourToPetscii(code: string): number | null {
 }
 
 /**
+ * EVERY CHORD CTRL OWNS on a C64 keyboard: the eight colours, and REVERSE on
+ * and off at 9 and 0.
+ *
+ * One function, because the canvas asks the same question before it decides
+ * whether to keep a keystroke or let the browser have it. While reverse was
+ * missing here the canvas let CTRL+9 through and the browser typed a `9`
+ * ("ctrl+0/9 just prints 0 or 9", the sysop, 2026-09-23).
+ */
+export function controlChordToPetscii(code: string): number | null {
+  if (code in REVERSE_KEYS) return REVERSE_KEYS[code];
+  return controlColourToPetscii(code);
+}
+
+/**
  * The byte the Commodore key sends for this physical key, or null.
  *
  * Exported so the canvas can ask whether a chord is the board's before it
@@ -170,8 +184,14 @@ export function keyEventToPetscii(
     return graphic === null ? null : [graphic];
   }
   if (ctrlKey && code) {
-    const colour = controlColourToPetscii(code);
-    return colour === null ? null : [colour];
+    /*
+     * CTRL+9 and CTRL+0 are REVERSE ON and OFF on real hardware, beside the
+     * eight colour chords and reached the same way. They were only wired to
+     * the Commodore key, so the browser kept the keystroke and printed the
+     * digit instead ("ctrl+0/9 just prints 0 or 9", the sysop, 2026-09-23).
+     */
+    const chord = controlChordToPetscii(code);
+    return chord === null ? null : [chord];
   }
   // A Swedish caller's own letters, where a Swedish C64 keeps them. Off by
   // default: in an ordinary session those bytes are [, pound and ].

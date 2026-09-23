@@ -4,7 +4,7 @@
 
 import { Element } from './element';
 import { Program } from './program';
-import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi, convert } from './colors';
+import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi, convert, match } from './colors';
 import { KeyBindings } from './keybindings';
 import { ResponsiveLayoutManager, type ResponsiveConfig } from './responsive-layout';
 import { borderCharsFor } from './border-chars';
@@ -1400,6 +1400,22 @@ export class Screen extends Element {
         bg = code - 100 + 8; // bright background
       } else if (code === 49) {
         bg = base.bg;
+      } else if (code === 38 && codes[i + 1] === 2 && codes.length > i + 4) {
+        /*
+         * TRUECOLOR IN CONTENT, REDUCED THE WAY A CELL CAN HOLD IT.
+         *
+         * A cell keeps a palette index, so `ESC[38;2;r;g;bm` is matched to the
+         * nearest one. Without this branch the 38 fell through, the 2 and the
+         * three components were read as separate SGR codes, and a red channel
+         * of 31 turned the cell RED by accident. Every door that writes
+         * truecolor into a widget - and every authored pen, which folds to
+         * truecolor - lost its colour here.
+         */
+        fg = match(codes[i + 2], codes[i + 3], codes[i + 4]);
+        i += 4;
+      } else if (code === 48 && codes[i + 1] === 2 && codes.length > i + 4) {
+        bg = match(codes[i + 2], codes[i + 3], codes[i + 4]);
+        i += 4;
       } else if (code === 38 && codes[i + 1] === 5 && typeof codes[i + 2] === 'number') {
         fg = Math.max(0, Math.min(255, codes[i + 2]));
         i += 2;

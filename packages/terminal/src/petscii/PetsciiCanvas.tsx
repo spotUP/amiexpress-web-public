@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef,
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
-import { controlColourToPetscii, keyEventToPetscii, pastedTextToPetscii } from './keymap';
+import { controlChordToPetscii, keyEventToPetscii, pastedTextToPetscii } from './keymap';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 
 export interface PetsciiCanvasProps {
@@ -621,7 +621,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
      * above.
      */
     if (e.metaKey) return;
-    if (e.ctrlKey && controlColourToPetscii(e.code) === null) return;
+    if (e.ctrlKey && controlChordToPetscii(e.code) === null) return;
     const bytes = keyEventToPetscii(e.key, e.shiftKey, swedish, e.code, e.altKey, e.ctrlKey);
     if (bytes) {
       e.preventDefault();

@@ -12,6 +12,10 @@ import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
+/** `U+E200 + vic`: the pen a caller picked, zero cells wide (`sdk/petscii/pua.ts`). */
+const PEN_MARKER_FIRST = 0xe200;
+const PEN_MARKER_LAST = 0xe20f;
+
 export class Textbox extends Element {
   /** blessed-style widget kind; see Element.type. */
   get type(): string { return 'textbox'; }
@@ -52,7 +56,7 @@ export class Textbox extends Element {
     this.value = options.value || '';
     this.secret = options.secret || false;
     this.censor = options.censor || false;
-    this.cursorPos = this.value.length;
+    this.cursorPos = this._getRenderedLength(this.value);
 
     // Update display
     this._updateContent();
@@ -439,7 +443,48 @@ export class Textbox extends Element {
    */
   private _getRenderedLength(text: string): number {
     // Strip both blessed tags and effect tags to get visible length
-    return this._stripTags(this._stripEffectTags(text)).length;
+    return this._stripPenMarkers(this._stripTags(this._stripEffectTags(text))).length;
+  }
+
+  /**
+   * A PEN THE CALLER PICKED IS NOT A CHARACTER IN HIS LINE.
+   *
+   * Ctrl+3 on a C64 does not put anything in the line - it changes the colour
+   * the next character is stored in. The board carries that as `U+E200 + vic`
+   * (`sdk/petscii/pua.ts`) INSIDE the value, because the value is what gets
+   * sent, and a chat message has every ESC stripped out of it. On the glass
+   * the marker is zero cells, so everything this widget measures, slices and
+   * positions has to skip it, exactly as it already skips a `{tag}`: without
+   * that, the cursor was drawn ON the marker, the line scrolled a column
+   * early, and a selection covered the wrong cells ("it's a proper mess with
+   * shitloads of bugs", the sysop, 2026-09-23).
+   */
+  private _isPenMarker(ch: string): boolean {
+    const code = ch.codePointAt(0);
+    return code !== undefined && code >= PEN_MARKER_FIRST && code <= PEN_MARKER_LAST;
+  }
+
+  private _stripPenMarkers(text: string): string {
+    let out = '';
+    for (const ch of text) if (!this._isPenMarker(ch)) out += ch;
+    return out;
+  }
+
+  /**
+   * The line as CELLS: each one the pen markers that colour it, then the one
+   * character they colour. A trailing pen with nothing after it yet is kept
+   * on the end, so the colour a caller just picked survives to the character
+   * he is about to type.
+   */
+  private _penCells(text: string): { cells: string[]; trailing: string } {
+    const cells: string[] = [];
+    let pen = '';
+    for (const ch of text) {
+      if (this._isPenMarker(ch)) { pen += ch; continue; }
+      cells.push(pen + ch);
+      pen = '';
+    }
+    return { cells, trailing: pen };
   }
 
   /**
@@ -497,6 +542,12 @@ export class Textbox extends Element {
         continue;
       }
 
+      // Skip a pen marker - it colours the next cell, it is not one
+      if (this._isPenMarker(text[rawPos])) {
+        rawPos++;
+        continue;
+      }
+
       rawPos++;
       rendered++;
     }
@@ -513,6 +564,10 @@ export class Textbox extends Element {
       const effectEnd = this._skipEffectTag(text, rawPos);
       if (effectEnd !== -1) {
         rawPos = effectEnd;
+        continue;
+      }
+      if (this._isPenMarker(text[rawPos])) {
+        rawPos++;
         continue;
       }
       break;
@@ -622,7 +677,25 @@ export class Textbox extends Element {
     if (!useTags || !text.includes('{')) {
       this._ensureCursorVisible();
       const visibleWidth = this._getVisibleWidth();
-      const visibleText = text.slice(this.viewOffset, this.viewOffset + visibleWidth);
+      /*
+       * SLICED IN CELLS, NOT IN CODEPOINTS.
+       *
+       * A pen marker carried in the value paints nothing, so a window cut
+       * with `slice` on the raw string showed one character fewer than it
+       * measured and put the cursor a column off. `_penCells` hands back one
+       * entry per CELL - its pen markers and the character they colour - and
+       * every offset below is a cell offset, which is what `cursorPos`,
+       * `viewOffset` and the selection have always been counted in.
+       */
+      const { cells, trailing } = this._penCells(text);
+      const visibleCells = cells.slice(this.viewOffset, this.viewOffset + visibleWidth);
+      const cut = (from: number, to?: number) =>
+        this._escapeForDisplay(visibleCells.slice(from, to).join(''));
+      /* Past the end of the line the cursor sits on the pen just picked, so it
+       * shows the colour the next character will be typed in - a C64's cursor
+       * changes colour under your hand. */
+      const cellAt = (index: number) =>
+        this._escapeForDisplay(visibleCells[index] ?? (trailing + ' '));
 
       let display: string;
       if (this.focused) {
@@ -630,29 +703,20 @@ export class Textbox extends Element {
           const selStart = Math.min(this.selectionStart, this.selectionEnd);
           const selEnd = Math.max(this.selectionStart, this.selectionEnd);
           const visStart = Math.max(0, selStart - this.viewOffset);
-          const visEnd = Math.min(visibleText.length, selEnd - this.viewOffset);
+          const visEnd = Math.min(visibleCells.length, selEnd - this.viewOffset);
 
-          if (visEnd > visStart && visStart < visibleText.length) {
-            const before = this._escapeForDisplay(visibleText.slice(0, visStart));
-            const selected = this._escapeForDisplay(visibleText.slice(visStart, visEnd));
-            const after = this._escapeForDisplay(visibleText.slice(visEnd));
-            display = `${before}{inverse}${selected}{/inverse}${after}`;
+          if (visEnd > visStart && visStart < visibleCells.length) {
+            display = `${cut(0, visStart)}{inverse}${cut(visStart, visEnd)}{/inverse}${cut(visEnd)}`;
           } else {
             const cursorPosInView = this.cursorPos - this.viewOffset;
-            const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-            const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
-            const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
-            display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+            display = `${cut(0, cursorPosInView)}{inverse}${cellAt(cursorPosInView)}{/inverse}${cut(cursorPosInView + 1)}`;
           }
         } else {
           const cursorPosInView = this.cursorPos - this.viewOffset;
-          const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-          const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
-          const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
-          display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+          display = `${cut(0, cursorPosInView)}{inverse}${cellAt(cursorPosInView)}{/inverse}${cut(cursorPosInView + 1)}`;
         }
       } else {
-        display = this._escapeForDisplay(visibleText);
+        display = cut(0);
       }
 
       this.setContent(display);
@@ -741,7 +805,9 @@ export class Textbox extends Element {
     // Convert rendered cursor position to raw position in value
     const rawPos = this._renderedToRawPos(this.value, this.cursorPos);
     this.value = this.value.slice(0, rawPos) + ch + this.value.slice(rawPos);
-    this.cursorPos++;
+    // A pen marker colours what comes next; it occupies no column, so the
+    // cursor does not move over it.
+    if (!this._isPenMarker(ch)) this.cursorPos++;
     this._updateContent();
     this.emit('change', this.value);
   }

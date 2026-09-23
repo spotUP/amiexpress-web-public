@@ -17,6 +17,7 @@ import type {
 import { applyResponsiveMixin, ResponsiveBehavior, type ResponsiveState } from './responsive-mixin';
 import { borderCharsFor } from './border-chars';
 import { wrapAnsiText } from './wrap-text';
+import { puaToUnicode } from '../../../../petscii/pua';
 import type { BreakpointName } from './responsive-constants';
 import type { SwipeOptions, LongPressOptions } from './touch-gestures';
 
@@ -978,6 +979,28 @@ export class Element extends EventEmitter {
 
   setContent(content: string): void {
     if (this.destroyed) return;
+
+    /*
+     * A PEN A CALLER TYPED IS AN ATTRIBUTE, NOT A CHARACTER.
+     *
+     * Authored colour travels through the board as `U+E200 + vic`
+     * (`sdk/petscii/pua.ts`) because a chat message has every ESC stripped
+     * out of it before it is stored, so ESC cannot be the form. On the glass
+     * that marker is ZERO CELLS - the transducer turns it into a colour byte
+     * and prints nothing - while blessed counts every codepoint as one cell.
+     * A widget holding one therefore measured a column it never painted: the
+     * frame drifted right, the last cells duplicated past the border, and a
+     * cursor drawn at `value[cursorPos]` sat on the marker itself ("it's a
+     * proper mess with shitloads of bugs", the sysop, 2026-09-23).
+     *
+     * Blessed already has a zero-width spelling for colour - it parses SGR
+     * inside content into cell attributes and re-emits it - so the pen is
+     * folded to SGR here, at the one door every widget's display text goes
+     * through. GLYPH markers (`U+E1xx`) are left alone on purpose: one of
+     * those really is one cell, and a PETSCII caller's own transducer draws
+     * it better than any fold could.
+     */
+    content = puaToUnicode(content, { glyphs: false });
 
     // Process {center} tags before storing content
     content = this.processCenterTags(content);
