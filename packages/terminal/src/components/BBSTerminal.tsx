@@ -1480,6 +1480,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           }
           return false;
 
+        case 'input':
+          // A colour chord. It takes the path a typed character takes, so
+          // the board cannot tell it from one - and xterm must not also
+          // type the digit the caller held a modifier over.
+          ev.preventDefault();
+          processInputKeyRef.current(action.text);
+          return false;
+
         case 'select-all':
           term.selectAll();
           return false;

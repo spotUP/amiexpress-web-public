@@ -103,6 +103,17 @@ export function controlColourToPetscii(code: string): number | null {
 }
 
 /**
+ * The colour the COMMODORE key and this physical key asks for, or null.
+ *
+ * The other eight, and only the colours - `commodoreKeyToPetscii` below
+ * answers for the graphics and for reverse as well, which an eighty-column
+ * terminal has no way to type and no way to show.
+ */
+export function commodoreColourToPetscii(code: string): number | null {
+  return code in COMMODORE_COLOUR_KEYS ? COMMODORE_COLOUR_KEYS[code] : null;
+}
+
+/**
  * EVERY CHORD CTRL OWNS on a C64 keyboard: the eight colours, and REVERSE on
  * and off at 9 and 0.
  *

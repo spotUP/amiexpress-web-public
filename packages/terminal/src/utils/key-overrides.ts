@@ -16,6 +16,8 @@
  * cannot be mounted in a test - it needs a canvas, a socket and a real
  * xterm - while the decision is a lookup.
  */
+import { controlColourToPetscii, commodoreColourToPetscii } from '../petscii/keymap';
+import { petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
 
 export interface KeyLike {
   key: string;
@@ -75,7 +77,14 @@ export type TerminalKeyAction =
   | { kind: 'block'; fullscreen?: boolean }
   | { kind: 'send'; bytes: string; fullscreen?: boolean }
   | { kind: 'select-all' }
-  | { kind: 'copy' };
+  | { kind: 'copy' }
+  /**
+   * TEXT THE CALLER TYPED, which happens to have come from a chord rather
+   * than from a character key. It goes down the ordinary input path, not
+   * out as raw bytes on `command`, because that is where a typed character
+   * goes and the board must not be able to tell the two apart.
+   */
+  | { kind: 'input'; text: string };
 
 /** xterm sends no modifier for these; a door that reads selections needs them. */
 const SHIFT_ARROWS: Record<string, string> = {
@@ -104,6 +113,39 @@ export function keyOverride(ev: KeyLike): string | null {
   }
 
   return null;
+}
+
+/**
+ * THE COLOUR CHORD, AT EIGHTY COLUMNS.
+ *
+ * "let ansi users type colors the same way and it gets translated to the
+ * petscii users" (the sysop, 2026-09-22). A PETSCII session learned both
+ * chords - CTRL and a digit for the first eight colours, the Commodore key
+ * and a digit for the other eight - because its keys go through the canvas
+ * keymap. An eighty-column session's keys go through xterm and this file,
+ * which had never been told.
+ *
+ * The same two tables answer for both, so a chord typed on either terminal
+ * becomes the same PETSCII colour byte and is decoded in one place. What
+ * travels is the board's own colour MARKER, not an ESC sequence: a chat
+ * line and a message both carry it, and a message has every ESC stripped
+ * out of it before it is stored.
+ *
+ * The Commodore key is ALT here, exactly as it is on the canvas. META is
+ * deliberately not a chord: Cmd+1 is the browser's own tab switch, and
+ * taking it would cost the caller their tabs.
+ */
+export function colourChordText(ev: KeyLike): string | null {
+  if (ev.type && ev.type !== 'keydown') return null;
+  if (!ev.code || ev.metaKey) return null;
+  const byte = ev.ctrlKey && !ev.altKey
+    ? controlColourToPetscii(ev.code)
+    : ev.altKey && !ev.ctrlKey
+      ? commodoreColourToPetscii(ev.code)
+      : null;
+  if (byte === null) return null;
+  const text = petsciiInputToAscii([byte]);
+  return text === '' ? null : text;
 }
 
 /**
@@ -144,6 +186,11 @@ export function classifyKey(ev: KeyLike, state: TerminalKeyState): TerminalKeyAc
     if (ev.key === 'a' || ev.key === 'A') return { kind: 'select-all' };
     if (ev.key === 'c' || ev.key === 'C') return { kind: 'copy' };
   }
+
+  // The colour chords. Below the game-mode block on purpose: a door running
+  // in game mode reads the raw key edges and must not also be typed at.
+  const colour = colourChordText(ev);
+  if (colour !== null) return { kind: 'input', text: colour };
 
   if (ev.shiftKey) {
     const sequence = SHIFT_ARROWS[ev.key];
