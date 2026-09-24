@@ -300,6 +300,24 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
     const stem = stemOf(entry.screen);
     let themeHasScreen = false;
 
+    /*
+     * ONE PROBLEM IS ONE FINDING, however many scopes it resolves through.
+     *
+     * `entry.resolutions` carries one resolution per NODE directory, and this
+     * board has seventy-one of them - while the theme has a single `Node/`
+     * scope that every one of those resolves into. So a theme with one
+     * `Node/LOGON.seq` shadowing the board's `logon10` and `logon20` reported
+     * the same problems seventy-one times each, and the admin's Themes page
+     * told the sysop the board default had "219 issues to fix" when it had
+     * nine (2026-09-24). A number nobody can act on is worse than no number:
+     * it is why the page was ignored.
+     *
+     * Keyed on what the finding is ABOUT - the theme file and the board file
+     * it would hide - rather than on the message, so a reworded message
+     * cannot quietly split one problem back into seventy-one.
+     */
+    const reported = new Set<string>();
+
     for (const resolution of entry.resolutions) {
       const scope = scopeDirectory(entry.dirType, resolution);
       if (!scope) continue;
@@ -360,6 +378,9 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
         if (!screenIsProgram(boardBytes)) continue;
         if (screenProgramSignature(boardBytes) === screenProgramSignature(themeBytes)) continue;
 
+        const codesKey = `codes|${path.join(scope, name)}|${boardRel}`;
+        if (reported.has(codesKey)) continue;
+        reported.add(codesKey);
         advisory.push({
           rule: 'runs-different-codes',
           severity: 'advisory',
@@ -377,6 +398,9 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
         .filter(v => !themeLevels.has(v.level));
 
       for (const shadowed of missing) {
+        const shadowKey = `shadow|${path.join(scope, base)}|${shadowed.name}`;
+        if (reported.has(shadowKey)) continue;
+        reported.add(shadowKey);
         blocking.push({
           rule: 'shadows-security-variant',
           severity: 'blocking',

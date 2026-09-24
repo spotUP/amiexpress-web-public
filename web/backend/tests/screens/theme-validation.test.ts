@@ -54,6 +54,53 @@ afterEach(() => {
   invalidateScreenIndex();
 });
 
+/**
+ * ONE PROBLEM IS ONE FINDING, HOWEVER MANY NODES THE BOARD HAS.
+ *
+ * `entry.resolutions` carries one resolution per node directory, and the
+ * theme has a single `Node/` scope that all of them resolve into - so a
+ * theme with one base file shadowing two board variants reported those two
+ * problems once per node. On the live board, seventy-one nodes turned three
+ * problems into 219 and the admin's Themes page told the sysop the board
+ * default had "219 issues to fix" (2026-09-24). A number nobody can act on
+ * is why the page was ignored.
+ */
+test('a shadowed variant is reported once, not once per node directory', () => {
+  // Four more nodes carrying the same pair. Before the fix this alone
+  // multiplied every shadowing finding by five.
+  for (const n of [2, 3, 4, 5]) {
+    write(`Node${n}/LOGON.txt`, 'the board logon\r\n');
+    write(`Node${n}/Logon100.txt`, 'the board sysop logon\r\n');
+  }
+  invalidateScreenIndex();
+
+  const report = validateTheme(root, theme({ 'Node/LOGON.txt': 'the neon logon\r\n' }));
+  const shadow = report.blocking.filter(f => f.rule === 'shadows-security-variant');
+
+  // One board variant is shadowed - Logon100 - so one finding, whatever the
+  // board's node count.
+  expect(shadow).toHaveLength(1);
+  expect(shadow[0].file).toBe('Node/LOGON.txt');
+  expect(shadow[0].message).toContain('Logon100.txt');
+});
+
+test('two shadowed variants are two findings, not one', () => {
+  // The de-duplication keys on the board file, so it must not collapse
+  // genuinely different variants of the same screen into one.
+  write('Node1/Logon200.txt', 'the board level-200 logon\r\n');
+  invalidateScreenIndex();
+
+  const report = validateTheme(root, theme({ 'Node/LOGON.txt': 'the neon logon\r\n' }));
+  const named = report.blocking
+    .filter(f => f.rule === 'shadows-security-variant')
+    .map(f => f.message)
+    .join(' ');
+
+  expect(report.blocking.filter(f => f.rule === 'shadows-security-variant')).toHaveLength(2);
+  expect(named).toContain('Logon100.txt');
+  expect(named).toContain('Logon200.txt');
+});
+
 test('a theme that only redraws one screen is publishable', () => {
   const report = validateTheme(root, theme({ 'Board/BULL.TXT': 'the neon bulletin\r\n' }));
 
