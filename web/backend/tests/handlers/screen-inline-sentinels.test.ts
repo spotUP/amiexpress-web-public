@@ -10,6 +10,7 @@
 
 import { parseMciCodes } from '../../src/handlers/screen.handler';
 import { flushOutput } from '../../src/utils/output.util';
+import { clearScreenFor } from '../../src/utils/ansi.util';
 
 // emitText buffers for 16ms before flushing to socket; tests need to
 // explicitly drain the buffer (or the socket sees nothing in the
@@ -90,7 +91,7 @@ describe('inline-mode sentinel walker', () => {
     const joined = emitted.join('');
     // CLS must appear AFTER "before" and BEFORE "after"
     const beforeIdx = joined.indexOf('before');
-    const clsIdx = joined.indexOf('\x1b[2J\x1b[H');
+    const clsIdx = joined.indexOf(clearScreenFor(session));
     const afterIdx = joined.indexOf('after');
     expect(beforeIdx).toBeGreaterThanOrEqual(0);
     expect(clsIdx).toBeGreaterThan(beforeIdx);
@@ -155,7 +156,7 @@ describe('inline-mode sentinel walker', () => {
     const joined2 = emitted2.join('');
     // page2, then CLS, then page3
     const page2Idx = joined2.indexOf('page2');
-    const clsIdx = joined2.indexOf('\x1b[2J\x1b[H');
+    const clsIdx = joined2.indexOf(clearScreenFor(session));
     const page3Idx = joined2.indexOf('page3');
     expect(page2Idx).toBeGreaterThanOrEqual(0);
     expect(clsIdx).toBeGreaterThan(page2Idx);
@@ -176,9 +177,7 @@ describe('inline-mode sentinel walker', () => {
     drainBuffer(socket);
     const joined = emitted.join('');
     // Two CLS occurrences expected.
-    const matches = joined.match(/\x1b\[2J\x1b\[H/g);
-    expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(2);
+    expect(joined.split(clearScreenFor(session)).length - 1).toBe(2);
   });
 
   test('~5SP| (width prefix) is NOT treated as pause', async () => {
@@ -291,6 +290,7 @@ describe('inline-mode sentinel walker', () => {
     // strict fall-through emits "F" as plain text. No CLS.
     const joined = emitted.join('');
     expect(joined).toContain('xFy');
+    expect(joined).not.toContain(clearScreenFor(session));
     expect(joined).not.toContain('\x1b[2J\x1b[H');
   });
 });

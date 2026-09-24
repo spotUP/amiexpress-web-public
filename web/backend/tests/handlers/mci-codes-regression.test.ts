@@ -23,6 +23,7 @@
 import { parseMciCodes } from '../../src/handlers/screen.handler';
 import { parseWipeMCI } from '../../src/utils/screen-wipe.util';
 import { flushOutput } from '../../src/utils/output.util';
+import { clearScreenFor } from '../../src/utils/ansi.util';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -332,14 +333,26 @@ describe('parseMciCodes non-inline mode (socket=undefined) — wipe animation pa
 // is true. The same case-sensitivity rules apply.
 // ---------------------------------------------------------------------------
 
+/**
+ * THE CLEAR A CALLER GETS IS `clearScreenFor`, NOT A LITERAL.
+ *
+ * `~f` emitted to a SOCKET goes through `emitCls` (screen.handler.ts:1112),
+ * which since 5bf1df148 scrolls the old screen into the caller's history
+ * instead of erasing it - `ESC[2J` saves nothing, so the board's own
+ * repaints were eating the scrollback. A C64 still gets the hard clear.
+ *
+ * These pinned the old spelling, so they went red the day that landed and
+ * stayed red on main. Asking the source of truth instead means the next
+ * change to what a clear IS cannot make a passing test lie.
+ */
 describe('parseMciCodes inline mode (socket provided)', () => {
-  it('~f emits ESC[2J to socket, not literal "~f"', async () => {
+  it('~f emits the caller\'s clear to the socket, not literal "~f"', async () => {
     const { socket, emitted } = makeMockSocket();
     const session = makeSession();
     await parseMciCodes('before~f|after', session, undefined, undefined, undefined, socket);
     drain(socket);
     const output = emitted.join('');
-    expect(output).toContain('\x1b[2J');
+    expect(output).toContain(clearScreenFor(session));
     expect(output).not.toContain('~f');
   });
 
@@ -353,12 +366,13 @@ describe('parseMciCodes inline mode (socket provided)', () => {
     expect(output).not.toContain('~N');
   });
 
-  it('~F (uppercase) does NOT emit ESC[2J — falls through as "F"', async () => {
+  it('~F (uppercase) does NOT clear the screen — falls through as "F"', async () => {
     const { socket, emitted } = makeMockSocket();
     const session = makeSession();
     await parseMciCodes('~F|', session, undefined, undefined, undefined, socket);
     drain(socket);
     const output = emitted.join('');
+    expect(output).not.toContain(clearScreenFor(session));
     expect(output).not.toContain('\x1b[2J');
     expect(output).toContain('F');
   });

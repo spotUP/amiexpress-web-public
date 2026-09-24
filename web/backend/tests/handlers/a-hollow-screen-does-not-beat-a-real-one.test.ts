@@ -23,6 +23,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { displayScreen, loadScreenFile } from '../../src/handlers/screen.handler';
+import { clearScreenFor } from '../../src/utils/ansi.util';
 
 const WELCOME = 'WELCOME TO UP ROUGH\r\n';
 
@@ -153,6 +154,6 @@ describe('a hollow screen file', () => {
     expect(shown).toBe(true);
     const wire = wireOf(socket);
     expect(wire).toContain('ONE NODE ONLY');
-    expect(wire).toContain('\x1b[2J');
+    expect(wire).toContain(clearScreenFor(makeSession()));
   });
 });
