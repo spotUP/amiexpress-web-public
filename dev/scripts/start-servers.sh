@@ -310,6 +310,27 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# WHICH BOARD CONTENT THE DEV STACK READS.
+#
+# `data/live/` when it exists: a snapshot of the LIVE volume, pulled by
+# dev/scripts/pull-live-content.sh. The sysop authors on the live board and
+# nothing ever brought those screens, themes and bulletins back, so
+# localhost showed whatever git happened to hold ("its the bbs content that
+# are not up to date on localhost", 2026-09-24).
+#
+# The repo root otherwise, which is what this always used - so a checkout
+# with no snapshot behaves exactly as before.
+#
+# It also stops the dev board WRITING into the checkout. Pointed at the repo
+# it rewrote Bulletins/bull1.txt..bull9.txt at every logoff and Conf*/ctop.data
+# as callers moved, which is why `git status` was never clean.
+if [ -d "$REPO_ROOT/data/live" ]; then
+  BBS_CONTENT_DIR="$REPO_ROOT/data/live"
+else
+  BBS_CONTENT_DIR="$REPO_ROOT"
+fi
+export BBS_CONTENT_DIR
+
 # Create logs directory if it doesn't exist
 LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
@@ -836,10 +857,10 @@ if [ "$WATCH_DOORS" = true ]; then
     printf "%b\n" "   ${CYAN}DOOR_PROFILE enabled for performance profiling${RESET}"
     # Start in background with job control for process group
     # All debug flags enabled: 68K execution, library calls, file ops, trap handlers, profiling
-    (cd "$REPO_ROOT" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
+    (cd "$REPO_ROOT" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$BBS_CONTENT_DIR" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
   else
     # Start in background with job control for process group
-    (cd "$REPO_ROOT" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning|\[WATCH\]|Restarting)") &
+    (cd "$REPO_ROOT" && BBS_DATA_DIR="$BBS_CONTENT_DIR" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning|\[WATCH\]|Restarting)") &
   fi
   BACKEND_PID=$!
 else
@@ -851,10 +872,10 @@ else
     # DEBUG_68K=1 enables verbose 68K logging
     # DEBUG_EXEC/DOS/FILE/TRAP=1 enables library/file/trap debugging (sync file I/O logs)
     # DOOR_PROFILE=1 enables performance profiling output
-    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 DEBUG_EXEC=1 DEBUG_DOS=1 DEBUG_FILE=1 DEBUG_TRAP=1 DOOR_PROFILE=1 BBS_DATA_DIR="$BBS_CONTENT_DIR" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
   else
     # NORMAL MODE: Clean output, no verbose 68K logging (DEBUG_68K not set)
-    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$BBS_CONTENT_DIR" NODE_ENV=development npx tsx src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
   fi
   BACKEND_PID=$!
 fi

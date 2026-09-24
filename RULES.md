@@ -46,6 +46,7 @@ Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 | Test all 68K doors | `./dev/scripts/test-all-doors.sh` |
 | 68K debug (smart) | `npm run xim:debug -- DOORNAME` |
 | Check context usage | `./dev/scripts/check-context-usage.sh` |
+| Pull live board content to localhost | `./dev/scripts/pull-live-content.sh` (dry run), `--apply` to pull |
 
 Type-check + tests + zero lint warnings required before commits. `tsc --noEmit` is the canonical type-check.
 
