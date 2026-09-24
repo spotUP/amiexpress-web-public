@@ -4148,7 +4148,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               if (text) processInputKeyRef.current(text);
             }}
             swedish={petsciiSwedish}
-            highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'brush' as const }] : undefined}
+            highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'selection' as const }] : undefined}
             scrollOffset={petsciiScrollOffset}
             onCellPointer={(event) => {
               /*

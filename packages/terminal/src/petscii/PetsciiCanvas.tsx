@@ -132,21 +132,48 @@ export interface PetsciiCellPointer {
   deltaY?: number;
 }
 
-/** A rectangle of cells to outline, and what it means. */
+/**
+ * What a marked rectangle MEANS, and therefore how it is drawn.
+ *
+ * The first three are the editor's, and they are OUTLINES around cells the
+ * caller has not touched - an MCI token the board will expand, a token it
+ * cannot, a lifted brush.
+ *
+ * `selection` is the caller's own, and it is not an outline at all: the
+ * cells are drawn REVERSED. A C64 has no per-cell background to tint and no
+ * concept of a box round some characters; reverse video is the one fill the
+ * machine has, and it is what the board already uses for a highlighted list
+ * row. "selecting text feels weird in petscii mode, can we do it by
+ * inverting chars or coloring them differently or something?" (the sysop,
+ * 2026-09-22).
+ */
+export type PetsciiHighlightTone = 'mci' | 'mci-unresolved' | 'brush' | 'selection';
+
+/** A rectangle of cells to mark, and what it means. */
 export interface PetsciiHighlight {
   x: number;
   y: number;
   w: number;
   h: number;
-  tone?: 'mci' | 'mci-unresolved' | 'brush';
+  tone?: PetsciiHighlightTone;
 }
 
-/** What each highlight tone is drawn in. Fixed, because they mean fixed things. */
-const HIGHLIGHT_TONES: Record<NonNullable<PetsciiHighlight['tone']>, string> = {
+/** What each OUTLINE tone is drawn in. Fixed, because they mean fixed things. */
+const HIGHLIGHT_TONES: Record<Exclude<PetsciiHighlightTone, 'selection'>, string> = {
   mci: '#4ad24a',
   'mci-unresolved': '#d2b34a',
   brush: '#ffffff',
 };
+
+/** Whether a cell falls inside any rectangle marked as the caller's selection. */
+function reversedByHighlight(highlight: readonly PetsciiHighlight[] | undefined, x: number, y: number): boolean {
+  if (!highlight) return false;
+  for (const box of highlight) {
+    if (box.tone !== 'selection') continue;
+    if (x >= box.x && x < box.x + box.w && y >= box.y && y < box.y + box.h) return true;
+  }
+  return false;
+}
 
 export interface PetsciiCanvasHandle {
   focus(): void;
@@ -393,7 +420,15 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       const liveBase = (y - scrolled) * cols;
       for (let x = 0; x < cols; x++) {
         const idx = liveBase + x;
-        const screenCode = historyRow ? historyRow.screen[x] : s.screen[idx];
+        const cell = historyRow ? historyRow.screen[x] : s.screen[idx];
+        /*
+         * A SELECTED CELL IS DRAWN REVERSED, which on this machine is the
+         * same screen code with bit 7 set - the atlas holds both halves. It
+         * is applied BEFORE the blank test on purpose: a reversed space is a
+         * solid block, and a selection over blank cells that painted nothing
+         * would be invisible, which is the shape the outline had.
+         */
+        const screenCode = reversedByHighlight(highlight, x, y) ? cell ^ 0x80 : cell;
         if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
         const color = colours[(historyRow ? historyRow.color[x] : s.colorRam[idx]) & 0x0F];
         const tinted = atlasCache.get(color);
@@ -453,6 +488,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     if (highlight) {
       ctx.lineWidth = 1;
       for (const box of highlight) {
+        if (box.tone === 'selection') continue; // drawn reversed, cell by cell, above
         ctx.strokeStyle = HIGHLIGHT_TONES[box.tone ?? 'mci'];
         ctx.strokeRect(
           border + box.x * destW + 0.5,

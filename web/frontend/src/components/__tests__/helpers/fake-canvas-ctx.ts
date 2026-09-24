@@ -18,7 +18,7 @@ export interface FakeCtx {
   calls: RecordedCall[];
 }
 
-const RECORDED_METHODS = ['fillRect', 'drawImage', 'fillText', 'save', 'restore', 'beginPath', 'rect', 'clip'] as const;
+const RECORDED_METHODS = ['fillRect', 'strokeRect', 'drawImage', 'fillText', 'save', 'restore', 'beginPath', 'rect', 'clip'] as const;
 
 /**
  * Property WRITES worth recording, in order, beside the calls: a colour is
