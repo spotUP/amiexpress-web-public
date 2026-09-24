@@ -378,7 +378,12 @@ console.log(
         // Immediately transition to login state (no key press required)
         session.state = BBSState.LOGON;
         session.subState = undefined;
-        socket.emit("ansi-output", "\r\n\r\n");
+        // The prompt TEXT, not only the browser's cue: `prompt-login` is
+        // web-only (server/transport-event-rulings.ts), so a byte transport
+        // is left silent without this. Same contract as
+        // command.handler.ts's completeRealC64Connect and its three ANSI
+        // sites; this copy is kept in step so they cannot drift.
+        socket.emit("ansi-output", "\r\n\r\nUsername: ");
         socket.emit("prompt-login"); // Tell frontend to show login form
         return;
       } else if (data === "\x7f" || data === "\b") {
@@ -430,6 +435,9 @@ console.log("📋 BBSTITLE viewed, transitioning to login");
         "ansi-output",
         "\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n"
       );
+      // The prompt TEXT as well as the cue - see the note on the other copy
+      // above; `prompt-login` reaches a browser and nothing else.
+      socket.emit("ansi-output", "Username: ");
       socket.emit("prompt-login"); // Tell frontend to show login form
       return;
     }

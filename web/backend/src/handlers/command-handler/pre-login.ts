@@ -146,6 +146,8 @@ console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
     socket.emit(outputEvent, '\x1b[2J\x1b[3J\x1b[H');
     socket.emit(outputEvent, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
     socket.emit(outputEvent, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
+    // Kept in step with the live copies: the prompt text, then the cue.
+    emitPrompt(socket, 'Username: ');
     socket.emit('prompt-login'); // Tell frontend to show login form
     return true;
   }
@@ -442,7 +444,9 @@ async function transitionToBBSTitle(socket: any, session: BBSSession): Promise<v
   session.state = BBSState.LOGON;
   session.subState = undefined;
   const outputEvent = getOutputEvent(session);
-  socket.emit(outputEvent, '\r\n\r\n');
+  socket.emit(outputEvent, '\r\n');
+  // Kept in step with the live copies: the prompt text, then the cue.
+  emitPrompt(socket, '\r\nUsername: ');
   socket.emit('prompt-login'); // Tell frontend to show login form
 }
 
