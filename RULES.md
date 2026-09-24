@@ -23,7 +23,7 @@ door, and says which it is (global rule: "Ask for the test, and say WHERE").
 | LOCAL board | http://localhost:3001 | `./dev/scripts/start-servers.sh --bbs-only`; the frontend is a BUILT bundle, so rebuild `packages/terminal` + `web/frontend` first |
 | LOCAL admin | http://localhost:3001/admin/ | |
 | LOCAL SDK | http://localhost:3001/sdk/ | |
-| LOCAL telnet | `telnet localhost 2323` | SSH 2222 needs `SSH_HOST_KEY_PATH` |
+| LOCAL telnet | `telnet localhost 64128` | Same port as live: `TELNET_PORT` defaults to 64128 (`web/backend/src/index.ts:1061`). The 2323 in `TelnetServer`'s constructor is a default nothing passes. SSH 2222 needs `SSH_HOST_KEY_PATH` |
 
 Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 
