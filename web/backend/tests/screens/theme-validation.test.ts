@@ -65,6 +65,36 @@ afterEach(() => {
  * default had "219 issues to fix" (2026-09-24). A number nobody can act on
  * is why the page was ignored.
  */
+/**
+ * A BOARD VARIANT THAT IS A PROGRAM IS NOT TAKEN AWAY BY A THEME.
+ *
+ * The rule was written when the theme's base file REPLACED the board's
+ * security variant. `loadScreenFile` does not do that any more, and it was
+ * driven to check: where the board's variant is a program, a TEXT theme file
+ * is spliced - the board's codes run around the theme's art - and a `.seq`
+ * or `.rip` is not spliced at all, so the board's own file is served
+ * (screen.handler.ts:1880, "Text screens only"). Either way the codes
+ * survive, so there is nothing to report.
+ *
+ * Three of the board default's nine findings were this: `logon10.txt` is a
+ * single `~SS_` include and `logon20.txt` three codes with no pixels.
+ */
+test("a level variant that only RUNS codes is not something a theme takes away", () => {
+  write('Node1/logon20.txt', '~CC_gl ~SP\r\n~SS_BBS:screens/quicknew.txt\r\n');
+  invalidateScreenIndex();
+
+  const report = validateTheme(root, theme({ 'Node/LOGON.txt': 'the neon logon art\r\n' }));
+  const named = report.blocking
+    .filter(f => f.rule === 'shadows-security-variant')
+    .map(f => f.message)
+    .join(' ');
+
+  // Logon100 is ART in this fixture and is still reported; logon20 is a
+  // program and is not.
+  expect(named).toContain('Logon100.txt');
+  expect(named).not.toContain('logon20.txt');
+});
+
 test('a shadowed variant is reported once, not once per node directory', () => {
   // Four more nodes carrying the same pair. Before the fix this alone
   // multiplied every shadowing finding by five.

@@ -392,10 +392,43 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
       const base = themeLevels.get(null);
       if (!base) continue;
 
+      /*
+       * A VARIANT THAT IS A PROGRAM CANNOT BE LOST.
+       *
+       * This rule was written when the theme's base file REPLACED the board's
+       * security variant. It does not any more, and `loadScreenFile` was
+       * driven to check rather than reasoned about (2026-09-24). Where the
+       * board's variant is a PROGRAM the loader keeps it either way:
+       *
+       *   a TEXT theme file is spliced - the board's codes run around the
+       *   theme's art, and a level-20 caller receives `~CC_gl ~SP` followed
+       *   by that art;
+       *   a `.seq` or `.rip` theme file is not spliced at all, and the
+       *   board's own file is served instead (screen.handler.ts:1880,
+       *   "Text screens only").
+       *
+       * So a program variant costs the caller nothing and is not a finding.
+       * An ART variant is: this board's `MENU250.TXT` is 3122 bytes of
+       * drawing that lists the sysop's own commands - ACCESS, CALLERSLOG,
+       * EDITING, FILEFLAG - and a theme's plain `Menu.txt` really does take
+       * that list away from a level-250 caller.
+       *
+       * Three of the board default's nine findings were program variants:
+       * `logon10.txt` is one `~SS_`, `logon20.txt` three codes and no pixels.
+       */
+      const boardDir = boardRel ? path.dirname(path.join(baseDir, boardRel)) : null;
       const missing = resolution.variants
         .map(name => ({ name, level: levelOf(stem, name) }))
         .filter((v): v is { name: string; level: number } => typeof v.level === 'number')
-        .filter(v => !themeLevels.has(v.level));
+        .filter(v => !themeLevels.has(v.level))
+        .filter(v => {
+          if (!boardDir) return true;
+          try {
+            return !screenIsProgram(fs.readFileSync(path.join(boardDir, v.name)));
+          } catch {
+            return true;   // unreadable: report it rather than hide it
+          }
+        });
 
       for (const shadowed of missing) {
         const shadowKey = `shadow|${path.join(scope, base)}|${shadowed.name}`;
