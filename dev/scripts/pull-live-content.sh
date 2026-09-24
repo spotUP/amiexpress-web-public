@@ -150,7 +150,20 @@ if [ "$APPLY" -eq 0 ]; then
   exit 0
 fi
 
-mkdir -p "$DEST" || { echo "[ERROR] cannot create $DEST" >&2; exit 1; }
+# EXTRACTED FRESH, THEN SWAPPED IN - never merged over the old snapshot.
+#
+# The snapshot is the dev board's DATA directory, so the board writes into
+# it: `Conf1/Hold` is a zero-byte file on the volume and a directory here,
+# created by a dev caller holding a file. tar cannot replace a non-empty
+# directory with a file, so the second pull failed with "Can't replace
+# existing directory with non-directory" after the first had succeeded.
+#
+# Replacing wholesale also makes the snapshot mean what it says: a file
+# DELETED on live disappears here too, where a merge would leave it behind
+# for ever - which is the same add-only trap the Doors volume has.
+STAGE="$DEST.incoming"
+rm -rf "$STAGE"
+mkdir -p "$STAGE" || { echo "[ERROR] cannot create $STAGE" >&2; exit 1; }
 
 echo "[INFO] pulling..."
 # Streamed through tar rather than rsync: nothing is installed on the host
@@ -158,10 +171,20 @@ echo "[INFO] pulling..."
 # inside the container, which is the only place its permissions make sense.
 if ! ssh -o BatchMode=yes -o ConnectTimeout=30 "$HOST" \
   "docker exec $CONTAINER tar -cf - -C $REMOTE_ROOT ${TAR_EXCLUDES[*]} ${REMOTE_LIST[*]} 2>/dev/null" \
-  | tar -xf - -C "$DEST"; then
-  echo "[ERROR] pull failed - $DEST may be half-written" >&2
+  | tar -xf - -C "$STAGE"; then
+  echo "[ERROR] pull failed - the old snapshot at $DEST is untouched" >&2
+  rm -rf "$STAGE"
   exit 1
 fi
+
+# The swap. The old snapshot is kept until the new one is in place, so an
+# interrupted pull leaves a working board rather than half a board.
+if [ -d "$DEST" ]; then
+  rm -rf "$DEST.previous"
+  mv "$DEST" "$DEST.previous" || { echo "[ERROR] cannot move the old snapshot aside" >&2; exit 1; }
+fi
+mv "$STAGE" "$DEST" || { echo "[ERROR] cannot put the new snapshot in place" >&2; exit 1; }
+rm -rf "$DEST.previous"
 
 # DOORS STAY THE CHECKOUT'S.
 #
