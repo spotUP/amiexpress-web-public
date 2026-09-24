@@ -4,7 +4,7 @@ import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
 import { controlChordToPetscii, keyEventToPetscii, pastedTextToPetscii } from './keymap';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
-import { clampScrollOffset } from './scrollback';
+import { clampScrollOffset, wheelDeltaInRows } from './scrollback';
 
 export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
@@ -130,6 +130,11 @@ export interface PetsciiCellPointer {
   alt: boolean;
   /** Wheel only: how far, in the DOM's units. */
   deltaY?: number;
+  /**
+   * Wheel only: how far, in ROWS of this screen as it is drawn on the page.
+   * Only the canvas knows how tall a row is on the glass, so it converts.
+   */
+  deltaRows?: number;
 }
 
 /**
@@ -658,8 +663,14 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       type: 'wheel', x: cell.x, y: cell.y, buttons: e.buttons,
       button: 0, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey,
       deltaY: e.deltaY,
+      deltaRows: wheelDeltaInRows(
+        e.deltaY,
+        e.deltaMode,
+        cellH * (e.currentTarget.getBoundingClientRect().height / height),
+        rows,
+      ),
     });
-  }, [onCellPointer, cellAt]);
+  }, [onCellPointer, cellAt, cellH, height, rows]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     // CTRL+C IS THE BOARD'S ABORT KEY, and it could not be pressed here at

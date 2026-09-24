@@ -471,15 +471,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    */
   const [petsciiScrollOffset, setPetsciiScrollOffset] = useState(0);
   const petsciiScrollOffsetRef = useRef(0);
-  const scrollPetsciiByWheel = useCallback((deltaY: number) => {
+  /** The part of a row the wheel has moved and the glass has not yet shown. */
+  const petsciiWheelCarryRef = useRef(0);
+  const scrollPetsciiByWheel = useCallback((deltaRows: number) => {
     const history = petsciiMachineRef.current?.historyLength ?? 0;
-    const next = scrollOffsetForWheel(petsciiScrollOffsetRef.current, deltaY, history);
-    if (next === petsciiScrollOffsetRef.current) return;
-    petsciiScrollOffsetRef.current = next;
-    setPetsciiScrollOffset(next);
+    const next = scrollOffsetForWheel(petsciiScrollOffsetRef.current, deltaRows, petsciiWheelCarryRef.current, history);
+    petsciiWheelCarryRef.current = next.carry;
+    if (next.offset === petsciiScrollOffsetRef.current) return;
+    petsciiScrollOffsetRef.current = next.offset;
+    setPetsciiScrollOffset(next.offset);
   }, []);
   /** Back to the live screen. Every key does this, the way xterm does. */
   const petsciiScrollToLive = useCallback(() => {
+    petsciiWheelCarryRef.current = 0;
     if (petsciiScrollOffsetRef.current === 0) return;
     petsciiScrollOffsetRef.current = 0;
     setPetsciiScrollOffset(0);
@@ -4189,7 +4193,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                * in the DOM and a LARGER offset here.
                */
               if (event.type === 'wheel') {
-                scrollPetsciiByWheel(event.deltaY ?? 0);
+                scrollPetsciiByWheel(event.deltaRows ?? 0);
                 return;
               }
 
