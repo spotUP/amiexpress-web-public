@@ -136,8 +136,12 @@ describe('the screens workspace', () => {
 
     render(<ScreenThemesPage />, { wrapper });
 
-    // The title cell carries the board-default marker beside the title, so
-    // the row is matched on the element's text, not on one text node.
-    expect(await screen.findByText(/Tango \(board default\)/)).toBeTruthy();
+    // The default row is named by its ROLE, not by its artist: the shipped
+    // theme is Tango's and Tango has a second one beside it, so "Tango
+    // (board default)" above "TANGo's screens" read as one artist with two
+    // half-named entries (the sysop, 2026-09-24). The slug under it still
+    // says which theme it is.
+    expect(await screen.findByText('Board Default')).toBeTruthy();
+    expect(screen.queryByText(/Tango \(board default\)/)).toBeNull();
   });
 });

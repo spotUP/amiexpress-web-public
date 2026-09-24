@@ -311,10 +311,20 @@ export function ScreenThemesPage() {
     {
       id: 'title',
       header: 'Theme',
-      value: row => row.title,
+      /*
+       * THE DEFAULT ROW IS NAMED BY ITS ROLE, not by its artist.
+       *
+       * The shipped theme is Tango's, and Tango has a second theme of his
+       * own beside it - so the list read "Tango (board default)" above
+       * "TANGo's screens" and looked like one artist with two half-named
+       * entries. "we dont need to mention it here as it's a bit confusing
+       * just name it Board Default" (the sysop, 2026-09-24). The slug under
+       * it still says which theme it actually is.
+       */
+      value: row => (row.slug === defaultSlug ? 'Board Default' : row.title),
       cell: row => (
         <div>
-          <div>{row.title}{row.slug === defaultSlug ? ' (board default)' : ''}</div>
+          <div>{row.slug === defaultSlug ? 'Board Default' : row.title}</div>
           <div className="text-xs text-content-secondary font-mono">{row.slug}</div>
         </div>
       ),
