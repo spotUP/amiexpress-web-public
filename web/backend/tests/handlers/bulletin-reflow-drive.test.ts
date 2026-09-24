@@ -218,6 +218,13 @@ describe('handleReadBulletinCommand on real bulletin bytes', () => {
    *
    * So the property is the same and the expected output is not: the table
    * must arrive, must fit, and must not be a smear.
+   *
+   * AMENDED 2026-09-24. The header is no longer expected to vanish. Since
+   * 01ce5f212 MultiTop's twice-printed table is read as two 38-column halves
+   * stacked down the screen, each under its own header - so the header FITS
+   * and is kept on purpose. That shape is pinned where it lives,
+   * tests/screens/a-two-column-bulletin-stacks-at-forty.test.ts; this drive
+   * only proves the bulletin command reaches it.
    */
   it('narrows an 80-column ANSI table bulletin to 40 columns, rather than skipping it', async () => {
     const out = await readBulletin(TABLE_BULLETIN, { petsciiMode: true, screenWidth: 40 });
@@ -230,8 +237,8 @@ describe('handleReadBulletinCommand on real bulletin bytes', () => {
     // what tells a caller which row is whose.
     const flat = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
     expect(flat).toContain('sysop');
-    // ...and the 80-column header is gone, because it did not fit.
-    expect(out).not.toContain('No# Username (Handle)');
+    // ...and the 80-column header, printed twice across the page, is not.
+    expect(out).not.toContain('Uploaded Bytes No# Username (Handle)');
   });
 
   it('leaves an ANSI session byte-identical on the same prose bulletin', async () => {
