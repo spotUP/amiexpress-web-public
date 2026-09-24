@@ -14,6 +14,7 @@ import {
   acceptTypedChar, acceptBackspace, ANSI_PROMPT_MAX_LEN,
   recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
+import { emitPrompt } from '../../utils/output.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -85,7 +86,11 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
         await displayScreen(socket, session, 'BBSTITLE');
         session.state = BBSState.LOGON;
         session.subState = undefined;
-        socket.emit('petscii-output', '\r\n\r\n');
+        // Kept in step with the LIVE copy in command.handler.ts
+        // (completeRealC64Connect): the prompt TEXT travels as ansi-output,
+        // because `prompt-login` is a browser-only cue and a byte transport
+        // is left silent without it.
+        emitPrompt(socket, '\r\n\r\nUsername: ');
         socket.emit('prompt-login');
       }
       return true;

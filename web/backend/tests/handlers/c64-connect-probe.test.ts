@@ -208,9 +208,51 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
     const texts = socket.emitted.map((e) => e.data).filter((d) => typeof d === 'string');
     expect(texts.some((t) => t.includes('ANSI, RIP, PETSCII'))).toBe(false);
 
-    // Real C64 output goes through petscii-output, not ansi-output.
-    expect(socket.emitted.some((e) => e.event === 'petscii-output')).toBe(true);
+    // The browser's cue, AND the prompt every other transport reads.
     expect(socket.emitted.some((e) => e.event === 'prompt-login')).toBe(true);
+  });
+
+  /**
+   * A C64 THAT ANSWERS THE GRAPHICS PROMPT WITH DEL IS ASKED FOR A NAME.
+   *
+   * `prompt-login` is a browser-only cue - the ruling in
+   * server/transport-event-rulings.ts says so in as many words: "A byte
+   * transport needs no cue - the server loop's own `Username: ` prompt
+   * travels as ansi-output". This site emitted the cue and no prompt, so
+   * the browser drew its own form and hid the omission, while a telnet C64
+   * got the logo and then silence. Its first RETURN was taken as an empty
+   * username and it was asked for a PASSWORD it had never been asked to
+   * name a user for (the sysop through CGTerm, 2026-09-24, reproduced
+   * against the live board: DEL, then CR, answered `PASSWORD: `).
+   */
+  test('a real C64 is asked for a username, not just told the browser to draw a form', async () => {
+    const socket = makeSocket();
+    const session = baseSession();
+    session.terminalType = 'c64';
+
+    await handleCommand(socket, session, '\x7f');
+
+    const texts = socket.emitted
+      .map((e) => e.data)
+      .filter((d): d is string => typeof d === 'string')
+      .join('');
+    expect(texts).toContain('Username: ');
+  });
+
+  test('the username prompt travels as ansi-output, so the PETSCII transducer sees it', async () => {
+    const socket = makeSocket();
+    const session = baseSession();
+    session.terminalType = 'c64';
+
+    await handleCommand(socket, session, '\x7f');
+
+    // petscii-output is the legacy PUA channel and bypasses the oracle;
+    // server/c64-detected-handler.ts sends this same prompt as ansi-output.
+    const carrying = socket.emitted.filter(
+      (e) => typeof e.data === 'string' && e.data.includes('Username: '),
+    );
+    expect(carrying.length).toBeGreaterThan(0);
+    expect(carrying.every((e) => e.event === 'ansi-output')).toBe(true);
   });
 
   test('(b) slower typer: DEL-probe classifies c64 only once ANSI_PROMPT is already showing — applies PETSCII immediately, not a backspace', async () => {

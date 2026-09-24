@@ -1410,7 +1410,26 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
   session.subState = undefined;
   session.tempData = session.tempData || {};
   session.tempData.loginPhase = 'username';
-  socket.emit('petscii-output', '\r\n\r\n');
+  /*
+   * THE PROMPT ITSELF, not only the browser's cue to draw one.
+   *
+   * `prompt-login` is web-only (server/transport-event-rulings.ts: "A byte
+   * transport needs no cue - the server loop's own `Username: ` prompt
+   * travels as ansi-output"), and this site emitted the cue and no prompt.
+   * The browser drew its own form and hid it; a telnet C64 that answered
+   * the graphics prompt with DEL got the logo and then SILENCE, had its
+   * first RETURN eaten as an empty username, and was asked for a PASSWORD
+   * it had never been asked to name a user for (the sysop through CGTerm,
+   * 2026-09-24; reproduced against the live board).
+   *
+   * Through `emitPrompt`, the way the three ANSI sites below do it and the
+   * way the TTYPE/dedicated-port C64 path already does
+   * (server/c64-detected-handler.ts): as ansi-output, so the session's
+   * transducer sees the text and its cursor and charset oracle match what
+   * the screen now holds. `petscii-output` is the legacy PUA channel and
+   * bypasses that.
+   */
+  emitPrompt(socket, '\r\n\r\nUsername: ');
   socket.emit('prompt-login');
 }
 
