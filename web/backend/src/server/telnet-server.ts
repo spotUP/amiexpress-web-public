@@ -47,6 +47,10 @@ const TELOPT_CHARSET = 42;    // Charset (RFC 2066)
 
 // TTYPE subnegotiation commands
 const TTYPE_SEND = 1;         // Request terminal type
+/** How long the board waits for a TTYPE reply from a client that never promised one. */
+const TTYPE_GRACE_MS = 500;
+/** How long it waits for one the client promised (IAC WILL TTYPE), from connect. */
+const TTYPE_PROMISE_MAX_MS = 3000;
 const TTYPE_IS = 0;           // Terminal type response
 
 // CHARSET subnegotiation commands (RFC 2066:3)
@@ -186,6 +190,14 @@ export class TelnetConnection extends EventEmitter {
   private peerWillState: Map<number, 'on' | 'off'> = new Map();
   private peerDoState:   Map<number, 'on' | 'off'> = new Map();
   private ttypeRequested: boolean = false;
+  /**
+   * True from the peer's IAC WILL TTYPE (we answer with SB SEND) until its
+   * reply is parsed or it withdraws with WONT. While true, the board holds the
+   * first screen: the client has promised to say what it is, and a PETSCII
+   * client whose reply lands after the 500 ms grace used to get the ANSI front
+   * door (2026-09-24, DCTelnet under Amiberry).
+   */
+  private ttypePromised: boolean = false;
   private ttypeData: number[] = [];
   /**
    * Which option the subnegotiation currently being collected belongs to.
@@ -203,6 +215,11 @@ export class TelnetConnection extends EventEmitter {
    */
   public wireCharset: WireCharset | undefined = undefined;
   public terminalType: string = 'unknown';
+
+  /** The peer said WILL TTYPE and its reply has not been parsed yet. */
+  public get isTerminalTypePending(): boolean {
+    return this.ttypePromised;
+  }
   public sessionId: string;
   public nodeId: number;
   public session: BBSSession | null = null;
@@ -417,6 +434,10 @@ export class TelnetConnection extends EventEmitter {
    * Detects C64 vs modern terminals based on reported type
    */
   private handleTerminalType(): void {
+    // Any reply, valid or not, settles the promise; the prompt stops waiting.
+    this.ttypePromised = false;
+    this.emit('terminal-type-settled');
+
     if (this.terminalTypeLocked) {
       // Task 10: dedicated PETSCII port already committed this connection
       // to C64 at connect time — a real TTYPE reply arriving afterward
@@ -541,6 +562,7 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
           if (!this.ttypeRequested) {
             this.sendCommand([IAC, SB, TELOPT_TTYPE, TTYPE_SEND, IAC, SE]);
             this.ttypeRequested = true;
+            this.ttypePromised = true;
           }
         } else if (option === TELOPT_NAWS) {
           // Client will send window size - acknowledge
@@ -571,6 +593,7 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
           this.peerWillState.set(option, 'off');
           this.sendCommand([IAC, DONT, option]);
         }
+        if (option === TELOPT_TTYPE) this.ttypePromised = false;
         break;
 
       case DO:
@@ -971,10 +994,25 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
       });
     }
 
-    // Timeout after 500ms if no TTYPE response - show prompt anyway
+    // After the grace period, prompt - unless the client has promised a
+    // terminal type (IAC WILL TTYPE) and not sent it yet. A promised type is
+    // waited for, up to TTYPE_PROMISE_MAX_MS: a slow PETSCII client otherwise
+    // lost the race to the ANSI front door, and a late "PETSCII" could not
+    // undo it. A client that makes no promise (a real C64 on a WiFi modem,
+    // CGTerm) keeps the 500 ms timer; the DEL-probe classifies those.
     setTimeout(() => {
-      showPrompt();
-    }, 500);
+      if (!connection.isTerminalTypePending) {
+        showPrompt();
+        return;
+      }
+      const cap = setTimeout(showPrompt, TTYPE_PROMISE_MAX_MS - TTYPE_GRACE_MS);
+      connection.once('terminal-type-settled', () => {
+        clearTimeout(cap);
+        // The classifying 'terminal-type' listener above prompts for a valid
+        // reply; this covers an invalid or locked-port one.
+        setImmediate(showPrompt);
+      });
+    }, TTYPE_GRACE_MS);
   }
 
   /**
