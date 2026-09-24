@@ -427,8 +427,21 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
          * is applied BEFORE the blank test on purpose: a reversed space is a
          * solid block, and a selection over blank cells that painted nothing
          * would be invisible, which is the shape the outline had.
+         *
+         * A SELECTION BELONGS TO THE LIVE SCREEN, and is drawn only there.
+         * Its rectangle is in live-screen coordinates, so painting it by
+         * the row on the GLASS stamped it over whatever history the caller
+         * had wheeled to - "if i have a selection its mirrored in the
+         * scrollback" (the sysop, 2026-09-24). Following the cells down
+         * instead would be truthful and still wrong to look at: a selection
+         * over blank cells is a solid block, and there would be one sitting
+         * in the middle of a screen the caller is only reading. A drag
+         * cannot be started or extended up there either, so while the glass
+         * is scrolled back there is simply no selection on it.
          */
-        const screenCode = reversedByHighlight(highlight, x, y) ? cell ^ 0x80 : cell;
+        const screenCode = (scrolled === 0 && reversedByHighlight(highlight, x, y))
+          ? cell ^ 0x80
+          : cell;
         if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
         const color = colours[(historyRow ? historyRow.color[x] : s.colorRam[idx]) & 0x0F];
         const tinted = atlasCache.get(color);

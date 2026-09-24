@@ -33,8 +33,14 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const ATLAS_PX_SIZE = 8;
 const atlasCellOf = (screenCode: number) => glyphCellIndex(0, screenCode) * ATLAS_PX_SIZE;
 
-async function paint(machine: PetsciiMachine, highlight?: Parameters<typeof PetsciiCanvas>[0]['highlight']): Promise<FakeCtx> {
-  const { container } = render(<PetsciiCanvas machine={machine} highlight={highlight} cursorVisible={false} />);
+async function paint(
+  machine: PetsciiMachine,
+  highlight?: Parameters<typeof PetsciiCanvas>[0]['highlight'],
+  scrollOffset?: number,
+): Promise<FakeCtx> {
+  const { container } = render(
+    <PetsciiCanvas machine={machine} highlight={highlight} cursorVisible={false} scrollOffset={scrollOffset} />,
+  );
   const canvas = container.querySelector('canvas')!;
   await waitFor(() => {
     const ctx = ctxByCanvas.get(canvas)!;
@@ -110,5 +116,41 @@ describe("the editor's own marks", () => {
 
     expect(strokes(ctx)).toHaveLength(1);
     expect(glyphs(ctx)[0].args[1]).toBe(atlasCellOf(0x01)); // not reversed
+  });
+});
+
+describe('a selection on a screen the caller has wheeled away from', () => {
+  /** "A" on the top row, one row of history under the glass. */
+  function scrolledScreen(): PetsciiMachine {
+    const machine = new PetsciiMachine({ historyRows: 100 });
+    machine.feed([0x41, 0x0d]); // "A", then RETURN
+    machine.feed([0x42]);       // "B" on the second row
+    for (let i = 0; i < 25; i++) machine.feed([0x0d]); // scroll both off the top
+    return machine;
+  }
+
+  it('does not mark the row that happens to be in its place now', async () => {
+    const ctx = await paint(scrolledScreen(), SELECT_ORIGIN, 2);
+    const drawn = glyphs(ctx);
+
+    // The top two rows of the glass are history. A selection made on the
+    // live screen says nothing about them, so nothing is reversed - and
+    // "A" and "B" are drawn as themselves.
+    expect(drawn.map((c) => c.args[1])).toEqual([atlasCellOf(0x01), atlasCellOf(0x02)]);
+  });
+
+  it('is not drawn at all up there, because a drag cannot reach it', async () => {
+    const machine = new PetsciiMachine({ historyRows: 100 });
+    machine.feed([0x41]); // "A" on the live top row
+    machine.feed([0x0d]);
+    machine.feed([0x93]); // clear: one row of history, blank glass
+
+    const ctx = await paint(machine, SELECT_ORIGIN, 1);
+    const drawn = glyphs(ctx);
+
+    // One cell only: the retired "A" on the top line. Nothing is reversed,
+    // and no solid block sits in the middle of a screen being read.
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0].args[1]).toBe(atlasCellOf(0x01));
   });
 });
