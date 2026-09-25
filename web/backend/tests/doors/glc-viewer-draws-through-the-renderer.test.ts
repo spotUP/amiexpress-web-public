@@ -220,7 +220,7 @@ describe('LINES=AUTO on a C64', () => {
   it('still sums the wide screen on eighty columns', async () => {
     const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, screenHeight: 24 });
-    expect(askedCount()).toBe(autoLines(24));
+    expect(askedCount()).toBe(autoLines(22));
   });
 });
 
@@ -266,6 +266,15 @@ describe('the page has its final shape before the network answers', () => {
     expect(drawn.indexOf('MOST CALLED')).toBeLessThan(firstRewind(drawn));
   });
 
+  it('leaves the board room for its pause on a 24-row screen', async () => {
+    // The page plus the board's blank line and `(Pause)...Space To Resume:`
+    // must fit, or the logo scrolls off the top before the caller reads it
+    // (the sysop's screenshot, 2026-09-25).
+    const { BOARD_PAUSE_ROWS } = require('../../../../Doors/glc-viewer/src/narrow');
+    const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 24 });
+    expect(heightOf(drawn) + BOARD_PAUSE_ROWS).toBeLessThanOrEqual(24);
+  });
+
   it('is exactly as tall after the answer as it was before it - the page cannot grow', async () => {
     for (const screenWidth of [80, 40]) {
       const drawn = await runTheDoor({ screenWidth, screenHeight: 25 });
@@ -296,10 +305,12 @@ describe('how tall the screen is', () => {
   const askedCount = (): number => Number(/[?&]count=(\d+)/.exec(asked[0])![1]);
 
   it('is what the terminal reported, not the user\'s pause length', async () => {
+    // Less the board's pause: 25 rows, 18 of chrome, 2 for the blank line and
+    // the prompt the board draws under the page (2026-09-25).
     const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, screenHeight: 25, user: { linesPerScreen: 0 } });
-    expect(askedCount()).toBe(autoLines(25));
-    expect(askedCount()).toBe(7);
+    expect(askedCount()).toBe(autoLines(23));
+    expect(askedCount()).toBe(5);
   });
 
   it('falls back to the pause length when nothing reported a screen', async () => {

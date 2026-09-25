@@ -25,7 +25,7 @@ import { logoFor } from './src/logo';
 import { rewind, overwrite, skeletonBody, awaitsData } from './src/skeleton';
 import { bodyForThisCall } from './src/fetch-deadline';
 import {
-  narrowBody, narrowHeader, narrowListRows, narrowSkeletonBody, NARROW_WIDTH,
+  narrowBody, narrowHeader, narrowListRows, narrowSkeletonBody, NARROW_WIDTH, BOARD_PAUSE_ROWS,
 } from './src/narrow';
 import { autoLines } from './src/sizing';
 import { doorRootFrom } from './src/door-root';
@@ -472,9 +472,17 @@ function rowsOf(ctx: DoorContext): number {
     bbsSession?: { screenHeight?: number; user?: { linesPerScreen?: number; lineLength?: number; pageLength?: number } };
   }).bbsSession;
   const user = session?.user;
-  const candidates = [
-    session?.screenHeight, user?.linesPerScreen, user?.lineLength, user?.pageLength,
-  ];
+  /*
+   * THE SCREEN IS NOT ALL OURS: the board draws a blank line and its
+   * `(Pause)...Space To Resume:` under this page. The original summed from
+   * DT_LINELENGTH, a pause length, which already leaves the prompt its rows;
+   * the terminal's real height does not, and a full page plus the pause
+   * scrolled the logo off a 24-row web terminal (the sysop's screenshot,
+   * 2026-09-25). The forty-column sum reserves the same rows.
+   */
+  const screen = session?.screenHeight;
+  if (Number.isFinite(screen) && Number(screen) > 0) return Number(screen) - BOARD_PAUSE_ROWS;
+  const candidates = [user?.linesPerScreen, user?.lineLength, user?.pageLength];
   for (const rows of candidates) {
     if (Number.isFinite(rows) && Number(rows) > 0) return Number(rows);
   }
