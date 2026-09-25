@@ -119,6 +119,20 @@ describe('whether the door exit owes the pause, or the walker does', () => {
     expect(doorExitOwesThePause(session)).toBe(false);
   });
 
+  it('does NOT owe it when a screen\'s queued command launched the door', () => {
+    /*
+     * CONF_BULL's `~XISUBSCAN`, run as the caller answers its pause. The
+     * runner's caller draws the next segment the moment the door returns, so
+     * a gate armed here was never shown - and the menu then waited behind it
+     * for a key nobody asked for (the sysop, 2026-09-25).
+     */
+    const session: any = {
+      screenSegments: { segments: ['piece 2'], eventName: 'ansi-output' },
+      executingScreenCommand: true,
+    };
+    expect(doorExitOwesThePause(session)).toBe(false);
+  });
+
   it('owes nothing when the screen is over', () => {
     const session: any = { screenSegments: { segments: [], eventName: 'ansi-output' } };
     expect(doorExitOwesThePause(session)).toBe(false);

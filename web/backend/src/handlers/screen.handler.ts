@@ -219,13 +219,24 @@ export function screenCatalogueName(screenName: string): string {
  *     to-the-end) or drawn over the door's output with no pause (the global
  *     last-callers list, 2026-09-15).
  *
- * So: the door's exit owes the pause exactly when segments remain AND no
- * inline walker is going to arm it.
+ *   * run by `runScreenCommands` - a screen's queued `~XI` door, run as the
+ *     caller answers the pause it waited behind (`~XISUBSCAN` in this
+ *     board's CONF_BULL). The runner's caller - the pagination input or
+ *     processNextScreenSegment - draws the next segment itself the moment
+ *     the door returns and arms the boundary after it. Arming here as well
+ *     left a gate nobody saw: the segment was drawn straight over it, the
+ *     join finished under it, and the menu waited for a key the caller was
+ *     never asked for ("i have to press enter before reaching the main menu
+ *     prompt", the sysop, 2026-09-25, joining C64 Demoscene).
+ *
+ * So: the door's exit owes the pause exactly when segments remain AND nobody
+ * who launched it is going to arm it.
  */
 export function doorExitOwesThePause(session: BBSSession): boolean {
   const segmentsRemain = (session.screenSegments?.segments.length ?? 0) > 0;
   const walkerWillArmIt = (session.inlineScreenCommandDepth ?? 0) > 0;
-  return segmentsRemain && !walkerWillArmIt;
+  const screenRunnerWillArmIt = !!session.executingScreenCommand;
+  return segmentsRemain && !walkerWillArmIt && !screenRunnerWillArmIt;
 }
 
 /**
