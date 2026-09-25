@@ -914,9 +914,7 @@ export async function runPostAuthLogin(
   }
 
   if (logonDisplayed) {
-    if (!session.paginatedScreen) {
-      doPause(emitter as any, session);
-    }
+    pauseAfterLogon(emitter, session);
     // Caller (or handleCommand on the next input) will advance the flow.
     return { ok: true };
   }
@@ -929,6 +927,32 @@ export async function runPostAuthLogin(
     console.error("[LOGIN] post-auth handleCommand failed:", err);
   }
   return { ok: true };
+}
+
+/**
+ * express.e shows LOGON and then pauses before the bulletins. When LOGON is
+ * split by `~SP`, the pause after the whole screen is still owed after its
+ * last piece.
+ */
+export function pauseAfterLogon(emitter: LoginEmitter, session: BBSSession): void {
+  if (!session.paginatedScreen) {
+    doPause(emitter as any, session);
+  }
+  /*
+   * A LOGON SPLIT BY `~SP` IS NOT FINISHED YET, so this pause is not the one
+   * after it.
+   *
+   * The live LOGON is `~CC_gl ~SP / uprough ~SP / quicknew`: displayScreen
+   * draws the first piece and parks the rest on the session, and the prompt
+   * above stands at the first `~SP`, not at the end of the file. Treating it
+   * as the pause after LOGON left the last piece - quicknew - to be drawn and
+   * wiped by BULL's clear in the same breath: "there is no pause after
+   * quicknew" (the sysop, 2026-09-24). NODE_BULL had exactly this debt; it is
+   * booked the same way and paid when the last segment is drawn
+   * (command.handler, handleCommand).
+   */
+  const { rememberTheDebtIfSegmentsRemain } = require("../handlers/command.handler");
+  rememberTheDebtIfSegmentsRemain(session, "logon");
 }
 
 /**

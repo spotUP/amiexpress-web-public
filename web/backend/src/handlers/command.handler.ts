@@ -788,7 +788,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
  * not happened yet, and without it the LAST piece is drawn and taken away by
  * whatever the flow draws next.
  */
-function rememberTheDebtIfSegmentsRemain(session: BBSSession, site: string): void {
+export function rememberTheDebtIfSegmentsRemain(session: BBSSession, site: string): void {
   const segments = session.screenSegments?.segments;
   /*
    * A SCREEN SOMEBODY ELSE IS WAITING ON PAUSES ITSELF.
