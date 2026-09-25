@@ -21,6 +21,12 @@ export class ModemEmulator {
   private directEmit: (event: string, ...args: any[]) => boolean;  // The raw socket emit, bypassing all wrappers
   private startTime: bigint = BigInt(0);
   private bytesSent: number = 0;
+  /**
+   * The unsent rest of the payload `sendThrottled` is part-way through, or
+   * null. `disable()` owes it to the wire BEFORE the queue behind it - see
+   * there.
+   */
+  private inFlightRest: (() => string) | null = null;
 
   constructor(socket: Socket) {
     this.socket = socket;
@@ -52,7 +58,22 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
     this.enabled = false;
     this.bps = 0;
     this.bytesPerSecond = 0;
-    // Flush any remaining queue immediately
+    /*
+     * THE HALF-SENT PAYLOAD GOES FIRST, AND NOW.
+     *
+     * Only the queue was flushed. The payload `sendThrottled` was part-way
+     * through stalled at zero bytes a second and went out when `enable()`
+     * reset the budget - after whatever ran with throttling off. A door does
+     * exactly that: LOGON's clear (thirty line feeds since the scrolling
+     * clear) was still trickling at 56k when `~CC_gl` disabled the modem, so
+     * the rest of it arrived AFTER the last-callers list and scrolled it off,
+     * leaving a screen with only the pause prompt on it ("the global last
+     * callers door is still cleared before the pause prompt", the sysop,
+     * 2026-09-25). The queue was also flushed ahead of it, out of order.
+     */
+    const rest = this.inFlightRest?.() ?? '';
+    this.inFlightRest = null;
+    if (rest) this.directEmit('ansi-output', rest);
     this.flushImmediate();
   }
 
@@ -167,8 +188,19 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
 
     // Tokenize ANSI so we never split escape sequences
     const tokens = this.tokenizeAnsi(payload);
+    let tokIndex = 0;
+    let chars: string[] = [];
+    let charOffset = 0;
+    // What is still unsent, read live - so disable() can send it in order.
+    const rest = () => chars.slice(charOffset).join('') + tokens.slice(tokIndex + 1).join('');
+    this.inFlightRest = rest;
 
-    for (const tok of tokens) {
+    for (; tokIndex < tokens.length; tokIndex++) {
+      // disable() already sent the rest of this payload.
+      if (this.inFlightRest !== rest) return;
+      const tok = tokens[tokIndex];
+      chars = [];
+      charOffset = 0;
       const isEscape = tok.startsWith('\x1b');
 
       if (isEscape) {
@@ -179,10 +211,10 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
 
       // Send visible characters with throttling
       // Use Array.from to properly split by Unicode code points (not bytes!)
-      const chars = Array.from(tok);
-      let charOffset = 0;
+      chars = Array.from(tok);
 
       while (charOffset < chars.length) {
+        if (this.inFlightRest !== rest) return;
         const now = process.hrtime.bigint();
         const elapsedMs = Number(now - this.startTime) / 1_000_000;
         const allowedBytes = Math.floor(this.bytesPerSecond * (elapsedMs / 1000));
@@ -223,6 +255,7 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
         this.bytesSent += chunkBytes;
       }
     }
+    if (this.inFlightRest === rest) this.inFlightRest = null;
   }
 
   /**

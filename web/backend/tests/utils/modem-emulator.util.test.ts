@@ -146,6 +146,40 @@ describe('ModemEmulator (Modem Speed Throttling)', () => {
       expect(emulator.getBps()).toBe(0);
     });
 
+    /*
+     * "the global last callers door is still cleared before the pause
+     * prompt" (the sysop, 2026-09-25, at 56k). LOGON's scrolling clear was
+     * still trickling when the `~CC_gl` door disabled the modem; the rest of
+     * it stalled, then went out AFTER the door's list once the modem came
+     * back, and scrolled it away.
+     */
+    it('sends the rest of a half-sent payload at once, before the door writes', async () => {
+      emulator.enable(1200); // 120 bytes a second: 60 bytes take half of it
+      const clear = '\r\n'.repeat(30) + '\x1b[H';
+      emulator.write(clear);
+      await new Promise(resolve => setTimeout(resolve, 60));
+      expect(mockSocket.getEmittedData('ansi-output').join('')).not.toBe(clear);
+
+      emulator.disable();
+      mockSocket.emit('ansi-output', 'LAST CALLERS');
+      emulator.enable(1200);
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      const wire = mockSocket.getEmittedData('ansi-output').join('');
+      expect(wire).toBe(clear + 'LAST CALLERS');
+    });
+
+    it('sends the queue after the half-sent payload, in order', async () => {
+      emulator.enable(1200);
+      emulator.write('A'.repeat(40));
+      emulator.write('B');
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      emulator.disable();
+
+      expect(mockSocket.getEmittedData('ansi-output').join('')).toBe('A'.repeat(40) + 'B');
+    });
+
     it('should allow immediate writes after disable', () => {
       emulator.enable(1200);
       emulator.disable();
