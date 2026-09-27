@@ -4899,7 +4899,20 @@ console.error('Error processing command:', error);
       showMenuAfterCommand(socket, session, true);
       return;
     }
-    // Otherwise honor the command-changed subState (e.g., pause or door); menu loop will pick it up.
+    /*
+     * A COMMAND THAT HANDS BACK TO THE MENU IS FOLLOWED BY THE MENU, NOW.
+     *
+     * express.e's main loop (28641-28648) goes straight round to
+     * DISPLAY_MENU after processCommand - no key between. `T` sets
+     * DISPLAY_MENU and returns, and nothing here ran the flow: the caller
+     * saw "It is ..." and then a silent line until he pressed a key nobody
+     * had asked for. Found by the scripted telnet login, 2026-09-27, on
+     * every line ending a client can send. A pause the command put up is
+     * left standing - advanceDisplayFlow refuses to walk over one.
+     */
+    if (isDisplayFlowState(session.subState) && !session.paginatedScreen) {
+      await advanceDisplayFlow(socket, session);
+    }
     return;
   } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
     // Handle user stats menu input (F=Font, Q=Quit)
