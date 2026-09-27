@@ -580,7 +580,19 @@ export async function runPostAuthLogin(
     (session.entryUserId as any) !== undefined &&
     String(session.entryUserId) === String((user as any)?.id);
 
-  if (!reauthenticating) {
+  /*
+   * RAPID TESTS ONLY. The scripted telnet suite logs the same account in and
+   * out many times a minute, and a call it had to drop leaves a session in
+   * its reconnect grace - so the next call met "already logged in" and the
+   * rest of the run failed on that, not on what it was testing (the sysop,
+   * 2026-09-27: "if you are going to do rapid tests i think you need a flag
+   * to disable that"). Never in production: the live container runs with
+   * NODE_ENV=production, and the check is express.e:29715-29727 parity.
+   */
+  const devAllowsTwice = process.env.BBS_DEV_ALLOW_SAME_USER_TWICE === '1'
+    && process.env.NODE_ENV !== 'production';
+
+  if (!reauthenticating && !devAllowsTwice) {
     const alreadyOn = userAlreadyOnNode(
       appConfig.get('dataDir'),
       user.username,

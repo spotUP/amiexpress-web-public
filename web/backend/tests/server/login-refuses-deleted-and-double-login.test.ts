@@ -168,6 +168,44 @@ describe('the same account logging in twice', () => {
     expect(output(socket)).toContain('You are already logged into another node!');
   });
 
+  /*
+   * The scripted telnet suite logs in many times a minute; a call it dropped
+   * leaves a session in its reconnect grace, and the next call was refused
+   * against it. A development-only flag lets the same account in twice - and
+   * a production board ignores it (the sysop, 2026-09-27).
+   */
+  it('lets the same account in twice on a development board with the flag', async () => {
+    userAlreadyOnNode.mockReturnValue(2);
+    const saved = { flag: process.env.BBS_DEV_ALLOW_SAME_USER_TWICE, env: process.env.NODE_ENV };
+    process.env.BBS_DEV_ALLOW_SAME_USER_TWICE = '1';
+    process.env.NODE_ENV = 'development';
+    try {
+      const { runPostAuthLogin } = require('../../src/services/login-post.service');
+      const result = await runPostAuthLogin(emitter(), session(), LIVE_USER, { lastLoginBeforeUpdate: new Date(0) });
+      expect(result).not.toEqual({ ok: false, terminated: 'already-on-another-node' });
+    } finally {
+      process.env.BBS_DEV_ALLOW_SAME_USER_TWICE = saved.flag;
+      process.env.NODE_ENV = saved.env;
+      if (saved.flag === undefined) delete process.env.BBS_DEV_ALLOW_SAME_USER_TWICE;
+    }
+  });
+
+  it('still refuses the second login on a production board, flag or not', async () => {
+    userAlreadyOnNode.mockReturnValue(2);
+    const saved = { flag: process.env.BBS_DEV_ALLOW_SAME_USER_TWICE, env: process.env.NODE_ENV };
+    process.env.BBS_DEV_ALLOW_SAME_USER_TWICE = '1';
+    process.env.NODE_ENV = 'production';
+    try {
+      const { runPostAuthLogin } = require('../../src/services/login-post.service');
+      const result = await runPostAuthLogin(emitter(), session(), LIVE_USER, { lastLoginBeforeUpdate: new Date(0) });
+      expect(result).toEqual({ ok: false, terminated: 'already-on-another-node' });
+    } finally {
+      process.env.BBS_DEV_ALLOW_SAME_USER_TWICE = saved.flag;
+      process.env.NODE_ENV = saved.env;
+      if (saved.flag === undefined) delete process.env.BBS_DEV_ALLOW_SAME_USER_TWICE;
+    }
+  });
+
   it('does not refuse a caller who is on no other node', async () => {
     const { runPostAuthLogin } = require('../../src/services/login-post.service');
     const socket = emitter();

@@ -172,7 +172,9 @@ def upload(b: Board, tmp: str, protocol: str) -> tuple[str, bytes]:
     b.send("\r")
     answer_leftovers(b)
     if xmodem:
-        expect_on_screen(b, r"\(A\)bort\? C", "the receiver's C", timeout=20)
+        # The receiver asks with 'C' (CRC), repeated until a sender answers,
+        # on its own row once the board's text has gone out first.
+        expect(b, r"^C+$", "the receiver's C", timeout=20)
         rc = b.relay(tmp, ["sz", "--xmodem", "-b", name])
     else:
         expect_on_screen(b, r"^\*\*", "rz's ZRINIT", timeout=20)
