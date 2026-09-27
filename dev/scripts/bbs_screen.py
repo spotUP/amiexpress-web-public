@@ -148,6 +148,14 @@ class Board:
         for _ in range(limit):
             self.settle(1.2, 30.0)
             here = self.prompt()
+            # An empty cursor row is not a question: a door is still thinking
+            # (a 68K door can sit silent for seconds). Give it time before
+            # calling it anything.
+            waited = 0.0
+            while not here and waited < 30.0:
+                self.settle(2.0, 10.0)
+                waited += 2.0
+                here = self.prompt()
             answer = None
             for pattern, keys, why in KNOWN_PROMPTS:
                 if pattern.search(here):
