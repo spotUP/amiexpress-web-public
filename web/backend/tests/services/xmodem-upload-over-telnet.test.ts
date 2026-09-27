@@ -35,7 +35,7 @@ function block(n: number, text: string): Buffer {
   return Buffer.concat([Buffer.from([SOH, n, 255 - n]), data, Buffer.from([sum])]);
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 20));
+const settle = (ms = 20) => new Promise((r) => setTimeout(r, ms));
 
 function aTelnetCaller(root: string) {
   const sent: Buffer[] = [];
@@ -44,7 +44,10 @@ function aTelnetCaller(root: string) {
     bbsPath: root, nodeId: 1, currentConf: 1, connectionType: 'telnet',
     user: { id: 'u1', username: 'sysop', protocol: 'xmodem' },
     transferRawSend: send, transferRawSendUnescaped: () => {},
-    tempData: { uploadBatch: [{ filename: 'HELLO.TXT', description: 'a test' }] },
+    tempData: {
+      uploadBatch: [{ filename: 'HELLO.TXT', description: 'a test' }],
+      fileArea: { id: 1, conferenceId: 1, name: 'Uploads', path: 'Conf1/Files' },
+    },
   };
   const socket: any = { id: 'xm-1', emit: () => true, on: () => {} };
   return { session, socket, send, sent };
@@ -68,6 +71,24 @@ describe('an XMODEM upload over telnet', () => {
     const landed = path.join(root, 'Node1', 'Playpen', 'HELLO.TXT');
     expect(fs.existsSync(landed)).toBe(true);
     expect(fs.readFileSync(landed, 'latin1')).toBe('hello from xmodem');
+  });
+
+  it('is filed like a ZMODEM upload - it goes on to its description', async () => {
+    // It landed, printed stats and was never filed: logoff then parked it in
+    // PartUpload as "incompleted". Now the same filing ZMODEM uses runs - the
+    // DIZ check and the description prompt for the file.
+    const { session, socket } = aTelnetCaller(root);
+    const out: string[] = [];
+    socket.emit = (event: string, data: unknown) => { if (event === 'ansi-output') out.push(String(data)); return true; };
+    startZmodemUpload(socket, session);
+    await settle();
+
+    session.transferRawSink(block(1, 'filed'));
+    session.transferRawSink(Buffer.from([EOT]));
+    await settle(200);
+
+    expect(out.join('')).toMatch(/Please enter a description/);
+    expect(out.join('')).toContain('HELLO.TXT');
   });
 
   it('leaves the transport\'s sender in place for the next transfer', async () => {

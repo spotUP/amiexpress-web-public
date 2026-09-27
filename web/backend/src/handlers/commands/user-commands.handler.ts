@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import { negotiateBinaryForTransfer } from '../file/file-delivery';
+import type { TransferResult } from '../../services/transfer-protocol.service';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -100,6 +101,123 @@ function getTransferTransport(session: BBSSession): TransferTransport {
     });
 
   return { type: transportType, send };
+}
+
+/**
+ * File what a transfer delivered to the playpen: the DIZ check, the
+ * description prompt per file, then the batch's filing and stats.
+ *
+ * ONE of these for every protocol. It was the body of the ZMODEM completion
+ * alone, so an XMODEM upload landed in the playpen, printed its stats, and
+ * was never filed - logoff then parked it in PartUpload as "incompleted"
+ * (the telnet regression suite, 2026-09-27).
+ */
+async function fileReceivedUploads(
+  socket: any,
+  session: BBSSession,
+  received: string[],
+  skipped: string[],
+  ulStartTime: number,
+): Promise<void> {
+  // express.e:15101 - every refused name goes to the CallersLog and
+  // the UD log, and nowhere else: the caller's own client has already
+  // told him the file was skipped.
+  for (const skippedName of skipped) {
+    try {
+      const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
+      void writeToCallersLog(session.user?.username || '', `Skipped ${skippedName}`, session.nodeId || 0);
+      void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
+    } catch (err) {
+      console.error('[UPLOAD] could not log a skipped file:', err);
+    }
+  }
+  const fsSync = require('fs');
+  const pathMod = require('path');
+  const { db } = require('../../database');
+  const { config: appConfig } = require('../../config');
+  const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
+    require('../../server/file-socket-handlers');
+
+  // Target file area: prefer what displayUploadInterface already
+  // resolved (file.handler.ts:720 sets session.tempData.fileArea
+  // = uploadArea via the conference's upload-path Tooltype). Only
+  // fall back to db.getFileAreas if tempData was cleared somehow
+  // — the express.e flow always commits the area at U-command
+  // entry, not at upload completion.
+  let fileArea: any = (session.tempData as any)?.fileArea || null;
+  if (!fileArea) {
+    try {
+      const areas = await db.getFileAreas(session.currentConf);
+      fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
+    } catch (err: any) {
+      console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
+    }
+  }
+  if (!fileArea) {
+    socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+    return;
+  }
+
+  if (received.length === 0) {
+    // No files received — short-circuit to the stats-only banner +
+    // runPostUpload so the user still gets the express.e-style
+    // completion line and the menu prompt fires. Express.e:19127
+    // emits "Time increased" then drops back to the main loop.
+    await handleUploadBatchComplete(socket, session);
+    return;
+  }
+
+  // Synthesize the uploadContext that processFileUpload installs
+  // for HTTP uploads. webUploadMode=true routes processBatchFile
+  // through handleDizExtractionAndDescription. Multi-file batches
+  // queue in pendingZmodemFiles and walk one-at-a-time after each
+  // description completes (state machine in command.handler.ts
+  // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
+  session.tempData = {
+    uploadMode: true,
+    fileArea,
+    uploadSessionId: `u-zmodem-${Date.now()}`,
+    uploadBatch: [],
+    uploadCount: received.length,
+    uploadStartTime: ulStartTime,
+    webUploadMode: true,
+    batchUpload: false,
+    currentUploadIndex: 0,
+    filesProcessedCount: 0,
+    uploadedFiles: 0,
+    uploadedBytes: 0,
+    skipDizExtraction: false,
+    pendingZmodemFiles: received.slice(1).map((fp: string) => ({
+      path: fp,
+      name: pathMod.basename(fp),
+    })),
+  } as any;
+
+  const firstPath = received[0];
+  let firstSize = 0;
+  try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
+  const firstName = pathMod.basename(firstPath);
+  try {
+    await handleDizExtractionAndDescription(socket, session, {
+      filename: firstName,
+      originalname: firstName,
+      size: firstSize,
+      path: firstPath,
+    }, appConfig);
+    // Only set UPLOAD_DESC_INPUT if the batch is still active.
+    // When all files have FILE_ID.DIZ the recursive chain clears
+    // tempData and sets subState=DISPLAY_MENU before returning here.
+    if (session.tempData) {
+      session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+    }
+  } catch (err: any) {
+    console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
+    socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+  }
 }
 
 export function startZmodemUpload(socket: any, session: BBSSession): void {
@@ -208,16 +326,22 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // express.e:15891-15896 - BINARY before any transfer, not only ZMODEM:
       // XMODEM blocks carry 0x0D and 0xFF as freely as ZMODEM frames do.
       negotiateBinaryForTransfer(session);
-      protocolManager.on('complete', async (result: any) => {
+      protocolManager.on('complete', async (result: TransferResult) => {
         endRawTransfer(session);
         // The post-upload pipeline is the same one lrzsz's onComplete runs;
         // a Punter upload must be filed exactly like a ZMODEM one.
-        const { runPostUpload } = require('../../services/post-upload.service');
-        await runPostUpload(socket, session, {
-          uploadStartTime: ulStartTime,
-          uploadedFiles: result?.filesTransferred ?? 0,
-          uploadedBytes: result?.bytesTransferred ?? 0,
-        });
+        //
+        // TYPED, because `any` hid the field name: this read
+        // `filesTransferred`, which TransferResult has never had, so every
+        // XMODEM/YMODEM/Punter upload reported "0 file(s)" and was filed as
+        // incomplete in PartUpload (the telnet regression suite, 2026-09-27).
+        if (!result.success || result.files.length === 0) {
+          socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = true;
+          return;
+        }
+        await fileReceivedUploads(socket, session, result.files, [], ulStartTime);
       });
       // These callers are not async; the transfer runs on its own and reports
       // through the 'complete' event above.
@@ -271,106 +395,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
             // FILES.BBS, or logged. Express.e:19053+ runs the post-upload
             // body unconditionally regardless of how the receive started,
             // so U-command and RZ-command must converge here.
-            const received: string[] = detail?.received || [];
-          // express.e:15101 - every refused name goes to the CallersLog and
-            // the UD log, and nowhere else: the caller's own client has already
-            // told him the file was skipped.
-            for (const skippedName of (detail?.skipped || [])) {
-              try {
-                const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
-                void writeToCallersLog(session.user?.username || '', `Skipped ${skippedName}`, session.nodeId || 0);
-                void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
-              } catch (err) {
-                console.error('[UPLOAD] could not log a skipped file:', err);
-              }
-            }
-            const fsSync = require('fs');
-            const pathMod = require('path');
-            const { db } = require('../../database');
-            const { config: appConfig } = require('../../config');
-            const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
-              require('../../server/file-socket-handlers');
-
-            // Target file area: prefer what displayUploadInterface already
-            // resolved (file.handler.ts:720 sets session.tempData.fileArea
-            // = uploadArea via the conference's upload-path Tooltype). Only
-            // fall back to db.getFileAreas if tempData was cleared somehow
-            // — the express.e flow always commits the area at U-command
-            // entry, not at upload completion.
-            let fileArea: any = (session.tempData as any)?.fileArea || null;
-            if (!fileArea) {
-              try {
-                const areas = await db.getFileAreas(session.currentConf);
-                fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
-              } catch (err: any) {
-                console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
-              }
-            }
-            if (!fileArea) {
-              socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
-              session.subState = LoggedOnSubState.DISPLAY_MENU;
-              session.menuPause = true;
-              return;
-            }
-
-            if (received.length === 0) {
-              // No files received — short-circuit to the stats-only banner +
-              // runPostUpload so the user still gets the express.e-style
-              // completion line and the menu prompt fires. Express.e:19127
-              // emits "Time increased" then drops back to the main loop.
-              await handleUploadBatchComplete(socket, session);
-              return;
-            }
-
-            // Synthesize the uploadContext that processFileUpload installs
-            // for HTTP uploads. webUploadMode=true routes processBatchFile
-            // through handleDizExtractionAndDescription. Multi-file batches
-            // queue in pendingZmodemFiles and walk one-at-a-time after each
-            // description completes (state machine in command.handler.ts
-            // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
-            session.tempData = {
-              uploadMode: true,
-              fileArea,
-              uploadSessionId: `u-zmodem-${Date.now()}`,
-              uploadBatch: [],
-              uploadCount: received.length,
-              uploadStartTime: ulStartTime,
-              webUploadMode: true,
-              batchUpload: false,
-              currentUploadIndex: 0,
-              filesProcessedCount: 0,
-              uploadedFiles: 0,
-              uploadedBytes: 0,
-              skipDizExtraction: false,
-              pendingZmodemFiles: received.slice(1).map((fp: string) => ({
-                path: fp,
-                name: pathMod.basename(fp),
-              })),
-            } as any;
-
-            const firstPath = received[0];
-            let firstSize = 0;
-            try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
-            const firstName = pathMod.basename(firstPath);
-            try {
-              await handleDizExtractionAndDescription(socket, session, {
-                filename: firstName,
-                originalname: firstName,
-                size: firstSize,
-                path: firstPath,
-              }, appConfig);
-              // Only set UPLOAD_DESC_INPUT if the batch is still active.
-              // When all files have FILE_ID.DIZ the recursive chain clears
-              // tempData and sets subState=DISPLAY_MENU before returning here.
-              if (session.tempData) {
-                session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-              }
-            } catch (err: any) {
-              console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
-              socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
-              session.subState = LoggedOnSubState.DISPLAY_MENU;
-              session.menuPause = true;
-            }
+            await fileReceivedUploads(socket, session, detail?.received || [], detail?.skipped || [], ulStartTime);
           },
         });
         (session as any).transferRawActive = true;
@@ -563,7 +588,7 @@ export function startZmodemDownload(
     );
     // express.e:15891-15896 - BINARY before any transfer, not only ZMODEM.
     negotiateBinaryForTransfer(session);
-    protocolManager.on('complete', async (result: any) => {
+    protocolManager.on('complete', async (result: TransferResult) => {
       endRawTransfer(session);
       // The same post-download pipeline ZMODEM runs: stats booked, logs
       // written, the prompt drawn. This branch printed its own line and
