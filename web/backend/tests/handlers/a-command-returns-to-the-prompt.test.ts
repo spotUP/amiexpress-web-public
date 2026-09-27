@@ -28,13 +28,35 @@ function aCaller() {
   };
   const session: any = {
     nodeId: 1, state: BBSState.LOGGEDON, subState: LoggedOnSubState.PROCESS_COMMAND,
-    currentConf: 1, relConfNum: 1, currentConfName: 'Main', timeRemaining: 3600, tempData: {},
+    currentConf: 1, relConfNum: 1, currentConfName: 'Main', timeRemaining: 3600, tempData: {}, commandHistory: [], historyIndex: 0,
     user: { id: 'u1', username: 'sysop', name: 'sysop', secLevel: 255, expert: 'X' },
   };
   return { socket, session, out };
 }
 
 describe('the T command', () => {
+  /*
+   * The real telnet path: the caller is at a prompt displayMainMenu drew
+   * (which leaves skipNextDisplayFlowMenu set), types T and RETURN. The
+   * unit case below started in PROCESS_COMMAND with the flag unset and
+   * passed while the live board still swallowed the prompt.
+   */
+  it('is followed by the prompt when typed at a prompt the menu drew', async () => {
+    const { socket, session, out } = aCaller();
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    session.skipNextDisplayFlowMenu = true;
+    session.manualMenuTargetState = LoggedOnSubState.READ_COMMAND;
+
+    await handleCommand(socket, session, 'T');
+    await handleCommand(socket, session, '\r');
+    await new Promise((r) => setTimeout(r, 30));   // the submit runs PROCESS_COMMAND on the next tick
+    flushOutput(socket);
+
+    const wire = out.join('');
+    expect(wire).toContain('It is ');
+    expect(wire.slice(wire.indexOf('It is '))).toMatch(/Menu \(/);
+  });
+
   it('is followed by the menu prompt without another key', async () => {
     const { socket, session, out } = aCaller();
     session.commandText = 'T';

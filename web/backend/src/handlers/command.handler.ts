@@ -4630,6 +4630,17 @@ console.log('[CommandHistory] History cleared by user (Ctrl-B)');
         const { addToHistory } = require('../utils/command-history.util');
         addToHistory(session, input);
 
+        /*
+         * A SUBMITTED COMMAND ENDS THE MANUAL MENU'S TURN.
+         *
+         * displayMainMenu sets skipNextDisplayFlowMenu so a flow pass in the
+         * SAME turn does not draw a second menu. Nothing cleared it once the
+         * caller typed on, so it swallowed the next real one: after T or S
+         * the flow logged "skipping duplicate MENU display" and the caller
+         * got no prompt (found by the telnet regression suite, 2026-09-27).
+         * The J path cleared it by hand for the same reason.
+         */
+        session.skipNextDisplayFlowMenu = false;
         // Store command text in session for PROCESS_COMMAND state
         session.commandText = input.toUpperCase();
 console.log(' Command text stored:', session.commandText);
