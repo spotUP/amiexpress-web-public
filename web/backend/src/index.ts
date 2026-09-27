@@ -534,6 +534,8 @@ export interface BBSSession {
   keyBusy?: boolean;
   /** Input before this time is a finished transfer's protocol tail (raw-transfer-teardown). */
   transferDrainUntil?: number;
+  /** Where the protocol-tail filter is inside a ZMODEM header (terminal-input isProtocolTail). */
+  transferTail?: { can: boolean; hex: number; eol: number; header?: boolean };
   // express.e's non-stop text flag (`~NS` / `~NSF`): suppresses further
   // pauses for the rest of the display. Set by the MCI dispatch and the
   // pre-passes, read by the XIM bridge (`XIMProtocol.ts:150`) and ARexx

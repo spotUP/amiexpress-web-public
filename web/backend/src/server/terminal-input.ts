@@ -158,6 +158,42 @@ export function isStrayMouseReport(input: string): boolean {
 }
 
 /**
+ * Is this key part of a ZMODEM goodbye still arriving after the board's end
+ * of the transfer exited?
+ *
+ * A caller's program closes with a ZFIN hex header - `**`, CAN, `B`, fourteen
+ * hex digits, CR LF and XON - and `OO`. Those went to the menu as commands
+ * ("No such command!!", 2026-09-27). Dropping EVERYTHING for a while after a
+ * transfer was too blunt: the upload's description prompt appears inside that
+ * while, and a quick caller's description vanished. So only the goodbye's own
+ * shape is dropped, tracked across keys because a header arrives a key at a
+ * time.
+ */
+export function isProtocolTail(
+  session: { transferTail?: { can: boolean; hex: number; eol: number; header?: boolean } },
+  piece: string,
+): boolean {
+  const tail = (session.transferTail ??= { can: false, hex: 0, eol: 0 });
+  if (tail.hex > 0 && /^[0-9a-fA-F]$/.test(piece)) {
+    tail.hex -= 1;
+    if (tail.hex === 0) { tail.eol = 3; tail.header = true; }   // CR LF XON after it
+    return true;
+  }
+  tail.hex = 0;
+  if (tail.eol > 0 && (piece === '\r' || piece === '\n' || piece === '\x11' || piece === '\x8a')) {
+    tail.eol -= 1;
+    return true;
+  }
+  tail.eol = 0;
+  if (piece === '\x18') { tail.can = true; return true; }
+  if (piece === 'B' && tail.can) { tail.can = false; tail.hex = 14; return true; }
+  tail.can = false;
+  // `OO` closes the session - but only once a header has shown this IS a
+  // goodbye; an O typed in the window is a caller's O.
+  return piece === '*' || piece === '\x11' || piece === '\x13' || (piece === 'O' && !!tail.header);
+}
+
+/**
  * How long one keystroke may hold the next one back. See dispatchInOrder.
  */
 export const KEY_ORDER_WAIT_MS = 2000;
@@ -180,14 +216,17 @@ export const KEY_ORDER_WAIT_MS = 2000;
  * the board is still taking the previous one in.
  */
 export function dispatchInOrder(
-  session: { keyChain?: Promise<void>; keyBusy?: boolean; transferDrainUntil?: number } | null | undefined,
+  session: { keyChain?: Promise<void>; keyBusy?: boolean; transferDrainUntil?: number; transferTail?: { can: boolean; hex: number; eol: number } } | null | undefined,
   pieces: string[],
   handle: (piece: string) => Promise<unknown>,
   onError: (error: unknown) => void,
 ): void {
-  // A transfer just ended: this is its protocol's goodbye, not typing.
-  // See endRawTransfer.
-  if (session?.transferDrainUntil && Date.now() < session.transferDrainUntil) return;
+  // A transfer just ended: what looks like its protocol's goodbye is dropped,
+  // anything else is typing and goes through. See endRawTransfer.
+  if (session?.transferDrainUntil && Date.now() < session.transferDrainUntil) {
+    pieces = pieces.filter((piece) => !isProtocolTail(session, piece));
+    if (pieces.length === 0) return;
+  }
   if (!session) {
     for (const piece of pieces) handle(piece).catch(onError);
     return;

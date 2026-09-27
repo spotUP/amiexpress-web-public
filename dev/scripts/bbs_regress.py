@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-Telnet regression suite: log in as a caller, exercise the board, check what
-comes back - file transfers included.
+Telnet regression suite, driven by READING the screen.
 
 "write a full telnet regression script and test everything we can for
-regressions? including file transfers which has issue via telnet. zmodem and
-xmodem being the focus for now" (the sysop, 2026-09-27).
+regressions? including file transfers" and "you are still guessing what to
+type" (the sysop, 2026-09-27). Every step here waits until the prompt it
+expects is on the cursor's row of the RENDERED 80x25 screen (bbs_screen.Board,
+pyte), then types. Anything else fails the case with the screen attached - it
+never presses a key on a guess. Each flow was walked by hand first.
 
-Each case is its own call (login ... logoff), so one broken case cannot
-poison the next. Verdicts are written to --results as each case finishes;
-the next run skips what already passed unless asked, so an interruption
-costs one case, not the suite (global rule 6a).
+  dev/scripts/.venv/bin/python dev/scripts/bbs_regress.py                 # cases not yet passed, LOCAL
+  dev/scripts/.venv/bin/python dev/scripts/bbs_regress.py --only zmodem-upload
+  dev/scripts/.venv/bin/python dev/scripts/bbs_regress.py --failed
+  dev/scripts/.venv/bin/python dev/scripts/bbs_regress.py --all --watch   # Terminal tab for the sysop
 
-  python3 dev/scripts/bbs_regress.py                     # every case not yet passed, LOCAL board
-  python3 dev/scripts/bbs_regress.py --only zmodem-upload
-  python3 dev/scripts/bbs_regress.py --failed            # re-run only what failed last time
-  python3 dev/scripts/bbs_regress.py --all --watch       # everything, with a Terminal tab to watch
-
-LOCAL by default. --host bbs.uprough.net runs against the live board, where
-uploads land on the real board - only on purpose.
+Each case is its own call. Verdicts go to --results per board as each case
+finishes; a run skips what passed unless --all (global rule 6a). The sysop's
+transfer protocol is read before the first transfer case and put back after.
+LOCAL by default; on --host bbs.uprough.net uploads land on the real board.
 """
 from __future__ import annotations
 
@@ -36,174 +35,258 @@ import traceback
 from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bbs_telnet import MENU, Session, Timeout  # noqa: E402
+from bbs_screen import MENU_PROMPT, Board  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_RESULTS = os.path.join(REPO, "thoughts", "spot", "bbs-regress-results.json")
 
+PAUSE = re.compile(r"space to resume:?$", re.I)
+PRESS_KEY = re.compile(r"press any key to continue\.*$", re.I)
+PROTOCOL_ROW = re.compile(r"\[\s*11\] TRANSFER PROTOCOL\.+\s*(\S.*)$")
+PROTOCOL_NUMBER = {"ZMODEM": "1", "YMODEM": "2", "XMODEM-1K": "3", "XMODEM-CRC": "4", "XMODEM": "5",
+                   "PUNTER": "6", "WEBSOCKET": "7"}
+
 
 class Failed(Exception):
-    """A check that did not hold."""
+    """A check that did not hold. Carries the screen it failed on."""
 
 
-def check(ok: bool, what: str) -> None:
+# -- reading --------------------------------------------------------------------
+
+def screen_text(b: Board) -> str:
+    with b.lock:
+        return "\n".join(line.rstrip() for line in b.screen.display)
+
+
+def expect(b: Board, pattern: str | re.Pattern, what: str, timeout: float = 30.0) -> str:
+    """Wait until the cursor's row ends with `pattern`. Returns the prompt."""
+    wanted = re.compile(pattern, re.I) if isinstance(pattern, str) else pattern
+    start = time.time()
+    while time.time() - start < timeout:
+        b.settle(0.6, 5.0)
+        here = b.prompt()
+        if wanted.search(here):
+            return here
+        if b.closed:
+            break
+    raise Failed(f"expected {what}; cursor row is {b.prompt()!r}\n{b.render()}")
+
+
+def expect_on_screen(b: Board, pattern: str, what: str, timeout: float = 30.0) -> str:
+    """Wait until `pattern` is anywhere on the screen (a result line, not a prompt)."""
+    wanted = re.compile(pattern, re.I | re.M)
+    start = time.time()
+    while time.time() - start < timeout:
+        b.settle(0.6, 5.0)
+        m = wanted.search(screen_text(b))
+        if m:
+            return m.group(0)
+    raise Failed(f"expected {what} on screen\n{b.render()}")
+
+
+def check(ok: bool, what: str, b: Board) -> None:
     if not ok:
-        raise Failed(what)
+        raise Failed(f"{what}\n{b.render()}")
 
 
-# -- the cases -----------------------------------------------------------------
-#
-# Each takes a logged-in Session standing at the menu prompt and a scratch
-# directory, and returns a one-line note. It must leave the session at the
-# menu prompt; the runner logs off.
-
-def case_login(s: Session, _tmp: str) -> str:
-    return "reached the menu prompt"
-
-
-def case_time(s: Session, _tmp: str) -> str:
-    # The board keeps the sysop's local time (f6ef1c99e) and redraws the
-    # prompt after T without another key (265943023).
-    out = s.command("T")
-    m = re.search(r"It is (\d\d)-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)", out)
-    check(bool(m), "T printed no time")
-    mo, d, y, hh, mm, ss = (int(x) for x in m.groups())
-    shown = dt.datetime(2000 + y, mo, d, hh, mm, ss)
-    drift = abs((dt.datetime.now() - shown).total_seconds())
-    check(drift < 120, f"board time {shown:%H:%M:%S} is {drift:.0f}s from this machine's local time")
-    return f"board time within {drift:.0f}s of local"
-
-
-def case_join(s: Session, _tmp: str) -> str:
-    out = s.command("J 2")
-    check("Joining Conference" in out or "Conference 2" in out, "no join line for conference 2")
-    s.command("J 1")
-    return "joined 2 and back to 1"
-
-
-def case_stats(s: Session, _tmp: str) -> str:
-    out = s.command("S")
-    check(re.search(r"(Uploads|Downloads|Calls)", out, re.I) is not None, "S showed no user stats")
-    return "user stats shown"
-
-
-def _set_protocol(s: Session, choice: str) -> None:
-    """W, option 11 (transfer protocol), then the protocol number."""
-    s.send("W\r", "command W")
-    s.until(r"(Which|Selection|Option|Choice)[^\n]*[:?]\s*$", idle=20)
-    s.send("11\r", "W: 11 transfer protocol")
-    s.until(r"[:?]\s*$", idle=20)
-    s.send(choice + "\r", f"protocol {choice}")
-    # Leave the W screen, whatever it asks next.
-    for _ in range(4):
-        try:
-            s.until(MENU, idle=6)
+def to_menu(b: Board, timeout: float = 40.0) -> None:
+    """Answer pauses (read, never guessed) until the menu prompt."""
+    start = time.time()
+    while time.time() - start < timeout:
+        b.settle(0.8, 10.0)
+        here = b.prompt()
+        if MENU_PROMPT.search(here):
             return
-        except Timeout:
-            s.send("\r", "leave W")
-    raise Failed("could not get back to the menu after W")
+        if PAUSE.search(here) or PRESS_KEY.search(here):
+            b.send("\r")
+            continue
+        if here == "":
+            continue           # a door is still thinking
+        raise Failed(f"expected the menu; the board asks {here!r}\n{b.render()}")
+    raise Failed(f"never got back to the menu\n{b.render()}")
 
 
-def _upload(s: Session, tmp: str, argv_for: Callable[[str], list[str]], protocol: str) -> tuple[str, bytes]:
-    name = f"RG{random.randint(100000, 999999)}.BIN"
+# -- steps walked by hand ---------------------------------------------------------
+
+def read_protocol(b: Board) -> str:
+    b.send("W\r")
+    expect(b, r"Which to change <CR>=QUIT \?$", "the W menu")
+    m = PROTOCOL_ROW.search(expect_on_screen(b, r"\[\s*11\] TRANSFER PROTOCOL.*$", "the protocol row"))
+    b.send("\r")
+    expect(b, MENU_PROMPT, "the menu after W")
+    return m.group(1).strip() if m else ""
+
+
+def set_protocol(b: Board, name: str) -> None:
+    b.send("W\r")
+    expect(b, r"Which to change <CR>=QUIT \?$", "the W menu")
+    b.send("11\r")
+    expect(b, r"Select \(1-7\) or <CR>=Cancel:$", "the protocol list")
+    b.send(PROTOCOL_NUMBER[name.upper()] + "\r")
+    expect(b, r"Which to change <CR>=QUIT \?$", "the W menu again")
+    row = expect_on_screen(b, r"\[\s*11\] TRANSFER PROTOCOL.*$", "the protocol row")
+    check(row.upper().rstrip().endswith(name.upper()), f"protocol row says {row!r}, wanted {name}", b)
+    b.send("\r")
+    expect(b, MENU_PROMPT, "the menu after W")
+
+
+def answer_leftovers(b: Board) -> None:
+    """A partial upload from an earlier call is offered first: decline, delete."""
+    for _ in range(40):
+        b.settle(1.0, 10.0)
+        here = b.prompt()
+        if re.search(r"Resume .+\(Y/N\)\?$", here):
+            b.send("N")                  # one key: Y/N answers without RETURN
+        elif re.search(r"Delete \(Y/N/All\)\?$", here):
+            b.send("Y")
+        else:
+            return
+
+
+def test_file(tmp: str, name: str) -> bytes:
     # Every byte value, and the pairs telnet mangles: CR NUL, CR LF, IAC, 0D FF 00.
     body = bytes(range(256)) + b"\r\x00\r\n\xff\xff\x0d\xff\x00" + os.urandom(4000)
-    path = os.path.join(tmp, name)
-    with open(path, "wb") as f:
+    with open(os.path.join(tmp, name), "wb") as f:
         f.write(body)
-    s.send("U\r", "command U")
-    s.until(r"FileName 1:\s*$", idle=40)
-    if protocol.startswith("xmodem"):
-        # XMODEM names nothing on the wire: the board takes the typed name.
-        s.send(name + "\r", f"filename {name}")
-        s.until(r":\s*$", idle=20)          # description line
-        s.send("regression upload\r", "description")
-        s.until(r":\s*$", idle=20)
-        s.send("\r", "end description")
-        s.until(r"FileName 2:\s*$", idle=20)
-    s.send("\r", "start the batch")
-    s.until(r"\(A\)bort\?\s*$", idle=20)
-    s.send("\r", "enter: start transfer")
-    time.sleep(0.5)
-    rc = s.relay(argv_for(name), cwd=tmp)
-    check(rc == 0, f"client exited {rc}")
+    return body
+
+
+def upload(b: Board, tmp: str, protocol: str) -> tuple[str, bytes]:
+    xmodem = protocol.upper().startswith("XMODEM")
+    name = f"RG{random.randint(100000, 999999)}.BIN"
+    body = test_file(tmp, name)
+    b.send("U\r")
+    expect(b, r"FileName 1:$", "FileName 1:", timeout=40)
+    header = expect_on_screen(b, r"^\S+ UPLOADING to .*$", "the upload header")
+    check(header.lower().startswith(protocol.lower() + " "), f"upload header {header!r} is not {protocol}", b)
+    if xmodem:
+        # XMODEM carries no name: the board takes it, and the description, first.
+        b.send(name + "\r")
+        expect(b, rf"{re.escape(name)}\s*:$", "the description field")
+        b.send("regression upload\r")
+        expect(b, r"^\s+:$", "the next description line")
+        b.send("\r")
+        expect(b, r"FileName 2:$", "FileName 2:")
+    b.send("\r")
+    expect(b, r"\(A\)bort\?$", "the Okay prompt")
+    b.send("\r")
+    answer_leftovers(b)
+    if xmodem:
+        expect_on_screen(b, r"\(A\)bort\? C", "the receiver's C", timeout=20)
+        rc = b.relay(tmp, ["sz", "--xmodem", "-b", name])
+    else:
+        expect_on_screen(b, r"^\*\*", "rz's ZRINIT", timeout=20)
+        rc = b.relay(tmp, ["sz", "-b", name])
+    check("exit 0" in rc, f"client {rc}", b)
+    if not xmodem:
+        expect(b, rf"{re.escape(name)}\s+\d+\s+\d\d-\d\d-\d\d :$", "the description prompt", timeout=40)
+        b.send("regression upload\r")
+        expect(b, r"^\s+:$", "the next description line")
+        b.send("\r")
+    expect_on_screen(b, r"^\s*1 file\(s\),.*efficiency\.$", "'1 file(s)' in the upload summary", timeout=40)
+    to_menu(b)
     return name, body
 
 
-def _finish_upload_screens(s: Session) -> None:
-    """Answer the description prompts after a ZMODEM upload until the menu."""
-    for _ in range(8):
-        try:
-            s.until(MENU, idle=10)
-            return
-        except Timeout:
-            tail = s.screen[-120:]
-            if re.search(r":\s*$", tail):
-                s.send("regression upload\r\r", "description")
-            else:
-                s.send("\r", "continue")
-    raise Failed("never got back to the menu after the upload")
-
-
-def _download(s: Session, tmp: str, name: str, argv: list[str]) -> bytes:
+def download(b: Board, tmp: str, name: str, argv: list[str], xmodem: bool) -> bytes:
     out_dir = os.path.join(tmp, "down")
     os.makedirs(out_dir, exist_ok=True)
-    s.send("D\r", "command D")
-    s.until(r"Filespec\(1\):\s*$", idle=30)
-    s.send(name + "\r", f"filespec {name}")
-    s.until(r"Filespec\(2\):\s*$", idle=30)
-    s.send("\r", "end filespecs")
-    s.until(r"\(A\)bort\?\s*$", idle=30)
-    s.send("\r", "enter: start transfer")
-    time.sleep(0.5)
-    rc = s.relay(argv, cwd=out_dir)
-    check(rc == 0, f"client exited {rc}")
-    s.until(MENU, idle=30)
+    b.send("D\r")
+    here = expect(b, r"(Space To Resume:|Filespec\(1\):)$", "the download screen", timeout=40)
+    if PAUSE.search(here):
+        b.send("\r")
+        expect(b, r"Filespec\(1\):$", "Filespec(1):")
+    b.send(name + "\r")
+    here = expect(b, r"Filespec\([12]\):$", "Filespec(2):")
+    check("Filespec(2)" in here, f"the board did not find {name}", b)
+    b.send("\r")
+    expect(b, r"LAST CHANCE!.*\(A\)bort\?$", "LAST CHANCE")
+    b.send("\r")
+    if xmodem:
+        b.settle(1.5, 5.0)     # an XMODEM sender says nothing: the receiver opens
+    else:
+        expect_on_screen(b, r"Starting ZMODEM send", "the ZMODEM send starting", timeout=20)
+    rc = b.relay(out_dir, argv)
+    check("exit 0" in rc, f"client {rc}", b)
+    to_menu(b)
     got = os.path.join(out_dir, name)
-    check(os.path.exists(got), f"{name} did not arrive")
+    check(os.path.exists(got), f"{name} did not arrive", b)
     with open(got, "rb") as f:
         return f.read()
 
 
-def case_zmodem_upload(s: Session, tmp: str) -> str:
-    _set_protocol(s, "1")
-    name, body = _upload(s, tmp, lambda n: ["sz", "-b", n], "zmodem")
-    _finish_upload_screens(s)
-    STATE["zmodem_file"] = (name, body)
-    return f"{name} ({len(body)} bytes) sent"
-
-
-def case_zmodem_download(s: Session, tmp: str) -> str:
-    check("zmodem_file" in STATE, "needs zmodem-upload first in the same run")
-    name, body = STATE["zmodem_file"]
-    _set_protocol(s, "1")
-    got = _download(s, tmp, name, ["rz", "-b", "-y"])
-    check(got == body, f"{name}: {len(got)} bytes back, {len(body)} sent, first difference at "
-          f"{next((i for i, (a, b) in enumerate(zip(got, body)) if a != b), min(len(got), len(body)))}")
-    return f"{name} round-tripped byte for byte"
-
-
-def case_xmodem_upload(s: Session, tmp: str) -> str:
-    _set_protocol(s, "4")   # XMODEM-CRC
-    name, body = _upload(s, tmp, lambda n: ["sz", "--xmodem", "-b", n], "xmodem-crc")
-    _finish_upload_screens(s)
-    STATE["xmodem_file"] = (name, body)
-    return f"{name} ({len(body)} bytes) sent"
-
-
-def case_xmodem_download(s: Session, tmp: str) -> str:
-    check("xmodem_file" in STATE, "needs xmodem-upload first in the same run")
-    name, body = STATE["xmodem_file"]
-    _set_protocol(s, "4")
-    got = _download(s, tmp, name, ["rz", "--xmodem", "-b", name])
-    # XMODEM pads the last block with SUB (0x1A); the file may come back longer.
-    check(got.rstrip(b"\x1a") == body.rstrip(b"\x1a"), f"{name}: content differs ({len(got)} vs {len(body)})")
-    return f"{name} round-tripped (SUB padding aside)"
-
+# -- the cases --------------------------------------------------------------------
 
 STATE: dict = {}
 
-CASES: list[tuple[str, Callable[[Session, str], str]]] = [
+
+def case_login(b: Board, _tmp: str) -> str:
+    return "at the menu prompt"
+
+
+def case_time(b: Board, _tmp: str) -> str:
+    b.send("T\r")
+    expect(b, MENU_PROMPT, "the menu after T - with no extra key")
+    shown = expect_on_screen(b, r"It is \d\d-\d\d-\d\d \d\d:\d\d:\d\d", "the time")
+    mo, d, y, hh, mm, ss = (int(x) for x in re.findall(r"\d+", shown))
+    drift = abs((dt.datetime.now() - dt.datetime(2000 + y, mo, d, hh, mm, ss)).total_seconds())
+    check(drift < 120, f"board time is {drift:.0f}s from this machine's local time", b)
+    return f"time within {drift:.0f}s, prompt back without a key"
+
+
+def case_join(b: Board, _tmp: str) -> str:
+    b.send("J 2\r")
+    to_menu(b)
+    check("[2:" in b.prompt(), "the prompt does not name conference 2", b)
+    b.send("J 1\r")
+    to_menu(b)
+    check("[1:" in b.prompt(), "the prompt does not name conference 1", b)
+    return "joined 2 and back to 1"
+
+
+def case_stats(b: Board, _tmp: str) -> str:
+    b.send("S\r")
+    to_menu(b)
+    expect_on_screen(b, r"(Uploads|Downloads|Calls)", "user stats")
+    return "stats shown, prompt back"
+
+
+def case_zmodem_upload(b: Board, tmp: str) -> str:
+    set_protocol(b, "ZMODEM")
+    name, body = upload(b, tmp, "zmodem")
+    STATE["zmodem"] = (name, body)
+    return f"{name} filed"
+
+
+def case_zmodem_download(b: Board, tmp: str) -> str:
+    if "zmodem" not in STATE:
+        raise Failed("needs zmodem-upload in the same run")
+    name, body = STATE["zmodem"]
+    set_protocol(b, "ZMODEM")
+    got = download(b, tmp, name, ["rz", "-b", "-y"], xmodem=False)
+    check(got == body, f"{name}: {len(got)} bytes back, {len(body)} sent, content differs", b)
+    return f"{name} round-tripped byte for byte"
+
+
+def case_xmodem_upload(b: Board, tmp: str) -> str:
+    set_protocol(b, "XMODEM-CRC")
+    name, body = upload(b, tmp, "xmodem-crc")
+    STATE["xmodem"] = (name, body)
+    return f"{name} filed"
+
+
+def case_xmodem_download(b: Board, tmp: str) -> str:
+    if "xmodem" not in STATE:
+        raise Failed("needs xmodem-upload in the same run")
+    name, body = STATE["xmodem"]
+    set_protocol(b, "XMODEM-CRC")
+    got = download(b, tmp, name, ["rz", "--xmodem", "-b", name], xmodem=True)
+    # XMODEM pads the last block with SUB (0x1A): the prefix is the file.
+    check(got[:len(body)] == body and set(got[len(body):]) <= {0x1A}, f"{name}: content differs", b)
+    return f"{name} round-tripped (block padding aside)"
+
+
+CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("login", case_login),
     ("time", case_time),
     ("join", case_join),
@@ -213,9 +296,10 @@ CASES: list[tuple[str, Callable[[Session, str], str]]] = [
     ("xmodem-upload", case_xmodem_upload),
     ("xmodem-download", case_xmodem_download),
 ]
+TRANSFER_CASES = {n for n, _ in CASES if "modem" in n}
 
 
-# -- the runner ---------------------------------------------------------------
+# -- the runner -------------------------------------------------------------------
 
 def load(path: str) -> dict:
     try:
@@ -232,71 +316,99 @@ def save(path: str, results: dict) -> None:
     os.replace(path + ".tmp", path)
 
 
+def call(args: argparse.Namespace, watch: bool) -> Board:
+    b = Board(args.host, args.port, args.log, watch)
+    b.s.note("LOGIN")
+    log = b.advance(args.user, args.password)
+    if not MENU_PROMPT.search(b.prompt()):
+        raise Failed("login did not reach the menu:\n" + log)
+    return b
+
+
+def hang_up(b: Board) -> None:
+    try:
+        if MENU_PROMPT.search(b.prompt()):
+            b.send("G\r")
+            b.settle(1.0, 5.0)
+            if re.search(r"\(Y/N\)\??$", b.prompt()):
+                b.send("Y")
+                b.settle(1.0, 5.0)
+    finally:
+        b.closed = True
+        b.s.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=64128)
     ap.add_argument("--user", default="sysop")
     ap.add_argument("--password", default="sysop")
-    ap.add_argument("--only", action="append", default=[], help="run just this case; repeatable")
-    ap.add_argument("--failed", action="store_true", help="run only the cases that failed last time")
-    ap.add_argument("--all", action="store_true", help="run every case, passed or not")
+    ap.add_argument("--only", action="append", default=[])
+    ap.add_argument("--failed", action="store_true")
+    ap.add_argument("--all", action="store_true")
     ap.add_argument("--results", default=DEFAULT_RESULTS)
-    ap.add_argument("--log", default=os.path.join(tempfile.gettempdir(), "bbs-regress.log"),
-                    help="raw screen bytes, for --watch or tail -f")
-    ap.add_argument("--watch", action="store_true", help="open a Terminal tab tailing --log")
+    ap.add_argument("--log", default=os.path.join(tempfile.gettempdir(), "bbs-regress.log"))
+    ap.add_argument("--watch", action="store_true")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
 
     if args.list:
-        for name, _ in CASES:
-            print(name)
+        print("\n".join(n for n, _ in CASES))
         return 0
-
     results = load(args.results)
     board = f"{args.host}:{args.port}"
     past = results.get(board, {})
-
     wanted = [c for c in CASES if not args.only or c[0] in args.only]
     if args.failed:
         wanted = [c for c in wanted if past.get(c[0], {}).get("verdict") == "FAIL"]
     elif not args.all and not args.only:
         wanted = [c for c in wanted if past.get(c[0], {}).get("verdict") != "PASS"]
     if not wanted:
-        print(f"[OK] nothing to run for {board} - every case passed. --all to run them again.")
+        print(f"[OK] nothing to run for {board}. --all to run them again.")
         return 0
 
     open(args.log, "ab").close()
-    watched = False
+    watch = args.watch
+    original_protocol = None
     failures = 0
     for name, fn in wanted:
         tmp = tempfile.mkdtemp(prefix=f"bbs-regress-{name}-")
         started = time.time()
         verdict, note = "FAIL", ""
+        b = None
         try:
-            s = Session(args.host, args.port, args.user, args.password, args.log, args.watch and not watched)
-            watched = True
-            s.note(f"CASE {name}")
-            s.login()
-            note = fn(s, tmp)
+            b = call(args, watch)
+            watch = False
+            b.s.note(f"CASE {name}")
+            if name in TRANSFER_CASES and original_protocol is None:
+                original_protocol = read_protocol(b)
+            note = fn(b, tmp)
             verdict = "PASS"
-            try:
-                s.logoff()
-            except Timeout:
-                s.close()
-        except (Failed, Timeout) as problem:
+        except Failed as problem:
             note = str(problem)
-        except Exception as problem:  # a crash in the harness is a failure too, and says where
-            note = f"{type(problem).__name__}: {problem} @ {traceback.extract_tb(problem.__traceback__)[-1].lineno}"
+        except Exception as problem:
+            note = f"{type(problem).__name__}: {problem} @ line {traceback.extract_tb(problem.__traceback__)[-1].lineno}"
         finally:
+            if b is not None:
+                hang_up(b)
             shutil.rmtree(tmp, ignore_errors=True)
-        if verdict == "FAIL":
-            failures += 1
-        past[name] = {"verdict": verdict, "note": note, "seconds": round(time.time() - started, 1),
+        failures += verdict == "FAIL"
+        past[name] = {"verdict": verdict, "note": note.splitlines()[0] if note else "",
+                      "seconds": round(time.time() - started, 1),
                       "at": dt.datetime.now().isoformat(timespec="seconds")}
         results[board] = past
-        save(args.results, results)   # recorded as each case finishes
+        save(args.results, results)
         print(f"[{'OK' if verdict == 'PASS' else 'FAIL'}] {name}: {note}")
+
+    if original_protocol:
+        try:
+            b = call(args, False)
+            set_protocol(b, original_protocol)
+            hang_up(b)
+            print(f"[INFO] transfer protocol put back to {original_protocol}")
+        except Exception as problem:  # say so: the sysop's setting is not what it was
+            print(f"[ERROR] could not put the protocol back to {original_protocol}: {problem}")
 
     print(f"\n{len(wanted) - failures} passed, {failures} failed. Results: {args.results}")
     return 1 if failures else 0

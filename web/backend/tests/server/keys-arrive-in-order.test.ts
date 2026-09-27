@@ -85,14 +85,28 @@ describe('keys typed faster than the board takes them', () => {
  * protocol's tail and is dropped.
  */
 describe('input right after a transfer ends', () => {
-  it('is dropped while the protocol is still saying goodbye', async () => {
+  it('drops a ZMODEM goodbye still arriving after the board\'s sz exited', async () => {
     const { endRawTransfer } = require('../../src/utils/raw-transfer-teardown.util');
     const session: any = { connectionType: 'web' };
     endRawTransfer(session);
     const typed: string[] = [];
-    dispatchInOrder(session, ['*', '*', 'B', '0', '8'], async (p) => { typed.push(p); }, () => {});
+    // rz's ZFIN retry and the closing OO, a key at a time.
+    const zfin = ['*', '*', '\x18', 'B', ...'08000000000022'.split(''), '\r', '\n', '\x11', 'O', 'O'];
+    dispatchInOrder(session, zfin, async (p) => { typed.push(p); }, () => {});
     await settle();
     expect(typed).toEqual([]);
+  });
+
+  it('still takes what the caller types in that window - an upload description', async () => {
+    // The description prompt appears within the window; dropping everything
+    // ate a quick caller's description (the regression suite, 2026-09-27).
+    const { endRawTransfer } = require('../../src/utils/raw-transfer-teardown.util');
+    const session: any = { connectionType: 'web' };
+    endRawTransfer(session);
+    const typed: string[] = [];
+    dispatchInOrder(session, [...'Only One', '\r'], async (p) => { typed.push(p); }, () => {});
+    await settle(200);
+    expect(typed.join('')).toBe('Only One\r');
   });
 
   it('is typing again once the window has passed', async () => {
