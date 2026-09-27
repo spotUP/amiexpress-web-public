@@ -92,6 +92,13 @@ services:
     environment:
       # Core settings
       - NODE_ENV=production
+      # The board's local time. AmiExpress runs on local time throughout -
+      # the T command, callers log, last callers, MM-DD-YY dates, the 68K
+      # doors' clock - and with TZ unset the container was UTC, two hours
+      # behind Sweden in summer: "It is 09-27-26 13:04:08" at 15:04
+      # (2026-09-27). A zone name, not an offset, so DST follows the rules.
+      # Stored timestamps are unaffected; Date keeps them in UTC.
+      - TZ=${BBS_TIMEZONE:-Europe/Stockholm}
       - HOST=0.0.0.0
       - PORT=3001
       - BACKEND_PORT=3001
@@ -258,6 +265,7 @@ services:
       - doorserver-net
     environment:
       - NODE_ENV=production
+      - TZ=${BBS_TIMEZONE:-Europe/Stockholm}
       - WHIP_API_URL=http://bbs:3001
       - BOT_ENV_FILE=/app/data/bots/whip.env
       - HEALTH_PORT=3099

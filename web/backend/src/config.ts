@@ -16,7 +16,6 @@ export interface BBSConfig {
   dataDir: string; // Data directory (contains Node0/, Node1/, Conf#, etc.)
 
   // Time Settings
-  timeZone: string;
   dailyTimeLimit: number;
   sessionTimeLimit: number;
 
@@ -101,8 +100,8 @@ export class ConfigManager {
       // (__dirname in dist points to web/backend/dist, so ../../.. reaches repo root)
       dataDir: process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..'),
 
-      // Time Settings
-      timeZone: 'UTC',
+      // Time Settings. The board's time ZONE is the process's TZ
+      // (docker-compose.yml, BBS_TIMEZONE); a setting here was never read.
       dailyTimeLimit: 120, // 2 hours
       sessionTimeLimit: 60, // 1 hour
 

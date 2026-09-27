@@ -260,7 +260,8 @@ RUN apk add --no-cache \
     build-base \
     g++ \
     make \
-    p7zip
+    p7zip \
+    tzdata
 
 # lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
 # Copy the real binaries (lsz/lrz) and recreate the classic sz/rz symlinks
