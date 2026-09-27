@@ -436,10 +436,13 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
   private finish(success: boolean, error?: string): void {
     this.active = false;
 
-    // Clean up session transfer state
+    // Clean up session transfer state. NOT `transferRawSend`: that is the
+    // TRANSPORT's sender (transport-session.ts attaches it once, on
+    // connect), not this transfer's, and clearing it left every later
+    // transfer in the call writing into a no-op - one XMODEM transfer and
+    // the next ZMODEM went nowhere. endRawTransfer leaves it alone too.
     (this.session as any).transferRawActive = false;
     (this.session as any).transferRawSink = undefined;
-    (this.session as any).transferRawSend = undefined;
     (this.session as any).transferManager = undefined;
 
     const result: TransferResult = {

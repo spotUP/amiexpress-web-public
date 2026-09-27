@@ -181,12 +181,33 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
     const chosenProtocol = getDefaultProtocol(session);
     if (chosenProtocol !== 'zmodem') {
+      /*
+       * XMODEM CARRIES NO FILENAME, so it is received into the name the
+       * caller typed at `FileName 1:`. It was handed the playpen DIRECTORY
+       * as its file and failed at EOT on every upload - writeFileSync of a
+       * directory, EISDIR, thrown before the transfer could finish. YMODEM
+       * and Punter name their own files and keep the directory.
+       */
+      let target = playpen;
+      if (String(chosenProtocol).startsWith('xmodem')) {
+        const named = (session.tempData?.uploadBatch ?? [])[0]?.filename as string | undefined;
+        if (!named) {
+          socket.emit('ansi-output', '\r\nXMODEM sends no filename - type one at FileName 1: before starting.\r\n\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          (session as any).menuPause = true;
+          return;
+        }
+        target = path.join(playpen, path.basename(named));
+      }
       const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
       const protocolManager = new TransferProtocolManager(
         session,
         { type: transport.type, send: transport.send },
-        { direction: 'upload', files: [playpen], protocol: chosenProtocol },
+        { direction: 'upload', files: [target], protocol: chosenProtocol },
       );
+      // express.e:15891-15896 - BINARY before any transfer, not only ZMODEM:
+      // XMODEM blocks carry 0x0D and 0xFF as freely as ZMODEM frames do.
+      negotiateBinaryForTransfer(session);
       protocolManager.on('complete', async (result: any) => {
         endRawTransfer(session);
         // The post-upload pipeline is the same one lrzsz's onComplete runs;
@@ -540,6 +561,8 @@ export function startZmodemDownload(
       { type: transport.type, send: transport.send },
       { direction: 'download', files: files, protocol: chosenProtocol },
     );
+    // express.e:15891-15896 - BINARY before any transfer, not only ZMODEM.
+    negotiateBinaryForTransfer(session);
     protocolManager.on('complete', async (result: any) => {
       endRawTransfer(session);
       socket.emit(
