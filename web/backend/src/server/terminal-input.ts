@@ -180,11 +180,14 @@ export const KEY_ORDER_WAIT_MS = 2000;
  * the board is still taking the previous one in.
  */
 export function dispatchInOrder(
-  session: { keyChain?: Promise<void>; keyBusy?: boolean } | null | undefined,
+  session: { keyChain?: Promise<void>; keyBusy?: boolean; transferDrainUntil?: number } | null | undefined,
   pieces: string[],
   handle: (piece: string) => Promise<unknown>,
   onError: (error: unknown) => void,
 ): void {
+  // A transfer just ended: this is its protocol's goodbye, not typing.
+  // See endRawTransfer.
+  if (session?.transferDrainUntil && Date.now() < session.transferDrainUntil) return;
   if (!session) {
     for (const piece of pieces) handle(piece).catch(onError);
     return;

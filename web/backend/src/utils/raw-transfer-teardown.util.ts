@@ -46,4 +46,19 @@ export function endRawTransfer(session: any): void {
   session.transferRawActive = false;
   session.transferRawSink = undefined;
   session.transferManager = undefined;
+  /*
+   * WHAT IS STILL ON THE LINE IS THE PROTOCOL'S TAIL, NOT KEYSTROKES.
+   *
+   * The board's sz/rz exits as soon as ITS half of the goodbye is done; the
+   * caller's program is still sending its own - a ZFIN retry, `OO` - and
+   * those bytes reached the menu prompt as typed commands: "No such
+   * command!!" twice under the prompt after every ZMODEM download (walked
+   * over telnet, 2026-09-27). express.e never met this: its ZMODEM ran
+   * in-process and read the goodbye itself. dispatchInOrder drops input
+   * until this moment passes.
+   */
+  session.transferDrainUntil = Date.now() + TRANSFER_TAIL_DRAIN_MS;
 }
+
+/** How long input after a transfer is taken to be the protocol's goodbye. */
+export const TRANSFER_TAIL_DRAIN_MS = 2000;

@@ -76,3 +76,30 @@ describe('keys typed faster than the board takes them', () => {
     expect(errors).toHaveLength(1);
   });
 });
+
+/**
+ * The goodbye a ZMODEM client sends after the board's sz has exited - a ZFIN
+ * retry, `OO` - is not typing. It reached the menu prompt as commands:
+ * "No such command!!" twice after every download (walked over telnet,
+ * 2026-09-27). endRawTransfer opens a short window in which input is the
+ * protocol's tail and is dropped.
+ */
+describe('input right after a transfer ends', () => {
+  it('is dropped while the protocol is still saying goodbye', async () => {
+    const { endRawTransfer } = require('../../src/utils/raw-transfer-teardown.util');
+    const session: any = { connectionType: 'web' };
+    endRawTransfer(session);
+    const typed: string[] = [];
+    dispatchInOrder(session, ['*', '*', 'B', '0', '8'], async (p) => { typed.push(p); }, () => {});
+    await settle();
+    expect(typed).toEqual([]);
+  });
+
+  it('is typing again once the window has passed', async () => {
+    const session: any = { transferDrainUntil: Date.now() - 1 };
+    const typed: string[] = [];
+    dispatchInOrder(session, ['G'], async (p) => { typed.push(p); }, () => {});
+    await settle();
+    expect(typed).toEqual(['G']);
+  });
+});

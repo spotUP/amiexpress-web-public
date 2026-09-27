@@ -59,6 +59,19 @@ MENU_PROMPT = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):$", re.I)
 DEFAULT_LOG = os.path.join(tempfile.gettempdir(), "bbs-screen.log")
 
 
+def as_glyphs(text: str) -> str:
+    """Bytes 0x80-0x9F are Amiga art, not C1 controls.
+
+    A terminal reading them as 8-bit controls treats 0x9D as OSC and 0x9B as
+    CSI, and swallows the rest of the screen - DOWNLOADMSG's art carries a
+    0x9D, and the rendered screen stopped at row 6 while the board had sent
+    the whole page and its prompt (2026-09-27). Shifted into the private-use
+    area they keep their cell and never steer the parser. The board's escape
+    sequences are 7-bit ESC [ ... and are untouched.
+    """
+    return "".join(chr(0xE000 + ord(c)) if 0x80 <= ord(c) <= 0x9F else c for c in text)
+
+
 # -- the session side ---------------------------------------------------------
 
 class Board:
@@ -95,7 +108,7 @@ class Board:
             if self.s.log:
                 self.s.log.write(text)
             with self.lock:
-                self.stream.feed(self.decoder.decode(text))
+                self.stream.feed(as_glyphs(self.decoder.decode(text)))
                 self.last_byte = time.time()
 
     def settle(self, quiet: float = 0.8, limit: float = 10.0) -> None:
