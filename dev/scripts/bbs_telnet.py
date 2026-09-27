@@ -147,6 +147,17 @@ class Session:
         self.sock.sendall(text.encode("latin1"))
         self.screen = ""
 
+    def type(self, text: str, why: str = "", cps: float = 20.0) -> None:
+        """Type like a person: one key at a time, reading the echo between keys."""
+        if why:
+            self.note(why)
+        # Cleared BEFORE typing: whatever the board answers while the keys go
+        # in (a prompt drawn after the RETURN) is the next thing to read.
+        self.screen = ""
+        for ch in text:
+            self.sock.sendall(ch.encode("latin1"))
+            self.pump(1.0 / cps)
+
     # -- conversation ------------------------------------------------------
 
     def auto_answer(self) -> bool:
