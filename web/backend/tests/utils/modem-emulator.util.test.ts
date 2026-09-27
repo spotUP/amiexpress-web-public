@@ -180,6 +180,24 @@ describe('ModemEmulator (Modem Speed Throttling)', () => {
       expect(mockSocket.getEmittedData('ansi-output').join('')).toBe('A'.repeat(40) + 'B');
     });
 
+    /*
+     * "**arting ZMODEM send rz" (the telnet regression suite, 2026-09-27):
+     * the download's banner was still trickling when the first ZMODEM frame
+     * went straight to the line. Whoever writes protocol bytes flushes first.
+     */
+    it('flushNow puts the held-back text out at once, in order, and keeps the speed', async () => {
+      emulator.enable(1200);
+      emulator.write('Starting ZMODEM send (lrzsz)...\r\n');
+      emulator.write('B');
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      emulator.flushNow();
+
+      expect(mockSocket.getEmittedData('ansi-output').join('')).toBe('Starting ZMODEM send (lrzsz)...\r\nB');
+      expect(emulator.isEnabled()).toBe(true);
+      expect(emulator.getBps()).toBe(1200);
+    });
+
     it('should allow immediate writes after disable', () => {
       emulator.enable(1200);
       emulator.disable();

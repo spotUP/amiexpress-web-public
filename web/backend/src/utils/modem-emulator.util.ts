@@ -54,6 +54,24 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
   /**
    * Disable modem emulation (full speed)
    */
+  /**
+   * Put everything still held back on the wire NOW, in order - the half-sent
+   * payload first, then the queue - without changing the speed.
+   *
+   * Protocol bytes do not go through this queue, so text written just before
+   * a transfer (the download's "Starting ZMODEM send (lrzsz)...") was still
+   * trickling at 56k when the first frames went straight out: the frames
+   * overtook it and the caller's screen read "**arting ZMODEM send rz", with
+   * the rest of the text landing inside the transfer (2026-09-27). Whoever
+   * writes protocol bytes calls this first.
+   */
+  flushNow(): void {
+    const rest = this.inFlightRest?.() ?? '';
+    this.inFlightRest = null;
+    if (rest) this.directEmit('ansi-output', rest);
+    this.flushImmediate();
+  }
+
   disable(): void {
     this.enabled = false;
     this.bps = 0;
@@ -71,11 +89,9 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
      * callers door is still cleared before the pause prompt", the sysop,
      * 2026-09-25). The queue was also flushed ahead of it, out of order.
      */
-    const rest = this.inFlightRest?.() ?? '';
-    this.inFlightRest = null;
-    if (rest) this.directEmit('ansi-output', rest);
-    this.flushImmediate();
+    this.flushNow();
   }
+
 
   /**
    * Wait for queue to drain with throttling intact

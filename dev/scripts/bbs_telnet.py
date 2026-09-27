@@ -53,6 +53,22 @@ MENU = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):\s*$", re.I)
 YESNO = re.compile(r"\(y/n\)\??\s*$", re.I)
 
 
+def transfer_tail(data: bytes) -> bytes:
+    """What the board printed AFTER a transfer, caught in the same read.
+
+    The program exits on the protocol's last word - ZMODEM's `OO`, XMODEM's
+    EOT (we received) or final ACK (we sent) - and whatever the board wrote
+    after it was handed to the program with it and lost: the screen stopped
+    mid-line at " 1 files, 4" and the menu prompt never showed (2026-09-27).
+    The bytes after the LAST such marker are the board talking to the caller.
+    """
+    ends = [data.rfind(b"OO") + 2 if b"OO" in data else -1,
+            data.rfind(b"\x04") + 1 if b"\x04" in data else -1,
+            data.rfind(b"\x06") + 1 if b"\x06" in data else -1]
+    cut = max(ends)
+    return data[cut:] if cut > 0 else b""
+
+
 def plain(data: bytes) -> str:
     return ANSI.sub(b"", data).decode("latin1").replace("\r", "")
 
@@ -218,7 +234,7 @@ class Session:
 
     # -- file transfers ------------------------------------------------------
 
-    def relay(self, argv: list[str], cwd: str, timeout: float = 120.0) -> int:
+    def relay(self, argv: list[str], cwd: str, timeout: float = 120.0, initial: bytes = b"") -> int:
         """
         Run a transfer program (sz, rz, `sz --xmodem`, ...) with its stdin and
         stdout joined to this telnet line, until it exits.
@@ -233,7 +249,10 @@ class Session:
         out_fd = proc.stdout.fileno()
         os.set_blocking(out_fd, False)
         started = time.time()
-        pending = b""
+        # Bytes a screen reader caught after the transfer had begun belong to
+        # the transfer program, and go first.
+        pending = initial
+        received = bytearray()   # every protocol byte handed over, for the tail below
         while proc.poll() is None:
             if time.time() - started > timeout:
                 proc.kill()
@@ -250,6 +269,7 @@ class Session:
                     # Keep a trailing lone IAC for the next read: it may be half of IAC IAC.
                     cut = len(pending) - 1 if pending.endswith(bytes([IAC])) and not pending.endswith(bytes([IAC, IAC])) else len(pending)
                     body, pending = self._negotiate(pending[:cut]), pending[cut:]
+                    received += body
                     if body:
                         try:
                             proc.stdin.write(body)
@@ -266,6 +286,7 @@ class Session:
         rc = proc.wait()
         err = proc.stderr.read().decode("latin1", "replace").strip()
         self.note(f"transfer: exit {rc}" + (f" ({err.splitlines()[-1]})" if err else ""))
+        self.relay_tail = transfer_tail(bytes(received[-4096:]))
         return rc
 
 

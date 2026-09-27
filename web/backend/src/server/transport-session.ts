@@ -52,6 +52,29 @@ import type { TransportEmitter } from "./transport-adapter";
 import type { TelnetConnection } from "./telnet-server";
 import type { SSHConnection } from "./ssh-server";
 import type { BBSSession } from "../index";
+import { flushOutput } from "../utils/output.util";
+import { getModemEmulator } from "../utils/modem-emulator.util";
+
+/**
+ * Text the caller has been sent reaches him BEFORE any protocol byte.
+ *
+ * Text is buffered twice - the 16 ms ANSI batch, then the modem-speed queue -
+ * while transfer bytes are written to the line directly. So "Starting ZMODEM
+ * send (lrzsz)..." was overtaken by the first frame and landed inside the
+ * transfer (the telnet regression suite, 2026-09-27). Every raw write calls
+ * this first; it is a no-op when nothing is held back.
+ */
+function textGoesFirst(emitter: unknown): void {
+  try {
+    flushOutput(emitter as never);
+    // Only a line that HAS a modem queue - getModemEmulator would make one.
+    if ((emitter as { _modemEmulator?: unknown })?._modemEmulator) {
+      getModemEmulator(emitter as never).flushNow();
+    }
+  } catch {
+    /* a transport with no text buffers has nothing to put first */
+  }
+}
 
 /**
  * RE-HOMED. `TransportEmitter` was DECLARED here by TP-2 (its recorded
@@ -177,6 +200,7 @@ console.log(
       // SSH connection wrapper is raw passthrough; no doubling
       // either way.
       connection.session.transferRawSend = (buf: Buffer) => {
+        textGoesFirst(emitter);
         connection.write(buf);
       };
       // Raw sender for protocol bytes (IAC negotiation, etc.) that
@@ -187,6 +211,7 @@ console.log(
       // to transferRawSend and the caller must construct already-
       // escaped sequences if they need raw IAC.
       (connection.session as SessionWithUnescapedSend).transferRawSendUnescaped = (buf: Buffer) => {
+        textGoesFirst(emitter);
         // Telnet.connection.write escapes IAC. To send IAC bytes
         // raw (for option negotiation initiated by us), reach the
         // underlying socket. SSH connection.write is already raw.

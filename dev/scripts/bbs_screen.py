@@ -85,6 +85,11 @@ class Board:
         self.lock = threading.Lock()
         self.reading = threading.Event()
         self.reading.set()
+        # One reader of the socket at a time. relay() takes it so the screen
+        # reader cannot be mid-recv when the transfer program takes over; bytes
+        # it still caught after being told to stop are kept for the program.
+        self.sock_lock = threading.Lock()
+        self.stash = b""
         self.last_byte = time.time()
         self.closed = False
         threading.Thread(target=self._read, daemon=True).start()
@@ -94,16 +99,24 @@ class Board:
             if not self.reading.is_set():
                 time.sleep(0.05)
                 continue
-            try:
-                data = self.s.sock.recv(65536)
-            except socket.timeout:
-                continue
-            except OSError:
-                self.closed = True
-                break
-            if not data:
-                self.closed = True
-                break
+            with self.sock_lock:
+                if not self.reading.is_set():
+                    continue
+                try:
+                    data = self.s.sock.recv(65536)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    self.closed = True
+                    break
+                if not data:
+                    self.closed = True
+                    break
+                if not self.reading.is_set():
+                    # A transfer began while this read was in flight: its
+                    # bytes are protocol, not screen.
+                    self.stash += data
+                    continue
             text = self.s._negotiate(data)
             if self.s.log:
                 self.s.log.write(text)
@@ -178,11 +191,18 @@ class Board:
 
     def relay(self, cwd: str, argv: list[str]) -> str:
         self.reading.clear()
-        time.sleep(0.2)
-        try:
-            rc = self.s.relay(argv, cwd=cwd)
-        finally:
-            self.reading.set()
+        with self.sock_lock:            # the screen reader is out of recv()
+            initial, self.stash = self.stash, b""
+            try:
+                rc = self.s.relay(argv, cwd=cwd, initial=initial)
+                tail = getattr(self.s, "relay_tail", b"")
+                if tail:
+                    with self.lock:
+                        self.stream.feed(as_glyphs(self.decoder.decode(tail)))
+                    if self.s.log:
+                        self.s.log.write(tail)
+            finally:
+                self.reading.set()
         return f"transfer exit {rc}"
 
 

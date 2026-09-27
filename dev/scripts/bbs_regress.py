@@ -316,9 +316,15 @@ def save(path: str, results: dict) -> None:
     os.replace(path + ".tmp", path)
 
 
-def call(args: argparse.Namespace, watch: bool) -> Board:
+def call(args: argparse.Namespace, watch: bool, quick: bool = True) -> Board:
+    """Log in. `quick` answers AQ at the graphics prompt - ANSI, skip the
+    bulletins - which lands at the main prompt (the sysop's tip, 2026-09-27);
+    only the login case walks the whole sequence."""
     b = Board(args.host, args.port, args.log, watch)
-    b.s.note("LOGIN")
+    b.s.note("LOGIN" + (" (AQ: skipping bulletins)" if quick else ""))
+    if quick:
+        expect(b, r"\(A/R/P/P8/T/N\).*\?$", "the graphics prompt")
+        b.send("AQ\r")
     log = b.advance(args.user, args.password)
     if not MENU_PROMPT.search(b.prompt()):
         raise Failed("login did not reach the menu:\n" + log)
@@ -378,7 +384,7 @@ def main() -> int:
         verdict, note = "FAIL", ""
         b = None
         try:
-            b = call(args, watch)
+            b = call(args, watch, quick=(name != "login"))
             watch = False
             b.s.note(f"CASE {name}")
             if name in TRANSFER_CASES and original_protocol is None:
