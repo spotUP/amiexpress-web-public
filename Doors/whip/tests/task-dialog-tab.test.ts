@@ -14,7 +14,7 @@
 
 import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createTask } from '../ui/task-editor';
+import { createTask, editTask } from '../ui/task-editor';
 
 // The dialog reads parties once to build the target-party list; everything
 // else under test is keys and focus. The real DataManager does door storage
@@ -55,10 +55,19 @@ export async function tabLeavesTheTitleInput(): Promise<void> {
   } finally { screen.destroy(); }
 }
 
+/**
+ * EDIT only since 2026-09-27: Enter in a NEW task's title is Save
+ * (task-enter-saves.test.ts). Editing keeps Enter-advances - the caller came
+ * to change something further down the dialog.
+ */
 export async function enterStepsToTheNextField(): Promise<void> {
   const screen = open();
   try {
-    const done = createTask(screen, project, user, dataManager);
+    const task: any = {
+      id: 't1', projectId: 'p1', title: 'Existing', category: 'code',
+      status: 'todo', priority: 'scener', points: 10, description: '',
+    };
+    const done = editTask(screen, task, user, dataManager, {} as any, project);
     await settle();
 
     const title = screen.getFocused();

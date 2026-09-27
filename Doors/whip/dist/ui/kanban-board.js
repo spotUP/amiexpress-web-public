@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.wrapTitle = wrapTitle;
+exports.spaceCards = spaceCards;
 exports.columnGeometry = columnGeometry;
 exports.formatKanbanCard = formatKanbanCard;
 exports.showKanbanBoard = showKanbanBoard;
@@ -17,7 +18,15 @@ const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
 const chrome_1 = require("./chrome");
-/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+/**
+ * The keys this screen answers to, and the same keys shortened for 40 columns.
+ *
+ * Enter is Edit and M is Move - two keys, each doing what it says (sysop,
+ * 2026-09-27). This legend already said "Enter: Edit", but Enter picked the
+ * card up into the move mode below, whose own legend then offered E to edit:
+ * editing a title took two keys and passed through a mode the caller never
+ * asked for.
+ */
 const HINTS = [
     { key: 'Arrows', does: 'Navigate' },
     { key: 'Enter', does: 'Edit' },
@@ -27,8 +36,8 @@ const HINTS = [
     { key: 'Q', does: 'Back' },
 ];
 const COMPACT_HINTS = [
-    { key: 'Arr', does: 'Move' },
-    { key: 'Ent', does: 'Edit' },
+    { key: 'Enter', does: 'Edit' },
+    { key: 'M', does: 'Move' },
     { key: 'Q', does: 'Back' },
 ];
 const CARRY_HINTS = [
@@ -90,6 +99,16 @@ function wrapTitle(title, width) {
     return lines;
 }
 /**
+ * A column's list items: one per card, with ONE EMPTY ROW between cards so
+ * they do not run together (sysop, 2026-09-27). The row rides on the card
+ * above it - a list item is the only unit the widget has - and outside that
+ * card's own inversion, so a selected card highlights its title and not the
+ * gap. The last card gets none: a trailing gap is a row the column loses.
+ */
+function spaceCards(cards) {
+    return cards.map((card, i) => (i < cards.length - 1 ? `${card}\n` : card));
+}
+/**
  * Column geometry for a screen width (2026-09-10): four equal columns
  * across the full width, so a widened terminal spreads the board
  * instead of leaving it narrow. Pure - the board recomputes it on
@@ -121,25 +140,24 @@ function columnGeometry(screenWidth, focused = 0, columns = 4) {
     return { totalWidth, colWidth, leftOf: (i) => i * colWidth, onePerScreen: false };
 }
 /**
- * One task as a multi-line card: full wrapped title rows, then the meta
- * row (priority, points, assignee). Replaces the old single-line
- * truncated form ("BBS Re.. [L] 10"), which left six readable characters.
+ * One task as a card: its full title, word-wrapped, and nothing else.
+ *
+ * TITLE ONLY (sysop, 2026-09-27). A card used to end in a meta row -
+ * `[S] 10 pts · handle` - and a quarter of 80 columns is too narrow to spend
+ * a row per card on it. Priority, points and assignee live in the task's
+ * detail view, which is the editor that Enter opens.
  */
-function formatKanbanCard(task, width, assigneeHandle, carried = false, selected = false) {
-    const priorityInitial = task.priority[0].toUpperCase();
-    const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
+function formatKanbanCard(task, width, carried = false, selected = false) {
     // A carried task shows its grip AND its held state: the marker eats
     // its own cells so the wrap width shrinks by exactly that much, and
     // every row inverts - a held card reads nothing like a merely
     // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
     // A selected (not carried) card inverts the same way: the list widget
     // highlights only the first visual row of a multi-row item, which left
-    // the rest of the title and the meta row dark (screenshot, 2026-09-10).
-    const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
-    if (carried && titleRows.length > 0)
-        titleRows[0] = `>> ${titleRows[0]}`;
-    const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''}`;
-    const rows = [...titleRows, meta];
+    // the rest of the title dark (screenshot, 2026-09-10).
+    const rows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
+    if (carried && rows.length > 0)
+        rows[0] = `>> ${rows[0]}`;
     if (!carried && !selected)
         return rows.join('\n');
     return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
@@ -163,10 +181,12 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 modalDepth--;
             }
         }
-        // Keyboard carry: Enter grabs the task under the cursor, arrows move
-        // the cursor (left/right carry the task along, unsaved), Enter drops
-        // (one persisted move with full side effects), ESC puts it back.
-        // E keeps the old Enter job (edit).
+        // Keyboard carry - the board's MOVE mode: M grabs the task under the
+        // cursor, arrows move the cursor (left/right carry the task along,
+        // unsaved), Enter drops (one persisted move with full side effects), ESC
+        // puts it back. Enter picked the card up until 2026-09-27; it is Edit now,
+        // and M - which opened a four-row destination picker that did the same
+        // job less visibly - is the one Move key.
         //
         // The held column is HERE, in the door's own UI state, and the Task is
         // never touched until the drop (2026-09-13). It used to be carried by
@@ -342,7 +362,6 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             if (immediate) {
                 isUpdating = true;
                 tasks = await dataManager.getTasksForProject(project.id);
-                handlesById = await loadHandles();
                 paintLists();
                 isUpdating = false;
             }
@@ -354,32 +373,16 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 updateListsImmediate();
             }
         };
-        /** Handle per id for card meta rows. Refreshed on every reload. */
-        let handlesById = {};
-        const loadHandles = async () => {
-            try {
-                const users = await dataManager.loadUsers();
-                const map = {};
-                for (const u of Object.values(users)) {
-                    if (u?.userId && u?.handle)
-                        map[u.userId] = u.handle;
-                }
-                return map;
-            }
-            catch {
-                return {};
-            }
-        };
         /** Repaint columns from the in-memory task list (no reload). */
         const paintLists = () => {
             for (let i = 0; i < COLUMNS.length; i++) {
                 const columnTasks = tasksIn(i);
                 const cardWidth = Math.max(8, colWidth - 2);
                 const sel = columnLists[i].selected || 0;
-                const items = columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id, 
+                const items = spaceCards(columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, carried?.task.id === task.id, 
                 // Selected rows invert whole: the widget highlights only the
                 // first visual row of a multi-row card (2026-09-10).
-                idx === sel && i === currentColumn));
+                idx === sel && i === currentColumn)));
                 // Clear items first, then set new ones to ensure proper refresh -
                 // and put the selection BACK, because clearItems() zeroes it
                 // (sdk list.ts:539) and setItems() only ever clamps downwards. Every
@@ -648,15 +651,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                                 await moveTask(screen, task, toStatus, dataManager, achievementManager, user, project, bbsApi);
                             }
                             await updateLists(true);
+                            break;
                         }
-                        else if (columnTasks.length > 0) {
-                            const selectedIndex = columnLists[currentColumn].selected || 0;
-                            const task = columnTasks[selectedIndex];
-                            carried = { task, fromStatus: task.status, toColumn: currentColumn };
-                            setCarryMode(true);
-                            paintLists();
-                        }
-                        break;
+                    // Not carrying: Enter is Edit, the same as E.
+                    // falls through
                     case 'e':
                     case 'E':
                         if (columnTasks.length > 0) {
@@ -671,14 +669,14 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         await updateLists(true);
                         break;
                     case 'm':
-                        if (columnTasks.length > 0) {
+                        // Move: pick the card up. Already carrying, M does nothing - Enter
+                        // drops, ESC cancels.
+                        if (!carried && columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const newStatus = await withModal(() => selectMoveDestination(screen));
-                            if (newStatus) {
-                                await moveTask(screen, task, newStatus, dataManager, achievementManager, user, project, bbsApi);
-                                await updateLists(true);
-                            }
+                            carried = { task, fromStatus: task.status, toColumn: currentColumn };
+                            setCarryMode(true);
+                            paintLists();
                         }
                         break;
                     case 'd':
@@ -716,62 +714,6 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             })();
         };
         screen.on('keypress', keyHandler);
-    });
-}
-async function selectMoveDestination(screen) {
-    return new Promise((resolve) => {
-        const moveSize = (0, layout_1.modalSize)(40, 10, screen.width, screen.height);
-        const modal = (0, blessed_helpers_1.createBox)({
-            parent: screen,
-            top: 'center',
-            left: 'center',
-            width: moveSize.width,
-            height: moveSize.height,
-            fixed: true,
-            border: { type: 'line' },
-            label: ' Move Task To ',
-            style: {
-                border: { fg: door_theme_1.T.accentAlt },
-                bg: door_theme_1.T.ground
-            },
-            focusable: false,
-            mouse: false,
-            clickable: false,
-        });
-        const list = (0, blessed_helpers_1.createList)({
-            parent: modal,
-            top: 1,
-            left: 1,
-            width: '100%-2',
-            height: '100%-2',
-            keys: true,
-            vi: true,
-            mouse: true,
-            items: COLUMNS.map(col => COLUMN_LABELS[col]),
-            style: {
-                selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
-                item: { fg: door_theme_1.T.ink },
-                bg: door_theme_1.T.ground
-            }
-        });
-        const cleanup = () => {
-            screen.off('keypress', keyHandler);
-            screen.remove(modal);
-            screen.render();
-        };
-        list.on('select', (item, index) => {
-            cleanup();
-            resolve(COLUMNS[index]);
-        });
-        const keyHandler = (ch, key) => {
-            if (key.name === 'escape' || key.name === 'q') {
-                cleanup();
-                resolve(null);
-            }
-        };
-        screen.on('keypress', keyHandler);
-        list.focus();
-        screen.render();
     });
 }
 async function moveTask(screen, task, newStatus, dataManager, achievementManager, user, project, bbsApi) {

@@ -1,14 +1,14 @@
 /**
  * Kanban M moves the task without opening anything else.
  *
- * The move-destination picker is a list, and lists deliberately do NOT
- * consume Enter (they emit 'select' and propagate) - so the keypress kept
- * travelling into the kanban's own screen handler, whose Enter case opens
- * the EDIT dialog. Picking "in progress" moved the task AND opened its
- * editor on top (2026-09-09). The board now ignores its own keys while a
- * modal dialog is open.
+ * History: M opened a move-destination picker whose Enter leaked into the
+ * board's own Enter case and opened the EDIT dialog on top (2026-09-09); the
+ * board now ignores its own keys while a modal is open. Since 2026-09-27 M
+ * is the board's one Move key and enters the keyboard carry (move mode)
+ * directly, and Enter outside that mode is Edit - so the drop's Enter must
+ * still never reach the editor.
  *
- * Driven: a real board with one task, M, arrows, Enter through
+ * Driven: a real board with one task, M, an arrow, Enter through
  * program.emit, then the task record and the absence of an edit dialog.
  */
 
@@ -65,10 +65,10 @@ export async function moveDestinationDoesNotOpenTheEditor(): Promise<void> {
     });
     await settle();
 
-    // M opens the move picker; down + Enter chooses in-progress.
+    // M picks the card up; right carries it to IN PROGRESS; Enter drops.
     press(screen, 'm', 'm');
     await settle();
-    press(screen, 'down', 'down');
+    press(screen, 'right', 'right');
     await settle();
     press(screen, '\r', 'enter');
     await settle();

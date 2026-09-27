@@ -395,7 +395,24 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // Enter in a text field advances to the next field (the textbox consumes
         // Enter as submit); Enter on a focused button presses it. Ctrl+Enter
         // saves from anywhere.
-        titleInput.on('submit', () => advanceFrom(titleInput));
+        //
+        // EXCEPT THE TITLE OF A NEW TASK: there Enter is Save (sysop, 2026-09-27:
+        // "type the title and press Enter - that should trigger OK at once").
+        // Every other field has a default a quick task can keep, so making the
+        // caller Tab through six of them to reach Save was the whole cost of a new
+        // task. The same save() the button calls, so a blank title is still
+        // refused by the one validation. An edit keeps Enter-advances: the caller
+        // came to change something further down.
+        titleInput.on('submit', () => {
+            // The title keeps focus through a refused save (the error message
+            // hands focus back when dismissed), so the caller just types on.
+            if (isNew) {
+                save();
+            }
+            else {
+                advanceFrom(titleInput);
+            }
+        });
         pointsInput.on('submit', () => advanceFrom(pointsInput));
         descInput.on('submit', () => advanceFrom(descInput));
         const keyHandler = (ch, key) => {

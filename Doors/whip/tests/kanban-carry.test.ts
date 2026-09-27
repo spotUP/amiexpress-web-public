@@ -1,6 +1,7 @@
 /**
- * Kanban pick-up and drop: Enter grabs the task, arrows carry it across
- * columns unsaved, Enter drops (one persisted move), ESC lets it go.
+ * Kanban pick-up and drop: M (Move) grabs the task, arrows carry it across
+ * columns unsaved, Enter drops (one persisted move), ESC lets it go. Enter
+ * grabbed until 2026-09-27; it is Edit now (kanban-keys.test.ts).
  *
  * "Unsaved" is the whole point and is what this file now pins hardest.
  * The carry used to be represented by WRITING `task.status` - and
@@ -11,7 +12,7 @@
  * wrote the carried column to disk with no points, no completedAt, no
  * achievement check and no feed event.
  *
- * E keeps Enter's old job (edit). Driven like kanban-move.test.ts: a real
+ * Driven like kanban-move.test.ts: a real
  * board, real keys, the stored record as the oracle.
  */
 
@@ -59,11 +60,11 @@ async function openBoard(stored: any, dm?: any): Promise<{ screen: any; done: Pr
   return { screen, done };
 }
 
-export async function enterGrabsArrowsCarryEnterDrops(): Promise<void> {
+export async function mGrabsArrowsCarryEnterDrops(): Promise<void> {
   const stored = storedTask();
   const { screen, done } = await openBoard(stored);
   try {
-    press(screen, '\r', 'enter');
+    press(screen, 'm', 'm');
     await settle();
     press(screen, 'right', 'right');
     await settle();
@@ -89,7 +90,7 @@ export async function escapePutsItBack(): Promise<void> {
   const stored = storedTask();
   const { screen, done } = await openBoard(stored);
   try {
-    press(screen, '\r', 'enter');
+    press(screen, 'm', 'm');
     await settle();
     press(screen, 'right', 'right');
     await settle();
@@ -139,7 +140,7 @@ export async function creatingATaskMidCarryNeverPersistsTheCarriedColumn(): Prom
 
   const { screen, done } = await openBoard(stored, dm);
   try {
-    press(screen, '\r', 'enter');
+    press(screen, 'm', 'm');
     await settle();
     for (let i = 0; i < 3; i++) {
       press(screen, 'right', 'right');

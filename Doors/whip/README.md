@@ -62,7 +62,7 @@ WHIP (Workflow Hub for Intro Productions) is a gamified BBS door for managing de
 - **[↑↓]** Select task
 - **[Enter]** Edit task
 - **[N]** Create new task
-- **[M]** Move task to next column (earns points when moved to DONE)
+- **[M]** Move task: pick it up, carry it with the arrow keys, Enter drops it, Escape cancels (earns points when dropped in DONE)
 - **[D]** Delete task
 - **[Q]** Back to main menu
 
