@@ -69,19 +69,30 @@ if (typeof (_connectionCleanupTimer as any).unref === 'function') {
   (_connectionCleanupTimer as any).unref();
 }
 
+/** Every node a live session holds, on any transport. */
+export function nodeIdsInUse(): Set<number> {
+  const used = new Set<number>();
+  for (const session of sessions.values()) {
+    if (session.nodeId) used.add(session.nodeId);
+  }
+  return used;
+}
+
 /**
  * Get next available node ID (1-99)
  * In AmiExpress, each physical node had a number - we simulate this for websockets
+ *
+ * ONE NODE, ONE CALLER, whichever allocator hands it out. The web path takes
+ * its node from NodeManager, and a web caller's session only reaches
+ * `sessions` a moment later (index.ts, after the welcome delay). So a node
+ * NodeManager has reserved is taken too, or a telnet caller arriving in that
+ * window is given the same number. See NodeManager.getAvailableNode for the
+ * other half.
  */
 export function getNextAvailableNodeId(): number {
-  const usedNodeIds = new Set<number>();
-
-  // Collect all currently used node IDs
-  for (const session of sessions.values()) {
-    if (session.nodeId) {
-      usedNodeIds.add(session.nodeId);
-    }
-  }
+  const usedNodeIds = nodeIdsInUse();
+  const { nodeManager } = require('../services/node-manager.service');
+  for (const id of nodeManager.reservedNodeIds() as number[]) usedNodeIds.add(id);
 
   // Find first available node ID (1-99)
   for (let i = 1; i < 100; i++) {

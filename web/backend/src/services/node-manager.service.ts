@@ -53,12 +53,30 @@ export class NodeManager {
 
   // Get available node for new session
   async getAvailableNode(): Promise<NodeInfo | null> {
+    /*
+     * A NODE A TELNET OR SSH CALLER HOLDS IS NOT AVAILABLE.
+     *
+     * Those transports number their nodes from the live session map
+     * (session-manager getNextAvailableNodeId) and never mark anything here,
+     * so this table alone said node 1 was free while a telnet caller sat on
+     * it. The next web caller was given node 1 as well; per-node routing then
+     * delivered the guest's graphics answer `a` into the telnet caller's door
+     * and command loop, which ran A and printed "Filename(s) to flag" under
+     * the guest's prompt (the sysop, 2026-09-27).
+     */
+    const { nodeIdsInUse } = require('../server/session-manager');
+    const held: Set<number> = nodeIdsInUse();
     for (const [id, node] of this.nodes) {
-      if (node.status === 'available') {
+      if (node.status === 'available' && !held.has(id)) {
         return node;
       }
     }
     return null;
+  }
+
+  /** Nodes this table has handed out, whether or not a session holds them yet. */
+  reservedNodeIds(): number[] {
+    return Array.from(this.nodes.values()).filter((n) => n.status === 'busy').map((n) => n.id);
   }
 
   // Assign session to node
