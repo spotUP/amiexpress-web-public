@@ -25,6 +25,8 @@ import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
+import { DEFAULT_TERMINAL_FONT } from '../../constants/terminal-fonts';
+import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 
@@ -577,7 +579,7 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   // WEB_: MODERN_* — option 18: terminal font selection, no express.e counterpart; web terminal setting
   const userFont = sessionWantsPetscii(session)
     ? 'C64 CHARACTER SET'
-    : currentUser.fontPreference || 'TopazPlus_a1200';
+    : currentUser.fontPreference || DEFAULT_TERMINAL_FONT;
   emitText(socket, AnsiUtil.colorize('[', 'blue'));
   emitText(socket, ' 18');
   emitText(socket, AnsiUtil.colorize('] ', 'blue'));
@@ -971,13 +973,12 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       }
       emitText(socket, '\r\nSelect Terminal Font:\r\n');
       emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');
-      emitText(socket, AnsiUtil.colorize('[2] ', 'blue') + 'TopazPlus_a500   - Classic Amiga Topaz (500)\r\n');
-      emitText(socket, AnsiUtil.colorize('[3] ', 'blue') + 'Topaz_a1200      - Original Topaz (1200)\r\n');
-      emitText(socket, AnsiUtil.colorize('[4] ', 'blue') + 'Topaz_a500       - Original Topaz (500)\r\n');
-      emitText(socket, AnsiUtil.colorize('[5] ', 'blue') + 'mosoul           - MO\'Soul (alternate)\r\n');
-      emitText(socket, '\r\n');
-      emitText(socket, 'Select (1-5) or <CR>=Cancel: ');
+      {
+        const rows: string[] = fontMenuRows();
+        for (const row of rows) emitText(socket, AnsiUtil.colorize(row.slice(0, row.indexOf(']') + 1), 'blue') + row.slice(row.indexOf(']') + 1) + '\r\n');
+        emitText(socket, '\r\n');
+        emitText(socket, `Select (1-${rows.length}) or <CR>=Cancel: `);
+      }
       session.subState = LoggedOnSubState.W_EDIT_FONT;
       break;
 
@@ -1632,30 +1633,17 @@ export async function handleWEditFontInput(socket: any, session: BBSSession, inp
     return;
   }
 
-  const choice = parseInt(trimmed, 10);
-  const fontMap: { [key: string]: string } = {
-    '1': 'TopazPlus_a1200',
-    '2': 'TopazPlus_a500',
-    '3': 'Topaz_a1200',
-    '4': 'Topaz_a500',
-    '5': 'mosoul'
-  };
-
-  const selectedFont = fontMap[trimmed];
+  const selectedFont: string | null = fontForChoice(trimmed);
   if (!selectedFont) {
-    emitText(socket, '\r\nInvalid selection. Use 1-5.\r\n');
+    emitText(socket, `\r\nInvalid selection. Use 1-${fontMenuRows().length}.\r\n`);
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  // Update user font preference
-  await db.updateUser(session.user.id, { fontPreference: selectedFont });
-  session.user.fontPreference = selectedFont;
-
-  // Send font change event to frontend
-  socket.emit('set-font', selectedFont);
-  emitText(socket, `\r\nFont set to: ${selectedFont}\r\n`);
+  // The one path the user stats menu takes too: saved, and on the screen now.
+  const result = await chooseTerminalFont(socket, session, selectedFont);
+  emitText(socket, result === 'set' ? `\r\nFont set to: ${selectedFont}\r\n` : `\r\n${PETSCII_FONT_IS_FIXED}\r\n`);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;

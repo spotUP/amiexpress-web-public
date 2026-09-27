@@ -15,6 +15,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
+import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -1319,28 +1320,13 @@ export function handleUserStatsMenuInput(socket: any, session: BBSSession, input
  * Web-specific feature
  */
 export function displayFontSelectionMenu(socket: any, session: BBSSession): void {
-  const fonts = [
-    { id: 'mosoul', name: "mO'sOul" },
-    { id: 'MicroKnight', name: 'MicroKnight' },
-    { id: 'MicroKnightPlus', name: 'MicroKnight Plus' },
-    { id: 'P0T-NOoDLE', name: 'P0T-NOoDLE' },
-    { id: 'Topaz_a500', name: 'Topaz (A500)' },
-    { id: 'Topaz_a1200', name: 'Topaz (A1200)' },
-    { id: 'TopazPlus_a500', name: 'Topaz Plus (A500)' },
-    { id: 'TopazPlus_a1200', name: 'Topaz Plus (A1200)' }
-  ];
-
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Select Font'));
   socket.emit('ansi-output', '\r\n');
-
-  fonts.forEach((font, index) => {
-    const number = (index + 1).toString().padStart(2, ' ');
-    socket.emit('ansi-output', AnsiUtil.colorize(`[${number}]`, 'cyan') + ` ${font.name}\r\n`);
-  });
-
+  const rows: string[] = fontMenuRows();
+  for (const row of rows) socket.emit('ansi-output', `${row}\r\n`);
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Selection (1-8 or Q to cancel): ', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize(`Selection (1-${rows.length} or Q to cancel): `, 'yellow'));
   session.subState = LoggedOnSubState.FONT_SELECTION;
 }
 
@@ -1450,19 +1436,6 @@ console.error('[COLOURS] could not save the palette preference:', error);
 }
 
 export async function handleFontSelectionInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const { db } = require('../../database');
-
-  const fonts = [
-    'mosoul',
-    'MicroKnight',
-    'MicroKnightPlus',
-    'P0T-NOoDLE',
-    'Topaz_a500',
-    'Topaz_a1200',
-    'TopazPlus_a500',
-    'TopazPlus_a1200'
-  ];
-
   const choice = input.trim().toUpperCase();
 
   if (choice === 'Q' || choice === '') {
@@ -1471,30 +1444,23 @@ export async function handleFontSelectionInput(socket: any, session: BBSSession,
     return;
   }
 
-  const selection = parseInt(choice, 10);
-  if (isNaN(selection) || selection < 1 || selection > fonts.length) {
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid choice. Enter 1-8 or Q to cancel.'));
+  const selectedFont: string | null = fontForChoice(choice);
+  if (!selectedFont) {
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Invalid choice. Enter 1-${fontMenuRows().length} or Q to cancel.`));
     socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
     return;
   }
 
-  const selectedFont = fonts[selection - 1];
-
-  // Update user's font preference in database
   try {
-    await db.updateUser(session.user.id, { fontPreference: selectedFont });
-    session.user.fontPreference = selectedFont;
-
-    // Notify frontend to change font
-    socket.emit('font-changed', { font: selectedFont });
-
-    socket.emit('ansi-output', AnsiUtil.successLine(`Font changed to ${selectedFont}!`));
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // The one path W row 18 takes too: saved, and on the screen now.
+    const result = await chooseTerminalFont(socket, session, selectedFont);
+    socket.emit('ansi-output', result === 'set'
+      ? AnsiUtil.successLine(`Font changed to ${selectedFont}!`)
+      : `\r\n${PETSCII_FONT_IS_FIXED}\r\n`);
   } catch (error) {
 console.error('Error updating font preference:', error);
     socket.emit('ansi-output', AnsiUtil.errorLine('Error saving font preference.'));
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

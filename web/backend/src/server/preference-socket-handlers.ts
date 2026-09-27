@@ -136,22 +136,4 @@ console.error('[Preference] Error updating theme preference:', error);
     }
   });
 
-  // Set user's font preference
-  socket.on('set-font-preference', async (data: { font: string }) => {
-console.log('[Preference] Received set-font-preference request:', data.font);
-    const session = getSessionBySocketId(socket.id);
-    if (!session || !session.user) {
-console.log('[Preference] No session or user, cannot save font');
-      return;
-    }
-
-    try {
-      await db.updateUser(session.user.id, { fontPreference: data.font });
-      session.user.fontPreference = data.font;
-console.log('[Preference] Saved font preference:', data.font, 'for user:', session.user.username);
-      socket.emit('font-changed', { font: data.font });
-    } catch (error) {
-console.error('[Preference] Error updating font preference:', error);
-    }
-  });
 }

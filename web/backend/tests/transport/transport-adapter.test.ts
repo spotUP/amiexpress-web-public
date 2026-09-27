@@ -131,7 +131,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'error',
   'example-data',
   'example-result',
-  'font-changed',
   'font-preference',
   'force-disconnect',
   'forced-pwd-change-complete',
@@ -596,7 +595,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // census is what caught them.
     // 251 as of 2026-09-24: `terminal-type-settled`, not-transport beside
     // `terminal-type` (server/telnet-server.ts:450); the arm-A count caught it.
-    expect(ruled.length).toBe(251);
+    // 250 as of 2026-09-28: `font-changed` left with its only senders - the
+    // dead `set-font-preference` route and the user stats font menu, which
+    // now applies its pick through `set-font` like W row 18.
+    expect(ruled.length).toBe(250);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -659,7 +661,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // call site).
       // 120 (2026-09-20): `emulator:open` and `emulator:close` - see the
       // arm-B note below. A byte caller has no pane to open.
-      'web-only': 120,
+      // 119 (2026-09-28): `font-changed` gone - no sender left, and no
+      // listener ever existed.
+      'web-only': 119,
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       'not-transport': 105,
@@ -746,7 +750,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // e25b8edd7), the connection telling its own session start that the TTYPE
     // exchange is over. It landed unruled; it is ruled not-transport beside
     // `terminal-type`, the event it follows.
-    expect(fromA.length).toBe(159);
+    // 158 as of 2026-09-28: `font-changed` gone (see the ruling count above).
+    expect(fromA.length).toBe(158);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

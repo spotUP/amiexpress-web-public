@@ -890,15 +890,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "handlers/examples/modern-handler.example.ts:59. An example file wired into " +
     "no route.",
   },
-  "font-changed": {
-    kind: "web-only",
-    note:
-    "Browser chrome. Emitted at server/preference-socket-handlers.ts:120, " +
-    "handlers/commands/user-commands.handler.ts:1136. Measured 2026-09-03: no " +
-    "frontend listener at all, so it is unconsumed on web too; it stays " +
-    "web-only rather than dead because it is a browser-chrome name and TP-15 " +
-    "owns any deletion.",
-  },
   "font-preference": {
     kind: "web-only",
     note:
@@ -1683,14 +1674,16 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     note:
     "Browser chrome. Emitted at server/preference-socket-handlers.ts:64, " +
     "server/preference-socket-handlers.ts:101. Measured 2026-09-03: no frontend " +
-    "listener. Same reasoning as font-changed.",
+    "listener; it stays web-only rather than dead because it is a " +
+    "browser-chrome name and TP-15 owns any deletion.",
   },
   "theme-preference": {
     kind: "web-only",
     note:
     "Browser chrome. Emitted at server/preference-socket-handlers.ts:44, " +
     "server/preference-socket-handlers.ts:81. Measured 2026-09-03: no frontend " +
-    "listener. Same reasoning as font-changed.",
+    "listener; it stays web-only rather than dead because it is a " +
+    "browser-chrome name and TP-15 owns any deletion.",
   },
   "transfer-raw:cancelled": {
     kind: "web-only",
