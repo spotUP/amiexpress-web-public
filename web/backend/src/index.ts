@@ -586,6 +586,13 @@ export interface BBSSession {
     onComplete?: () => void | Promise<void>;
     kind?: 'bbs' | 'door' | 'doPause'; // 'bbs' = More prompt, 'doPause' = Pause/Space prompt, 'door' = door-owned
     /**
+     * The gate belongs to an INCLUDED screen (~SS_/~SR_), and the host screen
+     * is waiting on it. N stops only this file: the host's own segments and
+     * queued commands are not the include's to throw away, and the host
+     * resumes either way (displayIncludedScreen).
+     */
+    include?: boolean;
+    /**
      * TP-5: the wire attribute page 1 went out with. Page 2 is the same
      * file's bytes, so it must carry the same source charset or a `.ans`
      * would reach a CP437 caller exactly for one page and transcoded for the

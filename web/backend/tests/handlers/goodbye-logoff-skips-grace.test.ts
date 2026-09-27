@@ -84,7 +84,9 @@ describe('fresh login reclaims its own grace-ghost first', () => {
     // already holds the same user: replacing, not refusing. A socket
     // with no user still takes the check (genuine second tab refused).
     expect(loginSrc).toMatch(/reauthenticating/);
-    const skipAt = loginSrc.indexOf('if (!reauthenticating)');
+    // The guard may carry more conditions (the dev-only same-user flag); what
+    // matters is that it comes before the already-on check.
+    const skipAt = loginSrc.indexOf('if (!reauthenticating');
     const alreadyOnAt = loginSrc.indexOf('userAlreadyOnNode(');
     expect(skipAt).toBeGreaterThan(-1);
     expect(skipAt).toBeLessThan(alreadyOnAt);

@@ -724,7 +724,31 @@ async function displayIncludedScreen(
   // it for free (`utils/petscii-session-model.ts`), so nothing is installed
   // here any more; what remains is the ORDERING the `.seq` depends on.
   try {
-    return await displayScreen(socket, session, target, false, silent);
+    const before = session.paginatedScreen;
+    const shown = await displayScreen(socket, session, target, false, silent);
+    /*
+     * AN INCLUDE THAT PAGES HOLDS THE SCREEN THAT INCLUDED IT.
+     *
+     * express.e's displayFile stops inside its own checkForPause, so the host
+     * screen goes on only after the caller answers the More. Here the include
+     * installed its gate and returned, and the host drew the rest of its
+     * segment straight under the prompt: LOGON's `~SS_quicknew.txt` paged at
+     * 25 lines and the art after it landed below "(Pause)...More(y/n/ns)?",
+     * with the board then waiting on a prompt the caller could not see
+     * (walked over telnet, 2026-09-27). Wait for the gate to finish - Y, NS
+     * or N - before going on.
+     */
+    const gate = session.paginatedScreen;
+    if (shown && gate && gate !== before && gate.kind === 'bbs' && gate.nextIndex < gate.lines.length) {
+      gate.include = true;
+      const after = gate.onComplete;
+      await new Promise<void>((resolve) => {
+        gate.onComplete = async () => {
+          try { if (after) await after(); } finally { resolve(); }
+        };
+      });
+    }
+    return shown;
   } finally {
     // An include that took the ANSI arm may still be sitting in the output
     // buffer (`emitText`'s 16 ms batch). Draining it HERE keeps two things
@@ -3880,6 +3904,11 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   if (noStop) {
     emitPage(paged.nextIndex, lines.length, false);
     session.paginatedScreen = undefined;
+    if (paged.include) {
+      // The rest of the included file is out; the host screen resumes itself.
+      if (paged.onComplete) await paged.onComplete();
+      return true;
+    }
     session.menuPause = false;
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
@@ -3926,6 +3955,11 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
   // N: abort remaining pages, do not run queued commands
   if (no) {
     session.paginatedScreen = undefined;
+    if (paged.include) {
+      // An included file stops; the screen that included it goes on.
+      if (paged.onComplete) await paged.onComplete();
+      return true;
+    }
     session.menuPause = false;
     session.queuedScreenCommands = [];
     session.pendingScreenCommand = undefined;
@@ -3945,6 +3979,13 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
 
   if (!hasMore) {
     session.paginatedScreen = undefined;
+    if (paged.include) {
+      // Only the included file is finished: the host screen that waits on it
+      // carries on from where it stopped, its own segments included.
+      if (paged.onComplete) await paged.onComplete();
+      restoreModemState(socket, session);
+      return true;
+    }
     session.menuPause = false;
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);

@@ -65,10 +65,26 @@ afterEach(() => {
 
 const count = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
 
+/**
+ * Show a screen the way a caller sees it: a Super-AmiLog longer than a page
+ * stops at "More" until answered, and an INCLUDED one holds BULL until then
+ * (express.e's displayFile blocks in its own checkForPause).
+ */
+async function showAnsweringMore(socket: any, session: any, name: string): Promise<void> {
+  const { handlePaginatedScreenInput } = require('../../src/handlers/screen.handler');
+  let done = false;
+  const running = displayScreen(socket, session, name, false).finally(() => { done = true; });
+  while (!done) {
+    await new Promise((r) => setTimeout(r, 5));
+    if (session.paginatedScreen?.kind === 'bbs') await handlePaginatedScreenInput(socket, session, '\r');
+  }
+  await running;
+}
+
 describe('Super-AmiLog, through the board', () => {
   it('goes out once when shown as the BULL step', async () => {
     const { socket, out } = socketDouble();
-    await displayScreen(socket, ansi(), 'BULL', false);
+    await showAnsweringMore(socket, ansi(), 'BULL');
     const wire = out.join('');
 
     expect(count(wire, 'lAST cALLERS')).toBe(1);
