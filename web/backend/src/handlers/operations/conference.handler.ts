@@ -357,6 +357,28 @@ console.warn('[joinConference] Failed to sync node user file:', err);
            */
           (session.screenSegments as any).onComplete = () =>
             doPause(socket, session, continuation);
+          /*
+           * AND SOMEBODY HAS TO STOP AT THE FIRST `~SP`.
+           *
+           * The flow's own screens get that prompt from pauseDisplayFlow; the
+           * join calls displayScreen directly, so when the first segment put
+           * no prompt up of its own, the rest of the bulletin sat parked
+           * with nothing on screen asking for a key - the caller was left
+           * at the bulletin art, waiting on a prompt that never came. h7's
+           * conference 2 bulletin does it: the board's `~f ~SP ~f ~CC_ctop`
+           * program spliced around the theme's art leaves a first segment
+           * that is only the clear (found driving the login over telnet,
+           * 2026-09-27). The boundary pause is the one every other segment
+           * boundary uses.
+           */
+          if (!session.paginatedScreen) {
+            const { armSegmentBoundaryPause } = require('../screen.handler');
+            if (!armSegmentBoundaryPause(socket, session, 'join-bull')) {
+              // Nothing left worth a key: the bulletin is over.
+              session.screenSegments = undefined;
+              doPause(socket, session, continuation);
+            }
+          }
         } else {
           doPause(socket, session, continuation);
         }

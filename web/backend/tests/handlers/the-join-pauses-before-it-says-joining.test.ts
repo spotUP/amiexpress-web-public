@@ -29,6 +29,13 @@ process.env.SKIP_DB_INIT = '1';
 /** What the caller would see, in the order the join produces it. */
 const events: string[] = [];
 
+/** Pretends a boundary prompt went up, the way the real one does for art. */
+const armSegmentBoundaryPause = jest.fn((_s: any, session: any) => {
+  events.push('boundary');
+  session.paginatedScreen = { kind: 'doPause' };
+  return true;
+});
+
 const doPause = jest.fn((_s: any, _sess: any, after?: () => void) => {
   events.push('pause');
   // A real doPause holds the screen until a key; the continuation runs on
@@ -49,6 +56,7 @@ jest.mock('../../src/handlers/screen.handler', () => ({
     return true;
   }),
   doPause: (...args: any[]) => doPause(...(args as [any, any, any])),
+  armSegmentBoundaryPause: (...args: any[]) => armSegmentBoundaryPause(...(args as [any, any])),
   checkScreenClear: jest.fn(),
   runQueuedScreenCommands: jest.fn(async () => {}),
 }));
@@ -141,7 +149,37 @@ describe('the pause a conference join owes', () => {
   beforeEach(() => {
     events.length = 0;
     doPause.mockClear();
+    armSegmentBoundaryPause.mockClear();
     aBoard();
+  });
+
+  /*
+   * Found driving a login over telnet, 2026-09-27: h7's conference 2 bulletin
+   * left its first segment with no prompt of its own, and the join armed
+   * none, so the caller waited at the art for a key nothing asked for.
+   */
+  it('stops at the bulletin\'s first ~SP when nothing else put a prompt up', async () => {
+    const { socket, session } = aCaller();
+
+    await joinConference(socket, session, 2, 2, false, false, FORCE_MAILSCAN_ALL, false);
+
+    expect(armSegmentBoundaryPause).toHaveBeenCalledTimes(1);
+    expect(session.paginatedScreen).toBeTruthy();
+  });
+
+  it('does not arm a second prompt when the bulletin already put one up', async () => {
+    const { socket, session } = aCaller();
+    const { displayScreen } = require('../../src/handlers/screen.handler');
+    displayScreen.mockImplementationOnce(async (_s: any, sess: any) => {
+      events.push('bulletin');
+      sess.screenSegments = { segments: ['more'], screenName: 'CONF_BULL' };
+      sess.paginatedScreen = { kind: 'doPause' };
+      return true;
+    });
+
+    await joinConference(socket, session, 2, 2, false, false, FORCE_MAILSCAN_ALL, false);
+
+    expect(armSegmentBoundaryPause).not.toHaveBeenCalled();
   });
 
   it('falls between the bulletin and "Joining Conference"', async () => {
@@ -151,7 +189,8 @@ describe('the pause a conference join owes', () => {
 
     await joinAndFinishTheBulletin(socket, session);
 
-    expect(events).toEqual(['bulletin', 'pause', 'joining']);
+    // `boundary` is the bulletin's own `~SP` prompt; `pause` is the join's.
+    expect(events).toEqual(['bulletin', 'boundary', 'pause', 'joining']);
   });
 
   it('is one pause, not a second one stacked on the segments', async () => {
