@@ -39,6 +39,7 @@ import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
 import { createLoginSequenceRouter } from './login-sequence-routes';
 import { findTheme, readThemeRegistry } from '../screens/theme-registry';
+import { landTargetsInTheme } from '../screens/theme-seeding';
 import { svgToRip } from '../screens/svg-to-rip';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import { themeOfPath, validateThemeFile, type ThemeFinding } from '../screens/theme-validation';
@@ -804,9 +805,18 @@ screensRouter.put('/file', (req: Request, res: Response) => {
   }
 
   const content = String((req.body || {}).content ?? '');
-  const targets: string[] = Array.isArray(req.body?.targets) && req.body.targets.length
+  let targets: string[] = Array.isArray(req.body?.targets) && req.body.targets.length
     ? req.body.targets
     : [rename ? path.join(path.dirname(rel), rename) : rel];
+
+  // A save made standing in a theme lands in that theme - see
+  // landTargetsInTheme for the board file this used to overwrite.
+  const standingIn = String((req.body || {}).theme ?? '').trim().toLowerCase();
+  if (standingIn && standingIn !== 'default') {
+    const landed = landTargetsInTheme(config.get('dataDir'), standingIn, targets, { dryRun: (req.body || {}).dryRun === true });
+    if ('error' in landed) return res.status(400).json({ success: false, error: landed.error });
+    targets = landed.targets;
+  }
 
   const placement = readPlacement((req.body || {}).carryCodes);
   if (!placement) {

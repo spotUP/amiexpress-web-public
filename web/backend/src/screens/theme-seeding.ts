@@ -26,7 +26,7 @@ import { getScreenIndex } from './screen-index.service';
 import { screenIsProgram } from './screen-blankness';
 import { themeTargetFor, themeTargetForBoardFile } from './theme-target-path';
 import { variantSetFor, type ScreenScope } from './theme-variant-set';
-import { themeDirectory } from './theme-registry';
+import { themeDirectory, readThemeRegistry } from './theme-registry';
 import type { ThemeEntry } from './theme-registry';
 
 /** What one "redraw this" did: the files that landed, and the artist's own. */
@@ -173,6 +173,46 @@ function scopeOf(resolution: { scope: 'node' | 'conf' | 'board'; id: number | nu
   if (resolution.scope === 'node') return { kind: 'node' };
   if (resolution.scope === 'conf') return { kind: 'conf', id: resolution.id ?? 1 };
   return { kind: 'board' };
+}
+
+/**
+ * Where a save made while standing in a theme lands: in that theme, always.
+ *
+ * The studio's save offered the BOARD's file whenever the open card was one
+ * (a sysop may write anything), so a menu edited "in 607080" overwrote the
+ * board's own `Screens/Conf/menu250.txt.GR` - which every theme's gallery
+ * shows, so the sysop saw 607080's art "in h7" (2026-09-27). The dialog has
+ * several write paths and this endpoint is the one they all go through.
+ *
+ * A board target is redrawn into the theme first (the screen and its
+ * variants, never overwriting what the theme already has - the same copy the
+ * studio's redraw makes) and the write goes to the theme's copy. A dry run
+ * copies nothing; it only answers where the write would go.
+ */
+export function landTargetsInTheme(
+  bbsRoot: string,
+  slug: string,
+  targets: string[],
+  options: { dryRun?: boolean } = {},
+): { targets: string[] } | { error: string } {
+  const theme = readThemeRegistry(bbsRoot).themes.find(entry => entry.slug === slug);
+  if (!theme) return { error: `No such theme: "${slug}"` };
+  if (!themeDirectory(bbsRoot, theme)) return { targets };
+
+  const inside = `${theme.dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}/`;
+  const index = getScreenIndex(bbsRoot);
+  const landed = new Set<string>();
+  for (const target of targets) {
+    if (target.replace(/\\/g, '/').toLowerCase().startsWith(inside)) {
+      landed.add(target);
+      continue;
+    }
+    const inTheme = themeTargetForBoardFile(index, target);
+    if (!inTheme) return { error: `${target} has no place in ${theme.title}` };
+    if (!options.dryRun) copyScreenIntoTheme(bbsRoot, theme, target);
+    landed.add(path.join(theme.dir, inTheme));
+  }
+  return { targets: [...landed] };
 }
 
 /**

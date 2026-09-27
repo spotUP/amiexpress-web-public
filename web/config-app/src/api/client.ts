@@ -429,13 +429,15 @@ class ApiClient {
     filePath: string,
     contentBase64: string,
     targets?: string[],
-    options?: { carryCodes?: 'none' | 'keep' | 'below'; dryRun?: boolean },
+    options?: { carryCodes?: 'none' | 'keep' | 'below'; dryRun?: boolean; theme?: string },
   ) {
     return this.putJson<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
       content: contentBase64,
       targets,
       carryCodes: options?.carryCodes,
       dryRun: options?.dryRun,
+      // The theme the editor stands in: the server lands every write there.
+      theme: options?.theme,
     });
   }
 

@@ -448,7 +448,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
 
   const save = useMutation({
     mutationFn: (base64: string) =>
-      apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'keep' }),
+      apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'keep', theme: theme.slug }),
     onSuccess: async () => {
       showSuccess(writeTargets.length > 1 ? `Saved ${writeTargets.length} copies` : 'Saved');
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
@@ -516,7 +516,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
 
   const writeBytes = useMutation({
     mutationFn: ({ target, bytes, carry, targets }: { target: string; bytes: string; carry?: 'none' | 'keep' | 'below'; targets?: string[] }) =>
-      apiClient.putScreenFile(target, bytes, targets ?? (target === path ? writeTargets : [target]), { carryCodes: carry ?? 'keep' }),
+      apiClient.putScreenFile(target, bytes, targets ?? (target === path ? writeTargets : [target]), { carryCodes: carry ?? 'keep', theme: theme.slug }),
     onSuccess: async (_answer, { target }) => {
       setPendingUpload(null);
       setCarryVerdict(null);
@@ -941,7 +941,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
                   // A dry run: the board answers what it would carry and
                   // writes nothing, so it is safe the moment a file is picked.
                   try {
-                    const res = await apiClient.putScreenFile(path, bytes, writeTargets, { carryCodes: 'keep', dryRun: true });
+                    const res = await apiClient.putScreenFile(path, bytes, writeTargets, { carryCodes: 'keep', dryRun: true, theme: theme.slug });
                     setCarryVerdict(((res.data?.targets ?? [])[0] ?? null) as typeof carryVerdict);
                   } catch {
                     // A verdict is an aid, not a gate.
