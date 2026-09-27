@@ -281,6 +281,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'terminal-mode',
   'terminal-resize',
   'terminal-type',
+  'terminal-type-settled',
   'texttv-mode',
   'theme-changed',
   'theme-preference',
@@ -593,7 +594,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // web-only - the BBC Micro pane the beeb and teletext doors raise over
     // the terminal. Emitted from committed code with no ruling; the arm-B
     // census is what caught them.
-    expect(ruled.length).toBe(250);
+    // 251 as of 2026-09-24: `terminal-type-settled`, not-transport beside
+    // `terminal-type` (server/telnet-server.ts:450); the arm-A count caught it.
+    expect(ruled.length).toBe(251);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -657,7 +660,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 120 (2026-09-20): `emulator:open` and `emulator:close` - see the
       // arm-B note below. A byte caller has no pane to open.
       'web-only': 120,
-      'not-transport': 104,
+      // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
+      // own end-of-TTYPE signal to its session start.
+      'not-transport': 105,
     });
   });
 
@@ -736,7 +741,12 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // event is a contradiction the pin cannot hold, so the call site was made
     // plain like every other emit in that file rather than the scan widened -
     // the scan's narrowness is what makes the count mean anything.
-    expect(fromA.length).toBe(158);
+    //
+    // 159 as of 2026-09-24: `terminal-type-settled` (server/telnet-server.ts:450,
+    // e25b8edd7), the connection telling its own session start that the TTYPE
+    // exchange is over. It landed unruled; it is ruled not-transport beside
+    // `terminal-type`, the event it follows.
+    expect(fromA.length).toBe(159);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

@@ -1659,6 +1659,16 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "connection (server/connection-emitter.ts:157). TP-12 makes SSH raise the " +
     "same one.",
   },
+  "terminal-type-settled": {
+    kind: "not-transport",
+    owner: "TelnetConnection",
+    note:
+    "The connection's own signal that the TTYPE exchange is over - the client " +
+    "answered, or the wait for an answer it promised ran out " +
+    "(server/telnet-server.ts:450). Heard by the server's own session start " +
+    "(server/telnet-server.ts:1020), which holds the graphics prompt until the " +
+    "type is known. Never leaves the process.",
+  },
   "texttv-mode": {
     kind: "web-only",
     note:
