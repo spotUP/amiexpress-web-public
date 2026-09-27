@@ -224,10 +224,43 @@ describe('typing V lets me type a filename', () => {
   });
 });
 
+describe('the upload asks for a filename and takes all of it', () => {
+  /*
+   * express.e:17666 reads `FileName n:` with lineInput. The branch took one
+   * keystroke as the whole name: a telnet caller naming RG136005.BIN got a
+   * file called R (the telnet regression suite, 2026-09-27).
+   */
+  it('names the upload with every letter typed', async () => {
+    const socket = makeSocket();
+    const session = c64Session('');
+    session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+    session.tempData = { uploadCount: 1, uploadBatch: [] };
+
+    await type(socket, session, 'HELLO.TXT');
+    expect(session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+    await type(socket, session, '\r');
+
+    expect(session.tempData.currentFilename).toBe('HELLO.TXT');
+    expect(session.subState).toBe(LoggedOnSubState.UPLOAD_DESC_INPUT);
+  });
+
+  it('still starts the transfer on a blank line', async () => {
+    const socket = makeSocket();
+    const session = c64Session('');
+    session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+    session.tempData = { uploadCount: 1, uploadBatch: [] };
+
+    await type(socket, session, '\r');
+
+    expect(session.subState).toBe(LoggedOnSubState.UPLOAD_OKAY_CONFIRM);
+  });
+});
+
 describe('the line-prompt table is the one declaration', () => {
   it('lists the prompts express.e reads with lineInput()', () => {
     expect([...LINE_PROMPT_SUBSTATES.keys()].sort()).toEqual(
       [
+        LoggedOnSubState.UPLOAD_FILENAME_INPUT,
         LoggedOnSubState.VIEW_FILE_INPUT,
         LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT,
         LoggedOnSubState.ZIPPY_SEARCH_INPUT,

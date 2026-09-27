@@ -219,6 +219,12 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   // express.e:20414 - lineInput('','',40,...) "Enter filename of file to view?"
   // handleFilenameInput emits express.e:20418's newline when the line is empty.
   [LoggedOnSubState.VIEW_FILE_INPUT, { maxLen: 40 }],
+  // express.e:17666 - lineInput('','',100,...) "FileName n: " in the batch
+  // upload. The branch took whatever one keystroke arrived as the whole name,
+  // so a telnet caller naming RG136005.BIN uploaded a file called R (found by
+  // the telnet regression suite, 2026-09-27). The branch emits its own
+  // newlines - the blank line's and the description block's.
+  [LoggedOnSubState.UPLOAD_FILENAME_INPUT, { maxLen: 100 }],
 ]);
 
 /**
