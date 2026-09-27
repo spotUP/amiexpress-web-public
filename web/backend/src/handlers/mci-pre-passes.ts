@@ -238,7 +238,15 @@ screenDebug('[MCI] Looking for ~XC_ and ~XI codes...');
   // ~XI - Execute XIM door (express.e format: ~XI<doorpath>)
   // Format: ~XIDOORS:who/NI or ~XIDOORS:who/No
   // This executes XIM doors silently from screen files
-  const xiRegex = /~XI([^\s\r\n]+)/g;
+  //
+  // The name ends at the first control character, a `|` or the next `~`, not
+  // only at whitespace. An art file's last line routinely closes with a colour
+  // reset - `~XISUBSCAN` followed by ESC[0m - and the ESC was read as part of
+  // the name: "SUBSCAN\x1b[0m" is no command, so every login that met the
+  // conference bulletin printed "No such command!!" and stacked a "Press any
+  // key" over its pause (found walking the login over telnet, 2026-09-27).
+  // The reset stays in the text, where the artist put it.
+  const xiRegex = /~XI([^\s\x00-\x1f\x7f|~]+)/g;
   parsed = parsed.replace(xiRegex, (_fullMatch: string, doorPath: string) => {
     screenDebug('[MCI] *** FOUND ~XI DOOR:', doorPath);
     commandsToExecute.push(doorPath.trim());
