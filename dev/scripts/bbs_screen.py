@@ -179,6 +179,13 @@ class Board:
                 log.append(f"[menu] {here[-60:]!r}")
                 break
             if answer is None:
+                # Not a question this knows - but the board may simply still
+                # be drawing (56k art, a gap between a screen and its pause).
+                # Only a board that stays silent is waiting on something new.
+                before = self.last_byte
+                self.settle(10.0, 12.0)
+                if self.last_byte != before:
+                    continue
                 log.append(f"[STOP - unknown prompt] {here[-70:]!r}")
                 break
             self.send(answer)
