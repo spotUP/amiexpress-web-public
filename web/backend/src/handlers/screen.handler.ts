@@ -3824,8 +3824,14 @@ console.log(`[handlePaginatedScreenInput] No paginatedScreen set, returning fals
 console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.lines.length} nextIndex=${paged.nextIndex} pageSize=${paged.pageSize}`);
   const key = (data || '').trim().toUpperCase();
   const yes = key === '' || key === 'Y' || key === '\r' || key === '\n';
-  const no = key === 'N';
-  const noStop = key === 'NS';
+  // N and NS answer a `More(y/n/ns)` gate. A doPause gate is "Space To
+  // Resume": express.e's doPause takes ANY key and goes on (express.e:5143-
+  // 5149). Read as the abort, N threw the gate away WITHOUT its
+  // continuation, so whatever was waiting on the pause - the join, the D
+  // command - never resumed.
+  const onlyForMore = paged.kind !== 'doPause';
+  const no = onlyForMore && key === 'N';
+  const noStop = onlyForMore && key === 'NS';
 
   // express.e:5199 aePuts('[1A[K') — only for checkForPause (More prompt)
   // express.e:5149 doPause(): aePuts('\b\n') — just newline, no cursor-up erase

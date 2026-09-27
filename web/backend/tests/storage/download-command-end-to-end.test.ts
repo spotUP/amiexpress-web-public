@@ -120,6 +120,24 @@ function harness(): Harness {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const asHandlerArgs = (h: Harness): [any, any] => [h.socket as any, h.session as any];
 
+/**
+ * Type D the way a caller does: the board shows DownloadMsg and waits at
+ * "Space To Resume" (express.e:19966-19970), so the key is pressed when the
+ * pause is up. The handler used to run on past that pause without waiting.
+ */
+async function typeD(h: Harness, params: string): Promise<void> {
+  const { handlePaginatedScreenInput } = require('../../src/handlers/screen.handler');
+  let done = false;
+  const running = DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), params).finally(() => { done = true; });
+  while (!done) {
+    await new Promise((r) => setTimeout(r, 5));
+    if ((h.session as any).paginatedScreen?.kind === 'doPause') {
+      await handlePaginatedScreenInput(h.socket as any, h.session as any, '\r');
+    }
+  }
+  await running;
+}
+
 afterEach(() => {
   setStorageContext(null);
   restoreConfig?.();
@@ -132,7 +150,7 @@ describe('typing D on a pooled area', () => {
     const h = harness();
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
 
     expect(h.written()).toContain('DEMO.LHA');
     expect(h.written()).not.toContain('File not found');
@@ -146,7 +164,7 @@ describe('typing D on a pooled area', () => {
     const h = harness();
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
 
     expect(h.backend.gets).toBe(0);
   });
@@ -157,7 +175,7 @@ describe('typing D on a pooled area', () => {
       await h.backend.put(`Conf1/Files/DEMO${i}.LHA`, Buffer.from(`payload-${i}`));
     }
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO*.LHA');
+    await typeD(h, 'DEMO*.LHA');
 
     expect((h.session.tempData?.downloadFileList as unknown[]).length).toBe(5);
     expect(h.backend.gets).toBe(0);
@@ -168,7 +186,7 @@ describe('typing D on a pooled area', () => {
     const h = harness();
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
 
     const [file] = h.session.tempData?.downloadFileList as { size: number }[];
     expect(file.size).toBe(7);
@@ -179,7 +197,7 @@ describe('typing D on a pooled area', () => {
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
     h.backend.down = true;
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
 
     expect(h.written()).toContain('DRIVE.2');
     expect(h.written()).toContain('try again later');
@@ -189,7 +207,7 @@ describe('typing D on a pooled area', () => {
   it('still says a genuinely absent file is not found', async () => {
     const h = harness();
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'NOPE.LHA');
+    await typeD(h, 'NOPE.LHA');
 
     expect(h.written()).toContain('File not found: NOPE.LHA');
     expect(h.written()).not.toContain('unavailable');
@@ -202,7 +220,7 @@ describe('typing D on a pooled area', () => {
     await h.backend.put('Conf1/Files/FLAGGED.LHA', Buffer.from('flagged'));
     h.session.flaggedFiles = [{ filename: 'FLAGGED.LHA', confNum: 1 }];
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
 
     expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
       'FLAGGED.LHA',
@@ -215,7 +233,7 @@ describe('typing D on a pooled area', () => {
     const h = harness();
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
     h.clear();
     await DownloadHandler.handleFilenameInput(...asHandlerArgs(h), 'DEMO.LHA');
 
@@ -229,7 +247,7 @@ describe('typing D on a pooled area', () => {
     const h = harness();
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
     h.backend.down = true;
     h.clear();
     await DownloadHandler.handleFilenameInput(...asHandlerArgs(h), 'DEMO.LHA');
@@ -247,7 +265,7 @@ describe('typing D on a pooled area', () => {
     flags.addFlag('FLAGGED.LHA', 1);
     h.session.flagManager = flags;
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
 
     expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
       'FLAGGED.LHA',
@@ -262,7 +280,7 @@ describe('typing D on a pooled area', () => {
     h.session.flagManager = flags;
     h.backend.down = true;
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
 
     expect(h.written()).toContain('unavailable');
     expect(h.written()).not.toContain('File not found');
@@ -274,7 +292,7 @@ describe('typing D on a pooled area', () => {
     h.session.flaggedFiles = [{ filename: 'FLAGGED.LHA', confNum: 1 }];
     h.backend.down = true;
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    await typeD(h, '');
 
     expect(h.written()).toContain('unavailable');
     expect((h.session.tempData?.downloadFileList as unknown[]).length).toBe(0);
@@ -285,7 +303,7 @@ describe('typing D on a pooled area', () => {
     fs.writeFileSync(path.join(h.dataDir, 'Conf1', 'Files', 'ONDISK.LHA'), 'on-disk');
     h.backend.down = true;
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'ONDISK.LHA');
+    await typeD(h, 'ONDISK.LHA');
 
     // Both truths, in one answer: the file is queued AND the pool is down.
     expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
@@ -307,7 +325,7 @@ describe('the bytes arriving in time for the transfer', () => {
     h.session.connectionType = 'telnet';
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
     expect(h.backend.gets).toBe(0); // still nothing fetched at the prompt
 
     await confirmTransfer(h);
@@ -324,13 +342,13 @@ describe('the bytes arriving in time for the transfer', () => {
     h.session.connectionType = 'telnet';
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
     await confirmTransfer(h);
     h.ctx.cache.evictTo(0);
     h.session.tempData = undefined;
 
     // A second D for the same file, with the cache emptied in between.
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
     await confirmTransfer(h);
 
     const paths = startZmodemDownload.mock.calls[1][2] as string[];
@@ -342,7 +360,7 @@ describe('the bytes arriving in time for the transfer', () => {
     h.session.connectionType = 'telnet';
     await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), 'DEMO.LHA');
+    await typeD(h, 'DEMO.LHA');
     h.backend.down = true;
     h.clear();
     await confirmTransfer(h);

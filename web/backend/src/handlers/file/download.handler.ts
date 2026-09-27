@@ -104,7 +104,17 @@ export class DownloadHandler {
         // never be found however well it was drawn, and the `catch` below hid it.
         const shown = await displayScreen(socket, session, 'DOWNLOADMSG', true, true);
         if (shown) {
-          if (typeof doPause === 'function') doPause(socket, session);
+          /*
+           * express.e's doPause() BLOCKS: the stats and the Filespec prompt
+           * come after the key. This called the port's doPause and carried
+           * straight on, so the caller saw "(Pause)...Space To Resume:" with
+           * the stats already printed under it and the pause answering
+           * nothing (walked over telnet, 2026-09-27). Its continuation is the
+           * key being pressed; wait for it.
+           */
+          if (typeof doPause === 'function') {
+            await new Promise<void>((resolve) => doPause(socket, session, () => resolve()));
+          }
           socket.emit('ansi-output', '\r\n');
         }
       }
