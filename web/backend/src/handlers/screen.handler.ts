@@ -701,14 +701,15 @@ type ScreenIncludeDepthHolder = { screenIncludeDepth?: number };
  * Display an included screen (`~SS_`, `~SR_`) under the depth cap. Over the
  * cap nothing is emitted - a truncated screen beats a crashed node.
  *
- * `silent` suppresses the sysop's "Screen not found" alert for a target that
- * may legitimately be absent - see the `~SR_` caller.
+ * A missing include is silent. express.e:6773 displayFile shows a file only
+ * when Open succeeds and has no else branch, so neither `~SS_` nor `~SR_`
+ * alerts anyone. The board used to raise "Screen not found:
+ * BBS:bulletins/bull9.txt" to the sysop mid-join (2026-09-27).
  */
 async function displayIncludedScreen(
   socket: any,
   session: BBSSession,
   target: string,
-  silent: boolean = false,
 ): Promise<boolean> {
   const holder = session as unknown as ScreenIncludeDepthHolder;
   const depth = holder.screenIncludeDepth ?? 0;
@@ -725,7 +726,7 @@ async function displayIncludedScreen(
   // here any more; what remains is the ORDERING the `.seq` depends on.
   try {
     const before = session.paginatedScreen;
-    const shown = await displayScreen(socket, session, target, false, silent);
+    const shown = await displayScreen(socket, session, target, false, /* silent */ true);
     /*
      * AN INCLUDE THAT PAGES HOLDS THE SCREEN THAT INCLUDED IT.
      *
@@ -946,7 +947,7 @@ async function walkInlineSentinels(
        * `Screens/logoff/001.logoff.txt` had been deleted from a `~3SR_` pool
        * (the sysop, 2026-09-27: "Screen not found: .../logoff/001.logoff").
        */
-      await displayIncludedScreen(socket, session, randomFile, /* silent */ true);
+      await displayIncludedScreen(socket, session, randomFile);
       inlineEmitted = true;
       continue;
     }
