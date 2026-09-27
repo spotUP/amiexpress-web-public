@@ -66,13 +66,22 @@ is clipped rather than wrapped.
 
 ## Launching it when a caller joins a conference
 
-One line in the conference's bulletin:
+Nothing to add when the conference hands its message base to the door
+(a `Conf<n>/MSGBASE.DEF.info` icon naming this door). express.e's join runs the new-mail
+scan through that door itself (express.e:5121-5125, `customMsgbaseCmd
+(MAIL_SCAN)`), and that scan IS the SUBSCAN listing. A `~XISUBSCAN` line in the
+bulletin as well prints the listing twice on every join (the sysop, 2026-09-27:
+"the subs shows twice when i join a conference").
+
+Only a conference WITHOUT `MSGBASE.DEF` needs the bulletin line:
 
 ```
 ~XISUBSCAN
 ```
 
 `~XI` starts a door without announcing it and strips the token from the text.
+The join scan honours the caller's mail-scan flags for the conference; the
+bulletin line runs for everyone, every time.
 
 `~XISUBS` there would open the FULL door on every join and hold the caller
 until they pressed Q. Do not do that - it is what the sysop asked to be rid of.
