@@ -91,8 +91,12 @@ export async function handleSetPointer(
   if (!Number.isInteger(value) || value < 0) return 0;
 
   const user = session?.user;
-  const confId = Number(session?.currentConf);
-  const msgBaseId = Number(session?.currentMsgBase);
+  // Inside a message-base door the row is the one the launch loaded the
+  // pointers from (custom-msgbase.ts doorPointerRow) - which is NOT always the
+  // caller's conference: MS runs the door for each conference in turn.
+  const row = session?.customMsgPointerRow;
+  const confId = Number(row?.conf ?? session?.currentConf);
+  const msgBaseId = Number(row?.msgBaseId ?? session?.currentMsgBase);
   if (!user?.id || !Number.isInteger(confId) || confId < 1) return 0;
   if (!Number.isInteger(msgBaseId) || msgBaseId < 1) return 0;
 

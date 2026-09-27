@@ -183,10 +183,16 @@ export async function runCustomMsgbaseCommand(
    */
   const priorRead = (session as any).lastMsgReadConf;
   const priorScanned = (session as any).lastNewReadConf;
+  // The row the door's pointers live in, for the load below AND for any
+  // AEW_SETPOINTER the door sends while it runs (xim/msgpointer.ts). One key,
+  // decided once: a load and a save that disagreed about it is how read mail
+  // came back as new at every join (the sysop, 2026-09-27).
+  const pointerRow = doorPointerRow(session, conferenceNumber);
+  (session as any).customMsgPointerRow = pointerRow;
   if (session.user?.id) {
     try {
       const { loadMsgPointers } = require('../utils/message-pointers.util');
-      const pointers = await loadMsgPointers(session.user.id, conferenceNumber, 1);
+      const pointers = await loadMsgPointers(session.user.id, pointerRow.conf, pointerRow.msgBaseId);
       (session as any).lastMsgReadConf = pointers?.lastMsgReadConf || 0;
       (session as any).lastNewReadConf = pointers?.lastNewReadConf || 0;
     } catch (error) {
@@ -222,6 +228,7 @@ console.warn('[customMsgbase] could not load read pointers:', error);
     (session as any).customMsgParam1 = undefined;
     (session as any).customMsgParam2 = undefined;
     (session as any).customMsgCmd = undefined;
+    (session as any).customMsgPointerRow = undefined;
     (session as any).lastMsgReadConf = priorRead;
     (session as any).lastNewReadConf = priorScanned;
   }
@@ -248,6 +255,26 @@ export function doorConference(session: any): number {
   return Number(
     session?.currentConference ?? session?.currentConf ?? session?.conferenceId ?? 1,
   );
+}
+
+/**
+ * WHERE a message-base door's read pointers are kept: the conference it was
+ * run for, and that conference's message base by DATABASE id - the key every
+ * board reader of `conf_base` uses (conference.handler's join, the scans).
+ *
+ * The caller's own base when the door is about the conference he stands in;
+ * otherwise the named conference's first base, which is where express.e's
+ * joinConf would put him (express.e:4995 clamps a missing base to 1).
+ */
+export function doorPointerRow(session: any, conferenceNumber: number): { conf: number; msgBaseId: number } {
+  const { getMessageBases } = require('../handlers/command-handler/dependency-injection');
+  const bases = (getMessageBases() as Array<{ id: number; conferenceId: number }>)
+    .filter((mb) => mb.conferenceId === conferenceNumber);
+  const current = Number(session?.currentMsgBase);
+  if (Number(session?.currentConf) === conferenceNumber && bases.some((mb) => mb.id === current)) {
+    return { conf: conferenceNumber, msgBaseId: current };
+  }
+  return { conf: conferenceNumber, msgBaseId: bases[0]?.id ?? 1 };
 }
 
 /** That conference's name, off `ConfConfig.info` - `getConfName` (express.e). */
