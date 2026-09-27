@@ -700,11 +700,15 @@ type ScreenIncludeDepthHolder = { screenIncludeDepth?: number };
 /**
  * Display an included screen (`~SS_`, `~SR_`) under the depth cap. Over the
  * cap nothing is emitted - a truncated screen beats a crashed node.
+ *
+ * `silent` suppresses the sysop's "Screen not found" alert for a target that
+ * may legitimately be absent - see the `~SR_` caller.
  */
 async function displayIncludedScreen(
   socket: any,
   session: BBSSession,
   target: string,
+  silent: boolean = false,
 ): Promise<boolean> {
   const holder = session as unknown as ScreenIncludeDepthHolder;
   const depth = holder.screenIncludeDepth ?? 0;
@@ -720,7 +724,7 @@ async function displayIncludedScreen(
   // it for free (`utils/petscii-session-model.ts`), so nothing is installed
   // here any more; what remains is the ORDERING the `.seq` depends on.
   try {
-    return await displayScreen(socket, session, target, false);
+    return await displayScreen(socket, session, target, false, silent);
   } finally {
     // An include that took the ANSI arm may still be sitting in the output
     // buffer (`emitText`'s 16 ms batch). Draining it HERE keeps two things
@@ -910,7 +914,15 @@ async function walkInlineSentinels(
       // ~SR_ always shows a full-screen art file — clear before
       // drawing so previous door output doesn't bleed through.
       hooks.emitClsBeforeRandomFile();
-      await displayIncludedScreen(socket, session, randomFile);
+      /*
+       * A POOL WITH A GAP IS NOT AN ERROR. express.e:5550-5552 asks
+       * findSecurityScreen and displays what it finds - a number the roll
+       * lands on with no file behind it shows nothing and says nothing. This
+       * alerted the sysop instead, on every third logoff once
+       * `Screens/logoff/001.logoff.txt` had been deleted from a `~3SR_` pool
+       * (the sysop, 2026-09-27: "Screen not found: .../logoff/001.logoff").
+       */
+      await displayIncludedScreen(socket, session, randomFile, /* silent */ true);
       inlineEmitted = true;
       continue;
     }
