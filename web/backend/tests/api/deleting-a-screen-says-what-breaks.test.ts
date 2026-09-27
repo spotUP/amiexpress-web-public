@@ -118,6 +118,34 @@ describe('GET /references - what the sysop is shown before deciding', () => {
     expect(res.body.data.removable).toBe(0);
   });
 
+  /*
+   * `Screens/logoff/001.logoff.txt` was deleted on 2026-09-20 with nothing
+   * reported, and the board's `~3SR_` pool went on rolling it: "Screen not
+   * found: .../logoff/001.logoff" (the sysop, 2026-09-27).
+   */
+  it('names the random pool a numbered screen belongs to, and never offers to drop it', async () => {
+    fs.mkdirSync(path.join(root, 'Screens/logoff'), { recursive: true });
+    write('Screens/logoff/001.logoff.txt', 'goodbye one\n');
+    write('Screens/logoff/002.logoff.txt', 'goodbye two\n');
+    write('Screens/Logoff.txt', '~ ~3SR_WORK:bbs/Screens/logoff/logoff\n');
+
+    const res = await request(app()).get('/api/screens/references?path=Screens/logoff/001.logoff.txt');
+
+    expect(res.body.data.references).toEqual([expect.objectContaining({ from: 'Screens/Logoff.txt' })]);
+    // The line draws the whole pool; dropping it would lose the others.
+    expect(res.body.data.removable).toBe(0);
+  });
+
+  it('does not call an unrelated file in the pool\'s directory a member', async () => {
+    fs.mkdirSync(path.join(root, 'Screens/logoff'), { recursive: true });
+    write('Screens/logoff/notes.txt', 'not art\n');
+    write('Screens/Logoff.txt', '~ ~3SR_WORK:bbs/Screens/logoff/logoff\n');
+
+    const res = await request(app()).get('/api/screens/references?path=Screens/logoff/notes.txt');
+
+    expect(res.body.data.references).toHaveLength(0);
+  });
+
   it('refuses a path outside the board', async () => {
     const res = await request(app()).get('/api/screens/references?path=../../../etc/passwd');
 

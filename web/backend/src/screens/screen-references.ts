@@ -73,6 +73,27 @@ function targetToRelPath(target: string): string {
 }
 
 /**
+ * Is `wanted` one of the numbered files a `~<n>SR_` base rolls between?
+ *
+ * formatNumberedFilename builds `NNN.<stem>` beside the base, so
+ * `~3SR_WORK:bbs/Screens/logoff/logoff` draws `Screens/logoff/001.logoff.txt`
+ * - and deleting that file must say so. Comparing the base path alone never
+ * matched a member: 001.logoff.txt went on 2026-09-20 with "nothing points
+ * at this", and every third logoff after it alerted the sysop. The same
+ * `^\d+\.<stem>(\.|$)` rule the screen index uses for a pool.
+ */
+function isPoolMember(code: string, wanted: string): boolean {
+  if (!/^~?\d*SR_/i.test(code)) return false;
+  const base = targetToRelPath(code);
+  const slash = base.lastIndexOf('/');
+  const dir = slash >= 0 ? base.slice(0, slash + 1) : '';
+  if (!wanted.startsWith(dir) || wanted.slice(dir.length).includes('/')) return false;
+  const stem = base.slice(dir.length).replace(/\.[^.]*$/, '');
+  const escaped = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\d+\\.${escaped}(\\.|$)`, 'i').test(wanted.slice(dir.length));
+}
+
+/**
  * The top-level directories a screen can live in.
  *
  * NOT the whole board root. Run against the repository this matched a stray
@@ -149,15 +170,17 @@ export function findScreenReferences(baseDir: string, relPath: string): ScreenRe
       // and sharing one across a walk is how a scanner starts skipping hits.
       const codes = line.match(new RegExp(INCLUDE_CODE.source, 'gi')) ?? [];
       for (const code of codes) {
-        if (targetToRelPath(code) !== wanted) continue;
+        const exact = targetToRelPath(code) === wanted;
+        if (!exact && !isPoolMember(code, wanted)) continue;
         // Alone on the line: nothing but this sentinel and whitespace, so
-        // dropping the line drops the include and nothing else.
+        // dropping the line drops the include and nothing else. A pool
+        // member never is: that line draws the whole pool, not this file.
         const withoutCode = line.replace(code, '');
         refs.push({
           from: candidate,
           line: i + 1,
           text: line,
-          removable: withoutCode.trim() === '',
+          removable: exact && withoutCode.trim() === '',
         });
       }
     }
