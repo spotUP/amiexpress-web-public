@@ -158,6 +158,62 @@ export function isStrayMouseReport(input: string): boolean {
 }
 
 /**
+ * How long one keystroke may hold the next one back. See dispatchInOrder.
+ */
+export const KEY_ORDER_WAIT_MS = 2000;
+
+/**
+ * Hand a session's keystrokes to the board ONE AFTER ANOTHER, in the order
+ * they arrived.
+ *
+ * Both transports called handleCommand once per piece without waiting, so
+ * the pieces of one packet ran as concurrent async handlers and could land
+ * out of order: a client that sends `sysop\r` in one write had the board look
+ * up `syso` or `sop` - the RETURN was taken before the last letter was
+ * stored (found by the telnet regression suite, 2026-09-27). A human rarely
+ * types that fast; a paste, a script or a slow line bunching keys always can.
+ *
+ * Each piece waits for the one before it, across packets too - but for
+ * KEY_ORDER_WAIT_MS at most. Some handlers legitimately run for minutes (a
+ * command that launches a door and waits for it to exit), and the keys typed
+ * meanwhile must still arrive; ordering is only owed to keys that arrive while
+ * the board is still taking the previous one in.
+ */
+export function dispatchInOrder(
+  session: { keyChain?: Promise<void>; keyBusy?: boolean } | null | undefined,
+  pieces: string[],
+  handle: (piece: string) => Promise<unknown>,
+  onError: (error: unknown) => void,
+): void {
+  if (!session) {
+    for (const piece of pieces) handle(piece).catch(onError);
+    return;
+  }
+  const take = (piece: string): Promise<void> => {
+    const run = handle(piece).catch(onError);
+    const cap = new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, KEY_ORDER_WAIT_MS);
+      (timer as { unref?: () => void }).unref?.();
+    });
+    return Promise.race([run.then(() => undefined), cap]);
+  };
+  for (const piece of pieces) {
+    const holder = session as { keyChain?: Promise<void>; keyBusy?: boolean };
+    if (!holder.keyBusy) {
+      // Nothing in flight: the key goes to the board NOW, as it always did.
+      holder.keyBusy = true;
+      holder.keyChain = take(piece);
+    } else {
+      holder.keyChain = (holder.keyChain ?? Promise.resolve()).then(() => take(piece));
+    }
+    const mine = holder.keyChain;
+    void mine.then(() => {
+      if (holder.keyChain === mine) holder.keyBusy = false;
+    });
+  }
+}
+
+/**
  * What the BBS command handler should be given, in order - possibly nothing.
  *
  * Phase two: called only after the transport's own door routing has declined

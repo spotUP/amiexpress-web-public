@@ -523,6 +523,9 @@ export interface BBSSession {
    * last segment of a segmented screen to be wiped by whatever drew next.
    */
   flowPauseAfterSegments?: boolean;
+  /** The last keystroke handed to the board; the next waits on it (terminal-input dispatchInOrder). */
+  keyChain?: Promise<void>;
+  keyBusy?: boolean;
   // express.e's non-stop text flag (`~NS` / `~NSF`): suppresses further
   // pauses for the rest of the display. Set by the MCI dispatch and the
   // pre-passes, read by the XIM bridge (`XIMProtocol.ts:150`) and ARexx

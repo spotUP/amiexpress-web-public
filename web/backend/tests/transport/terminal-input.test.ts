@@ -113,9 +113,12 @@ describe('TP-8 - a telnet caller gets the web caller\'s input pipeline', () => {
     expect(caller.inputs()).toEqual(['\x1b[A']);
   });
 
-  it('a paste is not one opaque command (divergence 22)', () => {
+  it('a paste is not one opaque command (divergence 22)', async () => {
     const caller = telnetCaller(22);
     caller.type('ABC');
+    // Each key waits for the one before it (dispatchInOrder), so the last two
+    // land a tick later - in order, which is the point.
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(caller.inputs()).toEqual(['A', 'B', 'C']);
   });
 

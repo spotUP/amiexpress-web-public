@@ -46,7 +46,7 @@ import {
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
-import { classifyTerminalInput, clearPauseHandler, commandPieces, chatTakesTheWholeChunk } from './terminal-input';
+import { classifyTerminalInput, clearPauseHandler, commandPieces, chatTakesTheWholeChunk, dispatchInOrder } from './terminal-input';
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
@@ -815,13 +815,11 @@ console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
       return;
     }
 
-    for (const piece of commandPieces(data)) {
-      handleCommand(socket, session, piece).catch((error: any) => {
+    dispatchInOrder(session, commandPieces(data), (piece) => handleCommand(socket, session, piece), (error: any) => {
 console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-console.error('[COMMAND ERROR] Stack:', error.stack);
-        socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
-      });
-    }
+console.error('[COMMAND ERROR] Stack:', error?.stack);
+      socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
+    });
   });
 
   // Binary transfer scaffold (upload/download via socket chunks)
