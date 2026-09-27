@@ -162,7 +162,9 @@ def upload(b: Board, tmp: str, protocol: str) -> tuple[str, bytes]:
     if xmodem:
         # XMODEM carries no name: the board takes it, and the description, first.
         b.send(name + "\r")
-        expect(b, rf"{re.escape(name)}\s*:$", "the description field")
+        field = expect(b, rf"{re.escape(name)}\s*:$", "the description field")
+        # express.e:17728-17729: the colon sits at column 32, under the ruler's [.
+        check(field.index(":") == 32, f"the description field's colon is at column {field.index(':')}, not 32 under the ruler", b)
         b.send("regression upload\r")
         expect(b, r"^\s+:$", "the next description line")
         b.send("\r")

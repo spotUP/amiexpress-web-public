@@ -12,7 +12,7 @@ import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-
 import { higherAccess } from '../utils/error-handling.util';
 import { inputKeys } from '../utils/input-chunks.util';
 import { EnvStat } from '../constants/env-codes';
-import { validateFilename, checkForFile } from '../utils/file-upload.util';
+import { validateFilename, checkForFile, descriptionPromptHead, pretransferDescriptionLead } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { setEnvStat } from '../utils/acs.util';
 import { resetPetsciiModel } from '../utils/petscii-session-model';
@@ -3359,10 +3359,8 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
 
     // Prompt for description (express.e:17689-17698)
     const maxDescLines = 10; // max_desclines from config
-    emitText(socket, `\r\nPlease enter a description, you only have ${maxDescLines} lines.\r\n`);
-    emitText(socket, 'Press return alone to end.  Begin  with (/) to make upload \'Private\' to Sysop.\r\n');
-    emitText(socket, '                                [--------------------------------------------]\r\n');
-    emitText(socket, `\x1b[13D${input.padEnd(13)}\x1b[0m:`); // Show filename with cursor at description start
+    emitText(socket, descriptionPromptHead(maxDescLines));
+    emitText(socket, pretransferDescriptionLead(input));
 
     // Initialize description storage
     session.tempData.currentDescription = [];

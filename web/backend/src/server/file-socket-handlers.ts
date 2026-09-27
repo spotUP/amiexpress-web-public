@@ -15,7 +15,7 @@ import {
   getNodeWorkDir,
   getPlaypenDir,
 } from "../utils/file-diz.util";
-import { formatFileSize, formatUploadDate } from "../utils/file-upload.util";
+import { formatFileSize, formatUploadDate, descriptionPromptHead } from "../utils/file-upload.util";
 import { testFile, TestResult } from "../utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "../utils/file-hold.util";
 import { getStorageContext } from "../storage/storage-context";
@@ -288,18 +288,7 @@ function promptForDescription(
   const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
   // express.e:17720: '\b\nPlease enter a description, you only have \d lines.'
-  socket.emit(
-    "ansi-output",
-    `\r\nPlease enter a description, you only have ${maxDescLines} lines.`
-  );
-  socket.emit(
-    "ansi-output",
-    "\r\nPress return alone to end.  Begin  with (/) to make upload 'Private' to Sysop.\r\n"
-  );
-  socket.emit(
-    "ansi-output",
-    "                                [--------------------------------------------]\r\n"
-  );
+  socket.emit("ansi-output", descriptionPromptHead(maxDescLines));
   socket.emit("ansi-output", `${filename13}${sizeStr}  ${dateStr} :`);
 
   uploadContext.currentDescription = [];

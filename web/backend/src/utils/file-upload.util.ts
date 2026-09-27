@@ -255,6 +255,27 @@ export function formatUploadDate(date: Date): string {
 }
 
 // Check if description starts with / (private upload marker) - express.e:19344
+/**
+ * The head of the upload description prompt, both before a transfer (the
+ * XMODEM batch names its files first) and after one (express.e:17720-17728).
+ * The ruler's `[` is column 32: every description line is typed under it.
+ */
+export function descriptionPromptHead(maxLines: number): string {
+  return `\r\nPlease enter a description, you only have ${maxLines} lines.`
+    + "\r\nPress return alone to end.  Begin  with (/) to make upload 'Private' to Sysop.\r\n"
+    + '                                [--------------------------------------------]\r\n';
+}
+
+/**
+ * The first description line before a transfer: express.e:17729
+ * `StringF(str2,'\l\s[13]                   :',str)` - the name left-justified
+ * in thirteen columns, nineteen spaces, and the colon at column 32 under the
+ * ruler's `[`, so the caller types inside the ruler.
+ */
+export function pretransferDescriptionLead(filename: string): string {
+  return `${filename.substring(0, 13).padEnd(13)}${' '.repeat(19)}:`;
+}
+
 export function isPrivateUpload(description: string): boolean {
   return description.startsWith('/');
 }
