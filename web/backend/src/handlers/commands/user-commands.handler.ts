@@ -14,6 +14,7 @@ import type { TransferResult } from '../../services/transfer-protocol.service';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -1295,6 +1296,12 @@ export function handleUserStatsMenuInput(socket: any, session: BBSSession, input
   const choice = input.trim().toUpperCase();
 
   if (choice === 'F') {
+    if (sessionWantsPetscii(session)) {
+      // The same gate as W row 18: a PETSCII screen's glyphs are the C64's.
+      socket.emit('ansi-output', `\r\n${PETSCII_FONT_IS_FIXED}\r\n`);
+      socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
+      return;
+    }
     // Show font selection menu
     displayFontSelectionMenu(socket, session);
   } else if (choice === 'Q' || choice === '') {

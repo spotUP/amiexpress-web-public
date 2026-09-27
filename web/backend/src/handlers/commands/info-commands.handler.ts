@@ -24,6 +24,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
+import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 
@@ -574,7 +575,9 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, '\r\n');
 
   // WEB_: MODERN_* — option 18: terminal font selection, no express.e counterpart; web terminal setting
-  const userFont = currentUser.fontPreference || 'TopazPlus_a1200';
+  const userFont = sessionWantsPetscii(session)
+    ? 'C64 CHARACTER SET'
+    : currentUser.fontPreference || 'TopazPlus_a1200';
   emitText(socket, AnsiUtil.colorize('[', 'blue'));
   emitText(socket, ' 18');
   emitText(socket, AnsiUtil.colorize('] ', 'blue'));
@@ -961,6 +964,11 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       break;
 
     case 18: // WEB_: MODERN_* — terminal font selection; no express.e:25712-26092 counterpart
+      if (sessionWantsPetscii(session)) {
+        emitText(socket, `\r\n${PETSCII_FONT_IS_FIXED}\r\n`);
+        _displayWCommandMenu(socket, session);
+        return;
+      }
       emitText(socket, '\r\nSelect Terminal Font:\r\n');
       emitText(socket, '\r\n');
       emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');

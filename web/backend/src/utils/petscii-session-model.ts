@@ -42,6 +42,18 @@ export function sessionWantsPetscii(session: any): boolean {
 }
 
 /**
+ * Why a PETSCII caller is not offered a terminal font.
+ *
+ * His screen is the C64's character ROM on the canvas (or on his own C64); a
+ * font pick reached the hidden xterm behind the canvas and broke the screen
+ * ("i can break it by connecting in petscii mode and change font to for
+ * example topaz", the sysop, 2026-09-28: "changing font should be gated in
+ * petscii mode"). Every font menu asks sessionWantsPetscii and says this.
+ */
+export const PETSCII_FONT_IS_FIXED =
+  'A PETSCII screen draws with the C64 character set. Pick a font in ANSI mode.';
+
+/**
  * The session's model, created on first use AT THE CALLER'S WIDTH.
  *
  * The width is chosen at the graphics prompt and never changes afterwards
