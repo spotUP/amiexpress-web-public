@@ -5431,12 +5431,8 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
       this.emulator.writeMemory32(fibPtr + 128, numBlocks);
 
       // fib_Date (12 bytes DateStamp) - ds_Days, ds_Minute, ds_Tick
-      const mtime = stats.mtime;
-      const amigaEpoch = new Date('1978-01-01T00:00:00Z');
-      const diffMs = mtime.getTime() - amigaEpoch.getTime();
-      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const mins = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60));
-      const ticks = Math.floor(((diffMs % (1000 * 60)) / 1000) * 50);
+      // The one DateStamp conversion - local wall clock, like every Amiga.
+      const { days, minutes: mins, ticks } = dateTimeToDateStamp(stats.mtime);
 
       this.emulator.writeMemory32(fibPtr + 132, days);
       this.emulator.writeMemory32(fibPtr + 136, mins);
@@ -6382,10 +6378,10 @@ debugLog(
     }
 
     // Convert to Amiga DateStamp format
-    const epoch = new Date("1978-01-01T00:00:00Z");
-    const targetDate = new Date(year, month - 1, day);
-    const daysSinceEpoch = Math.floor(
-      (targetDate.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000)
+    // Calendar days, not instants: a LOCAL midnight minus the UTC epoch put
+    // every date a day early east of Greenwich.
+    const daysSinceEpoch = Math.round(
+      (Date.UTC(year, month - 1, day) - Date.UTC(1978, 0, 1)) / (24 * 60 * 60 * 1000)
     );
     const minutesPastMidnight = hours * 60 + minutes;
     const ticksPastMinute = seconds * 50; // 50 ticks per second

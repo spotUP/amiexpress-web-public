@@ -183,86 +183,91 @@ describe('Date/Time Utility Functions', () => {
     });
   });
 
+  /*
+   * A DateStamp is the machine's LOCAL wall clock, as on a real Amiga: these
+   * read and build local times (the board's TZ), not UTC instants. Counting
+   * UTC put every door two hours behind in a Swedish summer (2026-09-27).
+   */
   describe('dateStampToDateTime', () => {
     it('should convert Amiga epoch (day 0) to 1978-01-01', () => {
       const result = dateStampToDateTime(0, 0, 0);
-      expect(result.toISOString()).toBe('1978-01-01T00:00:00.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 1, 0, 0, 0, 0).getTime());
     });
 
     it('should convert 1 day to 1978-01-02', () => {
       const result = dateStampToDateTime(1, 0, 0);
-      expect(result.toISOString()).toBe('1978-01-02T00:00:00.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 2, 0, 0, 0, 0).getTime());
     });
 
     it('should convert minutes correctly', () => {
       const result = dateStampToDateTime(0, 90, 0); // 1 hour 30 minutes
-      expect(result.toISOString()).toBe('1978-01-01T01:30:00.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 1, 1, 30, 0, 0).getTime());
     });
 
     it('should convert ticks correctly (1 tick = 20ms)', () => {
       const result = dateStampToDateTime(0, 0, 50); // 50 ticks = 1000ms = 1 second
-      expect(result.toISOString()).toBe('1978-01-01T00:00:01.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 1, 0, 0, 1, 0).getTime());
     });
 
     it('should convert complete DateStamp (days + minutes + ticks)', () => {
       // 10 days, 12:30:00 (750 minutes), plus 5 seconds (250 ticks)
       const result = dateStampToDateTime(10, 750, 250);
-      expect(result.toISOString()).toBe('1978-01-11T12:30:05.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 11, 12, 30, 5, 0).getTime());
     });
 
     it('should handle leap years correctly', () => {
       // 1980-02-29 (leap year) = 789 days from 1978-01-01
       // (365 days for 1978 + 365 days for 1979 + 59 days for Jan-Feb 1980)
       const result = dateStampToDateTime(789, 0, 0);
-      const expected = new Date('1980-02-29T00:00:00.000Z');
+      const expected = new Date(1980, 1, 29, 0, 0, 0, 0);
       expect(result.getTime()).toBe(expected.getTime());
     });
 
     it('should handle year 2000 date', () => {
       // 2000-01-01 = 8035 days from 1978-01-01
       const result = dateStampToDateTime(8035, 0, 0);
-      expect(result.toISOString()).toBe('2000-01-01T00:00:00.000Z');
+      expect(result.getTime()).toBe(new Date(2000, 0, 1, 0, 0, 0, 0).getTime());
     });
 
     it('should handle midnight of next day', () => {
       const result = dateStampToDateTime(0, 1440, 0); // 24 hours = 1440 minutes
-      expect(result.toISOString()).toBe('1978-01-02T00:00:00.000Z');
+      expect(result.getTime()).toBe(new Date(1978, 0, 2, 0, 0, 0, 0).getTime());
     });
   });
 
   describe('dateTimeToDateStamp', () => {
     it('should convert 1978-01-01 to Amiga epoch (0,0,0)', () => {
-      const date = new Date('1978-01-01T00:00:00.000Z');
+      const date = new Date(1978, 0, 1, 0, 0, 0, 0);
       const result = dateTimeToDateStamp(date);
       expect(result).toEqual({ days: 0, minutes: 0, ticks: 0 });
     });
 
     it('should convert 1978-01-02 to day 1', () => {
-      const date = new Date('1978-01-02T00:00:00.000Z');
+      const date = new Date(1978, 0, 2, 0, 0, 0, 0);
       const result = dateTimeToDateStamp(date);
       expect(result).toEqual({ days: 1, minutes: 0, ticks: 0 });
     });
 
     it('should convert time of day to minutes', () => {
-      const date = new Date('1978-01-01T12:30:00.000Z');
+      const date = new Date(1978, 0, 1, 12, 30, 0, 0);
       const result = dateTimeToDateStamp(date);
       expect(result).toEqual({ days: 0, minutes: 750, ticks: 0 });
     });
 
     it('should convert seconds/milliseconds to ticks', () => {
-      const date = new Date('1978-01-01T00:00:05.000Z'); // 5 seconds = 250 ticks
+      const date = new Date(1978, 0, 1, 0, 0, 5, 0); // 5 seconds = 250 ticks
       const result = dateTimeToDateStamp(date);
       expect(result).toEqual({ days: 0, minutes: 0, ticks: 250 });
     });
 
     it('should handle complete datetime conversion', () => {
-      const date = new Date('1978-01-11T12:30:05.000Z');
+      const date = new Date(1978, 0, 11, 12, 30, 5, 0);
       const result = dateTimeToDateStamp(date);
       expect(result).toEqual({ days: 10, minutes: 750, ticks: 250 });
     });
 
     it('should handle leap year date', () => {
-      const date = new Date('1980-02-29T00:00:00.000Z');
+      const date = new Date(1980, 1, 29, 0, 0, 0, 0);
       const result = dateTimeToDateStamp(date);
       // Verify day count is correct (allow small variance due to timezone)
       expect(result.days).toBeGreaterThanOrEqual(789);
@@ -270,7 +275,7 @@ describe('Date/Time Utility Functions', () => {
     });
 
     it('should handle year 2000 date', () => {
-      const date = new Date('2000-01-01T00:00:00.000Z');
+      const date = new Date(2000, 0, 1, 0, 0, 0, 0);
       const result = dateTimeToDateStamp(date);
       expect(result.days).toBe(8035);
       expect(result.minutes).toBe(0);
@@ -278,7 +283,7 @@ describe('Date/Time Utility Functions', () => {
     });
 
     it('should handle milliseconds within a second', () => {
-      const date = new Date('1978-01-01T00:00:00.500Z'); // 500ms = 25 ticks
+      const date = new Date(1978, 0, 1, 0, 0, 0, 500); // 500ms = 25 ticks
       const result = dateTimeToDateStamp(date);
       expect(result.ticks).toBe(25);
     });
@@ -419,5 +424,34 @@ describe('Date/Time Utility Functions', () => {
       const result = formatShortTime(date);
       expect(result).toBe('12:34');
     });
+  });
+});
+
+/**
+ * The door's clock is the board's clock, summer and winter.
+ * QuickNew printed "Time : 19:48:21" at 21:48 CEST (the telnet regression
+ * suite, 2026-09-27): DateStamp counted UTC. Written as properties of the
+ * process's own zone, because jest cannot change TZ inside a test; the
+ * board's zone itself is pinned by tests/deploy/the-board-keeps-local-time.
+ */
+describe('a DateStamp counts the local wall clock', () => {
+  it('holds the local hour and minute, in summer and in winter', () => {
+    for (const when of [new Date(2026, 8, 27, 15, 4, 0), new Date(2026, 0, 15, 14, 4, 0)]) {
+      const stamp = dateTimeToDateStamp(when);
+      expect(stamp.minutes).toBe(when.getHours() * 60 + when.getMinutes());
+    }
+  });
+
+  it('turns over the day at local midnight', () => {
+    const before = dateTimeToDateStamp(new Date(2026, 8, 27, 23, 30, 0));
+    const after = dateTimeToDateStamp(new Date(2026, 8, 28, 0, 30, 0));
+    expect(after.days).toBe(before.days + 1);
+    expect(after.minutes).toBe(30);
+  });
+
+  it('comes back as the same instant', () => {
+    const now = new Date('2026-09-27T13:04:08.120Z');
+    const s = dateTimeToDateStamp(now);
+    expect(dateStampToDateTime(s.days, s.minutes, s.ticks).getTime()).toBe(now.getTime());
   });
 });

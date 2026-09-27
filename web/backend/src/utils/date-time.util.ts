@@ -170,21 +170,14 @@ export function formatCDateTime(date: Date): string {
  * @returns JavaScript Date object
  */
 export function dateStampToDateTime(days: number, minutes: number, ticks: number): Date {
-  // Amiga epoch: January 1, 1978 00:00:00 UTC
-  const amigaEpoch = new Date('1978-01-01T00:00:00Z');
-
-  // Add days
-  const date = new Date(amigaEpoch);
-  date.setUTCDate(date.getUTCDate() + days);
-
-  // Add minutes
-  date.setUTCMinutes(date.getUTCMinutes() + minutes);
-
-  // Add ticks (1 tick = 1/50 second = 20 milliseconds)
-  const milliseconds = ticks * 20;
-  date.setUTCMilliseconds(date.getUTCMilliseconds() + milliseconds);
-
-  return date;
+  // A DateStamp is the machine's LOCAL wall clock (see dateTimeToDateStamp):
+  // work the calendar out with plain arithmetic, then read those fields as
+  // local time, so the instant comes back in the board's own zone.
+  const wall = new Date(Date.UTC(1978, 0, 1) + days * 86400000 + minutes * 60000 + ticks * 20);
+  return new Date(
+    wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(),
+    wall.getUTCHours(), wall.getUTCMinutes(), wall.getUTCSeconds(), wall.getUTCMilliseconds(),
+  );
 }
 
 /**
@@ -195,27 +188,27 @@ export function dateStampToDateTime(days: number, minutes: number, ticks: number
  * @returns Object with days, minutes, ticks
  */
 export function dateTimeToDateStamp(date: Date): { days: number; minutes: number; ticks: number } {
-  const amigaEpoch = new Date('1978-01-01T00:00:00Z');
-  const diffMs = date.getTime() - amigaEpoch.getTime();
-
-  // Calculate days
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  // Calculate minutes since midnight
-  const midnight = new Date(date);
-  midnight.setUTCHours(0, 0, 0, 0);
-  const minutesSinceMidnight = Math.floor((date.getTime() - midnight.getTime()) / (1000 * 60));
-
-  // Calculate ticks (1/50 second) within current minute
-  const secondsInMinute = date.getUTCSeconds();
-  const millisecondsInMinute = date.getUTCMilliseconds();
-  const totalMillisecondsInMinute = (secondsInMinute * 1000) + millisecondsInMinute;
-  const ticks = Math.floor(totalMillisecondsInMinute / 20); // 1 tick = 20ms
-
+  /*
+   * THE AMIGA'S CLOCK IS THE LOCAL WALL CLOCK. An Amiga has no time zone: its
+   * battery clock is set to the time on the wall, and DateStamp counts days
+   * and minutes of THAT. This counted UTC, so every door read the board's
+   * time two hours behind in a Swedish summer - QuickNew printed "Time :
+   * 19:48:21" at 21:48 (the telnet regression suite, 2026-09-27) - long after
+   * the board itself was put on local time. The wall clock's fields are taken
+   * in the process's zone (TZ, docker-compose.yml) and counted as plain
+   * calendar arithmetic, which is what the DateStamp readers already do.
+   */
+  const wallMs = Date.UTC(
+    date.getFullYear(), date.getMonth(), date.getDate(),
+    date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds(),
+  );
+  const sinceEpoch = wallMs - Date.UTC(1978, 0, 1);
+  const days = Math.floor(sinceEpoch / 86400000);
+  const intoDay = sinceEpoch - days * 86400000;
   return {
     days,
-    minutes: minutesSinceMidnight,
-    ticks
+    minutes: Math.floor(intoDay / 60000),
+    ticks: Math.floor((intoDay % 60000) / 20), // 1 tick = 20 ms
   };
 }
 
