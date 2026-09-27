@@ -22,6 +22,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { keyBytesFor } from '../../src/server/composed-key';
+import { gameKeyDownPayload } from '@amiexpress/terminal/utils/key-overrides';
 
 const handlers = readFileSync(
   join(__dirname, '..', '..', 'src', 'server', 'socket-handlers.ts'),
@@ -78,7 +79,16 @@ describe('game-mode key modifiers', () => {
       join(__dirname, '..', '..', '..', '..', 'packages', 'terminal', 'src', 'components', 'BBSTerminal.tsx'),
       'utf8'
     );
-    expect(terminal).toMatch(/emit\('key-down', \{ key, code, \.\.\.mods \}\)/);
+    // The press is built by one function, and what it carries is checked
+    // below; this only asks that the terminal still uses it and still reads
+    // the modifiers off the event.
+    expect(terminal).toMatch(/emit\('key-down', gameKeyDownPayload\(/);
     expect(terminal).toMatch(/pressGameKey\(ev\.key, ev\.code, \{ alt: ev\.altKey/);
+  });
+
+  it('sends Alt, Ctrl and Shift with the key, beside who pressed it', () => {
+    expect(gameKeyDownPayload('Enter', 'Enter', { alt: true, ctrl: false, shift: true }, 'window'))
+      .toEqual({ key: 'Enter', code: 'Enter', alt: true, ctrl: false, shift: true, src: 'window' });
+    expect(gameKeyDownPayload('g', 'KeyG', undefined, 'pad')).toEqual({ key: 'g', code: 'KeyG', src: 'pad' });
   });
 });

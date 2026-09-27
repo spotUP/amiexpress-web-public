@@ -54,6 +54,27 @@ export function trackKeyId(ev: KeyLike): string {
   return ev.code || ev.key;
 }
 
+/** The modifiers held with a game-mode key. */
+export interface GameKeyModifiers { alt?: boolean; ctrl?: boolean; shift?: boolean }
+
+/**
+ * What a game-mode key press sends as `key-down`.
+ *
+ * The MODIFIERS travel with the key. Without them a door in game mode
+ * received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
+ * "select" - so the size toggle could not work there however well the door
+ * was wired (2026-09-02). `src` names who pressed it (window listener,
+ * canvas, on-screen keyboard, game pad) for the board's `[DOOR-INPUT]` trace.
+ */
+export function gameKeyDownPayload(
+  key: string,
+  code: string,
+  mods: GameKeyModifiers | undefined,
+  src: string,
+): { key: string; code: string; src: string } & GameKeyModifiers {
+  return { key, code, ...mods, src };
+}
+
 /**
  * Repeat heartbeat: a held key keeps producing keydown auto-repeats, so a
  * repeat timer with no fresh edge for this long is orphaned (missed keyup,

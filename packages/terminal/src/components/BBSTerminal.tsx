@@ -26,7 +26,7 @@ import {
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat } from '../utils/key-overrides';
+import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
@@ -1810,11 +1810,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       keyState.current[id] = true;
       keyNames.current[id] = key;
       keyLastSeen.current[id] = Date.now();
-      // The MODIFIERS travel with the key. Without them a door in game mode
-      // received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
-      // "select" - so the size toggle could not work there however well the
-      // door was wired (2026-09-02).
-      socketRef.current.emit('key-down', { key, code, ...mods, src: pressSource.current });
+      socketRef.current.emit('key-down', gameKeyDownPayload(key, code, mods, pressSource.current));
       startKeyRepeat(key, code);
     };
 
