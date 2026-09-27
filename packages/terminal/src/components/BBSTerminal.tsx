@@ -27,6 +27,14 @@ import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
 import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
+import { createWireRecorder, recordTerminal, recordPetscii, exposeWireRecorder } from '../utils/wire-recorder';
+
+/**
+ * Everything the screen is given, for a capture after a bad draw
+ * (`__BBS_WIRE__.save()` in the console). One per page, so it outlives a
+ * terminal rebuilt by a reconnect. See utils/wire-recorder.ts.
+ */
+const wireRecorder = createWireRecorder();
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
@@ -1006,6 +1014,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       cols: 80,
       rows: 25,
     });
+    recordTerminal(term, wireRecorder);
+    exposeWireRecorder(wireRecorder, window as unknown as Record<string, unknown>);
 
     // xterm.js 5.5.0 registers touchstart with {passive:true} but calls
     // preventDefault() inside it, producing console warnings. Intercept
@@ -1193,6 +1203,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // session.
     const enqueuePetscii = (bytes: Uint8Array | number[]) => {
       if (bytes.length === 0) return;
+      recordPetscii(wireRecorder, bytes);
       // New output means the cells under any selection box are no longer the
       // ones the caller drew it around, so the box goes rather than sit there
       // outlining something else.
@@ -3159,6 +3170,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('door-active', (active: boolean) => {
       console.log('[BBSTerminal] door-active received:', active);
+      wireRecorder.record('door-active', String(active));
       doorActive.current = active;
       setDoorOwnsScreen(active);
       // Skip the modem soft-cap while a door is running — door output
@@ -3425,6 +3437,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
+      wireRecorder.record('font-preference', data.font);
       // A teletext session owns its face - the server preference applies
       // once the mode ends (or never, if the caller stays in T all night).
       if (texttvModeRef.current) return;
