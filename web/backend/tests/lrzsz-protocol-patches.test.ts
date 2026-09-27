@@ -5,10 +5,8 @@
  * vs lenient ZMODEM clients, documented and pinned here so a future
  * refactor that removes them surfaces the symptom they were added for:
  *
- * 1. ZRINIT CANFC32 clear — MuffinTerm hits an lrzsz bug where rz
- *    advertises CRC32 capability but then rejects CRC16 subpackets sent
- *    over ZBIN frames. Clearing CANFC32 forces 16-bit CRC end-to-end.
- *    Symptom without the patch: "Bad CRC" ZNAK loop on every upload.
+ * 1. ZRINIT CANFC32 clear — WITHDRAWN 2026-09-23 (e7e1f9836); see the note
+ *    where its tests used to be.
  *
  * 2. ZFILE subpacket ZCRCE → ZCRCW rewrite — MuffinTerm terminates the
  *    ZFILE name subpacket with ZCRCE (frame-ends marker). Per Forsberg
@@ -37,52 +35,12 @@ describe('lrzsz protocol patches (MuffinTerm interop)', () => {
     'utf8'
   );
 
-  describe('Patch 1: ZRINIT CANFC32 clear', () => {
-    test('patchZrinitFlags helper exists', () => {
-      expect(src).toMatch(/patchZrinitFlags/);
-    });
-
-    test('matches the canonical lrzsz ZRINIT bytes', () => {
-      // The original ZRINIT hex header for ZF0 = CANFDX|CANOVIO|CANFC32 = 0x23,
-      // type byte ZRINIT = 0x01, header CRC16 = 0xbe50.
-      // On wire as ASCII hex chars: ** \x18 B 01 00000023 be50
-      expect(src).toMatch(/2a2a18423031303030303030323362653530/);
-    });
-
-    test('replaces with CANFC32-cleared variant', () => {
-      // ZF0 = CANFDX|CANOVIO = 0x03, new CRC16 = 0x9a32.
-      // Verified offline that lrzsz's updcrc on type=01 + flags=03 gives 0x9a32.
-      expect(src).toMatch(/2a2a18423031303030303030303339613332/);
-    });
-
-    test('runs inside the stdout handler so it actually reaches the client', () => {
-      // THE PATCH IS NO USE IF IT DOES NOT REACH THE CALLER, and this used to
-      // be asserted by how many characters separated `patchZrinitFlags` from
-      // `transport.send` in the source. That bound had already been raised
-      // from 300 to 3000 once as the handler grew, and it went red again the
-      // next time the file changed - the distance was never the property.
-      //
-      // What it is now: a raw ZRINIT carrying CANFC32 goes in, and what the
-      // caller receives has the flag cleared. Moving the patch out of the
-      // stdout path fails this; rearranging the file does not.
-      const { LrzszTransferManager } = require('../src/services/lrzsz-transfer.service');
-      const sent: Buffer[] = [];
-      const manager = new LrzszTransferManager({
-        session: { nodeId: 1 } as never,
-        transport: { type: 'ssh', send: (b: Buffer) => { sent.push(Buffer.from(b)); } },
-        direction: 'upload',
-        paths: ['/tmp'],
-      });
-
-      // lrzsz's ZRINIT with CANFC32 set: ZF0 = 0x23.
-      const raw = Buffer.from('2a2a18423031303030303030323362653530', 'hex');
-      (manager as any).processStdoutChunk(raw);
-
-      const out = Buffer.concat(sent).toString('ascii');
-      expect(out).toContain('00000003'); // CANFDX|CANOVIO, CANFC32 cleared
-      expect(out).not.toContain('00000023');
-    });
-  });
+  // Patch 1 (the ZRINIT CANFC32 clear) was WITHDRAWN on 2026-09-23 (e7e1f9836):
+  // it changed what the sender was told and not what `rz` verified, so the two
+  // disagreed about every subpacket. The sysop ruled the MuffinTerm case is not
+  // the board's to paper over (bbf529b6d). The rule now - ZRINIT reaches the
+  // caller as `rz` wrote it - is tested where it lives,
+  // tests/lrzsz-transport-pipeline.test.ts.
 
   describe('Patch 2: ZFILE subpacket ZCRCE → ZCRCW rewrite (inbound)', () => {
     test('rewriteMuffintermZfile helper exists', () => {
