@@ -310,6 +310,15 @@ export class TelnetConnection extends EventEmitter {
     // and stripping it corrupts the CRC. The flag is read inside the
     // NORMAL state below.
     const rawTransfer = !!(this.session as any)?.transferRawActive;
+    /*
+     * A CLIENT SENDING BINARY HAS NO CR NUL RULE (RFC 856). The collapse
+     * below exists for a client that never negotiated BINARY (MuffinTerm)
+     * and escapes CR as CR NUL even inside file data. A client that DID agree
+     * sends a CR NUL pair because the file holds one, and dropping that NUL
+     * broke the upload's CRC - `sz` escapes neither byte by default, so any
+     * binary file carrying 0D 00 looped on CRC errors and then aborted.
+     */
+    const clientSendsBinary = this.peerWillState.get(TELOPT_BINARY) === 'on';
 
     const output: number[] = [];
 
@@ -322,7 +331,7 @@ export class TelnetConnection extends EventEmitter {
             this.iacState = IACState.IAC_SEEN;
           } else if (byte === 0 && !rawTransfer) {
             // Telnet clients often send CR NUL; ignore NUL padding.
-          } else if (byte === 0 && rawTransfer && this.lastWasCR) {
+          } else if (byte === 0 && rawTransfer && this.lastWasCR && !clientSendsBinary) {
             // RFC 854 CR-NUL collapse: in NVT mode senders escape CR
             // as `CR NUL`. The NUL is padding and MUST be stripped.
             // MuffinTerm doesn't negotiate BINARY transmission, so
@@ -339,8 +348,10 @@ export class TelnetConnection extends EventEmitter {
 
         case IACState.IAC_SEEN:
           if (byte === IAC) {
-            // IAC IAC = literal 255
+            // IAC IAC = literal 255. It is a data byte, so a CR before it no
+            // longer makes the NUL after it padding: 0D FF 00 must survive.
             output.push(255);
+            this.lastWasCR = false;
             this.iacState = IACState.NORMAL;
           } else if (byte === SB) {
             // IAC SB = Subnegotiation begin
