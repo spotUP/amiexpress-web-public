@@ -175,4 +175,15 @@ export async function runPostDownload(
   // Return to menu prompt
   (session as any).menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+  /*
+   * AND GO THERE. This runs when the transfer ends, long after the D command
+   * returned, so no command dispatch is waiting to run the flow for it: the
+   * caller got the stats and then a silent line until he pressed a key
+   * nobody had asked for (the telnet regression suite, 2026-09-27). A pause
+   * something else put up is left standing.
+   */
+  if (!session.paginatedScreen) {
+    const { advanceDisplayFlow } = require('../handlers/command.handler');
+    await advanceDisplayFlow(emitter, session);
+  }
 }

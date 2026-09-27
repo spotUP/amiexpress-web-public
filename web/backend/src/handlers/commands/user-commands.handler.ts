@@ -565,14 +565,23 @@ export function startZmodemDownload(
     negotiateBinaryForTransfer(session);
     protocolManager.on('complete', async (result: any) => {
       endRawTransfer(session);
-      socket.emit(
-        'ansi-output',
-        result?.success
-          ? '\r\nDownload complete.\r\n\r\n'
-          : '\r\nDownload aborted.\r\n\r\n',
-      );
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      (session as any).menuPause = true;
+      // The same post-download pipeline ZMODEM runs: stats booked, logs
+      // written, the prompt drawn. This branch printed its own line and
+      // set DISPLAY_MENU, so an XMODEM or Punter download booked nothing and
+      // left the caller without a prompt.
+      try {
+        await onFinished?.(!!result?.success);
+      } catch (err) {
+        console.error('[TRANSFER] booking the download failed:', err);
+      }
+      const { runPostDownload } = require('../../services/post-download.service');
+      await runPostDownload(socket, session, {
+        downloadStartTime: dlStartTime,
+        downloadedFiles: result?.success ? 1 : 0,
+        downloadedBytes: result?.bytesTransferred ?? 0,
+        goodbyeAfter,
+        success: !!result?.success,
+      });
     });
     // These callers are not async; the transfer runs on its own and reports
     // through the 'complete' event above.
