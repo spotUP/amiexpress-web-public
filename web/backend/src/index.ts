@@ -268,6 +268,12 @@ import {
 } from "./utils/message-pointers.util";
 
 export interface UploadSessionContext {
+  /**
+   * Descriptions the caller typed BEFORE the transfer, by upper-cased file
+   * name - the pre-described batch XMODEM uses (express.e:17666-17720). A
+   * file listed here is filed with it instead of being asked about again.
+   */
+  describedBefore?: Record<string, string[]>;
   uploadMode: true;
   fileArea: any;
   uploadSessionId: string;

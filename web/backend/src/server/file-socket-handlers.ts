@@ -191,45 +191,22 @@ console.log("[DIZ] File selected, checking for DIZ...");
             "ansi-output",
             "\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n"
           );
-
-          uploadContext.currentDescription = dizLines;
           uploadContext.hasDiz = true;
           uploadContext.skipDizExtraction = true;
-
-          // Add to upload batch and process immediately
-          uploadContext.uploadBatch.push({
-            filename: data.originalname,
-            description: dizLines.join("\n"),
-            isPrivate: false,
-          });
-
-          // Use sequential counter instead of array length
-          uploadContext.currentUploadIndex = uploadContext.filesProcessedCount || 0;
-          uploadContext.filesProcessedCount = (uploadContext.filesProcessedCount || 0) + 1;
-
-          // Process file immediately (with error recovery)
-          try {
-            await processBatchFile(socket, session, data, config);
-            return true; // File processed successfully
-          } catch (error: any) {
-console.error("[DIZ] Error processing file after DIZ extraction:", error);
-            // Clear context and show error
-            socket.emit(
-              "ansi-output",
-              `\r\n\x1b[31mUpload failed: ${error.message}\x1b[0m\r\n`
-            );
-            socket.emit(
-              "ansi-output",
-              "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-            );
-            session.menuPause = false;
-            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-            clearUploadContext(session, socket);
-            return true; // Handled (with error), don't wait for description
-          }
+          return fileWithDescription(socket, session, uploadContext, data, dizLines, config);
         } else {
-          // No DIZ found (null from timeout or no file) - prompt for description
+          // No DIZ found (null from timeout or no file).
           socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n");
+          /*
+           * DESCRIBED BEFORE THE TRANSFER: XMODEM's batch takes the name and
+           * the description first (express.e:17666-17720), because the
+           * protocol carries no name. Asking again after the transfer threw
+           * the first answer away (walked over telnet, 2026-09-27).
+           */
+          const typed = uploadContext.describedBefore?.[data.originalname.toUpperCase()];
+          if (typed && typed.length > 0) {
+            return fileWithDescription(socket, session, uploadContext, data, typed, config);
+          }
           promptForDescription(socket, uploadContext, data);
           return false; // Waiting for description
         }
@@ -255,6 +232,44 @@ console.error("[DIZ] Extraction error:", error);
 console.log("[DIZ] File already pending from previous attempt, prompting for description");
   promptForDescription(socket, uploadContext, data);
   return false; // Waiting for description (not processed yet)
+}
+
+/**
+ * File an upload whose description is already known - a FILE_ID.DIZ, or the
+ * lines the caller typed before an XMODEM transfer - without asking.
+ */
+async function fileWithDescription(
+  socket: Socket,
+  session: BBSSession,
+  uploadContext: UploadSessionContext,
+  data: { filename: string; originalname: string; size: number; path?: string },
+  lines: string[],
+  config: any,
+): Promise<boolean> {
+  uploadContext.currentDescription = lines;
+  uploadContext.uploadBatch.push({
+    filename: data.originalname,
+    description: lines.join("\n"),
+    isPrivate: lines[0]?.startsWith("/") ?? false,
+  });
+
+  // Use sequential counter instead of array length
+  uploadContext.currentUploadIndex = uploadContext.filesProcessedCount || 0;
+  uploadContext.filesProcessedCount = (uploadContext.filesProcessedCount || 0) + 1;
+
+  // Process file immediately (with error recovery)
+  try {
+    await processBatchFile(socket, session, data, config);
+    return true; // File processed successfully
+  } catch (error: any) {
+console.error("[UPLOAD] Error filing an upload with a known description:", error);
+    socket.emit("ansi-output", `\r\n\x1b[31mUpload failed: ${error.message}\x1b[0m\r\n`);
+    socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    clearUploadContext(session, socket);
+    return true; // Handled (with error), don't wait for description
+  }
 }
 
 /**

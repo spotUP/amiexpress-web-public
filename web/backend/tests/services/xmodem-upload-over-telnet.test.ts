@@ -73,10 +73,10 @@ describe('an XMODEM upload over telnet', () => {
     expect(fs.readFileSync(landed, 'latin1')).toBe('hello from xmodem');
   });
 
-  it('is filed like a ZMODEM upload - it goes on to its description', async () => {
-    // It landed, printed stats and was never filed: logoff then parked it in
-    // PartUpload as "incompleted". Now the same filing ZMODEM uses runs - the
-    // DIZ check and the description prompt for the file.
+  it('is filed with the description typed before it, not asked for again', async () => {
+    // XMODEM's batch takes the name and description BEFORE the transfer
+    // (express.e:17666-17720). After it, the filing asked again and threw the
+    // first answer away (walked over telnet, 2026-09-27).
     const { session, socket } = aTelnetCaller(root);
     const out: string[] = [];
     socket.emit = (event: string, data: unknown) => { if (event === 'ansi-output') out.push(String(data)); return true; };
@@ -85,10 +85,12 @@ describe('an XMODEM upload over telnet', () => {
 
     session.transferRawSink(block(1, 'filed'));
     session.transferRawSink(Buffer.from([EOT]));
-    await settle(200);
+    await settle(300);
 
-    expect(out.join('')).toMatch(/Please enter a description/);
-    expect(out.join('')).toContain('HELLO.TXT');
+    const screen = out.join('');
+    expect(screen).toContain('HELLO.TXT');
+    expect(screen).not.toMatch(/Please enter a description/);
+    expect(session.tempData?.uploadBatch?.[0]?.description ?? '').toBe('a test');
   });
 
   it('leaves the transport\'s sender in place for the next transfer', async () => {

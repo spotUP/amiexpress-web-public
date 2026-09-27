@@ -175,6 +175,15 @@ async function fileReceivedUploads(
   // queue in pendingZmodemFiles and walk one-at-a-time after each
   // description completes (state machine in command.handler.ts
   // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
+  // What the caller described before the transfer (XMODEM's batch), kept
+  // across the context reset below so those files are not asked about twice.
+  const describedBefore: Record<string, string[]> = {};
+  for (const entry of ((session.tempData as any)?.uploadBatch ?? []) as Array<{ filename?: string; description?: string }>) {
+    if (entry?.filename && entry.description) {
+      describedBefore[entry.filename.toUpperCase()] = entry.description.split('\n');
+    }
+  }
+
   session.tempData = {
     uploadMode: true,
     fileArea,
@@ -183,6 +192,7 @@ async function fileReceivedUploads(
     uploadCount: received.length,
     uploadStartTime: ulStartTime,
     webUploadMode: true,
+    describedBefore,
     batchUpload: false,
     currentUploadIndex: 0,
     filesProcessedCount: 0,
