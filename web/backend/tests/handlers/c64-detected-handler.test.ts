@@ -57,6 +57,31 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     });
   });
 
+  /**
+   * ONE EMITTER PER CONNECTION. The sysop, 2026-09-28, on DC telnet and
+   * CGTerm: "the cursor draws on the next line" after every menu prompt.
+   * This handler built a SECOND emitter for the connection; the output
+   * buffer (keyed by the connection's id) was created on it while the title
+   * drew, and after login the modem pacer and the ANSI filter were installed
+   * on the session's own emitter. From then on buffered text - the prompt -
+   * left through the bare second emitter while a direct emit - the newline
+   * before it - was paced through the first, and arrived after the prompt.
+   */
+  it("draws the title through the connection's own emitter, not a second one", async () => {
+    const own: any = { emit: jest.fn() };
+    const connection: any = {
+      write: () => {},
+      emitter: own,
+      session: { terminalType: 'c64', petsciiMode: true, tempData: {} },
+    };
+    displayScreenMock.mockImplementation(async () => true);
+
+    await handleC64Detected(connection);
+
+    expect(displayScreenMock.mock.calls[0][0]).toBe(own);
+    expect(own.emit).toHaveBeenCalledWith('ansi-output', 'Username: ');
+  });
+
   it('drives displayScreen through buildConnectionEmitter, and the fixture .seq bytes reach connection.write byte-identically', async () => {
     const written: Buffer[] = [];
     const connection: any = {

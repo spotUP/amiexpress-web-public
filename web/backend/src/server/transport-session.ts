@@ -23,7 +23,7 @@
  */
 import type { Server as IOServer } from "socket.io";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
-import { buildConnectionEmitter, flushPendingPetscii } from "./connection-emitter";
+import { emitterFor, flushPendingPetscii } from "./connection-emitter";
 import { armIdleTimeout } from '../services/idle-timeout.service';
 import {
   registerConnectionEmitter,
@@ -167,7 +167,7 @@ console.log(
   // 'petscii-bytes' raw-byte transport branch (Task 9) can be exercised
   // directly in tests without importing this file (which runs a top-level
   // IIFE that starts the HTTP/telnet/SSH servers as an import side effect).
-  const emitter: TransportEmitter = buildConnectionEmitter(connection);
+  const emitter: TransportEmitter = emitterFor(connection);
 
   // Expose the socket-shaped emitter on the connection so telnet/SSH
   // server entry points (which run BEFORE this handler completes) can

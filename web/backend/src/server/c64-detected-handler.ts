@@ -20,7 +20,7 @@
  */
 import { BBSState } from "../constants/bbs-states";
 import type { TelnetConnection } from "./telnet-server";
-import { buildConnectionEmitter } from "./connection-emitter";
+import { emitterFor } from "./connection-emitter";
 
 export async function handleC64Detected(connection: TelnetConnection): Promise<void> {
   if (!connection.session) {
@@ -33,7 +33,10 @@ console.log("[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE");
   // observe()), petscii-output (legacy PUA) and ansi-output (transduced,
   // charset bank ensured against the oracle) identically to the main
   // session pipeline.
-  const emitter = buildConnectionEmitter(connection);
+  // The connection's OWN emitter (emitterFor), never a second one: the
+  // output buffer binds to whichever emitter first prints, and a second
+  // emitter left every later prompt outside the modem pacer.
+  const emitter = emitterFor(connection);
   await displayScreen(emitter as any, connection.session, "BBSTITLE");
   // Transition to login
   connection.session.state = BBSState.LOGON;

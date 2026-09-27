@@ -69,6 +69,24 @@ export function flushPendingPetscii(connection: { session?: any; write: (b: Buff
   if (bytes.length > 0) connection.write(Buffer.from(bytes));
 }
 
+/**
+ * The connection's ONE socket-shaped emitter, built on first use and kept on
+ * the connection.
+ *
+ * Everything keyed by the connection's id - the output buffer behind
+ * emitText, the modem pacer, the ANSI filter login installs - wraps or binds
+ * the emitter object it is first handed. Two emitters for one connection
+ * means text split across two pipelines that reach the same wire at
+ * different speeds: the C64 title screen used to build its own, the buffer
+ * bound to it, and every menu prompt then overtook the paced newline in
+ * front of it (the sysop, 2026-09-28: "the cursor draws on the next line").
+ */
+export function emitterFor(connection: TelnetConnection | SSHConnection): any {
+  const holder = connection as unknown as { emitter?: unknown };
+  if (!holder.emitter) holder.emitter = buildConnectionEmitter(connection);
+  return holder.emitter;
+}
+
 export function buildConnectionEmitter(connection: TelnetConnection | SSHConnection): any {
   const eventBus = new EventEmitter();
   eventBus.setMaxListeners(50);
