@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { createDoubleHeightFilter, type DoubleHeightFilter } from '../utils/teletext-double-height';
 import { EmulatorOverlay } from './EmulatorOverlay';
+import { SystemNotice, systemNoticeText } from './SystemNotice';
 import {
   FIT_TO_WINDOW,
 } from '../utils/terminal-zoom';
@@ -526,6 +527,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * until the caller closes it or the door takes it away.
    */
   const [emulator, setEmulator] = useState<{ url: string; title: string; machine?: string } | null>(null);
+  const [systemNotice, setSystemNotice] = useState<string | null>(null);
+  const clearSystemNotice = useCallback(() => setSystemNotice(null), []);
 
   /*
    * THE FOCUS KEEPER IS OFF WHILE THE EMULATOR SURFACE IS OPEN.
@@ -2844,6 +2847,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // or a session ending.
     socket.on('emulator:close', () => setEmulator(null));
 
+    // A line from the board that is not screen output - the deploy's restart
+    // countdown, a sysop's kick line. Shown over the terminal so a door's
+    // screen is left alone (SystemNotice.tsx says why).
+    const showSystemNotice = (payload: unknown) => {
+      const text = systemNoticeText(payload);
+      if (text) setSystemNotice(text);
+    };
+    socket.on('system:notice', showSystemNotice);
+    socket.on('system-message', showSystemNotice);
+
     socket.on('texttv-mode', (data: { enabled: boolean }) => {
       if (data?.enabled) {
         console.log('[Terminal] Teletext mode on - TDAText face at 2x, teletext palette');
@@ -4385,6 +4398,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           />
         );
       })}
+      {systemNotice && <SystemNotice text={systemNotice} onExpire={clearSystemNotice} />}
       {emulator && (
         <EmulatorOverlay
           url={emulator.url}
