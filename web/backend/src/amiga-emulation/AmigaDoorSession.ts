@@ -366,6 +366,7 @@ debugLog(
       const memSize = Math.max(2, Math.min(16, memSizeMB)) * 1024 * 1024;
       debugLog(`[AmigaDoorSession] Emulator memory: ${memSizeMB}MB`);
       this.emulator = new MoiraEmulator(memSize);
+      this.emulator.doorName = path.basename(this.config.executablePath);
       // Frame boundary for a C64 caller whenever the CPU stops. NOTE the limit:
       // C64_ADAPT_MAX_FRAME_MS is a setTimeout, so it can only fire when the JS
       // loop yields - it cannot preempt a synchronous 68K batch inside

@@ -4,6 +4,8 @@ import * as path from 'path';
 import { conferenceDir, conferenceSubdir, conferenceAmigaPath, conferenceNumbers } from '../../conferences/conference-paths';
 import { execSync } from 'child_process';
 import * as amigafs from '../../utils/amigafs';
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { getLvoName } from '../constants/lvo-names.generated';
 
 /**
  * icon.library - Amiga Icon/Tooltype Library
@@ -222,6 +224,7 @@ console.log(`[icon.library]   Returning DiskObject at 0x${diskObjAddr.toString(1
 
 console.log(`[icon.library] PutDiskObject("${name}", 0x${diskObjPtr.toString(16)})`);
 console.warn(`[icon.library]   .info write not implemented — returning FAILURE (0) so the door surfaces the error instead of silently losing data. No installed door uses this today; implement a real serializer when one does.`);
+        amigaGaps.record('icon', 'PutDiskObject (writing a .info)', doorOf(this.emulator));
 
     // Honest failure — never fake success (would silently drop the door's
     // saved config while telling it the write succeeded).
@@ -1205,6 +1208,7 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
       default:
         // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
 console.warn(`[icon.library] STUB: Unimplemented function at LVO ${offset}`);
+        amigaGaps.record('library', `icon.library ${getLvoName('icon.library', offset) || 'offset ' + offset} (${offset})`, doorOf(this.emulator));
         this.emulator.setRegister(CPURegister.D0, 0);
 
         const d0 = this.emulator.getRegister(CPURegister.D0);

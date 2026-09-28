@@ -1,4 +1,6 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { getLvoName } from '../constants/lvo-names.generated';
 
 /**
  * intuition.library - Amiga Intuition Library (Stub Implementation)
@@ -206,6 +208,7 @@ console.log(`[intuition.library] AutoRequest(window=0x${window.toString(16)}, bo
       default:
         // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
 console.warn(`[intuition.library] STUB: Unimplemented function at LVO ${offset}`);
+        amigaGaps.record('library', `intuition.library ${getLvoName('intuition.library', offset) || 'offset ' + offset} (${offset})`, doorOf(this.emulator));
         this.emulator.setRegister(CPURegister.D0, 0);
 
         const d0 = this.emulator.getRegister(CPURegister.D0);

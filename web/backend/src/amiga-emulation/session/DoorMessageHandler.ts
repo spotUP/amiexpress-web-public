@@ -24,6 +24,7 @@ import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 import * as net from "net";
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -2115,6 +2116,7 @@ debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT GET: ${confAccounting ? 'YES' : 
           this.writeStringToMessage(msgAddr, confAccounting ? 'YES' : 'NO');
         } else {
 debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT SET: ignored (not implemented)`);
+        amigaGaps.record('xim', 'BB_CONFACCOUNT set', doorOf(this.emulator));
         }
         break;
 
@@ -2122,6 +2124,7 @@ debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT SET: ignored (not implemented)`)
         // express.e:3929-3934: Copy editor struct to/from door memory
         // data=1: copy from door to BBS, data=0: copy from BBS to door
 debugLog(`[DoorMessageHandler]   EDITOR_STRUCT: ${data ? 'READ from door' : 'WRITE to door'} (not implemented)`);
+        amigaGaps.record('xim', `EDITOR_STRUCT ${data ? 'read' : 'write'}`, doorOf(this.emulator));
         break;
 
       case XIMCommand.LOAD_CONFDB:
@@ -2779,6 +2782,7 @@ debugLog(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}" (from disk)
 
       default:
 debugLog(`[DoorMessageHandler]   Unknown command: ${command}`);
+        amigaGaps.record('xim', `command ${command}`, doorOf(this.emulator));
 debugLog(`[DoorMessageHandler]   Returning unchanged message`);
         break;
     }

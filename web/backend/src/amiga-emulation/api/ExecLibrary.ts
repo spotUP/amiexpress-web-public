@@ -16,6 +16,8 @@ import { debugLog } from "../../utils/debug-log";
 import { notifySysop } from "../../utils/sysop-alert.util";
 import { getSystemTime } from '../../utils/date-time.util';
 import * as memoryMap from "../memory-map";
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { getLvoName } from '../constants/lvo-names.generated';
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -1389,6 +1391,7 @@ console.warn(
 console.warn(
         `[ExecLibrary] Resident ${name} type=${type} not supported in InitResident`
       );
+      amigaGaps.record('exec', `InitResident of a resident of type ${type} (${name})`, doorOf(this.emulator));
       return 0;
     }
 
@@ -2164,6 +2167,7 @@ debugLog(
 console.warn(
           `[exec.library] STUB: Unimplemented function at LVO ${offset}`
         );
+        amigaGaps.record('library', `exec.library ${getLvoName('exec.library', offset) || 'offset ' + offset} (${offset})`, doorOf(this.emulator));
 
         // Exec library functions return pointers (non-zero) or 0 for failure
         // Default: Return 0 (failure) in D0

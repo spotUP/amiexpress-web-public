@@ -189,6 +189,14 @@ export enum CPURegister {
 }
 
 export class MoiraEmulator {
+  /**
+   * The door this emulator is running, set by its session. Several doors run
+   * at once (one emulator each), so anything reporting on a door - the gap
+   * log (instrumentation/amiga-gaps.ts) - reads it from here, never from a
+   * board-wide "current door".
+   */
+  public doorName = '';
+
   private module: MoiraModule | null = null;
   private cpu: MoiraCPU | null = null;
 

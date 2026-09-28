@@ -20,6 +20,8 @@ const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'lo
 
 // Import modular DOS components
 import type { HostFacts } from '../utils/host-vars';
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { getLvoName } from '../constants/lvo-names.generated';
 import {
   // Constants
   MODE_OLDFILE,
@@ -812,6 +814,7 @@ debugLog(
             );
           } else {
 console.error(`[dos.library] Open: Unknown mode ${mode}`);
+            amigaGaps.record('dos', `Open with mode ${mode}`, doorOf(this.emulator));
             fileId = 0;
             this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
             this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=mode${mode}`);
@@ -6518,6 +6521,7 @@ debugLog(`[dos.library] AllocDosObject(type=${type}, tags=0x${tags.toString(16)}
         break;
       default:
 console.error(`[dos.library] AllocDosObject: Unknown type ${type}`);
+        amigaGaps.record('dos', `AllocDosObject of type ${type}`, doorOf(this.emulator));
         this.emulator.setRegister(CPURegister.D0, 0);
         this.lastError = 122; // ERROR_BAD_NUMBER
         return;
@@ -6611,6 +6615,7 @@ debugLog(
 debugLog(
         `[dos.library] WARNING: Offset -298 not implemented; returning 0`
       );
+      amigaGaps.record('library', `dos.library ${getLvoName('dos.library', -298) || 'offset -298'} (-298)`, doorOf(this.emulator));
       this.emulator.setRegister(CPURegister.D0, 0);
       return true;
     }
@@ -6918,6 +6923,7 @@ debugLog(
         // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
         // This ensures doors never crash on unimplemented functions
 console.warn(`[dos.library] STUB: Unimplemented function at LVO ${offset}`);
+        amigaGaps.record('library', `dos.library ${getLvoName('dos.library', offset) || 'offset ' + offset} (${offset})`, doorOf(this.emulator));
 
         // Provide sensible defaults based on function type
         // Most DOS functions return 0 for failure, -1 (TRUE) for success

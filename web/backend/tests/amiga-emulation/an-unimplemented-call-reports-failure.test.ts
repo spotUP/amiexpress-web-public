@@ -11,6 +11,8 @@
  */
 import { LibraryTraps } from '../../src/amiga-emulation/api/LibraryTraps';
 import { ExecLibrary } from '../../src/amiga-emulation/api/ExecLibrary';
+import * as fs from 'fs';
+import { amigaGaps } from '../../src/amiga-emulation/instrumentation/amiga-gaps';
 
 interface Registers { d: number[]; a: number[]; sp: number; pc: number; sr: number }
 
@@ -96,4 +98,26 @@ it('a stubbed call returns 0 whatever the caller left in D0', () => {
 
   regs.d[0] = 0x00c0ffee; // what the door had in D0 before the call
   expect(openWindowTagList.handler(emu)).toBe(0);
+});
+
+it("is written to the board's gap log, under the door that asked", () => {
+  // The sysop, 2026-09-28: "we need to log all unimplemented amiga stuff so we
+  // can implement it." Driven through handleTrap - the path a real door takes
+  // - with the emulator named as its session names it.
+  amigaGaps.reset();
+  try { fs.rmSync(amigaGaps.file()); } catch { /* none yet */ }
+  const { regs, emu } = makeFake();
+  (emu as any).doorName = '5D_Page';
+  const lt = new LibraryTraps(emu, new ExecLibrary(emu));
+  const intuitionBase = 0x200000;
+  lt.installStubVectorsForLibrary('intuition.library', intuitionBase);
+  regs.sp = 0x10000;
+  emu.writeMemory32(regs.sp, 0x31a0); // the caller's return address
+
+  lt.handleTrap(intuitionBase - 606);
+  amigaGaps.flush();
+
+  const logged = JSON.parse(fs.readFileSync(amigaGaps.file(), 'utf8'));
+  const gap = logged.find((g: any) => g.kind === 'library' && /OpenWindowTagList/.test(g.what));
+  expect(gap).toMatchObject({ count: 1, doors: { '5D_Page': 1 } });
 });

@@ -23,6 +23,7 @@ import { debugLog } from "../../utils/debug-log";
 import { getSystemTime, formatLongDateTime } from "../../utils/date-time.util";
 import { writeToCallersLog, writeToUDLog } from "../../utils/download-logging.util";
 import { EscapeSequenceStripper } from "../utils/escape-sequence-stripper";
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 
 /**
  * Amiga epoch (January 1, 1978 00:00:00) — same reference point
@@ -775,6 +776,7 @@ export class FIMProtocol {
 
       default: {
         debugLog(`[FIM] not implemented: ${command}`);
+        amigaGaps.record('fim', `command ${command}`, doorOf(this.emulator));
         this.reply(msgAddr, FIM_RC.NOTIMPLEMENTED);
         break;
       }

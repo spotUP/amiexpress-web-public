@@ -31,6 +31,7 @@ import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./AmiSSLLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import { getLvoName } from "../constants/lvo-names.generated";
 import { libraryCallLedger } from "../instrumentation/library-call-ledger";
+import { doorOf } from "../instrumentation/amiga-gaps";
 import { debugLog } from "../../utils/debug-log";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -1345,12 +1346,14 @@ console.log(
     // Tier 2 measurement (LEDGER=1): record every resolved library call as
     // 'real' (genuine handler) or 'stub' (pass-through). The !vector branch
     // below records 'missing'. No-op unless the ledger is enabled.
-    if (libraryCallLedger.enabled && vector) {
+    // A stub is recorded even with the ledger off: it feeds the always-on gap
+    // log (instrumentation/amiga-gaps.ts).
+    if (vector && (libraryCallLedger.enabled || vector.isStub)) {
       // libraryMap holds the owning library instance per trap address — a more
       // reliable name than address math (ExecBase lives outside `libraries`).
       const lib = this.getLibraryName(this.libraryMap.get(pc)) ||
         this.execLibrary.getLibraryNameForAddress(pc) || 'unknown';
-      libraryCallLedger.record(lib, vector.offset, vector.name, vector.isStub ? 'stub' : 'real');
+      libraryCallLedger.record(lib, vector.offset, vector.name, vector.isStub ? 'stub' : 'real', doorOf(this.emulator));
     }
 
     // DEBUG: Log AEDoor-related calls to trace trap matching. Same hot-path
@@ -1382,7 +1385,7 @@ console.log(
       // Exec.library vectors are roughly from -700 to -30 from ExecBase
       if (pc >= execBase - 700 && pc < execBase && execOffset <= -30) {
         const execFnName = getLvoName('exec.library', execOffset) || `unknown(${execOffset})`;
-        libraryCallLedger.record('exec.library', execOffset, execFnName, 'missing');
+        libraryCallLedger.record('exec.library', execOffset, execFnName, 'missing', doorOf(this.emulator));
 console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION: ${execFnName} ***`);
 console.error(`[LibraryTraps]   PC: 0x${pc.toString(16)}`);
 console.error(`[LibraryTraps]   ExecBase: 0x${execBase.toString(16)}`);
@@ -1457,7 +1460,7 @@ console.error(
       if (dosBase && pc >= dosBase - 300 && pc < dosBase && dosOffset <= -30) {
         const offset = pc - dosBase;
         const dosFnName = getLvoName('dos.library', offset) || `unknown(${offset})`;
-        libraryCallLedger.record('dos.library', offset, dosFnName, 'missing');
+        libraryCallLedger.record('dos.library', offset, dosFnName, 'missing', doorOf(this.emulator));
 console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION: ${dosFnName} ***`);
 console.error(
           `[LibraryTraps]   PC: 0x${pc.toString(16)}, LVO: ${offset} = ${dosFnName}`
@@ -1939,11 +1942,12 @@ console.log(
     const libraries = this.offsetLibraryMap.get(offset);
 
     if (!vectors || vectors.length === 0) {
-      // Tier 2 measurement (LEDGER=1): a trapped call we have no handler for.
-      if (libraryCallLedger.enabled) {
+      // A trapped call we have no handler for: always a gap (amiga-gaps.ts),
+      // and in the Tier 2 ledger when LEDGER=1.
+      {
         const lib = this.execLibrary.getLibraryNameForAddress(baseAddr + offset) ||
           this.execLibrary.getLibraryNameForAddress(baseAddr) || 'unknown';
-        libraryCallLedger.record(lib, offset, getLvoName(lib, offset) || `unknown(${offset})`, 'missing');
+        libraryCallLedger.record(lib, offset, getLvoName(lib, offset) || `unknown(${offset})`, 'missing', doorOf(this.emulator));
       }
 console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
       return false;
@@ -1959,11 +1963,11 @@ console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
     const libraryName = this.getLibraryName(library);
 
     // Tier 2 measurement (LEDGER=1): record this call as 'real' or 'stub'.
-    if (libraryCallLedger.enabled) {
+    if (libraryCallLedger.enabled || vector.isStub) {
       const lib = (libraryName && libraryName !== 'unknown')
         ? libraryName
         : (this.execLibrary.getLibraryNameForAddress(baseAddr) || 'unknown');
-      libraryCallLedger.record(lib, offset, vector.name, vector.isStub ? 'stub' : 'real');
+      libraryCallLedger.record(lib, offset, vector.name, vector.isStub ? 'stub' : 'real', doorOf(this.emulator));
     }
 
     if (DEBUG_LIBRARY_TRAPS) {

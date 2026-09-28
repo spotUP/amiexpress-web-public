@@ -34,6 +34,7 @@ import { debugLog } from '../utils/debug-log';
 import * as amigafs from '../utils/amigafs';
 import { debugRegistry } from '../debug/DebugRegistry';
 import * as net from 'net';
+import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
 
 export { XIMCommand } from './xim/types';
 
@@ -752,6 +753,7 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     // Unknown command - match express.e DEFAULT behavior (line 4221-4228)
     // express.e just logs a warning and does NOT modify msg.data - reply with data unchanged
 debugLog(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
+        amigaGaps.record('xim', `command ${msg.command} (0x${msg.command.toString(16)})`, doorOf(this.emulator));
 debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
     this.sendReply(msg, msg.data);
   }

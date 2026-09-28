@@ -20,6 +20,7 @@ import * as deasync from 'deasync';
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { SocketTee } from './bsdsocket-tee';
 import { debugLog, isDebugEnabled } from '../../utils/debug-log';
+import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 
 // Amiga socket constants
 export const AF_INET = 2;
@@ -222,12 +223,14 @@ export class BsdSocketLibrary {
 
     if (domain !== AF_INET) {
       console.log(`[BsdSocketLibrary] Unsupported domain: ${domain}`);
+      amigaGaps.record('socket', `socket() in domain ${domain}`, doorOf(this.emulator));
       this.errno = ENOENT;
       return -1;
     }
 
     if (type !== SOCK_STREAM) {
       console.log(`[BsdSocketLibrary] Unsupported socket type: ${type}`);
+      amigaGaps.record('socket', `socket() of type ${type}`, doorOf(this.emulator));
       this.errno = ENOENT;
       return -1;
     }

@@ -20,6 +20,8 @@
  * via setCurrentDoor() and dumps the aggregate via snapshot() at the end.
  */
 
+import { amigaGaps } from './amiga-gaps';
+
 export type CallResolution = 'real' | 'stub' | 'missing';
 
 export interface LedgerEntry {
@@ -58,7 +60,12 @@ class LibraryCallLedger {
     this.entries.clear();
   }
 
-  record(library: string, offset: number, name: string, resolution: CallResolution): void {
+  record(library: string, offset: number, name: string, resolution: CallResolution, door?: string): void {
+    // Unimplemented calls go to the always-on gap log whether or not this
+    // ledger is enabled: the live board is where the real doors run.
+    if (resolution !== 'real') {
+      amigaGaps.record('library', `${(library || 'unknown').toLowerCase()} ${name || 'offset ' + offset} (${offset})`, door);
+    }
     if (!this.enabled) return;
     const lib = (library || 'unknown').toLowerCase();
     const key = `${lib}:${offset}`;

@@ -1,5 +1,6 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { DOOR_SEGMENT_BASE } from "../memory-map";
+import { amigaGaps } from '../instrumentation/amiga-gaps';
 
 /**
  * Amiga Hunk File Format Loader
@@ -352,6 +353,7 @@ console.warn(`[HunkLoader] Skipping HUNK_${hunkType === HunkType.HUNK_OVERLAY ? 
           // Per AmigaDOS v31+: unknown hunks > HUNK_ABSRELOC16 treated as debug
           if (hunkType > HunkType.HUNK_ABSRELOC16) {
 console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as debug block`);
+            amigaGaps.record('loader', `hunk type 0x${hunkType.toString(16)}`);
             this.parseDebugBlock();
           } else {
             throw new HunkLoaderError(`Unknown hunk type 0x${hunkType.toString(16)}`);
