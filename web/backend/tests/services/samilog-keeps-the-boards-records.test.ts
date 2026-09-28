@@ -95,3 +95,25 @@ it("today's running totals never touch the records", async () => {
   expect(recordOf(records, 'Dn Files')).toMatch(/^Dn Files\s+3745\s/);
   expect(recordOf(records, 'Calls')).toMatch(/^Calls\s+275\s/);
 });
+
+it('a logoff that added no session to the CallersLog adds no caller and no call', async () => {
+  /*
+   * Live 2026-09-28: randy and orlingo each stood twice in the Super-AmiLog
+   * list, same node, same times. Every logoff runs the node's batch, and the
+   * update reads the LAST session in that node's CallersLog - so a logoff that
+   * wrote no session (a caller who dropped before logging in) recorded the
+   * previous caller again, and counted them as another call.
+   */
+  const dir = board();
+  setDay0(dir, today(), { calls: 10, dnFiles: 0 });
+  const svc = serviceFor(dir);
+
+  await svc.updateStoreFromCallersLog(1, {});
+  await svc.updateStoreFromCallersLog(1, {});
+
+  expect(day0(dir).calls).toBe(11);
+  const rows = svc.generateBulletin(20, { noAnsi: true, noTexts: true }).split('\n')
+    .filter((l: string) => /^\S+\s+1\s/.test(l));
+  expect(rows.length).toBeGreaterThan(0);
+  expect(new Set(rows).size).toBe(rows.length);
+});

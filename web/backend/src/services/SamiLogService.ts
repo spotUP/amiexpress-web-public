@@ -278,6 +278,26 @@ console.warn('[SamiLog] Could not parse last session from CallersLog');
     }
 
     // Ignore sysop check — sysop username is 'sysop' (case-insensitive)
+    /*
+     * ONE SESSION IS ONE CALL, however many batches read it.
+     *
+     * Every logoff runs its node's batch, and this reads the LAST session in
+     * that node's CallersLog. A logoff that wrote no session - a caller who
+     * dropped before logging in - found the previous caller there and
+     * recorded them again, with another call on the day's count: randy and
+     * orlingo each stood twice in the live list (2026-09-28). The session a
+     * node last recorded is remembered beside the store, and the same one is
+     * not recorded twice.
+     */
+    const sessionKey = `${entry.dateOn} ${entry.timeOn} [${entry.nodeStr}] ${entry.username}`;
+    const lastSessionPath = path.join(path.dirname(storePath), `.last-session-node${nodeId}`);
+    try {
+      if (fs.readFileSync(lastSessionPath, 'latin1') === sessionKey) {
+console.log(`[SamiLog] Node ${nodeId}: ${sessionKey} is already recorded; nothing new in the CallersLog`);
+        return;
+      }
+    } catch { /* first update on this node */ }
+
     if (options.ignoreSysop && entry.username.toLowerCase() === 'sysop') {
 console.log('[SamiLog] Ignoring Sysop call');
       return;
@@ -372,6 +392,7 @@ console.log('[SamiLog] Ignoring Sysop call');
     buffer.writeUInt32BE(currentMins + (isNaN(minsUsed) ? 0 : minsUsed), dailyOffset + 22);
 
     fs.writeFileSync(storePath, buffer);
+    fs.writeFileSync(lastSessionPath, sessionKey, 'latin1');
 
     if (options.createMiniLog) {
       updateMiniCallersLog(newEntryObj, todayAmiga, storeDate !== todayAmiga, buffer);
