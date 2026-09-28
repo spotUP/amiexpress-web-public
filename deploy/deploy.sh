@@ -870,20 +870,12 @@ fi
 # pipefail` that fails the whole deploy - which is exactly what
 # happened the first time this check ran (exit 141), AFTER the
 # container was already live and healthy.
-# What actually RUNS is dist/, and the entrypoint deliberately
-# strips door .ts sources from the volume afterwards
-# ("production uses compiled dist/"). Comparing every file in
-# the image therefore reported the stripped sources as stale
-# for ever and failed three deploys on a volume that was
-# correct. Compare the code that runs.
-STALE=$(docker exec amiexpress-bbs sh -c '
-  cd /app/default-data/Doors 2>/dev/null || exit 0
-  find . -type f ! -name "*.db" ! -name "*.sqlite" ! -name "*.log" \
-         ! -name "*.ts" ! -path "*/node_modules/*" |
-    while IFS= read -r f; do
-      cmp -s "/app/default-data/Doors/$f" "/app/data/bbs/Doors/$f" || echo "$f"
-    done
-' || true)
+#
+# The comparison lives in deploy/door-drift.sh, which says what
+# it skips and why; it runs inside the container, where both
+# trees and the entrypoint's exclude list are.
+STALE=$(docker exec amiexpress-bbs sh -c "$(cat ./deploy/door-drift.sh)
+doors_differing_from_image /app/default-data/Doors /app/data/bbs/Doors /app/data/bbs/.door-sync-excludes" || true)
 if [ -n "$STALE" ]; then
   echo "ERROR: doors on the volume differ from the image:" >&2
   printf '%s\n' "$STALE" | sed -n '1,20p' >&2

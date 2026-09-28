@@ -1032,6 +1032,11 @@ else
         fi
     done
 
+    # The deploy's own check (deploy/door-drift.sh) must skip exactly what
+    # this sync skips, or it fails a healthy deploy over the board's own
+    # files. It reads the list from here rather than keeping a second copy.
+    cp "$DOOR_CFG_EXCLUDES" "$BBS_DATA_DIR/.door-sync-excludes" 2>/dev/null || true
+
     # SCREENS ARE NOT HERE, AND THAT IS THE POINT.
     #
     # They were, and the blanket extraction below ran 140 lines BEFORE the
