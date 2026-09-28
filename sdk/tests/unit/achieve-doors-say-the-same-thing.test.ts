@@ -16,7 +16,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const REPO = path.resolve(__dirname, '../../..');
-const C_DOOR = fs.readFileSync(path.join(REPO, 'sdk/c/examples/achieve/achieve.c'), 'utf8');
+// The whole C door, every source it is built from: its words moved into
+// achieve_rows.c (a09ea46da) and a test reading achieve.c alone went red
+// while the two doors still said the same thing.
+const C_DIR = path.join(REPO, 'sdk/c/examples/achieve');
+const C_DOOR = fs.readdirSync(C_DIR)
+  .filter((f) => f.endsWith('.c') || f.endsWith('.h'))
+  .sort()
+  .map((f) => fs.readFileSync(path.join(C_DIR, f), 'utf8'))
+  .join('\n');
 const TS_DOOR = fs.readFileSync(path.join(REPO, 'Doors/achieve/app.ts'), 'utf8');
 
 /** The labels menuItems() writes, as `[wide, compact]` pairs. */

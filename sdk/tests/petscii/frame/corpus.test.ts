@@ -417,12 +417,33 @@ for (const [id, entry] of Object.entries(manifest)) {
         return out;
       };
       /** Do `a` then `b` occur ADJACENT and INSIDE one word of `source`? */
-      const insideAWord = (source: string, a: string, b: string) => {
+      /**
+       * Is the break INSIDE a source word? The text either side of it - the
+       * last word-run of the row that ends at the edge, joined to the first
+       * word-run of the next - has to sit in the source with the join inside
+       * one word. Two glyphs searched for anywhere in the row were the test
+       * until 2026-09-28, and GLC's `...MOST CALLED` / `SYSTEM...` (a clean
+       * wrap, the blank consumed) read as a fold because "DS" is inside
+       * "RECORDS" further left on the same row.
+       */
+      const insideAWord = (source: string, tail: string, head: string) => {
         const spans = wordsOf(source);
-        for (let k = source.indexOf(a + b); k >= 0; k = source.indexOf(a + b, k + 1)) {
-          if (spans.some(([s, e]) => k >= s && k + 1 < e)) return true;
+        const joined = tail + head;
+        for (let k = source.indexOf(joined); k >= 0; k = source.indexOf(joined, k + 1)) {
+          const join = k + tail.length;
+          if (spans.some(([s, e]) => join - 1 >= s && join < e)) return true;
         }
         return false;
+      };
+      /** The row's last word-run up to the edge, spacing glyphs included. */
+      const tailOf = (row: string) => {
+        const spans = wordsOf(row);
+        return spans.length ? row.slice(spans[spans.length - 1][0]) : row.slice(-1);
+      };
+      /** The row's first word-run from column 0. */
+      const headOf = (row: string) => {
+        const spans = wordsOf(row);
+        return spans.length && spans[0][0] === 0 ? row.slice(0, spans[0][1]) : row.slice(0, 1);
       };
       for (const f of frames) {
         const rows = adaptRows(f).rows;
@@ -444,7 +465,9 @@ for (const [id, entry] of Object.entries(manifest)) {
           // never neighbours, and two pieces of DECORATION that were neighbours
           // carry no word between them.
           const source = text(f.cells[here.source]);
-          expect({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: insideAWord(source, last, first) })
+          const tail = tailOf(text(here.cells).slice(0, COLS));
+          const head = headOf(text(next.cells));
+          expect({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: insideAWord(source, tail, head) })
             .toEqual({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: false });
         }
       }

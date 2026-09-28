@@ -257,6 +257,9 @@ const PINS: Record<string, Pin> = {
   conftop: { renders: 22, bytes: 8699, sha256: '98cd16bbc6e0ed085d303838fba5605b470cfdc3202daf24ea36688a44d93c7d' },
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
+  // Added with the fixture (b59a00e33), after the refactor this file pins:
+  // no before exists, so this is its first render, pinned as the baseline.
+  glc: { renders: 21, bytes: 17827, sha256: '42d494f106682a6d7bf7589b4fddb4d2e0723e0aec356954f48c9d01586a1d1c' },
   olm: { renders: 32, bytes: 10598, sha256: '29bc2b1a9f937503c800cc33d54cd28b7c60e6deb8f9b68f7e3384b284472d42' },
   // First measurement of a new input, frozen from here on under the rule above.
   aquascan_f: { renders: 66, bytes: 158936, sha256: 'd317b8997312750b725d94b807a9e24e12a97364903ac2072f852a4c812eab67' },
