@@ -93,12 +93,17 @@ console.error('[Upload] Error setting filename:', error);
   }
 });
 
-const upload = multer({
-  storage: playpenStorage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB max
-  }
-});
+/*
+ * The size cap is the board's `maxFileSize` setting, read per request. It was
+ * a second literal 10 MB here while the setting sat in config.ts read by
+ * nothing, so changing the setting changed no upload.
+ */
+const upload = {
+  single: (field: string) => multer({
+    storage: playpenStorage,
+    limits: { fileSize: config.get('maxFileSize') },
+  }).single(field),
+};
 
 /**
  * Register all HTTP routes on the Express app

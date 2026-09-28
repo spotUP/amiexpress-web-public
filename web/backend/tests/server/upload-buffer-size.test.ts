@@ -55,10 +55,34 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
     expect(value).toBeGreaterThan(0);
   });
 
-  test('maxFileSize is set in the config', () => {
-    const value = config.get('maxFileSize');
-    expect(typeof value).toBe('number');
-    expect(value).toBeGreaterThan(0);
+  test("an HTTP upload over the board's maxFileSize is refused, and one under it is taken", async () => {
+    // The cap was a second literal 10 MB in routes-setup.ts while this setting
+    // was read by nothing, so changing it changed no upload.
+    const express = require('express');
+    const request = require('supertest');
+    const { registerHttpRoutes } = require('../../src/server/routes-setup');
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-cap-'));
+    const previous = { dataDir: config.get('dataDir'), max: config.get('maxFileSize') };
+    const quiet = [jest.spyOn(console, 'log').mockImplementation(() => {}), jest.spyOn(console, 'error').mockImplementation(() => {})];
+    try {
+      config.set('dataDir', dataDir);
+      config.set('maxFileSize', 32);
+      const app = express();
+      registerHttpRoutes(app, {} as never);
+
+      const over = await request(app).post('/api/upload').attach('file', Buffer.alloc(64, 1), 'BIG.LHA');
+      expect(over.status).toBe(500);
+      expect(String(over.body.error)).toMatch(/too large/i);
+
+      const under = await request(app).post('/api/upload').attach('file', Buffer.alloc(16, 1), 'SMALL.LHA');
+      expect(under.status).toBe(200);
+      expect(under.body.size).toBe(16);
+    } finally {
+      for (const q of quiet) q.mockRestore();
+      config.set('dataDir', previous.dataDir);
+      config.set('maxFileSize', previous.max);
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 
   test('maxHttpBufferSize is at least 1MB (covers ANSI screens, AREXX I/O, etc.)', () => {
