@@ -279,6 +279,29 @@ def case_file_list(b: Board, _tmp: str) -> str:
     return "dir 1 listed, back at the menu"
 
 
+def case_message_read(b: Board, _tmp: str) -> str:
+    """R opens the reader on conference 1, a message opens, Q twice leaves.
+
+    Conference 1 holds Conftop results - raw ANSI - so a colour code printed
+    as text shows up here: the SUBS pager used to send ` [32m17.` and the
+    board's bare-escape patch missed where an XIM message split it
+    (2026-09-28)."""
+    b.send("J 1\r")
+    to_menu(b)
+    b.send("R\r")
+    expect(b, re.compile(r"Q=Leave$", re.I), "the message list", timeout=45)
+    b.send("\r")
+    expect(b, re.compile(r"Q LEAVE$", re.I), "an open message")
+    shown = b.render()
+    stray = re.search(r"\[\d+(;\d+)*m", shown)
+    check(stray is None, f"a colour code printed as text: {stray.group(0) if stray else ''}", b)
+    b.send("Q")
+    expect(b, re.compile(r"Q=Leave$", re.I), "the list again")
+    b.send("Q")
+    to_menu(b)
+    return "read a message, no colour code as text, back at the menu"
+
+
 def case_zmodem_upload(b: Board, tmp: str) -> str:
     set_protocol(b, "ZMODEM")
     name, body = upload(b, tmp, "zmodem")
@@ -358,6 +381,7 @@ CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("stats", case_stats),
     ("bulletins", case_bulletins),
     ("file-list", case_file_list),
+    ("message-read", case_message_read),
     ("zmodem-upload", case_zmodem_upload),
     ("zmodem-download", case_zmodem_download),
     ("xmodem-upload", case_xmodem_upload),
