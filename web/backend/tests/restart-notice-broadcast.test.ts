@@ -129,6 +129,13 @@ describe('broadcastRestartNotice', () => {
 });
 
 describe('restartNoticeText', () => {
+  it('fits one 80-column row with the banner around it, for every mark', () => {
+    for (const seconds of [1, 5, 10, 30, 60, 120]) {
+      const shown = `*** ${restartNoticeText(seconds)} ***`;
+      expect(shown.length).toBeLessThanOrEqual(79);
+    }
+  });
+
   it('says "1 second" rather than "1 seconds"', () => {
     expect(restartNoticeText(1)).toContain('in 1 second.');
   });

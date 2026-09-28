@@ -56,10 +56,15 @@ function defaultDeps(): RestartNoticeDeps {
   return { sessions, emitterFor: (session, _nodeId, io) => emitterForSession(session, io as never) };
 }
 
+/**
+ * One short sentence. With the banner's `*** ` either side it has to fit an
+ * 80-column row: the longer "You will be reconnected automatically." made the
+ * line 86 wide and it wrapped under the menu prompt (sysop, 2026-09-29).
+ */
 export function restartNoticeText(seconds: number): string {
   return seconds === 1
-    ? 'SYSTEM UPDATE - restarting in 1 second. You will be reconnected automatically.'
-    : `SYSTEM UPDATE - restarting in ${seconds} seconds. You will be reconnected automatically.`;
+    ? 'SYSTEM UPDATE - restarting in 1 second.'
+    : `SYSTEM UPDATE - restarting in ${seconds} seconds.`;
 }
 
 /**
