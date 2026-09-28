@@ -104,6 +104,7 @@ import {
 } from "./server/ws-terminal-server";
 import { buildWsTerminalConnectionHandler } from "./server/ws-terminal-session";
 import { SSHServerImpl, SSHConnection } from "./server/ssh-server";
+import { LISTENER_DEFAULTS } from "./server/board-listeners";
 import { SSHKeyUtil } from "./utils/ssh-key.util";
 import type { WireCharset } from "./utils/wire-encoding.util";
 import type { LoginEmitter } from "./types/login-emitter";
@@ -1084,8 +1085,8 @@ console.error("[Socket.IO Auth] Authentication failed:", error.message);
 const port = process.env.PORT || config.get("port");
 
 // Create telnet and SSH servers for native BBS client connections (configured at runtime)
-let telnetPort = parseInt(process.env.TELNET_PORT || "64128");
-let sshPort = parseInt(process.env.SSH_PORT || "31337");
+let telnetPort = parseInt(process.env.TELNET_PORT || String(LISTENER_DEFAULTS.telnet));
+let sshPort = parseInt(process.env.SSH_PORT || String(LISTENER_DEFAULTS.ssh));
 let telnetServer: TelnetServer | null = null;
 let sshServer: SSHServerImpl | null = null;
 // Task 10: dedicated PETSCII port, disabled unless TELNET_PETSCII_PORT is set.

@@ -43,9 +43,9 @@ export interface BoardListener {
 }
 
 /**
- * `index.ts`'s own defaults, kept here so one file answers "what does the
- * board listen on". `web/backend/tests/server/board-listeners.test.ts` pins
- * these against index.ts so the two cannot drift apart silently.
+ * The board's default ports, and the only copy of them: `index.ts` falls back
+ * to these when TELNET_PORT / SSH_PORT are unset, so one file answers "what
+ * does the board listen on" and the two cannot drift apart.
  */
 export const LISTENER_DEFAULTS = {
   http: 3001,
