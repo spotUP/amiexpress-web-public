@@ -1,32 +1,32 @@
 import { Request, Response } from 'express';
 import * as fs from 'fs';
-import { basename, dirname, join, resolve, sep } from 'path';
+import { dirname, join, resolve, sep } from 'path';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * Sprite management API for the admin web UI.
  * Reuses the same path-resolution guards as Doors/sprite-editor/assets.ts.
  */
 
-const DOORS_ROOT = (() => {
-  let dir = __dirname;
-  // Walk up to find Doors/ — same logic as sprite-editor/assets.ts
-  for (let i = 0; i < 8; i++) {
-    if (basename(dir) === 'Doors') return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  // Fallback: look relative to data dir
-  const candidate = resolve(process.cwd(), 'Doors');
-  if (fs.existsSync(candidate)) return candidate;
-  // Last resort: relative to this file's project root
-  return resolve(__dirname, '..', '..', '..', '..', 'Doors');
-})();
+/**
+ * The board's Doors/ - the directory the door runner loads from.
+ *
+ * This walked up from its own file looking for a folder named Doors, then
+ * guessed cwd/Doors and web/Doors. On the live board none of those is the
+ * board: the code runs from /app/web/backend and the doors live in the
+ * volume, /app/data/bbs/Doors, so the page listed no doors and no sprites
+ * (sysop, 2026-09-07). boardRoot() is the one answer the rest of the board
+ * uses.
+ */
+function doorsRoot(): string {
+  return join(boardRoot(), 'Doors');
+}
 
 function resolveSpritePath(door: string, file?: string): string {
-  const base = resolve(DOORS_ROOT, door, 'sprites');
-  if (!base.startsWith(DOORS_ROOT + sep)) {
+  const root = doorsRoot();
+  const base = resolve(root, door, 'sprites');
+  if (!base.startsWith(root + sep)) {
     throw new Error(`Outside Doors/: ${door}`);
   }
   if (!file) return base;
@@ -41,16 +41,17 @@ export class SpriteManagerHandler {
   /** GET /api/sprite-manager/doors — list doors with sprites */
   async listDoors(_req: Request, res: Response): Promise<void> {
     try {
-      if (!fs.existsSync(DOORS_ROOT)) {
+      const root = doorsRoot();
+      if (!fs.existsSync(root)) {
         res.json({ doors: [] });
         return;
       }
-      const doors = fs.readdirSync(DOORS_ROOT, { withFileTypes: true })
+      const doors = fs.readdirSync(root, { withFileTypes: true })
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name)
         .filter(name => {
           try {
-            const spritesDir = join(DOORS_ROOT, name, 'sprites');
+            const spritesDir = join(root, name, 'sprites');
             return fs.existsSync(spritesDir) &&
               fs.readdirSync(spritesDir).some(f => f.endsWith('.sprite.json'));
           } catch { return false; }
