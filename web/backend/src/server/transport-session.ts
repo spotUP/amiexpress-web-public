@@ -41,7 +41,7 @@ import { c64AdapterFor } from "./c64-door-adapter";
  * the join, and one column at a time is a key a caller would hold down.
  */
 const PAN_COLUMNS = 8;
-import { classifyTerminalInput, clearPauseHandler, commandPieces, dispatchInOrder, swallowTelnetLineFeed } from "./terminal-input";
+import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed, dispatchInOrder, swallowTelnetLineFeed } from "./terminal-input";
 import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
 import { convertPetsciiInputToAscii } from "../utils/petscii.util";
@@ -427,9 +427,9 @@ console.log('[TELNET] Door active but nothing listening - emitting door:input');
       // caller's screen.
       dispatchInOrder(
         session,
-        commandPieces(input),
+        commandPieces(input, session.subState),
         (piece) => Promise.resolve(deps.handleCommand(emitter, session, piece, deps.io)),
-        (error) => console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error),
+        commandFailed(emitter),
       );
     }
   });

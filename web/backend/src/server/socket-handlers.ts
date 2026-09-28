@@ -46,7 +46,7 @@ import {
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
-import { classifyTerminalInput, clearPauseHandler, commandPieces, chatTakesTheWholeChunk, dispatchInOrder } from './terminal-input';
+import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed, dispatchInOrder } from './terminal-input';
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
@@ -804,22 +804,9 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
     // `[<35;X;Y;M` at the caller's cursor) is dropped, SS3 is folded to CSI so
     // an arrow key in application-cursor mode is understood, an escape
     // sequence is dispatched whole, and everything else a character at a time.
-    // The operator chat takes a pasted line whole - see chatTakesTheWholeChunk.
-    // Split into characters here it was dispatched as N un-awaited calls and
-    // trickled onto the caller's screen.
-    if (chatTakesTheWholeChunk(session.subState, data)) {
-      handleCommand(socket, session, data).catch((error: any) => {
-console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-        socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
-      });
-      return;
-    }
-
-    dispatchInOrder(session, commandPieces(data), (piece) => handleCommand(socket, session, piece), (error: any) => {
-console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-console.error('[COMMAND ERROR] Stack:', error?.stack);
-      socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
-    });
+    // The operator chat takes a pasted line whole - commandPieces asks
+    // chatTakesTheWholeChunk for both transports.
+    dispatchInOrder(session, commandPieces(data, session.subState), (piece) => handleCommand(socket, session, piece), commandFailed(socket));
   });
 
   // Binary transfer scaffold (upload/download via socket chunks)

@@ -261,9 +261,27 @@ export function dispatchInOrder(
  * Phase two: called only after the transport's own door routing has declined
  * the keystroke.
  */
-export function commandPieces(input: string): string[] {
+export function commandPieces(input: string, subState?: unknown): string[] {
   if (isStrayMouseReport(input)) return [];
+  // The operator chat takes a pasted run whole - see chatTakesTheWholeChunk.
+  // Here, not at each caller: web asked it and telnet did not, so a telnet
+  // caller's paste still trickled in a key at a time (web-vs-telnet audit
+  // item 7, 2026-09-28).
+  if (chatTakesTheWholeChunk(subState, input)) return [input];
   return splitInputForDispatch(normaliseCursorKeys(input));
+}
+
+/**
+ * What the caller is told when a command threw - one report for every
+ * transport. Web said `[ERROR] Command processing failed`; telnet and SSH
+ * only logged, so their caller was left at a screen that simply stopped
+ * (web-vs-telnet audit item 9).
+ */
+export function commandFailed(emitter: { emit: (event: string, ...args: any[]) => unknown }): (error: unknown) => void {
+  return (error: unknown) => {
+    console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+    emitter.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
+  };
 }
 
 /** The session fields these accumulators live on; they are not on BBSSession's type. */

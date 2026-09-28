@@ -188,6 +188,22 @@ describe('TP-8 - a telnet caller gets the web caller\'s input pipeline', () => {
     expect(caller.handleCommand).not.toHaveBeenCalled();
   });
 
+  it('a line pasted into the operator chat arrives whole, as it does on web (audit item 7)', () => {
+    const caller = telnetCaller(31);
+    (caller.session as unknown as { subState: string }).subState = 'operator_chat_active';
+    caller.type('tell me about fairlight');
+    expect(caller.inputs()).toEqual(['tell me about fairlight']);
+  });
+
+  it('a command that throws is reported to the caller, as it is on web (audit item 9)', async () => {
+    const caller = telnetCaller(32);
+    caller.handleCommand.mockImplementation(async () => { throw new Error('boom'); });
+    caller.type('X');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const shown = caller.connection.written.map((b) => b.toString('latin1')).join('');
+    expect(shown).toContain('Command processing failed');
+  });
+
   it('a transfer sink takes the bytes, and nothing else sees them', () => {
     const caller = telnetCaller(29);
     const sunk: Buffer[] = [];
