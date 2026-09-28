@@ -121,6 +121,19 @@ describe('the screen index', () => {
     expect(index.files[path.join('Screens', 'lastc.txt')].generated).toBe('runtime');
   });
 
+  test('the SVT Text bulletins are board-written, not art', () => {
+    // bull7/bull8 are rewritten every hour by the news-bulletins job, and the
+    // Screen Designer offered them to artists as the board's own screens
+    // (sysop screenshot, 2026-09-28).
+    write('Bulletins/bull7.txt', 'SVT Text news headlines\n');
+    write('Bulletins/bull8.txt', 'SVT Text sports headlines\n');
+    write('Bulletins/bull2.txt', '\x1b[36mhand drawn\n');
+    const index = buildScreenIndex(root);
+    expect(index.files[path.join('Bulletins', 'bull7.txt')].generated).toBe('runtime');
+    expect(index.files[path.join('Bulletins', 'bull8.txt')].generated).toBe('runtime');
+    expect(index.files[path.join('Bulletins', 'bull2.txt')].generated).toBeUndefined();
+  });
+
   test('a node pointed at a shared directory reports it as shared', () => {
     write('Node9/.keep', '');
     write('Screens/Shared/BBSTITLE.txt', 'shared title\n');
