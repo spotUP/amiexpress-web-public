@@ -29,7 +29,7 @@ import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog'
 import { checkPetsciiBoardRules } from './petscii-board-rules';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
-import { screenIsProgram } from './screen-blankness';
+import { mciGateOpen, screenIsProgram } from './screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
@@ -117,6 +117,11 @@ export interface ScreenFileFacts {
    *   breaks one of the two rules a C64 board runs (sysop, 2026-09-14). A save
    *   that breaks them is refused; one already on the board is REPORTED here
    *   and served exactly as its artist drew it.
+   * `codes-print-as-text` - it includes another screen or runs something
+   *   (`~SS_`, `~CC_`, ...) but its first line does not open with `~`, so the
+   *   board never parses it and a caller reads the code. Conf4/bull20.txt on
+   *   the live board lost its `~f` line in a 2026-09-18 edit and showed
+   *   `~SS_BBS:bulletins/bull9.txt` to every caller joining the conference.
    */
   problems: ScreenProblem[];
   /**
@@ -200,7 +205,8 @@ export type ScreenProblem =
   | 'empty'
   | 'colour-codes-without-escape'
   | 'petscii-graphics-bank'
-  | 'petscii-non-black-background';
+  | 'petscii-non-black-background'
+  | 'codes-print-as-text';
 
 export interface ScopeResolution {
   scope: 'node' | 'conf' | 'board';
@@ -642,6 +648,12 @@ function fileProblems(buf: Buffer, text: string, format: ScreenFormat): ScreenPr
    * (`petscii-board-rules.ts`); this is how a sysop finds the ones that were
    * there before the rules were.
    */
+  // RIP and native teletext are not read through the MCI pass at all.
+  if (format !== 'rip' && format !== 'teletext-native'
+    && screenIsProgram(text) && !mciGateOpen(text)) {
+    problems.push('codes-print-as-text');
+  }
+
   if (format === 'petscii' && buf.length > 0) {
     for (const violation of checkPetsciiBoardRules(buf)) {
       problems.push(violation.rule === 'graphics-bank'

@@ -34,7 +34,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
-import { screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
+import { mciGateOpen, screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
 import { splitScreenCodes, applyMciCarry, type CarryPlan } from '../screens/mci-carry';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
@@ -2952,9 +2952,7 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // === MCI Guard: allowMCI check (express.e:6800-6806) ===
     // MCI processing is only enabled when the file's first line starts with '~'.
     // Files that don't start with '~' are displayed as raw text with no MCI substitution.
-    const firstNewline = contentForMci.indexOf('\n');
-    const firstLine = firstNewline >= 0 ? contentForMci.slice(0, firstNewline) : contentForMci;
-    const allowMCI = firstLine.trimEnd().length > 0 && firstLine[0] === '~';
+    const allowMCI = mciGateOpen(contentForMci);
 
     // eventName is used throughout the display path after MCI processing
     const eventName = isPetscii ? 'petscii-output' : 'ansi-output';

@@ -136,6 +136,22 @@ export function screenIsProgram(content: string | Buffer): boolean {
 }
 
 /**
+ * Whether the board runs MCI in this screen at all.
+ *
+ * express.e:6800-6806 reads the FIRST line: `IF linedata[0]<>"~" THEN
+ * allowMCI:=FALSE`. A screen whose first line does not open with a tilde is
+ * shown as raw text, so every code in it - an include included - reaches the
+ * caller as the characters it is spelled with. The display path and the
+ * screen index both ask this, so they cannot disagree about a file.
+ */
+export function mciGateOpen(content: string | Buffer): boolean {
+  const text = typeof content === 'string' ? content : content.toString('latin1');
+  const firstNewline = text.indexOf('\n');
+  const firstLine = firstNewline >= 0 ? text.slice(0, firstNewline) : text;
+  return firstLine.trimEnd().length > 0 && firstLine[0] === '~';
+}
+
+/**
  * The codes a screen RUNS, in order - its behaviour, with the art removed.
  *
  * `screenIsProgram` answers "does this do anything"; this answers "what does

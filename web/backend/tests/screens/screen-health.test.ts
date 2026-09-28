@@ -42,6 +42,20 @@ describe('a screen the board cannot display properly', () => {
     expect(index.files['Node1/LOGON.TXT'].problems).toContain('colour-codes-without-escape');
   });
 
+  test('names a screen whose include prints as text because its first line is not ~', () => {
+    // Live Conf4/bull20.txt, 2026-09-28: an edit dropped the `~f` first line,
+    // and every caller joining the conference read the include as text.
+    write('Conf4/bull20.txt', '   \x1b[93m____ art\r\n\x1b[32m~SS_BBS:bulletins/bull9.txt\x1b[37m\r\n');
+    write('Conf1/bull20.txt', '~f\r\n   \x1b[93m____ art\r\n~SS_BBS:bulletins/bull9.txt\r\n');
+    write('Conf2/bull20.txt', '   \x1b[93m~~~~ waves, not a code\r\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Conf4/bull20.txt'].problems).toContain('codes-print-as-text');
+    expect(index.files['Conf1/bull20.txt'].problems).not.toContain('codes-print-as-text');
+    expect(index.files['Conf2/bull20.txt'].problems).not.toContain('codes-print-as-text');
+  });
+
   test('names an empty file, which draws nothing', () => {
     const index = buildScreenIndex(root);
 

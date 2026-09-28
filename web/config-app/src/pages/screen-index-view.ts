@@ -85,6 +85,8 @@ export const PROBLEM_LABELS: Record<string, string> = {
     'Drawn in the graphics bank - a C64 board shows the lowercase one',
   'petscii-non-black-background':
     'Asks for a background colour - a C64 board runs on a black screen',
+  'codes-print-as-text':
+    'Its codes print as text - the first line must start with ~ for the board to run them',
 };
 
 /** The two C64 rules, as the index reports them. */
