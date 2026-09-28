@@ -92,6 +92,9 @@ class Board:
         self.stash = b""
         self.last_byte = time.time()
         self.closed = False
+        # Every character the board has sent, in order - what scrolled off the
+        # 25 rows too, so a check can read the whole login, not its last page.
+        self.heard: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:
@@ -121,7 +124,9 @@ class Board:
             if self.s.log:
                 self.s.log.write(text)
             with self.lock:
-                self.stream.feed(as_glyphs(self.decoder.decode(text)))
+                decoded = self.decoder.decode(text)
+                self.heard.append(decoded)
+                self.stream.feed(as_glyphs(decoded))
                 self.last_byte = time.time()
 
     def settle(self, quiet: float = 0.8, limit: float = 10.0) -> None:

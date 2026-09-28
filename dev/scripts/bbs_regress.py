@@ -224,8 +224,23 @@ def download(b: Board, tmp: str, name: str, argv: list[str], xmodem: bool) -> by
 STATE: dict = {}
 
 
+# What a screen must never put in front of a caller: an MCI code the board
+# did not run (a screen whose first line lost its `~`, 2026-09-28) and a
+# door's own error line (QuickNew's "Couldn't Open DirFile", the same day).
+LEAKED = re.compile(r"~(?:SS_|CC_|\d*SR_|SX_|XI)\S*|ERROR : [^\r\n]*")
+
+
+def leaked(text: str) -> list[str]:
+    plain = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+    return sorted(set(m.group(0).strip() for m in LEAKED.finditer(plain)))
+
+
 def case_login(b: Board, _tmp: str) -> str:
-    return "at the menu prompt"
+    with b.lock:
+        heard = "".join(b.heard)
+    bad = leaked(heard)
+    check(not bad, f"the login showed what it should have run or hidden: {bad}", b)
+    return f"at the menu prompt, {len(heard)} characters read, nothing leaked"
 
 
 def case_time(b: Board, _tmp: str) -> str:
