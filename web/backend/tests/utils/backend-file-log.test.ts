@@ -163,4 +163,33 @@ describe('FileHandle debug log is off unless switched on', () => {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
   });
+
+  it('writes the log when the flag is on', () => {
+    // fhDebug called itself instead of writing: switched on, every line was a
+    // stack overflow the catch swallowed, and the log never appeared.
+    process.env[flag] = '1';
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fhon-'));
+    fs.mkdirSync(path.join(dataDir, 'logs'));
+    const savedDataDir = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = dataDir;
+    const quiet = [jest.spyOn(console, 'log').mockImplementation(() => {}), jest.spyOn(console, 'error').mockImplementation(() => {})];
+    try {
+      let FileHandleClass: any;
+      jest.isolateModules(() => {
+        ({ FileHandle: FileHandleClass } = require('../../src/amiga-emulation/api/FileHandle'));
+      });
+
+      const inMemory = new FileHandleClass('bbs:MEM', path.join(dataDir, 'MEM'), { memoryBuffer: Buffer.from('in memory') });
+      expect(inMemory.open('r')).toBe(true);
+      while (inMemory.read(4).length > 0) { /* to EOF */ }
+      inMemory.close();
+
+      const log = path.join(dataDir, 'logs', 'filehandle-debug.log');
+      expect(fs.existsSync(log) && fs.statSync(log).size > 0).toBe(true);
+    } finally {
+      for (const q of quiet) q.mockRestore();
+      if (savedDataDir === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = savedDataDir;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
 });

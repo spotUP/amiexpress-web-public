@@ -23,7 +23,7 @@ const FH_DEBUG = process.env.FILEHANDLE_DEBUG === '1';
 function fhDebug(line: string): void {
   if (!FH_DEBUG) return;
   try {
-    fhDebug( line);
+    fs.appendFileSync(DEBUG_LOG_PATH, line);
   } catch {
     /* logging must never break a door */
   }
