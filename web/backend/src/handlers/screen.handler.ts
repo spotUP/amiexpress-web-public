@@ -1424,26 +1424,22 @@ function artOfThemeWithBoardCodes(
     if (board.head.length === 0 && board.tail.length === 0) return null;
 
     /*
-     * A board file with NO drawing is all head: `Screens/BULL.TXT` is `~f|`
-     * and two includes. Taken as written, the theme's logo went below the
-     * whole program - under the last bulletin, on top of the pause that ends
-     * the screen ("a logo draws before the pause in super amilog", sysop,
-     * 2026-09-28). Such a file has no art slot of its own, so the theme's goes
-     * where a drawing sits in every other screen: after the leading lines that
-     * run nothing (the clear), before the first line that does.
+     * A BOARD FILE WITH NO DRAWING HAS NOTHING FOR A THEME TO RESTYLE.
+     *
+     * `Screens/Node/logon20.txt` is `~CC_gl ~SP` and two includes;
+     * `Screens/BULL.TXT` is a clear and two includes. Tango carries a logo for
+     * both, and there is no right place to splice it: after the program it sat
+     * on top of the last bulletin's pause ("a logo draws before the pause in
+     * super amilog", 2026-09-28), and before it (98c0d0dfc) it went under the
+     * Global Last Callers door, which draws its own page and was painted over
+     * ("global last callers ... lost their screen clears", 2026-09-29). A
+     * pure program is the board's, whole - the theme's art for it lies in the
+     * files the program includes, which Themes/<slug>/Files/ can override.
      */
-    let head = board.head;
-    let tail = board.tail;
-    if (tail.length === 0 && board.art.trim() === '') {
-      const firstProgram = head.findIndex(line => new RegExp(PROGRAM_CODE_IN_ART.source, 'i').test(line));
-      if (firstProgram >= 0) {
-        tail = head.slice(firstProgram);
-        head = head.slice(0, firstProgram);
-      }
-    }
+    if (board.art.trim() === '') return null;
 
     const plan: CarryPlan = {
-      head, tail, lost: [], uploadHasCodes: false,
+      head: board.head, tail: board.tail, lost: [], uploadHasCodes: false,
     };
 
     return {

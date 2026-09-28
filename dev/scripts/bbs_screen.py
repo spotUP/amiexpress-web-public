@@ -179,7 +179,8 @@ class Board:
             for pattern, keys, why in KNOWN_PROMPTS:
                 if pattern.search(here):
                     answer = keys.replace("{user}", user).replace("{password}", password)
-                    log.append(f"[{why}] {here[-60:]!r} -> {answer!r}")
+                    shown = "<password>" if "{password}" in keys else repr(answer)
+                    log.append(f"[{why}] {here[-60:]!r} -> {shown}")
                     break
             if MENU_PROMPT.search(here):
                 log.append(f"[menu] {here[-60:]!r}")
@@ -194,11 +195,13 @@ class Board:
                     continue
                 log.append(f"[STOP - unknown prompt] {here[-70:]!r}")
                 break
-            self.send(answer)
+            self.send(answer, secret="{password}" in keys)
         return "\n".join(log) + "\n" + self.render()
 
-    def send(self, keys: str) -> None:
-        self.s.note(f"send {keys!r}")
+    def send(self, keys: str, secret: bool = False) -> None:
+        # A password must not land in the session log, which lives in the
+        # scratchpad and gets read back into transcripts.
+        self.s.note("send <password>" if secret else f"send {keys!r}")
         self.last_byte = time.time()
         self.s.sock.sendall(keys.encode("latin1"))
 

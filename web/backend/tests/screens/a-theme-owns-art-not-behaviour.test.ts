@@ -25,7 +25,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
-import { displayScreen } from '../../src/handlers/screen.handler';
+import { displayScreen, loadScreenFile } from '../../src/handlers/screen.handler';
 import { invalidateScreenIndex } from '../../src/screens/screen-index.service';
 import { config } from '../../src/config';
 
@@ -168,16 +168,14 @@ describe('a theme may restyle a program, and not re-run it', () => {
 });
 
 describe('a board screen that is ALL program, worn by a theme that draws a logo', () => {
-  it('draws the logo first, not after the last bulletin where the pause lands on it', async () => {
+  it('runs the board program as it is, and draws no theme logo into it', async () => {
     /*
-     * Live 2026-09-28: `Screens/BULL.TXT` is `~f|`, `~SS_ bull1 ~SP`,
-     * `~SS_ bull6` and no drawing at all; tango's `Board/BULL.TXT` is a logo.
-     * Every line of the board's file counted as its head, so the logo went
-     * BELOW the whole program - under Super-AmiLog, right above the
-     * `(Pause)` that ends the screen ("a logo draws before the pause in super
-     * amilog", sysop). A board file with no drawing has no art slot of its
-     * own; the theme's goes where a drawing sits in every other screen -
-     * after the clear, before the first thing the program runs.
+     * Live 2026-09-28/29: `Screens/BULL.TXT` and `Screens/Node/logon20.txt`
+     * hold no drawing - a clear or a door, then includes - and tango carries a
+     * logo for each. Spliced after the program the logo sat on top of
+     * Super-AmiLog's pause; spliced before it, it went under the Global Last
+     * Callers door, which draws its own page. A pure program has no art for a
+     * theme to restyle, so the board's file is served whole.
      */
     write('Screens/BULL.TXT', '~f|\r\n~SS_BBS:Screens/one.txt\r\n~SS_BBS:Screens/six.txt\r\n');
     write('Themes/t1/Board/BULL.TXT', 'THEMELOGO\r\n');
@@ -185,15 +183,11 @@ describe('a board screen that is ALL program, worn by a theme that draws a logo'
     write('Screens/six.txt', 'SUPERAMILOG\r\n');
     invalidateScreenIndex();
 
-    const { socket, session, emits } = aCaller();
-    await displayScreen(socket, session, 'BULL', false);
-
-    // Each include is its own segment and only the first is drawn here; the
-    // logo has to be in front of it, not queued behind the last one.
-    const drawn = emits.join('');
-    expect(drawn).toContain('BULLETINONE');
-    expect(drawn).toContain('THEMELOGO');
-    expect(drawn.indexOf('THEMELOGO')).toBeLessThan(drawn.indexOf('BULLETINONE'));
+    // The whole program the caller is served, every segment of it.
+    const { session } = aCaller();
+    const served = loadScreenFile('BULL', 1, 1, session)?.content ?? '';
+    expect(served).toContain('~SS_BBS:Screens/six.txt');
+    expect(served).not.toContain('THEMELOGO');
   });
 });
 
