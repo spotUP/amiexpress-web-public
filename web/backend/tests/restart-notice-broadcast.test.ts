@@ -33,7 +33,9 @@ function makeIo(recorded: Emitted[]) {
 function makeDeps(sessionsByNode: Record<string, any>, socketByNode: Record<number, string>): RestartNoticeDeps {
   return {
     sessions: new Map(Object.entries(sessionsByNode)),
-    getSocketIdByNodeId: (nodeId: number) => socketByNode[nodeId],
+    // Reached the way the test's io reaches a socket id; the board's default
+    // is emitterForSession, which finds every transport.
+    emitterFor: (_session: any, nodeId: number, io: any) => (socketByNode[nodeId] ? io.to(socketByNode[nodeId]) : null),
   };
 }
 
@@ -166,5 +168,27 @@ describe('startRestartCountdown', () => {
     expect(texts.some((t) => t.includes('in 10 seconds'))).toBe(true);
     expect(texts.some((t) => t.includes('in 5 seconds'))).toBe(true);
     expect(seconds).toBeDefined();
+  });
+});
+
+describe('the restart notice on a byte transport', () => {
+  // A telnet or SSH caller's id names no socket.io socket, so io.to(id) never
+  // reached him and a deploy dropped him without a word (web-vs-telnet audit
+  // item 4, 2026-09-28). Default deps: the board's own session map and the
+  // session-emitter registry, the way a live telnet session is registered.
+  it('reaches a telnet caller through his own connection emitter', () => {
+    const { sessions } = require('../src/server/session-manager');
+    const { registerConnectionEmitter } = require('../src/server/session-emitter-registry');
+    const heard: Array<[string, unknown]> = [];
+    const session: any = { nodeId: 77, connectionType: 'telnet', socketId: 'telnet-77-1' };
+    registerConnectionEmitter(session, { id: 'telnet-77-1', emit: (e: string, p: unknown) => { heard.push([e, p]); return true; } });
+    sessions.set('77', session);
+    try {
+      const io = { to: () => ({ emit: () => undefined }) };
+      broadcastRestartNotice(io, 60);
+      expect(heard.some(([event, payload]) => event === 'ansi-output' && String(payload).includes('restarting in 60 seconds'))).toBe(true);
+    } finally {
+      sessions.delete('77');
+    }
   });
 });

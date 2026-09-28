@@ -21,7 +21,8 @@
 
 import { AnsiUtil } from '../utils/ansi.util';
 import { doorOwnsTerminal } from '../utils/door-owns-terminal';
-import { sessions, getSocketIdByNodeId } from '../server/session-manager';
+import { sessions } from '../server/session-manager';
+import { emitterForSession } from '../server/session-emitter-registry';
 
 /** Minimal shape of the socket.io server this module needs. */
 export interface RestartNoticeIo {
@@ -30,7 +31,13 @@ export interface RestartNoticeIo {
 
 export interface RestartNoticeDeps {
   sessions: Map<string, any>;
-  getSocketIdByNodeId: (nodeId: number) => string | undefined;
+  /**
+   * The sink that reaches a session. `io.to(getSocketIdByNodeId(n))` found a
+   * web caller only: a telnet or SSH session's id names no socket.io socket,
+   * so a byte caller got no warning before a deploy dropped him
+   * (web-vs-telnet audit item 4, 2026-09-28).
+   */
+  emitterFor: (session: any, nodeId: number, io: RestartNoticeIo) => { emit(event: string, ...args: any[]): unknown } | null;
 }
 
 export interface RestartNoticePayload {
@@ -46,7 +53,7 @@ export const NOTICE_MARKS = [60, 30, 10, 5];
 export const DEFAULT_RESTART_SECONDS = 60;
 
 function defaultDeps(): RestartNoticeDeps {
-  return { sessions, getSocketIdByNodeId };
+  return { sessions, emitterFor: (session, _nodeId, io) => emitterForSession(session, io as never) };
 }
 
 export function restartNoticeText(seconds: number): string {
@@ -75,14 +82,14 @@ export function broadcastRestartNotice(
     const nodeId = parseInt(nodeIdKey, 10);
     if (Number.isNaN(nodeId)) continue;
 
-    const socketId = deps.getSocketIdByNodeId(nodeId);
-    if (!socketId) continue;
+    const sink = deps.emitterFor(session, nodeId, io);
+    if (!sink) continue;
 
     if (doorOwnsTerminal(session)) {
-      io.to(socketId).emit('system:notice', payload);
+      sink.emit('system:notice', payload);
       doors++;
     } else {
-      io.to(socketId).emit('ansi-output', banner);
+      sink.emit('ansi-output', banner);
       terminals++;
     }
   }

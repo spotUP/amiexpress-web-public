@@ -428,18 +428,14 @@ function installDoorMessageCallback(deps: MessageCallbackDeps): void {
             text += String.fromCharCode(b & 0xff);
           }
           try {
-            const {
-              getSocketIdByNodeId,
-              sessions,
-            } = require("../../../server/session-manager.js");
-            const targetSocketId = getSocketIdByNodeId(targetNodeId);
-            const targetSession = sessions.get(String(targetNodeId));
-            if (targetSocketId && targetSession) {
-              const io = (global as any).io;
-              if (io && typeof io.to === "function") {
-                const payload = data === 1 ? text + "\r\n" : text;
-                io.to(targetSocketId).emit("ansi-output", payload);
-              }
+            const { sessions } = require("../../../server/session-manager.js");
+            const { emitterForSession } = require("../../../server/session-emitter-registry.js");
+            // The target's own sink, whatever transport: io.to(socketId)
+            // found a web caller only, and a node-to-node message to a telnet
+            // or SSH caller was dropped (web-vs-telnet audit item 4).
+            const target = emitterForSession(sessions.get(String(targetNodeId)), (global as any).io);
+            if (target) {
+              target.emit("ansi-output", data === 1 ? text + "\r\n" : text);
             }
           } catch {
             /* session-manager not loadable — drop the msg silently */
