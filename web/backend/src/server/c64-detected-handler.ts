@@ -18,33 +18,25 @@
  * required directly from a test process without pulling in index.ts's
  * top-level server-starting IIFE.
  */
-import { BBSState } from "../constants/bbs-states";
 import type { TelnetConnection } from "./telnet-server";
 import { emitterFor } from "./connection-emitter";
 
+/**
+ * A detected C64 takes the SAME pre-login pipeline as every other caller -
+ * connect banner, operator-chat listeners, SamiLog, FRONTEND, the AREXX login
+ * trigger - with the graphics prompt answered: `c64: true` puts the PETSCII
+ * title and `Username:` where the prompt would be (login-connect.service.ts
+ * showC64Title). This handler used to be the whole of a C64's connect and ran
+ * none of the rest (web-vs-telnet audit item 10, 2026-09-28).
+ */
 export async function handleC64Detected(connection: TelnetConnection): Promise<void> {
   if (!connection.session) {
     return;
   }
-console.log("[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE");
-  const { displayScreen } = await import("../handlers/screen.handler");
-  // Same emitter contract every other telnet/SSH connection uses — handles
-  // petscii-bytes (raw .seq transport, fed to the session's transducer via
-  // observe()), petscii-output (legacy PUA) and ansi-output (transduced,
-  // charset bank ensured against the oracle) identically to the main
-  // session pipeline.
-  // The connection's OWN emitter (emitterFor), never a second one: the
-  // output buffer binds to whichever emitter first prints, and a second
-  // emitter left every later prompt outside the modem pacer.
-  const emitter = emitterFor(connection);
-  await displayScreen(emitter as any, connection.session, "BBSTITLE");
-  // Transition to login
-  connection.session.state = BBSState.LOGON;
-  connection.session.subState = undefined;
-  connection.session.tempData = connection.session.tempData || {};
-  connection.session.tempData.loginPhase = "username";
-  // Through the emitter, not connection.write: the session's transducer
-  // must see this text so its cursor/charset oracle matches the screen.
-  emitter.emit("ansi-output", "\r\n\r\n");
-  emitter.emit("ansi-output", "Username: ");
+console.log("[C64] Auto-detected C64 terminal - pre-login pipeline, PETSCII title");
+  const { runPreLoginConnect } = await import("../services/login-connect.service");
+  await runPreLoginConnect(emitterFor(connection), connection.session, {
+    socketId: connection.sessionId,
+    c64: true,
+  });
 }

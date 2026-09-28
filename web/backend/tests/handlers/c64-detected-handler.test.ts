@@ -96,10 +96,10 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     expect(displayScreenMock.mock.calls[0][2]).toBe('BBSTITLE');
 
     // The old mini-emitter silently dropped this event entirely (no write
-    // at all) - buildConnectionEmitter must forward the exact bytes,
-    // untouched, as the very first write.
-    expect(written.length).toBeGreaterThanOrEqual(1);
-    expect(Buffer.compare(written[0], fixture)).toBe(0);
+    // at all) - the connection emitter must forward the exact bytes,
+    // untouched, as one write of their own.
+    const title = written.findIndex((b) => Buffer.compare(b, fixture) === 0);
+    expect(title).toBeGreaterThanOrEqual(0);
 
     // Session still transitions to LOGON/username exactly as before the
     // refactor - only the emitter changed, not the login hand-off.
@@ -107,8 +107,13 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     expect(connection.session.subState).toBeUndefined();
     expect(connection.session.tempData.loginPhase).toBe('username');
 
-    // BBSTITLE bytes, then two CR for spacing, then the Username: prompt.
-    expect(written).toHaveLength(3);
+    // The connect banner BEFORE the title - a detected C64 takes the same
+    // pre-login pipeline as every caller (web-vs-telnet audit item 10); it
+    // used to skip straight to the title and never saw it.
+    const text = (bs: Buffer[]) => Buffer.concat(bs).toString('latin1').toLowerCase();
+    expect(text(written.slice(0, title))).toContain('uccessful connection to node');
+    // And the login prompt after it.
+    expect(text(written.slice(title + 1))).toContain('sername:');
   });
 
   it('a dedicated-PETSCII-port session (petsciiMode set, terminalType not literally "c64" yet) also gets the raw bytes', () => {
@@ -125,7 +130,7 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     };
 
     return handleC64Detected(connection).then(() => {
-      expect(Buffer.compare(written[0], fixture)).toBe(0);
+      expect(written.some((b) => Buffer.compare(b, fixture) === 0)).toBe(true);
     });
   });
 

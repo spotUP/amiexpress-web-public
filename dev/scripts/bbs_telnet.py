@@ -81,8 +81,12 @@ class Session:
     def __init__(self, host: str = "localhost", port: int = 64128,
                  user: str = "sysop", password: str = "sysop",
                  log: Optional[str] = None, watch: bool = False,
-                 echo: Callable[[str], None] = lambda text: None):
+                 echo: Callable[[str], None] = lambda text: None,
+                 ttype: Optional[str] = "ANSI", naws: tuple[int, int] = (80, 25)):
+        # ttype=None refuses TTYPE, as a real C64 behind a WiFi modem does;
+        # naws is the window the client reports.
         self.user, self.password, self.echo = user, password, echo
+        self.ttype, self.naws = ttype, naws
         self.log = open(log, "ab", buffering=0) if log else None
         if watch and log:
             subprocess.run(["osascript", "-e",
@@ -105,10 +109,10 @@ class Session:
                 if cmd in (DO, DONT, WILL, WONT) and i + 2 < len(data):
                     opt = data[i + 2]
                     if cmd == DO:
-                        agree = opt in (TTYPE, NAWS, BINARY)
+                        agree = opt in (NAWS, BINARY) or (opt == TTYPE and self.ttype is not None)
                         self.sock.sendall(bytes([IAC, WILL if agree else WONT, opt]))
                         if opt == NAWS:
-                            self.sock.sendall(bytes([IAC, SB, NAWS, 0, 80, 0, 25, IAC, SE]))
+                            self.sock.sendall(bytes([IAC, SB, NAWS, 0, self.naws[0], 0, self.naws[1], IAC, SE]))
                     elif cmd == WILL:
                         agree = opt in (ECHO, SGA, BINARY)
                         self.sock.sendall(bytes([IAC, DO if agree else DONT, opt]))
@@ -119,7 +123,7 @@ class Session:
                     if end < 0:
                         break
                     if data[i + 2] == TTYPE:
-                        self.sock.sendall(bytes([IAC, SB, TTYPE, 0]) + b"ANSI" + bytes([IAC, SE]))
+                        self.sock.sendall(bytes([IAC, SB, TTYPE, 0]) + (self.ttype or "ANSI").encode() + bytes([IAC, SE]))
                     i = end + 2
                     continue
                 if cmd == IAC:

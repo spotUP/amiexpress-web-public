@@ -36,7 +36,7 @@
 import type { BBSSession } from "../index";
 import { recordPromptColumn, SAVE_CURSOR } from '../utils/line-input.util';
 import type { LoginEmitter } from "../types/login-emitter";
-import { LoggedOnSubState } from "../constants/bbs-states";
+import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { triggerSamiLogRefresh } from "./SamiLogService";
 import { arexxEngine } from "./arexx.service";
 import { config } from "../config";
@@ -52,6 +52,14 @@ export interface PreLoginConnectContext {
    * regression rather than parity.
    */
   postBannerDelayMs?: number;
+  /**
+   * A real C64 (TTYPE, the DEL-probe, the PETSCII port): no graphics prompt -
+   * it is PETSCII by definition - so the title and `Username:` stand where the
+   * prompt would. Everything before it runs as for any caller. It used to be a
+   * separate path that ran NONE of this: no banner, no FRONTEND, no AREXX login
+   * trigger for an auto-detected C64 (web-vs-telnet audit item 10, 2026-09-28).
+   */
+  c64?: boolean;
 }
 
 export interface PreLoginConnectResult {
@@ -171,6 +179,22 @@ export async function emitConnectBanner(
   }
 }
 
+/**
+ * What a real C64 sees where the graphics prompt would be: BBSTITLE, then the
+ * login prompt. Through the connection's own emitter, so the session's
+ * transducer sees the text and its cursor/charset model matches the screen.
+ */
+export async function showC64Title(emitter: LoginEmitter, session: BBSSession): Promise<void> {
+  const { displayScreen } = await import("../handlers/screen.handler");
+  await displayScreen(emitter as any, session, "BBSTITLE");
+  session.state = BBSState.LOGON;
+  session.subState = undefined;
+  session.tempData = session.tempData || {};
+  session.tempData.loginPhase = "username";
+  emitter.emit("ansi-output", "\r\n\r\n");
+  emitter.emit("ansi-output", "Username: ");
+}
+
 export async function runPreLoginConnect(
   emitter: LoginEmitter,
   session: BBSSession,
@@ -227,7 +251,13 @@ export async function runPreLoginConnect(
     // door.handler.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const handler = require("../handlers/command-execution.handler");
+    // Armed, as the command dispatcher arms it: the board runs FRONTEND
+    // itself, nobody typed it, so a screen too narrow for the door skips it
+    // quietly instead of greeting a C64 with "this door needs 80 columns"
+    // (auto-detected C64s take this pipeline since audit item 10).
+    session.widthGateFallThrough = "ARMED";
     const result = await handler.runSysCommand(emitter as any, session, "FRONTEND", "");
+    session.widthGateFallThrough = undefined;
     if (result !== 0) {
       // The cache size comes from THIS module instance. A dynamic import that
       // resolves to a second copy of the handler has its own empty cache, and
@@ -254,11 +284,16 @@ export async function runPreLoginConnect(
     return { ok: true, passwordResetActive: true };
   }
 
-  // 5. Graphics prompt + parked state — express.e:29527-29528.
-  emitter.emit("ansi-output", recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
-  emitter.emit("ansi-output", SAVE_CURSOR);
-  session.subState = LoggedOnSubState.ANSI_PROMPT;
-  session.tempData = { inputBuffer: "" };
+  // 5. Graphics prompt + parked state — express.e:29527-29528. A real C64
+  // has already answered it: the PETSCII title and the login prompt instead.
+  if (ctx.c64) {
+    await showC64Title(emitter, session);
+  } else {
+    emitter.emit("ansi-output", recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
+    emitter.emit("ansi-output", SAVE_CURSOR);
+    session.subState = LoggedOnSubState.ANSI_PROMPT;
+    session.tempData = { inputBuffer: "" };
+  }
 
   // 6. AREXX 'login' trigger — fires on every connect, regardless of
   // transport. Sysop AREXX scripts use this to log connections or

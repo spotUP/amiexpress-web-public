@@ -290,6 +290,43 @@ def case_xmodem_download(b: Board, tmp: str) -> str:
     return f"{name} round-tripped (block padding aside)"
 
 
+def petscii_plain(data: bytes) -> str:
+    """A PETSCII wire's letters as ASCII: capitals are $C1-$DA, lower case $41-$5A."""
+    return bytes((c - 0x80) if 0xC1 <= c <= 0xDA else c for c in data).decode("latin1").upper()
+
+
+def case_c64_connect(args: argparse.Namespace) -> str:
+    """A C64 that negotiates nothing (a WiFi modem): the DEL-probe makes it
+    PETSCII, and it takes the same pre-login pipeline as everyone - the connect
+    banner before the title - without being told a door it never asked for
+    needs 80 columns (FRONTEND runs armed). Audit item 10, 2026-09-28."""
+    from bbs_telnet import Session
+    s = Session(args.host, args.port, ttype=None, naws=(40, 25))
+    try:
+        seen, end = b"", time.time() + 10
+        while not seen and time.time() < end:
+            seen += s.pump(0.5)
+        s.sock.sendall(b"\x14")  # PETSCII DEL, the probe
+        end = time.time() + 15
+        while "SERNAME" not in petscii_plain(seen) and time.time() < end:
+            seen += s.pump(0.5)
+        text = petscii_plain(seen)
+        if "SERNAME" not in text:
+            raise Failed(f"no login prompt: {text[-200:]!r}")
+        if "CONNECTION TO NODE" not in text:
+            raise Failed("no connect banner before the title")
+        if "80 COLUMN" in text:
+            raise Failed("told a door needs 80 columns at connect")
+        return "banner, title and login prompt; no 80-column refusal"
+    finally:
+        s.close()
+
+
+# Cases that make their own connection instead of logging in through call().
+RAW_CASES: dict[str, Callable[[argparse.Namespace], str]] = {
+    "c64-connect": case_c64_connect,
+}
+
 CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("login", case_login),
     ("time", case_time),
@@ -299,11 +336,16 @@ CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("zmodem-download", case_zmodem_download),
     ("xmodem-upload", case_xmodem_upload),
     ("xmodem-download", case_xmodem_download),
+    ("c64-connect", lambda _b, _t: ""),  # runs from RAW_CASES
 ]
 TRANSFER_CASES = {n for n, _ in CASES if "modem" in n}
 
 
 # -- the runner -------------------------------------------------------------------
+
+class _Done(Exception):
+    """A raw case finished; skip the logged-in part of the loop."""
+
 
 def load(path: str) -> dict:
     try:
@@ -388,6 +430,10 @@ def main() -> int:
         verdict, note = "FAIL", ""
         b = None
         try:
+            if name in RAW_CASES:
+                note = RAW_CASES[name](args)
+                verdict = "PASS"
+                raise _Done()
             b = call(args, watch, quick=(name != "login"))
             watch = False
             b.s.note(f"CASE {name}")
@@ -395,6 +441,8 @@ def main() -> int:
                 original_protocol = read_protocol(b)
             note = fn(b, tmp)
             verdict = "PASS"
+        except _Done:
+            pass
         except Failed as problem:
             note = str(problem)
         except Exception as problem:
