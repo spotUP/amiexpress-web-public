@@ -17,8 +17,26 @@ jest.mock('../../src/services/FileAreaManager', () => ({
   },
 }));
 
-import * as fs from 'fs';
-import * as path from 'path';
+/** The board's `db` as the socket handler sees it: the lookup under test and inert writes. */
+const pooledRow = { id: 42, filename: 'POOLED.LHA', size: 7, downloads: 3, storageVolume: 2, objectKey: 'Conf1/Files/POOLED.LHA' };
+const handlerDb: Record<string, jest.Mock> = {
+  getFileEntryByName: jest.fn(async () => pooledRow),
+  getFileEntry: jest.fn(async () => null),
+  updateFileEntry: jest.fn(async () => undefined),
+  run: jest.fn(async () => undefined),
+  query: jest.fn(async () => ({ rows: [] })),
+  getConferenceById: jest.fn(async () => ({ id: 1, name: 'Conf1' })),
+  getWebhooksByTrigger: jest.fn(async () => []),
+};
+(globalThis as any).__byNameHandlerDb = handlerDb;
+jest.mock('../../src/database', () => ({
+  ...jest.requireActual('../../src/database'),
+  db: new Proxy({} as any, {
+    get: (_t, prop) => (globalThis as any).__byNameHandlerDb[prop] ?? jest.fn(async () => undefined),
+  }),
+}));
+jest.mock('../../src/server/database-helpers', () => ({ callersLog: jest.fn(async () => undefined) }));
+
 import { FileRepository } from '../../src/database/file-repository';
 import { remoteLocationFor } from '../../src/storage/remote-areas';
 
@@ -104,16 +122,28 @@ describe('getFileEntryByName', () => {
 });
 
 describe('the download socket handler', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'src', 'server', 'file-socket-handlers.ts'),
-    'utf8'
-  );
+  const { registerFileHandlers } = require('../../src/server/file-socket-handlers');
+  const { setSession, deleteSession } = require('../../src/server/session-manager');
 
-  it('looks a download up by name through the repository', () => {
-    expect(source).toMatch(/db\.getFileEntryByName\(/);
-  });
+  it('looks a download up by name through the repository, and books that row', async () => {
+    const handlers = new Map<string, (data: any) => Promise<void>>();
+    const socket: any = {
+      id: 'by-name-download',
+      emit: () => true,
+      on: (event: string, fn: (data: any) => Promise<void>) => { handlers.set(event, fn); },
+    };
+    const session: any = { nodeId: 96, currentConf: 1, user: { id: 'u1', username: 'caller' } };
+    setSession(socket.id, session);
+    try {
+      registerFileHandlers(socket);
+      await handlers.get('file-download-started')!({ filename: 'pooled.lha' });
 
-  it('no longer runs its own SELECT for it, which lost the storage columns', () => {
-    expect(source).not.toMatch(/SELECT fe\.\* FROM file_entries/);
+      expect(handlerDb.getFileEntryByName).toHaveBeenCalledTimes(1);
+      expect(handlerDb.getFileEntryByName.mock.calls[0][0]).toBe(1);
+      expect(String(handlerDb.getFileEntryByName.mock.calls[0][1]).toUpperCase()).toBe('POOLED.LHA');
+      expect(handlerDb.updateFileEntry).toHaveBeenCalledWith(42, { downloads: 4 });
+    } finally {
+      deleteSession(socket.id);
+    }
   });
 });

@@ -22,6 +22,11 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { cleanItUp } from '../../src/utils/clean-it-up.util';
+import { displayUploadInterface, setFileAreas } from '../../src/handlers/file/file.handler';
+import { getPlaypenDir } from '../../src/utils/bbs-paths.util';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { config } from '../../src/config';
+import { flushOutput } from '../../src/utils/output.util';
 
 function aPlaypen(names: string[]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'playpen-'));
@@ -91,10 +96,39 @@ describe('clearing the playpen', () => {
 
   it('is actually called by the upload, not merely defined', () => {
     // The whole defect was a function nobody called - the line in the handler
-    // said "nothing needed for web".
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src/handlers/file/file.handler.ts'), 'utf8');
-    expect(src).toContain('cleanItUp(getPlaypenDir(');
-    expect(src).not.toContain('cleanItUp() — nothing needed for web');
+    // said "nothing needed for web". Driven through `displayUploadInterface`,
+    // the function the U command runs, on a temp board whose Node1/Playpen
+    // holds a dead upload's leftovers: once the caller is at "FileName 1:",
+    // the playpen is empty.
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playpen-upload-'));
+    const areaDir = path.join(dataDir, 'Conf1', 'Files');
+    fs.mkdirSync(areaDir, { recursive: true });
+    const playpen = getPlaypenDir(1, dataDir);
+    fs.mkdirSync(playpen, { recursive: true });
+    fs.writeFileSync(path.join(playpen, 'DEC-SCP.LHA'), 'stale bytes');
+
+    const original = config.get.bind(config);
+    const spy = jest
+      .spyOn(config, 'get')
+      .mockImplementation((key: string) => (key === 'dataDir' ? dataDir : original(key as never)));
+    setFileAreas([{ id: 1, conferenceId: 1, dirNumber: 1, name: 'Conf1 - Dir 1', dlPath: areaDir, ulPath: areaDir }]);
+    const socket: any = { id: 'playpen-upload', emit: () => true, on: () => undefined };
+    const session: any = {
+      user: { id: 1, username: 'tester', slotNumber: 1 },
+      currentConf: 1,
+      nodeId: 1,
+      subState: LoggedOnSubState.DISPLAY_MENU,
+    };
+    try {
+      displayUploadInterface(socket, session, '');
+      flushOutput(socket);
+
+      expect(session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+      expect(fs.readdirSync(playpen)).toEqual([]);
+    } finally {
+      spy.mockRestore();
+      setFileAreas([]);
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

@@ -76,29 +76,9 @@ describe('updateNdirsIfNeeded', () => {
   });
 });
 
-describe('upload always targets DIR1', () => {
-  test('uploadDirNum is hardcoded to 1 on the upload path', () => {
-    // The filing step moved to services/upload-filing.service.ts on
-    // 2026-09-07 so FTP and the menu file an upload the same way. Both files
-    // are read: the invariant belongs to the upload PATH, and a pin that
-    // names one file stops checking anything the day the code moves.
-    const src = [
-      path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-      path.join(__dirname, '..', 'src', 'services', 'upload-filing.service.ts'),
-    ]
-      .map((file) => fs.readFileSync(file, 'utf8'))
-      .join('\n');
-    // Must use the literal constant 1, not a dynamic getDirFiles/getMaxDirs count
-    expect(src).toMatch(/const uploadDirNum = 1/);
-    expect(src).not.toMatch(/getMaxDirs/);
-  });
-
-  test('file-socket-handlers does not import updateNdirsIfNeeded', () => {
-    // NDIRS is sysop config; uploads must not auto-increment it
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-      'utf8'
-    );
-    expect(src).not.toMatch(/updateNdirsIfNeeded/);
-  });
-});
+// The upload-path half of this regression - an upload files into DIR1 and
+// never touches NDIRS - is driven at runtime through `processBatchFile` in
+// tests/upload-to-dir1-regression.test.ts (a conference with DIR1..DIR3 and
+// NDIRS=3; the entry lands in DIR1, DIR2/DIR3/NDIRS are unchanged). The
+// source-text pins that stood here checked a variable's spelling and an
+// import's absence in two named files; that runtime test covers both.

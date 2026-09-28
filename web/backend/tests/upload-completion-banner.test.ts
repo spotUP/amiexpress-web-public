@@ -9,142 +9,232 @@
  * pipeline (services/post-upload.service.ts) — the shared post-receive
  * code that web (handleUploadBatchComplete), telnet, and SSH all call.
  *
- * Pinning shape catches regressions where someone removes the banner,
- * drops the stats line, or skips the time-bonus credit emit (which
- * silently denies users the time award). Lives in the shared service
- * so a single break here surfaces on every transport.
+ * These catch regressions where someone removes the banner, drops the
+ * stats line, or skips the time-bonus credit (which silently denies users
+ * the time award). The first block drives the real `runPostUpload` with its
+ * loggers stubbed. The second drives `handleUploadBatchComplete` and a whole
+ * two-file RZ batch - `handleZmodemUploadCommand` with a fake lrzsz manager
+ * whose onComplete reports two FILE_ID.DIZ archives in the playpen - on a
+ * temp board, with the upload-into-pool mock set for the catalog. Both files
+ * must be filed, and the banner and stats must appear exactly once: a path
+ * that skipped the shared pipeline, or re-implemented it inline, shows up as
+ * zero or two.
  */
+process.env.SKIP_DB_INIT = '1';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import AdmZip = require('adm-zip');
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+jest.mock('../src/index', () => {
+  const states = require('../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
+const createdEntries: any[] = [];
+const mockDb = {
+  query: jest.fn(async () => ({ rows: [] })),
+  createFileEntry: jest.fn(async (entry: any) => { createdEntries.push(entry); return createdEntries.length; }),
+  recordLocation: jest.fn(),
+  run: jest.fn(async () => undefined),
+  getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: false }) }),
+  getConferences: jest.fn(async () => []),
+  updateConference: jest.fn(async () => undefined),
+  getConferenceById: jest.fn(async () => ({ id: 1, name: 'Conf1' })),
+  getWebhooksByTrigger: jest.fn(async () => []),
+  getFileAreas: jest.fn(async () => [{
+    id: 1, conferenceId: 1, dirNumber: 1, name: 'Conf1 - Dir 1', dlPath: 'BBS:Conf1/Files/', ulPath: 'BBS:Conf1/Files/',
+  }]),
+};
+(globalThis as any).__bannerMockDb = mockDb;
+jest.mock('../src/database', () => ({
+  db: new Proxy({} as any, { get: (_t, prop) => (globalThis as any).__bannerMockDb[prop] }),
+}));
+const callersLog = jest.fn(async (..._args: unknown[]) => undefined);
+jest.mock('../src/server/database-helpers', () => ({ callersLog: (...a: unknown[]) => callersLog(...a) }));
+jest.mock('../src/utils/download-logging.util', () => ({
+  writeUDSessionHeader: jest.fn(async () => undefined),
+  writeToCallersLog: jest.fn(async () => undefined),
+  writeToUDLog: jest.fn(async () => undefined),
+}));
+const doUploadNotify = jest.fn(async () => undefined);
+jest.mock('../src/utils/upload-notify.util', () => ({
+  ...jest.requireActual('../src/utils/upload-notify.util'),
+  doUploadNotify: () => doUploadNotify(),
+}));
+jest.mock('../src/utils/clean-playpen.util', () => ({ cleanPlayPen: jest.fn(async () => undefined) }));
+const handleGoodbyeCommand = jest.fn();
+jest.mock('../src/handlers/commands/system-commands.handler', () => ({
+  handleGoodbyeCommand: (...a: unknown[]) => handleGoodbyeCommand(...a),
+}));
+jest.mock('../src/services/resume-stuff.service', () => ({
+  startResumeStuff: (_s: unknown, _sess: unknown, _p: unknown, _c: unknown, done: (r: unknown) => void) => done({ resumed: 0 }),
+}));
+const lrzszManagers: any[] = [];
+jest.mock('../src/services/lrzsz-transfer.service', () => ({
+  isLrzszAvailable: () => true,
+  LrzszTransferManager: class {
+    opts: any;
+    constructor(opts: any) { this.opts = opts; lrzszManagers.push(this); }
+    start() { /* no rz */ }
+    handleInput() { /* no rz */ }
+  },
+}));
+
+import { runPostUpload } from '../src/services/post-upload.service';
+import { handleUploadBatchComplete } from '../src/server/file-socket-handlers';
+import {
+  handleZmodemUploadCommand,
+  setTransferMiscCommandsDependencies,
+} from '../src/handlers/commands/transfer-misc-commands.handler';
+import { BBSPaths } from '../src/utils/bbs-paths.util';
+import { LoggedOnSubState } from '../src/constants/bbs-states';
+import { config } from '../src/config';
+
+function aCaller(over: Record<string, unknown> = {}) {
+  const lines: string[] = [];
+  const socket: any = {
+    id: `banner-${Math.random().toString(36).slice(2)}`,
+    emit: (event: string, payload: unknown) => { if (event === 'ansi-output') lines.push(String(payload)); return true; },
+    on: () => undefined,
+    once: () => undefined,
+  };
+  const session: any = {
+    nodeId: 1,
+    currentConf: 1,
+    user: { id: 'u1', username: 'spot', name: 'spot', location: 'Uprough', securityFlags: 'T'.repeat(100), secLibrary: 0 },
+    ...over,
+  };
+  return { socket, session, said: () => lines.join('') };
+}
+const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  createdEntries.length = 0;
+  lrzszManagers.length = 0;
+});
+afterEach(() => jest.restoreAllMocks());
 
 describe('Post-upload banner + stats + time bonus (E-15, express.e:19053/19072/19127)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'services', 'post-upload.service.ts'),
-    'utf8'
-  );
+  const NOW = 1_800_000_000_000;
+  function finished(over: Record<string, unknown> = {}) {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW);
+    // 90 seconds, 10240 bytes: 113 cps; peff = 90*3/2 + 60 = 195 s = 3 mins.
+    return { uploadStartTime: NOW - 90_000, uploadedFiles: 2, uploadedBytes: 10240, efficiencyPct: 77, ...over };
+  }
+  const STATS = ' 2 file(s), 10k bytes, 1 minute(s). 30 second(s), 113 cps, 77% efficiency.';
 
-  test('runPostUpload emits "File Uploading Complete..."', () => {
-    expect(src).toMatch(
-      /runPostUpload[\s\S]*?File Uploading Complete\.\.\./
-    );
+  test('emits banner, stats line and time bonus, in that order', async () => {
+    const c = aCaller();
+    await runPostUpload(c.socket, c.session, finished());
+    const out = c.said();
+
+    const complete = out.indexOf('\r\n\r\nFile Uploading Complete...\r\n');
+    const stats = out.indexOf(`${STATS}\r\n`);
+    const bonus = out.indexOf('Time increased by 3 mins.\r\n\r\n');
+    expect(complete).toBeGreaterThan(-1);
+    expect(stats).toBeGreaterThan(complete);
+    expect(bonus).toBeGreaterThan(stats);
   });
 
-  test('emits stats line with file count, kbytes, minutes, seconds, cps, efficiency', () => {
-    // express.e:19072 ' \d file(s), \sk bytes, \d minute(s). \d second(s), \d cps, \d% efficiency.'
-    expect(src).toMatch(/file\(s\),[^"`'\n]*?bytes,[^"`'\n]*?minute\(s\)\.[^"`'\n]*?second\(s\),[^"`'\n]*?cps,[^"`'\n]*?efficiency\./);
+  test('credits (ulTTTM * 3 / 2) + 60 seconds to the session time limit (express.e:19109, 19130)', async () => {
+    const c = aCaller({ timeLimit: 3600 });
+    await runPostUpload(c.socket, c.session, finished());
+    expect(c.session.timeLimit).toBe(3600 + 195);
   });
 
-  test('emits "Time increased by N mins."', () => {
-    expect(src).toMatch(/Time increased by\s*\$\{[^}]+\}\s*mins\./);
+  test('credits nothing, and says 0 mins, when no file arrived', async () => {
+    const c = aCaller({ timeLimit: 3600 });
+    await runPostUpload(c.socket, c.session, finished({ uploadedFiles: 0, uploadedBytes: 0 }));
+    expect(c.session.timeLimit).toBe(3600);
+    expect(c.said()).toContain('Time increased by 0 mins.');
   });
 
-  test('three emits land in order: complete -> stats -> time bonus', () => {
-    // Skip past the JSDoc header so "Time increased by" mentioned in
-    // the function-level documentation doesn't out-position the actual
-    // emit in the function body.
-    const bodyStart = src.indexOf('export async function runPostUpload');
-    expect(bodyStart).toBeGreaterThan(-1);
-    const body = src.slice(bodyStart);
-    const completeIdx = body.indexOf('File Uploading Complete...');
-    const statsIdx = body.search(/file\(s\),[^"`'\n]*?bytes,/);
-    const timeIdx = body.search(/Time increased by/);
-    expect(completeIdx).toBeGreaterThan(-1);
-    expect(statsIdx).toBeGreaterThan(-1);
-    expect(timeIdx).toBeGreaterThan(-1);
-    expect(statsIdx).toBeGreaterThan(completeIdx);
-    expect(timeIdx).toBeGreaterThan(statsIdx);
+  test('callersLog gets the stats line only when a file was received, else "Upload Failed.." (express.e:19094)', async () => {
+    const ok = aCaller();
+    await runPostUpload(ok.socket, ok.session, finished());
+    expect(callersLog).toHaveBeenCalledWith('u1', 'spot', `\t${STATS}`);
+
+    callersLog.mockClear();
+    const none = aCaller();
+    await runPostUpload(none.socket, none.session, finished({ uploadedFiles: 0, uploadedBytes: 0 }));
+    expect(callersLog).toHaveBeenCalledWith('u1', 'spot', '\tUpload Failed..');
   });
 
-  test('cites express.e line numbers (18850/18857/19053/19072/19127)', () => {
-    // Express.e has two upload paths that share these strings; either citation
-    // form proves the dev knew the source location.
-    const cites19053 = /express\.e:19053|express\.e:18850/.test(src);
-    const cites19072 = /express\.e:19072|express\.e:18857/.test(src);
-    const cites19127 = /express\.e:19127/.test(src);
-    expect(cites19053).toBe(true);
-    expect(cites19072).toBe(true);
-    expect(cites19127).toBe(true);
+  test('doUploadNotify fires only when a file was received', async () => {
+    const ok = aCaller();
+    await runPostUpload(ok.socket, ok.session, finished());
+    expect(doUploadNotify).toHaveBeenCalledTimes(1);
+
+    doUploadNotify.mockClear();
+    const none = aCaller();
+    await runPostUpload(none.socket, none.session, finished({ uploadedFiles: 0, uploadedBytes: 0 }));
+    expect(doUploadNotify).not.toHaveBeenCalled();
   });
 
-  test('callersLog fires only when at least one file was received (express.e:19094)', () => {
-    // express.e:19094-19101 — success line on ulFileCount>0, failure line otherwise.
-    expect(src).toMatch(/uploadedFiles\s*>\s*0[\s\S]*?Upload Failed/);
-  });
-
-  test('doUploadNotify gated on uploadedFiles > 0', () => {
-    expect(src).toMatch(/uploadedFiles\s*>\s*0[\s\S]*?doUploadNotify/);
-  });
-
-  test('time credit formula is (ulTTTM * 3 / 2) + 60 seconds (express.e:19109)', () => {
-    // peff = (ulTTTM * 3 / 2) + 60 when files > 0 and time > 0, else 0.
-    expect(src).toMatch(/Math\.floor\(\(ulTTTM\s*\*\s*3\)\s*\/\s*2\)\s*\+\s*60/);
-  });
-
-  test('timeLimit += peff applied to session (express.e:19130)', () => {
-    expect(src).toMatch(/timeLimit\s*\+=\s*peff/);
-  });
-
-  test('goodbye-after-transfer branches to handleGoodbyeCommand (express.e:25657)', () => {
-    expect(src).toMatch(/goodbyeAfter[\s\S]*?handleGoodbyeCommand/);
+  test('goodbye-after-transfer hands over to handleGoodbyeCommand (express.e:25657)', async () => {
+    const c = aCaller();
+    await runPostUpload(c.socket, c.session, finished({ goodbyeAfter: true }));
+    expect(handleGoodbyeCommand).toHaveBeenCalledWith(c.socket, c.session, 'Y');
+    expect(c.said()).not.toContain('Press any key to continue');
   });
 });
 
 describe('Web handleUploadBatchComplete delegates to runPostUpload (no duplication)', () => {
-  const handlersSrc = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-    'utf8'
-  );
+  test('prints the banner, stats and bonus exactly once, and clears the upload context', async () => {
+    const c = aCaller({ tempData: { uploadStartTime: Date.now() - 5000, uploadedFiles: 1, uploadedBytes: 2048 } });
 
-  test('handleUploadBatchComplete calls runPostUpload (single source of truth)', () => {
-    expect(handlersSrc).toMatch(/handleUploadBatchComplete[\s\S]*?runPostUpload/);
-  });
+    await handleUploadBatchComplete(c.socket, c.session);
 
-  test('handleUploadBatchComplete does NOT contain the inline banner string anymore', () => {
-    // If this line ever reappears here it means someone re-duplicated the
-    // post-upload stats logic and the shared service is no longer single
-    // source of truth. Move it back into runPostUpload.
-    const handler = handlersSrc.slice(
-      handlersSrc.indexOf('export async function handleUploadBatchComplete'),
-      handlersSrc.indexOf('export async function handleUploadBatchComplete') + 2000
-    );
-    expect(handler).not.toMatch(/File Uploading Complete/);
+    expect(count(c.said(), 'File Uploading Complete...')).toBe(1);
+    expect(count(c.said(), ' 1 file(s), 2k bytes,')).toBe(1);
+    expect(count(c.said(), 'Time increased by')).toBe(1);
+    expect(c.session.tempData).toBeUndefined();
   });
 });
 
 describe('Telnet/SSH lrzsz onComplete routes through web pipeline (no duplication)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'handlers', 'commands', 'transfer-misc-commands.handler.ts'),
-    'utf8'
-  );
-
-  test('lrzsz onComplete calls processBatchFile per received file', () => {
-    expect(src).toMatch(/onComplete[\s\S]*?processBatchFile/);
+  let board: string;
+  let restoreConfig: () => void;
+  beforeEach(() => {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-banner-'));
+    fs.mkdirSync(path.join(board, 'Conf1', 'Files'), { recursive: true });
+    const original = config.get.bind(config);
+    const spy = jest.spyOn(config, 'get').mockImplementation((key: string) => (key === 'dataDir' ? board : original(key as never)));
+    restoreConfig = () => spy.mockRestore();
+    setTransferMiscCommandsDependencies({ setEnvStat: jest.fn() } as any);
+  });
+  afterEach(() => {
+    restoreConfig();
+    fs.rmSync(board, { recursive: true, force: true });
   });
 
-  test('lrzsz onComplete calls handleUploadBatchComplete (or relies on its auto-call)', () => {
-    expect(src).toMatch(/handleUploadBatchComplete/);
-  });
+  function dizZip(dir: string, name: string, diz: string): string {
+    const zip = new AdmZip();
+    zip.addFile('FILE_ID.DIZ', Buffer.from(diz));
+    zip.addFile('payload.bin', Buffer.from(`payload of ${name}`));
+    const full = path.join(dir, name);
+    zip.writeZip(full);
+    return full;
+  }
 
-  test('does not re-implement the stats line inline (would double-duplicate)', () => {
-    // The earlier session-stats version of this onComplete inlined the
-    // "X file(s), Yk bytes" formatting. The unified version delegates;
-    // if this string ever reappears here, someone re-forked the path.
-    expect(src).not.toMatch(/file\(s\),[^"`'\n]*?bytes,[^"`'\n]*?minute\(s\)\.[^"`'\n]*?second\(s\),[^"`'\n]*?cps,[^"`'\n]*?efficiency\./);
-  });
+  test('a two-file RZ batch files both, then prints one banner and one stats line for the pair', async () => {
+    const c = aCaller({ connectionType: 'telnet', bbsPath: board, transferRawSend: jest.fn(), transferRawSendUnescaped: jest.fn() });
+    await handleZmodemUploadCommand(c.socket, c.session);
+    expect(lrzszManagers).toHaveLength(1);
 
-  test('queues files 2..N into pendingZmodemFiles for the state-machine walker', () => {
-    // Multi-file ZMODEM batches: file 1 enters the DIZ/description
-    // pipeline immediately; files 2..N are queued in pendingZmodemFiles
-    // and walked one at a time after each description completes (state
-    // machine in command.handler.ts advances on Enter-Enter, dispatch
-    // on UPLOAD_DESC_INPUT done state pops the next entry and re-invokes
-    // handleDizExtractionAndDescription).
-    //
-    // If this queue isn't populated, only the first file gets the full
-    // post-upload pipeline (DIZ → description → DIRn → FILES.BBS); the
-    // rest sit in playpen forever (the symptom we shipped a fix for in
-    // a0196a5e2 for the U-command path). Pin the construction shape.
-    expect(src).toMatch(/pendingZmodemFiles\s*:\s*received\.slice\(\s*1\s*\)\.map/);
+    const playpen = new BBSPaths(board).node(1).playpen();
+    const received = [dizZip(playpen, 'ONE.ZIP', 'First release'), dizZip(playpen, 'TWO.ZIP', 'Second release')];
+    await lrzszManagers[0].opts.onComplete(true, { received, skipped: [] });
+
+    // Files 2..N were queued and walked: both reached the catalog.
+    expect(createdEntries.map((e) => e.filename)).toEqual(['ONE.ZIP', 'TWO.ZIP']);
+    expect(count(c.said(), 'File Uploading Complete...')).toBe(1);
+    expect(count(c.said(), ' 2 file(s),')).toBe(1);
+    expect(count(c.said(), 'file(s),')).toBe(1);
+    expect(c.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });

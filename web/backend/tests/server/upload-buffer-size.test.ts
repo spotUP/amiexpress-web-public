@@ -24,72 +24,59 @@
  *   - maxFileSize (HTTP upload cap) can comfortably exceed it because
  *     uploads no longer go through the socket.
  *   - The legacy regression case (1MB cap, JSON-array uploads) is gone.
+ *
+ * The buffer size is read off the REAL socket.io server `src/index.ts`
+ * builds (importing index.ts starts nothing under jest since d9f9bfe72),
+ * maxFileSize off the real config, and the backend half of the HTTP path is
+ * driven: `registerFileHandlers` on a fake socket, a `file-upload-ready`
+ * event for a file multer "wrote", and the door-archive callback that
+ * processFileUpload fires with the copied file. The frontend half stays a
+ * source check - see the comment on that test.
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-const INDEX_TS = fs.readFileSync(
-  path.resolve(__dirname, '../../src/index.ts'),
-  'utf8'
-);
-const CONFIG_TS = fs.readFileSync(
-  path.resolve(__dirname, '../../src/config.ts'),
-  'utf8'
-);
+import { config } from '../../src/config';
+import { registerFileHandlers } from '../../src/server/file-socket-handlers';
+import { setSession, deleteSession } from '../../src/server/session-manager';
 
-// Pull the maxHttpBufferSize literal from index.ts. Accept any of:
-//   maxHttpBufferSize: 64 * 1024 * 1024
-//   maxHttpBufferSize: 64e6
-//   maxHttpBufferSize: 67108864
-function extractMaxHttpBufferSize(src: string): number | null {
-  const match = src.match(/maxHttpBufferSize:\s*([^,\n]+)/);
-  if (!match) return null;
-  // eval-the-expression in a controlled way — only allow numeric literals,
-  // arithmetic operators, and exponent notation. No identifiers.
-  const expr = match[1].trim().replace(/\/\/.*$/, '').trim();
-  if (!/^[\d_.\s+\-*/eE()]+$/.test(expr)) return null;
-  // eslint-disable-next-line no-new-func
-  const value = Function(`"use strict"; return (${expr});`)();
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function extractMaxFileSize(src: string): number | null {
-  const match = src.match(/maxFileSize:\s*(\d+(?:_\d+)*)/);
-  if (!match) return null;
-  return parseInt(match[1].replace(/_/g, ''), 10);
+function socketIoBufferSize(): number {
+  require('../../src/index');
+  const io = (global as any).io;
+  return io.engine.opts.maxHttpBufferSize;
 }
 
 describe('socket.io upload buffer sizing (regression for #11)', () => {
-  test('maxHttpBufferSize is set in src/index.ts', () => {
-    const value = extractMaxHttpBufferSize(INDEX_TS);
-    expect(value).not.toBeNull();
-    expect(value!).toBeGreaterThan(0);
+  test('the board\'s socket.io server has a maxHttpBufferSize', () => {
+    const value = socketIoBufferSize();
+    expect(typeof value).toBe('number');
+    expect(value).toBeGreaterThan(0);
   });
 
-  test('maxFileSize is set in src/config.ts', () => {
-    const value = extractMaxFileSize(CONFIG_TS);
-    expect(value).not.toBeNull();
-    expect(value!).toBeGreaterThan(0);
+  test('maxFileSize is set in the config', () => {
+    const value = config.get('maxFileSize');
+    expect(typeof value).toBe('number');
+    expect(value).toBeGreaterThan(0);
   });
 
   test('maxHttpBufferSize is at least 1MB (covers ANSI screens, AREXX I/O, etc.)', () => {
-    const buffer = extractMaxHttpBufferSize(INDEX_TS)!;
-    expect(buffer).toBeGreaterThanOrEqual(1 * 1024 * 1024);
+    expect(socketIoBufferSize()).toBeGreaterThanOrEqual(1 * 1024 * 1024);
   });
 
   test('maxHttpBufferSize is at most 16MB — file bodies must NOT go through the socket', () => {
-    const buffer = extractMaxHttpBufferSize(INDEX_TS)!;
     // The migration moved file uploads to HTTP /api/upload (multer). The
     // websocket should never carry a file body. If maxHttpBufferSize creeps
     // above 16MB, someone may have re-introduced a binary-on-socket pattern
     // that #11 was meant to permanently eliminate.
-    expect(buffer).toBeLessThanOrEqual(16 * 1024 * 1024);
+    expect(socketIoBufferSize()).toBeLessThanOrEqual(16 * 1024 * 1024);
   });
 
   test('frontend BBSTerminal emits file-upload-ready (multipart HTTP path), not file-upload (JSON array)', () => {
-    const fs = require('fs');
-    const path = require('path');
+    // REASONABLE source check: BBSTerminal.tsx is a React component in
+    // packages/terminal, outside this jest project; the backend suite has no
+    // way to run it, and its emit is only observable in a browser.
     const bbs = fs.readFileSync(
       path.resolve(__dirname, '../../../../packages/terminal/src/components/BBSTerminal.tsx'),
       'utf8'
@@ -106,21 +93,41 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
     expect(bbs).toMatch(/fetch\(\s*[^,)]*uploadUrl[\s\S]*?method:\s*['"]POST['"]/);
   });
 
-  test('backend listens for file-upload-ready and feeds it to processFileUpload', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const handlers = fs.readFileSync(
-      path.resolve(__dirname, '../../src/server/file-socket-handlers.ts'),
-      'utf8'
-    );
+  test('backend listens for file-upload-ready and feeds the multer path to processFileUpload', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-ready-'));
+    const multerFile = path.join(dataDir, 'multer-upload.tmp');
+    fs.writeFileSync(multerFile, 'archive bytes');
+    const original = config.get.bind(config);
+    const spy = jest
+      .spyOn(config, 'get')
+      .mockImplementation((key: string) => (key === 'dataDir' ? dataDir : original(key as never)));
 
-    expect(handlers).toMatch(/socket\.on\(\s*['"]file-upload-ready['"]/);
-    // The handler must invoke processFileUpload with the multer-supplied path.
-    const block = handlers.match(
-      /socket\.on\(\s*['"]file-upload-ready['"][\s\S]*?\n\s{2}\}\);?/
-    );
-    expect(block).not.toBeNull();
-    expect(block![0]).toMatch(/processFileUpload\s*\(/);
-    expect(block![0]).toMatch(/path:\s*data\.path/);
+    const handlers = new Map<string, (data: any) => Promise<void>>();
+    const socket: any = {
+      id: 'upload-ready-socket',
+      emit: () => true,
+      on: (event: string, fn: (data: any) => Promise<void>) => { handlers.set(event, fn); },
+    };
+    const delivered: Array<{ path: string; filename: string }> = [];
+    const session: any = {
+      nodeId: 97,
+      pendingDoorUpload: true,
+      pendingDoorUploadCallback: (r: { path: string; filename: string }) => delivered.push(r),
+    };
+    setSession(socket.id, session);
+    try {
+      registerFileHandlers(socket);
+      const ready = handlers.get('file-upload-ready');
+      expect(ready).toBeDefined();
+
+      await ready!({ filename: 'DOOR.LHA', size: 13, path: multerFile });
+
+      expect(delivered).toEqual([{ path: path.join(dataDir, 'Doors', 'archives', 'DOOR.LHA'), filename: 'DOOR.LHA' }]);
+      expect(fs.readFileSync(delivered[0].path, 'utf8')).toBe('archive bytes');
+    } finally {
+      deleteSession(socket.id);
+      spy.mockRestore();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

@@ -10,47 +10,110 @@
  * upload path.  DIR files are sysop-configured file areas (not dynamic
  * buckets); the typical value is 1 (matches reference-board BBS reference).
  *
- * These tests verify both the static code shape and the runtime behaviour of
- * the utilities involved so the regression can never silently reappear.
+ * Section 1 drives the real upload path - `processBatchFile`, the function
+ * the ZMODEM/web pipeline calls once the bytes are in the playpen, which
+ * files through services/upload-filing.service.ts - on a temp board whose
+ * conference already has DIR1..DIR3 and NDIRS=3 (the shape the old
+ * count-derived number turned into DIR4, DIR5, ...). The entry must land in
+ * DIR1, the other DIR files and NDIRS must be untouched. The mock set is the
+ * one tests/storage/upload-into-pool.test.ts uses. The later sections test
+ * the utilities involved.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import AdmZip = require('adm-zip');
 
-// ─── 1. Static shape of file-socket-handlers.ts ──────────────────────────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-describe('upload handler: static code invariants', () => {
-  /**
-   * The filing step - the DIR entry included - moved out of
-   * `file-socket-handlers.ts` into `services/upload-filing.service.ts` on
-   * 2026-09-07, so that an upload over FTP is filed by the same code as one
-   * at the menu. Both files are read here: the invariant is about the UPLOAD
-   * PATH, wherever it lives, and a pin that names one file silently stops
-   * checking anything the day the code moves.
-   */
-  const src = [
-    path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-    path.join(__dirname, '..', 'src', 'services', 'upload-filing.service.ts'),
-  ]
-    .map((file) => fs.readFileSync(file, 'utf8'))
-    .join('\n');
+// The upload-into-pool mock set: a catalog stub, no callers log, no
+// post-upload banner. Everything on the filing path itself is real.
+const mockDb = {
+  query: jest.fn(async () => ({ rows: [] })),
+  createFileEntry: jest.fn(async () => 1),
+  recordLocation: jest.fn(),
+  run: jest.fn(async () => undefined),
+  getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: false }) }),
+  getConferences: jest.fn(async () => []),
+  updateConference: jest.fn(async () => undefined),
+  getConferenceById: jest.fn(async () => ({ id: 1, name: 'Conf1' })),
+  getWebhooksByTrigger: jest.fn(async () => []),
+};
+(globalThis as any).__dir1MockDb = mockDb;
+jest.mock('../src/database', () => ({
+  db: new Proxy({} as any, { get: (_target, prop) => (globalThis as any).__dir1MockDb[prop] }),
+}));
+jest.mock('../src/server/database-helpers', () => ({ callersLog: jest.fn(async () => undefined) }));
+jest.mock('../src/services/post-upload.service', () => ({ runPostUpload: jest.fn(async () => undefined) }));
 
-  test('uploadDirNum is the literal 1, not a dynamic expression', () => {
-    expect(src).toMatch(/const uploadDirNum = 1;/);
+import { processBatchFile } from '../src/server/file-socket-handlers';
+import { setStorageContext } from '../src/storage/storage-context';
+import { config } from '../src/config';
+
+// ─── 1. The upload path files into DIR1 ──────────────────────────────────────
+
+describe('an upload through processBatchFile', () => {
+  let dataDir: string;
+  let restoreConfig: () => void;
+
+  beforeEach(() => {
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-dir1-'));
+    const original = config.get.bind(config);
+    const spy = jest
+      .spyOn(config, 'get')
+      .mockImplementation((key: string) => (key === 'dataDir' ? dataDir : original(key as never)));
+    restoreConfig = () => spy.mockRestore();
+    setStorageContext(null);
   });
 
-  test('getMaxDirs is not imported or called', () => {
-    expect(src).not.toMatch(/getMaxDirs/);
+  afterEach(() => {
+    restoreConfig();
+    fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  test('updateNdirsIfNeeded is not called from upload path', () => {
-    // NDIRS is a sysop-configured value; uploads must not auto-increment it.
-    expect(src).not.toMatch(/updateNdirsIfNeeded/);
-  });
+  test('appends to DIR1 on a conference with three DIRs, and leaves DIR2, DIR3 and NDIRS alone', async () => {
+    const confDir = path.join(dataDir, 'Conf1');
+    fs.mkdirSync(path.join(confDir, 'Files'), { recursive: true });
+    for (const n of [1, 2, 3]) fs.writeFileSync(path.join(confDir, `DIR${n}`), '');
+    fs.writeFileSync(path.join(confDir, 'NDIRS'), '3');
 
-  test('writeUploadToDirFile is still called (upload path intact)', () => {
-    expect(src).toMatch(/await writeUploadToDirFile\(/);
+    const playpen = path.join(dataDir, 'Node1', 'Playpen');
+    fs.mkdirSync(playpen, { recursive: true });
+    const zip = new AdmZip();
+    zip.addFile('FILE_ID.DIZ', Buffer.from('A release for DIR1'));
+    zip.addFile('payload.bin', Buffer.from('payload'));
+    const playpenFile = path.join(playpen, 'DEMO.ZIP');
+    zip.writeZip(playpenFile);
+
+    const fileArea = {
+      id: 1, conferenceId: 1, dirNumber: 1, name: 'Conf1 - Dir 1',
+      dlPath: 'BBS:Conf1/Files/', ulPath: 'BBS:Conf1/Files/',
+    };
+    const session: any = {
+      user: { id: 1, username: 'tester', securityFlags: 'T'.repeat(100), secLibrary: 0 },
+      currentConf: 1,
+      nodeId: 1,
+      tempData: {
+        uploadMode: true, fileArea, uploadSessionId: 'sess-1',
+        uploadBatch: [{ filename: 'DEMO.ZIP', description: '', isPrivate: false }],
+        uploadCount: 1, currentUploadIndex: 0, uploadStartTime: Date.now(),
+        webUploadMode: true, pendingZmodemFiles: [],
+      },
+    };
+    const socket: any = { id: 'socket-dir1', emit: () => true };
+
+    await processBatchFile(
+      socket, session,
+      { filename: 'DEMO.ZIP', originalname: 'DEMO.ZIP', size: fs.statSync(playpenFile).size, path: playpenFile },
+      config
+    );
+
+    expect(fs.readFileSync(path.join(confDir, 'DIR1'), 'latin1')).toContain('DEMO.ZIP');
+    expect(fs.readFileSync(path.join(confDir, 'DIR2'), 'latin1')).toBe('');
+    expect(fs.readFileSync(path.join(confDir, 'DIR3'), 'latin1')).toBe('');
+    expect(fs.readdirSync(confDir).filter((e) => /^DIR\d+$/i.test(e)).sort()).toEqual(['DIR1', 'DIR2', 'DIR3']);
+    expect(fs.readFileSync(path.join(confDir, 'NDIRS'), 'utf8')).toBe('3');
   });
 });
 

@@ -6,10 +6,11 @@
  *
  * Behavioral: arm logs the old name, completion logs old -> new, and the
  * rename still lands on disk. Gate: needsRename fires on >12 chars and on
- * express.e:19223's forbidden set, and stays quiet otherwise. Shape: the
+ * express.e:19223's forbidden set, and stays quiet otherwise. And the
  * null-context early return in handleDizExtractionAndDescription warns
  * instead of skipping silently (it sits above the rename block, so a
- * missing context used to skip the whole prompt with zero output).
+ * missing context used to skip the whole prompt with zero output) - driven
+ * through the real function with a session that has no upload context.
  */
 
 import * as fs from 'fs';
@@ -17,6 +18,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { needsRename, startRenamePrompt } from '../src/services/rename-prompt.service';
 import { LoggedOnSubState } from '../src/constants/bbs-states';
+import { handleDizExtractionAndDescription } from '../src/server/file-socket-handlers';
+import { config } from '../src/config';
 
 function fakeEmitter(captured: string[]) {
   return { emit: (ev: string, ...args: unknown[]) => { captured.push(`${ev}:${args.join('')}`); } };
@@ -77,14 +80,21 @@ describe('T17 rename prompt observability (express.e:19192-19256)', () => {
     }
   });
 
-  test('null-context skip warns instead of vanishing (shape)', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-      'utf8'
+  test('null-context skip warns instead of vanishing', async () => {
+    const socket: any = { id: 't17-no-context', emit: jest.fn() };
+    const session: any = { nodeId: 3, user: { username: 'probe' } };
+
+    const handled = await handleDizExtractionAndDescription(
+      socket, session,
+      { filename: 'AVeryLongName.LHA', originalname: 'AVeryLongName.LHA', size: 1 },
+      config
     );
-    const bodyStart = src.indexOf('export async function handleDizExtractionAndDescription');
-    expect(bodyStart).toBeGreaterThan(-1);
-    const body = src.slice(bodyStart, bodyStart + 2000);
-    expect(body).toMatch(/getUploadContext\(session, socket\)[\s\S]{0,800}console\.warn/);
+
+    expect(handled).toBe(false);
+    const warned = warnSpy.mock.calls.map((c) => String(c[0]));
+    expect(warned.some((l) => l.includes('no upload context') && l.includes('AVeryLongName.LHA'))).toBe(true);
+    // Nothing is armed and nothing reaches the caller.
+    expect(session.subState).toBeUndefined();
+    expect(socket.emit).not.toHaveBeenCalled();
   });
 });

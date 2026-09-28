@@ -121,11 +121,23 @@ describe('the download screen (express.e:19966-19971)', () => {
 
     expect(shown).toBe(true);
     expect(painted(emits)).toContain('THE DOWNLOAD SCREEN');
+  });
 
-    const source = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'handlers', 'file', 'download.handler.ts'), 'utf8'
-    );
-    expect(source).not.toMatch(/displayScreen\([^)]*'DOWNLOAD'/);
+  it('is shown by the D command itself', async () => {
+    // The reachability half: the real `D` handler has to ASK for the routed
+    // name. It pauses after the screen (express.e doPause blocks for a key),
+    // so the command is left waiting at that pause and the screen is read
+    // off the wire before it.
+    write('Conf1/DownloadMsg.txt', 'THE DOWNLOAD SCREEN\r\n');
+    const { DownloadHandler } = require('../../src/handlers/file/download.handler');
+    const emits: Array<{ event: string; data: any }> = [];
+
+    void DownloadHandler.handleDownloadCommand(socket(emits), session(), '');
+    for (let i = 0; i < 40 && !painted(emits).includes('THE DOWNLOAD SCREEN'); i++) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+
+    expect(painted(emits)).toContain('THE DOWNLOAD SCREEN');
   });
 });
 
