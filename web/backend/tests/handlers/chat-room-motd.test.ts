@@ -8,6 +8,7 @@ jest.mock('../../src/services/UserDatabaseManager', () => ({
 }));
 
 import { handleSetRoomMotd } from '../../src/handlers/chat/room-motd.handler';
+import { roomMember, clearRoomMembers } from '../helpers/room-members';
 
 async function waitForTestDb(): Promise<any> {
   let attempts = 0;
@@ -36,6 +37,8 @@ describe('room:motd handler', () => {
     rawDb.prepare(`INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator) VALUES (?, ?, 'O', 'sock', 1)`).run(roomId, owner);
   }, 30000);
 
+  afterEach(() => clearRoomMembers());
+
   afterAll(() => {
     try {
       rawDb.prepare('DELETE FROM chat_room_members WHERE room_id = ?').run(roomId);
@@ -48,8 +51,10 @@ describe('room:motd handler', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: (ev: string, d: any) => emits.push({ ev, d }) };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    const member = roomMember(901, { user: { id: owner, username: 'O' }, currentRoomId: roomId });
+    const session: any = member.session;
     await handleSetRoomMotd({ io, socket, session, data: { motd: 'Hello' } });
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
     expect(ioEmits.some(e => e.ev === 'room:motd' && e.d.motd === 'Hello')).toBe(true);
   });
 
@@ -75,9 +80,11 @@ describe('room:motd handler', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: () => {} };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    const member = roomMember(902, { user: { id: owner, username: 'O' }, currentRoomId: roomId });
+    const session: any = member.session;
     const longMotd = 'a'.repeat(600);
     await handleSetRoomMotd({ io, socket, session, data: { motd: longMotd } });
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
     const broadcast = ioEmits.find(e => e.ev === 'room:motd');
     expect(broadcast?.d.motd?.length).toBe(500);
     // Persisted row also reflects truncation
@@ -91,8 +98,10 @@ describe('room:motd handler', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: () => {} };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: owner, username: 'O' }, currentRoomId: roomId };
+    const member = roomMember(903, { user: { id: owner, username: 'O' }, currentRoomId: roomId });
+    const session: any = member.session;
     await handleSetRoomMotd({ io, socket, session, data: { motd: null } });
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
     const broadcast = ioEmits.find(e => e.ev === 'room:motd');
     expect(broadcast?.d.motd).toBeNull();
     const row = rawDb.prepare('SELECT motd FROM chat_rooms WHERE room_id = ?').get(roomId) as any;
@@ -127,9 +136,12 @@ describe('room:motd handler', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: () => {} };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: ownerId, username: 'OwnerNoAc' }, currentRoomId: ownedRoomId };
+    const member = roomMember(904, { user: { id: ownerId, username: 'OwnerNoAc' }, currentRoomId: ownedRoomId });
+    const session: any = member.session;
 
     await handleSetRoomMotd({ io, socket, session, data: { motd: 'owner-set' } });
+
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
 
     expect(ioEmits.some(e => e.ev === 'room:motd' && e.d.motd === 'owner-set')).toBe(true);
 

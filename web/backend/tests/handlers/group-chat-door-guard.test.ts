@@ -27,31 +27,10 @@ const handler = readFileSync(
   'utf8'
 );
 
-describe('the door guard', () => {
-  /** The function's CODE, with comments stripped - the fix is described in
-   *  a comment that names the old call, and a comment is not behaviour. */
-  const broadcast = handler
-    .slice(
-      handler.indexOf('function broadcastAnsiToRoom'),
-      handler.indexOf('function broadcastRoomSystem')
-    )
-    .split('\n')
-    .filter(line => !line.trim().startsWith('//'))
-    .join('\n');
-
-  it('looks the session up by socket, not in the node-keyed map', () => {
-    expect(broadcast).toMatch(/getSessionBySocketId\(socketId\)/);
-    expect(broadcast).not.toMatch(/sessions\.get\(socketId\)/);
-  });
-
-  it('skips members whose door owns the terminal', () => {
-    expect(broadcast).toMatch(/doorOwnsTerminal\(memberSession\)\) continue/);
-  });
-
-  it('still excludes the sender', () => {
-    expect(broadcast).toMatch(/excludeSocketId && socketId === excludeSocketId\) continue/);
-  });
-});
+// The broadcast's own behaviour - a door member skipped, the sender left out,
+// every transport reached - is driven in tests/chat/group-chat-door-terminal.test.ts
+// since room members became sessions (src/server/session-rooms.ts, 2026-09-28).
+// The source pins that stood here named socket.io lookups that no longer exist.
 
 describe('what counts as a door owning the terminal', () => {
   // Behaviour, not source text: the predicate moved to

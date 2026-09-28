@@ -7,6 +7,7 @@ jest.mock('../../src/services/UserDatabaseManager', () => ({
   }
 }));
 import { parseModeString, handleRoomMode } from '../../src/handlers/chat/mode.handler';
+import { roomMember, clearRoomMembers } from '../helpers/room-members';
 import { handleRoomMessage, setGroupChatDependencies } from '../../src/handlers/chat/group-chat.handler';
 
 async function waitForTestDb(): Promise<any> {
@@ -65,6 +66,8 @@ describe('handleRoomMode', () => {
     rawDb.prepare(`INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator) VALUES (?, ?, ?, 'sock', 1)`).run(roomId, owner, ownerName);
     rawDb.prepare(`INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator) VALUES (?, ?, ?, 'sock2', 0)`).run(roomId, other, otherName);
   }, 30000);
+
+  afterEach(() => clearRoomMembers());
 
   afterAll(() => {
     try {
@@ -176,13 +179,16 @@ describe('handleRoomMode', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: (ev: string, d: any) => emits.push({ ev, d }) };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+    const member = roomMember(901, { user: { id: owner, username: ownerName }, currentRoomId: roomId });
+    const session: any = member.session;
 
     // First reset i flag, then +iv ghost (parametric +v consumes ghostUname)
     const { db } = require('../../src/database');
     await db.setInviteOnly(roomId, false);
 
     await handleRoomMode({ io, socket, session, data: { modeString: '+iv', params: [ghostUname] } });
+
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
 
     // The +v token should fail (ghost is not a member) and emit a per-token room:error,
     // but the +i token still applies and the broadcast still goes out.
@@ -198,8 +204,10 @@ describe('handleRoomMode', () => {
     const ioEmits: any[] = [];
     const socket: any = { id: 'sock', emit: () => {} };
     const io: any = { to: () => ({ emit: (ev: string, d: any) => ioEmits.push({ ev, d }) }) };
-    const session: any = { user: { id: owner, username: ownerName }, currentRoomId: roomId };
+    const member = roomMember(902, { user: { id: owner, username: ownerName }, currentRoomId: roomId });
+    const session: any = member.session;
     await handleRoomMode({ io, socket, session, data: { modeString: '+i', params: [] } });
+    ioEmits.push(...member.events.map(([ev, d]) => ({ ev, d })));
     const broadcast = ioEmits.find(e => e.ev === 'room:mode');
     expect(broadcast).toBeTruthy();
     expect(broadcast.d.tokens).toEqual([{ sign: '+', flag: 'i', param: undefined }]);

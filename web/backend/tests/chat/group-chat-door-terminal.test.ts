@@ -13,34 +13,17 @@
  */
 
 import { setGroupChatDependencies, handleRoomMessage } from '../../src/handlers/chat/group-chat.handler';
-import { setSession, deleteSession } from '../../src/server/session-manager';
+import { roomMember, clearRoomMembers, type Member } from '../helpers/room-members';
 
-interface Emitted { target: string; event: string; payload: unknown }
-
-function environment(sessionsById: Record<string, Record<string, unknown>>) {
-  const emitted: Emitted[] = [];
-  const members = new Set(Object.keys(sessionsById));
-
-  const io = {
-    sockets: { adapter: { rooms: new Map([['room:7', members]]) } },
-    to: (target: string) => ({
-      emit: (event: string, payload: unknown) => emitted.push({ target, event, payload }),
-      except: () => ({
-        emit: (event: string, payload: unknown) => emitted.push({ target, event, payload }),
-      }),
-    }),
-  };
-
-  const sessions = new Map<string, unknown>(Object.entries(sessionsById));
-
-  // Register each member the way the BBS does, through session-manager. The
-  // guard resolves members with getSessionBySocketId, which reads
-  // session-manager's own maps - a map injected here is never consulted, so
-  // every member used to come back undefined and the guard could not fire
-  // whatever the predicate said.
-  Object.entries(sessionsById).forEach(([socketId, session], index) => {
-    (session as Record<string, unknown>).nodeId = index + 1;
-    setSession(socketId, session as never);
+/**
+ * The room's members are sessions standing in room 7 (src/server/session-rooms.ts),
+ * each reached through its own emitter - so each member here records what it
+ * was sent, by name.
+ */
+function environment(membersByName: Record<string, Record<string, unknown>>) {
+  const members: Record<string, Member> = {};
+  Object.entries(membersByName).forEach(([name, session], index) => {
+    members[name] = roomMember(index + 1, session, name);
   });
 
   // Only what handleRoomMessage actually reaches for.
@@ -50,8 +33,8 @@ function environment(sessionsById: Record<string, Record<string, unknown>>) {
     saveChatRoomMessage: async () => undefined,
   };
 
-  setGroupChatDependencies({ db, sessions, io } as never);
-  return { emitted, socketIds: Object.keys(sessionsById) };
+  setGroupChatDependencies({ db, sessions: new Map(), io: {} } as never);
+  return { members };
 }
 
 function plainUser(id: number): Record<string, unknown> {
@@ -63,30 +46,36 @@ function doorUser(id: number): Record<string, unknown> {
 }
 
 describe('chat output while a door owns the terminal', () => {
-  const registered: string[] = [];
-  afterEach(() => {
-    registered.splice(0).forEach(deleteSession);
-  });
+  afterEach(() => clearRoomMembers());
 
   it('sends room ANSI to plain terminals but not to a door', async () => {
     const env = environment({ plain: plainUser(1), door: doorUser(2) });
-    registered.push(...env.socketIds);
     const socket = { id: 'sender', emit: () => undefined } as never;
 
     await handleRoomMessage(socket, plainUser(3) as never, { message: 'hello' });
 
-    const ansiTargets = env.emitted.filter(e => e.event === 'ansi-output').map(e => e.target);
-    expect(ansiTargets).toContain('plain');
-    expect(ansiTargets).not.toContain('door');
+    expect(env.members.plain.of('ansi-output').length).toBeGreaterThan(0);
+    expect(env.members.door.of('ansi-output')).toEqual([]);
+  });
+
+  it('does not send the sender his own line back', async () => {
+    const env = environment({ sender: plainUser(1), other: plainUser(2) });
+    // `socket.id` is the sender's emitter id, whatever his transport.
+    const socket = { id: 'sender', emit: () => undefined } as never;
+
+    await handleRoomMessage(socket, env.members.sender.session as never, { message: 'hello' });
+
+    expect(env.members.sender.of('ansi-output')).toEqual([]);
+    expect(env.members.sender.of('chat:message')).toEqual([]);
+    expect(env.members.other.of('ansi-output').length).toBeGreaterThan(0);
   });
 
   it('still gives the door the structured event it renders from', async () => {
     const env = environment({ door: doorUser(2) });
-    registered.push(...env.socketIds);
     const socket = { id: 'sender', emit: () => undefined } as never;
 
     await handleRoomMessage(socket, plainUser(3) as never, { message: 'hello' });
 
-    expect(env.emitted.some(e => e.event === 'chat:message')).toBe(true);
+    expect(env.members.door.of('chat:message').length).toBe(1);
   });
 });

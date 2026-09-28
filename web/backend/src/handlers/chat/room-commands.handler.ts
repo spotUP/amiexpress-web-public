@@ -25,6 +25,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 
 import type { BBSSession } from '../../index';
+import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 // Session type
 
 // Dependencies (injected via setter)
@@ -470,9 +471,9 @@ async function setRoomTopic(socket: Socket, session: BBSSession, topic: string) 
     await db.updateChatRoom(session.currentRoomId, { topic: topic.trim() });
 
     // Broadcast topic change to room
-    const socketRoom = 'room:' + session.currentRoomId;
+    // Every member, whatever transport (server/session-rooms.ts).
     const msg = AnsiUtil.line(AnsiUtil.warning('*** Topic changed by ' + session.user?.username + ': ' + topic.trim() + ' ***'));
-    io.to(socketRoom).emit('ansi-output', msg);
+    emitToMembers(groupRoomMembers(session.currentRoomId), io, 'ansi-output', msg);
 
 console.log('✅ Room topic updated:', session.currentRoomName, topic.trim());
 

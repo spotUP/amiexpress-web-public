@@ -14,9 +14,9 @@ import type { BBSSession } from '../../index';
 import {
   emitterForSession,
   emitterForUserId,
-  socketIoSocketFor,
   type SessionEmitter,
 } from '../../server/session-emitter-registry';
+import { internodeChatMembers, emitToMembers } from '../../server/session-rooms';
 import { report } from '../../achievements/reporter';
 // Session type
 
@@ -334,31 +334,12 @@ console.log('✅ [CHAT ACCEPT] Found recipient session in Map');
       return;
     }
 
-    // Create Socket.io room for this chat
-    const roomName = `chat:${sessionId}`;
-console.log('🏠 [CHAT ACCEPT] Creating Socket.io room:', roomName);
+    // No socket.io room: the chat's members are the two sessions whose
+    // chatSessionId is set just below (server/session-rooms.ts). A telnet or
+    // SSH end has no socket.io socket to join one - accepting threw here
+    // (web-vs-telnet audit item 3, 2026-09-28).
 console.log('🏠 [CHAT ACCEPT] Recipient socket:', recipientSocketId);
 console.log('🏠 [CHAT ACCEPT] Initiator socket:', initiatorSocketId);
-
-    socket.join(roomName);
-console.log('✅ [CHAT ACCEPT] Recipient joined room');
-
-    // TP-10: room membership is a socket.io concept a byte transport is never
-    // part of, so this asks the registry for the REAL socket and gets null for
-    // a telnet/SSH initiator - who needs no room, because the pushes below
-    // address the session, not the room.
-    const initiatorSocket = socketIoSocketFor(initiatorSession, io);
-    if (initiatorSocket) {
-      initiatorSocket.join(roomName);
-console.log('✅ [CHAT ACCEPT] Initiator joined room');
-    } else {
-console.log('❌ [CHAT ACCEPT] Could not find initiator socket!');
-    }
-
-    // Verify room membership
-    const roomMembers = Array.from(io.sockets.adapter.rooms.get(roomName) || []);
-console.log('🏠 [CHAT ACCEPT] Room members:', roomMembers);
-console.log('🏠 [CHAT ACCEPT] Expected 2 members, got:', roomMembers.length);
 
     // Save previous states for both users (using the actual sessions from the Map)
     initiatorSession.previousState = initiatorSession.state;
@@ -381,8 +362,8 @@ console.log('   Initiator subState:', initiatorSession.subState);
 console.log('   Recipient subState:', recipientSession.subState);
 
     // Notify both users that chat has started
-console.log('📤 [CHAT ACCEPT] Emitting chat:started to room:', roomName);
-    io.to(roomName).emit('chat:started', {
+console.log('📤 [CHAT ACCEPT] Emitting chat:started to both ends');
+    emitToMembers(internodeChatMembers(sessionId), io, 'chat:started', {
       sessionId,
       withUsername: recipientSession.user?.username,
       withUserId: recipientSession.user?.id
@@ -687,17 +668,16 @@ console.log('✅ [CHAT MESSAGE] Message saved to database');
     }
 
     // Broadcast message to room (both users)
-    const roomName = `chat:${session.chatSessionId}`;
+    const members = internodeChatMembers(session.chatSessionId);
     const timestamp = getSystemTime().toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     });
 
-console.log('📤 [CHAT MESSAGE] Broadcasting to room:', roomName);
-console.log('📤 [CHAT MESSAGE] Room members:', Array.from(io.sockets.adapter.rooms.get(roomName) || []));
+console.log('📤 [CHAT MESSAGE] Broadcasting to', members.length, 'members');
 
-    io.to(roomName).emit('chat:message-received', {
+    emitToMembers(members, io, 'chat:message-received', {
       sessionId: session.chatSessionId,
       from: session.user!.username,
       fromId: session.user!.id,
@@ -725,7 +705,7 @@ console.log('✅ [CHAT MESSAGE] Emitted chat:message-received event');
       '\x1b8' + // Restore cursor to line 24
       '\x1b[K'; // Clear input line
 
-    io.to(roomName).emit('ansi-output', insertMessage);
+    emitToMembers(members, io, 'ansi-output', insertMessage);
 console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
 
   } catch (error) {
@@ -790,10 +770,11 @@ console.log(`  ✅ FOUND PARTNER! socketId=${socketId}`);
 
 console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketId: ${partnerSocketId}`);
 
-    const roomName = `chat:${sessionId}`;
+    // Both ends, while both still carry the chat's id (cleanup is below).
+    const members = internodeChatMembers(sessionId);
 
     // Notify both users
-    io.to(roomName).emit('chat:ended', {
+    emitToMembers(members, io, 'chat:ended', {
       sessionId,
       messageCount,
       duration
@@ -817,8 +798,8 @@ console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketI
       '\x1b[32mPress any key to continue...\x1b[0m' +
       '\x1b[?25h'; // Show cursor again
 
-    // Send to both users in the room
-    io.to(roomName).emit('ansi-output', endMessage);
+    // Send to both users
+    emitToMembers(members, io, 'ansi-output', endMessage);
 
     // Clean up both users and set them to menu display state
 console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.username}`);
@@ -842,15 +823,6 @@ console.log(`❌ [CHAT END] Partner socket NOT FOUND for socketId: ${partnerSock
 console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
     }
 
-    // Leave Socket.io room
-    socket.leave(roomName);
-    if (partnerSession) {
-      // TP-10: room membership needs the real socket.io socket, and there is
-      // none for a byte transport - `socketIoSocketFor` returns null and the
-      // optional call skips, exactly as this line always did for a partner it
-      // could not find.
-      socketIoSocketFor(partnerSession, io)?.leave(roomName);
-    }
 
   } catch (error) {
 console.error('[INTERNODE CHAT] Error ending chat:', error);
@@ -919,9 +891,6 @@ export async function handleChatDisconnect(socket: Socket, session: BBSSession) 
       }
     }
 
-    // Leave room
-    const roomName = `chat:${sessionId}`;
-    socket.leave(roomName);
 
   } catch (error) {
 console.error('[INTERNODE CHAT] Error handling chat disconnect:', error);

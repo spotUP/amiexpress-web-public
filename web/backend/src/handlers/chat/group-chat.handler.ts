@@ -14,7 +14,8 @@
 import { Socket } from 'socket.io';
 import { sanitizeChatMessage } from './sanitize-message';
 import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-manager';
-import { emitterForSession, socketIoSocketFor } from '../../server/session-emitter-registry';
+import { emitterForSession } from '../../server/session-emitter-registry';
+import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -115,47 +116,24 @@ function sendRoomError(socket: Socket, message: string): void {
  * lines painted across it. Those clients already receive the structured
  * chat:message event and render it themselves.
  */
-function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: string): void {
-  const socketRoom = 'room:' + roomId;
-  const members: Set<string> | undefined = io?.sockets?.adapter?.rooms?.get(socketRoom);
-
-  if (!members) {
-    // No adapter (tests, or a transport without rooms): fall back to the
-    // broad emit rather than dropping the message entirely.
-    if (excludeSocketId) {
-      io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
-    } else {
-      io.to(socketRoom).emit('ansi-output', output);
-    }
-    return;
-  }
-
-  for (const socketId of members) {
-    if (excludeSocketId && socketId === excludeSocketId) continue;
-
-    // getSessionBySocketId, NOT sessions.get(socketId). The sessions map is
-    // keyed by NODE ID, so looking a socket id up in it always missed - and
-    // this guard, the one thing stopping raw room ANSI being painted over a
-    // door's screen, never fired once.
-    //
-    // That is what put the same message on screen twice: the door drew it
-    // from the structured chat:message event, and this wrote it again as raw
-    // ANSI at wherever the cursor happened to be, merging it into another
-    // row. Only OTHER people's messages doubled, because the sender is
-    // excluded from this broadcast - which is exactly what was reported.
-    const memberSession = getSessionBySocketId(socketId);
-    if (memberSession && doorOwnsTerminal(memberSession)) continue;
-
-    io.to(socketId).emit('ansi-output', output);
-  }
+function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: string, leaving?: BBSSession): void {
+  // Members are the sessions standing in the room (server/session-rooms.ts),
+  // reached through their own emitters - a telnet or SSH member was in no
+  // socket.io room and heard nothing (web-vs-telnet audit item 3). A member
+  // whose screen a door drives is skipped: the door draws the structured
+  // chat:message itself, and raw ANSI over it doubled every line.
+  emitToMembers(groupRoomMembers(roomId), io, 'ansi-output', output, {
+    exceptEmitterId: excludeSocketId,
+    skip: (member) => member === leaving || doorOwnsTerminal(member),
+  });
 }
 
 /**
  * Broadcast a system message to all room members
  */
-function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string) {
+function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string, leaving?: BBSSession) {
   const output = AnsiUtil.warning('*** ' + message + ' ***') + '\r\n';
-  broadcastAnsiToRoom(roomId, output, excludeSocketId);
+  broadcastAnsiToRoom(roomId, output, excludeSocketId, leaving);
 }
 
 /**
@@ -171,11 +149,10 @@ console.log('📡 [BROADCAST] Starting broadcast:', {
     ioAvailable: !!io
   });
 
-  const socketRoom = 'room:' + roomId;
   const timestamp = getSystemTime().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message + '\r\n';
 
-console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
+console.log('📡 [BROADCAST] Emitting to room:', roomId);
 
   // Raw ANSI for plain terminal clients only - a door renders the
   // structured chat:message event below itself.
@@ -193,13 +170,8 @@ console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
     createdAt: getSystemTime(),
   };
 
-  if (excludeSocketId) {
-    io.to(socketRoom).except(excludeSocketId).emit('chat:message', structuredMessage);
-console.log('📡 [BROADCAST] Sent chat:message (excluding:', excludeSocketId + ')');
-  } else {
-    io.to(socketRoom).emit('chat:message', structuredMessage);
-console.log('📡 [BROADCAST] Sent chat:message to all in room');
-  }
+  emitToMembers(groupRoomMembers(roomId), io, 'chat:message', structuredMessage, { exceptEmitterId: excludeSocketId });
+console.log('📡 [BROADCAST] Sent chat:message', excludeSocketId ? `(excluding ${excludeSocketId})` : 'to all in room');
 
 console.log('📡 [BROADCAST] Broadcast complete');
 }
@@ -359,7 +331,6 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
     if (session.currentRoomId) {
       if (session.currentRoomId === room.room_id) {
         const members = await db.getRoomMembers(room.room_id);
-        socket.join('room:' + room.room_id);
         socket.emit('room:joined', {
           roomId: room.room_id,
           roomName: room.room_name,
@@ -417,8 +388,8 @@ console.log('ℹ️ User already in room, rejoining:', session.user?.username, r
       await db.revokeInvite(room.room_id, session.user?.id);
     }
 
-    // Join Socket.io room
-    socket.join('room:' + room.room_id);
+    // No socket.io room: membership is `session.currentRoomId`, set below
+    // (server/session-rooms.ts).
 
     // Update session state
     session.currentRoomId = room.room_id;
@@ -492,12 +463,11 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
     // the room ***" and "[21:51] infant joined" each drawn twice. The door
     // and a plain terminal both need this event, so the surviving emit is the
     // one that excludes nobody.
-    const socketRoom = 'room:' + room.room_id;
-    io.to(socketRoom).emit('room:user-joined', {
+    emitToMembers(groupRoomMembers(room.room_id), io, 'room:user-joined', {
       userId: session.user?.id,
       username: session.user?.username
     });
-console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', socketRoom);
+console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', room.room_id);
 
     // Emit room joined event to this user (include members list for LiveChat)
     const roomJoinedData = {
@@ -545,20 +515,18 @@ console.log('🚪 Room leave request:', session.user?.id, session.currentRoomNam
     // Leave room in database
     await db.leaveChatRoom(roomId, session.user?.id);
 
-    // Leave Socket.io room
-    socket.leave('room:' + roomId);
-
-    // Broadcast leave to other room members (before clearing session)
-    broadcastRoomSystem(roomId, username + ' left the room');
+    // Broadcast leave to the OTHER room members. The leaver still carries
+    // currentRoomId until the state is restored below, so he is skipped by
+    // name - socket.io used to drop him from the room before this emit.
+    broadcastRoomSystem(roomId, username + ' left the room', undefined, session);
 
     // ONE announcement, for the same reason as the join above: two emits to
     // the same room drew every leave twice.
-    const socketRoom = 'room:' + roomId;
-    io.to(socketRoom).emit('room:user-left', {
+    emitToMembers(groupRoomMembers(roomId), io, 'room:user-left', {
       userId: session.user?.id,
       username: username
-    });
-console.log('📢 Broadcast room:user-left:', username, 'to room:', socketRoom);
+    }, { skip: (member) => member === session });
+console.log('📢 Broadcast room:user-left:', username, 'to room:', roomId);
 
     // Restore previous state
     if (session.previousState && session.previousSubState) {
@@ -760,9 +728,6 @@ console.log('👢 Room kick request:', session.user?.id, data.targetUsername);
       const targetSocket = emitterForSession(targetSess, io);
 
       if (targetSocket) {
-        // Leave Socket.io room
-        socketIoSocketFor(targetSess, io)?.leave('room:' + session.currentRoomId);
-
         // Restore previous state
         if (targetSess.previousState && targetSess.previousSubState) {
           targetSess.state = targetSess.previousState;
@@ -892,11 +857,11 @@ console.log('🚪 Room disconnect cleanup:', session.user?.username, session.cur
     await db.leaveChatRoom(roomId, session.user?.id);
 
     // Broadcast disconnect to room
-    broadcastRoomSystem(roomId, username + ' disconnected');
-    io.to('room:' + roomId).emit('room:user-left', {
+    broadcastRoomSystem(roomId, username + ' disconnected', undefined, session);
+    emitToMembers(groupRoomMembers(roomId), io, 'room:user-left', {
       userId: session.user?.id,
       username: session.user?.username
-    });
+    }, { skip: (member) => member === session });
 
   } catch (error) {
 console.error('❌ Error in room disconnect:', error);

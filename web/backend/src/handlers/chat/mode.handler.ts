@@ -10,6 +10,7 @@
  */
 import type { Socket, Server as IOServer } from 'socket.io';
 import type { BBSSession } from '../../index';
+import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 import { db } from '../../database';
 
 export interface ModeToken { sign: '+' | '-'; flag: string; param?: string; }
@@ -112,7 +113,7 @@ export async function handleRoomMode(ctx: ModeContext): Promise<void> {
     }
 
     if (applied.length > 0) {
-      io.to('room:' + roomId).emit('room:mode', {
+      emitToMembers(groupRoomMembers(roomId), io, 'room:mode', {
         roomId,
         by: session.user.username,
         byId: String(session.user.id),

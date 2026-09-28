@@ -4,6 +4,7 @@
  */
 import type { Socket, Server as IOServer } from 'socket.io';
 import type { BBSSession } from '../../index';
+import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 import { db } from '../../database';
 
 export interface SetMotdContext {
@@ -29,7 +30,7 @@ export async function handleSetRoomMotd(ctx: SetMotdContext): Promise<void> {
     }
     const motd = typeof data.motd === 'string' ? data.motd.slice(0, 500) : null;
     await db.setMotd(session.currentRoomId, motd);
-    io.to('room:' + session.currentRoomId).emit('room:motd', {
+    emitToMembers(groupRoomMembers(session.currentRoomId), io, 'room:motd', {
       roomId: session.currentRoomId,
       motd,
     });
