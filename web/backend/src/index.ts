@@ -390,6 +390,7 @@ export interface BBSSession {
   displayFlowPaused?: boolean; // Waiting for keypress to advance BULL/NODE_BULL/CONF_BULL/menu flow
   newFilesPauseFlag?: boolean; // Like AmiExpress newFilesPauseFlag - express.e:216,28100 - controls pause during confScan
   inConfScan?: boolean; // Whether user is currently in conference scan - suppress menu prompts
+  confScanPauseOwed?: boolean; // express.e:28145 doPause() after the scan's part-upload check; paid by the display flow before the rejoin
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   uploadContext?: UploadSessionContext;
   pendingDisplayInputs?: string[];

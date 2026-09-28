@@ -1115,6 +1115,16 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // There is no separate displayConferenceBulletins call — that was showing the wrong
         // (global) CONF_BULL before joinConference showed the correct per-conference one.
         session.subState = LoggedOnSubState.AUTO_REJOIN;
+        // express.e:28145 - the scan's own doPause(), owed by the part-upload
+        // check (message-scan.handler performPartialUploadCheck), paid before
+        // the rejoin draws its bulletin over the scan.
+        if (session.confScanPauseOwed) {
+          session.confScanPauseOwed = false;
+          if (pauseDisplayFlow(socket, session, false, 'confscan')) {
+            displayFlowLog('pause after the conference scan');
+            return;
+          }
+        }
         continue;
       }
 
