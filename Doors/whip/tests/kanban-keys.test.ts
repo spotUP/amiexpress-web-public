@@ -129,6 +129,8 @@ export async function theLegendNamesEditAndMoveAtFortyColumns(): Promise<void> {
     const text = allText(screen);
     assert.ok(/Enter:\s*Edit/.test(text), `the 40-column legend says Enter is Edit: ${text.slice(-200)}`);
     assert.ok(/M:\s*Move/.test(text), 'and M is Move');
+    // The read-only view is named at forty columns too (sysop, 2026-09-28).
+    assert.ok(/I:\s*Info/.test(text), 'and I is Info');
     assert.ok(!/Arr:\s*Move/.test(text), 'arrows are not advertised as Move');
 
     press(screen, '\x1b', 'escape');

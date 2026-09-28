@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './discord-name.test', './task-cancel.test', './task-dialog-tab.test', './task-dialog-buttons.test', './task-dialog-project.test', './project-list-select.test', './menu-navigate.test', './leaderboard.test', './achievements-scroll.test', './party-timeline-scroll.test', './responsive.test', './main-menu-bar.test', './kanban-focus.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test', './kanban-selection.test', './task-blank-title.test', './party-timeline-refresh.test', './menu-bar-reach.test', './task-enter-saves.test', './kanban-keys.test', './kanban-cards.test', './duplicate-records.test', './task-details.test'];
+const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './discord-name.test', './task-cancel.test', './task-dialog-tab.test', './task-dialog-buttons.test', './task-dialog-project.test', './project-list-select.test', './menu-navigate.test', './leaderboard.test', './achievements-scroll.test', './party-timeline-scroll.test', './responsive.test', './main-menu-bar.test', './kanban-focus.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test', './kanban-selection.test', './task-blank-title.test', './party-timeline-refresh.test', './menu-bar-reach.test', './task-enter-saves.test', './kanban-keys.test', './kanban-cards.test', './duplicate-records.test', './task-details.test', './no-backlog.test', './kanban-drag.test'];
 
 const realLog = console.log;
 console.log = () => {};

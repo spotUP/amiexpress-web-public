@@ -22,6 +22,7 @@ const my_tasks_1 = require("./ui/my-tasks");
 const my_profile_1 = require("./ui/my-profile");
 const responsive_1 = require("./ui/responsive");
 const door_theme_1 = require("./door-theme");
+const quick_task_1 = require("./core/quick-task");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 class WhipApp {
     constructor(session) {
@@ -104,34 +105,7 @@ class WhipApp {
         user.level = (0, gamification_1.calculateLevel)(user.points);
         await this.dataManager.updateUser(user);
         this.currentUser = user;
-        // Ensure default "Backlog" project exists for quick tasks
-        await this.ensureBacklogProject();
-    }
-    async ensureBacklogProject() {
-        const projects = await this.dataManager.loadProjects();
-        // Check if Backlog project already exists
-        const backlogExists = projects.some(p => p.id === 'backlog');
-        if (!backlogExists) {
-            // Create default Backlog project
-            await this.dataManager.addProject({
-                id: 'backlog',
-                name: 'Backlog',
-                type: 'code',
-                description: 'Default project for quick tasks',
-                createdBy: this.currentUser.userId,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                status: 'active'
-            });
-            // Emit event for created Backlog project
-            if (this.bbsApi?.emitCustomEvent) {
-                this.bbsApi.emitCustomEvent('project_created', 'Created default "Backlog" project for quick tasks', {
-                    projectType: 'code',
-                    projectId: 'backlog',
-                    status: 'active'
-                });
-            }
-        }
+        await (0, quick_task_1.retireEmptyBacklog)(this.dataManager);
     }
     async showMainMenu() {
         while (!this.exited) {
@@ -176,26 +150,25 @@ class WhipApp {
         }
     }
     async showQuickTask() {
-        // Get or create Backlog project
+        // No Backlog any more (sysop, 2026-09-28: "it should be removed"): a quick
+        // task opens on the project this session last used, or the first active
+        // one, and the dialog's own Project picker moves it anywhere else.
         const projects = await this.dataManager.loadProjects();
-        let backlogProject = projects.find(p => p.id === 'backlog');
-        if (!backlogProject) {
-            // Ensure backlog project exists (should always exist after loadUserStats)
-            await this.ensureBacklogProject();
-            const updatedProjects = await this.dataManager.loadProjects();
-            backlogProject = updatedProjects.find(p => p.id === 'backlog');
-        }
-        if (backlogProject) {
-            // Open task editor for new task in Backlog project. Silence on
-            // cancel: an ESC out of the dialog used to congratulate the caller
-            // on a task that was never created (sysop, 2026-09-10).
-            const created = await (0, task_editor_1.createTask)(this.screen, backlogProject, this.currentUser, this.dataManager, this.bbsApi);
-            if (!created)
-                return;
-            // Show success message
-            this.showMessage('Task created in Backlog! View in Kanban [K]');
+        const project = (0, quick_task_1.quickTaskProject)(projects, this.lastProjectId);
+        if (!project) {
+            this.showMessage('No projects yet. Create one first [N]');
             await this.sleep(2000);
+            return;
         }
+        // Silence on cancel: an ESC out of the dialog used to congratulate the
+        // caller on a task that was never created (sysop, 2026-09-10).
+        const created = await (0, task_editor_1.createTask)(this.screen, project, this.currentUser, this.dataManager, this.bbsApi);
+        if (!created)
+            return;
+        const home = projects.find(p => p.id === created.projectId) ?? project;
+        this.lastProjectId = home.id;
+        this.showMessage(`Task created in ${home.name}! View in Kanban [K]`);
+        await this.sleep(2000);
     }
     async showNewProject() {
         const project = await (0, project_editor_1.createProject)(this.screen, this.currentUser, this.dataManager, this.bbsApi);

@@ -28,8 +28,10 @@ const chrome_1 = require("./chrome");
  * editing a title took two keys and passed through a mode the caller never
  * asked for.
  */
+// I: Info in the place Arrows: Navigate had - the arrows need no telling, the
+// read-only details do (sysop, 2026-09-28).
 const HINTS = [
-    { key: 'Arrows', does: 'Navigate' },
+    { key: 'I', does: 'Info' },
     { key: 'Enter', does: 'Edit' },
     { key: 'N', does: 'New' },
     { key: 'M', does: 'Move' },
@@ -38,6 +40,7 @@ const HINTS = [
 ];
 const COMPACT_HINTS = [
     { key: 'Enter', does: 'Edit' },
+    { key: 'I', does: 'Info' },
     { key: 'M', does: 'Move' },
     { key: 'Q', does: 'Back' },
 ];
@@ -533,10 +536,15 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     const columnTasks = tasksIn(colIndex);
                     if (columnTasks.length === 0)
                         return;
-                    // Get the selected item index - blessed updates this on mousedown
-                    const selectedIndex = list.selected ?? 0;
+                    // The card UNDER THE PRESS, not the list's selection: the selection
+                    // only follows the mouse if a motion event came first, and without
+                    // one this dragged whichever card was selected before (the sysop,
+                    // 2026-09-28: "drag n dropping tasks in kanban stopped working").
+                    const selectedIndex = list.itemIndexAt?.(data.y) ?? list.selected ?? 0;
                     if (selectedIndex >= columnTasks.length)
                         return;
+                    if (list.selected !== selectedIndex)
+                        list.select(selectedIndex);
                     currentColumn = colIndex;
                     // Capture coordinates and start drag immediately
                     const mouseX = data.x;
