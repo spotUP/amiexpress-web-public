@@ -15,16 +15,23 @@
  * Access Levels: a level is 87 ACS.* tooltypes, read into booleans and
  * written back out. A flag that does not survive that round trip is a
  * permission a sysop can tick and not grant.
+ *
+ * The route side is DRIVEN: the real config router on a temp board and a
+ * temp database, an account created through it, and every field the form
+ * offers PUT back by its disk id and read back from disk through GET /users.
+ * Only the list of fields comes from the form's source (UsersPage.tsx lives
+ * in web/config-app, a React page this node-env suite cannot mount).
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import request from 'supertest';
 import { tooltypesToFlags, flagsToTooltypes } from '../../src/services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../../src/constants/acs-permissions';
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
 const USERS_PAGE = path.join(REPO_ROOT, 'web', 'config-app', 'src', 'pages', 'UsersPage.tsx');
-const CONFIG_ROUTES = path.join(__dirname, '..', '..', 'src', 'api', 'config-routes.ts');
 
 /**
  * Fields the users form holds that the route is not expected to write.
@@ -38,36 +45,105 @@ const NOT_SAVED_BY_THE_ROUTE: Record<string, string> = {
   confirmPassword: 'never leaves the browser',
 };
 
+/** The real config router on a temp board and a temp database. */
+const board: { app: any; db: any; root: string; dbDir: string } = { app: null, db: null, root: '', dbDir: '' };
+const savedEnv: Record<string, string | undefined> = {};
+
+beforeAll(async () => {
+  for (const key of ['BBS_DATA_DIR', 'DATABASE_DIR', 'DATABASE_FILE']) savedEnv[key] = process.env[key];
+  board.root = fs.mkdtempSync(path.join(os.tmpdir(), 'users-contract-'));
+  board.dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'users-contract-db-'));
+  process.env.BBS_DATA_DIR = board.root;
+  process.env.DATABASE_DIR = board.dbDir;
+  process.env.DATABASE_FILE = 'users-contract.db';
+  jest.resetModules();
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const express = require('express');
+  const { Database } = require('../../src/database');
+  const { createConfigRouter } = require('../../src/api/config-routes');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  board.db = new Database();
+  await board.db.init();
+  board.app = express();
+  board.app.use(express.json());
+  board.app.use('/api/config', createConfigRouter(board.db));
+}, 30000);
+
+afterAll(async () => {
+  if (board.db) await board.db.close();
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  fs.rmSync(board.root, { recursive: true, force: true });
+  fs.rmSync(board.dbDir, { recursive: true, force: true });
+});
+
+let accounts = 0;
+/** Create an account through the route and answer its disk record as GET /users lists it. */
+async function newAccount(): Promise<any> {
+  const username = `contract${++accounts}_${Date.now() % 100000}`;
+  const created = await request(board.app).post('/api/config/users').send({ username, password: 'first-password', securityLevel: 10 });
+  expect([200, 201]).toContain(created.status);
+  return onDisk(username);
+}
+
+async function onDisk(username: string): Promise<any> {
+  const listed = await request(board.app).get('/api/config/users');
+  return (listed.body.data ?? []).find((u: { username?: string }) => u.username?.toLowerCase() === username.toLowerCase());
+}
+
+async function onDiskById(id: string): Promise<any> {
+  const listed = await request(board.app).get('/api/config/users');
+  return (listed.body.data ?? []).find((u: { id?: string }) => u.id === id);
+}
+
+/** A value for `field` that differs from what the record holds now. */
+function changed(field: string, current: unknown): unknown {
+  if (field === 'username') return `renamed${accounts}`;
+  if (field === 'confAccess') return String(current ?? '').startsWith('X') ? '-'.repeat(10) : 'X'.repeat(10);
+  if (typeof current === 'boolean' || field === 'accountLocked' || field === 'expert') return !current;
+  if (typeof current === 'number') return current === 42 ? 43 : 42;
+  // Short: the record's fields are fixed width (phone holds 12).
+  return `Chg${field.slice(0, 5)}`;
+}
+
+const truthy = (v: unknown) => v === true || v === 1 || v === 'Y';
+
+/** PUT one field by the disk id and answer what disk holds for it afterwards. */
+async function roundTrip(field: string) {
+  const before = await newAccount();
+  const sent = changed(field, before[field]);
+  const put = await request(board.app).put(`/api/config/users/${before.id}`).send({ [field]: sent });
+  expect(put.status).toBe(200);
+  const after = await onDiskById(before.id);
+  const saved = typeof sent === 'boolean' ? truthy(after?.[field]) === sent : after?.[field] === sent;
+  return { saved, before: before[field], sent, after: after?.[field] };
+}
+
 describe('Users: what the form can send, the route must write', () => {
-  it('handles every field the form offers', () => {
+  it('handles every field the form offers', async () => {
+    // REASONABLE source read of the FORM only: which fields it can submit.
     const page = fs.readFileSync(USERS_PAGE, 'utf8');
-    const routes = fs.readFileSync(CONFIG_ROUTES, 'utf8');
+    const offered = [...new Set([...page.matchAll(/formData\.([a-zA-Z_]+)/g)].map((m) => m[1]))]
+      .filter((field) => !(field in NOT_SAVED_BY_THE_ROUTE));
+    expect(offered.length).toBeGreaterThan(5);
 
-    // What the form actually holds and can submit.
-    const offered = new Set(
-      [...page.matchAll(/formData\.([a-zA-Z_]+)/g)].map((m) => m[1])
-    );
-    // What the route copies onto the user before writing it back.
-    const written = new Set(
-      [...routes.matchAll(/updates\.([a-zA-Z_]+) !== undefined/g)].map((m) => m[1])
-    );
-
-    const ignored = [...offered].filter(
-      (field) => !written.has(field) && !(field in NOT_SAVED_BY_THE_ROUTE)
-    );
+    const ignored: string[] = [];
+    for (const field of offered) {
+      const result = await roundTrip(field);
+      if (!result.saved) ignored.push(`${field}: sent ${JSON.stringify(result.sent)}, disk holds ${JSON.stringify(result.after)}`);
+    }
 
     // Jest's expect takes no message, so the report goes in the value.
-    expect(ignored.join(', ')).toBe('');
-  });
+    expect(ignored.join('\n')).toBe('');
+  }, 60000);
 
-  it('still writes the fields it is meant to', () => {
-    const routes = fs.readFileSync(CONFIG_ROUTES, 'utf8');
-    const written = [...routes.matchAll(/updates\.([a-zA-Z_]+) !== undefined/g)].map((m) => m[1]);
-
+  it('still writes the fields it is meant to', async () => {
     for (const field of ['realname', 'location', 'email', 'secLevel', 'timeLimit']) {
-      expect(written).toContain(field);
+      const result = await roundTrip(field);
+      expect({ field, saved: result.saved }).toEqual({ field, saved: true });
     }
-  });
+  }, 60000);
 });
 
 describe('Access Levels: every flag survives being written and read back', () => {
@@ -144,22 +220,31 @@ describe('renaming a user', () => {
   // write path had always supported it - userToStruct puts `user.username`
   // into the record's name field - so what was missing was validation, not
   // the ability.
-  const routes = () =>
-    fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'api', 'config-routes.ts'), 'utf8');
+  it('is handled by the route', async () => {
+    const before = await newAccount();
+    const put = await request(board.app).put(`/api/config/users/${before.id}`).send({ username: 'RenamedByAdmin' });
+    expect(put.status).toBe(200);
+    expect((await onDiskById(before.id))?.username).toBe('RenamedByAdmin');
+  }, 30000);
 
-  it('is handled by the route', () => {
-    expect(routes()).toContain('updates.username !== undefined');
-    expect(routes()).toContain('updatedUser.username = wanted');
-  });
-
-  it('refuses an empty name, an over-long one, and a name already taken', () => {
-    const source = routes();
-    expect(source).toContain('Username cannot be empty');
-    expect(source).toContain('Username cannot be longer than 31 characters');
-    expect(source).toContain('already exists');
-  });
+  it('refuses an empty name, an over-long one, and a name already taken', async () => {
+    const taken = await newAccount();
+    const target = await newAccount();
+    const refusal = async (username: string) => {
+      const put = await request(board.app).put(`/api/config/users/${target.id}`).send({ username });
+      expect(put.status).toBeGreaterThanOrEqual(400);
+      return JSON.stringify(put.body);
+    };
+    expect(await refusal('   ')).toContain('Username cannot be empty');
+    expect(await refusal('x'.repeat(32))).toContain('Username cannot be longer than 31 characters');
+    expect(await refusal(taken.username.toUpperCase())).toContain('already exists');
+    // And none of the three renamed anything.
+    expect((await onDiskById(target.id))?.username).toBe(target.username);
+  }, 30000);
 
   it('is no longer disabled on the form, and warns about history', () => {
+    // REASONABLE source read: UsersPage.tsx is a config-app React page this
+    // node-env suite cannot mount; the wording is the thing under test.
     const page = fs.readFileSync(USERS_PAGE, 'utf8');
     expect(page).not.toContain('Username cannot be changed');
     // A rename does not rewrite messages or the callers log; saying so is the

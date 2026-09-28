@@ -63,27 +63,6 @@ describe('recognising a door that paints rather than prints', () => {
   });
 });
 
-describe('the emitter uses it', () => {
-  // A predicate nobody calls would leave the screenshot unchanged.
-  const fs = require('fs');
-  const path = require('path');
-  // The row loop moved out of io.ts on 2026-09-16 (io-emit-lines.ts), so the
-  // pause could hand back the lines it had not sent; the wrap and its
-  // exemption went with it.
-  const source = fs.readFileSync(
-    path.resolve(__dirname, '../../src/amiga-emulation/xim/io-emit-lines.ts'), 'utf8'
-  );
-
-  it('asks before wrapping', () => {
-    expect(source).toContain('positionsCursorAbsolutely');
-  });
-
-  it('still wraps the doors the wrap was written for', () => {
-    // The exemption must be a condition ON the wrap, not a removal of it.
-    expect(source).toContain('wrapLine(');
-  });
-});
-
 /**
  * positionsCursorAbsolutely gained J/K/s/u (petscii-full-canvas plan,
  * Task 10) so wrap-for-session.util.ts could reuse it as the one
@@ -137,5 +116,26 @@ describe('io.ts line-wrap safety net: erase and save/restore also exempt a line'
     const { handler, emits } = buildHandler(80);
     serialOutput(handler, line);
     expect(emits.join('').replace(/\r?\n$/, '')).toBe(line);
+  });
+
+  // The emitter uses the predicate: a predicate nobody calls would leave the
+  // screenshot unchanged. The reported DOORREPO row, driven through the real
+  // io path - positioned, mostly letters, longer than the wrap column.
+  it('a positioned row longer than the wrap column reaches the caller unbroken', () => {
+    const line = "\x1b[9;3Hfiles       browse a door's own files on disk, and " + 'z'.repeat(60);
+    const { handler, emits } = buildHandler(80);
+    serialOutput(handler, line);
+    expect(emits.join('').replace(/\r?\n$/, '')).toBe(line);
+  });
+
+  // The exemption must be a condition ON the wrap, not a removal of it: the
+  // teletype doors the wrap was written for still need it.
+  it('still wraps a plain long line, the doors the wrap was written for', () => {
+    const line = 'Welcome to the board. ' + 'word '.repeat(20);
+    const { handler, emits } = buildHandler(80);
+    serialOutput(handler, line);
+    const out = emits.join('').replace(/\r?\n$/, '');
+    expect(out).not.toBe(line);
+    for (const row of out.split(/\r?\n/)) expect(row.length).toBeLessThanOrEqual(80);
   });
 });

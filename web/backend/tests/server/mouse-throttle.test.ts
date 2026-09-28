@@ -14,138 +14,136 @@
  *   and mouse-click are NOT throttled — they're discrete events that doors
  *   need to see immediately.
  *
- * This test exercises the throttle helper used by socket-handlers.ts mouse
- * branches, asserting the cadence cap holds and that the per-key tracking
- * (drag vs hover) is independent.
+ * The test DRIVES the real handlers: registerSocketHandlers is handed a fake
+ * socket (the technique of server/petscii-session-geometry.test.ts), a door
+ * session sits in the real session registry, Date.now is stubbed, and each
+ * assertion counts what reached the door's input handler. It used to test a
+ * copy of the helper plus a regex over socket-handlers.ts; the copy could
+ * drift from the 16ms constant unseen.
+ *
+ * src/index.ts is mocked away: socket-handlers.ts imports the BBSSession
+ * type from it.
  */
+jest.mock('../../src/index', () => ({}));
 
-const MOUSE_MOVE_THROTTLE_MS = 16; // mirrors socket-handlers.ts
+const THROTTLE_MS = 16; // the 60Hz cap the handlers enforce
 
-// Mirror of the helper inside registerCommandHandler. Kept local so this test
-// has no implicit cross-file dependency on internals — if the production helper
-// drifts, the source-level guard at the bottom catches it.
-function makeShouldEmit(now: () => number) {
-  return function shouldEmitPositionMouse(session: any, key: string): boolean {
-    const stamps = session.__mouseLast || (session.__mouseLast = {});
-    const t = now();
-    if ((t - (stamps[key] || 0)) < MOUSE_MOVE_THROTTLE_MS) return false;
-    stamps[key] = t;
-    return true;
+type Handler = (...args: any[]) => void;
+
+let clock = 1000;
+let nowSpy: jest.SpyInstance;
+beforeEach(() => { clock = 1000; nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => clock); });
+afterEach(() => { nowSpy.mockRestore(); });
+
+let nextId = 0;
+/** A mouse-enabled door session on a fake socket wired by the real handlers. */
+function mouseDoor() {
+  const id = `mouse-throttle-${++nextId}`;
+  const handlers: Record<string, Handler> = {};
+  const socket: any = {
+    id,
+    handshake: { address: '127.0.0.1' },
+    on(event: string, cb: Handler) { handlers[event] = cb; return socket; },
+    onAny() { return socket; },
+    emit() { return true; },
+    join() { return socket; },
+    removeAllListeners() { return socket; },
   };
+  const received: Array<{ type: string }> = [];
+  const session: any = {
+    nodeId: 90 + nextId, socketId: id,
+    inDoorManager: true, mouseEventsEnabled: true,
+    doorInputHandler: (bytes: string) => { received.push(JSON.parse(bytes)); },
+  };
+  const { setSession, deleteSession } = require('../../src/server/session-manager');
+  const { registerSocketHandlers } = require('../../src/server/socket-handlers');
+  setSession(id, session);
+  const io: any = { sockets: { sockets: new Map() }, emit() { return true; }, to() { return { emit() { return true; } }; } };
+  registerSocketHandlers(io, socket);
+  const fire = (event: string) => handlers[event]({ x: 1, y: 1, button: 0, shift: false, ctrl: false, alt: false });
+  const count = (type: string) => received.filter((e) => e.type === type).length;
+  return { fire, count, cleanup: () => deleteSession(id) };
 }
 
 describe('mouse-move throttle (regression for #14 DOORMAN freeze)', () => {
+  let logSpy: jest.SpyInstance;
+  beforeEach(() => { logSpy = jest.spyOn(console, 'log').mockImplementation(() => {}); });
+  afterEach(() => { logSpy.mockRestore(); });
+
   test('first event for a fresh session is always emitted', () => {
-    let t = 1000;
-    const shouldEmit = makeShouldEmit(() => t);
-    const session: any = {};
-    expect(shouldEmit(session, 'hover')).toBe(true);
+    const door = mouseDoor();
+    try {
+      door.fire('mouse-hover');
+      expect(door.count('mouse-hover')).toBe(1);
+    } finally { door.cleanup(); }
   });
 
   test('events within the throttle window are dropped', () => {
-    let t = 1000;
-    const shouldEmit = makeShouldEmit(() => t);
-    const session: any = {};
-    expect(shouldEmit(session, 'hover')).toBe(true);
-
-    // 4 more events at 1ms intervals — all within the 16ms window.
-    for (let i = 0; i < 4; i++) {
-      t += 1;
-      expect(shouldEmit(session, 'hover')).toBe(false);
-    }
+    const door = mouseDoor();
+    try {
+      door.fire('mouse-hover');
+      // 4 more events at 1ms intervals - all within the 16ms window.
+      for (let i = 0; i < 4; i++) { clock += 1; door.fire('mouse-hover'); }
+      expect(door.count('mouse-hover')).toBe(1);
+    } finally { door.cleanup(); }
   });
 
   test('event at exactly throttle_ms after last is emitted', () => {
-    let t = 1000;
-    const shouldEmit = makeShouldEmit(() => t);
-    const session: any = {};
-    expect(shouldEmit(session, 'hover')).toBe(true);
-
-    t += MOUSE_MOVE_THROTTLE_MS;
-    expect(shouldEmit(session, 'hover')).toBe(true);
+    const door = mouseDoor();
+    try {
+      door.fire('mouse-hover');
+      clock += THROTTLE_MS - 1;
+      door.fire('mouse-hover');
+      expect(door.count('mouse-hover')).toBe(1);
+      clock += 1;
+      door.fire('mouse-hover');
+      expect(door.count('mouse-hover')).toBe(2);
+    } finally { door.cleanup(); }
   });
 
   test('drag and hover have independent throttle clocks', () => {
-    let t = 1000;
-    const shouldEmit = makeShouldEmit(() => t);
-    const session: any = {};
-
-    // Hover at t=1000
-    expect(shouldEmit(session, 'hover')).toBe(true);
-    // Drag at t=1000 — independent key, must also fire
-    expect(shouldEmit(session, 'drag')).toBe(true);
-
-    t += 1; // 1ms later: both still throttled
-    expect(shouldEmit(session, 'hover')).toBe(false);
-    expect(shouldEmit(session, 'drag')).toBe(false);
+    const door = mouseDoor();
+    try {
+      door.fire('mouse-hover');
+      door.fire('mouse-drag'); // same instant, independent key: must also fire
+      clock += 1; // 1ms later: both still throttled
+      door.fire('mouse-hover');
+      door.fire('mouse-drag');
+      expect({ hover: door.count('mouse-hover'), drag: door.count('mouse-drag') }).toEqual({ hover: 1, drag: 1 });
+    } finally { door.cleanup(); }
   });
 
   test('60Hz of mousemove input is capped at one emit per ~16ms', () => {
-    let t = 0;
-    const shouldEmit = makeShouldEmit(() => t);
-    const session: any = {};
-    let emitted = 0;
-
-    // 1 second of input @ 60Hz = 60 events
-    for (let i = 0; i < 60; i++) {
-      t = Math.floor(i * (1000 / 60)); // ~16.67ms apart
-      if (shouldEmit(session, 'hover')) emitted++;
-    }
-
-    // 1000ms / 16ms = 62 emits max; should be at most that, and at least 50
-    // (allow tolerance for floor rounding and the "first event always emits" rule).
-    expect(emitted).toBeGreaterThanOrEqual(50);
-    expect(emitted).toBeLessThanOrEqual(63);
+    const door = mouseDoor();
+    try {
+      // 1 second of input @ 240Hz = 240 events, ~4ms apart.
+      for (let i = 0; i < 240; i++) {
+        clock = 10_000 + Math.floor(i * (1000 / 240));
+        door.fire('mouse-drag');
+      }
+      // 1000ms / 16ms = 62.5 windows.
+      expect(door.count('mouse-drag')).toBeGreaterThanOrEqual(50);
+      expect(door.count('mouse-drag')).toBeLessThanOrEqual(63);
+    } finally { door.cleanup(); }
   });
 
   test('separate sessions have independent throttle state', () => {
-    let t = 1000;
-    const shouldEmit = makeShouldEmit(() => t);
-    const sessionA: any = {};
-    const sessionB: any = {};
-
-    expect(shouldEmit(sessionA, 'hover')).toBe(true);
-    // Same instant, different session — must also emit.
-    expect(shouldEmit(sessionB, 'hover')).toBe(true);
+    const a = mouseDoor();
+    const b = mouseDoor();
+    try {
+      a.fire('mouse-hover');
+      b.fire('mouse-hover'); // same instant, different session: must also emit
+      expect([a.count('mouse-hover'), b.count('mouse-hover')]).toEqual([1, 1]);
+    } finally { a.cleanup(); b.cleanup(); }
   });
 
-  // Source-level guard: ensure the production socket handler still throttles
-  // mouse-drag and mouse-hover but NOT mouse-up / mouse-click. If anyone
-  // accidentally inverts these, this test catches it.
-  test('socket-handlers.ts wires the throttle on hover/drag but NOT on up/click', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const src = fs.readFileSync(
-      path.resolve(__dirname, '../../src/server/socket-handlers.ts'),
-      'utf8'
-    );
-
-    // Carve out each handler block (between socket.on('<event>', ... ) and the
-    // next socket.on or the function close.
-    function blockFor(eventName: string): string {
-      const re = new RegExp(
-        `socket\\.on\\(['"]${eventName}['"][\\s\\S]*?\\n\\s{2}\\}\\);`
-      );
-      const m = src.match(re);
-      return m ? m[0] : '';
-    }
-
-    const dragBlock = blockFor('mouse-drag');
-    const hoverBlock = blockFor('mouse-hover');
-    const upBlock = blockFor('mouse-up');
-    const clickBlock = blockFor('mouse-click');
-
-    expect(dragBlock).not.toBe('');
-    expect(hoverBlock).not.toBe('');
-    expect(upBlock).not.toBe('');
-    expect(clickBlock).not.toBe('');
-
-    // hover and drag MUST gate via shouldEmitPositionMouse
-    expect(dragBlock).toMatch(/shouldEmitPositionMouse\s*\(/);
-    expect(hoverBlock).toMatch(/shouldEmitPositionMouse\s*\(/);
-
-    // up and click MUST NOT — they're discrete and must always reach the door.
-    expect(upBlock).not.toMatch(/shouldEmitPositionMouse\s*\(/);
-    expect(clickBlock).not.toMatch(/shouldEmitPositionMouse\s*\(/);
+  // mouse-up and mouse-click are discrete: every one must reach the door,
+  // however close together, or a drag never ends and a click is lost.
+  test('mouse-up and mouse-click are never throttled', () => {
+    const door = mouseDoor();
+    try {
+      for (let i = 0; i < 5; i++) { door.fire('mouse-up'); door.fire('mouse-click'); }
+      expect({ up: door.count('mouse-up'), click: door.count('mouse-click') }).toEqual({ up: 5, click: 5 });
+    } finally { door.cleanup(); }
   });
 });

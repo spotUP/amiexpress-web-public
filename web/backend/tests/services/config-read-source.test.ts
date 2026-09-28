@@ -75,6 +75,8 @@ function sourceFiles(dir: string, found: string[] = []): string[] {
 }
 
 describe('where the board reads its configuration', () => {
+  // REASONABLE source walk: a repo-wide ban on a call shape (the census 14.8
+  // class). No runtime test can enumerate consumers that do not exist yet.
   it('has no runtime consumer reading system_config from the database', () => {
     const offenders: string[] = [];
 
@@ -106,15 +108,43 @@ describe('where the board reads its configuration', () => {
     expect(offenders.join('\n')).toBe('');
   });
 
-  it('offers one accessor for the whole board to use', () => {
-    const service = fs.readFileSync(
-      path.join(SRC, 'services', 'bbs-config-file.service.ts'),
-      'utf8'
-    );
+  /**
+   * DRIVEN against a temp board: getBoardConfig reads the file, and a save
+   * through saveBBSConfig is visible to the very next read. The file's stamp
+   * (mtime + size) is frozen for the second half, so the only thing that can
+   * make the new value appear is the writer dropping the cache - a cached
+   * reader that never notices a write is the same bug wearing a different hat.
+   */
+  it('offers one accessor for the whole board to use, and a write reaches it', () => {
+    // The service binds fs when it loads, so the stat stub goes in first and
+    // the service is loaded fresh behind it.
+    const realFs = require('fs');
+    const realStat = realFs.statSync;
+    let freezeUnder: string | null = null;
+    const statSpy = jest.spyOn(realFs, 'statSync').mockImplementation(((p: fs.PathLike, o?: any) => {
+      if (freezeUnder && String(p).startsWith(freezeUnder)) return { mtimeMs: 1, size: 1 } as fs.Stats;
+      return realStat(p, o);
+    }) as never);
+    let svc: any;
+    jest.isolateModules(() => { svc = require('../../src/services/bbs-config-file.service'); });
 
-    expect(service).toContain('export function getBoardConfig');
-    // A cached reader that never notices a write is the same bug wearing a
-    // different hat, so the writer has to drop the cache.
-    expect(service).toContain('invalidateBoardConfig');
+    const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'board-config-'));
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      fs.writeFileSync(path.join(root, 'bbsConfig.info.txt'), 'BBS_NAME=First Board\n');
+      expect(svc.getBoardConfig(root).bbs_name).toBe('First Board');
+
+      freezeUnder = root;
+      expect(svc.getBoardConfig(root).bbs_name).toBe('First Board'); // cached under the frozen stamp
+      expect(statSpy).toHaveBeenCalled(); // the freeze really is what the cache sees
+      svc.saveBBSConfig(root, { bbs_name: 'Second Board' });
+      expect(svc.getBoardConfig(root).bbs_name).toBe('Second Board');
+    } finally {
+      statSpy.mockRestore();
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

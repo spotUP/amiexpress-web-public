@@ -829,29 +829,79 @@ describe('refreshStorageContext', () => {
  *
  *   1. a REQUIRED option, so the deletion is a compile error rather than an
  *      omission nothing can see (`InitStorageOptions.usedBytesByVolume`);
- *   2. a structural pin on each production call site, the pattern
- *      `file-cache.test.ts`'s "blockOn is actually wired to blockOutcome"
- *      and `download-command-remote.test.ts`'s `rematerialise` pin use, so
- *      the deletion is ALSO a red test and not merely a red build.
+ *   2. a DRIVEN check on each production caller: the real initializeData
+ *      boots a temp board (tests/support/booted-board.ts) and the conference
+ *      bus is fired, and the real DriveConfigService writes a drive secret,
+ *      each with `refreshStorageContext` replaced by a recorder at the module
+ *      boundary - so the deletion is ALSO a red test and not merely a red
+ *      build, whatever the call site looks like.
  */
 describe('production actually supplies the catalog seeder', () => {
-  const backendSrc = (...parts: string[]): string =>
-    fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', ...parts), 'utf8');
+  /** Every refreshStorageContext call a production caller made. */
+  const refreshes: Array<{ opts: any }> = [];
+  const recordRefreshes = () => {
+    jest.doMock('../../src/storage', () => ({
+      ...jest.requireActual('../../src/storage'),
+      refreshStorageContext: async (_root: string, _areas: unknown, opts: any) => { refreshes.push({ opts }); },
+    }));
+  };
+  const quietly = () => [
+    jest.spyOn(console, 'log').mockImplementation(() => undefined),
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined),
+  ];
 
-  it('server/initialization.ts passes it on BOTH refreshStorageContext calls - boot and the conference bus', () => {
-    const source = backendSrc('server', 'initialization.ts');
-    const calls = source.match(/await refreshStorageContext\([\s\S]*?\}\);/g) ?? [];
-    expect(calls).toHaveLength(2);
-    for (const call of calls) {
-      expect(call).toMatch(/usedBytesByVolume:\s*\(\)\s*=>\s*db\.usedBytesByVolume\(\)/);
+  it('server/initialization.ts passes it on BOTH refreshStorageContext calls - boot and the conference bus', async () => {
+    refreshes.length = 0;
+    const quiet = quietly();
+    recordRefreshes();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { bootBoard } = require('../support/booted-board');
+    const board = await bootBoard('boot-wiring-seeder-');
+    try {
+      const { db } = require('../../src/database');
+      const seeded = await db.usedBytesByVolume();
+      expect(refreshes).toHaveLength(1); // the boot
+      await require('../../src/services/conference-change-bus').notifyConferencesChanged();
+      expect(refreshes).toHaveLength(2); // and the conference bus
+      for (const { opts } of refreshes) {
+        expect(typeof opts.usedBytesByVolume).toBe('function');
+        expect(await opts.usedBytesByVolume()).toEqual(seeded);
+      }
+    } finally {
+      board.cleanup();
+      jest.dontMock('../../src/storage');
+      jest.dontMock('../../src/index');
+      for (const q of quiet) q.mockRestore();
     }
-  });
+  }, 180000);
 
-  it('DriveConfigService.refreshLiveStorage passes it, so a Drives.info write reseeds too', () => {
-    const source = backendSrc('services', 'config-services', 'drive-config.service.ts');
-    const method = source.match(/private async refreshLiveStorage\([\s\S]*?\n  \}/);
-    expect(method).not.toBeNull();
-    expect(method![0]).toMatch(/usedBytesByVolume:\s*\(\)\s*=>\s*this\.database\.usedBytesByVolume\(\)/);
+  it('DriveConfigService.refreshLiveStorage passes it, so a Drives.info write reseeds too', async () => {
+    refreshes.length = 0;
+    const quiet = quietly();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'boot-wiring-drives-'));
+    const seeded = new Map([[1, 5 * 1024 * 1024]]);
+    const database = { usedBytesByVolume: () => seeded, getConfigRepository: () => ({}) } as never;
+    let service: any;
+    let appConfig: any;
+    jest.isolateModules(() => {
+      recordRefreshes();
+      const { DriveConfigService } = require('../../src/services/config-services/drive-config.service');
+      ({ config: appConfig } = require('../../src/config')); // the instance the service reads
+      service = new DriveConfigService(database);
+    });
+    const previousDataDir = appConfig.get('dataDir');
+    try {
+      appConfig.set('dataDir', root);
+      await service.writeDriveSecret(1, 'sekrit');
+      expect(refreshes).toHaveLength(1);
+      expect(typeof refreshes[0].opts.usedBytesByVolume).toBe('function');
+      expect(await refreshes[0].opts.usedBytesByVolume()).toBe(seeded);
+    } finally {
+      appConfig.set('dataDir', previousDataDir);
+      jest.dontMock('../../src/storage');
+      for (const q of quiet) q.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('says out loud what an omitted seeder costs, for the untyped callers a compile error cannot reach', async () => {

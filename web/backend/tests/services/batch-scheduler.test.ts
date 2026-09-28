@@ -54,23 +54,70 @@ describe('runExecuteOn — no bbsConfig.info in test env', () => {
   });
 });
 
-// Source-level pin, in the style of menu.test.ts's call-site guard: a spawn
-// test would need the real emulator. tsx resolves tsconfig by walking up
-// from cwd; from a door's own directory it finds the repo root's config
-// (no experimentalDecorators) and the runner dies on chat.handler.ts on
-// every scheduler tick. The TS-runner branch must therefore spawn from
-// web/backend. Dev-only in practice - the container ships dist/ and takes
-// the node branch - which is exactly why only this pin ever notices.
+// tsx resolves tsconfig by walking up from cwd; from a door's own directory
+// it finds the repo root's config (no experimentalDecorators) and the runner
+// dies on chat.handler.ts on every scheduler tick. The TS-runner branch must
+// therefore spawn from web/backend. Dev-only in practice - the container
+// ships dist/ and takes the node branch.
+//
+// DRIVEN: a real batch file with an NTR-LASTCALLERS line goes through
+// runBatchFile, child_process.spawn is replaced by a recorder that closes at
+// once (no emulator runs), and the test reads the cwd the runner got. The
+// compiled runner is hidden so the TS branch is taken whatever is built.
 describe('runAmigaDoorViaRunner spawn cwd (regression for the [runner:mtop] crash-loop)', () => {
-  test('the tsx runner branch is pinned to web/backend as cwd', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const src = fs.readFileSync(
-      path.join(__dirname, '../../src/services/batch-scheduler.ts'),
-      'utf8'
-    );
-    expect(src).toContain(
-      "cwd: useTsRunner ? path.join(appRootPath, 'web', 'backend') : (cwd || path.dirname(doorPath))"
-    );
+  test('the tsx runner branch is pinned to web/backend as cwd', async () => {
+    const { EventEmitter } = require('events');
+    const childProcess = require('child_process');
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-cwd-'));
+    const savedRoot = process.env.BBS_ROOT;
+    process.env.BBS_ROOT = root;
+    const batch = path.join(root, 'batch1');
+    fs.writeFileSync(batch, 'doors:ntr-lastcallers/ntr-lastcallers 1\n');
+
+    const spawns: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const realFs = require('fs'); // the module object itself, not this file's import wrapper
+    const realExists = realFs.existsSync;
+    const spies = [
+      jest.spyOn(childProcess, 'spawn').mockImplementation((command: string, args: string[], opts: any) => {
+        const child: any = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.stdin = { end() {} };
+        child.pid = 0;
+        child.kill = () => true;
+        spawns.push({ command, args, cwd: opts.cwd });
+        setImmediate(() => child.emit('close', 0));
+        return child;
+      }),
+      jest.spyOn(realFs, 'existsSync').mockImplementation((p: any) =>
+        String(p).endsWith(path.join('dist', 'scripts', 'run-amiga-door.js')) ? false : realExists(p)),
+      jest.spyOn(console, 'log').mockImplementation(() => {}),
+      jest.spyOn(console, 'warn').mockImplementation(() => {}),
+    ];
+    // batch-scheduler binds fs when it loads, so it is loaded fresh behind
+    // the existsSync stub.
+    let runBatchFile: (p: string, n: number) => Promise<void>;
+    jest.isolateModules(() => {
+      ({ runBatchFile } = require('../../src/services/batch-scheduler'));
+      // No drop files written into a real node directory.
+      const { doorDropFileManager } = require('../../src/services/DoorDropFileManager');
+      spies.push(
+        jest.spyOn(doorDropFileManager, 'createDoorSys').mockImplementation(() => undefined),
+        jest.spyOn(doorDropFileManager, 'createDorInfo').mockImplementation(() => undefined),
+      );
+    });
+    try {
+      await runBatchFile(batch, 1);
+    } finally {
+      for (const s of spies) s.mockRestore();
+      if (savedRoot === undefined) delete process.env.BBS_ROOT; else process.env.BBS_ROOT = savedRoot;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+
+    const runner = spawns.find((s) => s.args.some((a) => a.endsWith('run-amiga-door.ts')));
+    expect(runner).toBeDefined();
+    expect(runner!.args[0]).toBe('tsx');
+    expect(path.resolve(runner!.cwd)).toBe(path.resolve(__dirname, '../..'));
   });
 });

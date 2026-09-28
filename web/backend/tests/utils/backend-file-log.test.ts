@@ -125,13 +125,42 @@ describe('FileHandle debug log is off unless switched on', () => {
     expect(fs.existsSync(path.join(dataDir, 'logs', 'filehandle-debug.log'))).toBe(false);
   });
 
-  it('the source has no ungated appendFileSync to the debug path left', () => {
-    // The defect was 13 direct writes with no flag between them and the disk.
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'amiga-emulation', 'api', 'FileHandle.ts'),
-      'utf8',
-    );
-    expect(src).toContain("FILEHANDLE_DEBUG === '1'");
-    expect(src).not.toMatch(/fs\.appendFileSync\(DEBUG_LOG_PATH/);
+  it('reading, seeking and closing files writes nothing to it while the flag is off', () => {
+    // The defect was 13 direct writes with no flag between them and the disk,
+    // on every read. DRIVEN: a real FileHandle reads a file (disk-backed and
+    // memory-backed), seeks back over EOF and closes, with logs/ present so an
+    // ungated append would succeed rather than fail quietly on ENOENT.
+    delete process.env[flag];
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fhread-'));
+    fs.mkdirSync(path.join(dataDir, 'logs'));
+    const savedDataDir = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = dataDir;
+    const file = path.join(dataDir, 'READ.ME');
+    fs.writeFileSync(file, 'line one\nline two\n');
+    const quiet = [jest.spyOn(console, 'log').mockImplementation(() => {}), jest.spyOn(console, 'error').mockImplementation(() => {})];
+    try {
+      let FileHandleClass: any;
+      jest.isolateModules(() => {
+        ({ FileHandle: FileHandleClass } = require('../../src/amiga-emulation/api/FileHandle'));
+      });
+
+      const onDisk = new FileHandleClass('bbs:READ.ME', file);
+      expect(onDisk.open('r')).toBe(true);
+      while (onDisk.read(4).length > 0) { /* to EOF */ }
+      onDisk.seek(0, -1);
+      onDisk.read(64);
+      onDisk.close();
+
+      const inMemory = new FileHandleClass('bbs:MEM', path.join(dataDir, 'MEM'), { memoryBuffer: Buffer.from('in memory') });
+      expect(inMemory.open('r')).toBe(true);
+      while (inMemory.read(4).length > 0) { /* to EOF */ }
+      inMemory.close();
+
+      expect(fs.existsSync(path.join(dataDir, 'logs', 'filehandle-debug.log'))).toBe(false);
+    } finally {
+      for (const q of quiet) q.mockRestore();
+      if (savedDataDir === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = savedDataDir;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

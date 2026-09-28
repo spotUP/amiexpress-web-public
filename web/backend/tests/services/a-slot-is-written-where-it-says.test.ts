@@ -103,12 +103,68 @@ describe('a user written twice', () => {
   });
 });
 
+/**
+ * The regeneration script is DRIVEN: it runs on import, so the test hands it
+ * a fake Database (getUsers returns accounts in an order that is NOT their
+ * slot order) and a recording userFileManager, stops process.exit, and reads
+ * which slot each account was written to.
+ */
 describe('the regeneration script', () => {
-  it('keeps each account on the slot it already has', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '../../src/scripts/regenerate-user-files.ts'), 'utf8');
-    // The shape that renumbered everyone by query order.
-    expect(src).not.toMatch(/const slot = i \+ 1;/);
-    expect(src).toContain('if (Number.isInteger(u.slotNumber) && u.slotNumber > 0) return u.slotNumber;');
+  async function runScript(users: Array<Record<string, unknown>>) {
+    const writes: Array<[string, number]> = [];
+    const updates: Array<[string, unknown]> = [];
+    let exited!: () => void;
+    const done = new Promise<void>((resolve) => { exited = resolve; });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      exited();
+      return undefined as never;
+    }) as never);
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      jest.isolateModules(() => {
+        jest.doMock('../../src/database', () => ({
+          Database: class {
+            async init() { /* no DB */ }
+            async getUsers() { return users; }
+            async updateUser(id: string, fields: unknown) { updates.push([id, fields]); }
+          },
+        }));
+        jest.doMock('../../src/services/UserFileManager', () => ({
+          userFileManager: {
+            initializeUserFiles: () => undefined,
+            writeUserFiles: (u: { username: string }, slot: number) => { writes.push([u.username, slot]); },
+          },
+        }));
+        require('../../src/scripts/regenerate-user-files');
+      });
+      await done;
+      return { writes, updates, exitCode: exitSpy.mock.calls[0]?.[0] };
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      jest.dontMock('../../src/database');
+      jest.dontMock('../../src/services/UserFileManager');
+    }
+  }
+
+  it('keeps each account on the slot it already has', async () => {
+    // Query order dalton, coffe - the order that used to renumber them 1, 2.
+    const { writes, updates, exitCode } = await runScript([
+      { id: 'd', username: 'dalton', slotNumber: 14 },
+      { id: 'c', username: 'coffe', slotNumber: 13 },
+    ]);
+    expect(exitCode).toBe(0);
+    expect(writes).toEqual([['dalton', 14], ['coffe', 13]]);
+    expect(updates).toEqual([]);
+  });
+
+  it('gives an account with no slot the first free one, and records it', async () => {
+    const { writes, updates } = await runScript([
+      { id: 'n', username: 'newbie', slotNumber: null },
+      { id: 'a', username: 'sysop', slotNumber: 1 },
+      { id: 'b', username: 'coffe', slotNumber: 2 },
+    ]);
+    expect(writes).toEqual([['newbie', 3], ['sysop', 1], ['coffe', 2]]);
+    expect(updates).toEqual([['n', { slotNumber: 3 }]]);
   });
 });

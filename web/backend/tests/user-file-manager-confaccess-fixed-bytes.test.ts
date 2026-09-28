@@ -16,47 +16,70 @@
  * other 68K doors, any tool that reads user.data directly) see the
  * full access map.
  *
- * Grep-style — UserFileManager.ts requires the BBS subsystem.
+ * DRIVEN: the real UserFileManager writes a user into a temp board, and
+ * the test reads the bytes of user.data the way a 68K door would.
  */
+process.env.SKIP_DB_INIT = '1';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
+import { UserFileManager } from '../src/services/UserFileManager';
+import type { User } from '../src/database';
+
+const REC = 232;
+
+function user(username: string, confAccess: string): User {
+  return {
+    id: `id-${username}`, username, realname: 'Real Name', location: 'Somewhere', phone: '000',
+    secLevel: 30, slotNumber: 1, uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
+    timeTotal: 0, timeLimit: 60, timeUsed: 0, calls: 1, callsToday: 1, expert: false,
+    ansi: true, linesPerScreen: 23, confAccess,
+    created: new Date('2026-01-01T00:00:00Z'), updated: new Date('2026-01-01T00:00:00Z'),
+    lastLogin: new Date('2026-01-01T00:00:00Z'),
+  } as unknown as User;
+}
+
 describe('UserFileManager writes conferenceAccess as 10 fixed bytes (no null terminator carve-out)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'services', 'UserFileManager.ts'),
-    'utf8'
-  );
+  let root: string;
+  let mgr: UserFileManager;
 
-  test('writeFixedBytes helper exists', () => {
-    expect(src).toMatch(/private writeFixedBytes\(buffer: Buffer, offset: number, str: string, maxLen: number\): number/);
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'confaccess-bytes-'));
+    const saved = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = root;
+    try { mgr = new UserFileManager(); } finally {
+      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+    }
   });
 
-  test('writeFixedBytes does NOT subtract 1 for a null terminator', () => {
-    // writeString trims to maxLen-1; writeFixedBytes must use maxLen.
-    const m = src.match(/private writeFixedBytes\([^)]*\)\s*:\s*number\s*\{([\s\S]*?)\n  \}/);
-    expect(m).not.toBeNull();
-    expect(m![1]).toMatch(/substring\(\s*0\s*,\s*maxLen\s*\)/);
-    expect(m![1]).not.toMatch(/maxLen\s*-\s*1/);
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  /** The raw user.data record for `slot`. */
+  const record = (slot: number) => fs.readFileSync(path.join(root, 'user.data')).subarray((slot - 1) * REC, slot * REC);
+
+  test('all ten access flags reach the disk, the tenth included', () => {
+    mgr.writeUserFiles(user('tenconfs', 'XXXXXXXXXX'), 3);
+
+    const at = mgr.conferenceAccessOffset();
+    expect(record(3).subarray(at, at + 10).toString('latin1')).toBe('XXXXXXXXXX');
   });
 
-  test('serializeUserStruct routes conferenceAccess through writeFixedBytes', () => {
-    expect(src).toMatch(
-      /writeFixedBytes\(buffer,\s*offset,\s*struct\.conferenceAccess,\s*10\)/
-    );
+  test('a mixed map keeps every position, and reads back whole', () => {
+    mgr.writeUserFiles(user('mixed', 'X_X_X_X_XX'), 2);
+
+    const at = mgr.conferenceAccessOffset();
+    expect(record(2).subarray(at, at + 10).toString('latin1')).toBe('X_X_X_X_XX');
+    expect(mgr.readUserBySlot(2)?.confAccess).toBe('X_X_X_X_XX');
   });
 
-  test('serializeUserStruct does NOT route conferenceAccess through writeString anymore', () => {
-    // Specifically: there's no writeString call with struct.conferenceAccess.
-    expect(src).not.toMatch(/writeString\(buffer,\s*offset,\s*struct\.conferenceAccess/);
-  });
+  test('a string field keeps its null terminator (name[31] holds at most 30 characters)', () => {
+    // Other string fields are C-style; the fixed-byte path is for the map only.
+    mgr.writeUserFiles(user('N'.repeat(40), 'XXXXXXXXXX'), 1);
 
-  test('writeString still keeps the null-terminator carve-out for proper string fields (name/pass/location/phone)', () => {
-    // Other string fields are C-style; writeString must remain the path
-    // for them.
-    expect(src).toMatch(/private writeString\(buffer: Buffer, offset: number, str: string, maxLen: number\): number/);
-    const m = src.match(/private writeString\([^)]*\)\s*:\s*number\s*\{([\s\S]*?)\n  \}/);
-    expect(m).not.toBeNull();
-    expect(m![1]).toMatch(/maxLen\s*-\s*1/);
+    const name = record(1).subarray(0, 31);
+    expect(name.subarray(0, 30).toString('latin1')).toBe('N'.repeat(30));
+    expect(name[30]).toBe(0);
   });
 });

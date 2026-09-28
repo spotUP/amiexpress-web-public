@@ -6,6 +6,17 @@ import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { StorageUnavailableError } from '../../src/storage/storage-backend';
 import { FakeBackend } from './fake-backend';
 
+/**
+ * deasync's loop, with a seam: by default it IS the real loop (every test
+ * above that blocks really blocks), and the wiring tests at the bottom swap in
+ * a scripted loop that stops at the exact moment they need.
+ */
+const mockLoop: { script: null | ((predicate: () => boolean) => void) } = { script: null };
+jest.mock('deasync', () => {
+  const real = jest.requireActual('deasync');
+  return { ...real, loopWhile: (predicate: () => boolean) => (mockLoop.script ? mockLoop.script(predicate) : real.loopWhile(predicate)) };
+});
+
 function setup(): { cache: FileCache; backend: FakeBackend; dir: string; volumes: VolumeSet } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'filecache-'));
   const backend = new FakeBackend({ driveNumber: 2 });
@@ -812,76 +823,75 @@ describe('blockOn is actually wired to blockOutcome', () => {
    * it. Reverting the call site to the old `if (!done || Date.now() > deadline)`
    * leaves every behavioural test green, the probe included, because at a real
    * timeout both terms are true in almost every run - the bug only shows in a
-   * sliver no test can schedule. So the wiring gets a structural guard, the
-   * pattern tests/amiga-emulation/jh-sf-sync-emit.test.ts uses for the same
-   * class of unobservable-but-critical ordering.
+   * sliver no REAL clock can schedule.
+   *
+   * So the sliver is scheduled on a scripted one. The work handed to blockOn
+   * is a thenable that settles (or does not) synchronously, deasync's loop is
+   * replaced by a script that stops at the moment under test, and the clock is
+   * jest's: each case is exactly one of the races, driven through the public
+   * ensureLocalSync.
    */
-  const source = fs.readFileSync(path.resolve(__dirname, '../../src/storage/file-cache.ts'), 'utf8');
-
-  function bodyOfBlockOn(): string {
-    const method = source.indexOf('private blockOn<T>(');
-    expect(method).toBeGreaterThan(-1);
-    const endOfMethod = source.indexOf('\n  }\n', method);
-    expect(endOfMethod).toBeGreaterThan(-1);
-    return source.slice(method, endOfMethod);
-  }
-
-  function postLoopBodyOfBlockOn(): string {
-    const body = bodyOfBlockOn();
-    const afterLoop = body.indexOf('clearTimeout(timer);');
-    expect(afterLoop).toBeGreaterThan(-1);
-    return body.slice(afterLoop);
-  }
-
-  function fulfilArmOfBlockOn(): string {
-    const body = bodyOfBlockOn();
-    const start = body.indexOf('work.then(');
-    expect(start).toBeGreaterThan(-1);
-    const rejectArm = body.indexOf('(error: unknown) =>', start);
-    expect(rejectArm).toBeGreaterThan(-1);
-    return body.slice(start, rejectArm);
-  }
-
-  function timerCallbackOfBlockOn(): string {
-    const body = bodyOfBlockOn();
-    const armed = body.indexOf('setTimeout(');
-    expect(armed).toBeGreaterThan(-1);
-    const end = body.indexOf('}, this.syncTimeoutMs);', armed);
-    expect(end).toBeGreaterThan(-1);
-    return body.slice(armed, end);
-  }
-
-  it('decides on blockOutcome(succeeded, failed)', () => {
-    expect(postLoopBodyOfBlockOn()).toContain('blockOutcome(succeeded, failed)');
+  afterEach(() => {
+    mockLoop.script = null;
+    jest.useRealTimers();
   });
 
-  it('consults no clock after the loop', () => {
-    // `Date.now()` belongs in the predicate and nowhere after it. Reading it
-    // to decide the outcome is the bug this whole guard exists for.
-    expect(postLoopBodyOfBlockOn()).not.toContain('Date.now()');
+  /** Work that has already landed: the fulfil arm runs the moment blockOn attaches. */
+  const landed = (value: string) => ({ then: (fulfil: (v: string) => void) => { fulfil(value); } });
+  /** Work that never settles. */
+  const pending = () => ({ then: () => undefined });
+
+  function cacheWith(work: unknown, syncTimeoutMs = 1000): FileCache {
+    const { volumes, dir } = setup();
+    const cache = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024, syncTimeoutMs });
+    jest.spyOn(cache, 'ensureLocal').mockReturnValue(work as Promise<string>);
+    return cache;
+  }
+
+  it('returns the value of work that landed', () => {
+    // Work that landed is a value, however the loop ended.
+    const cache = cacheWith(landed('/cache/2/Files/DEMO.LHA'));
+    mockLoop.script = () => undefined;
+    expect(cache.ensureLocalSync(2, 'Files/DEMO.LHA')).toBe('/cache/2/Files/DEMO.LHA');
   });
 
-  it('sets succeeded in exactly one place in the whole method', () => {
-    // Slicing only the post-loop body let a mutation put `succeeded = true`
-    // inside the timer callback and still pass - which is precisely the
-    // confusion blockOutcome exists to prevent. The count is over the whole
-    // method, so a second assignment anywhere fails.
-    const occurrences = bodyOfBlockOn().split('succeeded = true').length - 1;
-    expect(occurrences).toBe(1);
+  it('returns work that landed even when the loop ends past the deadline', () => {
+    // The work landed and the loop came back one tick AFTER the deadline: the
+    // clock-reading version called that a timeout and told the door its file
+    // was unavailable when it was on disk.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    const cache = cacheWith(landed('/cache/2/Files/DEMO.LHA'));
+    mockLoop.script = () => { jest.setSystemTime(Date.now() + 1001); };
+    expect(cache.ensureLocalSync(2, 'Files/DEMO.LHA')).toBe('/cache/2/Files/DEMO.LHA');
   });
 
-  it('sets succeeded inside the fulfil handler, not before the loop', () => {
-    // "Exactly one, and not in the timer" still passes if the single
-    // assignment is HOISTED to just before loopWhile - which would report
-    // every timeout as a value and hand a door `undefined` as a file path.
-    expect(fulfilArmOfBlockOn()).toContain('succeeded = true');
+  it('reports a timeout when the bounding timer fires with nothing settled', () => {
+    // Nothing settled and the bounding timer fired: a timeout, never a value.
+    // An assignment of `succeeded` anywhere but the fulfil arm - in the timer,
+    // or hoisted before the loop - turns this into `undefined` handed back as
+    // a file path.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    const cache = cacheWith(pending());
+    mockLoop.script = () => { jest.advanceTimersByTime(1000); };
+    expect(() => cache.ensureLocalSync(2, 'Files/DEMO.LHA')).toThrow(StorageUnavailableError);
   });
 
-  it('never sets succeeded from the bounding timer', () => {
-    // The timer means "give up", not "the work landed". A timer that reported
-    // success would hand a door `undefined` as a file path, or tell it an
-    // upload that never happened had landed.
-    expect(timerCallbackOfBlockOn()).not.toContain('succeeded');
+  it('reports a timeout when the loop gives up with nothing settled', () => {
+    // The loop gave up before the timer (the predicate saw the deadline) with
+    // nothing settled: still a timeout.
+    const cache = cacheWith(pending());
+    mockLoop.script = () => undefined;
+    expect(() => cache.ensureLocalSync(2, 'Files/DEMO.LHA')).toThrow(StorageUnavailableError);
+  });
+
+  it('throws the rejection a failed call carries, ahead of the timer', () => {
+    // The timer means "give up", not "the work landed" - and a rejection that
+    // arrives is the failure it carries, not a timeout and not a value.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+    const refused = new Error('bucket said no');
+    const cache = cacheWith({ then: (_f: unknown, reject: (e: unknown) => void) => { reject(refused); } });
+    mockLoop.script = () => { jest.advanceTimersByTime(1000); };
+    expect(() => cache.ensureLocalSync(2, 'Files/DEMO.LHA')).toThrow(refused);
   });
 });
 

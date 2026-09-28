@@ -30,6 +30,8 @@ import {
   clearMailCache,
   usesImplicitTls,
   buildTransportConfig,
+  testSmtpConnection,
+  mailOnUpload,
   type MailOptions,
 } from '../../src/services/mail-notification.service';
 import { saveBBSConfig } from '../../src/services/bbs-config-file.service';
@@ -95,11 +97,37 @@ function mailOptions(overrides: Partial<MailOptions> = {}): MailOptions {
   };
 }
 
-function readMailService(): string {
-  return fs.readFileSync(
-    path.join(__dirname, '..', '..', 'src', 'services', 'mail-notification.service.ts'),
-    'utf8'
-  );
+/**
+ * A board on a temp root with mail set up, and nodemailer's createTransport
+ * replaced by a recorder: every transport the service builds is captured,
+ * and none of them opens a socket.
+ */
+function mailBoard(disk: Record<string, unknown>) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'smtp-transport-'));
+  const previousDataDir = appConfig.get('dataDir');
+  appConfig.set('dataDir', root);
+  clearMailCache();
+  for (const key of Object.keys(secretRow)) delete secretRow[key];
+  saveBBSConfig(root, disk as never);
+  const built: Array<Record<string, unknown>> = [];
+  const nodemailer = require('nodemailer');
+  const spies = [
+    jest.spyOn(nodemailer, 'createTransport').mockImplementation(((cfg: Record<string, unknown>) => {
+      built.push(cfg);
+      return { verify: async () => true, sendMail: async () => ({ messageId: 'x' }) };
+    }) as never),
+    jest.spyOn(console, 'log').mockImplementation(() => {}),
+    jest.spyOn(console, 'error').mockImplementation(() => {}),
+  ];
+  return {
+    built,
+    done: () => {
+      for (const spy of spies) spy.mockRestore();
+      appConfig.set('dataDir', previousDataDir);
+      clearMailCache();
+      fs.rmSync(root, { recursive: true, force: true });
+    },
+  };
 }
 
 describe('the connection the SMTP test opens', () => {
@@ -138,8 +166,16 @@ describe('the connection the SMTP test opens', () => {
   // The 587-plus-SSL combination used to be refused with an instruction to
   // untick the box. That message was a workaround for a value the code can
   // derive, and it refused a configuration that now works.
-  it('does not refuse 587 with SSL ticked before it tries', () => {
-    expect(readMailService()).not.toContain('Untick SMTP SSL');
+  // DRIVEN: the admin's test runs against a board on 587 with SSL ticked, and
+  // it must build a STARTTLS transport and succeed rather than answer first.
+  it('does not refuse 587 with SSL ticked before it tries', async () => {
+    const board = mailBoard({ smtp_server: 'smtp.gmail.com', smtp_port: 587, smtp_ssl: true, sysop_email: 'sysop@uprough.net' });
+    try {
+      const result = await testSmtpConnection();
+      expect(result).toEqual({ success: true });
+      expect(board.built).toHaveLength(1);
+      expect(board.built[0]).toEqual(expect.objectContaining({ port: 587, secure: false, requireTLS: true }));
+    } finally { board.done(); }
   });
 
   it('carries timeouts, so a wrong port answers instead of hanging', () => {
@@ -154,11 +190,24 @@ describe('the connection the SMTP test opens', () => {
   // transports - the one that sends mail and the one the admin's test opens -
   // now come from this one builder, so a setting cannot reach only one of
   // them.
-  it('is built in one place for both callers', () => {
-    const source = readMailService();
-
-    expect(source.split('...SMTP_TIMEOUTS').length - 1).toBe(1);
-    expect(source.split('createTransport(buildTransportConfig(options))').length - 1).toBe(2);
+  //
+  // DRIVEN: both callers run - a mail event (the sender) and the admin's test
+  // - and each transport they hand nodemailer must be exactly what the one
+  // builder makes for the same options, timeouts included.
+  it('is built in one place for both callers', async () => {
+    const board = mailBoard({
+      smtp_server: 'smtp.gmail.com', smtp_port: 587, smtp_ssl: true,
+      smtp_username: 'bbs@uprough.net', sysop_email: 'sysop@uprough.net', mail_on_upload: true,
+    });
+    try {
+      await mailOnUpload('caller', 'somewhere');
+      await testSmtpConnection();
+      const expected = buildTransportConfig((await getMailOptions())!) as Record<string, unknown>;
+      expect(board.built).toHaveLength(2);
+      expect(board.built[0]).toEqual(expected);
+      expect(board.built[1]).toEqual(expected);
+      expect(expected.greetingTimeout).toBe(10_000);
+    } finally { board.done(); }
   });
 
   // With implicit TLS off, nodemailer will settle for a plaintext session if

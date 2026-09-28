@@ -689,106 +689,12 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     const fromA = namesFromGrepA(shell(GREP_A));
     const fromB = namesFromGrepOutput(shell(GREP_B));
 
-    // The census's own arithmetic, quoted in the module header.
-    //
-    // 150, not the 149 this landed with: grep A is a text scan, and
-    // `src/doors/who-is-online.ts` opens with a header that QUOTES the dead
-    // round trip it replaced - `socket.emit('get-active-users')` - inside a
-    // comment. No new emit site exists; `get-active-users` was already in the
-    // census (and already ruled) from grep B, so the union below is unchanged
-    // and it is only this arm's count that moved. The union, not the arm, is
-    // what proves nothing is unruled.
-    //
-    // 155 as of 2026-09-07: `petscii-mode` joined it, the shape event an
-    // 80-column PETSCII caller is mounted on (petscii80 phase 3).
-    // 154 as of 2026-09-06, and that time the UNION moved too: four real new
-    // backend emit sites, all in arm A - `cursor-visibility`
-    // (utils/terminal-utils.ts:39) and the three operator names
-    // `operator:active-chats` (handlers/operator-chat.handler.ts:148),
-    // `operator:paging-dot` (:434) and `operator:bot-activated` (:1182). Each
-    // is ruled in EVENT_RULINGS with the receiver that earns its class.
-    //
-    // 151 as of 2026-09-07 (TP-9b): FOUR names left arm A with the browser's
-    // login line editor. `user-not-found`, `prompt-password`,
-    // `prompt-password-reset` and `prompt-forced-pwd-change` each existed to
-    // move that editor into a new mode, and the server prints those prompts
-    // as ordinary output now, on every transport. A fifth,
-    // `forced-pwd-change-complete`, did NOT leave: its only emit site was the
-    // retired `forced-pwd-change-input` handler, and it moved to the place the
-    // change actually completes (services/login-prompt.service.ts), where it
-    // now reaches every transport. Union 245 -> 241.
-    //
-    // 153 before that: `cursor-visibility` had NO SENDER - setCursorVisible() was the
-    // only site that emitted it and nothing in the tree called setCursorVisible
-    // - so the helper was deleted rather than left asserting behaviour no code
-    // performs, and the name left arm A with it. Union 246 -> 245.
-    // 152 as of 2026-09-07: `petscii-palette` (server/preference-socket-handlers.ts)
-    // landed unruled and this pin caught it a push later.
-    //
-    // 153 as of 2026-09-08: `operator:accept-queued`
-    // (handlers/operator-chat.handler.ts:246), the notice a sysop gets when
-    // they accept a page while the caller is inside a door. It landed UNRULED
-    // and this pin caught it the same way - the fix was to rule it in
-    // transport-event-rulings.ts (web-only, like every other operator-chat
-    // control name), not to move this number on its own.
-    //
-    // 154 as of 2026-09-10: `texttv-mode`
-    // (handlers/command-handler/pre-login.ts, the graphics prompt's T
-    // answer), ruled web-only in the same change.
-    //
-    // 155 as of 2026-09-14: `petscii-charset`
-    // (handlers/commands/info-commands.handler.ts:930, the Swedish set `W`
-    // row 22 chooses). It landed UNRULED with 551fe9f66 and this pin caught
-    // it a few pushes later, exactly as it caught `petscii-palette` - the
-    // fix is the ruling beside that one, web-only, not this number moving
-    // on its own.
-    //
-    // 158 as of 2026-09-16: TWO joined. `key-repeat-mode`
-    // (services/game-mode.service.ts) was emitted to the browser with no
-    // ruling and no pin at all - the browser's key auto-repeat rate while a
-    // door owns the screen - and it is ruled and pinned beside this now.
-    //
-    // `petscii-off` is the more interesting one: it had been RULED since
-    // 2026-09-15 and was emitted, but the census could not see it, because
-    // its one call site used optional chaining and this arm is a text scan
-    // for a plain call with a quoted name. A ruled, emitted, uncountable
-    // event is a contradiction the pin cannot hold, so the call site was made
-    // plain like every other emit in that file rather than the scan widened -
-    // the scan's narrowness is what makes the count mean anything.
-    //
-    // 159 as of 2026-09-24: `terminal-type-settled` (server/telnet-server.ts:450,
-    // e25b8edd7), the connection telling its own session start that the TTYPE
-    // exchange is over. It landed unruled; it is ruled not-transport beside
-    // `terminal-type`, the event it follows.
-    // 158 as of 2026-09-28: `font-changed` gone (see the ruling count above).
-    // 157 as of 2026-09-28: `retry-login` gone (see the ruling count above).
-    expect(fromA.length).toBe(157);
-    // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
-    // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
-    // records the correction.
-    //
-    // The Doors arm is 14, not the 16 this landed with, and both departures are
-    // the SAME two names that move the arm-A count above - which is why the
-    // union is untouched:
-    //   - `get-active-users` left `Doors/telnet-front/index.ts` when the node
-    //     table stopped asking for it over the socket; the read now lives in
-    //     `src/doors/who-is-online.ts`, whose header quotes the dead call.
-    //   - `bbs:event` moved from `Doors/card-lobby/index.ts` down to
-    //     `Doors/card-lobby/lib/live-chat.ts`, which `Doors/*/[a-z]*.ts` does
-    //     not reach. The backend emits it too, so arm A still sees it.
-    // 98 as of 2026-09-14: one name left the sdk/Doors arm. It did NOT leave
-    // the tree - the union assertion below still finds it, because the
-    // BACKEND emits it too - so this is a door that stopped emitting a name
-    // the board also sends, not a name that went missing. Measured against
-    // HEAD's own tree before the number moved: both answer 98, so the pin
-    // had gone stale on committed code rather than on anything in flight.
-    // 100 as of 2026-09-20: `emulator:open` and `emulator:close`, the BBC
-    // Micro pane the beeb and teletext doors raise over the terminal
-    // (Doors/beeb/app.ts, Doors/teletext/app.ts). They were emitted from
-    // committed code with no ruling at all, and this pin is what said so -
-    // the fix is the web-only ruling beside `petscii-charset`, not this
-    // number moving on its own.
-    expect(fromB.length).toBe(100);
+    // No per-arm count: a name moving from one arm to the other (a door that
+    // stops emitting a name the board also sends, a comment that quotes an
+    // emit) moved those numbers a dozen times without the union changing, and
+    // the union - asserted below - is what proves nothing is unruled.
+    expect(fromA.length).toBeGreaterThan(0);
+    expect(fromB.length).toBeGreaterThan(0);
 
     const live = [...new Set([...fromA, ...fromB])].sort();
     const pinned = [...PINNED_EVENT_NAMES].sort();
@@ -858,6 +764,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     for (const p of PATTERN_RULINGS) expect(p.ruling.note.length).toBeGreaterThan(40);
   });
 
+  // REASONABLE source read: this guards the census instrument itself. A
+  // literal emit written inside the two files that define the rulings would be
+  // counted as emitted by grep A, and the table would rule a name only because
+  // it mentions it - no runtime path and no census comparison can see that.
   censusIt('the adapter never contaminates the census it defines' +
     (treesPresent ? '' : ' [SKIPPED: web/backend/src absent - a packaged run]'), () => {
     // Both halves of this module live inside grep A's scope, so a note that

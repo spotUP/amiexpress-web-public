@@ -8,9 +8,22 @@
  * would have muted it for every real user too.
  */
 
+const mockPost = jest.fn(async () => ({ status: 204 }));
+jest.mock('axios', () => ({ __esModule: true, default: { post: (...a: unknown[]) => (mockPost as any)(...a) } }));
+jest.mock('../../src/database', () => ({
+  db: {
+    // One Discord webhook for every trigger, and the PII policy ON
+    // (webhook_include_pii false), which is the board default.
+    getWebhooksByTrigger: async () => [{ id: 1, name: 'discord', type: 'discord', url: 'https://discord.invalid/hook', enabled: true }],
+    getConfigRepository: () => ({ getSystemConfig: () => ({ webhook_include_pii: false }) }),
+  },
+}));
+
 import {
   webhookExcludedUsers,
   isWebhookSuppressed,
+  webhookService,
+  WebhookTrigger,
 } from '../../src/services/webhook.service';
 
 describe('who is muted', () => {
@@ -62,19 +75,27 @@ describe('suppressing an event', () => {
   });
 });
 
+/**
+ * DRIVEN through the real sendWebhook, with the PII policy on: it rewrites
+ * username to "User #7", so a check made after it would have nothing left
+ * to match on and the sysop's test would post.
+ */
 describe('where the check happens', () => {
-  it('runs before the PII policy replaces the username', () => {
-    // applyPiiPolicy rewrites username to "User #7", so a check after it
-    // would have nothing left to match on.
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const source = readFileSync(join(__dirname, '..', '..', 'src', 'services', 'webhook.service.ts'), 'utf8');
-    const send = source.slice(source.indexOf('async sendWebhook('));
+  const saved = process.env.WEBHOOK_EXCLUDE_USERS;
+  let quiet: jest.SpyInstance;
+  beforeEach(() => { delete process.env.WEBHOOK_EXCLUDE_USERS; mockPost.mockClear(); quiet = jest.spyOn(console, 'log').mockImplementation(() => {}); });
+  afterEach(() => { quiet.mockRestore(); if (saved === undefined) delete process.env.WEBHOOK_EXCLUDE_USERS; else process.env.WEBHOOK_EXCLUDE_USERS = saved; });
 
-    const suppressAt = send.indexOf('isWebhookSuppressed');
-    const piiAt = send.indexOf('applyPiiPolicy');
+  it('runs before the PII policy replaces the username', async () => {
+    await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, { username: 'SysOp', userId: '1', filename: 'TEST.LHA' });
+    expect(mockPost).not.toHaveBeenCalled();
 
-    expect(suppressAt).toBeGreaterThan(-1);
-    if (piiAt > -1) expect(suppressAt).toBeLessThan(piiAt);
+    // The same event from anyone else posts - anonymised, which is what
+    // proves the policy was on while the sysop's was being judged.
+    await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, { username: 'spot', userId: '7', filename: 'TEST.LHA' });
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    const payload = JSON.stringify((mockPost.mock.calls[0] as unknown[])[1]);
+    expect(payload).toContain('User #7');
+    expect(payload).not.toContain('spot');
   });
 });

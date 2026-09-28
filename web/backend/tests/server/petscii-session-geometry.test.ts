@@ -308,9 +308,12 @@ describe('both reporters go through the one gate', () => {
 
   it('index.ts no longer carries a copy of either handler', () => {
     // The move is only a move if the old body is gone: two copies would drift.
+    // REASONABLE source read: this is an absence (no second copy), and the
+    // telnet/SSH 'connection' wiring in index.ts is only reached from
+    // startBBS once real listeners are bound - the handler it delegates to is
+    // driven above. The patterns take any quoting, spacing and line layout.
     const indexSrc = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
-    expect(indexSrc).not.toContain('connection.on("window-size"');
-    expect(indexSrc).not.toContain('connection.on(\n    "terminal-type"');
-    expect(indexSrc).not.toContain('function setupTelnetSSHHandler');
+    expect(indexSrc).not.toMatch(/\.on\(\s*['"`](?:window-size|terminal-type)['"`]/);
+    expect(indexSrc).not.toMatch(/function\s+setupTelnetSSHHandler\b|(?:const|let|var)\s+setupTelnetSSHHandler\s*=/);
   });
 });
