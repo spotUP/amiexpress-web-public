@@ -335,7 +335,18 @@ export class List extends Element {
         // own colour tags out of itemText, and rebuilding from the untouched
         // `item` here threw that away - which is why the first attempt at
         // this fix changed nothing on screen.
-        itemText = `${openTags}${itemText}${closeTags}`;
+        //
+        // EVERY ROW OF THE ITEM, not the item once. An item may hold several
+        // rows (`\n`), and the wrap below splits the PARSED text on `\n` -
+        // so one wrapper round the whole item painted its style on the first
+        // row only: a selected WHIP kanban card lit its first title row and
+        // left the rest dark (sysop, 2026-09-28). Each row carries its own
+        // open and close now. An empty row stays empty - a spacer between
+        // multi-row items is not part of the selection.
+        itemText = itemText
+          .split('\n')
+          .map((row) => (row.length > 0 ? `${openTags}${row}${closeTags}` : row))
+          .join('\n');
       }
 
       if (this.wrapItemsEnabled) {

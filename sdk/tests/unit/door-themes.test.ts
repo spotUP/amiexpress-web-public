@@ -538,7 +538,11 @@ describe('glitching a list rather than a box', () => {
     // The first version wrote to setContent and nothing was ever visible -
     // reported as "uprough neon is active, i see no glitches".
     const list = listLike(['alpha', 'beta', 'gamma']);
-    glitchTargetFor(list).setContent('one\ntwo\nthree');
+    // Read first, as the glitch tick does: a list target only writes back
+    // text shaped like the items it handed out.
+    const target = glitchTargetFor(list);
+    target.getContent();
+    target.setContent('one\ntwo\nthree');
     expect(list.items).toEqual(['one', 'two', 'three']);
   });
 

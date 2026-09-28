@@ -43,12 +43,55 @@ export function glitchTargetFor(element: any): GlitchTarget {
   const isList = typeof element?.setItems === 'function' && Array.isArray(element?.items);
   if (!isList) return element as GlitchTarget;
 
+  /*
+   * THE ITEMS KEEP THEIR SHAPE. An item may span several rows (`\n`), and the
+   * glitch damages ROWS - so the text goes out as rows and must come back as
+   * the same items. This used to restore with `setItems(text.split('\n'))`,
+   * which turned every row into an item of its own: after the first glitch a
+   * WHIP kanban card was four items and the empty row between cards a fifth,
+   * so the cursor stopped on the spacer and lit one row of a wrapped title
+   * (sysop, 2026-09-28). The row count per item is taken when the content is
+   * read, and the damaged rows are regrouped by it.
+   */
+  //
+  // AND THE LIST'S OWN REDRAW WINS. A door repaints its list whenever it likes
+  // (an arrow key, a reload), including between the damage and the repair.
+  // So nothing is ever written back that the list is not still showing: text
+  // that does not fit the shape is refused rather than split into rows - the
+  // split is what left a WHIP column as one item per row when two tests, or
+  // two repaints, overlapped a glitch - and the repair puts the truth back
+  // only while the list still shows the damage this target wrote. If the door
+  // has redrawn in between, the door's content is the truth.
+  let shape: number[] = [];
+  let written: string | null = null;
+  const text = (item: any): string =>
+    typeof item === 'string' ? item : item?.getContent?.() ?? '';
+  const showing = (): string => (element.items as any[]).map(text).join('\n');
   return {
-    getContent: () =>
-      (element.items as any[])
-        .map((item: any) => (typeof item === 'string' ? item : item?.getContent?.() ?? ''))
-        .join('\n'),
-    setContent: (text: string) => element.setItems(text.split('\n')),
+    getContent: () => {
+      const items = (element.items as any[]).map(text);
+      shape = items.map((item) => item.split('\n').length);
+      written = null;
+      return items.join('\n');
+    },
+    setContent: (content: string) => {
+      const rows = content.split('\n');
+      const total = shape.reduce((a, b) => a + b, 0);
+      if (rows.length !== total) return;
+      if (written !== null && showing() !== written) {
+        // The door redrew over the damage; there is nothing of ours to repair.
+        written = null;
+        return;
+      }
+      const items: string[] = [];
+      let at = 0;
+      for (const count of shape) {
+        items.push(rows.slice(at, at + count).join('\n'));
+        at += count;
+      }
+      element.setItems(items);
+      written = written === null ? showing() : null;
+    },
   };
 }
 
