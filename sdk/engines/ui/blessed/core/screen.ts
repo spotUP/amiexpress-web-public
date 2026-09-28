@@ -1217,11 +1217,24 @@ export class Screen extends Element {
 
     // Mark element content area as dirty so _diff() outputs the changes
     // This is critical for scrolling to work - content changes need to be in dirty region
-    this._markDirty(startX, startY, maxX - 1, maxY - 1);
+    // The BACKGROUND covers everything inside the border - the padding ring
+    // and the rows a valign offset skips included - as blessed's own render
+    // does. It used to start at the content origin, so a padded or
+    // vertically-centred box over other content let that content show
+    // through its padding: WHIP's "Task title cannot be empty!" message
+    // (padding 1, text centred) drew with the dialog behind it bleeding
+    // through (2026-09-28).
+    const fillX = pos.xi + border;
+    const fillY = pos.yi + border;
+    const fillMaxXRaw = pos.xl - border;
+    const fillMaxYRaw = pos.yl - border;
+    this._markDirty(fillX, fillY, fillMaxXRaw - 1, fillMaxYRaw - 1);
 
     // BBS Constraint: Enforce 80-column width limit (unless responsive mode)
     let bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
     let bbsMaxY = maxY;
+    let fillMaxX = this._responsive ? fillMaxXRaw : Math.min(fillMaxXRaw, 80);
+    let fillMaxY = fillMaxYRaw;
 
     // CRITICAL FIX: Clamp rendering area to parent bounds to prevent background/content leaking
     if (element.parent && element.parent !== this) {
@@ -1234,6 +1247,8 @@ export class Screen extends Element {
         const parentMaxY = parentPos.yl - parentBorder;
         bbsMaxX = Math.min(bbsMaxX, parentMaxX);
         bbsMaxY = Math.min(bbsMaxY, parentMaxY);
+        fillMaxX = Math.min(fillMaxX, parentMaxX);
+        fillMaxY = Math.min(fillMaxY, parentMaxY);
       }
     }
 
@@ -1265,9 +1280,9 @@ export class Screen extends Element {
       // Neo-blessed style: blend colors at 50% opacity
       // Keep underlying characters visible, only blend the color attributes
       // EXACT from neo-blessed element.js line 1945: colors.blend(attr, lines[y][x][0])
-      for (let y = startY; y < maxY; y++) {
+      for (let y = fillY; y < fillMaxY; y++) {
         if (y < 0 || y >= this.height || !this.buffer[y]) continue;
-        for (let x = startX; x < bbsMaxX; x++) {
+        for (let x = fillX; x < fillMaxX; x++) {
           if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
           const existingAttr = this.buffer[y][x][0];
           const existingChar = this.buffer[y][x][1];
@@ -1278,9 +1293,9 @@ export class Screen extends Element {
       }
     } else if (!isTransparentBg) {
       // Normal fill - overwrite buffer (now uses clamped bounds from above)
-      for (let y = startY; y < bbsMaxY; y++) {
+      for (let y = fillY; y < fillMaxY; y++) {
         if (y < 0 || y >= this.height || !this.buffer[y]) continue;
-        for (let x = startX; x < bbsMaxX; x++) {
+        for (let x = fillX; x < fillMaxX; x++) {
           if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
           this.buffer[y][x] = [baseAttr, fillChar];
         }
@@ -1288,9 +1303,9 @@ export class Screen extends Element {
     } else {
       // Transparent bg: clear characters but preserve each cell's existing bg color.
       // Without this, old content persists as ghost artifacts when content shrinks.
-      for (let y = startY; y < bbsMaxY; y++) {
+      for (let y = fillY; y < fillMaxY; y++) {
         if (y < 0 || y >= this.height || !this.buffer[y]) continue;
-        for (let x = startX; x < bbsMaxX; x++) {
+        for (let x = fillX; x < fillMaxX; x++) {
           if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
           const existingAttr = this.buffer[y][x][0];
           const existingBg = existingAttr & 0x1ff;

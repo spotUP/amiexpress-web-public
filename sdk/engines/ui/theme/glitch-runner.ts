@@ -43,6 +43,22 @@ export function glitchTargetFor(element: any): GlitchTarget {
   const isList = typeof element?.setItems === 'function' && Array.isArray(element?.items);
   if (!isList) return element as GlitchTarget;
 
+  // ONE wrapper per list. The wrapper remembers the item shape between the
+  // read and the write, and a caller that asks for the target at each call -
+  // the chrome's lazy glitch target does - used to get a fresh wrapper with
+  // no shape, so every damage was refused and a lazily named pane never
+  // glitched at all (door-chrome tests, red since f14943931).
+  const cached = listTargets.get(element);
+  if (cached) return cached;
+  const made = listTargetFor(element);
+  listTargets.set(element, made);
+  return made;
+}
+
+const listTargets = new WeakMap<object, GlitchTarget>();
+
+function listTargetFor(element: any): GlitchTarget {
+
   /*
    * THE ITEMS KEEP THEIR SHAPE. An item may span several rows (`\n`), and the
    * glitch damages ROWS - so the text goes out as rows and must come back as

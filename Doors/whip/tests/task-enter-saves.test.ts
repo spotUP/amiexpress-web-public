@@ -84,6 +84,15 @@ export async function enterOnABlankNewTitleIsRefusedAndTheCallerTypesOn(): Promi
     await settle();
     assert.strictEqual(added.length, 0, 'a blank title is never stored');
     assert.ok(findByLabel(screen, ' Error '), 'the caller is told why');
+    // ...and can SEE it: a 'shrink' message used to measure zero columns
+    // (its text lives in a child), so it was there and invisible (sysop,
+    // 2026-09-28: "i get no error with the empty title").
+    {
+      const shown = findByLabel(screen, ' Error ');
+      const pos = shown._getCoords();
+      assert.ok(pos.xl - pos.xi >= 'Task title cannot be empty!'.length + 4,
+        `the error box is wide enough for its text (is ${pos.xl - pos.xi})`);
+    }
 
     // ONE Enter dismisses the error and the caller's keys are back in the
     // title. A dismissed message used to hand focus back to ITSELF

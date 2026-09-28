@@ -17,6 +17,7 @@
 import { Box } from './box';
 import { Button } from './button';
 import { Overlay } from './overlay';
+import { stripTags } from '../helpers';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
@@ -41,6 +42,8 @@ export class Message extends Box {
   private _responsiveCleanup?: () => void;
   private _trapCleanup?: () => void;
   private _desktopWidth: number | string | undefined;
+  /** `width: 'shrink'` - sized from the text, set again whenever it changes. */
+  private _shrinkToText = false;
   private _mobileWidth: number | string | undefined;
   private _desktopButtonWidth: number = 10;
   private _mobileButtonWidth: number = 14;
@@ -62,7 +65,7 @@ export class Message extends Box {
       parent: useOverlay ? undefined : originalParent,  // Don't set parent yet if using overlay
       border: options.border || { type: 'line', fg: 'white', bg: 'blue' },
       label: options.title || options.label || ' Message ',
-      width: options.width || 40,
+      width: options.width === 'shrink' ? widthForText(options.text) : options.width || 40,
       height: height,
       top: options.top || 'center',
       left: options.left || 'center',
@@ -155,7 +158,8 @@ export class Message extends Box {
     });
 
     // Store desktop dimensions for responsive toggling
-    this._desktopWidth = options.width || 40;
+    this._shrinkToText = options.width === 'shrink';
+    this._desktopWidth = this._shrinkToText ? widthForText(options.text) : options.width || 40;
     this._mobileWidth = options.mobileWidth;
     this._tapToDismiss = options.tapToDismiss !== false;  // Default: enabled
 
@@ -255,6 +259,10 @@ export class Message extends Box {
    */
   setText(text: string): void {
     this.messageText.setContent(text);
+    if (this._shrinkToText) {
+      this._desktopWidth = widthForText(text);
+      if (!this._isMobileMode) this.width = this._desktopWidth;
+    }
   }
 
   /**
@@ -337,4 +345,23 @@ export class Message extends Box {
 
     if (this.screen) this.screen.render();
   }
+}
+
+/**
+ * The width a `'shrink'` message needs for its text.
+ *
+ * Blessed's shrink measures an element's OWN content, and a Message keeps its
+ * text in a child box - so a shrink message measured zero columns and drew
+ * nothing at all. WHIP's "Task title cannot be empty!" was on screen, not
+ * hidden, and invisible (sysop, 2026-09-28: "i get no error with the empty
+ * title"). The height already had the same treatment (fixed, above). Longest
+ * line plus padding and border, never narrower than the OK button needs.
+ */
+function widthForText(text: string | undefined): number {
+  const longest = stripTags(String(text ?? ''))
+    .split('\n')
+    .reduce((max, line) => Math.max(max, line.length), 0);
+  const PADDING_AND_BORDER = 4;
+  const OK_BUTTON_ROOM = 14;
+  return Math.max(OK_BUTTON_ROOM, longest + PADDING_AND_BORDER);
 }
