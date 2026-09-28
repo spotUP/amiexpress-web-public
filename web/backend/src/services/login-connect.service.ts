@@ -200,6 +200,18 @@ export async function runPreLoginConnect(
   session: BBSSession,
   ctx: PreLoginConnectContext,
 ): Promise<PreLoginConnectResult> {
+  // Before anything is drawn: EXECUTE_ON_CONNECT - express.e:7353 runs it
+  // once per call, node known, right before the connect screen. It ran from
+  // the web socket handler only, for every socket (a reconnect, a chat-only
+  // page) with node 0, and never for telnet or SSH (web-vs-telnet audit
+  // item 14, 2026-09-28).
+  try {
+    const { runExecuteOn } = await import("./batch-scheduler");
+    await runExecuteOn("CONNECT", session.nodeId || 0, {});
+  } catch (err) {
+    console.error("[PreLoginConnect] EXECUTE_ON_CONNECT failed:", err);
+  }
+
   // 0. The connect banner, for every transport that reaches this service.
   try {
     await emitConnectBanner(emitter, session, ctx.postBannerDelayMs ?? 0);

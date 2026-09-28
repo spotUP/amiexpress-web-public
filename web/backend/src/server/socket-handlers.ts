@@ -180,12 +180,6 @@ console.warn('[debug-mcp] failed to install ansi-output tap:', err);
   // Start tracking session output for admin log viewer
   sessionLogManager.startSession(socket.id);
 
-  // express.e:7353 - runExecuteOn('CONNECT') when connection is established
-  // Note: nodeId is 0 here as no session is assigned yet
-  runExecuteOn('CONNECT', 0, {}).catch((err) =>
-console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
-  );
-
   const session = getSession(socket.id);
   if (session) {
     session.socket = socket;
