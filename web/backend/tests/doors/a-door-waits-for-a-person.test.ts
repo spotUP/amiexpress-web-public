@@ -23,10 +23,20 @@
  * menu once, and pressing it at 26 s drew it twice and logged
  * `HotKey() -> char: 0`. After the fix, 26 s draws it once.
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import { waitBudgetMs } from '../../src/amiga-emulation/api/AEDoorLibrary';
+import { AEDoorLibrary, waitBudgetMs } from '../../src/amiga-emulation/api/AEDoorLibrary';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
+
+/*
+ * A deasync stand-in for the wiring test at the bottom: each turn of the
+ * pump advances a virtual clock by one second, so the real wait loop can be
+ * run to its own deadline without a suite sitting through it.
+ */
+const mockClock = { now: 0 };
+jest.mock('deasync', () => ({
+  loopWhile: (pred: () => boolean) => {
+    while (pred()) mockClock.now += 1000;
+  },
+}));
 
 /** Longer than any person takes to read a menu and decide. */
 const A_HUMAN_PAUSE_MS = 30_000;
@@ -86,20 +96,36 @@ describe('how long a door waits for a reply', () => {
 
   it('is what the wait loop actually asks for', () => {
     /*
-     * WIRING, not behaviour - and worth saying so. The tests above pass
-     * against a `waitBudgetMs` nothing calls: they pinned the helper while
-     * the loop kept its hardcoded 5000, which is the exact shape of a green
-     * test over a live bug.
+     * WIRING - the tests above pass against a `waitBudgetMs` nothing calls:
+     * they once pinned the helper while the loop kept its hardcoded 5000,
+     * which is the exact shape of a green test over a live bug.
      *
-     * The behaviour itself is driven through the real loop in
-     * `the-wait-measures-the-board-not-the-caller.test.ts`; this only keeps
-     * the deadline consulting the command at all.
+     * So the real `waitForReply` loop is run, with nothing ever replying, on
+     * a virtual clock, and how long it waited before giving up is measured:
+     * a keypress wait must outlast a person, a board-answered command must
+     * still stop at the machine budget.
      */
-    const source = fs.readFileSync(
-      path.join(__dirname, '../../src/amiga-emulation/api/AEDoorLibrary.ts'),
-      'utf8',
-    );
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => mockClock.now);
+    try {
+      const waitedFor = (command: number): number => {
+        const emulator: any = {
+          readMemory: () => 0, readMemory32: () => 0, writeMemory: () => undefined,
+          writeMemory32: () => undefined, setRegister: () => undefined, getRegister: () => 0,
+          readString: () => '', writeString: () => undefined, pause: () => undefined, resume: () => undefined,
+        };
+        const execLibrary: any = { getMsg: () => 0, hasPort: () => true, putMsg: () => undefined, replyMsg: () => undefined };
+        const library = new AEDoorLibrary({ on: () => undefined, emit: () => undefined } as any, emulator, execLibrary, {}) as any;
+        const state = { bbsPortAddr: 0x1000, replyPortAddr: 0x2000, messageAddr: 0x3000, dataPtr: 0x4000, stringPtr: 0x5000 };
+        mockClock.now = 1_000_000;
+        const startedAt = mockClock.now;
+        expect(library.waitForReply(state, command)).toBe(false);
+        return mockClock.now - startedAt;
+      };
 
-    expect(source).toMatch(/deadline = Date\.now\(\) \+ waitBudgetMs\(command\)/);
+      expect(waitedFor(XIMCommand.JH_HK)).toBeGreaterThan(A_HUMAN_PAUSE_MS);
+      expect(waitedFor(XIMCommand.JH_SF)).toBeLessThanOrEqual(waitBudgetMs(XIMCommand.JH_SF) + 1000);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

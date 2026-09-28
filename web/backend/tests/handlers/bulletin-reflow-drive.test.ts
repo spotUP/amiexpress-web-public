@@ -271,7 +271,9 @@ describe('handleReadBulletinCommand on real bulletin bytes', () => {
  * route to handleReadBulletinCommand) and its exports were imported by
  * index.ts and command.handler.ts without ever being called, so it was dead
  * code that would have served 80-column bytes to a C64 the moment anything
- * routed to it. It is deleted; this stops it coming back unnoticed.
+ * routed to it. It is deleted; this stops it coming back unnoticed. These are
+ * absence walks (REASONABLE: an import or declaration that must not exist is
+ * invisible at runtime); the renderer that DOES exist is driven above.
  */
 describe('the board has exactly one bulletin renderer', () => {
   const SRC = path.resolve(__dirname, '../../src');
@@ -295,10 +297,14 @@ describe('the board has exactly one bulletin renderer', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('only display-file-commands.handler.ts declares a bulletin display helper', () => {
+  it('no other file declares a bulletin display helper', () => {
+    // REASONABLE source read: a repo-wide absence walk. The one renderer's
+    // PRESENCE is not read from text - the drives above run it through
+    // handleReadBulletinCommand, whatever its helper is called.
     const offenders = sourceFiles(SRC)
+      .filter((f) => path.relative(SRC, f) !== path.join('handlers', 'commands', 'display-file-commands.handler.ts'))
       .filter((f) => /function\s+_?displayBulletin\b/.test(fs.readFileSync(f, 'utf8')))
       .map((f) => path.relative(SRC, f));
-    expect(offenders).toEqual(['handlers/commands/display-file-commands.handler.ts']);
+    expect(offenders).toEqual([]);
   });
 });

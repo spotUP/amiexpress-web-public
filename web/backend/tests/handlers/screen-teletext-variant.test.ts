@@ -1,9 +1,8 @@
 /**
  * ANSI teletext screens (.ttx) - WEB_ extension, T answer at the graphics
- * prompt. Behavioural where the loader allows it (findSecurityScreen takes
- * an explicit base path), structural where it does not (the variant lists
- * live inline in loadScreenFile - see screen-loader-case.test.ts for why
- * a source pin is proportionate there).
+ * prompt. Behavioural throughout: findSecurityScreen takes an explicit base
+ * path, and the variant lists inline in loadScreenFile are driven through
+ * the loader on a scratch board (config.set('dataDir')).
  *
  * Priority: .SEQ (petscii) > .RIP (rip) > .TTX (teletext) > user type >
  * .TXT. Native packet-level .TTI is deliberately NOT served until
@@ -167,36 +166,85 @@ describe('loadScreenFile - teletext wins end to end on a scratch board', () => {
     expect(screen!.isTeletext).toBe(true);
   });
 });
-describe('loadScreenFile - teletext variant lists (structural pins)', () => {
-  const src = fs.readFileSync(
-    path.resolve(__dirname, '../../src/handlers/screen.handler.ts'),
-    'utf8',
-  );
+describe('loadScreenFile - teletext variant lists, driven', () => {
+  // What the variant lists inside loadScreenFile decide, observed through
+  // the loader on a scratch board. Lookups are case-insensitive
+  // (findCaseInsensitive / amigafs), so the order of `.ttx` against `.TTX` is
+  // not a behaviour; what is, is teletext art of EITHER case beating `.txt`.
+  let board = '';
+  let oldDataDir = '';
 
-  test('SCREEN_EXTENSION_RE swaps .ttx (and still .tti), not appends', () => {
-    expect(src).toMatch(/SCREEN_EXTENSION_RE\s*=\s*\/\\\.\(seq\|txt\|rip\|tti\|ttx\)/);
+  beforeEach(() => {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-variants-'));
+    fs.mkdirSync(path.join(board, 'Node0'), { recursive: true });
+    fs.mkdirSync(path.join(board, 'Art'), { recursive: true });
+    const { config } = require('../../src/config');
+    oldDataDir = config.getConfig().dataDir;
+    config.set('dataDir', board);
   });
 
-  test('addTeletextVariants queues .ttx before .TTX before .txt', () => {
-    const body = src.match(/addTeletextVariants[\s\S]*?return\s+Array\.from\(variants\)/)?.[0];
-    expect(body).toBeDefined();
-    const ttx = body!.search(/\$\{\w+\}\.ttx`/);
-    const TTX = body!.search(/\$\{\w+\}\.TTX`/);
-    const txt = body!.search(/\$\{\w+\}\.txt`/);
-    expect(ttx).toBeGreaterThanOrEqual(0);
-    expect(TTX).toBeGreaterThan(ttx);
-    expect(txt).toBeGreaterThan(TTX);
+  afterEach(() => {
+    const { config } = require('../../src/config');
+    config.set('dataDir', oldDataDir);
+    fs.rmSync(board, { recursive: true, force: true });
   });
 
-  test('the selection arms route a teletext session to addTeletextVariants', () => {
-    const hits = src.match(/wantsTeletext\)\s*\{\s*return[^;]*addTeletextVariants/g);
-    // BBSTITLE, AWAITSCREEN and the general arm.
-    expect(hits).not.toBeNull();
-    expect(hits!.length).toBe(3);
+  test('a name that already ends in .ttx or .tti has the extension swapped, not appended', () => {
+    fs.writeFileSync(path.join(board, 'Art', 'PAGE.txt'), 'ANSI PAGE');
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    for (const asked of ['PAGE.ttx', 'PAGE.tti']) {
+      const screen = loadScreenFile(path.join(board, 'Art', asked), undefined, 0, { texttvMode: false });
+      expect({ asked, content: screen?.content }).toEqual({ asked, content: 'ANSI PAGE' });
+    }
   });
 
-  test('the assign-path extOrder tries .ttx first for a teletext session', () => {
-    expect(src).toMatch(/session\?\.texttvMode === true[\s\S]*?'\.ttx', '\.TTX'/);
+  // The security walk answers first and would hide the variant lists, so
+  // each case below also carries an unrenderable .tti: the security slot takes
+  // it, rendering fails, and the loader falls through to the variant walk -
+  // the list under test (same route as "an unrenderable .tti falls back").
+  const BROKEN_TTI = 'DE,broken\nOL,0,';
+
+  test('upper-case .TTX art still beats .txt for a teletext session', () => {
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.tti'), BROKEN_TTI);
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.TTX'), 'UPPER TELETEXT');
+    fs.writeFileSync(path.join(board, 'Node0', 'BBSTITLE.txt'), 'ANSI TITLE');
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('BBSTITLE', undefined, 0, { texttvMode: true });
+    expect(screen?.content).toContain('UPPER TELETEXT');
+    expect(screen?.isTeletext).toBe(true);
+  });
+
+  test('the AWAITSCREEN arm routes a teletext session to its .ttx', () => {
+    fs.writeFileSync(path.join(board, 'Node0', 'AWAITSCREEN.tti'), BROKEN_TTI);
+    fs.writeFileSync(path.join(board, 'Node0', 'AWAITSCREEN.ttx'), 'TELETEXT AWAIT');
+    fs.writeFileSync(path.join(board, 'Node0', 'AWAITSCREEN.txt'), 'ANSI AWAIT');
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const teletext = loadScreenFile('AWAITSCREEN', undefined, 0, { texttvMode: true });
+    expect(teletext?.content).toContain('TELETEXT AWAIT');
+    expect(teletext?.isTeletext).toBe(true);
+  });
+
+  test('the general arm routes a teletext session to its .ttx', () => {
+    fs.mkdirSync(path.join(board, 'Conf1'), { recursive: true });
+    fs.writeFileSync(path.join(board, 'Conf1', 'Menu.tti'), BROKEN_TTI);
+    fs.writeFileSync(path.join(board, 'Conf1', 'Menu.ttx'), 'TELETEXT MENU');
+    fs.writeFileSync(path.join(board, 'Conf1', 'Menu.txt'), 'ANSI MENU');
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const teletext = loadScreenFile('MENU', 1, 0, { texttvMode: true });
+    expect(teletext?.content).toContain('TELETEXT MENU');
+    expect(teletext?.isTeletext).toBe(true);
+  });
+
+  test('the assign-path arm tries .ttx before .txt for a teletext session', () => {
+    // An absolute path (what ~SR_/~SS_ resolve to) takes extOrder, not the
+    // variant builders.
+    fs.writeFileSync(path.join(board, 'Art', 'PAGE.ttx'), 'TELETEXT PAGE');
+    fs.writeFileSync(path.join(board, 'Art', 'PAGE.txt'), 'ANSI PAGE');
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const teletext = loadScreenFile(path.join(board, 'Art', 'PAGE'), undefined, 0, { texttvMode: true });
+    expect(teletext?.content).toBe('TELETEXT PAGE');
+    const ansi = loadScreenFile(path.join(board, 'Art', 'PAGE'), undefined, 0, { texttvMode: false });
+    expect(ansi?.content).toBe('ANSI PAGE');
   });
 });
 

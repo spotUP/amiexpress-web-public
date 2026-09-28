@@ -13,9 +13,11 @@
  *     against their own copy of the extractor. This is what proves identity
  *     where there is no door-server checkout, and it is what fails when
  *     somebody edits the generated mirror by hand.
- *  2. THE BYTE COMPARISON (runs when the checkout is there). The mirror must
- *     equal what the generator would produce from the contract right now, and
- *     the contract versions must agree.
+ *  2. THE BYTE COMPARISON (runs when the checkout is there, found as the
+ *     sibling amiexpress-doorserver directory or DOORSERVER_CONTRACT). The
+ *     mirror must equal what the generator would produce from the contract
+ *     right now, and the contract versions must agree. Without the checkout
+ *     the block is reported SKIPPED, naming the path it looked for.
  *
  * WHAT IDENTITY DOES NOT CLAIM: that a given archive gets the same description
  * in both places. `analyseDoor` is pure in its inputs, but one of those inputs
@@ -26,14 +28,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import * as mirrorModule from '../../src/utils/describe.generated';
 import { analyseDoor, DESCRIBE_CONTRACT_VERSION } from '../../src/utils/describe.generated';
 
+// The sibling checkout, found relative to this repo rather than one
+// developer's home directory; DOORSERVER_CONTRACT overrides it (e.g. in CI).
 const SERVER_CONTRACT = process.env.DOORSERVER_CONTRACT
-  ?? '~/Code/amiexpress-doorserver/contract/describe.ts';
+  ?? path.resolve(__dirname, '..', '..', '..', '..', '..', 'amiexpress-doorserver', 'contract', 'describe.ts');
 const MIRROR = path.join(__dirname, '..', '..', 'src', 'utils', 'describe.generated.ts');
 const FIXTURES = path.join(__dirname, 'describe-fixtures.json');
 
-const describeIfServer = fs.existsSync(SERVER_CONTRACT) ? describe : describe.skip;
+const serverPresent = fs.existsSync(SERVER_CONTRACT);
+const describeIfServer = serverPresent ? describe : describe.skip;
 
 interface FixtureFile {
   contractVersion: string;
@@ -48,16 +54,21 @@ const fixtures: FixtureFile = JSON.parse(fs.readFileSync(FIXTURES, 'utf-8'));
 
 describe('the vendored describe mirror', () => {
   it('exists and says it is generated', () => {
+    // REASONABLE source read: the generated-file header is a comment,
+    // invisible at runtime, and without the door-server checkout it is the
+    // only generated marker CI can see. The byte comparison is the real check.
     const mirror = fs.readFileSync(MIRROR, 'utf-8');
     expect(mirror).toContain('GENERATED FILE -- DO NOT EDIT BY HAND');
     expect(mirror).toContain('Mirror of amiexpress-doorserver contract/describe.ts');
   });
 
   it('exports the API the board needs', () => {
-    const mirror = fs.readFileSync(MIRROR, 'utf-8');
-    for (const symbol of ['analyseDoor', 'buildGroupTags', 'DESCRIBE_CONTRACT_VERSION']) {
-      expect(mirror).toContain(`export ${symbol.startsWith('DESCRIBE') ? 'const' : 'function'} ${symbol}`);
-    }
+    // Read from the loaded module, not the text: how each is declared is the
+    // generator's business, that it is callable is the board's.
+    expect(typeof mirrorModule.analyseDoor).toBe('function');
+    expect(typeof mirrorModule.buildGroupTags).toBe('function');
+    expect(typeof mirrorModule.DESCRIBE_CONTRACT_VERSION).toBe('string');
+    expect(mirrorModule.DESCRIBE_CONTRACT_VERSION.length).toBeGreaterThan(0);
   });
 });
 
@@ -75,7 +86,11 @@ describe('the shared corpus - the same cases the door server runs', () => {
   );
 });
 
-describeIfServer('against the door server checkout', () => {
+// Absent checkout: reported as SKIPPED with the path looked for, never a
+// silent pass.
+describeIfServer(serverPresent
+  ? 'against the door server checkout'
+  : `against the door server checkout (SKIPPED: ${SERVER_CONTRACT} not found; set DOORSERVER_CONTRACT)`, () => {
   it('is byte-identical to what the generator produces today', () => {
     const source = fs.readFileSync(SERVER_CONTRACT, 'utf-8');
     // renderMirror's own shape, kept here rather than imported: importing

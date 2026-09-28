@@ -10,75 +10,204 @@
  * column turned a "60 minute" default into sixty SECONDS, which is what the
  * reporting user's own account had.
  *
- * These tests pin the units at every place a time limit is written or shown.
+ * These tests drive every place a time limit is written or shown, through the
+ * real code: the admin API's user create, the BBS's own sign-up, a fresh and
+ * a migrated database, the account statistics screen and the sysop's bulk
+ * editor. What is asserted is the number stored or the text shown.
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import request from 'supertest';
+import BetterSqlite3 from 'better-sqlite3';
 
-const backendSrc = join(__dirname, '..', '..', 'src');
+// The account and editor handlers import session types and sub-states from
+// index.ts; the three-export stub is all they touch.
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
 
-function source(...parts: string[]): string {
-  return readFileSync(join(backendSrc, ...parts), 'utf8');
-}
-
-/** Seconds a user gets from a configured limit given in minutes. */
-function secondsFor(minutes: number): number {
-  return minutes * 60;
-}
+/** A board whose sysop set the new-user time limit to 90 MINUTES. */
+const CONFIGURED_MINUTES = 90;
 
 describe('the configured default', () => {
-  it('is expressed in minutes and converted to seconds when a user is created', () => {
-    const routes = source('api', 'config-routes.ts');
+  let app: any;
+  let db: any;
+  let AuthHandler: any;
+  let bbsRoot: string;
+  let dbDir: string;
+  let previousDataDir: string | undefined;
+  let previousDbDir: string | undefined;
+  let previousDbFile: string | undefined;
 
-    // The write must multiply, not pass the minutes through as seconds.
-    expect(routes).toMatch(/timeLimit:\s*userData\.timeLimit\s*\?\?\s*\(\(defaults\.timeLimit[^)]*\)\s*\*\s*60\)/);
+  beforeAll(async () => {
+    previousDataDir = process.env.BBS_DATA_DIR;
+    previousDbDir = process.env.DATABASE_DIR;
+    previousDbFile = process.env.DATABASE_FILE;
+    bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bbs-time-limit-'));
+    dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bbs-time-limit-db-'));
+    process.env.BBS_DATA_DIR = bbsRoot;
+    process.env.DATABASE_DIR = dbDir;
+    process.env.DATABASE_FILE = 'time-limit.db';
+
+    // Env first, modules after (same shape as user-password-change-reaches-login).
+    jest.resetModules();
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const express = require('express');
+    const { saveBBSConfig, invalidateBoardConfig } = require('../../src/services/bbs-config-file.service');
+    const { Database } = require('../../src/database');
+    const { createConfigRouter } = require('../../src/api/config-routes');
+    AuthHandler = require('../../src/handlers/user/auth.handler').AuthHandler;
+    /* eslint-enable @typescript-eslint/no-var-requires */
+
+    // The sysop's setting, where the board keeps it: bbsConfig.info.
+    saveBBSConfig(bbsRoot, { new_user_time_limit: CONFIGURED_MINUTES });
+    invalidateBoardConfig();
+
+    db = new Database();
+    await db.init();
+    app = express();
+    app.use(express.json());
+    app.use('/api/config', createConfigRouter(db));
+  }, 30000);
+
+  afterAll(async () => {
+    if (db) await db.close();
+    const restore = (key: string, value: string | undefined) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    };
+    restore('BBS_DATA_DIR', previousDataDir);
+    restore('DATABASE_DIR', previousDbDir);
+    restore('DATABASE_FILE', previousDbFile);
+    fs.rmSync(bbsRoot, { recursive: true, force: true });
+    fs.rmSync(dbDir, { recursive: true, force: true });
   });
 
-  it('reaches users who sign up through the BBS itself', () => {
+  it('is expressed in minutes and converted to seconds when a user is created', async () => {
+    const username = `tl_admin_${Date.now()}`;
+    const res = await request(app)
+      .post('/api/config/users')
+      .send({ username, password: 'hunter2xyz', securityLevel: 10 });
+    expect([200, 201]).toContain(res.status);
+
+    const user = await db.getUserByUsername(username);
+    expect(user.timeLimit).toBe(CONFIGURED_MINUTES * 60);
+  }, 30000);
+
+  it('reaches users who sign up through the BBS itself', async () => {
     // This path used to hardcode 3600, so raising the configured limit had no
     // effect on anyone registering through the BBS - which is everyone.
-    const auth = source('handlers', 'user', 'auth.handler.ts');
+    const username = `tl_bbs_${Date.now()}`;
+    const res: any = { status: jest.fn(() => res), json: jest.fn(() => res) };
+    await new AuthHandler(db).register(
+      { body: { username, realname: 'Time Limit', location: 'Uprough', password: 'hunter2xyz' } } as any,
+      res,
+    );
+    expect(res.status).not.toHaveBeenCalledWith(500);
 
-    expect(auth).toContain('newUserTimeLimitSeconds');
-    expect(auth).toMatch(/new_user_time_limit/);
-    expect(auth).not.toMatch(/timeLimit:\s*3600,/);
-  });
+    const user = await db.getUserByUsername(username);
+    expect(user).toBeTruthy();
+    expect(user.timeLimit).toBe(CONFIGURED_MINUTES * 60);
+  }, 30000);
 
-  it('defaults to the maximum the schema allows', () => {
-    const db = source('database.ts');
-    const repo = source('database', 'config-repository.ts');
-
+  it('defaults to the maximum the schema allows on a fresh database', () => {
     // 1440 minutes = 24 hours, the ceiling of the column's CHECK constraint.
-    expect(db).toMatch(/new_user_time_limit INTEGER DEFAULT 1440/);
-    expect(repo).toMatch(/new_user_time_limit \?\? 1440/);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ConfigRepository } = require('../../src/database/config-repository');
+    const raw = new BetterSqlite3(':memory:');
+    try {
+      // The real table, as the fresh database created it.
+      const ddl = db.db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'system_config'").get().sql;
+      raw.exec(ddl);
+      const created = new ConfigRepository(raw).getSystemConfig();
+      expect(created.new_user_time_limit).toBe(1440);
+    } finally {
+      raw.close();
+    }
   });
 });
 
-describe('a day at the configured maximum', () => {
-  it('is a full 24 hours of seconds, not 1440 of them', () => {
-    expect(secondsFor(1440)).toBe(86400);
-  });
+describe('a board upgraded from before the column existed', () => {
+  it('gets the 24 hour default, not whatever the column would otherwise hold', async () => {
+    const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bbs-time-limit-legacy-'));
+    const previousDbDir = process.env.DATABASE_DIR;
+    const previousDbFile = process.env.DATABASE_FILE;
+    process.env.DATABASE_DIR = dbDir;
+    process.env.DATABASE_FILE = 'legacy.db';
+    // A system_config row written before new_user_time_limit was a column.
+    const legacy = new BetterSqlite3(path.join(dbDir, 'legacy.db'));
+    legacy.exec('CREATE TABLE system_config (id INTEGER PRIMARY KEY, bbs_name TEXT)');
+    legacy.exec("INSERT INTO system_config (id, bbs_name) VALUES (1, 'Legacy')");
+    legacy.close();
 
-  it('would have been 24 minutes under the old behaviour', () => {
-    // The bug in one line: the number that meant "a day" meant "24 minutes".
-    expect(1440 / 60).toBe(24);
-  });
+    let db: any;
+    try {
+      jest.resetModules();
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Database } = require('../../src/database');
+      db = new Database();
+      await db.init();
+      const row = db.db.prepare('SELECT new_user_time_limit AS m FROM system_config WHERE id = 1').get();
+      expect(row.m).toBe(1440);
+    } finally {
+      if (db) await db.close();
+      if (previousDbDir === undefined) delete process.env.DATABASE_DIR;
+      else process.env.DATABASE_DIR = previousDbDir;
+      if (previousDbFile === undefined) delete process.env.DATABASE_FILE;
+      else process.env.DATABASE_FILE = previousDbFile;
+      fs.rmSync(dbDir, { recursive: true, force: true });
+    }
+  }, 30000);
 });
 
 describe('showing and editing a limit', () => {
-  it('converts to minutes for display rather than printing raw seconds', () => {
-    const account = source('handlers', 'user', 'account.handler.ts');
+  function recordingSocket() {
+    const out: string[] = [];
+    return { socket: { emit: (_event: string, data: unknown) => { out.push(String(data)); } }, text: () => out.join('') };
+  }
 
-    expect(account).not.toMatch(/Time Limit: \$\{user\.timeLimit\} minutes/);
-    expect(account).toMatch(/Time Limit: \$\{Math\.floor\(\(user\.timeLimit \|\| 0\) \/ 60\)\} minutes/);
+  it('converts to minutes for display rather than printing raw seconds', async () => {
+    jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const account = require('../../src/handlers/user/account.handler');
+    account.setDatabase({
+      getUserByUsername: async () => ({
+        username: 'Spot', realname: 'Spot', location: 'Uprough', secLevel: 255,
+        firstLogin: new Date(0), lastLogin: new Date(0), calls: 1, callsToday: 1,
+        timeTotal: 0, timeUsed: 0, timeLimit: 86400, uploads: 0, downloads: 0,
+        bytesUpload: 0, bytesDownload: 0,
+      }),
+    });
+    const { socket, text } = recordingSocket();
+    account.handleViewUserStats(socket, {} as any, 'Spot');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(text()).toContain('Time Limit: 1440 minutes');
+    expect(text()).not.toContain('86400 minutes');
   });
 
-  it('converts the sysop editor back to seconds on the way in', () => {
+  it('converts the sysop editor back to seconds on the way in', async () => {
     // The editor's field is labelled "mins", so a sysop typing 60 must get an
-    // hour, not a minute.
-    const editor = source('handlers', 'user', 'user-editor.handler.ts');
+    // hour, not a minute. Driven as the sysop types it: B (bulk editor),
+    // U (Time Limit), 60, ~ (apply).
+    jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const editor = require('../../src/handlers/user/user-editor.handler');
+    const updateUser = jest.fn(async () => undefined);
+    const db: any = {
+      getUsers: async () => [{ id: 'u1', username: 'Spot', slotNumber: 1, secLevel: 10, location: '' }],
+      getUserById: async () => null,
+      updateUser,
+    };
+    const session: any = { state: 'loggedon', user: { username: 'sysop', secLevel: 255 }, tempData: undefined };
+    const { socket } = recordingSocket();
 
-    expect(editor).toMatch(/updates\.timeLimit = parseInt\(s\[10\], 10\) \* 60/);
+    await editor.handleAccountEditorInput(socket, session, db, 'B');
+    for (const key of ['U', '60', '~']) await session.inputCallback(key);
+
+    expect(updateUser).toHaveBeenCalledWith('u1', expect.objectContaining({ timeLimit: 3600 }));
   });
 });

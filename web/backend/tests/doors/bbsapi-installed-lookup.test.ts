@@ -67,6 +67,9 @@ describe('BBSApi installed-door lookup', () => {
     const read = (file: string) => fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'doors', file), 'utf-8');
 
+    // REASONABLE source read: an import that must be ABSENT is invisible at
+    // runtime. That the list IS built from door_installs is driven below
+    // (getDoorList counts its getInstallByCommand calls).
     const uses = read('door-list.ts')
       .split('\n')
       .map(line => line.trim())
@@ -76,7 +79,6 @@ describe('BBSApi installed-door lookup', () => {
 
     expect(uses).toEqual([]);
     expect(read('BBSApi.ts')).not.toMatch(/door-catalog\.service/);
-    expect(read('door-list.ts')).toMatch(/door-installs\.repository/);
   });
 
   it('keeps the catalog service in require.cache for DOORMAN', () => {
@@ -84,9 +86,18 @@ describe('BBSApi installed-door lookup', () => {
     // bare import must STAY. It has no named binding on purpose - a named
     // import nothing used would be elided by the compiler and DOORMAN's
     // catalogue browse would go quietly empty again (bdde95215).
-    const source = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'doors', 'door-list.ts'), 'utf-8');
-    expect(source).toMatch(/^import\s+['"]\.\/door-catalog\.service['"];?\s*$/m);
+    //
+    // Driven: load door-list and see whether the catalog service module was
+    // loaded with it. jest keeps its own registry rather than require.cache,
+    // so the service is replaced by a factory that records being evaluated -
+    // it runs exactly when, and only if, something requires the module.
+    const loaded = { catalogService: false };
+    jest.doMock('../../src/doors/door-catalog.service', () => {
+      loaded.catalogService = true;
+      return {};
+    });
+    require('../../src/doors/door-list');
+    expect(loaded.catalogService).toBe(true);
   });
 
   it('overlays all five catalog fields onto the door object', () => {

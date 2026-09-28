@@ -12,9 +12,16 @@
  * If a future change needs a third name here, that name joins the frozen set
  * and its behaviour stops being free to move - which is the decision this test
  * exists to force into the open.
+ *
+ * The seam itself is checked at RUNTIME: every value ascii-art.util.ts exports
+ * that is the frame module's own object must be one of the frozen two. The
+ * rest are import-graph ABSENCE checks (REASONABLE: an import that must not
+ * exist is invisible at runtime), read from the files on the 80-column path.
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import * as asciiArtUtil from '../../src/utils/ascii-art.util';
+import * as frameModule from '@amiexpress/bbs-door-sdk/petscii/frame';
 
 const SRC = path.resolve(__dirname, '../../src');
 const FROZEN = ['looksLikeAsciiArt', 'positionsCursorAbsolutely'];
@@ -22,7 +29,10 @@ const FRAME_MODULE = '@amiexpress/bbs-door-sdk/petscii/frame';
 
 const read = (rel: string) => fs.readFileSync(path.join(SRC, rel), 'utf8');
 
-/** The named bindings of every `import`/`export ... from '<module>'` in `src`. */
+/**
+ * The named bindings of every `import`/`export ... from '<module>'` in `src`
+ * (`moduleSuffix` '' = from any module).
+ */
 function namesImportedFrom(src: string, moduleSuffix: string): string[] {
   const names: string[] = [];
   const re = /(?:import|export)\s*\{([^}]*)\}\s*from\s*'([^']+)'/g;
@@ -37,11 +47,20 @@ function namesImportedFrom(src: string, moduleSuffix: string): string[] {
 }
 
 describe('the 80-column path takes only the frozen detectors out of the frame module', () => {
-  it('ascii-art.util.ts re-exports exactly the two frozen names', () => {
-    const src = read('utils/ascii-art.util.ts');
-    expect(namesImportedFrom(src, FRAME_MODULE).sort()).toEqual([...FROZEN].sort());
-    // ...and reaches the frame module exactly once, so there is one seam to audit.
-    expect(src.split(FRAME_MODULE).length - 1).toBe(1);
+  it('ascii-art.util.ts hands the 80-column path exactly the two frozen detectors', () => {
+    // Runtime identity, whatever the import/export syntax: which of the
+    // seam's exports ARE the frame module's objects.
+    const frameValues = new Map<unknown, string>(
+      Object.entries(frameModule).map(([name, value]) => [value, name]),
+    );
+    const fromFrame = Object.entries(asciiArtUtil)
+      .filter(([, value]) => frameValues.has(value))
+      .map(([name]) => name)
+      .sort();
+    expect(fromFrame).toEqual([...FROZEN].sort());
+    for (const name of FROZEN) {
+      expect((asciiArtUtil as Record<string, unknown>)[name]).toBe((frameModule as Record<string, unknown>)[name]);
+    }
   });
 
   it.each([
@@ -56,7 +75,6 @@ describe('the 80-column path takes only the frozen detectors out of the frame mo
     const src = read(rel);
     expect(src).not.toContain(FRAME_MODULE);
     const taken = namesImportedFrom(src, 'ascii-art.util');
-    expect(taken.length).toBeGreaterThan(0);
     expect(taken.filter((n) => !FROZEN.includes(n))).toEqual([]);
   });
 
@@ -71,11 +89,13 @@ describe('the 80-column path takes only the frozen detectors out of the frame mo
     expect(read(rel)).not.toContain(FRAME_MODULE);
   });
 
-  it('no 80-column file names a ladder symbol at all', () => {
+  it('no 80-column file imports a ladder symbol from anywhere', () => {
+    // Import bindings, from any module - not substrings of the code, so a
+    // local name or a string that happens to match is not a use.
     const ladder = ['classifyRow', 'chooseRule', 'adaptRows', 'adaptFrame', 'applyRule', 'narrowRow', 'deindentRow', 'isRuleRow', 'columnParts', 'columnSpans', 'hasColumnStructure', 'hasTabularGutters'];
-    for (const rel of ['utils/ascii-art.util.ts', 'amiga-emulation/xim/io.ts', 'utils/wrap-for-session.util.ts', 'utils/dir-file.util.ts']) {
-      const code = read(rel).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');   // comments may discuss them
-      expect({ rel, used: ladder.filter((n) => code.includes(n)) }).toEqual({ rel, used: [] });
+    for (const rel of ['utils/ascii-art.util.ts', 'amiga-emulation/xim/io.ts', 'amiga-emulation/xim/io-emit-lines.ts', 'utils/wrap-for-session.util.ts', 'utils/dir-file.util.ts']) {
+      const imported = namesImportedFrom(read(rel), '');
+      expect({ rel, used: ladder.filter((n) => imported.includes(n)) }).toEqual({ rel, used: [] });
     }
   });
 });

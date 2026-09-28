@@ -11,31 +11,53 @@
  * was declared, so default-src caught it. The policy is report-only today,
  * which is the only reason the camera still worked - the day it is enforced,
  * video breaks.
+ *
+ * Driven through the real express app (same technique as
+ * security-headers.test.ts): the header a browser receives is what is read.
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import request from 'supertest';
+import { app } from '../../src/server/app';
 
-const app = readFileSync(join(__dirname, '..', '..', 'src', 'server', 'app.ts'), 'utf8');
+/**
+ * The policy the board actually sends, directive by directive - read from
+ * the response of a real request through the app's middleware, enforced or
+ * report-only (it is report-only today).
+ */
+async function policy(): Promise<Map<string, string[]>> {
+  const res = await request(app).get('/health');
+  expect(res.status).toBe(200);
+  const header: string | undefined =
+    res.headers['content-security-policy'] ?? res.headers['content-security-policy-report-only'];
+  expect(header).toBeDefined();
+  const directives = new Map<string, string[]>();
+  for (const part of header!.split(';')) {
+    const [name, ...sources] = part.trim().split(/\s+/);
+    if (name) directives.set(name.toLowerCase(), sources);
+  }
+  return directives;
+}
 
 describe('the content security policy', () => {
+  let csp: Map<string, string[]>;
+  beforeAll(async () => {
+    csp = await policy();
+  });
+
   it('declares media-src', () => {
-    expect(app).toMatch(/mediaSrc:/);
+    expect(csp.has('media-src')).toBe(true);
   });
 
   it('allows the blob: URLs a webcam produces', () => {
-    const directive = app.slice(app.indexOf('mediaSrc:'), app.indexOf('mediaSrc:') + 120);
-
-    expect(directive).toContain("'self'");
-    expect(directive).toContain('blob:');
+    expect(csp.get('media-src')).toEqual(expect.arrayContaining(["'self'", 'blob:']));
   });
 
   it('still refuses everything by default', () => {
     // Adding media-src must not loosen the rest.
-    expect(app).toMatch(/defaultSrc: \["'self'"\]/);
-    expect(app).toMatch(/objectSrc: \["'none'"\]/);
+    expect(csp.get('default-src')).toEqual(["'self'"]);
+    expect(csp.get('object-src')).toEqual(["'none'"]);
     // `'self'` since 6e7d87509, which serves the BBC Micro as its own page for
     // the terminal to frame. Still nothing cross-origin, which is the point.
-    expect(app).toMatch(/frameAncestors: \["'self'"\]/);
+    expect(csp.get('frame-ancestors')).toEqual(["'self'"]);
   });
 });

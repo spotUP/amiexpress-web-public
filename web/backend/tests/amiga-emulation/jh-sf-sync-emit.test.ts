@@ -16,27 +16,48 @@
  *   commentary.)
  *
  * Test strategy:
- *   In production we use deasync.loopWhile inside the trap-sync XIMProcessor
- *   to drain the handler's promise. Jest's runtime sandboxes promise /
- *   immediate scheduling so deasync.loopWhile cannot drain promise
- *   continuations from inside a Jest test (verified with a smoke test).
- *   We therefore validate the regression in two layers:
+ *   In production the trap-sync XIMProcessor (and Path B's doorMessageCallback
+ *   in the legacy synchronous mode) drains the handler's promise with
+ *   deasync.loopWhile. Real deasync cannot drain promise continuations from
+ *   inside a Jest test (jest sandboxes promise / immediate scheduling -
+ *   verified with a smoke test), so deasync is replaced by a stand-in whose
+ *   loopWhile does what the real one exists to do: it lets pending event-loop
+ *   work run while the caller waits. The regression is then driven in layers:
  *
- *     (A) Behavioural contract — exercise the real installMessageCallbacks
+ *     (A) Behavioural contract - exercise the real installMessageCallbacks
  *         with a synchronous-resolving stub handler whose effects (emit +
  *         replyHandled flip) land BEFORE the returned promise resolves.
  *         This locks the invariant that "if handleShowFile finishes its
  *         work before its promise resolves, the trap path skips the
- *         fallback replyMsg" — which is what dRE!Wall depends on.
+ *         fallback replyMsg" - which is what dRE!Wall depends on.
  *
- *     (B) Structural guard — assert the trap-sync source still contains
- *         the deasync drain and lists all five async-output commands.
- *         A future refactor that removes the drain (or drops a command
- *         from the list) without an equivalent guarantee fails here so
- *         we don't silently re-introduce the trap-sync race.
+ *     (B) The drain itself, Path A - a GENUINELY async handler (its emit and
+ *         reply only land when the event loop runs) for each of the five
+ *         async-output commands. The file body must be on the wire and the
+ *         fallback replyMsg skipped by the time the processor returns. With
+ *         the drain gone, or a command dropped from ASYNC_OUTPUT_COMMANDS,
+ *         the fallback reply releases the door before the file body.
+ *
+ *     (D) The drain itself, Path B (doorMessageCallback) in the legacy
+ *         synchronous mode (DOOR_ASYNC_WAIT=0): the same genuinely async
+ *         handler's file body must land before the callback returns.
  */
 
 import { installMessageCallbacks } from '../../src/amiga-emulation/session/lifecycle/door-message-callbacks';
+
+/*
+ * deasync stand-in. loopWhile(pred) runs the work a real event loop would
+ * run while pred() holds - here, the pending bodies of genuinely async stub
+ * handlers - and counts that it was asked to wait at all.
+ */
+const mockPendingEventLoopWork: Array<() => void> = [];
+const mockDrain = { calls: 0 };
+jest.mock('deasync', () => ({
+  loopWhile: (pred: () => boolean) => {
+    mockDrain.calls++;
+    while (pred() && mockPendingEventLoopWork.length > 0) mockPendingEventLoopWork.shift()!();
+  },
+}));
 
 // XIMCommand enum values (web/backend/src/amiga-emulation/xim/types.ts)
 const JH_WRITE = 2;             // sync output, NOT async-output
@@ -143,11 +164,8 @@ function buildHarness(): {
 }
 
 describe('(A) trap-sync XIMProcessor: handler contract', () => {
-  // Each ASYNC_OUTPUT_COMMAND test exercises the deasync drain path. In
-  // jest the drain hits its 5s deadline (microtask sandbox), then the
-  // sync-flipped replyHandled is observed. Per-test timeout therefore
-  // needs >5s. JH_WRITE / fallback tests use sync-only commands and run
-  // in <100ms.
+  // The stub replies synchronously, so the drain is skipped here; (B) is
+  // where a handler that has not yet replied is driven through it.
   jest.setTimeout(15000);
 
   test('JH_SF emit lands and fallback replyMsg is skipped', () => {
@@ -207,47 +225,74 @@ describe('(A) trap-sync XIMProcessor: handler contract', () => {
 });
 
 /**
- * (B) Structural / source-level guard. If a future refactor removes the
- * deasync drain or drops a command from the ASYNC_OUTPUT_COMMANDS list
- * without an equivalent sync emit guarantee, this test fails so we don't
- * silently regress dRE!Wall, J door, MultiTop, etc.
+ * A stub XIMProtocol whose async-output handler is GENUINELY async: its emit
+ * and reply only happen when the event loop runs (mockPendingEventLoopWork), as
+ * the real handler's file read / MCI parse does. Without a drain the
+ * processor sees replyHandled=false and releases the door first.
  */
-describe('(B) trap-sync XIMProcessor: deasync drain wired in source', () => {
-  let src = '';
+function buildTrulyAsyncXim(wire: string[]) {
+  const replyHandled = { value: false };
+  const xim = {
+    parseMessage: (msgAddr: number): FakeMsg => ({ msgAddr, command: msgAddr }),
+    hasQueuedInput: () => false,
+    isWaitingForLineInput: () => false,
+    isShuttingDown: () => false,
+    wasReplyHandled: () => replyHandled.value,
+    handleMessage: (msg: FakeMsg) => {
+      replyHandled.value = false;
+      return new Promise<void>((resolve) => {
+        mockPendingEventLoopWork.push(() => {
+          wire.push(`emit:FILE_BODY:${msg.command}`);
+          replyHandled.value = true;
+          resolve();
+        });
+      });
+    },
+  };
+  return { xim, replyHandled };
+}
 
-  beforeAll(() => {
-    const fs = require('fs');
-    const path = require('path');
-    src = fs.readFileSync(
-      path.join(
-        __dirname,
-        '../../src/amiga-emulation/session/lifecycle/door-message-callbacks.ts',
-      ),
-      'utf8',
-    );
+const ASYNC_OUTPUT = [
+  ['JH_SG', JH_SG],
+  ['JH_SF', JH_SF],
+  ['JH_MCI', JH_MCI],
+  ['DISPLAY_FILE', DISPLAY_FILE],
+  ['CHECK_TO_DISPLAY', CHECK_TO_DISPLAY],
+] as const;
+
+describe('(B) trap-sync XIMProcessor: the drain waits for a genuinely async handler', () => {
+  beforeEach(() => {
+    mockPendingEventLoopWork.length = 0;
+    mockDrain.calls = 0;
   });
 
-  test('source references ASYNC_OUTPUT_COMMANDS, deasync.loopWhile, and handleMessage(parsed)', () => {
-    expect(src).toMatch(/ASYNC_OUTPUT_COMMANDS/);
-    expect(src).toMatch(/deasync\.loopWhile/);
-    expect(src).toMatch(/handleMessage\(parsed\)/);
-  });
+  test.each(ASYNC_OUTPUT)('%s: the file body is on the wire before the processor returns, and the door is not released early', (_name, cmd) => {
+    const wire: string[] = [];
+    const { xim, replyHandled } = buildTrulyAsyncXim(wire);
+    let processor: ((bbsPortAddr: number) => void) | null = null;
+    let nextMsgAddr = 0;
+    installMessageCallbacks({
+      libraryManager: {
+        aedoorLibrary: { setXIMProcessor: (cb: (a: number) => void) => { processor = cb; } },
+        execLibrary: {
+          getMsg: () => { const m = nextMsgAddr; nextMsgAddr = 0; return m; },
+          replyMsg: (msgAddr: number) => wire.push(`fallback-replyMsg:${msgAddr}`),
+          setDoorMessageCallback: () => {},
+        },
+      } as any,
+      emulator: { pause: () => {} } as any,
+      executionState: {} as any,
+      getXimProtocol: () => xim as any,
+      markUsingDoorMessageCallback: () => {},
+      incrementMessagesHandled: () => {},
+    });
 
-  test('ASYNC_OUTPUT_COMMANDS contains all five async-emit XIM commands', () => {
-    const m = src.match(/ASYNC_OUTPUT_COMMANDS\s*=\s*\[([^\]]+)\]/);
-    expect(m).not.toBeNull();
-    const numbers = m![1]
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0)
-      .map((s: string) => parseInt(s, 10));
-    expect(numbers).toEqual(expect.arrayContaining([
-      JH_SG,
-      JH_SF,
-      JH_MCI,
-      DISPLAY_FILE,
-      CHECK_TO_DISPLAY,
-    ]));
+    nextMsgAddr = cmd;
+    processor!(0xdead0001);
+
+    expect(mockDrain.calls).toBeGreaterThan(0);
+    expect(wire).toEqual([`emit:FILE_BODY:${cmd}`]);
+    expect(replyHandled.value).toBe(true);
   });
 });
 
@@ -362,36 +407,51 @@ describe('(C) Path B (doorMessageCallback): drain async-output handlers', () => 
 });
 
 /**
- * (D) Structural guard for Path B's drain — the source must wire
- * deasync.loopWhile inside installDoorMessageCallback (NOT just
- * installXIMProcessor). A regression that drops the drain from one but
- * keeps it in the other reintroduces the dRE!Wall race only for
- * direct-XIM doors and would otherwise sneak through structural test
- * (B) (which only checks file-wide presence).
+ * (D) Path B's own drain. A regression that drops the drain from
+ * installDoorMessageCallback but keeps it in installXIMProcessor
+ * reintroduces the dRE!Wall race only for direct-XIM doors, so this drives
+ * Path B separately, in the legacy synchronous mode where the drain lives
+ * (under DOOR_ASYNC_WAIT the emulator is paused instead).
  */
-describe('(D) Path B (doorMessageCallback): deasync drain wired in source', () => {
-  let src = '';
-
-  beforeAll(() => {
-    const fs = require('fs');
-    const path = require('path');
-    src = fs.readFileSync(
-      path.join(
-        __dirname,
-        '../../src/amiga-emulation/session/lifecycle/door-message-callbacks.ts',
-      ),
-      'utf8',
-    );
+describe('(D) Path B (doorMessageCallback): the drain waits for a genuinely async handler', () => {
+  const savedAsyncWait = process.env.DOOR_ASYNC_WAIT;
+  beforeEach(() => {
+    process.env.DOOR_ASYNC_WAIT = '0';
+    mockPendingEventLoopWork.length = 0;
+    mockDrain.calls = 0;
+  });
+  afterEach(() => {
+    if (savedAsyncWait === undefined) delete process.env.DOOR_ASYNC_WAIT;
+    else process.env.DOOR_ASYNC_WAIT = savedAsyncWait;
   });
 
-  test('installDoorMessageCallback body contains ASYNC_OUTPUT_COMMANDS + deasync.loopWhile', () => {
-    // Slice from the function declaration to end-of-file so we don't
-    // accept a match that lives only in installXIMProcessor.
-    const idx = src.indexOf('function installDoorMessageCallback');
-    expect(idx).toBeGreaterThan(-1);
-    const tail = src.slice(idx);
-    expect(tail).toMatch(/ASYNC_OUTPUT_COMMANDS\.includes\(parsed\.command\)/);
-    expect(tail).toMatch(/deasync\.loopWhile/);
-    expect(tail).toMatch(/handleMessage\(parsed\)/);
+  test.each(ASYNC_OUTPUT)('%s: the file body lands before the callback returns', (_name, cmd) => {
+    const wire: string[] = [];
+    const { xim, replyHandled } = buildTrulyAsyncXim(wire);
+    let processor: ((portAddr: number, msgAddr: number) => void) | null = null;
+    installMessageCallbacks({
+      libraryManager: {
+        aedoorLibrary: { setXIMProcessor: () => {} },
+        execLibrary: {
+          getMsg: () => 0,
+          replyMsg: (msgAddr: number) => wire.push(`fallback-replyMsg:${msgAddr}`),
+          setDoorMessageCallback: (cb: (p: number, m: number) => void) => { processor = cb; },
+          getPortName: () => 'aedoorport1',
+          getDoorPortAddress: () => 0xdead0001,
+          removeMessageFromPort: () => {},
+        },
+      } as any,
+      emulator: { pause: () => {}, readMemory: () => 0, readMemory32: () => 0, writeMemory: () => {} } as any,
+      executionState: {} as any,
+      getXimProtocol: () => xim as any,
+      markUsingDoorMessageCallback: () => {},
+      incrementMessagesHandled: () => {},
+    });
+
+    processor!(0xdead0001, cmd);
+
+    expect(mockDrain.calls).toBeGreaterThan(0);
+    expect(wire).toEqual([`emit:FILE_BODY:${cmd}`]);
+    expect(replyHandled.value).toBe(true);
   });
 });

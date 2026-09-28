@@ -14,14 +14,10 @@
  * `src/handlers/mci-dispatch.ts` when the PETSCII `.seq` renderer started
  * sharing it.
  *
- * Pinning:
- *   1. The dispatch entry BEHAVES: driven through buildMciDispatch it emits
- *      the space-separated join, and a width truncates it. (A source regex
- *      proves a line exists, not that it runs — so the behavioural
- *      assertion comes first and the source shapes back it up.)
- *   2. The dispatch entry exists and routes through applyMciWidth.
- *   3. The space-join still happens (not comma/empty).
- *   4. applyMciWidth itself uses substring with width.
+ * Pinned by behaviour only: driven through buildMciDispatch, the entry
+ * emits the space-separated join, a width truncates it, and the C64 flavour
+ * shares the definition. (The source-shape pins that used to back these up
+ * asserted the same three things by spelling, and were removed.)
  */
 
 process.env.SKIP_DB_INIT = '1';
@@ -37,22 +33,10 @@ jest.mock('../src/database', () => ({
   },
 }));
 
-import * as fs from 'fs';
-import * as path from 'path';
-
 import { buildMciDispatch, MCI_SENTINELS } from '../src/handlers/mci-dispatch';
 import { flaggedFilesManager } from '../src/services/FlaggedFilesManager';
 
 describe('~FF flagged-files MCI output (G-FF, express.e:5439-5441 / 2830-2853)', () => {
-  const dispatchSrc = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'handlers', 'mci-dispatch.ts'),
-    'utf8'
-  );
-  const tokenizerSrc = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'utils', 'mci-tokenizer.util.ts'),
-    'utf8'
-  );
-
   const FF_USER_ID = 90210;
 
   beforeAll(() => {
@@ -86,25 +70,5 @@ describe('~FF flagged-files MCI output (G-FF, express.e:5439-5441 / 2830-2853)',
     const ansi = await ffEntry('ansi');
     const petscii = await ffEntry('petscii');
     expect(petscii(-1)).toBe(ansi(-1));
-  });
-
-  test('FF dispatch entry exists and applies width via applyMciWidth on the space-separated join', () => {
-    // Dispatch shape: `FF: (w) => applyMciWidth(flaggedFilesSpaceSep, w),`
-    expect(dispatchSrc).toMatch(
-      /FF:\s*\(\s*w\s*\)\s*=>\s*applyMciWidth\(\s*flaggedFilesSpaceSep\s*,\s*w\s*\)/,
-    );
-  });
-
-  test('flaggedFilesSpaceSep uses a space join (not comma / empty / list builder)', () => {
-    expect(dispatchSrc).toMatch(
-      /flaggedFilesSpaceSep\s*=\s*[\s\S]{0,200}?\.map\([\s\S]{0,80}?\.join\(['"] ['"]\)/,
-    );
-  });
-
-  test('applyMciWidth truncates to N chars when N > 0 (matches express.e maxLen>0 stop condition)', () => {
-    // applyMciWidth lives in the shared tokenizer utility now.
-    expect(tokenizerSrc).toMatch(
-      /export function applyMciWidth\([\s\S]{0,200}?substring\(0,\s*width\)/,
-    );
   });
 });

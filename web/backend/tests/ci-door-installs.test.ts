@@ -17,17 +17,29 @@
  * door whose package.json depends on the SDK. It is a superset of anything
  * the backend can reach, by any spelling, and it cannot go stale. This test
  * guards that rule.
+ *
+ * It guards it by RUNNING the workflow's own install step: the step's script
+ * is taken from the parsed YAML and executed against this checkout with `npm`
+ * replaced by a recorder, and what is asserted is the set of installs it
+ * would have made - not how its shell lines are spelled.
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+// js-yaml ships no types here; the one call this test makes, typed.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const yaml = require('js-yaml') as { load(text: string): unknown };
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const workflow = path.join(repoRoot, '.github', 'workflows', 'backend-tests.yml');
 
-/** Doors the backend's own sources and tests name. */
+/**
+ * Doors the backend's own sources and tests name. REASONABLE source read: a
+ * walk for `Doors/<name>/` paths - the reach it measures is textual.
+ */
 function doorsTheBackendReaches(): string[] {
   const found = new Set<string>();
   const walk = (dir: string): void => {
@@ -55,29 +67,64 @@ function doorsNeedingInstall(): string[] {
   });
 }
 
-describe('the backend-tests workflow', () => {
-  it('installs by the rule, never from a list of names', () => {
-    const text = fs.readFileSync(workflow, 'utf8');
+interface NpmInstall { door: string; scripts: boolean }
 
-    // Every Doors/*/package.json that names the SDK, and nothing about which
-    // doors the backend happens to mention.
-    expect(text).toContain('for pkg in Doors/*/package.json; do');
-    expect(text).toContain('grep -q "bbs-door-sdk" "$pkg"');
-    expect(text).toContain('npm install --prefix "$door"');
+/**
+ * Run the workflow's "Install door deps" step, as written, in this checkout,
+ * with a fake `npm` first on PATH that records its arguments instead of
+ * installing anything. Returns one entry per `npm install --prefix <door>`.
+ */
+function runTheWorkflowInstallStep(): NpmInstall[] {
+  const doc = yaml.load(fs.readFileSync(workflow, 'utf8')) as {
+    jobs: Record<string, { steps?: Array<{ name?: string; run?: string }> }>;
+  };
+  const steps = Object.values(doc.jobs).flatMap((job) => job.steps ?? []);
+  const step = steps.find((st) => /^Install door deps/.test(st.name ?? ''));
+  if (!step?.run) throw new Error('backend-tests.yml has no "Install door deps" step with a run script');
+
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-door-installs-'));
+  const log = path.join(bin, 'npm.log');
+  try {
+    fs.writeFileSync(path.join(bin, 'npm'), `#!/bin/bash\necho "$*" >> "${log}"\n`, { mode: 0o755 });
+    execFileSync('/bin/bash', ['-e', '-c', step.run], {
+      cwd: repoRoot,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+      stdio: 'pipe',
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const lines = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+    return lines.map((line) => {
+      const args = line.split(/\s+/);
+      expect(args[0]).toBe('install');
+      const prefix = args[args.indexOf('--prefix') + 1];
+      return { door: path.basename(prefix), scripts: !args.includes('--ignore-scripts') };
+    });
+  } finally {
+    fs.rmSync(bin, { recursive: true, force: true });
+  }
+}
+
+/** Every door on disk whose package.json depends on the SDK - the rule. */
+function doorsDependingOnTheSdk(): string[] {
+  return fs.readdirSync(path.join(repoRoot, 'Doors')).filter((door) => {
+    const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
+    return fs.existsSync(pkg) && fs.readFileSync(pkg, 'utf8').includes('bbs-door-sdk');
+  }).sort();
+}
+
+describe('the backend-tests workflow', () => {
+  const installs = runTheWorkflowInstallStep();
+  const installed = installs.map((i) => i.door).sort();
+
+  it('installs by the rule, never from a list of names', () => {
+    // Exactly the doors whose package.json names the SDK - nothing about
+    // which doors the backend happens to mention.
+    expect(installed).toEqual(doorsDependingOnTheSdk());
   });
 
   it('installs every door the backend reaches that needs the SDK', () => {
     const needed = doorsNeedingInstall();
     expect(needed.length).toBeGreaterThan(5);
-
-    // Run the workflow's own loop here, against this checkout, and require
-    // its output to cover every door the backend reaches - including the
-    // ones it reaches by a name it builds at runtime, which is what the
-    // old grep-the-sources rule missed.
-    const installed = execSync(
-      `for pkg in Doors/*/package.json; do grep -q "bbs-door-sdk" "$pkg" && dirname "$pkg"; done | cut -d/ -f2 | sort -u`,
-      { cwd: repoRoot, encoding: 'utf8', shell: '/bin/bash', maxBuffer: 8 * 1024 * 1024 },
-    ).split('\n').map((line) => line.trim()).filter(Boolean);
 
     const missed = needed.filter((door) => !installed.includes(door));
     expect(missed).toEqual([]);
@@ -95,10 +142,6 @@ describe('the backend-tests workflow', () => {
     // and wrong for one with a native module: better-sqlite3's binary is
     // fetched by an install script, and without it GRANDMASTER's own suites
     // fail on "Could not locate the bindings file".
-    const text = fs.readFileSync(workflow, 'utf8');
-    expect(text).toMatch(/better-sqlite3\|node-pty/);
-    expect(text).toContain('npm install --prefix "$door" --no-audit --no-fund');
-
     const native = fs.readdirSync(path.join(repoRoot, 'Doors'))
       .filter((door) => {
         const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
@@ -107,6 +150,10 @@ describe('the backend-tests workflow', () => {
       });
     // If this ever empties, the branch above is dead and should go with it.
     expect(native).toContain('grandmaster');
+
+    for (const install of installs) {
+      expect(install).toEqual({ door: install.door, scripts: native.includes(install.door) });
+    }
   });
 
   it('names the doors that broke main, so the guard is not vacuous', () => {
