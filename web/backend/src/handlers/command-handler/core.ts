@@ -1,4 +1,5 @@
 import { BBSSession } from "../../index";
+import { keysForLog } from '../../utils/keys-for-log.util';
 import { BBSState, LoggedOnSubState } from "../../constants/bbs-states";
 import { AnsiUtil } from "../../utils/ansi.util";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
@@ -217,7 +218,7 @@ export async function handleCommand(
   data: string
 ) {
 console.log("=== handleCommand called ===");
-console.log("data:", JSON.stringify(data));
+console.log("data:", keysForLog(session, data));
 console.log("session.state:", session.state);
 console.log("session.subState:", session.subState);
   const trimmedScreenCommand = (data || "").trim();

@@ -5,6 +5,7 @@
  * 1:1 port from AmiExpress express.e command processing
  */
 
+import { keysForLog } from '../utils/keys-for-log.util';
 import { BBSSession } from '../index';
 import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
@@ -1436,7 +1437,7 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
 // Handle user commands (processCommand equivalent)
 export async function handleCommand(socket: any, session: BBSSession, data: string, io?: any) {
 console.log('=== handleCommand called ===');
-console.log('data:', JSON.stringify(data));
+console.log('data:', keysForLog(session, data));
 console.log('session.state:', session.state);
 console.log('session.subState:', session.subState);
   // If the menu was just displayed and the user pressed *anything* (including Enter),
@@ -1729,7 +1730,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
   // This function should only be called for non-door input
 
-console.log(`[handleCommand] ENTRY: data="${data}" subState=${session.subState} paginatedScreen=${!!session.paginatedScreen} inDoorManager=${session.inDoorManager}`);
+console.log(`[handleCommand] ENTRY: data=${keysForLog(session, data)} subState=${session.subState} paginatedScreen=${!!session.paginatedScreen} inDoorManager=${session.inDoorManager}`);
 
   // If user is responding to a paginated screen prompt, handle that first
   if (session.paginatedScreen) {
