@@ -52,7 +52,7 @@ import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
-import { sessionLogManager } from '../services/SessionLogManager';
+import { startObserving, observeOutput, observeInput, stopObserving } from './session-observers';
 import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
 import { emitUserLogout } from '../services/bbs-event-emitter';
 import * as fs from 'fs';
@@ -153,32 +153,10 @@ console.log(`Client connected from ${clientIp}`);
     });
   }
 
-  // Debug MCP: tee every 'ansi-output' emit into a per-node ring buffer.
-  // Dev-only. Transparent to the socket (we still call the original emit).
-  // Applied exactly once per socket via a marker flag.
-  if (process.env.NODE_ENV !== 'production' && !(socket as any).__ansiTapInstalled) {
-    (socket as any).__ansiTapInstalled = true;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { outputTap } = require('../debug/OutputTap');
-      const origEmit = socket.emit.bind(socket);
-      (socket as any).emit = function (event: string, ...args: any[]): boolean {
-        if (event === 'ansi-output' && typeof args[0] === 'string') {
-          const sess = getSession(socket.id);
-          const nodeId = sess?.nodeId;
-          if (typeof nodeId === 'number' && nodeId > 0) {
-            outputTap.push(nodeId, args[0] as string);
-          }
-        }
-        return origEmit(event, ...args);
-      };
-    } catch (err) {
-console.warn('[debug-mcp] failed to install ansi-output tap:', err);
-    }
-  }
-
-  // Start tracking session output for admin log viewer
-  sessionLogManager.startSession(socket.id);
+  // The sysop's tools - the session-log viewer and the debug MCP tap - watch
+  // this caller through server/session-observers.ts, the same functions a
+  // telnet or SSH connection feeds (web-vs-telnet audit item 15).
+  startObserving(socket.id);
 
   const session = getSession(socket.id);
   if (session) {
@@ -189,10 +167,7 @@ console.warn('[debug-mcp] failed to install ansi-output tap:', err);
   // Wrap socket.emit to capture all terminal output
   const originalEmit = socket.emit.bind(socket);
   socket.emit = ((event: string, ...args: any[]) => {
-    // Capture ansi-output events for session log
-    if (event === 'ansi-output' && args[0]) {
-      sessionLogManager.captureOutput(socket.id, args[0]);
-    }
+    if (event === 'ansi-output') observeOutput(socket.id, getSession(socket.id)?.nodeId, args[0]);
     return originalEmit(event, ...args);
   }) as any;
 
@@ -654,7 +629,7 @@ console.error('No session found for socket:', socket.id);
     flushPetsciiModel(session);
 
     // Capture user input for session log viewer
-    sessionLogManager.captureInput(socket.id, data);
+    observeInput(socket.id, data);
 
     // ONE INPUT PIPELINE (TP-8, server/terminal-input.ts). The branches that
     // used to be written out here - the raw-transfer bypass, the two pause
@@ -985,7 +960,7 @@ console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff), skippin
     }
 
     // End session log tracking
-    sessionLogManager.endSession(socket.id);
+    stopObserving(socket.id);
 
     const session = getSession(socket.id);
     if (!session) {

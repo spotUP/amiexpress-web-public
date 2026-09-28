@@ -25,6 +25,7 @@ import type { Server as IOServer } from "socket.io";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { emitterFor, flushPendingPetscii } from "./connection-emitter";
 import { decodeFromWire } from "../utils/wire-encoding.util";
+import { startObserving, observeInput, stopObserving } from "./session-observers";
 import { armIdleTimeout } from '../services/idle-timeout.service';
 import {
   registerConnectionEmitter,
@@ -176,6 +177,10 @@ console.log(
   // the same code path the web transport uses.
   (connection as unknown as { emitter?: TransportEmitter }).emitter = emitter;
 
+  // The sysop's session-log viewer records this caller from here on, as it
+  // does a web caller (server/session-observers.ts, audit item 15).
+  startObserving(connection.sessionId);
+
   const attachTransferSender = () => {
     if (connection.session) {
       connection.session.connectionType = type;
@@ -310,6 +315,8 @@ console.log(
         if (input === "") return;
       }
     }
+
+    observeInput(connection.sessionId, input);
 
     // ONE INPUT PIPELINE (TP-8). Everything that can claim a keystroke before
     // a door sees it - the two pause accumulators, chat mode, the client-door
@@ -495,6 +502,7 @@ console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
 console.log(
       `[${type.toUpperCase()}] Disconnected: node ${connection.nodeId}`
     );
+    stopObserving(connection.sessionId);
     // Cleanup session
     if (connection.session) {
       const session = connection.session;

@@ -28,6 +28,7 @@ import { applyTransportEvent } from "./transport-adapter";
 import { encodeForWire } from "../utils/wire-encoding.util";
 import type { OutputAttributes } from "../utils/output-pacing";
 import { foldForWire } from "../utils/wrap-for-session.util";
+import { observeOutput } from "./session-observers";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -129,6 +130,9 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       const attrs: Readonly<OutputAttributes> | undefined =
         args[1] !== null && typeof args[1] === "object" ? (args[1] as Readonly<OutputAttributes>) : undefined;
       const session = connection.session;
+      // The sysop's tools see what the caller sees (server/session-observers.ts)
+      // - the session-log viewer and the MCP tap were web-only.
+      if (event === "ansi-output") observeOutput(connection.sessionId, session?.nodeId, data);
       if (event === "ansi-output") {
         if (sessionWantsPetscii(session)) {
           // C64 caller: the ANSI stream (prompts, menus, blessed door frames)
