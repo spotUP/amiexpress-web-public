@@ -20,9 +20,9 @@ function makeSocket(): { socket: any; emitted: string[] } {
 
 function makeSession(initialLineCount = 99): any {
   return {
+    wireHeight: 23,
     tempData: {
       lineCount: initialLineCount,
-      termHeight: 23,
     },
     user: { linesPerScreen: 23 },
     flagManager: null,

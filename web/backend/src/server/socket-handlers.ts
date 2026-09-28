@@ -58,7 +58,7 @@ import { emitUserLogout } from '../services/bbs-event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
-import { applyClientReportedGeometry } from '../amiga-emulation/xim/screen-width.util';
+import { applyClientReportedGeometry, applyCallerResize } from '../amiga-emulation/xim/screen-width.util';
 
 const DISCONNECT_GRACE_MS = 15000;
 
@@ -268,25 +268,14 @@ console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.messag
     // applyClientReportedGeometry is the single gate; a false return means
     // the session keeps its geometry and no door hears a resize it did not
     // have.
-    if (!applyClientReportedGeometry(session, cols, rows)) {
+    // applyCallerResize: the geometry gate, the real height (wireHeight) and
+    // a running door's screen:resize - the same call telnet's NAWS and SSH's
+    // window-change make (web-vs-telnet audit item 12).
+    if (!applyCallerResize(session as any, cols, rows)) {
 console.log(`[TERMINAL] Ignoring client size ${cols}x${rows} for socket ${socket.id}: PETSCII session stays 40x25`);
       return;
     }
 console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
-
-    // Also update tempData for doors
-    if (!session.tempData) {
-      session.tempData = {} as any;
-    }
-    (session.tempData as any).termWidth = cols;
-    (session.tempData as any).termHeight = rows;
-
-    // Emit resize event to the door's BBSApi (if a door is running)
-    // This uses the internal EventEmitter, not socket.emit (which goes to client)
-    if (session.bbsApi && typeof session.bbsApi.emitInternal === 'function') {
-console.log(`[TERMINAL] Emitting screen:resize to door via bbsApi.emitInternal`);
-      session.bbsApi.emitInternal('screen:resize', { cols, rows });
-    }
   });
 
   // Register all event handlers

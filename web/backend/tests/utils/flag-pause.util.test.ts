@@ -191,8 +191,8 @@ describe('flag-pause.util', () => {
   });
 
   describe('flagPause - screen height calculation', () => {
-    it('should use termHeight if available', () => {
-      mockSession.tempData.termHeight = 30;
+    it('should use the real terminal height (wireHeight) if available', () => {
+      mockSession.wireHeight = 30;
       mockSession.tempData.lineCount = 29;
 
       // Don't await - just trigger pause
@@ -201,8 +201,8 @@ describe('flag-pause.util', () => {
       expect(mockSocket.emit).toHaveBeenCalledWith('ansi-output', expect.stringContaining('Pause'));
     });
 
-    it('should use screenHeight if termHeight not available', () => {
-      mockSession.tempData.termHeight = undefined;
+    it('should use screenHeight if wireHeight not available', () => {
+      mockSession.wireHeight = undefined;
       mockSession.screenHeight = 25;
       mockSession.tempData.lineCount = 24;
 
@@ -212,7 +212,7 @@ describe('flag-pause.util', () => {
     });
 
     it('should use user.linesPerScreen as fallback', () => {
-      mockSession.tempData.termHeight = undefined;
+      mockSession.wireHeight = undefined;
       mockSession.screenHeight = undefined;
       mockSession.user.linesPerScreen = 20;
       mockSession.tempData.lineCount = 19;
@@ -408,7 +408,7 @@ describe('flag-pause.util', () => {
 
   describe('checkForPause - screen height', () => {
     it('should use same height calculation as flagPause', () => {
-      mockSession.tempData.termHeight = 30;
+      mockSession.wireHeight = 30;
       mockSession.tempData.lineCount = 29;
 
       checkForPause(mockSocket, mockSession);

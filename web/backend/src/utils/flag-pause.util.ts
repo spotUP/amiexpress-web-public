@@ -41,7 +41,7 @@ export async function flagPause(
   }
 
   const rawLineLen =
-    session.tempData?.termHeight ||
+    session.wireHeight ||
     session.screenHeight ||
     session.user?.linesPerScreen ||
     session.user?.lineLength ||
@@ -199,7 +199,7 @@ export async function checkForPause(
   }
 
   const rawLineLen =
-    session.tempData?.termHeight ||
+    session.wireHeight ||
     session.screenHeight ||
     session.user?.linesPerScreen ||
     session.user?.lineLength ||

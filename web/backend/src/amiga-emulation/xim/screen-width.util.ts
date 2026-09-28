@@ -138,6 +138,10 @@ export function doorScreenHeight(
 
 export interface MutableGeometry extends ScreenWidthSource {
   screenHeight?: number;
+  /** The caller's real terminal height - wireWidth's twin. Not reset by the graphics prompt. */
+  wireHeight?: number;
+  /** A running TypeScript door's API, told about a resize (doors/BBSApi.ts). */
+  bbsApi?: { emitInternal?: (event: string, payload: unknown) => void };
 }
 
 /**
@@ -174,6 +178,24 @@ export function applyClientReportedGeometry(
   if (session.petsciiMode === true) return false;
   session.screenWidth = cols;
   session.screenHeight = rows;
+  // The real height, kept where the graphics prompt's reset cannot reach it.
+  // It lived in `tempData.termHeight`, on web only, and any `tempData = {...}`
+  // wiped it (web-vs-telnet audit item 12, 2026-09-28).
+  session.wireHeight = rows;
+  return true;
+}
+
+/**
+ * A caller's terminal changed size: take the size and tell a running door.
+ *
+ * The door notification was on the web path only (socket-handlers.ts
+ * terminal-size), so a TypeScript door never heard a telnet caller's NAWS or
+ * an SSH caller's window-change (web-vs-telnet audit item 12). Every
+ * transport's resize comes through here now.
+ */
+export function applyCallerResize(session: MutableGeometry | null | undefined, cols: number, rows: number): boolean {
+  if (!applyClientReportedGeometry(session, cols, rows)) return false;
+  session?.bbsApi?.emitInternal?.('screen:resize', { cols, rows });
   return true;
 }
 
@@ -248,7 +270,7 @@ export function applyWindowSizeReport(
   height: number,
 ): WindowSizeOutcome {
   if (!session) return { geometryTaken: false, detectedFromSize: false };
-  if (!applyClientReportedGeometry(session, width, height)) {
+  if (!applyCallerResize(session, width, height)) {
     return { geometryTaken: false, detectedFromSize: false };
   }
   if (!session.terminalType || session.terminalType === 'unknown') {

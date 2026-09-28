@@ -277,7 +277,8 @@ describe('New User Handler — registration steps', () => {
       const socket = makeSocket();
       const session = makeSession({
         subState: LoggedOnSubState.NEW_USER_LINES,
-        tempData: { termHeight: 25 },
+        wireHeight: 25,
+        tempData: {},
       });
 
       await handleLinesInput(socket, session, '');

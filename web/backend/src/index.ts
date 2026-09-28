@@ -498,6 +498,7 @@ export interface BBSSession {
   terminalType?: "c64" | "modern" | "unknown"; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
   screenWidth?: number; // The board's column MODEL (40 for C64, 80 for modern) - what its screens and doors are drawn for
   wireWidth?: number; // The caller's REAL terminal width, from NAWS / the PTY size. Not reset by the graphics prompt; the wire fold reads THIS, not screenWidth.
+  wireHeight?: number; // wireWidth's twin: the REAL height, set by applyClientReportedGeometry for every transport (was tempData.termHeight, web only).
   screenHeight?: number; // Terminal height (25 for C64, 24 for modern)
   currentRoomId?: string; // Current chat room ID for group chat
   gamepadHandler?: (event: any) => void; // Set by GamepadInputManager; called by socket-handlers on gamepad-event

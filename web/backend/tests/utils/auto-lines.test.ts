@@ -13,7 +13,7 @@ import { DEFAULT_PAUSE_LINES, SHORTEST_TERMINAL_ROWS } from '../../src/screens/s
 
 describe('autoLinesFor', () => {
   it('takes the web client\'s reported rows, less the prompt row', () => {
-    expect(autoLinesFor({ tempData: { termHeight: 25 } })).toBe(24);
+    expect(autoLinesFor({ wireHeight: 25 })).toBe(24);
   });
 
   it('falls back to the telnet screen height when no client rows were reported', () => {
@@ -21,7 +21,7 @@ describe('autoLinesFor', () => {
   });
 
   it('prefers the measured client rows over the screen height', () => {
-    expect(autoLinesFor({ tempData: { termHeight: 30 }, screenHeight: 25 })).toBe(29);
+    expect(autoLinesFor({ wireHeight: 30, screenHeight: 25 })).toBe(29);
   });
 
   it('is the standard usable height when nothing was measured', () => {
@@ -31,7 +31,7 @@ describe('autoLinesFor', () => {
   });
 
   it('never returns 0 or a negative from a degenerate measurement', () => {
-    expect(autoLinesFor({ tempData: { termHeight: 1 } })).toBe(DEFAULT_PAUSE_LINES);
+    expect(autoLinesFor({ wireHeight: 1 })).toBe(DEFAULT_PAUSE_LINES);
     expect(autoLinesFor({ screenHeight: 0 })).toBe(DEFAULT_PAUSE_LINES);
   });
 });

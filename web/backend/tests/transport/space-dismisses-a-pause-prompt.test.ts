@@ -43,7 +43,8 @@ function makeSocket(): { socket: any; emitted: string[] } {
 /** A session already past its screenful, so the next call prompts. */
 function makeSession(): any {
   return {
-    tempData: { lineCount: 99, termHeight: 23 },
+    wireHeight: 23,
+    tempData: { lineCount: 99 },
     user: { linesPerScreen: 23 },
     flagManager: null,
     currentConf: 1,

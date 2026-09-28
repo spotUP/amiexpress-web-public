@@ -20,9 +20,9 @@
 import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 
 export function autoLinesFor(session: {
-  tempData?: { termHeight?: number };
+  wireHeight?: number;
   screenHeight?: number;
 } | null | undefined): number {
-  const measured = session?.tempData?.termHeight || session?.screenHeight || 0;
+  const measured = session?.wireHeight || session?.screenHeight || 0;
   return measured > 1 ? measured - 1 : DEFAULT_PAUSE_LINES;
 }

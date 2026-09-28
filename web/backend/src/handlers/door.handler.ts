@@ -645,7 +645,7 @@ function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: b
 
   const now = getSystemTime();
   const nodeId = session.nodeId || 0;
-  const linesPerScreen = session.tempData?.termHeight || session.screenHeight || 24;
+  const linesPerScreen = session.wireHeight || session.screenHeight || 24;
 
   const guestUser: User = {
     id: `guest-${nodeId}`,
@@ -735,7 +735,7 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
 
     const terminalHeight =
       pickPositiveNumber(
-        session.tempData?.termHeight,
+        session.wireHeight,
         session.screenHeight,
         session.user?.linesPerScreen,
         session.user?.pageLength
@@ -743,7 +743,7 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
 
     const terminalWidth =
       pickPositiveNumber(
-        session.tempData?.termWidth,
+        session.wireWidth,
         session.screenWidth,
         session.user?.lineLength
       ) ?? 80;
@@ -869,7 +869,7 @@ console.log(`[launchAmigaDoor] PAGINATION=${doorInfo.pagination}: autoPause=${au
         pauseLines: effectivePauseLines,
         autoPauseEnabled: autoPauseEnabled,
         // PETSCII and teletext callers wrap at their own width (40) whatever
-        // tempData.termWidth still says from before the P/T answer; everyone
+        // wireWidth still says from before the P/T answer; everyone
         // else keeps terminalWidth. ONE helper, because a mode copied into
         // this literal by hand is a mode that gets left out: texttvMode was,
         // and the door then read 80 from BB_SCRWIDTH while lineWrap said 40.
