@@ -24,6 +24,7 @@
 import type { Server as IOServer } from "socket.io";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { emitterFor, flushPendingPetscii } from "./connection-emitter";
+import { decodeFromWire } from "../utils/wire-encoding.util";
 import { armIdleTimeout } from '../services/idle-timeout.service';
 import {
   registerConnectionEmitter,
@@ -293,7 +294,9 @@ console.log(
       // `$5D` for a-ring where an American one sends `]`.
       input = convertPetsciiInputToAscii(data, sessionWantsSwedishPetscii(connection.session));
     } else {
-      input = data.toString("utf-8");
+      // In the caller's own charset - see decodeFromWire. This was
+      // `data.toString("utf-8")`, and an Amiga caller's a-ring became U+FFFD.
+      input = decodeFromWire(connection.session, data);
     }
 
     // Telnet clients may send CR NUL sequences; strip NUL padding

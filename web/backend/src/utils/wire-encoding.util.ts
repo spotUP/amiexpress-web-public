@@ -246,3 +246,31 @@ export function encodeForWire(
   if (attrs?.sourceCharset === charset) return iconv.encode(text, charset);
   return iconv.encode(substituteUnmappable(text, charset), charset);
 }
+
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * The text a caller's bytes spell - `encodeForWire`'s other half.
+ *
+ * Input used to be `data.toString("utf-8")` for every telnet and SSH caller,
+ * whatever the wire: an Amiga client on the default Latin-1 wire types a-ring
+ * as the ONE byte 0xE5, which UTF-8 cannot read, and the board got U+FFFD
+ * instead of the letter (web callers were fine - the browser sends strings).
+ *
+ * Bytes that are well-formed UTF-8 are read as UTF-8 whatever the wire says:
+ * charset detection is not perfect, and a UTF-8 client left on a Latin-1 wire
+ * typed a-ring correctly before this and must still. Anything else is read in
+ * the wire's own charset. The two never collide on a keystroke: a lone high
+ * byte is never valid UTF-8, and a Latin-1 or CP437 caller does not type the
+ * two-letter pairs (`Ã¥`) that happen to spell a UTF-8 sequence.
+ */
+export function decodeFromWire(session: WireSession | null | undefined, bytes: Buffer): string {
+  const charset = resolveWireCharset(session);
+  if (charset === "utf-8") return bytes.toString("utf-8");
+  if (!bytes.some((byte) => byte >= 0x80)) return bytes.toString("latin1");
+  try {
+    return strictUtf8.decode(bytes);
+  } catch {
+    return iconv.decode(bytes, charset);
+  }
+}
