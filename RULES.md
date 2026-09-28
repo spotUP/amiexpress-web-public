@@ -950,3 +950,22 @@ both paid on 2026-09-08:
   worktree, not the code. Re-verify in the shared checkout after pulling
   before you believe either answer, and never report a worktree's red as the
   branch's red.
+
+## A browser you started is closed when you are done
+
+Codified 2026-09-28 after sixteen headless Chromium processes - four
+playwright browsers and their renderers - were found still running four days
+after whichever session started them, parented to launchd with nothing left
+to drive them. The sysop: "add rules to always kill playwright when done".
+
+- **Close what you open, in the task that opened it.** Playwright MCP:
+  `browser_close` before the reply that ends the task. A script: `await
+  browser.close()` in a `finally`, so a thrown assertion still closes it.
+  Chrome DevTools MCP: `close_page` on every page you created.
+- **Before the end report, look.** `ps -eo pid,etime,args | grep
+  chrome-headless-shell | grep -v grep` must list nothing you started. A
+  leftover is killed by PID, never by `pkill -f` - other sessions share this
+  machine and their browsers may be in use this second.
+- **Orphans are anyone's to report.** A headless browser older than a day
+  with launchd (PID 1) as its parent is an orphan; report it under **Found**
+  and kill it when the sysop says so.
