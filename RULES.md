@@ -606,6 +606,7 @@ Files:
 - `JWT_SECRET` — generate with `openssl rand -base64 32`
 - `DATABASE_DIR` — default `./data`
 - `BACKEND_PORT` — default `3001`
+- `BBS_CONNECTION_LIMITS` — `on`/`off`; the per-IP rate limit and IP ban (`security/connection-limits.ts`). Unset: on in production, off in development
 
 DB: `./data/amiexpress.db` (auto-created).
 

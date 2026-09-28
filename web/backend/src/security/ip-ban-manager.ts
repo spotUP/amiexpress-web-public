@@ -1,3 +1,5 @@
+import { connectionLimitsApply } from './connection-limits';
+
 const DEFAULT_CONNECTION_WINDOW_MS = 10_000; // 10 seconds
 const DEFAULT_CONNECTION_LIMIT = 8;
 const DEFAULT_FAILURE_WINDOW_MS = 30_000; // 30 seconds
@@ -32,6 +34,9 @@ export class IpBanManager {
   private bans = new Map<string, number>();
 
   allowConnection(ip: string): boolean {
+    // The one limits switch (security/connection-limits.ts): no ban while
+    // developing, unless BBS_CONNECTION_LIMITS=on.
+    if (!connectionLimitsApply()) return true;
     if (!ip || ip === 'unknown') return true;
     // Whitelist internal/localhost IPs (health checks, load balancers)
     if (isWhitelisted(ip)) return true;

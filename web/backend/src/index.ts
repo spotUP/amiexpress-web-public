@@ -89,6 +89,7 @@ import {
   socketToUser,
   setSession,
   getNextAvailableNodeId,
+  checkConnectionLimit,
   allNodesBusyNotice,
   createSession,
   socketToNodeId,
@@ -1101,62 +1102,12 @@ let telnetPetsciiServer: TelnetServer | null = null;
 // own BBS during debugging. 30/min still throttles connection-spam
 // abuse while leaving normal use comfortably under the cap.
 // Override via env: BBS_MAX_CONNECTIONS_PER_IP / BBS_CONNECTION_WINDOW_MS.
-const recentConnections: Map<string, number[]> = new Map();
-const MAX_CONNECTIONS_PER_IP = parseInt(process.env.BBS_MAX_CONNECTIONS_PER_IP || '30', 10);
-const CONNECTION_WINDOW = parseInt(process.env.BBS_CONNECTION_WINDOW_MS || '60000', 10);
+// The limiter itself is session-manager's checkConnectionLimit, the one
+// every transport asks, under one switch (security/connection-limits.ts).
 
-// Moved to constants/localhost-ips.ts: importing it from here booted the
-// whole board in any test that touched TelnetServer. Re-exported so existing
-// importers keep working, and imported so this file can still use it.
 import { LOCALHOST_IPS } from "./constants/localhost-ips";
 export { LOCALHOST_IPS };
 
-function checkConnectionLimit(ip: string): boolean {
-  // Always skip rate limiting for loopback/internal addresses
-  if (LOCALHOST_IPS.includes(ip)) {
-    return true;
-  }
-
-  // In development allow everything (already handled above for loopback but keep behaviour)
-  if (process.env.NODE_ENV !== "production") {
-    return true;
-  }
-
-  const now = Date.now();
-  const connections = recentConnections.get(ip) || [];
-
-  // Remove old connections outside the window
-  const recentConns = connections.filter(
-    (time) => now - time < CONNECTION_WINDOW
-  );
-
-  if (recentConns.length >= MAX_CONNECTIONS_PER_IP) {
-    return false; // Rate limit exceeded
-  }
-
-  // Add this connection
-  recentConns.push(now);
-  recentConnections.set(ip, recentConns);
-  return true;
-}
-
-// Cleanup old connection tracking data every 5 minutes.
-//
-// UNREF'D for the same reason as the heartbeat above: it is housekeeping for
-// a running server, not a reason for the process to keep running. Module
-// level, so a suite using jest.resetModules() collects one per test.
-const connectionCleanupTimer = setInterval(() => {
-  const now = Date.now();
-  for (const [ip, connections] of recentConnections.entries()) {
-    const recent = connections.filter((time) => now - time < CONNECTION_WINDOW);
-    if (recent.length === 0) {
-      recentConnections.delete(ip);
-    } else {
-      recentConnections.set(ip, recent);
-    }
-  }
-}, 5 * 60 * 1000); // 5 minutes
-connectionCleanupTimer.unref?.();
 
 // getNextAvailableNodeId is now imported from session-manager
 

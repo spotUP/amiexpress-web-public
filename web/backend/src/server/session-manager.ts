@@ -1,6 +1,7 @@
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { EnvStat } from '../constants/env-codes';
+import { connectionLimitsApply } from '../security/connection-limits';
 
 /**
  * BBS Session Manager
@@ -20,7 +21,7 @@ export const socketToNodeId = new Map<string, number>();  // Socket ID → Node 
 export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for user lookups)
 export const pendingDisconnects = new Map<string, { socketId: string; nodeId: number; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
-// Connection rate limiting for Telnet/SSH (web is gated separately in index.ts).
+// Connection rate limiting for every transport - web, telnet and SSH.
 // Override via env: BBS_MAX_CONNECTIONS_PER_IP / BBS_CONNECTION_WINDOW_MS.
 const recentConnections: Map<string, number[]> = new Map();
 const MAX_CONNECTIONS_PER_IP = parseInt(process.env.BBS_MAX_CONNECTIONS_PER_IP || '30', 10);
@@ -30,6 +31,10 @@ const CONNECTION_WINDOW = parseInt(process.env.BBS_CONNECTION_WINDOW_MS || '6000
  * Check if IP address has exceeded connection rate limit
  */
 export function checkConnectionLimit(ip: string): boolean {
+  // One switch for every limiter (security/connection-limits.ts): off outside
+  // production unless BBS_CONNECTION_LIMITS=on. This is the rate limit for
+  // every transport now - web kept its own copy, which is gone.
+  if (!connectionLimitsApply()) return true;
   // Whitelist localhost/internal IPs (health checks, load balancer probes)
   if (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1' || ip === 'localhost') {
     return true;
