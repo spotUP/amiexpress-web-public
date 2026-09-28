@@ -253,6 +253,12 @@ export const FORWARDING_EMIT_SITES: ReadonlyArray<VariableEmitSite & { readonly 
       why: "`emitInternal` on the door API's own EventEmitter - server-side notification to the door, not a socket write.",
     },
     {
+      file: "web/backend/src/server/session-rooms.ts",
+      line: 53,
+      expression: "emitter.emit(event",
+      why: "emitToMembers delivers a chat or room event to each member's own emitter. Its callers name the event as a literal argument, which the census reads (grep A's emitToMembers arm).",
+    },
+    {
       file: "web/backend/src/scripts/run-amiga-door.ts",
       line: 18,
       expression: "super.emit(event",

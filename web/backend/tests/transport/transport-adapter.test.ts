@@ -313,9 +313,16 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'window-size',
 ];
 
-/** The census's grep A, verbatim, run from the tree. */
+/**
+ * The census's grep A, run from the tree - plus one arm the plan did not
+ * have: the event-name argument of `emitToMembers` (server/session-rooms.ts).
+ * Chat and room events leave through that forwarder since 2026-09-28, and a
+ * name only it carried would otherwise be invisible here - the census would
+ * stop seeing nine ruled names and never see a tenth, unruled one.
+ */
 const GREP_A = String.raw`
-cd web/backend/src && grep -rhoE "\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . \
+cd web/backend/src && { grep -rhoE "\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; \
+  grep -rhoE "emitToMembers\([^,]+, *[^,]+, *['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; } \
   | sed -E "s/.*['\"]([^'\"]+)['\"]/\1/" | sort -u
 `;
 
@@ -844,7 +851,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     const messageArm = PATTERN_RULINGS.find((p) => p.test.source.includes('door:message'));
     expect(renderedArm?.sites.length).toBe(16);
     expect(messageArm?.sites.length).toBe(1);
-    expect(FORWARDING_EMIT_SITES.length).toBe(6);
+    // 7 as of 2026-09-28: server/session-rooms.ts emitToMembers, the chat and
+    // room forwarder whose names grep A now reads from its call sites.
+    expect(FORWARDING_EMIT_SITES.length).toBe(7);
     for (const s of FORWARDING_EMIT_SITES) expect(s.why.length).toBeGreaterThan(20);
     for (const p of PATTERN_RULINGS) expect(p.ruling.note.length).toBeGreaterThan(40);
   });
