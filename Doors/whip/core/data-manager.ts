@@ -32,6 +32,52 @@ export function getSharedDataManager(storageBaseDir?: string): DataManager {
   return sharedInstance;
 }
 
+/**
+ * ONE RECORD PER ID - the invariant every list store here keeps.
+ *
+ * The live board held the same project and two tasks twice (2026-09-28):
+ * identical copies, side by side, because the SAME object had been pushed
+ * twice. A closed task/project dialog still held focus, so a second Enter
+ * pressed its Save again and `add*` pushed a record that was already there.
+ * The dialogs are fixed; this is the store refusing to hold the result
+ * whoever calls it: `add*` replaces a record with its own id instead of
+ * appending one, every save writes one record per id, and a load heals a
+ * file that already holds twins.
+ */
+type Record_ = { id: string; updatedAt?: string; createdAt?: string };
+
+/** When a record last changed, for choosing between two copies of it. */
+const changedAt = (r: Record_): string => r.updatedAt ?? r.createdAt ?? '';
+
+/**
+ * The records with every id kept once - the most recently changed copy, in
+ * the place the id first appeared. Returns the same array when nothing
+ * repeats, so a clean store is not copied.
+ */
+export function uniqueById<T extends Record_>(records: T[]): T[] {
+  const at = new Map<string, number>();
+  let repeated = false;
+  const out: T[] = [];
+  for (const record of records) {
+    const i = at.get(record.id);
+    if (i === undefined) {
+      at.set(record.id, out.length);
+      out.push(record);
+      continue;
+    }
+    repeated = true;
+    if (changedAt(record) >= changedAt(out[i])) out[i] = record;
+  }
+  return repeated ? out : records;
+}
+
+/** Put a record in its list: over the one with its id, or at the end. */
+function putById<T extends Record_>(records: T[], record: T): void {
+  const i = records.findIndex((r) => r.id === record.id);
+  if (i >= 0) records[i] = record;
+  else records.push(record);
+}
+
 let writeChain: Promise<void> = Promise.resolve();
 
 export function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -98,14 +144,15 @@ export class DataManager {
   // Projects
   async loadProjects(): Promise<Project[]> {
     if (this.projectsCache === null) {
-      this.projectsCache = (await this.storage.load<Project[]>('projects')) ?? [];
+      this.projectsCache = uniqueById((await this.storage.load<Project[]>('projects')) ?? []);
     }
     return this.projectsCache;
   }
 
   async saveProjects(projects: Project[]): Promise<void> {
-    this.projectsCache = projects;  // Update cache
-    await this.storage.save('projects', projects);
+    const unique = uniqueById(projects);
+    this.projectsCache = unique;  // Update cache
+    await this.storage.save('projects', unique);
   }
 
   async getProject(id: string): Promise<Project | undefined> {
@@ -116,7 +163,7 @@ export class DataManager {
   async addProject(project: Project): Promise<void> {
     return runExclusive(async () => {
       const projects = await this.loadProjects();
-      projects.push(project);
+      putById(projects, project);
       await this.saveProjects(projects);
     });
   }
@@ -148,14 +195,15 @@ export class DataManager {
   // Tasks
   async loadTasks(): Promise<Task[]> {
     if (this.tasksCache === null) {
-      this.tasksCache = (await this.storage.load<Task[]>('tasks')) ?? [];
+      this.tasksCache = uniqueById((await this.storage.load<Task[]>('tasks')) ?? []);
     }
     return this.tasksCache;
   }
 
   async saveTasks(tasks: Task[]): Promise<void> {
-    this.tasksCache = tasks;  // Update cache
-    await this.storage.save('tasks', tasks);
+    const unique = uniqueById(tasks);
+    this.tasksCache = unique;  // Update cache
+    await this.storage.save('tasks', unique);
   }
 
   async getTask(id: string): Promise<Task | undefined> {
@@ -176,7 +224,7 @@ export class DataManager {
   async addTask(task: Task): Promise<void> {
     return runExclusive(async () => {
       const tasks = await this.loadTasks();
-      tasks.push(task);
+      putById(tasks, task);
       await this.saveTasks(tasks);
     });
   }
@@ -281,20 +329,21 @@ export class DataManager {
     if (this.partiesCache === null) {
       const stored = await this.storage.load<Party[]>('parties');
       // Return empty array if no stored data - let refreshParties() populate from demoparty.net
-      this.partiesCache = stored ?? [];
+      this.partiesCache = uniqueById(stored ?? []);
     }
     return this.partiesCache;
   }
 
   async saveParties(parties: Party[]): Promise<void> {
-    this.partiesCache = parties;  // Update cache
-    await this.storage.save('parties', parties);
+    const unique = uniqueById(parties);
+    this.partiesCache = unique;  // Update cache
+    await this.storage.save('parties', unique);
   }
 
   async addParty(party: Party): Promise<void> {
     return runExclusive(async () => {
       const parties = await this.loadParties();
-      parties.push(party);
+      putById(parties, party);
       await this.saveParties(parties);
     });
   }

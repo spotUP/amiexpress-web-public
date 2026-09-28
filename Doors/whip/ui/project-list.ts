@@ -2,7 +2,8 @@ import {
   createBox,
   createList,
   createTextbox,
-  createButton
+  createButton,
+  guardDoubleSubmit
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { modalSize } from './layout';
@@ -479,14 +480,21 @@ async function showProjectEditor(
       }
     });
 
+    // A closed dialog saves nothing: its removed widgets keep focus, and a
+    // second Enter on Save added the same project again (2026-09-28).
+    let closed = false;
     const cleanup = () => {
+      if (closed) return;
+      closed = true;
       screen.off('keypress', keyHandler);
       screen.remove(modal);
       screen.render();
     };
 
-    // Save handler
-    const save = async () => {
+    // Save handler - guarded like the other two editors: two saves at once
+    // store one project object twice.
+    const save = guardDoubleSubmit(async () => {
+      if (closed) return;
       project.name = nameInput.getValue();
       project.type = PROJECT_TYPES[typeList.selected!] as ProjectType;
       project.status = statuses[statusList.selected!];
@@ -543,7 +551,7 @@ async function showProjectEditor(
 
       cleanup();
       resolve();
-    };
+    });
 
     saveBtn.on('press', () => {
       save();

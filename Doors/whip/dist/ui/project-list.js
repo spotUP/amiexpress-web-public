@@ -411,13 +411,22 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
                 hover: { bg: 'lightred', fg: door_theme_1.T.ground }
             }
         });
+        // A closed dialog saves nothing: its removed widgets keep focus, and a
+        // second Enter on Save added the same project again (2026-09-28).
+        let closed = false;
         const cleanup = () => {
+            if (closed)
+                return;
+            closed = true;
             screen.off('keypress', keyHandler);
             screen.remove(modal);
             screen.render();
         };
-        // Save handler
-        const save = async () => {
+        // Save handler - guarded like the other two editors: two saves at once
+        // store one project object twice.
+        const save = (0, blessed_helpers_1.guardDoubleSubmit)(async () => {
+            if (closed)
+                return;
             project.name = nameInput.getValue();
             project.type = PROJECT_TYPES[typeList.selected];
             project.status = statuses[statusList.selected];
@@ -460,7 +469,7 @@ async function showProjectEditor(screen, project, dataManager, isNew, bbsApi) {
             }
             cleanup();
             resolve();
-        };
+        });
         saveBtn.on('press', () => {
             save();
         });

@@ -64,16 +64,6 @@ export async function carriedCardInvertsEveryRow(): Promise<void> {
   assert.ok(rows[0].includes('>>'), 'the grip survives the inversion');
 }
 
-export async function selectedCardInvertsWithoutGrip(): Promise<void> {
-  const card = formatKanbanCard(task, 30, false, true);
-  const rows = card.split('\n');
-  assert.ok(rows.length >= 1, 'the title');
-  for (const row of rows) {
-    assert.ok(row.startsWith('{inverse}') && row.endsWith('{/inverse}'), `selected row inverted: ${row}`);
-  }
-  assert.ok(!card.includes('>>'), 'selection is not a grip');
-}
-
 export async function columnsSpanTheWidth(): Promise<void> {
   // 80-column board: four ~19-wide columns across ~79.
   let geo = columnGeometry(80);

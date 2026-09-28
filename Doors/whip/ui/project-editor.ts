@@ -244,6 +244,10 @@ async function showProjectEditor(
     // Double-submit guard, same as the task editor: one project object
     // saved twice shows up duplicated under one id.
     const save = guardDoubleSubmit(async () => {
+      // A closed dialog saves nothing: its removed widgets keep focus, and a
+      // second Enter used to add the same project again (the live board held
+      // 'Demo System' twice, 2026-09-28) and count projectsCreated twice.
+      if (closed) return;
       project.name = nameInput.getValue();
       project.type = PROJECT_TYPES[typeList.selected!] as ProjectType;
       project.status = PROJECT_STATUSES[statusList.selected!] as ProjectStatus;

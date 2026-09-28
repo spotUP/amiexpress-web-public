@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DataManager = void 0;
 exports.getSharedDataManager = getSharedDataManager;
+exports.uniqueById = uniqueById;
 exports.runExclusive = runExclusive;
 const core_1 = require("@amiexpress/bbs-door-sdk/core");
 const achievements_1 = require("./achievements");
@@ -29,6 +30,38 @@ function getSharedDataManager(storageBaseDir) {
         sharedBaseDir = storageBaseDir;
     }
     return sharedInstance;
+}
+/** When a record last changed, for choosing between two copies of it. */
+const changedAt = (r) => r.updatedAt ?? r.createdAt ?? '';
+/**
+ * The records with every id kept once - the most recently changed copy, in
+ * the place the id first appeared. Returns the same array when nothing
+ * repeats, so a clean store is not copied.
+ */
+function uniqueById(records) {
+    const at = new Map();
+    let repeated = false;
+    const out = [];
+    for (const record of records) {
+        const i = at.get(record.id);
+        if (i === undefined) {
+            at.set(record.id, out.length);
+            out.push(record);
+            continue;
+        }
+        repeated = true;
+        if (changedAt(record) >= changedAt(out[i]))
+            out[i] = record;
+    }
+    return repeated ? out : records;
+}
+/** Put a record in its list: over the one with its id, or at the end. */
+function putById(records, record) {
+    const i = records.findIndex((r) => r.id === record.id);
+    if (i >= 0)
+        records[i] = record;
+    else
+        records.push(record);
 }
 let writeChain = Promise.resolve();
 function runExclusive(fn) {
@@ -78,13 +111,14 @@ class DataManager {
     // Projects
     async loadProjects() {
         if (this.projectsCache === null) {
-            this.projectsCache = (await this.storage.load('projects')) ?? [];
+            this.projectsCache = uniqueById((await this.storage.load('projects')) ?? []);
         }
         return this.projectsCache;
     }
     async saveProjects(projects) {
-        this.projectsCache = projects; // Update cache
-        await this.storage.save('projects', projects);
+        const unique = uniqueById(projects);
+        this.projectsCache = unique; // Update cache
+        await this.storage.save('projects', unique);
     }
     async getProject(id) {
         const projects = await this.loadProjects();
@@ -93,7 +127,7 @@ class DataManager {
     async addProject(project) {
         return runExclusive(async () => {
             const projects = await this.loadProjects();
-            projects.push(project);
+            putById(projects, project);
             await this.saveProjects(projects);
         });
     }
@@ -121,13 +155,14 @@ class DataManager {
     // Tasks
     async loadTasks() {
         if (this.tasksCache === null) {
-            this.tasksCache = (await this.storage.load('tasks')) ?? [];
+            this.tasksCache = uniqueById((await this.storage.load('tasks')) ?? []);
         }
         return this.tasksCache;
     }
     async saveTasks(tasks) {
-        this.tasksCache = tasks; // Update cache
-        await this.storage.save('tasks', tasks);
+        const unique = uniqueById(tasks);
+        this.tasksCache = unique; // Update cache
+        await this.storage.save('tasks', unique);
     }
     async getTask(id) {
         const tasks = await this.loadTasks();
@@ -144,7 +179,7 @@ class DataManager {
     async addTask(task) {
         return runExclusive(async () => {
             const tasks = await this.loadTasks();
-            tasks.push(task);
+            putById(tasks, task);
             await this.saveTasks(tasks);
         });
     }
@@ -234,18 +269,19 @@ class DataManager {
         if (this.partiesCache === null) {
             const stored = await this.storage.load('parties');
             // Return empty array if no stored data - let refreshParties() populate from demoparty.net
-            this.partiesCache = stored ?? [];
+            this.partiesCache = uniqueById(stored ?? []);
         }
         return this.partiesCache;
     }
     async saveParties(parties) {
-        this.partiesCache = parties; // Update cache
-        await this.storage.save('parties', parties);
+        const unique = uniqueById(parties);
+        this.partiesCache = unique; // Update cache
+        await this.storage.save('parties', unique);
     }
     async addParty(party) {
         return runExclusive(async () => {
             const parties = await this.loadParties();
-            parties.push(party);
+            putById(parties, party);
             await this.saveParties(parties);
         });
     }

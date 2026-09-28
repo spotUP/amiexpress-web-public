@@ -14,6 +14,7 @@ const layout_1 = require("./layout");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
+const task_details_1 = require("./task-details");
 const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
@@ -147,19 +148,23 @@ function columnGeometry(screenWidth, focused = 0, columns = 4) {
  * a row per card on it. Priority, points and assignee live in the task's
  * detail view, which is the editor that Enter opens.
  */
-function formatKanbanCard(task, width, carried = false, selected = false) {
+function formatKanbanCard(task, width, carried = false) {
     // A carried task shows its grip AND its held state: the marker eats
     // its own cells so the wrap width shrinks by exactly that much, and
     // every row inverts - a held card reads nothing like a merely
     // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
-    // A selected (not carried) card inverts the same way: the list widget
-    // highlights only the first visual row of a multi-row item, which left
-    // the rest of the title dark (screenshot, 2026-09-10).
+    //
+    // A SELECTED card is the list's to highlight, not the card's. The door
+    // used to bake `{inverse}` into the selected card at paint time, because
+    // the list lit only the first row of a multi-row item - but paint runs on
+    // a reload, not on an arrow key, so the bake stayed on the card the cursor
+    // had LEFT while the list lit the new card's first row only (sysop,
+    // 2026-09-28). The list now styles every row of the selected item (sdk
+    // list.ts), and the card says nothing about selection.
     const rows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
-    if (carried && rows.length > 0)
-        rows[0] = `>> ${rows[0]}`;
-    if (!carried && !selected)
+    if (!carried)
         return rows.join('\n');
+    rows[0] = `>> ${rows[0]}`;
     return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
 }
 async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi, onNavigate) {
@@ -379,16 +384,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 const columnTasks = tasksIn(i);
                 const cardWidth = Math.max(8, colWidth - 2);
                 const sel = columnLists[i].selected || 0;
-                const items = spaceCards(columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, carried?.task.id === task.id, 
-                // Selected rows invert whole: the widget highlights only the
-                // first visual row of a multi-row card (2026-09-10).
-                idx === sel && i === currentColumn)));
+                const items = spaceCards(columnTasks.map((task) => formatKanbanCard(task, cardWidth, carried?.task.id === task.id)));
                 // Clear items first, then set new ones to ensure proper refresh -
                 // and put the selection BACK, because clearItems() zeroes it
                 // (sdk list.ts:539) and setItems() only ever clamps downwards. Every
-                // repaint used to drop the cursor to row 0 while the inverse
-                // highlight above stayed drawn on the old row, so two cards looked
-                // selected and E/M/D acted on the wrong one (2026-09-13).
+                // repaint used to drop the cursor to row 0 while the highlight stayed
+                // drawn on the old row, so two cards looked selected and E/M/D acted
+                // on the wrong one (2026-09-13).
                 columnLists[i].clearItems();
                 columnLists[i].setItems(items.length > 0 ? items : []);
                 if (sel > 0)
@@ -572,11 +574,11 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             cleanup();
             resolve();
         };
-        // N/M/D/E/Q are the board's own keys, so the bar neither binds nor
+        // N/M/D/E/I/Q are the board's own keys, so the bar neither binds nor
         // advertises them here; Tab still reaches it, and T/V/K/P/L/A pick
         // straight from the board.
         menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => columnLists[currentColumn], {
-            reserved: ['N', 'M', 'D', 'E', 'Q'],
+            reserved: ['N', 'M', 'D', 'E', 'I', 'Q'],
         });
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
@@ -662,6 +664,16 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                             const task = columnTasks[selectedIndex];
                             await withModal(() => (0, task_editor_1.editTask)(screen, task, user, dataManager, achievementManager, project, bbsApi));
                             await updateLists(true);
+                        }
+                        break;
+                    case 'i':
+                        // Details, read-only: every field the title-only card leaves out.
+                        // I, not V - V is the menu bar's View All Projects on this screen.
+                        if (!carried && columnTasks.length > 0) {
+                            const selectedIndex = columnLists[currentColumn].selected || 0;
+                            const task = columnTasks[selectedIndex];
+                            await withModal(() => (0, task_details_1.showTaskDetails)(screen, task, dataManager));
+                            updateListsImmediate();
                         }
                         break;
                     case 'n':

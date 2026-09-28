@@ -11,12 +11,13 @@
  *
  * Driven: a real board with three cards in TODO, real Down keys, a real
  * resize to force the repaint, and the list's own `selected` plus the
- * inverse markers in its items as the oracle.
+ * rows drawn lit on the rendered screen as the oracle.
  */
 
 import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { showKanbanBoard } from '../ui/kanban-board';
+import { litRows } from './board-cells';
 
 const PROJECT = { id: 'p1', name: 'Demo', type: 'demo', status: 'active' };
 const USER = { userId: 'u1', handle: 'tester' };
@@ -59,15 +60,6 @@ function columnLists(screen: any): any[] {
   return found;
 }
 
-/** Indices of the items drawn inverse - the cards that LOOK selected. */
-function invertedRows(list: any): number[] {
-  const out: number[] = [];
-  (list.items as string[]).forEach((item, i) => {
-    if (String(item).includes('{inverse}')) out.push(i);
-  });
-  return out;
-}
-
 export async function aRepaintKeepsTheCursorOnTheSelectedCard(): Promise<void> {
   const screen = open();
   try {
@@ -93,7 +85,7 @@ export async function aRepaintKeepsTheCursorOnTheSelectedCard(): Promise<void> {
       'the repaint must not send the cursor back to the first card',
     );
     assert.deepStrictEqual(
-      invertedRows(todo()), [2],
+      litRows(screen, todo()).map((r) => r.text), ['Task 3'],
       'exactly one card is drawn selected, and it is the one under the cursor',
     );
 

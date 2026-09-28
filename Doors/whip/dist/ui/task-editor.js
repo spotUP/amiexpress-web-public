@@ -317,6 +317,14 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // task duplicated under one id (2026-09-09). Set synchronously so the
         // second entry bails before its first await.
         const save = (0, blessed_helpers_1.guardDoubleSubmit)(async () => {
+            // A CLOSED DIALOG SAVES NOTHING (2026-09-28). Closing removes the modal
+            // but leaves focus on the widget that was focused - the title, or the
+            // Save button - so the caller's next Enter reached it and saved the
+            // same Task object a second time: addTask pushed it again and the live
+            // board held that task twice under one id. guardDoubleSubmit only
+            // stops two saves at once; this stops one after the dialog is gone.
+            if (closed)
+                return;
             // VALIDATE FIRST, then write (2026-09-13). This used to assign title,
             // category, priority, points, assignee and projectId onto the Task -
             // which is DataManager's cached record, handed out by reference - and
