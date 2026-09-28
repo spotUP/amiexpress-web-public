@@ -13,6 +13,10 @@
  *
  * The service the admin uses reads the file and falls back to the table; the
  * prompt uses that same service now, so there is one answer to the question.
+ *
+ * The service is tested directly, and both of its callers - the signup
+ * prompt (new-user.handler) and W options 8 and 9 (info-commands.handler) -
+ * are driven for real against a board whose files list more than its table.
  */
 
 import * as fs from 'fs';
@@ -36,26 +40,25 @@ describe('the computer types a new user is offered', () => {
     fs.rmSync(bbsRoot, { recursive: true, force: true });
   });
 
-  /** A ComputerList.info with the tooltypes AmiExpress writes. */
-  function writeComputerList(names: string[]): void {
+  /** One of the board's .info files, holding exactly these tooltypes. */
+  function writeInfo(name: string, pairs: Array<[string, string]>): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { writeInfoFile, parseInfoFile } = require('../../src/utils/info-file.util');
-    const source = path.join(__dirname, '../../../../ComputerList.info');
-    const target = path.join(bbsRoot, 'ComputerList.info');
-    fs.copyFileSync(source, target);
-
+    const target = path.join(bbsRoot, name);
+    fs.copyFileSync(path.join(__dirname, '../../../..', name), target);
     const parsed = parseInfoFile(target);
-    parsed.tooltypes = [
-      ...names.map((name, i) => ({
-        key: `COMPUTER.${i + 1}`, value: name, commented: false, prefix: '',
-        originalLine: `COMPUTER.${i + 1}=${name}`,
-      })),
-      {
-        key: 'COMPUTER.NUM', value: String(names.length), commented: false, prefix: '',
-        originalLine: `COMPUTER.NUM=${names.length}`,
-      },
-    ];
+    parsed.tooltypes = pairs.map(([key, value]) => ({
+      key, value, commented: false, prefix: '', originalLine: `${key}=${value}`,
+    }));
     writeInfoFile(parsed);
+  }
+
+  /** A ComputerList.info with the tooltypes AmiExpress writes. */
+  function writeComputerList(names: string[]): void {
+    writeInfo('ComputerList.info', [
+      ...names.map((n, i): [string, string] => [`COMPUTER.${i + 1}`, n]),
+      ['COMPUTER.NUM', String(names.length)],
+    ]);
   }
 
   it('offers every machine in ComputerList.info, not only the ones with a database row', async () => {
@@ -96,26 +99,68 @@ describe('the computer types a new user is offered', () => {
     expect(records.map((c: { computer_name: string }) => c.computer_name)).toEqual(['Commodore 64']);
   });
 
-  it('the signup prompt asks the service, not the repository', () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, '../../src/handlers/user/new-user.handler.ts'), 'utf8');
-    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  /*
+   * The two callers, driven. Each is loaded fresh (the resetModules above) so
+   * the new-user choice cache starts empty, and each is handed a database
+   * whose table holds only the two recently added machines: a caller that
+   * asked the repository instead of the service would offer those two.
+   */
+  const ALL = ['AMiGA 500', 'AMiGA 1200', 'PC', 'Commodore 64', 'Commodore 128'];
+  const twoRowDatabase = (): any => ({
+    getConfigRepository: () => ({
+      getAllComputerTypes: () => [
+        { id: 1, computer_number: 4, computer_name: 'Commodore 64', enabled: true },
+        { id: 2, computer_number: 5, computer_name: 'Commodore 128', enabled: true },
+      ],
+      getAllScreenTypes: () => [
+        { id: 1, screen_number: 1, screen_type: 'PETSCII', screen_title: 'Commodore PETSCII', enabled: true },
+        { id: 2, screen_number: 2, screen_type: 'WEB', screen_title: 'Web', enabled: true },
+      ],
+    }),
+    updateUser: async () => undefined,
+  });
+  const socket = (): any => ({ id: 'nu', emit: () => true, on() { return this; } });
 
-    expect(code).toContain('new ComputerConfigService(db).getAllComputerTypes()');
-    expect(code).not.toMatch(/repo\.getAllComputerTypes\(\)/);
+  it('the signup prompt asks the service, not the repository', async () => {
+    writeComputerList(ALL);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const newUser = require('../../src/handlers/user/new-user.handler');
+    newUser.setNewUserDependencies({ db: twoRowDatabase(), sessions: new Map() });
+    const session: any = { nodeId: 1, tempData: {}, newUserData: {}, screenWidth: 80, screenHeight: 24 };
+
+    // Lines answered: the computer prompt is next.
+    await newUser.handleLinesInput(socket(), session, '24');
+
+    expect(session.newUserData.computerChoices).toEqual(ALL);
   });
 
-  it('the W command asks the services too, for both lists', () => {
+  it('the W command asks the services too, for both lists', async () => {
     // Same defect, same file: "Which to change" offered
     // "1> Commodore PETSCII  2> Web" on a board whose ScreenTypes.info and
     // admin page both list four.
-    const source = fs.readFileSync(
-      path.join(__dirname, '../../src/handlers/commands/info-commands.handler.ts'), 'utf8');
-    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    writeComputerList(ALL);
+    const screens = [['ANSI', 'Amiga ANSI'], ['ASCII', 'Plain text'], ['PETSCII', 'Commodore PETSCII'], ['WEB', 'Web']];
+    writeInfo('ScreenTypes.info', screens.flatMap(([type, title], i) => [[`TYPE.${i + 1}`, type], [`TITLE.${i + 1}`, title]]));
 
-    expect(code).toContain('new ComputerConfigService(db).getAllComputerTypes()');
-    expect(code).toContain('new ScreenConfigService(db).getAllScreenTypes()');
-    expect(code).not.toMatch(/repo\.getAllComputerTypes\(\)/);
-    expect(code).not.toMatch(/repo\.getAllScreenTypes\(\)/);
+    const database = twoRowDatabase();
+    jest.doMock('../../src/index', () => {
+      const states = jest.requireActual('../../src/constants/bbs-states');
+      return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
+    });
+    jest.doMock('../../src/database', () => ({ db: database }));
+    jest.doMock('../../src/handlers/command-handler/dependency-injection', () => ({ getDoors: () => [] }));
+    jest.doMock('../../src/utils/acs.util', () => ({
+      ...jest.requireActual('../../src/utils/acs.util'),
+      checkSecurity: () => true,
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { handleWOptionSelectInput } = require('../../src/handlers/commands/info-commands.handler');
+    const session: any = { nodeId: 1, currentConf: 1, tempData: {}, user: { id: 'u8', username: 'SPOT', secLevel: 255 } };
+
+    await handleWOptionSelectInput(socket(), session, '8');
+    expect(session.tempData.computerChoices).toEqual(ALL);
+
+    await handleWOptionSelectInput(socket(), session, '9');
+    expect(session.tempData.screenTypeChoices).toEqual(screens.map(([, title]) => title));
   });
 });

@@ -36,6 +36,12 @@ jest.mock('../../src/utils/output.util', () => ({
   emitText: jest.fn(),
   emitPrompt: jest.fn(),
 }));
+// saveMessage's disk write, the one piece of the real save path stubbed below.
+jest.mock('../../src/utils/message-file.util', () => ({
+  ...jest.requireActual('../../src/utils/message-file.util'),
+  writeMessageFile: jest.fn().mockResolvedValue(1),
+  writeExtSendDumpIfApplicable: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/handlers/transfer/olm.handler', () => ({
   processOlmQueue: jest.fn(),
 }), { virtual: true });
@@ -197,27 +203,48 @@ describe('Menu Display (express.e:28555-28648)', () => {
       );
     });
 
-    // Source-level guard: catches anyone who edits message-entry.handler.ts
-    // back to forceMenuDisplay=true. The text of the call site is part of the
-    // contract for #9 — keep saveMessage's invocation specific.
-    it('saveMessage call site uses forceMenuDisplay=false, bypassDebounce=true (source-level guard)', () => {
-      const fs = require('fs');
-      const path = require('path');
-      const src = fs.readFileSync(
-        path.resolve(__dirname, '../../src/handlers/message/message-entry.handler.ts'),
-        'utf8'
-      );
+    // The call site itself, driven: S at the message options prompt runs the
+    // REAL saveMessage (message-entry.handler), which hands off to the real
+    // displayMainMenu above. With the debounce primed, an expert must still
+    // get the menu pass (bypassDebounce=true: manualMenuTargetState is set)
+    // but never the MENU screen (forceMenuDisplay=false). Only the disk
+    // write is stubbed; the saved-message DB goes through the injected dep.
+    async function saveAs(expert: 'X' | 'N') {
+      const { handleMessageOptionsInput, setMessageEntryDependencies } =
+        require('../../src/handlers/message/message-entry.handler');
+      setMessageEntryDependencies({
+        db: {
+          createMessage: jest.fn().mockResolvedValue(1),
+          getConferenceById: jest.fn().mockResolvedValue(null),
+          getMessageBaseById: jest.fn().mockResolvedValue(null),
+          getUserByUsername: jest.fn().mockResolvedValue(null),
+        },
+        callersLog: jest.fn().mockResolvedValue(undefined),
+      });
+      const socket = makeSocket();
+      const session = makeSession({
+        user: { id: 'u1', username: 'poster', expert, secLevel: 20, confAccess: 'X' },
+        tempData: { messageEntry: { toUser: 'ALL', subject: 'Hello', isPrivate: false, body: ['line one'] } },
+      });
+      (session as any)._lastMainMenuTime = Date.now();
+      await handleMessageOptionsInput(socket, session, 'S');
+      return session;
+    }
 
-      // Find the saveMessage closing block — assume there's only one displayMainMenu call inside it.
-      // Match the call regardless of whitespace/comments between args.
-      const saveMessageCall = src.match(
-        /displayMainMenu\s*\(\s*socket\s*,\s*session\s*,\s*(true|false)([\s\S]*?)\)/
+    it('saving a message as an expert runs the menu pass past the debounce without drawing MENU', async () => {
+      const session = await saveAs('X');
+      expect(session.manualMenuTargetState).toBe(LoggedOnSubState.READ_COMMAND);
+      expect(mockedDisplayScreen).not.toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), 'MENU'
       );
-      expect(saveMessageCall).not.toBeNull();
-      // First positional arg after session must be `false` — i.e. don't override expert mode.
-      expect(saveMessageCall![1]).toBe('false');
-      // The 2nd boolean (bypassDebounce) must be present and true.
-      expect(saveMessageCall![2]).toMatch(/,\s*true/);
+    });
+
+    it('saving a message as a novice draws MENU (the same call site reaches the menu)', async () => {
+      const session = await saveAs('N');
+      expect(session.manualMenuTargetState).toBe(LoggedOnSubState.READ_COMMAND);
+      expect(mockedDisplayScreen).toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), 'MENU'
+      );
     });
   });
 

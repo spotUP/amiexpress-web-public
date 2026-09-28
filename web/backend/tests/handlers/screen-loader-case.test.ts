@@ -11,66 +11,111 @@
  * and the BBSTITLE wrap path emitted hide-cursor + cursor-home after
  * the art; the login prompt then printed inside the ASCII banner.
  *
- * The variant lists live inline inside loadScreenFile (not exported)
- * so this test inspects the source string directly. It's a structural
- * test — if the file is reorganised the regex won't match and the
- * test will fail loudly, prompting whoever refactored to add a real
- * unit test for the new arrangement.
+ * Driven through the REAL loadScreenFile on a temp board. macOS' APFS is
+ * case-insensitive, so the two twins cannot both exist in a tmp dir - but
+ * what a case-sensitive volume does is LIST both, in whatever order its
+ * directory hashing gives. `fs.readdirSync` is therefore made to list the
+ * stale uppercase twin FIRST for the board's node directory, which is the
+ * failing order on Linux. (The old header said amigafs.existsSync could not
+ * be redefined; jest.mock replaces the module a src file imports, sealed
+ * namespace or not, and the loader's choice is made by the listing anyway.)
  *
- * Why source-string and not behavioural? macOS' default APFS is
- * case-insensitive, so we can't create both .txt and .TXT in a tmp
- * dir; and jest's module-mocking can't redefine amigafs.existsSync
- * (TS module objects are sealed). The fix is a one-line ordering
- * change, so a structural check is proportionate.
+ * WHAT THIS FOUND (2026-09-28, source-pin conversion P47): the property does
+ * NOT hold, and the variant order the old source pins checked decides
+ * nothing. Every lookup goes through amigafs.findCaseInsensitive, which looks
+ * the LOWERCASED name up in a listing that keeps the FIRST entry per
+ * lowercased name (amigafs.ts listingOf, "First wins") - so 'BBSTITLE.txt'
+ * and 'BBSTITLE.TXT' are one key, answered by whichever twin the volume lists
+ * first. The security-screen lookup ahead of the variant list also asks for
+ * `.TXT` first. Swapping the pinned literals stays green; a fix that prefers
+ * the lowercase twin in findCaseInsensitive turns both tests below red. They
+ * are `it.failing` until the loader is fixed - when they start passing, jest
+ * reports them, and they become plain `it`.
  */
+process.env.SKIP_DB_INIT = '1';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-describe('loadScreenFile — filename-variant ordering (regression)', () => {
-  const src = fs.readFileSync(
-    path.resolve(__dirname, '../../src/handlers/screen.handler.ts'),
-    'utf8',
-  );
+// The node directory a case-sensitive volume would list with both twins.
+let mockTwinDir = '';
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    readdirSync: (dir: any, ...rest: any[]) => {
+      const entries = actual.readdirSync(dir, ...rest);
+      if (mockTwinDir && String(dir) === mockTwinDir && rest.length === 0) {
+        // Stale uppercase twin first, then what is really there.
+        const twins = entries
+          .filter((e: string) => /\.txt$/.test(e))
+          .map((e: string) => e.replace(/\.txt$/, '.TXT'));
+        return [...twins, ...entries];
+      }
+      return entries;
+    },
+  };
+});
 
-  function lowerBeforeUpper(haystack: string, name: string): void {
-    const lowerIdx = haystack.indexOf(`'${name}.txt'`);
-    const upperIdx = haystack.indexOf(`'${name}.TXT'`);
-    if (lowerIdx < 0 || upperIdx < 0) {
-      throw new Error(
-        `Could not locate both '${name}.txt' and '${name}.TXT' literals. ` +
-          `The screen-loader variant list may have been refactored; add a ` +
-          `behavioural test in its place.`,
-      );
+/**
+ * The loader and what it reads, loaded AFTER the fs mock: tests/setup.ts
+ * imports src/database, which caches amigafs with the real fs before any
+ * test file's jest.mock is registered - so the registry is reset first.
+ */
+function freshLoader() {
+  jest.resetModules();
+  return {
+    loadScreenFile: require('../../src/handlers/screen.handler').loadScreenFile,
+    invalidateScreenIndex: require('../../src/screens/screen-index.service').invalidateScreenIndex,
+    clearThemeRegistryCache: require('../../src/screens/theme-registry').clearThemeRegistryCache,
+    config: require('../../src/config').config,
+  };
+}
+
+describe('loadScreenFile — a stale uppercase twin never wins (regression)', () => {
+  let root: string;
+  let previousDataDir: string;
+  let loader: ReturnType<typeof freshLoader>;
+
+  beforeEach(() => {
+    loader = freshLoader();
+    const { config, clearThemeRegistryCache, invalidateScreenIndex } = loader;
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'screen-twins-'));
+    previousDataDir = config.get('dataDir');
+    config.set('dataDir', root);
+    fs.writeFileSync(path.join(root, 'ConfConfig.info'), '');
+    fs.mkdirSync(path.join(root, 'Node1'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Node1', 'BBSTITLE.txt'), 'CURRENT TITLE ~SMC|\r\n', 'latin1');
+    fs.writeFileSync(path.join(root, 'Node1', 'AWAITSCREEN.txt'), 'CURRENT AWAIT\r\n', 'latin1');
+    mockTwinDir = path.join(root, 'Node1');
+    clearThemeRegistryCache();
+    invalidateScreenIndex();
+  });
+  afterEach(() => {
+    const { config, clearThemeRegistryCache, invalidateScreenIndex } = loader;
+    mockTwinDir = '';
+    config.set('dataDir', previousDataDir);
+    fs.rmSync(root, { recursive: true, force: true });
+    clearThemeRegistryCache();
+    invalidateScreenIndex();
+  });
+
+  const caller = (): any => ({ nodeId: 1, currentConf: 1, ansiEnabled: true, screenWidth: 80, screenHeight: 24, tempData: {} });
+
+  it('the loader sees the twin listing (harness check: the screen is found)', () => {
+    for (const name of ['BBSTITLE', 'AWAITSCREEN']) {
+      const loaded = loader.loadScreenFile(name, 1, 1, caller());
+      expect(loaded).not.toBeNull();
+      expect(path.basename(loaded!.filePath).toLowerCase()).toBe(`${name.toLowerCase()}.txt`);
     }
-    expect(lowerIdx).toBeLessThan(upperIdx);
-  }
-
-  it('BBSTITLE special-case list tries .txt before .TXT', () => {
-    // The literal looks like: return ['BBSTITLE.txt', 'BBSTITLE.TXT', 'BBSTITLE'];
-    const bbsTitleArray = src.match(/return\s*\[\s*'BBSTITLE\.(txt|TXT)'.*?'BBSTITLE'/)?.[0];
-    expect(bbsTitleArray).toBeDefined();
-    lowerBeforeUpper(bbsTitleArray!, 'BBSTITLE');
   });
 
-  it('AWAITSCREEN special-case list tries .txt before .TXT', () => {
-    const awaitArray = src.match(/return\s*\[\s*'AWAITSCREEN\.(txt|TXT)'.*?\]/)?.[0];
-    expect(awaitArray).toBeDefined();
-    lowerBeforeUpper(awaitArray!, 'AWAITSCREEN');
+  it.failing('BBSTITLE: the lowercase .txt is served, not a .TXT twin listed first', () => {
+    expect(path.basename(loader.loadScreenFile('BBSTITLE', 1, 1, caller())!.filePath)).toBe('BBSTITLE.txt');
   });
 
-  it('addAnsiVariants helper queues .txt before .TXT', () => {
-    // Locate the addAnsiVariants body (between its declaration and the
-    // next `const add` helper or end of variants block).
-    const body = src.match(/addAnsiVariants[\s\S]*?return\s+Array\.from\(variants\)/)?.[0];
-    expect(body).toBeDefined();
-    // The interpolated variable is the STEM (a known screen extension
-    // stripped, plan Task 7), not the raw name - match on the extension so
-    // this pin survives that rename and any future one.
-    const txtIdx = body!.search(/\$\{\w+\}\.txt`/);
-    const TXTIdx = body!.search(/\$\{\w+\}\.TXT`/);
-    expect(txtIdx).toBeGreaterThanOrEqual(0);
-    expect(TXTIdx).toBeGreaterThanOrEqual(0);
-    expect(txtIdx).toBeLessThan(TXTIdx);
+  it.failing('AWAITSCREEN: the lowercase .txt is served, not a .TXT twin listed first', () => {
+    expect(path.basename(loader.loadScreenFile('AWAITSCREEN', 1, 1, caller())!.filePath)).toBe('AWAITSCREEN.txt');
   });
 });

@@ -17,15 +17,9 @@
  * the lookup always missed and the guard never fired once.
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { doorOwnsTerminal } from '../../src/utils/door-owns-terminal';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
-
-const handler = readFileSync(
-  join(__dirname, '..', '..', 'src', 'handlers', 'chat', 'group-chat.handler.ts'),
-  'utf8'
-);
+import { setGroupChatDependencies, handleRoomList } from '../../src/handlers/chat/group-chat.handler';
 
 // The broadcast's own behaviour - a door member skipped, the sender left out,
 // every transport reached - is driven in tests/chat/group-chat-door-terminal.test.ts
@@ -58,22 +52,36 @@ describe('what counts as a door owning the terminal', () => {
   });
 });
 
-describe('emitToTerminal', () => {
-  const fn = handler.slice(
-    handler.indexOf('function emitToTerminal'),
-    handler.indexOf('// Dependencies (injected via setter)')
-  );
+// emitToTerminal is private; ROOM LIST is its simplest caller - a structured
+// room:list event for doors, then the terminal copy through emitToTerminal.
+describe('emitToTerminal, through the real ROOM LIST', () => {
+  function listRooms(session: Record<string, unknown>) {
+    setGroupChatDependencies({
+      db: { listChatRooms: async () => [] },
+      sessions: new Map(),
+      io: {},
+    } as never);
+    const emitted: Array<[string, unknown]> = [];
+    const socket = { id: 's1', emit: (e: string, d: unknown) => { emitted.push([e, d]); return true; } };
+    return handleRoomList(socket as never, { user: { id: 1 }, ...session } as never).then(() => emitted);
+  }
 
-  it('emits instead of calling itself', () => {
+  it('emits instead of calling itself', async () => {
     // It called emitToTerminal(socket, session, data) - itself - so any
-    // session without a door recursed until the stack gave out. Door
-    // sessions returned on the line above, which is the only reason this was
-    // survivable.
-    expect(fn).toMatch(/socket\.emit\('ansi-output', data\)/);
-    expect(fn).not.toMatch(/\n\s*emitToTerminal\(socket, session, data\);/);
+    // session without a door recursed until the stack gave out (the catch
+    // below it would swallow the RangeError, so the proof is the output).
+    // Door sessions returned on the line above, which is the only reason
+    // this was survivable.
+    const emitted = await listRooms({});
+    const ansi = emitted.filter(([e]) => e === 'ansi-output').map(([, d]) => String(d)).join('');
+    expect(ansi).toContain('Available Chat Rooms');
+    expect(ansi).toContain('No rooms available');
   });
 
-  it('still says nothing while a door owns the screen', () => {
-    expect(fn).toMatch(/if \(doorOwnsTerminal\(session\)\) return;/);
+  it('still says nothing while a door owns the screen', async () => {
+    const emitted = await listRooms({ clientDoorActive: true });
+    expect(emitted.filter(([e]) => e === 'ansi-output')).toEqual([]);
+    // The door still gets what it renders from.
+    expect(emitted.map(([e]) => e)).toContain('room:list');
   });
 });

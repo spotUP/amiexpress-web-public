@@ -6,57 +6,51 @@
  * who just left. express.e does this in writeLogoff at line 8213
  * (StrCopy(reservedName,'')).
  *
- * Pinning at handleGoodbyeCommand level: when called with a session that
- * carries a nodeId AND that node has a reservation, the reservation is
- * removed from the per-node service before the disconnect emit.
- *
- * Same grep-style structural test as the other audit closures —
- * system-commands.handler.ts pulls in the entire BBS subsystem and
- * can't be unit-loaded cleanly under jest.
+ * Driven through the REAL handleGoodbyeCommand (system-commands.handler,
+ * loaded unmocked as tests/system-commands.test.ts does): a node carries a
+ * reservation in the real node-reservation service, the caller says G Y,
+ * and the reservation must be gone - on that node only. The LOGOFF
+ * sys-commands are stubbed; they run doors and are not what is under test.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import * as fs from 'fs';
-import * as path from 'path';
+jest.mock('../../src/handlers/command-execution.handler', () => ({
+  runSysCommand: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../../src/handlers/commands/system-commands.handler';
+import {
+  setNodeReservation, getNodeReservation, resetAllNodeReservations,
+} from '../../src/services/node-reservation.service';
 
 describe('handleGoodbyeCommand clears node reservation on logoff (A-3, express.e:8213)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'src', 'handlers', 'commands', 'system-commands.handler.ts'),
-    'utf8'
-  );
-
-  test('imports clearNodeReservation from node-reservation.service', () => {
-    expect(src).toMatch(
-      /clearNodeReservation[\s\S]{0,80}?from\s*['"][^'"]*node-reservation\.service['"]|require\(['"][^'"]*node-reservation\.service['"]\)[\s\S]{0,80}?clearNodeReservation/
-    );
+  beforeEach(() => {
+    resetAllNodeReservations();
+    setSystemCommandsDependencies({
+      displayScreen: async () => true,
+      findSecurityScreen: () => null,
+    } as any);
+  });
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
-  /**
-   * The source of handleGoodbyeCommand, from its signature to the next
-   * top-level declaration.
-   *
-   * This used to be a regex with a hard `{0,8000}` cap, which is a trap: the
-   * function grew to 8101 characters and the match silently became null, so
-   * both tests below failed reporting "expected not null" - saying nothing
-   * about clearNodeReservation, which was still there and still correct.
-   * Slicing to the next declaration cannot go stale that way.
-   */
-  function goodbyeBody(): string {
-    const start = src.indexOf('export async function handleGoodbyeCommand');
-    expect(start).toBeGreaterThan(-1);
-    const after = src.slice(start + 10);
-    const next = after.search(/\nexport |\nfunction |\nclass /);
-    return next === -1 ? after : after.slice(0, next);
-  }
+  test('a caller who says goodbye releases the reservation on his node', async () => {
+    jest.useFakeTimers(); // the 2 s force-disconnect timer
+    setNodeReservation(3, 'spot');
+    setNodeReservation(4, 'someone');
+    const socket: any = { emit: jest.fn(), disconnect: jest.fn() };
+    const session: any = {
+      nodeId: 3, tempData: {}, shortcuts: new Map(),
+      user: { username: 'spot', slotNumber: 2 },
+      flagManager: { getCount: () => 0, save: jest.fn() },
+    };
 
-  test('handleGoodbyeCommand body calls clearNodeReservation(session.nodeId)', () => {
-    const block = [goodbyeBody()];
-    expect(block[0].length).toBeGreaterThan(0);
-    expect(block[0]).toMatch(
-      /clearNodeReservation\(\s*session\.nodeId[^)]*\)/
-    );
-  });
+    await handleGoodbyeCommand(socket, session, 'Y');
 
-  test('cites express.e:8213 for the clear call', () => {
-    expect(goodbyeBody()).toMatch(/express\.e:8213/);
+    expect(getNodeReservation(3)).toBeNull();
+    // Only the caller's own node: the next node's reservation stands.
+    expect(getNodeReservation(4)).toBe('someone');
   });
 });

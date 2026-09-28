@@ -19,64 +19,109 @@
  *
  * The backend has always sent the sender's userId with the frame. Nothing
  * was missing but the wiring.
+ *
+ * Each leg is driven for real: the backend relay (audio-video.handler) with a
+ * registered session, the SDK's Video with a fake socket, and the LiveChat
+ * door's frame handler (EnhancedVoiceChannel, whose constructor builds a
+ * blessed UI - so the handler is installed on a bare instance holding only
+ * the fields it reads, the way the-w-screen test calls mapUserFromDb). The
+ * handler's type signature is tsc's to enforce.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { registerAudioVideoHandlers } from '../../src/handlers/audio-video.handler';
+import { setSession, deleteSession } from '../../src/server/session-manager';
+import { Video } from '../../../../sdk/media/Video';
+import { EnhancedVoiceChannel } from '../../../../Doors/livechat/features/voice-channel-ux';
 
-const ROOT = join(__dirname, '..', '..', '..', '..');
-const types = readFileSync(join(ROOT, 'sdk', 'core', 'types.ts'), 'utf8');
-const video = readFileSync(join(ROOT, 'sdk', 'media', 'Video.ts'), 'utf8');
-const voiceUx = readFileSync(join(ROOT, 'Doors', 'livechat', 'features', 'voice-channel-ux.ts'), 'utf8');
-const backend = readFileSync(
-  join(ROOT, 'web', 'backend', 'src', 'handlers', 'audio-video.handler.ts'),
-  'utf8'
-);
+/** A socket that keeps its handlers and records what it sends to a room. */
+function fakeSocket(id: string) {
+  const handlers = new Map<string, (...a: any[]) => any>();
+  const toRoom: Array<{ room: string; event: string; data: any }> = [];
+  const socket: any = {
+    id,
+    emit: jest.fn(),
+    on: (e: string, h: any) => { handlers.set(e, h); return socket; },
+    to: (room: string) => ({ emit: (event: string, data: any) => { toRoom.push({ room, event, data }); } }),
+  };
+  return { socket, handlers, toRoom };
+}
 
 describe('the frame carries its sender', () => {
-  it('is in the handler signature', () => {
-    // The sender's NAME was added after this test was written; what matters
-    // is that the frame still carries who sent it.
-    expect(types).toMatch(/VideoFrameHandler = \(frame: string, userId\?: string \| number/);
-  });
-
   it('is passed on by the SDK', () => {
-    expect(video).toMatch(/this\.frameHandler\(data\.frame, data\.userId/);
+    const { socket, handlers } = fakeSocket('sdk');
+    const video = new Video(socket);
+    const received: unknown[][] = [];
+    video.onFrame((...args: unknown[]) => { received.push(args); });
+
+    handlers.get('video:frame')!({ frame: 'FRAME', userId: 42, username: 'spot' });
+
+    expect(received).toEqual([['FRAME', 42, 'spot']]);
   });
 
   it('was already being sent by the backend', () => {
     // The wiring was the only thing missing.
-    const relay = backend.slice(backend.indexOf("socket.on('video:frame'"));
+    const socketId = 'video-sender';
+    setSession(socketId, { nodeId: 31, currentRoomId: 'lobby', user: { id: 'u-31', username: 'spot' } } as any);
+    try {
+      const { socket, handlers, toRoom } = fakeSocket(socketId);
+      registerAudioVideoHandlers(socket, {} as any, new Map());
 
-    // Whole relay, not a fixed 500-character window - comments and the
-    // self-view echo pushed the field past it.
-    expect(relay).toMatch(/userId: session\.user\?\.id/);
+      handlers.get('video:frame')!({ streamId: 's1', frame: 'FRAME' });
+
+      expect(toRoom).toEqual([{
+        room: 'voice:lobby', event: 'video:frame',
+        data: expect.objectContaining({ userId: 'u-31', frame: 'FRAME' }),
+      }]);
+    } finally {
+      deleteSession(socketId);
+    }
   });
 });
 
 describe('the door', () => {
-  const handler = voiceUx.slice(
-    voiceUx.indexOf('this.ctx.video.onFrame('),
-    voiceUx.indexOf('this.ctx.video.onFrame(') + 1200
-  );
+  /** The door's frame handler on a bare instance, and the grid it draws into. */
+  function door(opts: { videoEnabled: boolean }) {
+    let onFrame: ((frame: string, senderId?: string | number, senderName?: string) => void) | undefined;
+    const tiles: Array<[string, string]> = [];
+    const known = new Set<string>(['me']);
+    const channel: any = Object.create(EnhancedVoiceChannel.prototype);
+    Object.assign(channel, {
+      userId: 'me',
+      videoEnabled: opts.videoEnabled,
+      ctx: { video: { onFrame: (h: typeof onFrame) => { onFrame = h; } } },
+      videoGrid: {
+        hasParticipant: (id: string) => known.has(id),
+        addParticipant: (p: { userId: string }) => { known.add(p.userId); },
+        updateParticipantVideo: (id: string, frame: string) => { tiles.push([id, frame]); },
+      },
+    });
+    channel.ensureFrameHandler();
+    expect(onFrame).toBeDefined();
+    return { frame: onFrame!, tiles };
+  }
 
   it('routes the frame to the sender, not to itself', () => {
-    expect(handler).toMatch(/senderId/);
-    expect(handler).not.toMatch(/updateParticipantVideo\(this\.userId, frame\)/);
+    const d = door({ videoEnabled: true });
+    d.frame('THEIRS', 'them', 'Them');
+    expect(d.tiles).toEqual([['them', 'THEIRS']]);
   });
 
   it('falls back to itself when no sender is given', () => {
     // An older backend, or a local-only demo, still shows your own camera.
-    expect(handler).toMatch(/senderId === undefined \|\| senderId === null \? this\.userId/);
+    const d = door({ videoEnabled: true });
+    d.frame('MINE');
+    expect(d.tiles).toEqual([['me', 'MINE']]);
   });
 
   it('does not require video to be ON to show someone else', () => {
     // Their camera is not yours to gate: a viewer with no camera must still
-    // see everyone who does.
-    // `isSelf` became an inline comparison against the frame's owner. The
-    // behaviour is the point: OWN frames are gated on the local camera,
-    // everyone else's are not - which is also what makes the self view
-    // appear only while your own camera is running.
-    expect(handler).toMatch(/=== String\(this\.userId\) && !this\.videoEnabled/);
+    // see everyone who does. OWN frames are gated on the local camera,
+    // which is also what makes the self view appear only while your own
+    // camera is running.
+    const d = door({ videoEnabled: false });
+    d.frame('MINE', 'me');
+    d.frame('THEIRS', 'them');
+    expect(d.tiles).toEqual([['them', 'THEIRS']]);
   });
 });

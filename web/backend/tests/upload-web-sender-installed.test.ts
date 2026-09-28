@@ -20,69 +20,91 @@
  * bug because it builds its sender inline:
  *   const sender = session.transferRawSend || ((b) => socket.emit(...));
  *
- * Same grep-style approach as upload-abort-state.test.ts because
- * user-commands.handler.ts can't be loaded cleanly under jest (drags in
- * the whole BBS subsystem).
+ * Driven through the REAL user-commands.handler (technique of
+ * handlers/upload-offers-the-resume.test.ts): the resume step and both
+ * transfer engines are stubbed, the engine's constructor captures the
+ * transport the handler gives it, and the test writes bytes into that
+ * transport's send - they must come out of the socket as transfer-raw:data.
+ * Whatever getTransferTransport returns, the bytes either reach the
+ * browser or they do not; that is the property.
  */
+process.env.SKIP_DB_INIT = '1';
+process.env.SKIP_SERVER_START = '1';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-describe('startZmodemUpload installs a real socket-emit sender for web', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'handlers', 'commands', 'user-commands.handler.ts'),
-    'utf8'
-  );
+type Transport = { type: string; send: (buf: Buffer) => void };
 
-  function startZmodemUploadBody(): string {
-    // Capture function body up to the matching closing brace at column 0.
-    const m = src.match(
-      /export function startZmodemUpload\([^)]*\)\s*:\s*void\s*\{([\s\S]*?)\n\}\n/
-    );
-    if (!m) throw new Error('startZmodemUpload not found');
-    return m[1];
+function loadWith(engine: 'lrzsz' | 'zmodem.js') {
+  jest.resetModules();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ul-web-sender-'));
+  process.env.BBS_ROOT = root;
+  process.env.BBS_DATA_DIR = root;
+
+  const startResumeStuff = jest.fn();
+  jest.doMock('../src/services/resume-stuff.service', () => ({
+    ...jest.requireActual('../src/services/resume-stuff.service'),
+    startResumeStuff,
+  }));
+  const captured: { transport?: Transport } = {};
+  class Engine {
+    constructor(opts: { transport: Transport }) { captured.transport = opts.transport; }
+    start() { /* no receive runs in this test */ }
+    handleInput() { /* nothing arrives */ }
   }
+  jest.doMock('../src/services/lrzsz-transfer.service', () => ({
+    isLrzszAvailable: () => engine === 'lrzsz',
+    LrzszTransferManager: Engine,
+  }));
+  jest.doMock('../src/services/zmodem-transfer.service', () => ({
+    ZmodemTransferManager: Engine,
+  }));
 
-  test('startZmodemUpload installs a real socket-emit sender on the web branch', () => {
-    const body = startZmodemUploadBody();
-    // Must have an unconditional (or web-conditional) assignment to
-    // transport.send that actually calls socket.emit('transfer-raw:data', ...).
-    // The pre-fix `if (!transport.send)` guard is broken because
-    // getTransferTransport always returns a truthy placeholder, so the
-    // assignment never fires for web. Look for a web-specific replacement.
-    expect(body).toMatch(
-      /transport\.type\s*===\s*['"]web['"][\s\S]*?transport\.send\s*=[\s\S]*?socket\.emit\(\s*['"]transfer-raw:data['"]/
-    );
-  });
+  const handler = require('../src/handlers/commands/user-commands.handler');
+  return { handler, startResumeStuff, captured };
+}
 
-  test('startZmodemUpload does NOT rely solely on the (falsy-check) `if (!transport.send)` guard', () => {
-    // The standalone broken guard read like:
-    //   if (!transport.send) { transport.send = (buf) => socket.emit(...); }
-    // …with no surrounding web check. The fixed shape introduces an
-    // explicit `transport.type === 'web'` branch first. A regression
-    // would remove the web branch and revert to the bare falsy check.
-    const body = startZmodemUploadBody();
+function socket() {
+  return {
+    id: 'ul', emit: jest.fn(),
+    on: jest.fn(function (this: unknown) { return this; }),
+    once: jest.fn(function (this: unknown) { return this; }),
+    join: jest.fn(function (this: unknown) { return this; }),
+  } as any;
+}
 
-    // It's OK to KEEP the `if (!transport.send)` as a fallback for
-    // telnet/SSH after the web branch — what we don't want is a code
-    // shape where the ONLY assignment is gated on the truthy
-    // placeholder, i.e. no web branch in sight.
-    const hasWebBranch =
-      /transport\.type\s*===\s*['"]web['"]/.test(body);
-    expect(hasWebBranch).toBe(true);
-  });
+/** A web caller types U; returns the socket and the transport the engine got. */
+function uploadFromBrowser(engine: 'lrzsz' | 'zmodem.js') {
+  const { handler, startResumeStuff, captured } = loadWith(engine);
+  const s = socket();
+  // No connectionType and no transferRawSend: a browser session.
+  const session: any = { nodeId: 1, currentConf: 1, tempData: {}, user: { slotNumber: 3, username: 'spot' } };
+  handler.startZmodemUpload(s, session);
+  // The web path arms a 120 s "no file picked" timer; fake the clock for it.
+  jest.useFakeTimers();
+  try {
+    (startResumeStuff.mock.calls[0][4] as (r: unknown) => void)(false);
+  } finally {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  }
+  expect(captured.transport).toBeDefined();
+  return { s, transport: captured.transport! };
+}
 
-  test('getTransferTransport still returns a placeholder send (pinning the trap that motivates the fix)', () => {
-    // If someone fixes getTransferTransport to return null/undefined
-    // when transferRawSend is missing, the explicit web branch in
-    // startZmodemUpload would become a no-op overwrite — still
-    // correct, but the *original* bug shape (truthy placeholder
-    // defeats the falsy guard) is gone. This test pins the current
-    // helper shape so a future "tidy up" that re-removes the web
-    // branch under the assumption that the falsy guard is enough
-    // surfaces immediately.
-    expect(src).toMatch(
-      /function getTransferTransport[\s\S]*?send\s*=[\s\S]*?transferRawSend\s*\|\|[\s\S]*?\(\s*\(buf[^)]*\)\s*=>\s*\{/
-    );
-  });
+describe('startZmodemUpload installs a real socket-emit sender for web', () => {
+  test.each(['lrzsz', 'zmodem.js'] as const)(
+    'bytes the %s receiver sends reach the browser as transfer-raw:data',
+    (engine) => {
+      const { s, transport } = uploadFromBrowser(engine);
+      expect(transport.type).toBe('web');
+      const zrinit = Buffer.from('**\x18B0100000023be50\r\n');
+      transport.send(zrinit);
+      const sent = s.emit.mock.calls.filter((c: unknown[]) => c[0] === 'transfer-raw:data');
+      expect(sent).toHaveLength(1);
+      expect(Buffer.from(sent[0][1]).equals(zrinit)).toBe(true);
+    },
+  );
 });

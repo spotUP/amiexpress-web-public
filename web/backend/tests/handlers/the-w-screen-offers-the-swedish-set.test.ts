@@ -9,13 +9,58 @@
  * These pin the numbering and the persistence, which is where this kind of
  * change goes wrong: a new row that pushes the settings doors down by one
  * without anyone noticing, or a preference that is shown but never saved.
+ *
+ * Driven through the REAL W menu (info-commands.handler, mocked the way
+ * tests/handlers/w-menu-settings-doors.test.ts mocks it: the index stub, a
+ * database whose updateUser records the write, and ACS let through) and the
+ * REAL graphics-prompt answer (pre-login.applyGraphicsAnswer).
  */
-import * as fs from 'fs';
-import * as path from 'path';
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
+});
+jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({
+  getDoors: () => [],
+}));
+const mockUpdateUser = jest.fn(async (..._args: unknown[]) => undefined);
+jest.mock('../../src/database', () => ({ db: { updateUser: (...a: unknown[]) => mockUpdateUser(...a) } }));
+jest.mock('../../src/utils/acs.util', () => ({
+  ...jest.requireActual('../../src/utils/acs.util'),
+  checkSecurity: () => true,
+}));
 
-import { FIRST_SETTINGS_DOOR_OPTION } from '../../src/handlers/commands/info-commands.handler';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { flushOutput } from '../../src/utils/output.util';
+import {
+  FIRST_SETTINGS_DOOR_OPTION,
+  handleWriteUserParamsCommand,
+  handleWOptionSelectInput,
+} from '../../src/handlers/commands/info-commands.handler';
+import { applyGraphicsAnswer } from '../../src/handlers/command-handler/pre-login';
 
-const src = (f: string) => fs.readFileSync(path.join(__dirname, '../../src', f), 'utf8');
+let seq = 0;
+function driver(user: Record<string, unknown> = {}) {
+  const text: string[] = [];
+  const events: Array<[string, unknown]> = [];
+  const session: any = { nodeId: 1, currentConf: 1, tempData: {}, user: { id: 'u22', username: 'SPOT', secLevel: 255, ...user } };
+  const socket: any = {
+    id: `w22-${seq++}`, session,
+    emit(event: string, data: unknown) {
+      if (event === 'ansi-output') text.push(String(data)); else events.push([event, data]);
+      return true;
+    },
+    on() { return socket; },
+  };
+  // The row's own line, colours stripped.
+  const row22 = () => {
+    flushOutput(socket);
+    const plain = text.join('').replace(/\x1b\[[0-9;]*m/g, '');
+    return plain.split(/\r?\n/).find((l) => /\b22\]/.test(l)) ?? '';
+  };
+  return { socket, session, events, row22 };
+}
+
+beforeEach(() => mockUpdateUser.mockClear());
 
 describe('W row 22', () => {
   it('leaves room for itself before the settings doors', () => {
@@ -24,25 +69,40 @@ describe('W row 22', () => {
   });
 
   it('is shown with the value the caller has', () => {
-    const text = src('handlers/commands/info-commands.handler.ts');
-    expect(text).toContain('PETSCII CHARACTER SET');
-    expect(text).toMatch(/petsciiCharset === 'swedish'/);
     // Both states are named, so the row reads as a choice rather than a flag.
-    expect(text).toContain("'SWEDISH'");
-    expect(text).toContain("'STANDARD'");
+    const standard = driver();
+    handleWriteUserParamsCommand(standard.socket, standard.session);
+    expect(standard.row22()).toMatch(/PETSCII CHARACTER SET\.*\s+STANDARD/);
+
+    const swedish = driver({ petsciiCharset: 'swedish' });
+    handleWriteUserParamsCommand(swedish.socket, swedish.session);
+    expect(swedish.row22()).toMatch(/PETSCII CHARACTER SET\.*\s+SWEDISH/);
   });
 
-  it('saves the choice, and tells the screen at once', () => {
-    const text = src('handlers/commands/info-commands.handler.ts');
+  it('saves the choice, and tells the screen at once', async () => {
+    const d = driver({ petsciiCharset: 'standard' });
+    d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    await handleWOptionSelectInput(d.socket, d.session, '22');
     // Persisted like the palette beside it...
-    expect(text).toMatch(/updateUser\(session\.user\.id, \{ petsciiCharset: next \}\)/);
+    expect(mockUpdateUser).toHaveBeenCalledWith('u22', { petsciiCharset: 'swedish' });
+    expect(d.session.user.petsciiCharset).toBe('swedish');
     // ...and applied without making the caller reconnect.
-    expect(text).toContain("socket.emit('petscii-charset'");
+    expect(d.events).toContainEqual(['petscii-charset', { charset: 'swedish' }]);
+
+    // And back again.
+    await handleWOptionSelectInput(d.socket, d.session, '22');
+    expect(mockUpdateUser).toHaveBeenLastCalledWith('u22', { petsciiCharset: 'standard' });
   });
 
   it('travels on the mode event, so a reconnecting caller keeps it', () => {
-    const text = src('handlers/command-handler/pre-login.ts');
-    expect(text).toMatch(/charset: \(session\.user\?\.petsciiCharset === 'swedish'/);
+    const mode = (user: Record<string, unknown>) => {
+      const d = driver(user);
+      d.session.connectionType = 'web';
+      applyGraphicsAnswer(d.socket, d.session, 'P');
+      return (d.events.find(([e]) => e === 'petscii-mode')?.[1] as { charset?: string } | undefined)?.charset;
+    };
+    expect(mode({ petsciiCharset: 'swedish' })).toBe('swedish');
+    expect(mode({})).toBe('standard');
   });
 
   /*

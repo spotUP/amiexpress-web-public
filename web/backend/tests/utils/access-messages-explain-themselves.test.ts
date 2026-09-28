@@ -77,20 +77,31 @@ describe('an access refusal names what was refused', () => {
 });
 
 describe('the EALL refusal explains the permission', () => {
-  // The handler is large and session-bound, so this pins the sentence the
-  // handler emits rather than re-driving message entry: the wording is the
-  // thing under test, and message-entry.test.ts already drives the flow.
-  it('names ACS.EALL_MESSAGES in the source, after the express.e line', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'handlers', 'message', 'message-entry.handler.ts'),
-      'utf8',
-    );
+  // Driven through the REAL message-entry handler, the way
+  // tests/handlers/message/message-entry.test.ts drives the To: prompt: a
+  // caller with no EALL_MESSAGES grant (no securityFlags, no ACS files) types
+  // EALL, and what reaches his terminal is read back in order.
+  it("says express.e's line first, then names ACS.EALL_MESSAGES", async () => {
+    const { handleMessageToInput } = require('../../src/handlers/message/message-entry.handler');
+    const { flushOutput } = require('../../src/utils/output.util');
+    const out: string[] = [];
+    const socket: any = {
+      id: 'eall-refused',
+      emit: (event: string, text: unknown) => { if (event === 'ansi-output') out.push(String(text)); return true; },
+      on: () => socket,
+    };
+    const session: any = {
+      state: 'logged_in', nodeId: 1, currentConf: 1,
+      user: { username: 'Low', secLevel: 5, confAccess: 'X' },
+      tempData: { messageEntry: { toUser: '', subject: '', isPrivate: false, body: [] } },
+    };
 
-    const parity = src.indexOf('User does not exist!!');
-    const explain = src.indexOf('ACS.EALL_MESSAGES, which your access level does not grant');
+    await handleMessageToInput(socket, session, 'EALL');
+    flushOutput(socket);
+    const said = out.join('');
 
+    const parity = said.indexOf('User does not exist!!');
+    const explain = said.indexOf('ACS.EALL_MESSAGES');
     expect(parity).toBeGreaterThan(-1);
     expect(explain).toBeGreaterThan(-1);
     // express.e's line first, the explanation after it.
