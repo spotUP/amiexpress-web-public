@@ -236,7 +236,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'replay:list',
   'replay:load',
   'replay:save',
-  'retry-login',
   'rip-mode',
   'room:created',
   'room:error',
@@ -598,7 +597,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // 250 as of 2026-09-28: `font-changed` left with its only senders - the
     // dead `set-font-preference` route and the user stats font menu, which
     // now applies its pick through `set-font` like W row 18.
-    expect(ruled.length).toBe(250);
+    // 249 as of 2026-09-28: `retry-login` - its last sender was RL's web
+    // branch, for a browser login editor TP-9b retired; RL now writes the
+    // Username prompt on every transport.
+    expect(ruled.length).toBe(249);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -663,7 +665,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // arm-B note below. A byte caller has no pane to open.
       // 119 (2026-09-28): `font-changed` gone - no sender left, and no
       // listener ever existed.
-      'web-only': 119,
+      // 118 (2026-09-28): `retry-login` gone with RL's web branch.
+      'web-only': 118,
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       'not-transport': 105,
@@ -751,7 +754,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // exchange is over. It landed unruled; it is ruled not-transport beside
     // `terminal-type`, the event it follows.
     // 158 as of 2026-09-28: `font-changed` gone (see the ruling count above).
-    expect(fromA.length).toBe(158);
+    // 157 as of 2026-09-28: `retry-login` gone (see the ruling count above).
+    expect(fromA.length).toBe(157);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

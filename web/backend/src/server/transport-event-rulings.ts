@@ -1320,13 +1320,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "event the emitter forwards to the connection " +
     "(server/connection-emitter.ts:157).",
   },
-  "retry-login": {
-    kind: "web-only",
-    note:
-    "Emitted at server/auth-socket-handlers.ts:667, " +
-    "server/auth-socket-handlers.ts:701, server/auth-socket-handlers.ts:747. " +
-    "The server loop re-prompts by writing the prompt again.",
-  },
   "rip-mode": {
     kind: "web-only",
     note:

@@ -76,12 +76,15 @@ describe('relogon after logoff', () => {
     expect(emitted.map(e => String(e.data)).join('')).toContain('Username:');
   });
 
-  it('tells a web caller to show its own login, which it drives itself', async () => {
+  it('leaves a web caller at the same username prompt', async () => {
     const { socket, session, emitted } = harness('web');
     await runLogoff(socket, session);
 
-    // The LOGON branch returns immediately for web connections, so a
-    // "Username:" written to the screen would be a prompt nothing reads.
-    expect(emitted.some(e => e.event === 'retry-login')).toBe(true);
+    // Since TP-9a every transport's login goes through handleCommand's LOGON
+    // branch. The web caller used to be sent `retry-login` instead, for a
+    // browser login editor TP-9b retired - nothing listened, so after RL his
+    // screen showed no prompt at all (web-vs-telnet audit item 5, 2026-09-28).
+    expect(emitted.map(e => String(e.data)).join('')).toContain('Username:');
+    expect(emitted.some(e => e.event === 'retry-login')).toBe(false);
   });
 });

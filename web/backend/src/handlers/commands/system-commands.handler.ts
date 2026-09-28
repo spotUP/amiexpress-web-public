@@ -265,15 +265,11 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
     session.tempData.loginPhase = 'username';
     session.tempData.inputBuffer = '';
 
-    // Telnet and SSH are served by the LOGON branch in handleCommand, which
-    // buffers the username itself and needs the prompt on screen. Web
-    // clients drive login through their own events - that branch returns
-    // immediately for them - so they are told to show it instead.
-    if (session.connectionType === 'web') {
-      socket.emit('retry-login', { prefillUsername: '' });
-    } else {
-      socket.emit('ansi-output', '\r\nUsername: ');
-    }
+    // Every transport is served by the LOGON branch in handleCommand (TP-9a),
+    // which buffers the username itself and needs the prompt on screen. A
+    // web caller used to be sent `retry-login` for a browser login editor
+    // that TP-9b retired, and was left with no prompt at all.
+    socket.emit('ansi-output', '\r\nUsername: ');
     return;
   }
 
