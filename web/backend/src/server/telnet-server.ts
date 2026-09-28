@@ -24,6 +24,7 @@ import { ipBanManager } from '../security/ip-ban-manager';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { resetPetsciiModel } from '../utils/petscii-session-model';
 import type { WireCharset } from '../utils/wire-encoding.util';
+import { applyTerminalTypeReport } from '../amiga-emulation/xim/screen-width.util';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -975,12 +976,10 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
       width: number;
       height: number;
     }) => {
-      // Store unicode capability in session for doors to use
-      if (connection.session) {
-        (connection.session as any).unicodeCapable = info.unicodeCapable;
-        (connection.session as any).isAmigaTerminal = info.isAmiga;
-        (connection.session as any).detectedTerminalType = info.terminalType;
-      }
+      // The one applier (xim/screen-width.util.ts) writes what the terminal
+      // said - here as well as in transport-session's listener, because this
+      // one runs first and showPrompt reads the charset it sets.
+      if (connection.session) applyTerminalTypeReport(connection.session as any, info);
       showPrompt();
     });
 

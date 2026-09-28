@@ -22,12 +22,29 @@ import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { classifyTerminalType } from './telnet-server';
+import { applyTerminalTypeReport, applyWindowSizeReport, type TerminalTypeReport } from '../amiga-emulation/xim/screen-width.util';
 import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 
 /**
  * SSH Connection
  * Wraps an SSH session with the same interface as TelnetConnection
  */
+/**
+ * What the pty said before the BBS session existed - its terminal type and its
+ * size - put on the session when it is made.
+ *
+ * ssh2 delivers `pty` before `shell`, and the session is made on `ready`
+ * (from `shell`), so both reports were emitted to a connection with no
+ * session and dropped: an SSH caller stayed 80x24 and Latin-1 until he
+ * resized (web-vs-telnet audit item 1, 2026-09-28). The same appliers the
+ * events use, so nothing here is a second copy of session init.
+ */
+export function applyPtyToSession(connection: SSHConnection, session: BBSSession): void {
+  if (connection.terminalReport) applyTerminalTypeReport(session as any, connection.terminalReport);
+  const size = connection.getWindowSize();
+  applyWindowSizeReport(session as any, size.width, size.height);
+}
+
 export class SSHConnection extends EventEmitter {
   private connection: Connection;
   private stream: any = null;
@@ -114,14 +131,19 @@ console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight} t
         const termString = String(info.term || '').toUpperCase();
         if (termString) {
           const { isC64, isAmiga, unicodeCapable } = classifyTerminalType(termString);
-          this.emit('terminal-type', {
+          // KEPT, not only emitted: ssh2 delivers `pty` before `shell`, and the
+          // BBS session is made on `ready` (from `shell`) - so this event finds
+          // no session and is dropped. The session applies the kept report
+          // when it is created (see the `ready` handler below).
+          this.terminalReport = {
             terminalType: termString,
             isC64,
             isAmiga,
             unicodeCapable,
             width: isC64 ? 40 : this.terminalWidth,
             height: isC64 ? 25 : this.terminalHeight,
-          });
+          };
+          this.emit('terminal-type', this.terminalReport);
         }
 
         // A pty request carries the size too, and only `window-change` used
@@ -212,6 +234,9 @@ console.log(`[SSH] Flushing ${queued.length} write(s) queued before the shell op
   /**
    * Get terminal dimensions
    */
+  /** The pty's terminal report, kept for the session that does not exist yet. */
+  public terminalReport: TerminalTypeReport | null = null;
+
   public getWindowSize(): { width: number; height: number } {
     return {
       width: this.terminalWidth || 80,
@@ -368,6 +393,8 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
         connectionBaud: DEFAULT_CONNECTION_BAUD
       });
       connection.session = session;
+
+      applyPtyToSession(connection, session);
 
       // Map session to node ID for lookup
       setSession(connection.sessionId, session);

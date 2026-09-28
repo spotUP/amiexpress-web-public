@@ -139,8 +139,12 @@ describe('R14 - three legs, one board', () => {
     const port = (server as unknown as { server: { address(): { port: number } } }).server.address().port;
 
     const client = new SSHClient();
-    const chunks: string[] = [];
-    const text = () => chunks.join('');
+    // UTF-8, whole: the pty below names xterm-256color, and since the pty's
+    // report reaches the session (web-vs-telnet audit item 1, 2026-09-28) an
+    // SSH caller on a UTF-8 terminal gets a UTF-8 wire. Decoded from the
+    // concatenated bytes so a character split across packets survives.
+    const chunks: Buffer[] = [];
+    const text = () => Buffer.concat(chunks).toString('utf-8');
     try {
       const stream: { on: (e: string, f: (d: Buffer) => void) => void; write: (s: string) => void } =
         await new Promise((resolve, reject) => {
@@ -151,7 +155,7 @@ describe('R14 - three legs, one board', () => {
           client.on('error', reject);
           client.connect({ host: '127.0.0.1', port, username: 'walker', password: 'ignored' });
         });
-      stream.on('data', (d: Buffer) => chunks.push(d.toString('latin1')));
+      stream.on('data', (d: Buffer) => chunks.push(Buffer.from(d)));
 
       await until(() => text().includes(STEP_01), 25000, () => `ssh step01: ${text().slice(-120)}`);
       await untilSettled(() => text().length);

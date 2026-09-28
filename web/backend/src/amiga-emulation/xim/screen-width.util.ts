@@ -179,11 +179,17 @@ export function applyClientReportedGeometry(
 
 export interface NegotiatedSession extends MutableGeometry {
   terminalType?: string;
+  unicodeCapable?: boolean;
+  isAmigaTerminal?: boolean;
+  detectedTerminalType?: string;
 }
 
 export interface TerminalTypeReport {
   terminalType: string;
   isC64: boolean;
+  /** classifyTerminalType's answers; absent from a report that did not classify. */
+  isAmiga?: boolean;
+  unicodeCapable?: boolean;
   width: number;
   height: number;
 }
@@ -210,6 +216,15 @@ export function applyTerminalTypeReport(
   if (!session) return false;
   session.terminalType = info.isC64 ? 'c64' : 'modern';
   session.petsciiMode = info.isC64;
+  // The terminal's own answers, written HERE and nowhere else. Telnet kept a
+  // private listener that was the only writer of `unicodeCapable` on the
+  // whole backend, so an SSH caller - whose report came through this
+  // function - was never UTF-8: every high-bit character went out as
+  // Latin-1 and blessed doors drew the ASCII fallback (web-vs-telnet audit
+  // item 1, 2026-09-28).
+  if (info.unicodeCapable !== undefined) session.unicodeCapable = info.unicodeCapable;
+  if (info.isAmiga !== undefined) session.isAmigaTerminal = info.isAmiga;
+  session.detectedTerminalType = info.terminalType;
   return applyClientReportedGeometry(session, info.width, info.height);
 }
 
