@@ -65,6 +65,17 @@ describe('broadcastRestartNotice', () => {
     expect(String(recorded[0].payload)).toContain('restarting in 30 seconds');
   });
 
+  it('word-wraps the banner for a 40-column C64 caller', () => {
+    const recorded: Emitted[] = [];
+    const deps = makeDeps({ '3': { petsciiMode: true, screenWidth: 40 } }, { 3: 'socket-3' });
+
+    broadcastRestartNotice(makeIo(recorded), 60, deps);
+
+    const plain = String(recorded[0].payload).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+    expect(plain).toContain('restarting in');
+    for (const line of plain.split(/\r?\n/)) expect(line.length).toBeLessThanOrEqual(40);
+  });
+
   it('does NOT treat a session that merely RAN a door as door-owned', () => {
     // currentDoorName is attribution, not liveness, and no exit path clears
     // it. Measured live: a plain web connect ran FRONTEND at the login screen

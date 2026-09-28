@@ -20,6 +20,7 @@
  */
 
 import { AnsiUtil } from '../utils/ansi.util';
+import { wrapForSession } from '../utils/wrap-for-session.util';
 import { doorOwnsTerminal } from '../utils/door-owns-terminal';
 import { sessions } from '../server/session-manager';
 import { emitterForSession } from '../server/session-emitter-registry';
@@ -94,7 +95,9 @@ export function broadcastRestartNotice(
       sink.emit('system:notice', payload);
       doors++;
     } else {
-      sink.emit('ansi-output', banner);
+      // A C64 or teletext caller is 40 columns wide: word-wrapped there, the
+      // same choke every other board line takes (wrapForSession).
+      sink.emit('ansi-output', wrapForSession(banner, session));
       terminals++;
     }
   }
