@@ -36,8 +36,6 @@ const USERS_OFFSET =
   RECORD_BYTES;
 const TOTAL_USER_BYTES = USER_COUNT * USER_ENTRY_BYTES;
 const RECORDS_OFFSET = VERSION_LENGTH + CLEAR_DATE_BYTES + RESERVED_BYTES + DAILY_COUNT * DAILY_ENTRY_BYTES;
-const CALLS_COUNT_OFFSET = RECORDS_OFFSET;
-const CALLS_DATE_OFFSET = CALLS_COUNT_OFFSET + 2;
 
 const DEFAULT_ENTRY = {
   name: '[-----USER-----] ',
@@ -339,6 +337,9 @@ console.log('[SamiLog] Ignoring Sysop call');
     const storeDate = buffer.readUInt32BE(todayDateOffset);
 
     if (storeDate !== todayAmiga) {
+      // The day that just ended breaks the records it beat, before it
+      // becomes yesterday.
+      breakRecords(buffer, dailyOffset);
       // New day — shift daily slots 0-6 → 1-7
       for (let i = DAILY_COUNT - 1; i > 0; i--) {
         const src = dailyOffset + (i - 1) * DAILY_ENTRY_BYTES;
@@ -369,14 +370,6 @@ console.log('[SamiLog] Ignoring Sysop call');
     const minsUsed = parseInt(durationStr.split(':')[0]) * 60 + parseInt(durationStr.split(':')[1]);
     const currentMins = buffer.readUInt32BE(dailyOffset + 22);
     buffer.writeUInt32BE(currentMins + (isNaN(minsUsed) ? 0 : minsUsed), dailyOffset + 22);
-
-    // Update Records (calls count)
-    const recOffset = RECORDS_OFFSET;
-    const recCalls  = buffer.readUInt32BE(recOffset + 4);
-    if ((currentCalls + 1) > recCalls) {
-      buffer.writeUInt32BE(currentCalls + 1, recOffset + 4);
-      buffer.writeUInt32BE(todayAmiga, recOffset);
-    }
 
     fs.writeFileSync(storePath, buffer);
 
@@ -672,82 +665,9 @@ function writeEntry(buffer: Buffer, offset: number, entry: ReturnType<typeof bui
   buffer.fill(0, cursor, cursor + 40);
 }
 
-function countNonDefaultEntries(buffer: Buffer): number {
-  let count = 0;
-  for (let i = 0; i < USER_COUNT; i++) {
-    const entryOffset = USERS_OFFSET + i * USER_ENTRY_BYTES;
-    const name = buffer
-      .toString('ascii', entryOffset, entryOffset + 18)
-      .replace(/\u0000/g, '')
-      .trim();
-    if (name && name !== DEFAULT_NAME) {
-      count++;
-    }
-  }
-  return count;
-}
-
 function getDaysSinceAmigaEpoch(): number {
   const diffMs = Date.now() - AMIGA_EPOCH;
   return Math.floor(diffMs / (24 * 60 * 60 * 1000));
-}
-
-export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise<void> {
-  try {
-    ensureStoreExists();
-
-    const storePath = getStorePath();
-    let buffer: Buffer;
-    if (!fs.existsSync(storePath)) {
-      const baseline = loadBaselineStore();
-      if (!baseline) {
-console.warn('[SamiLog] Storage file not found and no baseline available:', storePath);
-        return;
-      }
-      buffer = Buffer.from(baseline.buffer);
-      fs.writeFileSync(storePath, buffer);
-console.log(`[SamiLog] Seeded storage file from ${baseline.path}`);
-    } else {
-      buffer = fs.readFileSync(storePath);
-      if (countNonDefaultEntries(buffer) === 0) {
-        const baseline = loadBaselineStore();
-        if (baseline) {
-          buffer = Buffer.from(baseline.buffer);
-console.log('[SamiLog] Store empty, reloaded baseline contents');
-        }
-      }
-    }
-
-console.log(`[SamiLog] Refreshing store with ${activeSessions.length} session(s)`);
-
-    if (buffer.length < USERS_OFFSET + TOTAL_USER_BYTES) {
-console.warn('[SamiLog] Storage file is smaller than expected, skipping update');
-      return;
-    }
-
-    const sortedSessions = activeSessions
-      .filter(session => !!session)
-      .sort((a, b) => (a.nodeId || 0) - (b.nodeId || 0))
-      .slice(0, USER_COUNT);
-
-    sortedSessions.forEach((session, index) => {
-      const entry = buildEntry(session);
-      const entryOffset = USERS_OFFSET + index * USER_ENTRY_BYTES;
-      writeEntry(buffer, entryOffset, entry);
-      if (index === 0) {
-console.log(`[SamiLog] Entry #1 -> name="${entry.name}" node=${entry.node} usage=${entry.usage}`);
-      }
-    });
-
-    const totalEntries = countNonDefaultEntries(buffer);
-    buffer.writeUInt16BE(totalEntries, CALLS_COUNT_OFFSET);
-    buffer.writeUInt32BE(getDaysSinceAmigaEpoch(), CALLS_DATE_OFFSET);
-
-    fs.writeFileSync(storePath, buffer);
-console.log('[SamiLog] Storage file updated');
-  } catch (error) {
-console.error('[SamiLog] Failed to prepare SAmiLog.Store:', error);
-  }
 }
 
 ensureStoreExists();
@@ -837,6 +757,86 @@ function readDailyStats(buffer: Buffer): {
 }
 
 /**
+ * THE RECORDS, as SAmiLog v2 stores them (DOCS/Storage.DOC, the v002 layout
+ * this file carries - `*SALv002`): each value followed by the day it was set,
+ * a longword of days since 1978. Words for counts, longwords for kilobytes
+ * and minutes, 78 bytes of records and 40 reserved.
+ *
+ * The port read and wrote its own shape instead - a date first, then every
+ * value as a longword - so the board's real records (275 calls, 3745
+ * downloads, 21 GB uploaded, set on the Amiga between 2021 and 2025) read
+ * back as noise and the records line showed 9999 calls and zero downloads
+ * (sysop's board, 2026-09-28). `daily` is the same field's offset in a day's
+ * stats (SD_*), which a finished day is compared by.
+ */
+const RECORD_FIELDS = [
+  { key: 'calls', size: 2, daily: 4 },
+  { key: 'upKBytes', size: 4, daily: 6 },
+  { key: 'upFiles', size: 2, daily: 10 },
+  { key: 'upFails', size: 2, daily: 12 },
+  { key: 'dnKBytes', size: 4, daily: 14 },
+  { key: 'dnFiles', size: 2, daily: 18 },
+  { key: 'dnFails', size: 2, daily: 20 },
+  { key: 'usedMins', size: 4, daily: 22 },
+  { key: 'newUsers', size: 2, daily: 26 },
+  { key: 'hacks', size: 2, daily: 28 },
+  { key: 'drops', size: 2, daily: 30 },
+  { key: 'pages', size: 2, daily: 32 },
+] as const;
+
+type RecordKey = typeof RECORD_FIELDS[number]['key'];
+
+/** Where each record's value and its date sit, from RECORDS_OFFSET. */
+const RECORD_AT: Record<RecordKey, { value: number; date: number; size: 2 | 4; daily: number }> = (() => {
+  const at = {} as Record<RecordKey, { value: number; date: number; size: 2 | 4; daily: number }>;
+  let offset = 0;
+  for (const f of RECORD_FIELDS) {
+    at[f.key] = { value: offset, date: offset + f.size, size: f.size, daily: f.daily };
+    offset += f.size + 4;
+  }
+  return at;
+})();
+
+function readUnsigned(buffer: Buffer, offset: number, size: 2 | 4): number {
+  return size === 2 ? buffer.readUInt16BE(offset) : buffer.readUInt32BE(offset);
+}
+
+function writeUnsigned(buffer: Buffer, offset: number, size: 2 | 4, value: number): void {
+  const max = size === 2 ? 0xffff : 0xffffffff;
+  const clamped = Math.max(0, Math.min(max, Math.floor(value)));
+  if (size === 2) buffer.writeUInt16BE(clamped, offset);
+  else buffer.writeUInt32BE(clamped, offset);
+}
+
+/** A record's value and the day (days since 1978) it was set. */
+function readRecord(buffer: Buffer, key: RecordKey): { value: number; date: number } {
+  const at = RECORD_AT[key];
+  return {
+    value: readUnsigned(buffer, RECORDS_OFFSET + at.value, at.size),
+    date: buffer.readUInt32BE(RECORDS_OFFSET + at.date),
+  };
+}
+
+/**
+ * A finished day breaks the records it beat (Command_U, "Update Records -
+ * Check if any were broken"): value and that day's date. Run when the day
+ * rolls over, on the day that just ended - never on today's running totals,
+ * so a record is a whole day's figure, as SAmiLog keeps it.
+ */
+function breakRecords(buffer: Buffer, dayOffset: number): void {
+  const dayDate = buffer.readUInt32BE(dayOffset);
+  if (dayDate === 0) return; // a fresh file has no finished day
+  for (const f of RECORD_FIELDS) {
+    const at = RECORD_AT[f.key];
+    const day = readUnsigned(buffer, dayOffset + at.daily, at.size);
+    if (day > readUnsigned(buffer, RECORDS_OFFSET + at.value, at.size)) {
+      writeUnsigned(buffer, RECORDS_OFFSET + at.value, at.size, day);
+      buffer.writeUInt32BE(dayDate, RECORDS_OFFSET + at.date);
+    }
+  }
+}
+
+/**
  * Read Records (All-time stats) from SAmiLog.Store buffer
  */
 function readRecords(buffer: Buffer): {
@@ -847,21 +847,14 @@ function readRecords(buffer: Buffer): {
   dnFiles: number;
   usedMins: number;
 } {
-  // Records are at RECORDS_OFFSET (after 8 daily entries)
-  // Record Structure (118 bytes):
-  // Date(4), Calls(4!), UpK(4), UpFiles(4!), UpFail(4!), DnK(4), DnFiles(4!), DnFail(4!), Mins(4)...
-  // Note: Records use LONGs for counts (unlike Daily which uses Words)
-  
-  const offset = RECORDS_OFFSET;
-  
-  const calls = buffer.readUInt32BE(offset + 4);
-  const upKBytes = buffer.readUInt32BE(offset + 8);
-  const upFiles = buffer.readUInt32BE(offset + 12);
-  const dnKBytes = buffer.readUInt32BE(offset + 20); // UpFiles(4) + UpFail(4) = +8 bytes from UpK
-  const dnFiles = buffer.readUInt32BE(offset + 24);
-  const usedMins = buffer.readUInt32BE(offset + 32); 
-
-  return { calls, upKBytes, upFiles, dnKBytes, dnFiles, usedMins };
+  return {
+    calls: readRecord(buffer, 'calls').value,
+    upKBytes: readRecord(buffer, 'upKBytes').value,
+    upFiles: readRecord(buffer, 'upFiles').value,
+    dnKBytes: readRecord(buffer, 'dnKBytes').value,
+    dnFiles: readRecord(buffer, 'dnFiles').value,
+    usedMins: readRecord(buffer, 'usedMins').value,
+  };
 }
 
 function formatBaud(baudStr: string): string {
@@ -1238,28 +1231,26 @@ export function generateRecordStats(options: OutputOptions = {}): string {
   try {
     const storePath = getStorePath();
     const buffer = fs.readFileSync(storePath);
-    const off = RECORDS_OFFSET;
 
     let output = options.noAnsi ? '' : '\x0c';
     output += '  Area       Record   Date\n';
     output += '-'.repeat(30) + '\n';
 
-    const fields = [
-      { label: 'Calls', off: 4, size: 4 },
-      { label: 'Up Bytes', off: 8, size: 4, traffic: true },
-      { label: 'Up Files', off: 12, size: 4 },
-      { label: 'Dn Bytes', off: 20, size: 4, traffic: true },
-      { label: 'Dn Files', off: 24, size: 4 },
-      { label: 'Hours Used', off: 32, size: 4, hrs: true },
-      { label: 'New Users', off: 36, size: 4 },
-      { label: 'Hacks', off: 40, size: 4 },
-      { label: 'Drops', off: 44, size: 4 },
-      { label: 'Pages', off: 48, size: 4 }
+    const fields: Array<{ label: string; key: RecordKey; traffic?: boolean; hrs?: boolean }> = [
+      { label: 'Calls', key: 'calls' },
+      { label: 'Up Bytes', key: 'upKBytes', traffic: true },
+      { label: 'Up Files', key: 'upFiles' },
+      { label: 'Dn Bytes', key: 'dnKBytes', traffic: true },
+      { label: 'Dn Files', key: 'dnFiles' },
+      { label: 'Hours Used', key: 'usedMins', hrs: true },
+      { label: 'New Users', key: 'newUsers' },
+      { label: 'Hacks', key: 'hacks' },
+      { label: 'Drops', key: 'drops' },
+      { label: 'Pages', key: 'pages' },
     ];
 
     fields.forEach(f => {
-      const val = buffer.readUInt32BE(off + f.off);
-      const date = buffer.readUInt32BE(off + f.off + 4);
+      const { value: val, date } = readRecord(buffer, f.key);
       let valStr = val.toString();
       if (f.traffic) valStr = formatTraffic(val, true);
       if (f.hrs) valStr = Math.floor(val/60).toString();
