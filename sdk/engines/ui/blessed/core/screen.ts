@@ -2025,9 +2025,15 @@ export class Screen extends Element {
   trapFocus(container: Element): void {
     if (this.focusTrap === container) return;
 
-    // Save current focus via stack
-    if (this._focused) {
-      this.focusStack.push(this._focused);
+    // Save the focus to return to on release - never one inside the trap:
+    // that content is hidden by then. Message, Question and Prompt focusPush
+    // themselves before trapping, so the trap used to save the dialog itself
+    // and hand focus back to it on release; the caller's next key went to a
+    // hidden message (WHIP's "title cannot be empty", 2026-09-28). The entry
+    // their focusPush left - what held focus before - is the one to pop.
+    const focused = this._focused;
+    if (focused && focused !== container && !focused.hasAncestor?.(container)) {
+      this.focusStack.push(focused);
     }
     
     this.focusTrap = container;

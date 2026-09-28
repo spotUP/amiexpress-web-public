@@ -85,18 +85,14 @@ export async function enterOnABlankNewTitleIsRefusedAndTheCallerTypesOn(): Promi
     assert.strictEqual(added.length, 0, 'a blank title is never stored');
     assert.ok(findByLabel(screen, ' Error '), 'the caller is told why');
 
-    // Dismiss the error. KNOWN SDK DEFECT, not pinned here: a dismissed
-    // blessed message hands focus back to ITSELF (Message.display pushes it
-    // with focusPush AND trapFocus; hide's releaseFocusTrap then focusPops
-    // the message), so a second Enter is needed before keys reach the title
-    // again. This test presses until focus is back in the title, at most
-    // three times, and pins only what the door owns.
+    // ONE Enter dismisses the error and the caller's keys are back in the
+    // title. A dismissed message used to hand focus back to ITSELF
+    // (Screen.trapFocus saved the dialog as the place to return to), so a
+    // second Enter was swallowed - fixed in the SDK 2026-09-28.
     const error = findByLabel(screen, ' Error ');
     const title = findByLabel(screen, ' Title ');
-    for (let i = 0; i < 3 && screen.getFocused() !== title; i++) {
-      press(screen, '\r', 'enter');
-      await settle();
-    }
+    press(screen, '\r', 'enter');
+    await settle();
     assert.ok(error.hidden, 'the error was dismissed');
     assert.strictEqual(added.length, 0, 'dismissing the error saves nothing');
     // assert.ok, not strictEqual: a failing strictEqual on two blessed
