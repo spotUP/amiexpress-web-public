@@ -1475,6 +1475,6 @@ echo "[Entrypoint] Native dependencies installed for $NATIVE_INSTALL_COUNT doors
 # NOTE: Default sysop creation removed - first user to register becomes sysop (level 255)
 # The main application handles this automatically via new-user.handler.ts
 
-# Execute the main command (typically: npx tsx src/index.ts)
+# Execute the main command (the Dockerfile CMD: node --import tsx src/index.ts)
 echo "[Entrypoint] Starting BBS server..."
 exec "$@"

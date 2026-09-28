@@ -21,6 +21,10 @@ services:
         # caller didn't set GIT_SHA.
         GIT_SHA: ${GIT_SHA:-unknown}
     container_name: amiexpress-bbs
+    # tini as PID 1: it forwards every signal to the board (the deploy's
+    # SIGUSR1 restart notice included) and reaps the child processes doors and
+    # lrzsz leave behind. See the CMD comment in the Dockerfile.
+    init: true
     # Pinned, not left to the Docker default (the container ID, which
     # changes on every --force-recreate or image rebuild). The backend
     # pooled-storage subsystem (web/backend/src/storage/node-id.ts) reads

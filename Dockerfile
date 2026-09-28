@@ -585,4 +585,11 @@ WORKDIR /app/web/backend
 
 # Use entrypoint to initialize data on first run, then start server
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["npx", "tsx", "src/index.ts"]
+# The board itself, not `npx tsx`. With npx the process that received signals
+# was npm, and npm relays SIGTERM and SIGINT but not SIGUSR1: the deploy's
+# "restarting in 60 seconds" signal never reached the board - it opened npm's
+# debugger instead - and no caller was ever warned before a deploy (the sysop,
+# 2026-09-28: "i have never ever seen such a warning"). `--import tsx` is the
+# same loader tsx's CLI registers. docker-compose runs this under `init: true`,
+# so tini is PID 1, forwards every signal here and reaps door children.
+CMD ["node", "--import", "tsx", "src/index.ts"]
