@@ -7,7 +7,7 @@
  * screen.
  *
  * executeAmigaDoor's post-exit path must:
- *   1. Consume (clear) sysopPagePending IMMEDIATELY after flushOutput(),
+ *   1. Consume (clear) sysopPagePending IMMEDIATELY after the door exits,
  *      BEFORE the CHAIN/RETURNCOMMAND/exitState-merge block that can throw
  *      — otherwise an exception there hits the outer catch with the flag
  *      still set, and the STALE flag fires the page-wait on the NEXT,
@@ -18,101 +18,192 @@
  *   3. Never call startSysopPage / consumePendingSysopPage a second time
  *      from the trigger site (no recursive PowerPager launch; no double
  *      consumption).
- *   4. The outer catch block must ALSO clear sysopPagePending /
+ *   4. Finish the wait before the menu is repainted.
+ *   5. The outer catch block must ALSO clear sysopPagePending /
  *      sysopPageChatSessionId as a belt-and-braces measure, for the case
- *      where a crash happens BEFORE flushOutput() ever runs (so step 1
+ *      where a crash happens BEFORE the door's exit is processed (so step 1
  *      never executed).
  *
- * Same grep-style approach as door-chain-menu-leak.test.ts because
- * door.handler.ts can't be exercised end-to-end under jest (drags in the
- * BBS subsystem + 68K emulator) — this pins the source-level sequencing
- * instead so a future refactor can't silently reintroduce the stale-flag
- * bug or a mid-door page-wait or a recursive PowerPager launch.
+ * Driven through the REAL executeDoor -> executeAmigaDoor with the 68K
+ * runtime replaced by a door that pages the sysop and then exits asking for a
+ * CHAIN (the technique of tests/transport/browser-door-gate). The page-wait
+ * pair, the command dispatcher and the menu are replaced by recorders, so the
+ * ORDER in which executeAmigaDoor reaches them is what is asserted.
  */
+process.env.SKIP_DB_INIT = '1';
 
+import 'reflect-metadata';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
+jest.mock('../src/index', () => {
+  const states = require('../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
+jest.mock('../src/services/DoorDropFileManager');
+jest.mock('../src/services/CallersLogManager');
+
+/** Everything the door exit touched, in the order it touched it. */
+const mockOrder: string[] = [];
+/** How the fake door behaves on this run. */
+const mockDoor = { crash: false };
+
+jest.mock('../src/amiga-emulation/AmigaDoorSession', () => ({
+  AmigaDoorSession: class {
+    private session: any;
+    constructor(_socket: unknown, config: { bbsSession: any }) { this.session = config.bbsSession; }
+    async start(): Promise<void> {
+      // What notifySysopPage leaves behind when a FIM door pages mid-door.
+      this.session.sysopPagePending = true;
+      this.session.sysopPageChatSessionId = 'chat-1';
+      if (mockDoor.crash) throw new Error('door crashed');
+      mockOrder.push('door-exit');
+    }
+    getExitState() {
+      mockOrder.push('exit-state');
+      return { ximState: { chainCommand: 'NEXTDOOR' } };
+    }
+    isDoorRunning() { return false; }
+  },
+}));
+
+const mockChat = { id: 'chat-1' };
+jest.mock('../src/handlers/chat/chat.handler', () => ({
+  ...jest.requireActual('../src/handlers/chat/chat.handler'),
+  consumePendingSysopPage: jest.fn((session: any) => {
+    mockOrder.push('consume');
+    session.sysopPagePending = false;
+    return mockChat;
+  }),
+  runSysopPageWait: jest.fn((_socket: unknown, _session: unknown, _chat: unknown, done: () => void) => {
+    mockOrder.push('wait-start');
+    // The dots animation takes real time; the menu must wait for it.
+    setTimeout(() => { mockOrder.push('wait-done'); done(); }, 5);
+  }),
+  startSysopPage: jest.fn(),
+}));
+
+jest.mock('../src/handlers/command.handler', () => ({
+  processCommand: jest.fn(async () => { mockOrder.push('chain'); }),
+  runSysCommand: jest.fn(),
+  processBBSCommand: jest.fn(),
+}));
+
+jest.mock('../src/handlers/command-handler/menu', () => ({
+  ...jest.requireActual('../src/handlers/command-handler/menu'),
+  displayMainMenu: jest.fn(async () => { mockOrder.push('menu'); }),
+}));
+
+const mockRoot = { value: '' };
+jest.mock('../src/doors/amigaDoorManager', () => ({
+  getAmigaDoorManager: () => ({
+    bbsRoot: mockRoot.value,
+    scanInstalledDoors: async () => [],
+    getCachedDoors: () => [],
+    isCachePopulated: () => true,
+  }),
+}));
+
+import { executeDoor, setHelpers, type Door } from '../src/handlers/door.handler';
+import { consumePendingSysopPage, runSysopPageWait, startSysopPage } from '../src/handlers/chat/chat.handler';
+import { BBSState, LoggedOnSubState } from '../src/constants/bbs-states';
+import { config } from '../src/config';
+
+setHelpers({
+  callersLog: async () => undefined,
+  getRecentCallerActivity: async () => [],
+});
+
 describe('executeAmigaDoor sysop page-wait sequencing (task 18, round 2)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'handlers', 'door.handler.ts'),
-    'utf8'
-  );
+  let root: string;
+  const realGet = config.get.bind(config);
 
-  function executeAmigaDoorBody(): string {
-    const start = src.indexOf('async function executeAmigaDoor(');
-    expect(start).toBeGreaterThan(-1);
-    // Next top-level "async function " after this one marks the end of
-    // executeAmigaDoor's body (good enough for a structural pin — the file
-    // has several sibling executeXDoor functions in sequence).
-    const next = src.indexOf('\nasync function ', start + 1);
-    return next > -1 ? src.slice(start, next) : src.slice(start);
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'page-wait-seq-'));
+    mockRoot.value = root;
+    jest.spyOn(config, 'get').mockImplementation(((key: string) =>
+      key === 'dataDir' ? root : (realGet as (k: string) => unknown)(key)) as never);
+    fs.mkdirSync(path.join(root, 'Doors', '5D_Page'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Doors', '5D_Page', '5D_Page'), Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+    mockOrder.length = 0;
+    mockDoor.crash = false;
+    (consumePendingSysopPage as jest.Mock).mockClear();
+    (runSysopPageWait as jest.Mock).mockClear();
+    (startSysopPage as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  async function runPagingDoor(): Promise<any> {
+    const session: any = {
+      state: BBSState.LOGGEDON,
+      subState: LoggedOnSubState.PROCESS_COMMAND,
+      nodeId: 1,
+      currentConf: 1,
+      screenWidth: 80,
+      tempData: {},
+      user: { id: 1, username: 'CALLER', secLevel: 100, slotNumber: 1, confAccess: 'X'.repeat(25) },
+    };
+    const door = {
+      id: '5d_page', name: '5D_Page', description: '', command: 'O',
+      path: 'Doors/5D_Page/5D_Page', accessLevel: 0, enabled: true, type: 'FIM',
+    } as unknown as Door;
+    const socket: any = { id: `page-wait-${Math.random()}`, emit: () => true, on: () => undefined };
+    await executeDoor(socket, session, door);
+    return session;
   }
 
-  function flushToReturnToMenuBlock(body: string): string {
-    const flushIdx = body.indexOf('flushOutput(socket)');
-    const menuIdx = body.indexOf('// Return to menu');
-    expect(flushIdx).toBeGreaterThan(-1);
-    expect(menuIdx).toBeGreaterThan(flushIdx);
-    return body.slice(flushIdx, menuIdx);
-  }
+  const before = (a: string, b: string) => {
+    expect(mockOrder).toContain(a);
+    expect(mockOrder).toContain(b);
+    expect(mockOrder.indexOf(a)).toBeLessThan(mockOrder.indexOf(b));
+  };
 
-  test('consumePendingSysopPage runs immediately after flushOutput(socket), before getExitState (the risky CHAIN/RETURNCOMMAND region)', () => {
-    const window = flushToReturnToMenuBlock(executeAmigaDoorBody());
-    const consumeIdx = window.indexOf('consumePendingSysopPage');
-    const exitStateIdx = window.indexOf('getExitState');
-    expect(consumeIdx).toBeGreaterThan(-1);
-    expect(exitStateIdx).toBeGreaterThan(-1);
-    expect(consumeIdx).toBeLessThan(exitStateIdx);
+  test('the flag is consumed as soon as the door exits, before the CHAIN/RETURNCOMMAND region', async () => {
+    const session = await runPagingDoor();
+
+    before('door-exit', 'consume');
+    before('consume', 'exit-state');
+    before('consume', 'chain');
+    expect(session.sysopPagePending).toBe(false);
   });
 
-  test('the page-wait trigger runs after flushOutput(socket), before the "Return to menu" block', () => {
-    const window = flushToReturnToMenuBlock(executeAmigaDoorBody());
-    expect(window).toMatch(/pendingSysopPageChatSession/);
-    expect(window).toMatch(/runSysopPageWait/);
+  test('the page-wait starts only after the CHAIN block, with the chat session already consumed', async () => {
+    await runPagingDoor();
+
+    before('chain', 'wait-start');
+    expect(runSysopPageWait).toHaveBeenCalledTimes(1);
+    expect((runSysopPageWait as jest.Mock).mock.calls[0][2]).toBe(mockChat);
   });
 
-  test('the page-wait trigger happens strictly after amigaSession.start() resolves (door has exited)', () => {
-    const body = executeAmigaDoorBody();
-    const startIdx = body.indexOf('await amigaSession.start()');
-    const triggerIdx = body.indexOf('if (pendingSysopPageChatSession)');
-    expect(startIdx).toBeGreaterThan(-1);
-    expect(triggerIdx).toBeGreaterThan(-1);
-    expect(triggerIdx).toBeGreaterThan(startIdx);
+  test('the trigger does not re-consume the flag or launch PowerPager', async () => {
+    await runPagingDoor();
+
+    expect(consumePendingSysopPage).toHaveBeenCalledTimes(1);
+    expect(startSysopPage).not.toHaveBeenCalled();
   });
 
-  test('the trigger does not re-consume the flag or call startSysopPage (no double-consume, no recursive PowerPager launch)', () => {
-    const window = flushToReturnToMenuBlock(executeAmigaDoorBody());
-    const triggerStart = window.indexOf('if (pendingSysopPageChatSession)');
-    expect(triggerStart).toBeGreaterThan(-1);
-    const block = window.slice(triggerStart);
-    expect(block).not.toMatch(/consumePendingSysopPage/);
-    // Match an actual call/import, not an explanatory comment that
-    // deliberately names startSysopPage to explain why it's NOT used.
-    expect(block).not.toMatch(/[^A-Za-z](startSysopPage\(|\{\s*startSysopPage\s*[,}])/);
+  test('the page-wait finishes before the menu is repainted', async () => {
+    await runPagingDoor();
+
+    before('wait-done', 'menu');
   });
 
-  test('awaits the page-wait trigger before falling through to applyPostDoorMenuAction', () => {
-    // Important 4 (DD final-review wave, 2026-08-16): the inline
-    // postDoorMenuAction(session) decision block was extracted into
-    // applyPostDoorMenuAction(socket, session) so the inChat-skip branch
-    // is behaviorally testable (see post-door-menu-action.test.ts and
-    // apply-post-door-menu-action.test.ts) — this pin follows that rename.
-    const body = executeAmigaDoorBody();
-    const triggerIdx = body.indexOf('if (pendingSysopPageChatSession)');
-    const postActionIdx = body.indexOf('applyPostDoorMenuAction(socket, session)');
-    expect(triggerIdx).toBeGreaterThan(-1);
-    expect(postActionIdx).toBeGreaterThan(triggerIdx);
-    const block = body.slice(triggerIdx, postActionIdx);
-    expect(block).toMatch(/await new Promise/);
-  });
+  test('a door that crashes before its exit is processed leaves no page pending', async () => {
+    mockDoor.crash = true;
+    const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-  test('the outer catch block also clears sysopPagePending/sysopPageChatSessionId (crash-before-flushOutput fallback)', () => {
-    const body = executeAmigaDoorBody();
-    const catchIdx = body.indexOf('} catch (error) {');
-    expect(catchIdx).toBeGreaterThan(-1);
-    const catchBlock = body.slice(catchIdx);
-    expect(catchBlock).toMatch(/sysopPagePending\s*=\s*false/);
-    expect(catchBlock).toMatch(/delete\s+session\.sysopPageChatSessionId/);
+    const session = await runPagingDoor();
+    err.mockRestore();
+
+    // The consume-first block never ran; the outer catch is what cleared it.
+    expect(consumePendingSysopPage).not.toHaveBeenCalled();
+    expect(session.sysopPagePending).toBe(false);
+    expect(session.sysopPageChatSessionId).toBeUndefined();
+    expect(runSysopPageWait).not.toHaveBeenCalled();
   });
 });

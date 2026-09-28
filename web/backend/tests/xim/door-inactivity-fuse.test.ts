@@ -133,64 +133,162 @@ describe('the door inactivity fuse', () => {
 });
 
 /**
- * The wiring, pinned at the source. DoorLifecycleManager is not
- * unit-constructible (it wants an emulator, a socket and a loaded binary), so
- * what is held here is that the door's timeout is BUILT from the fuse and
- * TOUCHED by door traffic - the two edits that turn the behaviour above into
- * behaviour on the board.
+ * The wiring, driven on the manager itself. DoorLifecycleManager IS
+ * constructible with its collaborators stubbed - the technique
+ * tests/amiga-emulation/a-teardown-from-inside-the-door-waits-for-it-to-unwind
+ * uses - so what is held here runs: startLifecycle arms the door's timeout AS
+ * the fuse, door traffic (an XIM message, a library call) pushes it back, and
+ * the fuse dies with the door. jest's clock stands in for the wall clock the
+ * manager hands the fuse; setImmediate stays real because the execution loop
+ * yields through it.
  */
-import * as fs from 'fs';
-import * as path from 'path';
+import { DoorLifecycleManager } from '../../src/amiga-emulation/session/DoorLifecycleManager';
+
+/** What installMessageCallbacks was handed, so a test can deliver an XIM message. */
+const messageDeps: { incrementMessagesHandled?: () => void } = {};
+jest.mock('../../src/amiga-emulation/session/lifecycle/door-message-callbacks', () => {
+  const actual = jest.requireActual('../../src/amiga-emulation/session/lifecycle/door-message-callbacks');
+  return {
+    ...actual,
+    installMessageCallbacks: (deps: { incrementMessagesHandled: () => void }) => {
+      messageDeps.incrementMessagesHandled = deps.incrementMessagesHandled;
+    },
+  };
+});
 
 describe('DoorLifecycleManager arms the fuse rather than a wall clock', () => {
-  const src = fs.readFileSync(
-    path.resolve(__dirname, '../../src/amiga-emulation/session/DoorLifecycleManager.ts'),
-    'utf8',
-  );
+  const SECOND = 1000;
 
-  it('builds the execution timeout through createInactivityFuse', () => {
-    expect(src).toContain('createInactivityFuse({');
-    expect(src).toMatch(/seconds: this\.lifecycleConfig\.timeout\b/);
-    expect(src).toContain('maxSeconds: DOOR_ABSOLUTE_TIMEOUT_SECONDS,');
-    // The shape it replaced: a timer armed once, for the whole timeout.
-    expect(src).not.toContain('}, this.lifecycleConfig.timeout * 1000);');
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
   });
 
-  it('arms it even for a door whose registration names no timeout', () => {
-    /*
-     * It used to be `if (this.lifecycleConfig.timeout)`, so a door with none -
-     * GWall is one - had nothing watching it at all. When its server stopped
-     * answering, its error path spun at pc 0x8184 and held the node until the
-     * container was restarted: "fix gwall first i cant log in" (sysop,
-     * 2026-09-19).
-     */
-    expect(src).not.toContain('if (this.lifecycleConfig.timeout) {');
-    expect(src).toContain('this.lifecycleConfig.timeout ?? DOOR_DEFAULT_SILENCE_SECONDS');
+  afterEach(() => {
+    jest.useRealTimers();
+    delete messageDeps.incrementMessagesHandled;
   });
 
-  it('touches it on every library call, not only on XIM messages', () => {
+  /**
+   * Anything asked of it answers: every property is another of these, and
+   * calling one returns 0 - a stand-in for the emulator and the libraries,
+   * none of which this timeout ever consults.
+   */
+  const permissive = (): any =>
+    new Proxy(function stub() { return 0; }, {
+      get: (_t, k) => (k === 'then' ? undefined : permissive()),
+      apply: () => 0,
+    });
+
+  /**
+   * A manager for a door whose registration carries `timeout` (or none), with
+   * the event loop left out unless `realLoop` - the timeout is what is under
+   * test, not the 68K loop.
+   */
+  async function aRunningDoor(timeout: number | undefined, opts: { realLoop?: boolean } = {}) {
+    const events: string[] = [];
+    const socket: any = {
+      emit: (event: string, data: any) => { events.push(event === 'door:status' ? data.status : event); },
+      on: () => undefined,
+    };
+    const manager: any = new DoorLifecycleManager(
+      permissive(), socket, { executablePath: '/x/door', timeout } as any,
+      permissive(), permissive(), null, undefined,
+    );
+    if (!opts.realLoop) manager.runExecutionLoop = async () => undefined;
+    return { manager, events, started: manager.startLifecycle() as Promise<void> };
+  }
+
+  const killedForSilence = (events: string[]) => events.includes('door:error');
+
+  it('kills a silent door after its configured timeout, not before', async () => {
+    const door = await aRunningDoor(120);
+    await door.started;
+
+    jest.advanceTimersByTime(119 * SECOND);
+    expect(killedForSilence(door.events)).toBe(false);
+    jest.advanceTimersByTime(2 * SECOND);
+    expect(killedForSilence(door.events)).toBe(true);
+    expect(door.events).toContain('terminated');
+  });
+
+  it('arms it even for a door whose registration names no timeout', async () => {
+    // It used to be `if (this.lifecycleConfig.timeout)`, so a door with none -
+    // GWall is one - had nothing watching it at all. When its server stopped
+    // answering, its error path spun at pc 0x8184 and held the node until the
+    // container was restarted: "fix gwall first i cant log in" (sysop,
+    // 2026-09-19).
+    const door = await aRunningDoor(undefined);
+    await door.started;
+
+    jest.advanceTimersByTime(299 * SECOND);
+    expect(killedForSilence(door.events)).toBe(false);
+    jest.advanceTimersByTime(2 * SECOND);
+    expect(killedForSilence(door.events)).toBe(true);
+  });
+
+  it('is pushed back by every XIM message the door handles', async () => {
+    const door = await aRunningDoor(120);
+    await door.started;
+    expect(messageDeps.incrementMessagesHandled).toBeDefined();
+
+    // Ten minutes of a caller reading: a message every half minute.
+    for (let i = 0; i < 20; i += 1) {
+      jest.advanceTimersByTime(30 * SECOND);
+      messageDeps.incrementMessagesHandled!();
+    }
+    expect(killedForSilence(door.events)).toBe(false);
+  });
+
+  it('still has a ceiling a busy door cannot push past', async () => {
+    // One hour, however much the door talks: an abandoned animated door must
+    // give the node back.
+    const door = await aRunningDoor(120);
+    await door.started;
+
+    for (let i = 0; i < 61; i += 1) {
+      jest.advanceTimersByTime(60 * SECOND);
+      messageDeps.incrementMessagesHandled!();
+    }
+    expect(killedForSilence(door.events)).toBe(true);
+  });
+
+  it('is pushed back by every library call, not only by XIM messages', async () => {
     /*
      * A door doing a long stretch of ordinary library work - reading files,
      * drawing through dos.library - was burning the fuse down while working
      * perfectly. The other half of the same rule is what catches GWall: a door
      * that has stopped calling the board entirely.
+     *
+     * The REAL execution loop runs here, over a PC that is always a trap
+     * address; each library call takes a minute of the clock, and the door
+     * makes five of them against a two-minute timeout.
      */
-    const trapBlock = src.slice(
-      src.indexOf('const trapHandled ='),
-      src.indexOf('const trapHandled =') + 1200,
-    );
-    expect(trapBlock).toContain('this.inactivityFuse?.touch()');
+    let calls = 0;
+    const door = await aRunningDoor(120, { realLoop: true });
+    door.manager.setLibraryTraps({ isTrapAddress: () => true } as any);
+    door.manager.trapDispatcher = {
+      checkAndHandleLibraryTrap: () => {
+        calls += 1;
+        jest.advanceTimersByTime(60 * SECOND);
+        if (calls >= 5) door.manager.executionState.isRunning = false;
+        return true;
+      },
+      handleTrapExecution: () => undefined,
+    };
+    await door.started;
+
+    expect(calls).toBe(5);
+    expect(killedForSilence(door.events)).toBe(false);
   });
 
-  it('touches it on every XIM message the door handles', () => {
-    const block = src.slice(
-      src.indexOf('incrementMessagesHandled:'),
-      src.indexOf('incrementMessagesHandled:') + 240,
-    );
-    expect(block).toContain('this.inactivityFuse?.touch()');
-  });
+  it('dies with the door', async () => {
+    const door = await aRunningDoor(120);
+    await door.started;
 
-  it('clears it when the door ends', () => {
-    expect(src).toContain('this.inactivityFuse.clear();');
+    door.manager.terminate();
+    jest.advanceTimersByTime(7200 * SECOND);
+
+    expect(killedForSilence(door.events)).toBe(false);
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

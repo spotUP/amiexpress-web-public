@@ -10,8 +10,37 @@
  * Doors now say whether they own the pointer, and the backend passes it on.
  */
 
+process.env.SKIP_DB_INIT = '1';
+
+import 'reflect-metadata';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
+jest.mock('../../src/amiga-emulation/loader/LibraryLoader', () => ({ LibraryLoader: jest.fn() }));
+jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({ AmigaDoorSession: jest.fn() }));
+jest.mock('../../src/services/DoorDropFileManager');
+jest.mock('../../src/services/CallersLogManager');
+jest.mock('../../src/doors/amigaDoorManager', () => ({
+  getAmigaDoorManager: () => ({ scanInstalledDoors: async () => [] }),
+}));
+
+import { executeDoor, setHelpers, type Door } from '../../src/handlers/door.handler';
+import { getClientDoorBridge } from '../../src/doors/client-door-bridge';
+import { flushAllBuffers } from '../../src/utils/ansi-buffer.util';
+import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
+import { config } from '../../src/config';
+
+setHelpers({
+  callersLog: async () => undefined,
+  getRecentCallerActivity: async () => [],
+});
 
 const repoRoot = join(__dirname, '..', '..', '..', '..');
 
@@ -30,27 +59,108 @@ describe('client door pointer capture', () => {
     expect(manifest('livechat').capturePointer).toBeUndefined();
   });
 
-  it('reaches the client in the door:load-client manifest', () => {
-    const handler = readFileSync(
-      join(repoRoot, 'web', 'backend', 'src', 'handlers', 'door.handler.ts'),
-      'utf8'
-    );
-    const emit = handler.slice(handler.indexOf("socket.emit('door:load-client'"));
+});
 
-    expect(emit.slice(0, 800)).toMatch(/capturePointer: manifest\.capturePointer === true/);
+/**
+ * What the BACKEND tells the browser, driven through the real executeDoor for
+ * a browser caller (the technique of tests/transport/browser-door-gate): a
+ * client door is installed on a temp board and the `door:load-client` the
+ * socket received is read back.
+ */
+describe('the backend passes the claim on', () => {
+  let root: string;
+  const realGet = config.get.bind(config);
+  const savedEnv = { dataDir: process.env.BBS_DATA_DIR, root: process.env.BBS_ROOT };
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'client-door-pointer-'));
+    // The manifest is read from BBS_ROOT, the door from dataDir.
+    process.env.BBS_DATA_DIR = root;
+    process.env.BBS_ROOT = root;
+    jest.spyOn(config, 'get').mockImplementation(((key: string) =>
+      key === 'dataDir' ? root : (realGet as (k: string) => unknown)(key)) as never);
+    jest.spyOn(getClientDoorBridge(), 'startSession').mockImplementation(() => 'pointer-session');
   });
 
-  it('defaults to false rather than undefined, so the client can trust it', () => {
-    const handler = readFileSync(
-      join(repoRoot, 'web', 'backend', 'src', 'handlers', 'door.handler.ts'),
-      'utf8'
-    );
+  afterEach(() => {
+    jest.restoreAllMocks();
+    for (const [key, value] of [['BBS_DATA_DIR', savedEnv.dataDir], ['BBS_ROOT', savedEnv.root]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 
-    // `=== true` collapses a missing field to false.
-    expect(handler).toMatch(/capturePointer: manifest\.capturePointer === true/);
+  function install(name: string, manifest: Record<string, unknown>, type = 'typescript'): Door {
+    const dir = path.join(root, 'Doors', name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, version: '1.0.0', ...manifest }));
+    return {
+      id: name, name, description: '', command: name.toUpperCase(),
+      path: `Doors/${name}`, accessLevel: 0, enabled: true, type,
+    } as unknown as Door;
+  }
+
+  async function run(door: Door) {
+    const emitted: Array<{ event: string; data: any }> = [];
+    const socket = {
+      id: `pointer-${Math.random()}`,
+      connected: true,
+      emit: (event: string, data?: unknown) => { emitted.push({ event, data }); return true; },
+      on: () => socket, once: () => socket, off: () => socket, removeListener: () => socket,
+    };
+    const session: any = {
+      state: BBSState.LOGGEDON, subState: LoggedOnSubState.PROCESS_COMMAND,
+      user: { id: 7, username: 'CALLER', secLevel: 100 }, nodeId: 7, currentConf: 1,
+      connectionType: 'web', terminalType: 'ansi', screenWidth: 80, screenHeight: 24, tempData: {},
+    };
+    await executeDoor(socket as never, session, door);
+    flushAllBuffers();
+    return emitted;
+  }
+
+  const capturePointerSent = (emitted: Array<{ event: string; data: any }>) => {
+    const load = emitted.find((e) => e.event === 'door:load-client');
+    expect(load).toBeDefined();
+    return load!.data.manifest.capturePointer;
+  };
+
+  it('reaches the client in the door:load-client manifest', async () => {
+    const emitted = await run(install('game', { runtime: 'client', capturePointer: true }));
+
+    expect(capturePointerSent(emitted)).toBe(true);
+  });
+
+  it('defaults to false rather than undefined, so the client can trust it', async () => {
+    expect(capturePointerSent(await run(install('tui', { runtime: 'client' })))).toBe(false);
+    // Only a real `true` claims it - not a truthy string.
+    expect(capturePointerSent(await run(install('odd', { runtime: 'client', capturePointer: 'yes' })))).toBe(false);
+  });
+
+  it('does NOT blanket-clear the screen when a door exits', async () => {
+    // Tried on 2026-08-26 to contain a stray TetriNET block appearing over
+    // LiveChat, and it broke the BBS outright: the welcome and login screen
+    // is itself drawn by a door (telnet-front), so clearing on every door
+    // exit wiped it the instant it was drawn - "there is just a blinking
+    // cursor". Containment that breaks the front door is not containment.
+    //
+    // Any door that runs and exits goes through the shared exit path; an MCI
+    // door with nothing to show is the one that needs no runtime at all.
+    const emitted = await run(install('mci', {}, 'MCI'));
+    const wire = emitted.filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');
+
+    // The door ran (its own notice is on the wire), and nothing wiped it after.
+    expect(wire).toContain('MCI door has no text to display.');
+    expect(wire).not.toContain('\x1b[r\x1b[2J\x1b[H');
   });
 });
 
+/*
+ * The TERMINAL half, still read as source: BBSTerminal.tsx is a React
+ * component with the pointer logic inline in its socket handlers, and
+ * packages/terminal has no test runner, so nothing in this suite can execute
+ * it. Converting these needs the logic extracted into a function first.
+ */
 describe('the pointer follows the RUNNING door, not the last one', () => {
   const terminal = readFileSync(
     join(repoRoot, 'packages', 'terminal', 'src', 'components', 'BBSTerminal.tsx'),
@@ -98,22 +208,5 @@ describe('the pointer follows the RUNNING door, not the last one', () => {
 
     expect(body).toMatch(/applyPointerCapture\(false\)/);
     expect(body).toMatch(/capturePointer\.current\s*=\s*false/);
-  });
-
-  it('does NOT blanket-clear the screen when a door exits', () => {
-    // Tried on 2026-08-26 to contain a stray TetriNET block appearing over
-    // LiveChat, and it broke the BBS outright: the welcome and login screen
-    // is itself drawn by a door (telnet-front), so clearing on every door
-    // exit wiped it the instant it was drawn - "there is just a blinking
-    // cursor". Containment that breaks the front door is not containment.
-    const handler = readFileSync(
-      join(repoRoot, 'web', 'backend', 'src', 'handlers', 'door.handler.ts'),
-      'utf8'
-    );
-    const exitRegion = handler.indexOf('Clean up drop files after door exit');
-    expect(exitRegion).toBeGreaterThan(0);
-
-    const before = handler.slice(Math.max(0, exitRegion - 600), exitRegion);
-    expect(before).not.toMatch(/emitText\(socket, '\\x1b\[r\\x1b\[2J\\x1b\[H'\)/);
   });
 });

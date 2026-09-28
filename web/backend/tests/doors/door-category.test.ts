@@ -17,7 +17,26 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
+jest.mock('../../src/amiga-emulation/loader/LibraryLoader', () => ({ LibraryLoader: jest.fn() }));
+jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({ AmigaDoorSession: jest.fn() }));
+jest.mock('../../src/services/DoorDropFileManager');
+jest.mock('../../src/services/CallersLogManager');
+jest.mock('../../src/doors/amigaDoorManager', () => ({
+  getAmigaDoorManager: () => ({ scanInstalledDoors: async () => [] }),
+}));
+jest.mock('../../src/services/bbs-event-emitter', () => ({
+  ...jest.requireActual('../../src/services/bbs-event-emitter'),
+  emitDoorActivity: jest.fn(),
+}));
+
 import { config as appConfig } from '../../src/config';
+import { executeDoor, setHelpers, type Door } from '../../src/handlers/door.handler';
+import { emitDoorActivity } from '../../src/services/bbs-event-emitter';
+import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import {
   doorCategoryAt,
   normaliseCategory,
@@ -157,15 +176,57 @@ describe('the doors this board ships', () => {
   });
 });
 
+/**
+ * Driven through the REAL executeDoor (the technique of
+ * tests/transport/browser-door-gate): a door with a declared category runs on
+ * a temp board and the door events it raised are read back.
+ */
 describe('the door event', () => {
-  const handler = fs.readFileSync(
-    path.join(REPO, 'web/backend/src/handlers/door.handler.ts'),
-    'utf8',
-  );
+  setHelpers({
+    callersLog: async () => undefined,
+    getRecentCallerActivity: async () => [],
+  });
+
+  let root: string;
+  let previousDataDir: string;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'door-cat-event-'));
+    previousDataDir = appConfig.get('dataDir');
+    appConfig.set('dataDir', root);
+    clearDoorCategoryCache();
+    (emitDoorActivity as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    appConfig.set('dataDir', previousDataDir);
+    clearDoorCategoryCache();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 
   // Both ends of a door session, or the feed says a game started and never
   // that it stopped.
-  it('carries the category when a door is entered AND when it is left', () => {
-    expect(handler.split('category: doorCategoryAt(door.path)').length - 1).toBe(2);
+  it('carries the category when a door is entered AND when it is left', async () => {
+    fs.mkdirSync(path.join(root, 'Doors', 'frogger'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'Doors', 'frogger', 'package.json'),
+      JSON.stringify({ name: 'frogger', category: 'Games' }),
+    );
+    // An MCI door with nothing to show: it runs and exits with no runtime.
+    const door = {
+      id: 'frogger', name: 'FROGGER', description: '', command: 'FROGGER',
+      path: 'Doors/frogger', accessLevel: 0, enabled: true, type: 'MCI',
+    } as unknown as Door;
+    const socket: any = { id: `door-cat-${Math.random()}`, emit: () => true, on: () => undefined };
+    const session: any = {
+      state: BBSState.LOGGEDON, subState: LoggedOnSubState.PROCESS_COMMAND,
+      user: { id: 3, username: 'PLAYER', secLevel: 100 }, nodeId: 3, currentConf: 1,
+      screenWidth: 80, tempData: {},
+    };
+
+    await executeDoor(socket, session, door);
+
+    const events = (emitDoorActivity as jest.Mock).mock.calls.map(([e]) => [e.action, e.category]);
+    expect(events).toEqual([['entered', 'game'], ['exited', 'game']]);
   });
 });

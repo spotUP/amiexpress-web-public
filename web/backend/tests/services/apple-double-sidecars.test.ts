@@ -18,6 +18,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { isRealInfoFile } from '../../src/utils/info-file.util';
 import { scanCommandDirectory } from '../../src/utils/amiga-command-parser.util';
+import { LanguageConfigService } from '../../src/services/config-services/language-config.service';
+import { AmigaDoorManager } from '../../src/doors/amigaDoorManager';
+import { infoEditorRouter } from '../../src/api/info-editor-routes';
+import { config as appConfig } from '../../src/config';
+import express from 'express';
+import request from 'supertest';
 
 describe('AppleDouble sidecars', () => {
   it('are not .info files', () => {
@@ -71,16 +77,87 @@ describe('AppleDouble sidecars', () => {
     }
   });
 
-  it('are filtered by every scan that walks a directory of .info files', () => {
-    // The rule lives in one place; these are the callers that must use it.
-    for (const file of [
-      '../../src/utils/amiga-command-parser.util.ts',
-      '../../src/doors/amigaDoorManager.ts',
-      '../../src/services/config-services/language-config.service.ts',
-      '../../src/api/info-editor-routes.ts',
-    ]) {
-      const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
-      expect(source).toContain('isRealInfoFile');
+  /*
+   * The rule lives in one place (isRealInfoFile); these are the other scans
+   * that walk a directory of .info files, each driven with a sidecar beside a
+   * real icon and asked what it found. (This used to be a text check that
+   * each file mentioned the name, which an unused import satisfied.)
+   */
+  describe('in every other scan that walks a directory of .info files', () => {
+    let root: string;
+    let previousDataDir: string;
+
+    beforeEach(() => {
+      root = fs.mkdtempSync(path.join(os.tmpdir(), 'bbs-sidecar-scan-'));
+      previousDataDir = appConfig.get('dataDir');
+      appConfig.set('dataDir', root);
+    });
+
+    afterEach(() => {
+      appConfig.set('dataDir', previousDataDir);
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    /** A real icon and its AppleDouble shadow, side by side in `dir`. */
+    function iconAndShadow(dir: string, name: string, body: string): void {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${name}.info`), body);
+      fs.writeFileSync(path.join(dir, `._${name}.info`), body);
     }
+
+    it('the admin language list (Languages/)', async () => {
+      iconAndShadow(path.join(root, 'Languages'), 'EnglishFrench', 'CODE=en\n');
+      const repo = { getLanguages: () => [], logConfigChange: () => undefined };
+      const service = new LanguageConfigService({ getConfigRepository: () => repo } as never);
+
+      const titles = (await service.getLanguages()).map((l) => l.title);
+
+      expect(titles).toEqual(['EnglishFrench']);
+    });
+
+    it('the installed-door scan (Commands/BBSCmd/)', async () => {
+      fs.mkdirSync(path.join(root, 'Doors', 'a-door'), { recursive: true });
+      iconAndShadow(
+        path.join(root, 'Commands', 'BBSCmd'),
+        'REALDOOR',
+        'TYPE=XIM\nLOCATION=Doors/a-door\n',
+      );
+
+      const doors = await new AmigaDoorManager(root).scanInstalledDoors();
+      const commands = doors.map((d) => d.command);
+
+      // The real one is found - otherwise the absence below proves nothing.
+      expect(commands).toContain('REALDOOR');
+      expect(commands.some((c) => c.startsWith('._'))).toBe(false);
+    });
+
+    it('the door-archive analysis (an uploaded .zip)', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip();
+      const icon = Buffer.from('TYPE=XIM\nLOCATION=Doors/Foo/foo\n');
+      zip.addFile('Commands/BBSCmd/FOO.info', icon);
+      zip.addFile('Commands/BBSCmd/._FOO.info', icon);
+      zip.addFile('Doors/Foo/foo', Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+      const archive = path.join(root, 'foo.zip');
+      zip.writeZip(archive);
+
+      const analysis = await new AmigaDoorManager(root).analyzeDoorArchive(archive);
+
+      expect(analysis?.bbsCommands).toEqual(['FOO']);
+      expect(analysis?.infoFiles).toEqual(['Commands/BBSCmd/FOO.info']);
+    });
+
+    it('the admin .info editor file list', async () => {
+      iconAndShadow(path.join(root, 'Commands', 'BBSCmd'), 'EXAMPLE', 'TYPE=XIM\n');
+      const app = express();
+      app.use('/api/info-editor', infoEditorRouter);
+
+      const res = await request(app).get('/api/info-editor/files');
+      const names: string[] = res.body.data.files.map((f: { basename: string }) => f.basename);
+
+      expect(names).toContain('EXAMPLE.info');
+      expect(names.some((n) => n.startsWith('._'))).toBe(false);
+    });
   });
 });

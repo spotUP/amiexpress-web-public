@@ -1,35 +1,18 @@
 /**
  * How a 68K door learns the caller's width.
  *
- * ONE SOURCE PIN AND ONE DRIVEN TEST, and the split is deliberate:
+ * `DoorMessageHandler`'s fallback BB_SCRWIDTH IS constructible - the header
+ * here said otherwise for months, and nobody checked - so it is driven: the
+ * width the door is told is read back out of the message it was handed.
  *
- *  - `launchAmigaDoor` builds the 68K bbsSession's geometry through
- *    `doorSessionGeometry()`, which carries petsciiMode, texttvMode,
- *    screenWidth and lineWrap across as ONE thing. That launch needs a whole
- *    emulator to reach, so the call site stays pinned by source; the function
- *    it must call is driven by tests/xim/teletext-door-geometry.test.ts.
- *
- *  - `DoorMessageHandler`'s fallback BB_SCRWIDTH IS constructible, the header
- *    here said otherwise for months, and nobody checked. It is driven now.
+ * This file also used to pin, by source text, that `launchAmigaDoor` built
+ * the 68K session's geometry through `doorSessionGeometry()`. That function
+ * has no callers (tests/xim/dead-launch-path.test.ts holds it that way), so
+ * the pin guarded nothing a caller can reach and was removed. The live launch,
+ * executeAmigaDoor, hands the door the caller's own session object; the
+ * geometry helper itself is driven by tests/xim/teletext-door-geometry.test.ts.
  */
-import * as fs from 'fs';
-import * as path from 'path';
-
-const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '../../src', p), 'utf8');
-
 describe('door launch hands the 68K session its PETSCII width', () => {
-  it('launchAmigaDoor builds the 68K session geometry through doorSessionGeometry', () => {
-    const src = read('handlers/door.handler.ts');
-    const literal = src.slice(src.indexOf('const amigaSession = new AmigaDoorSession(socket, {'), src.indexOf('[launchAmigaDoor] bbsSession.currentConference='));
-    // The three fields now travel together, through doorSessionGeometry -
-    // pinned by behaviour in tests/xim/teletext-door-geometry.test.ts. What
-    // this still holds is that the LAUNCH SITE goes through it rather than
-    // rebuilding the literal by hand, which is how texttvMode was left out.
-    expect(literal).toContain('...doorSessionGeometry(session, terminalWidth),');
-    expect(literal).not.toContain('lineWrap: terminalWidth,');
-    expect(literal).not.toContain('petsciiMode: session.petsciiMode === true,');
-  });
-
   /**
    * What the door is actually TOLD, read out of the memory it would read.
    *

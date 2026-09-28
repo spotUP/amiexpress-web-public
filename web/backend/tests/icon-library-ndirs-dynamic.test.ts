@@ -10,86 +10,79 @@
  * Fix: IconLibrary.synthesizeACPTooltypes now counts the highest-numbered
  * DIRn file in each conference directory and uses max(ConfConfig.info, count)
  * so the returned NDIRS is always at least as large as the true dir count.
+ *
+ * Driven through the REAL IconLibrary on a temp board, the same way
+ * tests/services/conference-directory-honours-location.test.ts reaches it:
+ * a conference whose ConfConfig.info says NDIRS=1 while its directory holds
+ * the DIRn files, and the NDIRS the door would be handed is read back.
+ * (This file used to test a copy of the counting loop, tied to production
+ * only by a regex over IconLibrary.ts.)
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+import { applyTooltypes } from '../src/utils/info-file.util';
+import { IconLibrary } from '../src/amiga-emulation/api/IconLibrary';
 
-// Minimal stub: synthesizeACPTooltypes() logic extracted for unit testing
-// so we don't need to spin up an entire IconLibrary instance.
-function countHighestDir(confDir: string): number {
-  let highest = 0;
-  try {
-    const entries = fs.readdirSync(confDir);
-    for (const name of entries) {
-      const m = name.match(/^[Dd][Ii][Rr](\d+)$/);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (n > highest) highest = n;
-      }
-    }
-  } catch {
-    // unreadable
-  }
-  return highest;
+/** The NDIRS a door is handed by GetDiskObject's synthesized ACP icon. */
+function ndirsFor(bbsRoot: string): string | undefined {
+  const icons = new IconLibrary({} as never, bbsRoot);
+  const tooltypes = (
+    icons as unknown as { synthesizeACPTooltypes: () => string[] }
+  ).synthesizeACPTooltypes();
+  return tooltypes.find((t) => t.startsWith('NDIRS='));
 }
 
-describe('IconLibrary NDIRS dir-count logic', () => {
-  let tmpDir: string;
+describe('IconLibrary synthesizeACPTooltypes NDIRS', () => {
+  let root: string;
+  let conf1: string;
 
-  beforeEach(async () => {
-    tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'icon-ndirs-'));
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-ndirs-'));
+    // One conference, found by its directory (no board-level ConfConfig.info).
+    conf1 = path.join(root, 'Conf1');
+    fs.mkdirSync(conf1, { recursive: true });
   });
 
-  afterEach(async () => {
-    await fs.promises.rm(tmpDir, { recursive: true });
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
-  test('returns 0 when conf dir is empty', () => {
-    expect(countHighestDir(tmpDir)).toBe(0);
+  /** The conference's own ConfConfig.info, carrying the install-time NDIRS. */
+  function confConfigSays(ndirs: number): void {
+    applyTooltypes(path.join(conf1, 'ConfConfig.info'), [['NDIRS', String(ndirs)]]);
+  }
+
+  function dirs(...names: string[]): void {
+    for (const name of names) fs.writeFileSync(path.join(conf1, name), '');
+  }
+
+  test('a stale NDIRS=1 is raised to the highest DIRn on disk', () => {
+    confConfigSays(1);
+    dirs('DIR1', 'DIR3', 'DIR7', 'DIR12', 'DIR24');
+
+    expect(ndirsFor(root)).toBe('NDIRS=24');
   });
 
-  test('detects DIR1 as highest when only DIR1 exists', async () => {
-    await fs.promises.writeFile(path.join(tmpDir, 'DIR1'), '');
-    expect(countHighestDir(tmpDir)).toBe(1);
+  test('counts a lowercase dir24 the same as DIR24', () => {
+    confConfigSays(1);
+    dirs('DIR1', 'dir24');
+
+    expect(ndirsFor(root)).toBe('NDIRS=24');
   });
 
-  test('detects highest across many DIR files', async () => {
-    for (const n of [1, 3, 7, 12, 24]) {
-      await fs.promises.writeFile(path.join(tmpDir, `DIR${n}`), '');
-    }
-    expect(countHighestDir(tmpDir)).toBe(24);
+  test('ignores files that are not DIRn', () => {
+    confConfigSays(1);
+    dirs('NDIRS', 'Upload', 'FILES.BBS', 'DIR3', 'DIR99.bak');
+
+    expect(ndirsFor(root)).toBe('NDIRS=3');
   });
 
-  test('case-insensitive: matches dir24 lowercase', async () => {
-    await fs.promises.writeFile(path.join(tmpDir, 'dir24'), '');
-    expect(countHighestDir(tmpDir)).toBe(24);
-  });
+  test('keeps ConfConfig.info when it is the higher of the two', () => {
+    confConfigSays(30);
+    dirs('DIR1', 'DIR3');
 
-  test('ignores non-DIR files', async () => {
-    for (const name of ['NDIRS', 'Upload', 'ConfConfig.info', 'FILES.BBS']) {
-      await fs.promises.writeFile(path.join(tmpDir, name), '');
-    }
-    await fs.promises.writeFile(path.join(tmpDir, 'DIR3'), '');
-    expect(countHighestDir(tmpDir)).toBe(3);
-  });
-
-  test('returns 0 for non-existent directory without throwing', () => {
-    expect(countHighestDir('/no/such/path/exists')).toBe(0);
-  });
-});
-
-describe('IconLibrary synthesizeACPTooltypes NDIRS integration', () => {
-  test('NDIRS line in IconLibrary.ts counts DIR files on disk', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'amiga-emulation', 'api', 'IconLibrary.ts'),
-      'utf8'
-    );
-    // The fix must appear inside the per-conference loop and use readdirSync
-    // to count numbered DIR files, taking the higher of ConfConfig.info and disk count.
-    expect(src).toMatch(/readdirSync.*Conf.*\$\{confNum\}/s);
-    expect(src).toMatch(/[Dd][Ii][Rr].*\\d\+/);
-    expect(src).toMatch(/highestDir.*ndirs|ndirs.*highestDir/);
+    expect(ndirsFor(root)).toBe('NDIRS=30');
   });
 });
