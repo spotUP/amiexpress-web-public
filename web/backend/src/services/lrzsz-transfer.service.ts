@@ -690,22 +690,6 @@ export class LrzszTransferManager {
     }
   }
 
-  private patchZrinitFlags(chunk: Buffer): Buffer {
-    const orig = Buffer.from('2a2a18423031303030303030323362653530', 'hex');
-    const fixed = Buffer.from('2a2a18423031303030303030303339613332', 'hex');
-    let out: Buffer | null = null;
-    let cursor = 0;
-    while (cursor <= chunk.length - orig.length) {
-      const idx = chunk.indexOf(orig, cursor);
-      if (idx === -1) break;
-      if (!out) out = Buffer.from(chunk);
-      fixed.copy(out, idx);
-      console.log(`[lrzsz ${this.direction}] patched ZRINIT: cleared CANFC32 at offset ${idx}`);
-      cursor = idx + fixed.length;
-    }
-    return out || chunk;
-  }
-
   /**
    * MuffinTerm terminates its ZFILE name/info subpacket with ZCRCE (0x68)
    * — "frame ends, header packet follows". Per Forsberg the spec-compliant
