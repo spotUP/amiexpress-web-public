@@ -10,12 +10,11 @@ import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { deliverFilesToCaller } from '../file/file-delivery';
+import { bookDownloads, isFreeDownload, conferencesOf } from '../../services/download-booking.service';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
-import { ConferenceRepository } from '../../database/conference-repository';
-import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { checkDownloadRatios } from '../../utils/download-ratios.util';
 import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -250,7 +249,7 @@ export class BatchDownloadHandler {
         continue;
       }
 
-      const isFree = this.isFreeDownload(fileInfo);
+      const isFree = isFreeDownload(fileInfo);
       fileInfo.isFree = isFree;
       downloadList.push(fileInfo);
       ratioRequests.push({
@@ -272,7 +271,7 @@ export class BatchDownloadHandler {
     const ratioCheck = await checkDownloadRatios(
       session.user,
       ratioRequests,
-      await this.loadConferences(session),
+      await conferencesOf(session),
       checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING),
       getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
     );
@@ -370,12 +369,11 @@ export class BatchDownloadHandler {
      * and the accounting follow what it answers.
      */
     const route = await deliverFilesToCaller(socket, session, downloadList, {
-      onBeforeHandoff: async () => {
-        for (const fileInfo of downloadList) {
-          const isFree = this.isFreeDownload(fileInfo);
-          await this.updateDownloadStats(session, fileInfo, isFree);
-          await this.updateConferenceDownloadStats(session, fileInfo, isFree);
-        }
+      // Charged when the transfer FINISHES and only if it went, as `D` is
+      // (express.e:15437). This booked before sz was spawned, so an aborted
+      // batch was charged in full (web-vs-telnet audit item 19).
+      onTransferFinished: async (ok: boolean) => {
+        if (ok) await bookDownloads(session, downloadList);
       },
     });
 
@@ -391,10 +389,9 @@ export class BatchDownloadHandler {
     } else {
       for (const fileInfo of downloadList) {
         socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileInfo.name || fileInfo.filename}\x1b[0m\r\n`);
-        const isFree = this.isFreeDownload(fileInfo);
-        await this.updateDownloadStats(session, fileInfo, isFree);
-        await this.updateConferenceDownloadStats(session, fileInfo, isFree);
       }
+      // The browser reports no completion: charged at handoff, the same books.
+      await bookDownloads(session, downloadList);
       socket.emit('ansi-output', `\r\n\x1b[32m[OK] Batch download complete! ${downloadList.length} file(s) queued.\x1b[0m\r\n`);
       socket.emit('ansi-output', '\x1b[36mCheck your browser downloads.\x1b[0m\r\n');
     }
@@ -411,92 +408,4 @@ export class BatchDownloadHandler {
     // pendingGoodbye is handled before the download loop — not reachable here
   }
 
-  /**
-   * Determine if a file is flagged as free download
-   */
-  private static isFreeDownload(fileInfo: any): boolean {
-    if (!fileInfo) return false;
-    if (fileInfo.isFree === true) return true;
-    if (typeof fileInfo.comment === 'string' && fileInfo.comment.toUpperCase().startsWith('F')) {
-      return true;
-    }
-    if (fileInfo.confNum) {
-      const flags = getConferenceToolFlags(fileInfo.confNum);
-      if (flags.freeDownloads) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Update download statistics
-   */
-  private static async updateDownloadStats(
-    session: BBSSession,
-    fileInfo: any,
-    isFree: boolean = false
-  ): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-
-    await applyDownloadStats(user, fileInfo.size, isFree);
-
-    // Save to database
-    const db = require('../../database').db;
-    await db.updateUser(user.id, {
-      downloads: user.downloads,
-      bytesDownload: user.bytesDownload,
-      dailyBytesDld: user.dailyBytesDld,
-      bytesAvailableForDownload: user.bytesAvailableForDownload,
-      lastDownloadTime: user.lastDownloadTime
-    });
-
-console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
-  }
-
-  private static async updateConferenceDownloadStats(
-    session: BBSSession,
-    fileInfo: any,
-    isFree: boolean = false
-  ): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-    if (!checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)) return;
-    if (isFree) return;
-    if (!creditAccountTrackDownloads(user)) return;
-
-    try {
-      const conferences = await this.loadConferences(session);
-      const target = conferences?.find(c => c.id === fileInfo.confNum);
-      if (!target) return;
-
-      target.downloads = (target.downloads || 0) + 1;
-      target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
-
-      const rawDb = (require('../../database').db as any).db ?? require('../../database').db;
-      const repo = new ConferenceRepository(rawDb);
-      await repo.updateConference(target.id, {
-        downloads: target.downloads,
-        bytesDownload: target.bytesDownload
-      });
-    } catch (err) {
-console.error('[BATCH DOWNLOAD] Failed to persist conference download stats', err);
-    }
-  }
-
-  private static async loadConferences(session: BBSSession) {
-    if (session.conferences && Array.isArray(session.conferences)) {
-      return session.conferences;
-    }
-    try {
-      const repo = new ConferenceRepository(require('../../database').db);
-      const confs = await repo.getConferences();
-      session.conferences = confs;
-      return confs;
-    } catch (err) {
-console.error('[BATCH DOWNLOAD] Failed to load conferences for accounting', err);
-      return undefined;
-    }
-  }
 }

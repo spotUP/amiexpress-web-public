@@ -28,7 +28,8 @@ import { PROTOCOL_DISPLAY_NAMES } from '../../src/types';
 
 describe('the delivery contract', () => {
   it('offers a finished hook, not only a handoff hook', async () => {
-    // The distinction IS the fix: onBeforeHandoff runs before sz is spawned.
+    // The distinction IS the fix: booking at the handoff (before sz is
+    // spawned) charged aborted batches; that hook is gone (audit item 19).
     const delivery = require('../../src/handlers/file/file-delivery');
 
     expect(typeof delivery.deliverFilesToCaller).toBe('function');

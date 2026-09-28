@@ -1,6 +1,7 @@
 import { db as singletonDb } from '../src/database';
 import { ConferenceRepository } from '../src/database/conference-repository';
 import { DownloadHandler as RawDownloadHandler } from '../src/handlers/file/download.handler';
+import { bookConference } from '../src/services/download-booking.service';
 
 // Access private method for testing
 const DownloadHandler: any = RawDownloadHandler;
@@ -41,7 +42,7 @@ describe('download accounting integration (per-conference + credit tracking)', (
 
     const fileInfo = { confNum: 1, size: 200 };
 
-    await DownloadHandler.updateConferenceDownloadStats(session, fileInfo, false);
+    await bookConference(session, fileInfo, false);
 
     const confAfter = await repo.getConferenceById(1);
     expect(confAfter?.downloads).toBe((confBefore?.downloads || 0) + 1);
@@ -64,7 +65,7 @@ describe('download accounting integration (per-conference + credit tracking)', (
 
     const fileInfo = { confNum: 1, size: 300 };
 
-    await DownloadHandler.updateConferenceDownloadStats(session, fileInfo, false);
+    await bookConference(session, fileInfo, false);
 
     const confAfter = await repo.getConferenceById(1);
     expect(confAfter?.downloads).toBe(confBefore?.downloads || 0);

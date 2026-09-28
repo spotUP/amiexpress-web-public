@@ -17,11 +17,8 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { deliverFilesToCaller, deliveryRouteFor } from './file-delivery';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
-import { updateDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
-import { logDownload } from '../../utils/download-logging.util';
+import { updateDownloadStats } from '../../utils/download-ratios.util';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
-import { ConferenceRepository } from '../../database/conference-repository';
 import { db } from '../../database';
 import { config } from '../../config';
 import * as fs from 'fs';
@@ -30,9 +27,7 @@ import * as amigafs from '../../utils/amigafs';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
-import { userFileManager } from '../../services/UserFileManager';
-import { doorDropFileManager } from '../../services/DoorDropFileManager';
-import { emitDownload } from '../../services/bbs-event-emitter';
+import { bookDownloads, isFreeDownload } from '../../services/download-booking.service';
 import {
   listRemoteMatches,
   locateRemoteFile,
@@ -426,7 +421,7 @@ export class DownloadHandler {
     const kSize = (fsize >>> 10) & 0x003fffff; // express.e:12736 mask
     const line  = ` ${kSize}k, ${min} mins ${secs.toString().padStart(2, '0')} secs ${file.name}`;
     socket.emit('ansi-output', line);
-    if (this.isFreeDownload(file)) {
+    if (isFreeDownload(file)) {
       socket.emit('ansi-output', '  >>Free Download!\r\n');  // express.e:12741
     } else {
       socket.emit('ansi-output', '\r\n');                    // express.e:12745
@@ -593,23 +588,11 @@ export class DownloadHandler {
          * file would need sz's stderr parsed for each name.
          */
         onTransferFinished: async (ok: boolean) => {
-          if (!session.user) return;
           if (!ok) {
             console.log('[download] transfer did not complete - nothing booked');
             return;
           }
-          for (const fileInfo of fileList) {
-            try {
-              const isFree = this.isFreeDownload(fileInfo);
-              await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
-              await updateDownloadStats(session.user, fileInfo.size, isFree);
-              await this.persistDownloadStats(session);
-              await this.updateConferenceDownloadStats(session, fileInfo, isFree);
-              doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
-            } catch (err) {
-              console.warn('[download] post-transfer stats failed:', err);
-            }
-          }
+          await bookDownloads(session, fileList);
         },
       });
       if (route !== 'zmodem') {
@@ -628,33 +611,10 @@ export class DownloadHandler {
     // one place in this codebase (TP-11's success criterion).
     await deliverFilesToCaller(socket, session, fileList);
 
-    for (let i = 0; i < fileList.length; i++) {
-      const fileInfo = fileList[i];
-
-      if (session.user) {
-        const isFree = this.isFreeDownload(fileInfo);
-        await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
-
-        try {
-          const conference = await db.getConferenceById(session.currentConf);
-          emitDownload({
-            username:       session.user.username,
-            nodeId:         session.nodeId || 1,
-            fileName:       fileInfo.name,
-            fileSize:       fileInfo.size,
-            conferenceId:   session.currentConf,
-            conferenceName: conference?.name,
-            timestamp:      Date.now(),
-          });
-        } catch { /* non-critical */ }
-
-        await updateDownloadStats(session.user, fileInfo.size, isFree);
-        await this.persistDownloadStats(session);
-        await this.updateConferenceDownloadStats(session, fileInfo, isFree);
-        doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
-      }
-      totalBytes += fileInfo.size;
-    }
+    // The browser reports no completion, so it is charged at handoff - the
+    // same books the ZMODEM branch keeps on finish (download-booking.service).
+    await bookDownloads(session, fileList);
+    for (const fileInfo of fileList) totalBytes += fileInfo.size;
 
     // Route through the shared runPostDownload pipeline so web/telnet/SSH
     // post-transfer behavior (stats line, callersLog summary, top-CPS
@@ -959,62 +919,4 @@ console.error(`[Download] ${pattern} in conf ${confNum}:`, storageError);
 
   // ─── helpers ────────────────────────────────────────────────────────────
 
-  private static isFreeDownload(fileInfo: any): boolean {
-    if (fileInfo.comment?.toUpperCase().startsWith('F')) return true;
-    if (fileInfo.confNum) {
-      const flags = getConferenceToolFlags(fileInfo.confNum);
-      if (flags.freeDownloads) return true;
-    }
-    return false;
-  }
-
-  private static async persistDownloadStats(session: BBSSession): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-    try {
-      if (db?.updateUser) {
-        await db.updateUser(user.id, {
-          downloads:                user.downloads,
-          bytesDownload:            user.bytesDownload,
-          dailyBytesDld:            user.dailyBytesDld,
-          bytesAvailableForDownload: user.bytesAvailableForDownload,
-          lastDownloadTime:         user.lastDownloadTime,
-          topDownloadCPS:           user.topDownloadCPS,
-        });
-        if (user.slotNumber) {
-          try { userFileManager.updateUserDataFile(user, user.slotNumber); } catch { /* disk err */ }
-        }
-      }
-    } catch (err) { console.error('[DOWNLOAD] Failed to persist download stats', err); }
-  }
-
-  private static async updateConferenceDownloadStats(
-    session: BBSSession, fileInfo: any, isFree: boolean = false
-  ): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-    if (!checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)) return;
-    if (isFree) return;
-    if (!creditAccountTrackDownloads(user)) return;
-    try {
-      const conferences = await this.loadConferences(session);
-      const target = conferences?.find((c: any) => c.id === fileInfo.confNum);
-      if (!target) return;
-      target.downloads    = (target.downloads    || 0) + 1;
-      target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
-      const rawDb = (db as any).db ?? db;
-      const repo  = new ConferenceRepository(rawDb);
-      await repo.updateConference(target.id, { downloads: target.downloads, bytesDownload: target.bytesDownload });
-    } catch (err) { console.error('[DOWNLOAD] Failed to persist conference download stats', err); }
-  }
-
-  private static async loadConferences(session: BBSSession) {
-    if (session.conferences && Array.isArray(session.conferences)) return session.conferences;
-    try {
-      const repo  = new ConferenceRepository(db);
-      const confs = await repo.getConferences();
-      session.conferences = confs;
-      return confs;
-    } catch { return undefined; }
-  }
 }

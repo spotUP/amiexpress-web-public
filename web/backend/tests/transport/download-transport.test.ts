@@ -20,6 +20,11 @@ jest.mock('../../src/handlers/commands/user-commands.handler', () => ({
   startZmodemDownload: (...args: unknown[]) => startZmodemDownload(...args),
 }));
 jest.mock('../../src/storage/storage-context', () => ({ getStorageContext: () => null }));
+const bookDownloads = jest.fn(async () => undefined);
+jest.mock('../../src/services/download-booking.service', () => ({
+  ...jest.requireActual('../../src/services/download-booking.service'),
+  bookDownloads: (...args: unknown[]) => (bookDownloads as any)(...args),
+}));
 jest.mock('../../src/storage/remote-download', () => ({
   // No pool in these tests: a file is already where it says it is.
   rematerialise: async (file: any) => file.fullPath ?? file.path,
@@ -55,18 +60,9 @@ function makeCaller(connectionType: string) {
   return { socket, session, said, downloadFileEvents };
 }
 
-let stats: jest.SpyInstance;
-let confStats: jest.SpyInstance;
-
 beforeEach(() => {
   startZmodemDownload.mockClear();
-  stats = jest.spyOn(BatchDownloadHandler as any, 'updateDownloadStats').mockResolvedValue(undefined);
-  confStats = jest.spyOn(BatchDownloadHandler as any, 'updateConferenceDownloadStats').mockResolvedValue(undefined);
-});
-
-afterEach(() => {
-  stats.mockRestore();
-  confStats.mockRestore();
+  bookDownloads.mockClear();
 });
 
 describe('a batch download, by transport', () => {
@@ -117,20 +113,26 @@ describe('a batch download, by transport', () => {
     expect(deliveryRouteFor(telnet.session as any)).toBe('zmodem');
     expect(telnet.said()).toContain('SENDING 2 FILE(S) VIA ZMODEM');
     expect(telnet.downloadFileEvents()).toEqual([]);
-    // A delivered transfer DOES book its statistics.
-    expect(stats).toHaveBeenCalled();
+    // Booked when the transfer FINISHES, and only if it went - never at the
+    // handoff, which charged an aborted batch in full (web-vs-telnet audit
+    // item 19, 2026-09-28; express.e:15437 books behind `IF sentsize`).
+    expect(bookDownloads).not.toHaveBeenCalled();
+    const finished = startZmodemDownload.mock.calls[0][3] as (ok: boolean) => Promise<void>;
+    await finished(false);
+    expect(bookDownloads).not.toHaveBeenCalled();
+    await finished(true);
+    expect(bookDownloads).toHaveBeenCalledTimes(1);
+    expect((bookDownloads.mock.calls[0] as any[])[1]).toHaveLength(2);
 
     // The refusal arm: nothing sent, nothing booked, nothing cleared.
     startZmodemDownload.mockClear();
-    stats.mockClear();
-    confStats.mockClear();
+    bookDownloads.mockClear();
     const refused = makeCaller('carrier-pigeon');
     await BatchDownloadHandler.handleBatchConfirm(refused.socket, refused.session, 'Y');
 
     expect(deliveryRouteFor(refused.session as any)).toBe('refused');
     expect(startZmodemDownload).toHaveBeenCalledTimes(0);
-    expect(stats).toHaveBeenCalledTimes(0);
-    expect(confStats).toHaveBeenCalledTimes(0);
+    expect(bookDownloads).not.toHaveBeenCalled();
     expect(refused.session.flagManager.clearAll).not.toHaveBeenCalled();
     expect(refused.said()).toContain(NO_TRANSFER_NOTICE);
   });
@@ -151,8 +153,7 @@ describe('a batch download, by transport', () => {
 
     await BatchDownloadHandler.handleBatchConfirm(caller.socket, caller.session, 'Y');
 
-    expect(stats).not.toHaveBeenCalled();
-    expect(confStats).not.toHaveBeenCalled();
+    expect(bookDownloads).not.toHaveBeenCalled();
     expect(startZmodemDownload).not.toHaveBeenCalled();
     expect(caller.downloadFileEvents()).toEqual([]);
     expect(caller.said()).toContain(NO_TRANSFER_NOTICE);
@@ -178,7 +179,9 @@ describe('a batch download, by transport', () => {
     expect(caller.said()).toContain('[OK] Batch download complete! 2 file(s) queued.');
     expect(caller.said()).toContain('Check your browser downloads.');
     expect(startZmodemDownload).not.toHaveBeenCalled();
-    expect(stats).toHaveBeenCalledTimes(2);
+    // The browser reports no completion: booked at handoff, both files at once.
+    expect(bookDownloads).toHaveBeenCalledTimes(1);
+    expect((bookDownloads.mock.calls[0] as any[])[1]).toHaveLength(2);
   });
 });
 

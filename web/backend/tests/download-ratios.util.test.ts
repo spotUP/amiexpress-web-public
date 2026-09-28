@@ -161,8 +161,9 @@ describe('checkDownloadRatios', () => {
   });
 
   it('treats conference FREEDOWNLOADS as free (no ratio hit)', () => {
-    const handler: any = DownloadHandler;
+    // One rule for every download path (services/download-booking.service).
+    const { isFreeDownload } = require('../src/services/download-booking.service');
     const fileInfo = { confNum: 1, comment: '', size: 1000 };
-    expect(handler.isFreeDownload(fileInfo)).toBe(true);
+    expect(isFreeDownload(fileInfo)).toBe(true);
   });
 });

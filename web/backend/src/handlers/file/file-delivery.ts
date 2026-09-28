@@ -49,19 +49,12 @@ export interface DeliverableFile {
 
 export interface DeliverOptions {
   /**
-   * Runs after the paths are resolved and BEFORE the handoff to ZMODEM.
-   *
-   * The statistics are booked there on purpose - "the ZMODEM transfer is
-   * async and the user could disconnect; record intent now so per-user
-   * totals stay accurate" - and NOT when nothing could be resolved, which
-   * is what keeps a refusal from booking anything.
-   */
-  onBeforeHandoff?: () => Promise<void> | void;
-  /**
    * Called when a ZMODEM transfer has actually finished, with whether it
    * succeeded. express books a download behind `IF sentsize`
    * (express.e:15437), so anything that charges the caller belongs here
-   * rather than in `onBeforeHandoff` - an aborted batch must not be billed.
+   * and nowhere earlier - an aborted batch must not be billed. There was an
+   * `onBeforeHandoff` hook for booking at handoff; the batch path used it and
+   * charged aborted batches, so it is gone (web-vs-telnet audit item 19).
    * The browser route has no such moment: its files are handed to the DOM
    * and are gone, so it books at handoff as before.
    */
@@ -141,7 +134,7 @@ export function endBinaryAfterTransfer(session: BBSSession): boolean {
  *
  * Answers `'refused'` - having said why on the caller's screen - when the
  * transport can receive neither, and when nothing could be resolved to send.
- * In both cases `onBeforeHandoff` never runs, so nothing is booked.
+ * In both cases no transfer starts, so nothing is booked.
  */
 export async function deliverFilesToCaller(
   socket: Socket,
@@ -177,7 +170,6 @@ console.error('[Download] re-fetch before transfer failed:', error);
       return 'refused';
     }
 
-    await opts.onBeforeHandoff?.();
     startZmodemDownload(socket, session, paths, opts.onTransferFinished);
     return 'zmodem';
   }
