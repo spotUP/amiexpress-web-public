@@ -54,6 +54,7 @@ KNOWN_PROMPTS = [
     (re.compile(r"space to resume:?$", re.I), "\r", "pause"),
     (re.compile(r"more\(y/n/ns\)\?$", re.I), "\r", "more"),
     (re.compile(r"press (return|any key)[^:]*[.:]*$", re.I), "\r", "press a key"),
+    (re.compile(r"privacy notice\. Accept now \(Y/n\)\?$", re.I), "Y\r", "privacy notice"),
 ]
 MENU_PROMPT = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):$", re.I)
 DEFAULT_LOG = os.path.join(tempfile.gettempdir(), "bbs-screen.log")

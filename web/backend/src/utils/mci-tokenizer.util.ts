@@ -242,10 +242,16 @@ export function processMci(
     // while staying byte-exact-compatible with express.e on every
     // form that does use space or `|` (since \r/\n only matter when
     // there's no earlier space/term).
+    //
+    // An ESC ends a code too: art writes a colour straight after one
+    // (`~SS_BBS:bulletins/bull9.txt` then `ESC[37m` on live Conf4/bull20.txt),
+    // and reading through it made the include ask for `bull9.txt\x1b[37m`.
+    // The screen index and the MCI catalog already stop there
+    // (screens/mci-catalog.ts); this is the reader that runs the code.
     let nextWs = -1;
     for (let i = pos; i < len; i++) {
       const c = input.charCodeAt(i);
-      if (c === 0x20 || c === 0x0a || c === 0x0d) {
+      if (c === 0x20 || c === 0x0a || c === 0x0d || c === 0x1b) {
         nextWs = i;
         break;
       }

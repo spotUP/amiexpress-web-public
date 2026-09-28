@@ -376,3 +376,18 @@ describe('processMci onSubstitution hook (Task 3)', () => {
     expect(calls).toEqual(['N', 'N', 'SS_path', 'N', 'UL']);
   });
 });
+
+describe('a code followed straight by a colour', () => {
+  it('ends at the escape, so an include names the file and not the colour after it', () => {
+    // Live Conf4/bull20.txt: `ESC[32m~SS_BBS:bulletins/bull9.txt ESC[37m` with
+    // no space between - the include asked for `bull9.txt\x1b[37m`, found no
+    // such file, and the Requests list never showed (2026-09-29).
+    const seen: string[] = [];
+    const out = processMci('~SS_BBS:bulletins/bull9.txt\x1b[37m after', {
+      dispatch: {},
+      prefixDispatch: { 'SS_': (suffix) => { seen.push(suffix); return '<INCLUDED>'; } },
+    });
+    expect(seen).toEqual(['BBS:bulletins/bull9.txt']);
+    expect(out).toBe('<INCLUDED>\x1b[37m after');
+  });
+});
