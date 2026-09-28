@@ -72,7 +72,7 @@ import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
 import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
-import { panKeyOf } from '../services/door-input-routing';
+import { routeDoorInput } from '../services/door-input-routing';
 
 /**
  * How far one press of a cursor key moves a windowed door's view, in source
@@ -372,7 +372,7 @@ console.error('Failed to assign node to session:', error);
 /**
  * Register command handler
  */
-function registerCommandHandler(socket: Socket) {
+export function registerCommandHandler(socket: Socket) {
 console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
 console.error('[SOCKET-DEBUG] Registering command handler for socket:', socket.id);
 
@@ -381,11 +381,6 @@ console.error('[SOCKET-DEBUG] Registering command handler for socket:', socket.i
 console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
     socket.emit('pong-test', { received: data });
   });
-
-  const markDoorInput = (session: BBSSession, data: string): boolean => {
-    // Debounce disabled for doors to ensure real-time fidelity
-    return false;
-  };
 
   /**
    * WHICH ROUTE A KEYSTROKE TOOK INTO THE DOOR.
@@ -430,9 +425,6 @@ console.log('[socket-handlers] door:input received:', JSON.stringify(data));
     logDoorDebug(`SOCKET door:input data=${JSON.stringify(data)} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
 
     if (session.inDoorManager && session.doorInputHandler) {
-      if (markDoorInput(session, data)) {
-        return;
-      }
 console.log('[socket-handlers] Calling doorInputHandler from door:input');
       traceDoorInput(session, 'door:input', data);
       session.doorInputHandler(data);
@@ -735,56 +727,37 @@ console.error('No session found for socket:', socket.id);
 
     if (decision.kind === 'swallow') return;   // game mode: the client sends key events instead
 
-    // BBS-owned pause takes priority over door input routing.
-    // When a display flow pause (doPause) is active while a ~CC_ door is finishing,
-    // Enter/Space should dismiss the pause, not go to the door.
-    if (session.paginatedScreen?.kind === 'bbs' && (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING)) {
-      const ch = data.charCodeAt(0);
-      const isPauseKey = data === ' ' || data === '\r' || data === '\n' || ch === 13 || ch === 10;
-      if (isPauseKey) {
-console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command handler instead of door`);
-        // Fall through to command handler below which will handle pagination
-      } else {
-        // Non-pause keys still go to the door
-        if (session.doorInputHandler) {
-          if (markDoorInput(session, data)) {
-            return;
-          }
-          traceDoorInput(session, 'command/bbs-pause', data);
-          session.doorInputHandler(data);
-          return;
-        }
-      }
-    } else if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
-      /*
-       * A WINDOWED door's cursor keys move the window, not the door.
-       *
-       * Only a door that declared C64_VIEWPORT reaches this: its screen has
-       * no 40-column fold that keeps it usable, so half of what it draws is
-       * off the caller's screen until they pan. Same rule as telnet
-       * (services/door-input-routing.ts), asked here because the web path
-       * routes door keys itself.
-       */
+    // A running door's keys: the SAME rule telnet asks (services/door-input-
+    // routing.ts). The web path used to route them itself, and differed at the
+    // edges - with a BBS pause up it never panned a C64_VIEWPORT window, and a
+    // key with no door handler fell through to the command handler instead of
+    // the door's fallback (web-vs-telnet audit item 8, 2026-09-28).
+    // hasCommandListener is false here, as the rule documents: socket.io has
+    // already delivered to those listeners by the time this runs.
+    if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
       const windowed = c64AdapterFor(socket);
-      if (windowed && !windowed.isDisposed() && windowed.isViewport()) {
-        const pan = panKeyOf(data);
-        if (pan === 'home') { windowed.panHome(); return; }
-        if (pan) { windowed.pan(pan === 'right' ? VIEWPORT_PAN_COLUMNS : -VIEWPORT_PAN_COLUMNS); return; }
+      const viewport = windowed && !windowed.isDisposed() && windowed.isViewport() ? windowed : null;
+      const route = routeDoorInput(data, {
+        doorActive: true,
+        hasDoorInputHandler: Boolean(session.doorInputHandler),
+        hasCommandListener: false,
+        bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
+        viewportPan: viewport !== null,
+      });
+      if (route.pan) {
+        if (route.pan === 'home') viewport?.panHome();
+        else viewport?.pan(route.pan === 'right' ? VIEWPORT_PAN_COLUMNS : -VIEWPORT_PAN_COLUMNS);
+        return;
       }
-      // Normal door input routing (no BBS pause active)
-      if (session.doorInputHandler) {
-        if (markDoorInput(session, data)) {
-          return;
-        }
-        logDoorDebug(`CMD->door handler dispatch`);
+      if (route.toDoorHandler && session.doorInputHandler) {
         traceDoorInput(session, 'command', data);
         session.doorInputHandler(data);
-        return;
-      } else {
+      }
+      if (route.toDoorInputEvent) {
         logDoorDebug(`WARN missing handler while door active; emitting door:input fallback`);
         socket.emit('door:input', data);
-        return;
       }
+      if (!route.toBbs) return;
     }
 
     // No door took it. `commandPieces` is the rule this handler has always
