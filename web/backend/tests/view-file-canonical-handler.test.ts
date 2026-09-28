@@ -112,3 +112,21 @@ describe('V command uses canonical ViewFileHandler (C-V, express.e:25675-25687)'
     expect(c.said()).toContain('THE NOTES BODY');
   });
 });
+
+describe('V with no filename asks for one (express.e:20408-20413)', () => {
+  test('a bare V prompts instead of trying to show a file called ""', async () => {
+    // ''.split(/\s+/) is [''] - one EMPTY parameter - so the prompt was
+    // unreachable and the handler tried to display '' (EISDIR on Dir1).
+    const caller = aCaller();
+    await ViewFileHandler.handleViewFileCommand(caller.socket, caller.session, '');
+    expect(caller.said()).toContain('Enter filename of file to view?');
+    expect(caller.session.tempData?.waitingForViewFilename).toBe(true);
+  });
+
+  test('V NS still prompts, and remembers non-stop', async () => {
+    const caller = aCaller();
+    await ViewFileHandler.handleViewFileCommand(caller.socket, caller.session, 'NS');
+    expect(caller.said()).toContain('Enter filename of file to view?');
+    expect(caller.session.tempData?.nonStopDisplay).toBe(true);
+  });
+});

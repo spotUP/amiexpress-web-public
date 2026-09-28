@@ -91,7 +91,10 @@ console.log('[ENV] Viewing');
     }
 
     // Parse parameters - express.e:20401
-    const paramParts = params.trim().toUpperCase().split(/\s+/);
+    // filter(Boolean): ''.split(/\s+/) is [''], one EMPTY parameter, which
+    // made the prompt below unreachable - a bare V tried to show a file
+    // called '' (express.e:20408 prompts when parsedParams.count() is 0).
+    const paramParts = params.trim().toUpperCase().split(/\s+/).filter(Boolean);
     const hasNonStop = paramParts.includes('NS');
 
     // Get filename from params or prompt - express.e:20403-20419
