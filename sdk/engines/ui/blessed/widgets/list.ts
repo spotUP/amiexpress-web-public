@@ -133,33 +133,35 @@ export class List extends Element {
     }
   }
 
-  private _onClick(event: any): void {
-    if (!this.interactive) return;
-
-    // Calculate which item was clicked
+  /**
+   * The item drawn on screen row `y`, or undefined for a row that holds none
+   * (a border, padding, below the last item).
+   *
+   * ONE mapping for every pointer question. The click and the hover each
+   * worked it out for themselves (the hover forgot the top padding), and a
+   * door that wanted the card under a mouse press had nothing to ask - WHIP's
+   * drag read `selected`, which is only right if a hover had already moved
+   * the cursor there, and so picked up the wrong card when the press came
+   * with no motion before it (the sysop, 2026-09-28: "drag n dropping tasks
+   * in kanban stopped working").
+   */
+  itemIndexAt(y: number): number | undefined {
     const pos = this._getCoords();
-    if (!pos) return;
-
-    // `border: { type: 'none' }` is truthy but doesn't draw anything, so
-    // treating it as a 1-row offset caused the list to select the row
-    // above the one the user clicked (reported 2026-04-24). Only count
-    // border rows when a real border is actually rendered.
-    // Use Element.hasBorder() rather than a local truthiness test: `border`
-    // accepts a string ('line'/'none') as well as an object ({type:'line'}),
-    // and the old check here required `.type` to exist, so the string form
-    // read as "no border" while Element/Screen said otherwise.
-    const hasDrawnBorder = this.hasBorder();
-    const border = hasDrawnBorder ? 1 : 0;
+    if (!pos) return undefined;
+    // `border: { type: 'none' }` is truthy but draws nothing; only a drawn
+    // border offsets the rows (reported 2026-04-24: the row above was picked).
+    const border = this.hasBorder() ? 1 : 0;
     const padding = this.options.padding || 0;
     const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
+    const relY = y - pos.yi - border - padTop;
+    if (relY < 0 || relY >= this.iheight) return undefined;
+    const itemIndex = this.lineToItem[relY + this.getScroll()];
+    return itemIndex !== undefined && itemIndex >= 0 && itemIndex < this.items.length ? itemIndex : undefined;
+  }
 
-    // Get click position relative to content area
-    const relY = event.y - pos.yi - border - padTop;
-    const scroll = this.getScroll();
-    const lineIndex = relY + scroll;
-    const itemIndex = this.wrapItemsEnabled
-      ? this.lineToItem[lineIndex]
-      : lineIndex;
+  private _onClick(event: any): void {
+    if (!this.interactive) return;
+    const itemIndex = this.itemIndexAt(event.y);
 
     if (itemIndex !== undefined && itemIndex >= 0 && itemIndex < this.items.length) {
       this.select(itemIndex);
@@ -985,19 +987,9 @@ export class List extends Element {
       return handled;
     }
 
-    // Get relative y position within the list content area
-    const relY = event.y - coords.yi - border;
-
-    if (relY < 0 || relY >= this.iheight) {
-      return handled;
-    }
-
-    // Account for scroll position
-    const scroll = this.getScroll();
-    const lineIndex = relY + scroll;
-
-    // Map line index to item index
-    const itemIndex = this.lineToItem[lineIndex];
+    // Which item the mouse is over - the same mapping the click uses.
+    const itemIndex = this.itemIndexAt(event.y);
+    if (itemIndex === undefined) return handled;
 
     // The mouse moves the SELECTION, through the same select() the arrow
     // keys call. It used to light a separate "hovered" row instead, which
