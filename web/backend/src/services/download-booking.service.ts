@@ -98,13 +98,19 @@ async function saveAccount(session: BBSSession): Promise<void> {
   }
 }
 
+/**
+ * Only what the account keeps. Not bytesAvailableForDownload - that is
+ * AmiExpress's bytesADL, a session figure worked out at logon from the day's
+ * limit minus dailyBytesDld (express.e:28529-28535) - and not
+ * lastDownloadTime, which express.e has no field for and nothing reads back.
+ * Saving them asked for columns that do not exist, so every booked
+ * download's row write failed ("no such column").
+ */
 async function saveAccountRow(user: NonNullable<BBSSession['user']>): Promise<void> {
   await db.updateUser(user.id, {
     downloads: user.downloads,
     bytesDownload: user.bytesDownload,
     dailyBytesDld: user.dailyBytesDld,
-    bytesAvailableForDownload: user.bytesAvailableForDownload,
-    lastDownloadTime: user.lastDownloadTime,
     topDownloadCPS: user.topDownloadCPS,
   });
 }
