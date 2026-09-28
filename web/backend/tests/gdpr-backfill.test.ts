@@ -172,29 +172,29 @@ describe('GDPR Phase 2 — backfill consent', () => {
   // Regression guard for 2026-04-24: the initial Phase 2 commit placed the
   // GDPR_BACKFILL case inside handleMessageEntryInput (POST_MESSAGE_*
   // dispatcher only), so the backfill handler was never reached on live
-  // user Enter. This grep-style test pins the case inside the top-level
-  // handleCommand function instead.
-  test('command.handler.ts has the GDPR_BACKFILL branch inside handleCommand, not handleMessageEntryInput', () => {
-    const fs = require('fs');
-    const pathMod = require('path');
-    const src: string = fs.readFileSync(
-      pathMod.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
-      'utf8'
-    );
+  // user Enter. Driven through the board's own keystroke entry point,
+  // handleCommand: the answer typed a key at a time, then Enter, must reach
+  // the backfill handler and decide the session.
+  test('an answer typed at the live prompt and ended with Enter reaches the backfill handler', async () => {
+    const { handleCommand } = require('../src/handlers/command.handler');
+    const db = await waitForTestDb();
+    const id = await createLegacyUser(db, `legacy_live_${Date.now()}`);
+    const user = await db.getUserById(id);
 
-    const messageFnStart = src.indexOf('async function handleMessageEntryInput');
-    const commandFnStart = src.indexOf('export async function handleCommand');
-    expect(messageFnStart).toBeGreaterThan(0);
-    expect(commandFnStart).toBeGreaterThan(messageFnStart);
+    const { socket } = makeSocket();
+    const session: any = {
+      state: 'loggedon',
+      subState: LoggedOnSubState.GDPR_BACKFILL,
+      user,
+      inputBuffer: '',
+    };
 
-    // GDPR_BACKFILL must NOT appear inside handleMessageEntryInput
-    // (between its start and handleCommand's start).
-    const messageEntrySlice = src.slice(messageFnStart, commandFnStart);
-    expect(messageEntrySlice).not.toMatch(/GDPR_BACKFILL/);
+    await handleCommand(socket, session, 'n');
+    expect(session.inputBuffer).toBe('n');
+    await handleCommand(socket, session, '\r');
 
-    // And it MUST appear inside handleCommand (after its start).
-    const commandSlice = src.slice(commandFnStart);
-    expect(commandSlice).toMatch(/LoggedOnSubState\.GDPR_BACKFILL/);
-    expect(commandSlice).toMatch(/handleGdprBackfillInput/);
+    // Declining is the backfill handler's answer: the caller is logged off.
+    expect(session.user).toBeUndefined();
+    expect(session.state).toBe('await');
   });
 });

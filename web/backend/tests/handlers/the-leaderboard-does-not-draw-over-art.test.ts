@@ -13,49 +13,69 @@
  * file's FIRST LINE STARTS WITH `~`, and this file's body is generated from
  * user and board names - a `~` in one would then be read as a code. So the
  * clear belongs to the code that decides to show the screen.
+ *
+ * Checked at runtime: the generator's own output, and the real display flow
+ * with the screen renderer recorded - what is already on the wire at the
+ * moment ACHIEVETOP is asked for.
  */
 process.env.SKIP_DB_INIT = '1';
 
-import * as fs from 'fs';
-import * as path from 'path';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { flushOutput, clearTheScreen } from '../../src/utils/output.util';
 
-const read = (rel: string) =>
-  fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8');
+/** Every screen asked for, with the wire as it stood at that moment. */
+const asked: Array<{ screen: string; wireBefore: string }> = [];
+const wire: string[] = [];
+jest.mock('../../src/handlers/screen.handler', () => ({
+  ...jest.requireActual('../../src/handlers/screen.handler'),
+  displayScreen: async (socket: any, _session: any, screen: string) => {
+    flushOutput(socket);                    // whatever was emitted before this call
+    asked.push({ screen, wireBefore: wire.join('') });
+    return true;
+  },
+}));
+
+import { renderAchievementsBulletin } from '../../src/achievements/bulletin';
+import { advanceDisplayFlow } from '../../src/handlers/command.handler';
 
 describe('the generated leaderboard file', () => {
-  const src = read('src/achievements/bulletin.ts');
+  const file = renderAchievementsBulletin([], [], 'UPROUGH', new Date('2026-09-28T12:00:00Z'));
 
   it('no longer opens with a form feed that clears nothing', () => {
     // The bug: a leading 0x0C that xterm.js renders as a line feed.
-    expect(src).not.toMatch(/out\.push\('\\x0c'/);
+    expect(file).not.toContain('\x0c');
   });
 
   it('does not try to ask for the clear with an MCI code either', () => {
     // `~f` as the first line would switch MCI on for the whole generated
     // body (express.e:6800-6806) - user names would start being parsed.
-    const firstPush = src.slice(src.indexOf('const out: string[] = []'));
-    expect(firstPush).not.toMatch(/out\.push\('~f/);
+    expect(file.startsWith('~')).toBe(false);
   });
 });
 
 describe('the display flow', () => {
-  const src = read('src/handlers/command.handler.ts');
+  it('clears before it draws the leaderboard', async () => {
+    const socket = {
+      id: 'leaderboard-clear',
+      emit: (event: string, data: unknown) => {
+        if (event === 'ansi-output' && typeof data === 'string') wire.push(data);
+        return true;
+      },
+      on: () => {},
+    } as any;
+    const session = {
+      nodeId: 1,
+      state: 'loggedon',
+      subState: LoggedOnSubState.DISPLAY_ACHIEVE_BULL,
+      currentConf: 1,
+      user: { id: 1, username: 'spot', secLevel: 10, expert: 'X', confRJoin: 1, msgBaseRJoin: 1 },
+      tempData: {},
+    } as any;
 
-  it('clears before it draws the leaderboard', () => {
-    // Anchored on the BRANCH, not the first mention: the name appears
-    // earlier as `session.subState = ...DISPLAY_ACHIEVE_BULL` inside the
-    // NODE_BULL branch, which is a handover, not the place that draws.
-    const branch = src.indexOf(
-      'if (session.subState === LoggedOnSubState.DISPLAY_ACHIEVE_BULL)');
-    expect(branch).toBeGreaterThan(-1);
-    const next = src.indexOf(
-      'if (session.subState === LoggedOnSubState.CONF_SCAN)', branch);
-    const block = src.slice(branch, next > -1 ? next : undefined);
+    await advanceDisplayFlow(socket, session);
 
-    const clear = block.indexOf('clearTheScreen(socket)');
-    const draw = block.indexOf("'ACHIEVETOP'");
-    expect(clear).toBeGreaterThan(-1);
-    expect(draw).toBeGreaterThan(-1);
-    expect(clear).toBeLessThan(draw);
+    const achieve = asked.find((a) => a.screen === 'ACHIEVETOP');
+    expect(achieve).toBeDefined();
+    expect(achieve!.wireBefore).toContain(clearTheScreen(socket));
   });
 });

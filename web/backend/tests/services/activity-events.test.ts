@@ -12,6 +12,10 @@
  * to exist on both sides of a socket. Nothing kept them in step - a type added
  * to one would simply never be rendered by the other, silently. That is the
  * two-store shape this codebase keeps getting caught by, so it is pinned here.
+ *
+ * The emit site is driven through the real `processCommand`, with only the
+ * BBSCMD tier's answer controlled - so "a door handled it" can be said without
+ * launching one - and the feed heard through the emitter's own listener.
  */
 
 process.env.SKIP_DB_INIT = '1';
@@ -19,7 +23,20 @@ process.env.SKIP_DB_INIT = '1';
 import * as fs from 'fs';
 import * as path from 'path';
 
+/** null = the real BBSCMD tier; a number = what it answers (0 = a door ran). */
+let bbsCmdAnswer: number | null = null;
+jest.mock('../../src/handlers/command-execution.handler', () => {
+  const actual = jest.requireActual('../../src/handlers/command-execution.handler');
+  return {
+    ...actual,
+    runBbsCommand: (...args: any[]) =>
+      (bbsCmdAnswer === null ? actual.runBbsCommand(...args) : Promise.resolve(bbsCmdAnswer)),
+  };
+});
+
 import { bbsEventEmitter, emitCommand } from '../../src/services/bbs-event-emitter';
+import { processCommand } from '../../src/handlers/command.handler';
+import { BBSState, LoggedOnSubState } from '../../src/index';
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
@@ -31,39 +48,10 @@ function eventTypesIn(source: string): string[] {
   return [...union.matchAll(/'([a-z_]+)'/g)].map(m => m[1]).sort();
 }
 
-/**
- * The first statement of `source`, skipping the blank lines and the comments
- * that may precede it. A statement ends at the first line carrying a `;`, so
- * a call broken over several lines is still read whole.
- */
-function firstStatementIn(source: string): string {
-  const statement: string[] = [];
-  let inBlockComment = false;
-
-  for (const raw of source.split('\n')) {
-    const line = raw.trim();
-
-    if (statement.length === 0) {
-      if (inBlockComment) {
-        if (line.includes('*/')) inBlockComment = false;
-        continue;
-      }
-      if (line === '' || line.startsWith('//')) continue;
-      if (line.startsWith('/*')) {
-        if (!line.includes('*/')) inBlockComment = true;
-        continue;
-      }
-    }
-
-    statement.push(line);
-    if (line.includes(';')) break;
-  }
-
-  return statement.join(' ');
-}
-
 describe('the event vocabulary', () => {
   it('is the same on both sides of the socket', () => {
+    // REASONABLE source pin: the admin's copy is a TypeScript union in another
+    // package, erased at runtime, so there is no value on either side to compare.
     const backend = eventTypesIn(
       fs.readFileSync(
         path.join(ROOT, 'web/backend/src/services/bbs-event-emitter.ts'),
@@ -79,15 +67,6 @@ describe('the event vocabulary', () => {
 
     expect(backend.length).toBeGreaterThan(6);
     expect(admin).toEqual(backend);
-  });
-
-  it('carries the command a user ran', () => {
-    expect(eventTypesIn(
-      fs.readFileSync(
-        path.join(ROOT, 'web/backend/src/services/bbs-event-emitter.ts'),
-        'utf8',
-      ),
-    )).toContain('command');
   });
 });
 
@@ -116,60 +95,79 @@ describe('a command event', () => {
 });
 
 describe('the command emit site', () => {
-  const source = fs.readFileSync(
-    path.join(ROOT, 'web/backend/src/handlers/command.handler.ts'),
-    'utf8',
-  );
+  let heard: any[] = [];
+  const listen = (payload: any) => { if (payload?.type === 'command') heard.push(payload); };
+
+  beforeAll(() => bbsEventEmitter.on('bbs:event', listen));
+  afterAll(() => bbsEventEmitter.off('bbs:event', listen));
+  beforeEach(() => { heard = []; bbsCmdAnswer = null; });
+
+  let n = 0;
+  function aLoggedOnCaller() {
+    const socket = { id: `activity-${++n}`, emit: () => true, on: () => {}, off: () => {}, removeListener: () => {} } as any;
+    const session: any = {
+      state: BBSState.LOGGEDON,
+      subState: LoggedOnSubState.PROCESS_COMMAND,
+      connectionType: 'web',
+      nodeId: 3,
+      currentConf: 1,
+      currentConference: 1,
+      inputBuffer: '',
+      commandHistory: [],
+      user: { id: 1, username: 'Phantasm', secLevel: 255, expert: 'X' },
+      tempData: {},
+    };
+    return { socket, session };
+  }
 
   // processCommand is the one funnel every logged-on command passes through.
   // A feed fed from anywhere else would miss whatever routes around it.
-  it('is the funnel every command passes through', () => {
-    const funnel = source.slice(source.indexOf('export async function processCommand'));
-    expect(funnel.slice(0, 2500)).toContain('emitCommand(');
+  it('reports a command the board runs itself', async () => {
+    const { socket, session } = aLoggedOnCaller();
+
+    await processCommand(socket, session, 'T', '');
+
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toEqual(expect.objectContaining({
+      type: 'command', username: 'Phantasm', nodeId: 3, data: { command: 'T', conferenceId: 1 },
+    }));
   });
 
   // A command that names a DOOR is reported by the door's own entered/exited
   // event. Emitting here as well put every door in the feed twice - "Ran
   // FROGGER in Amiga Warez!" beside "Started a game of FROGGER" - which the
   // sysop saw on the live board and called wrong.
-  //
-  // So the report happens on the paths that handle the command HERE, never
-  // unconditionally at the top of the funnel.
-  it('reports only the commands it runs itself, not doors', () => {
-    const funnel = source.slice(source.indexOf('export async function processCommand'));
+  it('reports nothing when a door handled the command', async () => {
+    bbsCmdAnswer = 0;
+    const { socket, session } = aLoggedOnCaller();
 
-    // Every report is immediately followed by an internal dispatch - which is
-    // exactly "only what this handler runs itself". The J-with-a-number case
-    // reports too, and correctly: it deliberately bypasses the door path and
-    // calls the internal handler directly.
-    //
-    // Adjacency is read as "the next STATEMENT", not as a spelling: a comment
-    // may sit between the two, and the dispatch may be assigned (the refusal
-    // path needs its result). What must not be tolerated is a dispatch that
-    // merely happens LATER - that would let a report be followed by anything
-    // at all and stop proving the property - so only the first statement
-    // after the report is examined.
-    const reports = funnel.split('reportCommand();').slice(1);
-    const nextStatements = reports.map(firstStatementIn);
+    await processCommand(socket, session, 'FROGGER', '');
 
-    expect(nextStatements.length).toBeGreaterThan(0);
-    for (const statement of nextStatements) {
-      expect(statement).toContain('processBBSCommand(');
-    }
+    expect(heard).toEqual([]);
   });
 
   // A command line can carry a password - the login prompt, AUTOVAL_PASSWORD,
   // a sysop changing one - and this is broadcast to every admin socket.
-  it('never puts the parameters on the wire', () => {
-    const call = source.slice(source.indexOf('emitCommand({'), source.indexOf('emitCommand({') + 400);
+  it('never puts the parameters on the wire', async () => {
+    const { socket, session } = aLoggedOnCaller();
 
-    expect(call).toContain('command: String(command');
-    expect(call).not.toContain('params');
+    await processCommand(socket, session, 'T', 'hunter2');
+
+    expect(heard).toHaveLength(1);
+    expect(JSON.stringify(heard)).not.toContain('hunter2');
   });
 
   // The feed is a nicety; the command is the user's session.
-  it('cannot stop a command running', () => {
-    const call = source.slice(source.indexOf('emitCommand('), source.indexOf('emitCommand(') + 600);
-    expect(call).toContain('catch');
+  it('cannot stop a command running', async () => {
+    const spy = jest.spyOn(bbsEventEmitter, 'emitCommand').mockImplementation(() => {
+      throw new Error('the feed is down');
+    });
+    const { socket, session } = aLoggedOnCaller();
+    try {
+      await expect(processCommand(socket, session, 'T', '')).resolves.toBe('SUCCESS');
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

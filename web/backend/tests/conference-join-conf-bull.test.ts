@@ -3,52 +3,77 @@
  *   - NODE_BULL sysop alert suppression (#20)
  *   - CONF_BULL display on every conference join (#21)
  *
- * Both are grep-style structural guards: the underlying paths pull in
- * the whole screen-handler + conference subsystem (amiga-emulation etc.)
- * which the jest harness can't load cleanly. Pinning the call-site shape
- * catches regressions where someone 'tidies up' the silent flag or
- * accidentally drops the CONF_BULL call again.
+ * NODE_BULL is optional (express.e:28557 shows it only IF it exists), so a
+ * board without one must not raise a red 'Screen not found' alert to the
+ * sysop on every login: the display flow asks for it silently.
+ *
+ * CONF_BULL lives inside joinConference (express.e:5058 - the bulletin is part
+ * of "Joining Conference", not shown separately by the caller), so the login
+ * flow's CONF_BULL step must reach joinConference or the bulletin is never
+ * shown at all.
+ *
+ * Both are driven through the real `advanceDisplayFlow`, with only the screen
+ * renderer and the join recorded, so a 'tidy-up' that drops the silent flag or
+ * the join call turns this red.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import * as fs from 'fs';
-import * as path from 'path';
+import { LoggedOnSubState } from '../src/constants/bbs-states';
+
+const displayScreen = jest.fn(async (..._args: any[]) => true);
+jest.mock('../src/handlers/screen.handler', () => ({
+  ...jest.requireActual('../src/handlers/screen.handler'),
+  displayScreen: (...args: any[]) => displayScreen(...args),
+}));
+
+/** A join that draws its bulletin and parks the caller, as the real one does. */
+const joinConference = jest.fn(async (_socket: any, session: any) => {
+  session.subState = LoggedOnSubState.READ_COMMAND;
+  return true;
+});
+jest.mock('../src/handlers/operations/conference.handler', () => ({
+  ...jest.requireActual('../src/handlers/operations/conference.handler'),
+  joinConference: (...args: any[]) => joinConference(...(args as [any, any])),
+}));
+
+import { advanceDisplayFlow } from '../src/handlers/command.handler';
+
+function aCallerInTheLoginFlow(subState: string) {
+  const socket = { id: `flow-${Math.random().toString(36).slice(2)}`, emit: () => {}, on: () => {} } as any;
+  const session = {
+    nodeId: 1,
+    state: 'loggedon',
+    subState,
+    currentConf: 1,
+    relConfNum: 1,
+    user: { id: 1, username: 'spot', name: 'spot', secLevel: 255, expert: 'X', confRJoin: 1, msgBaseRJoin: 1 },
+    tempData: {},
+  } as any;
+  return { socket, session };
+}
 
 describe('Node/conference screen display wiring (2026-04-24)', () => {
-  test('DISPLAY_NODE_BULL call uses silent=true', () => {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
-      'utf8'
-    );
-    // Look for the NODE_BULL display inside the DISPLAY_NODE_BULL branch.
-    const nodeBullBlock = src.match(
-      /subState === LoggedOnSubState\.DISPLAY_NODE_BULL[\s\S]{0,800}?displayScreen\(socket, session, 'NODE_BULL'[^)]*\)/
-    );
-    expect(nodeBullBlock).not.toBeNull();
-    const call = nodeBullBlock![0];
-    // Fourth/fifth arg must pass a silent truthy value so missing file
-    // doesn't notifySysop the user with a red 'Screen not found' toast.
-    expect(call).toMatch(/NODE_BULL'\s*,\s*true\s*,\s*\/\*\s*silent\s*\*\/\s*true/);
+  beforeEach(() => {
+    displayScreen.mockClear();
+    joinConference.mockClear();
   });
 
-  test('command.handler advanceDisplayFlow invokes joinConference (which owns the CONF_BULL display)', () => {
-    // CONF_BULL display now lives inside joinConference (express.e:5058
-    // parity — the bulletin is shown as part of "Joining Conference",
-    // not separately by the caller). command.handler's advanceDisplayFlow
-    // calls joinConference for the AUTO_REJOIN transition; that's the
-    // architectural pin we want to keep stable.
-    //
-    // History: an earlier version of this test expected a direct
-    // displayScreen('CONF_BULL') call from command.handler.ts. That
-    // shape predated commits that moved CONF_BULL rendering into
-    // joinConference; the assertion was retargeted 2026-05-20.
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'src', 'handlers', 'command.handler.ts'),
-      'utf8'
-    );
-    // Must import doPause from screen.handler (the post-CONF_BULL pause
-    // hook is still imported for cases other than the AUTO_REJOIN path).
-    expect(src).toMatch(/import\s*\{[^}]*\bdoPause\b[^}]*\}\s*from\s*['"]\.\/screen\.handler['"]/);
-    // Must call joinConference (the function that owns CONF_BULL render).
-    expect(src).toMatch(/joinConference\s*\(/);
+  test('the node bulletin is asked for silently, so a board without one raises no alert', async () => {
+    const { socket, session } = aCallerInTheLoginFlow(LoggedOnSubState.DISPLAY_NODE_BULL);
+
+    await advanceDisplayFlow(socket, session);
+
+    const nodeBull = displayScreen.mock.calls.find((c) => c[2] === 'NODE_BULL');
+    expect(nodeBull).toBeDefined();
+    // (socket, session, 'NODE_BULL', runCommands, silent)
+    expect(nodeBull![4]).toBe(true);
+  });
+
+  test('the conference-bulletin step of the login flow joins the conference, which shows CONF_BULL', async () => {
+    const { socket, session } = aCallerInTheLoginFlow(LoggedOnSubState.DISPLAY_CONF_BULL);
+
+    await advanceDisplayFlow(socket, session);
+
+    expect(joinConference).toHaveBeenCalledTimes(1);
   });
 });

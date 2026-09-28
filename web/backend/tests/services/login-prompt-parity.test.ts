@@ -10,43 +10,171 @@
  *   - GDPR-pre-existing users never saw the backfill consent prompt
  *     (gated by `if (isWeb && !gdprConsentAt)` in runPostAuthLogin).
  *
- * These tests are structural assertions on the source — same approach
- * as login-connect.service.test.ts. Behavioural tests for the input
- * state machines themselves would need a heavy telnet/SSH connection
- * harness; we cover the wiring instead, which is where drift happens.
+ * Driven at runtime, on a TELNET session wherever the transport matters: the
+ * real `handleCommand` login branch, the real reset state machine, the real
+ * `runPostAuthLogin` pipeline. Mail, the database, the logoff and the
+ * callers log are stood in for; the GDPR prompt and PWFAIL are recorded.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import * as fs from "fs";
-import * as path from "path";
+/** index.ts wires its services against the database at import; the stub browser-door-gate uses. */
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, LOCALHOST_IPS: [] };
+});
 
-const SRC = path.resolve(__dirname, "../../src");
+const mailOnPwdFail = jest.fn(async (_email: string, _code: string) => true);
+let mailEnabled = true;
+jest.mock('../../src/services/mail-notification.service', () => ({
+  ...jest.requireActual('../../src/services/mail-notification.service'),
+  isMailEventEnabled: async () => mailEnabled,
+  isSmtpConfigured: async () => true,
+  mailOnPwdFail: (email: string, code: string) => mailOnPwdFail(email, code),
+}));
 
-function read(rel: string): string {
-  return fs.readFileSync(path.join(SRC, rel), "utf8");
+/** The account the caller is trying to reach. */
+let account: any = { id: 'u-7', username: 'spot', email: 'spot@example.test', slotNumber: 0 };
+const updateUserPassword = jest.fn(async (..._a: any[]) => undefined);
+/** Built inside the factory: jest runs it before this file's own consts exist. */
+jest.mock('../../src/database', () => {
+  const fake = {
+    getUserByUsername: async () => account,
+    updateUserPassword: (...a: any[]) => updateUserPassword(...a),
+    updateUser: async () => undefined,
+    generateAccessToken: async () => 'token',
+    generateRefreshToken: async () => 'refresh',
+  };
+  return { ...jest.requireActual('../../src/database'), db: fake, getDatabase: () => fake };
+});
+
+jest.mock('../../src/services/password-policy.util', () => ({
+  ...jest.requireActual('../../src/services/password-policy.util'),
+  getMaxPasswordFails: () => 1,
+}));
+jest.mock('../../src/services/CallersLogManager');
+
+const beginLogoff = jest.fn();
+jest.mock('../../src/server/logoff', () => ({
+  ...jest.requireActual('../../src/server/logoff'),
+  beginLogoff: (...a: any[]) => beginLogoff(...a),
+}));
+
+const runPwfailAndLogoff = jest.fn(async () => undefined);
+jest.mock('../../src/services/login-post.service', () => ({
+  ...jest.requireActual('../../src/services/login-post.service'),
+  runPwfailAndLogoff: (...a: any[]) => (runPwfailAndLogoff as any)(...a),
+}));
+
+const promptGdprBackfill = jest.fn(async () => undefined);
+const handleGdprBackfillInput = jest.fn(async () => undefined);
+jest.mock('../../src/handlers/user/gdpr.handler', () => ({
+  ...jest.requireActual('../../src/handlers/user/gdpr.handler'),
+  promptGdprBackfill: (...a: any[]) => (promptGdprBackfill as any)(...a),
+  handleGdprBackfillInput: (...a: any[]) => (handleGdprBackfillInput as any)(...a),
+}));
+
+/* The rest of the login pipeline, stood in for as a-login-does-not-run-the-logoff-batch does. */
+jest.mock('../../src/services/node-reservation.service', () => ({
+  ...jest.requireActual('../../src/services/node-reservation.service'),
+  isReservationMatch: () => true,
+}));
+jest.mock('../../src/services/user-already-online', () => ({
+  ...jest.requireActual('../../src/services/user-already-online'),
+  userAlreadyOnNode: () => null,
+}));
+jest.mock('../../src/handlers/screen.handler', () => ({
+  ...jest.requireActual('../../src/handlers/screen.handler'),
+  displayScreen: jest.fn(async () => true),
+  doPause: jest.fn(async () => undefined),
+}));
+jest.mock('../../src/services/batch-scheduler', () => ({
+  ...jest.requireActual('../../src/services/batch-scheduler'),
+  runExecuteOn: jest.fn(async () => undefined),
+}));
+
+import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
+import { setDatabase } from '../../src/handlers/command-handler/dependency-injection';
+import { isPasswordResetAvailable, promptPasswordReset } from '../../src/services/login-prompt.service';
+import { handleCommand } from '../../src/handlers/command.handler';
+import { runPostAuthLogin } from '../../src/services/login-post.service';
+import { db as fakeDb } from '../../src/database';
+import { container } from '../../src/container';
+import { AuthenticationUseCase } from '../../src/services/use-cases/authentication.use-case';
+
+/** Every password the login branch checks is wrong. */
+container.registerInstance(AuthenticationUseCase, { authenticate: async () => ({ success: false }) } as any);
+
+let n = 0;
+function aTelnetLine(): any {
+  const said: string[] = [];
+  return {
+    said,
+    id: `parity-${++n}`,
+    emit: (_event: string, payload: unknown) => { said.push(String(payload)); return true; },
+    on: () => undefined,
+    once: () => undefined,
+    join() { return this; },
+    removeListener: () => undefined,
+  };
 }
 
-describe("telnet/SSH parity — multi-step pre-login flows", () => {
-  describe("email-based password reset", () => {
-    const adapterSrc = read("services/login-prompt.service.ts");
+const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
 
-    it("exports promptPasswordReset adapter + isPasswordResetAvailable predicate", () => {
-      expect(adapterSrc).toMatch(/export\s+(async\s+)?function\s+promptPasswordReset/);
-      expect(adapterSrc).toMatch(/export\s+(async\s+)?function\s+isPasswordResetAvailable/);
+beforeEach(() => {
+  jest.clearAllMocks();
+  mailEnabled = true;
+  account = { id: 'u-7', username: 'spot', email: 'spot@example.test', slotNumber: 0 };
+  setDatabase(fakeDb);
+});
+
+describe('telnet/SSH parity — multi-step pre-login flows', () => {
+  describe('email-based password reset', () => {
+    it('is offered only when mail is on and the caller has an email', async () => {
+      expect(await isPasswordResetAvailable('spot@example.test')).toBe(true);
+      expect(await isPasswordResetAvailable(null)).toBe(false);
+      mailEnabled = false;
+      expect(await isPasswordResetAvailable('spot@example.test')).toBe(false);
     });
 
-    it("drives the await_confirm → await_code → await_new_password state machine", () => {
-      const body = adapterSrc.match(/function\s+promptPasswordReset[\s\S]*?\n\}/)?.[0];
-      expect(body).toBeDefined();
-      expect(body).toMatch(/await_confirm/);
-      expect(body).toMatch(/await_code/);
-      expect(body).toMatch(/await_new_password/);
-      // Hands off to mailOnPwdFail for the actual email send and uses
-      // crypto.randomBytes for the reset code — matches express.e:29168.
-      expect(body).toMatch(/mailOnPwdFail/);
-      expect(body).toMatch(/crypto\.randomBytes/);
+    it('drives await_confirm -> await_code -> await_new_password, mailing a random code (express.e:29168)', async () => {
+      const line = aTelnetLine();
+      const session: any = { connectionType: 'telnet', passwordResetUsername: 'spot' };
+
+      const flow = promptPasswordReset(line, session);
+      expect(session.passwordResetState).toBe('await_confirm');
+
+      session.loginInputHandler('y\r');
+      await settle();
+      expect(mailOnPwdFail).toHaveBeenCalledTimes(1);
+      const [email, code] = mailOnPwdFail.mock.calls[0];
+      expect(email).toBe('spot@example.test');
+      expect(code).toMatch(/^[0-9A-F]{10}$/);
+      expect(session.passwordResetState).toBe('await_code');
+
+      session.loginInputHandler(`${code}\r`);
+      await settle();
+      expect(session.passwordResetState).toBe('await_new_password');
+
+      session.loginInputHandler('n3wpass\r');
+      await expect(flow).resolves.toEqual({ ok: true });
+      expect(updateUserPassword).toHaveBeenCalledWith('u-7', 'n3wpass');
     });
 
-    it("drives WEB too - TP-9b deleted the browser's own reset handler", async () => {
+    it('mails a different code each time', async () => {
+      const codes: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const session: any = { connectionType: 'telnet', passwordResetUsername: 'spot' };
+        const flow = promptPasswordReset(aTelnetLine(), session);
+        session.loginInputHandler('\r');       // blank Enter is Y (express.e:29160-29167)
+        await settle();
+        codes.push(mailOnPwdFail.mock.calls[i][1]);
+        session.loginInputHandler('wrong\r');  // end the flow
+        await flow;
+      }
+      expect(codes[0]).not.toBe(codes[1]);
+    });
+
+    it('drives WEB too - TP-9b deleted the browser\'s own reset handler', async () => {
       // This asserted the opposite, by reading the function's source for
       // `session.connectionType === 'web'`. That early return existed while
       // auth-socket-handlers.ts had a `password-reset-input` handler of its
@@ -54,75 +182,95 @@ describe("telnet/SSH parity — multi-step pre-login flows", () => {
       // deleted it. One loop drives web, telnet and SSH now, so a pin on the
       // old spelling was pinning a bug: a web caller who hit the excessive
       // failure would have been answered by nothing at all.
-      const { promptPasswordReset } = require("../../src/services/login-prompt.service");
-      const said: string[] = [];
-      // The ansi buffer attaches a disconnect listener to whatever it is
-      // given, so the fake needs `on` as well as `emit`.
-      const emitter: any = {
-        id: 'web-caller',
-        emit: (_event: string, payload: unknown) => said.push(String(payload)),
-        on: () => undefined,
-        once: () => undefined,
-        removeListener: () => undefined,
-      };
-      const session: any = { connectionType: "web", passwordResetUsername: "spot" };
+      const emitter = aTelnetLine();
+      const session: any = { connectionType: 'web', passwordResetUsername: 'spot' };
 
       const flow = promptPasswordReset(emitter, session);
       await Promise.resolve();
 
-      expect(said.join("")).toContain("Excessive Password Failure");
-      expect(said.join("")).toContain("send a reset code");
-      expect(session.passwordResetState).toBe("await_confirm");
-      expect(typeof session.loginInputHandler).toBe("function");
+      expect(emitter.said.join('')).toContain('Excessive Password Failure');
+      expect(emitter.said.join('')).toContain('send a reset code');
+      expect(session.passwordResetState).toBe('await_confirm');
+      expect(typeof session.loginInputHandler).toBe('function');
 
       // Decline, so the flow finishes rather than being left open.
-      session.loginInputHandler("n");
-      session.loginInputHandler("\r");
+      session.loginInputHandler('n');
+      session.loginInputHandler('\r');
       await flow;
     });
 
-    it("telnet/SSH failure path calls promptPasswordReset before PWFAIL", () => {
-      const cmd = read("handlers/command.handler.ts");
-      // Find the excessive-failure block by anchoring on the loop-budget
-      // check, then assert that promptPasswordReset is invoked *before*
-      // runPwfailAndLogoff in the same branch.
-      const block = cmd.match(/if\s*\(\s*maxFails[\s\S]*?runPwfailAndLogoff[\s\S]*?\}/)?.[0];
-      expect(block).toBeDefined();
-      const promptIdx = block!.indexOf("promptPasswordReset");
-      const pwfailIdx = block!.indexOf("runPwfailAndLogoff");
-      expect(promptIdx).toBeGreaterThanOrEqual(0);
-      expect(pwfailIdx).toBeGreaterThanOrEqual(0);
-      expect(promptIdx).toBeLessThan(pwfailIdx);
+    /** A telnet caller at the Password: prompt, one wrong answer from the limit. */
+    const atThePasswordPrompt = (): any => ({
+      state: BBSState.LOGON,
+      connectionType: 'telnet',
+      nodeId: 1,
+      tempData: { loginPhase: 'password', loginUsername: 'spot', inputBuffer: 'wrong' },
+    });
+
+    it('a telnet caller out of password attempts is offered the reset before PWFAIL', async () => {
+      const line = aTelnetLine();
+      const session = atThePasswordPrompt();
+
+      const typed = handleCommand(line, session, '\r');
+      await settle();
+
+      expect(session.passwordResetState).toBe('await_confirm');
+      expect(runPwfailAndLogoff).not.toHaveBeenCalled();
+
+      session.loginInputHandler('n\r');          // decline, so the branch finishes
+      await typed;
+    });
+
+    it('with no email on file, the same caller goes straight to PWFAIL', async () => {
+      // The control: the budget IS spent on this one keystroke.
+      account = { ...account, email: null };
+      const session = atThePasswordPrompt();
+
+      await handleCommand(aTelnetLine(), session, '\r');
+
+      expect(session.passwordResetState).toBeUndefined();
+      expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("GDPR consent backfill", () => {
-    const postAuthSrc = read("services/login-post.service.ts");
+  describe('GDPR consent backfill', () => {
+    const aTelnetLogin = (): any => ({
+      state: BBSState.LOGON,
+      subState: LoggedOnSubState.READ_COMMAND,
+      connectionType: 'telnet',
+      nodeId: 4,
+      tempData: {},
+    });
+    const LEGACY = { id: 'u-1', username: 'spot', slotNumber: 7, calls: 0, callsToday: 0, ansi: true };
 
-    it("GDPR gate is no longer guarded by `isWeb &&`", () => {
-      // Locate the if-line that mentions gdprConsentAt. The condition
-      // text spans nested parens — match the whole physical line.
-      const lineMatch = postAuthSrc
-        .split("\n")
-        .find((l) => /if\s*\(.*gdprConsentAt/.test(l));
-      expect(lineMatch).toBeDefined();
-      expect(lineMatch).not.toMatch(/\bisWeb\b/);
+    it('a telnet caller with no recorded consent is asked for it', async () => {
+      await runPostAuthLogin(aTelnetLine(), aTelnetLogin(), { ...LEGACY }, { lastLoginBeforeUpdate: new Date(0) });
+
+      expect(promptGdprBackfill).toHaveBeenCalledTimes(1);
     });
 
-    it("still calls promptGdprBackfill from the gate", () => {
-      // Source-order check: promptGdprBackfill must appear after the
-      // gdprConsentAt gate keyword.
-      const gateIdx = postAuthSrc.indexOf("gdprConsentAt");
-      const callIdx = postAuthSrc.indexOf("promptGdprBackfill", gateIdx);
-      expect(gateIdx).toBeGreaterThan(0);
-      expect(callIdx).toBeGreaterThan(gateIdx);
+    it('a caller who already consented is not asked again', async () => {
+      await runPostAuthLogin(aTelnetLine(), aTelnetLogin(), { ...LEGACY, gdprConsentAt: new Date() }, { lastLoginBeforeUpdate: new Date(0) });
+
+      expect(promptGdprBackfill).not.toHaveBeenCalled();
     });
 
-    it("input dispatch for GDPR_BACKFILL state is wired in command.handler.ts (telnet/SSH path)", () => {
-      const cmd = read("handlers/command.handler.ts");
-      expect(cmd).toMatch(
-        /session\.subState\s*===\s*LoggedOnSubState\.GDPR_BACKFILL[\s\S]*?handleGdprBackfillInput/,
-      );
+    it('the answer a telnet caller types at the prompt reaches the backfill handler', async () => {
+      const session: any = {
+        state: BBSState.LOGGEDON,
+        subState: LoggedOnSubState.GDPR_BACKFILL,
+        connectionType: 'telnet',
+        nodeId: 1,
+        inputBuffer: '',
+        user: { id: 1, username: 'spot' },
+        tempData: {},
+      };
+
+      await handleCommand(aTelnetLine(), session, 'y');
+      await handleCommand(aTelnetLine(), session, '\r');
+
+      expect(handleGdprBackfillInput).toHaveBeenCalledTimes(1);
+      expect((handleGdprBackfillInput.mock.calls[0] as any[])[2]).toBe('y');
     });
   });
 });

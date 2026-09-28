@@ -17,50 +17,72 @@
  * board did nothing - which is worse than the doubled draw the guard exists
  * to prevent, because the caller is the one who asked.
  *
- * Source-level because `command.handler` pulls in the whole BBS and cannot be
- * loaded under jest; the same reason `upload-abort-state` reads it this way.
+ * Driven through the real `handleCommand` and the real `displayMainMenu`: a
+ * menu drawn 100ms ago, then Return. `_lastMainMenuTime` only moves when the
+ * menu is actually drawn (a debounced call returns before touching it), so it
+ * is the witness that the second draw happened.
  */
-import * as fs from 'fs';
-import * as path from 'path';
+process.env.SKIP_DB_INIT = '1';
 
-const SRC = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'src', 'handlers', 'command.handler.ts'), 'utf8');
-const MENU = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'src', 'handlers', 'command-handler', 'menu.ts'), 'utf8');
+import { handleCommand } from '../../src/handlers/command.handler';
+import { displayMainMenu } from '../../src/handlers/command-handler/menu';
+import { BBSState, LoggedOnSubState } from '../../src/index';
 
-/** The empty-command branch, sliced to the call it makes. */
-function emptyCommandBranch(): string {
-  const at = SRC.indexOf('Empty command, redisplaying menu');
-  expect(at).toBeGreaterThan(-1);
-  return SRC.slice(at, SRC.indexOf(';', SRC.indexOf('menuDisplayMainMenu', at)));
+function makeSocket() {
+  return {
+    id: `empty-cmd-${Math.random().toString(36).slice(2)}`,
+    emit: () => true,
+    on: () => {}, off: () => {}, removeListener: () => {},
+  } as any;
+}
+
+/** A caller at the command prompt whose menu was drawn `msAgo` ago. */
+function atTheMenu(msAgo: number): any {
+  return {
+    state: BBSState.LOGGEDON,
+    subState: LoggedOnSubState.READ_COMMAND,
+    connectionType: 'web',
+    screenWidth: 80,
+    screenHeight: 25,
+    nodeId: 1,
+    currentConf: 1,
+    inputBuffer: '',
+    user: { id: 1, username: 'spot', secLevel: 255, expert: 'X' },
+    tempData: {},
+    _lastMainMenuTime: Date.now() - msAgo,
+  };
 }
 
 describe('an empty command at the menu', () => {
-  it('redraws the menu without asking the debounce', () => {
-    expect(emptyCommandBranch()).toMatch(/menuDisplayMainMenu\(socket, session, false, [^)]*true\)/);
-  });
+  it('redraws the menu even when the last one was drawn a moment ago', async () => {
+    const session = atTheMenu(100);
+    const before = session._lastMainMenuTime;
 
-  it('cites the express.e line it is porting', () => {
-    expect(SRC.slice(SRC.indexOf('Empty command, redisplaying menu') - 900,
-                     SRC.indexOf('Empty command, redisplaying menu'))).toContain('28228');
+    await handleCommand(makeSocket(), session, '\r');
+
+    expect(session._lastMainMenuTime).toBeGreaterThan(before);
   });
 });
 
 describe('the debounce itself', () => {
-  it('still exists for the races it was written for', () => {
+  it('still swallows an internal redraw inside 500ms, the race it was written for', async () => {
     // The round trip: this fix exempts ONE caller, it does not delete the
     // guard. Internal callers that fire twice on a state transition still
     // meet it.
-    expect(MENU).toContain('_lastMainMenuTime');
-    expect(MENU).toMatch(/now - lastMenuTime < 500/);
+    const session = atTheMenu(100);
+    const before = session._lastMainMenuTime;
+
+    await displayMainMenu(makeSocket(), session);
+
+    expect(session._lastMainMenuTime).toBe(before);
   });
 
-  it('can be bypassed by a caller that means it', () => {
-    expect(MENU).toMatch(/bypassDebounce/);
-  });
+  it('lets a caller that means it past', async () => {
+    const session = atTheMenu(100);
+    const before = session._lastMainMenuTime;
 
-  it('is still marked as having no express.e equivalent', () => {
-    // So nobody later mistakes it for ported behaviour.
-    expect(MENU).toMatch(/no express\.e equivalent/i);
+    await displayMainMenu(makeSocket(), session, false, /* bypassDebounce */ true);
+
+    expect(session._lastMainMenuTime).toBeGreaterThan(before);
   });
 });

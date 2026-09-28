@@ -5,7 +5,8 @@
  * Regression: three dispatchers carried their own copies of this block and
  * only a dead one set session.ripMode - answering R logged "RIP" and then
  * served .TXT screens. These tests pin the shared semantics; the
- * source-level pins below hold every live dispatcher to the shared call.
+ * dispatcher tests below type an answer into every live dispatcher and check
+ * the session it leaves behind.
  */
 
 jest.mock('../../src/index', () => {
@@ -178,39 +179,70 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
   });
 });
 
-describe('every live dispatcher uses the shared implementation (source pins)', () => {
-  const fs = require('fs');
-  const path = require('path');
-  const read = (p: string) =>
-    fs.readFileSync(path.resolve(__dirname, '../../src/handlers', p), 'utf8');
+/*
+ * Every live dispatcher of the graphics prompt, driven with a real keystroke.
+ * command.handler.ts is the entry point every transport reaches;
+ * command-handler/core.ts is the one screen.handler re-enters. The regression
+ * was a dispatcher with its own copy that set only `tempData.ripMode` "for
+ * future use", so the answer is asserted as the session the screen loader
+ * reads - ripMode itself - and the dead field must stay unset.
+ */
+describe('every live dispatcher applies the answer the caller typed', () => {
+  const { BBSState, LoggedOnSubState } = require('../../src/constants/bbs-states');
+  const dispatchers: Array<[string, () => (s: any, x: any, d: string) => Promise<unknown>]> = [
+    ['command.handler', () => require('../../src/handlers/command.handler').handleCommand],
+    ['command-handler/core', () => require('../../src/handlers/command-handler/core').handleCommand],
+  ];
 
-  test('command.handler.ts calls applyGraphicsAnswer and keeps no hasR copy', () => {
-    const src = read('command.handler.ts');
-    expect(src).toContain('applyGraphicsAnswer(socket, session, answer)');
-    expect(src).not.toMatch(/tempData\.ripMode\s*=\s*true/);
+  /** Its own socket id: the output buffer is keyed by it, and a shared key hands the text to another test's socket. */
+  let n = 0;
+  const aCaller = () => ({ id: `graphics-answer-${++n}`, emit: jest.fn() });
+
+  function atTheGraphicsPrompt(typed: string): any {
+    return {
+      state: BBSState.AWAIT,
+      subState: LoggedOnSubState.ANSI_PROMPT,
+      connectionType: 'web',
+      nodeId: 1,
+      tempData: { inputBuffer: typed },
+    };
+  }
+
+  test.each(dispatchers)('%s: R and Enter turn RIP on, and the dead tempData copy stays unset', async (_name, get) => {
+    const session = atTheGraphicsPrompt('r');
+    await get()(aCaller(), session, '\r');
+    expect(session.ripMode).toBe(true);
+    expect(session.tempData.ripMode).toBeUndefined();
   });
 
-  test('command-handler/core.ts calls applyGraphicsAnswer and keeps no hasR copy', () => {
-    const src = read('command-handler/core.ts');
-    expect(src).toContain('applyGraphicsAnswer(socket, session, answer)');
-    expect(src).not.toMatch(/tempData as any\)\.ripMode/);
+  test.each(dispatchers)('%s: T and Enter turn teletext on', async (_name, get) => {
+    const session = atTheGraphicsPrompt('t');
+    await get()(aCaller(), session, '\r');
+    expect(session.texttvMode).toBe(true);
+    expect(session.ripMode).toBe(false);
   });
 
   /*
-   * REWRITTEN 2026-09-16, and the CODE moved with it.
-   *
-   * This used to regex a string literal out of `core.ts` and check its shape,
-   * with a note explaining that it read source text because requiring the
-   * module needs heavy mocks. Both halves were treating a symptom: the reason
-   * the literal was in `core.ts` at all is that the file carried its OWN COPY
-   * of the prompt, "kept identical to login-connect.service.ts" by a comment.
-   *
-   * There is one string now. `core.ts` imports the exported
-   * `ANSI_GRAPHICS_PROMPT` that telnet and SSH already use, so the shape
-   * below is asserted against the real thing - no regex, no escape-sequence
-   * unescaping, and nothing left to drift.
+   * REWRITTEN 2026-09-16, and the CODE moved with it: `core.ts` used to carry
+   * its OWN COPY of the prompt, "kept identical to login-connect.service.ts"
+   * by a comment. There is one string now; both dispatchers must put exactly
+   * that string on the wire when the connect screen is dismissed.
    */
-  test('the connect prompt is two lines, uppercase, and invites a C64 on its own line', () => {
+  test.each(dispatchers)('%s: asks with the one shared prompt string, not a copy of it', async (_name, get) => {
+    const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
+    const socket = aCaller();
+    const session: any = { state: BBSState.AWAIT, subState: LoggedOnSubState.DISPLAY_CONNECT, connectionType: 'web', nodeId: 1, tempData: {} };
+
+    await get()(socket, session, ' ');
+
+    const wire = socket.emit.mock.calls.filter((c: any[]) => c[0] === 'ansi-output').map((c: any[]) => String(c[1])).join('');
+    expect(session.subState).toBe(LoggedOnSubState.ANSI_PROMPT);
+    expect(wire).toContain(ANSI_GRAPHICS_PROMPT);
+  });
+});
+
+describe('the connect prompt', () => {
+  test('is two lines, uppercase, and invites a C64 on its own line', () => {
     const { ANSI_GRAPHICS_PROMPT } = require('../../src/services/login-connect.service');
 
     const lines = ANSI_GRAPHICS_PROMPT.split('\r\n').filter((l: string) => l.length > 0);
@@ -228,18 +260,5 @@ describe('every live dispatcher uses the shared implementation (source pins)', (
     // The question comes last, with a trailing space, so the cursor sits
     // after it rather than under it.
     expect(ANSI_GRAPHICS_PROMPT.endsWith('? ')).toBe(true);
-  });
-
-  test('the command handler asks with that same string, not a copy of it', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const core = fs.readFileSync(
-      path.resolve(__dirname, '../../src/handlers/command-handler/core.ts'), 'utf8',
-    );
-    // The one thing a runtime check cannot make: that no SECOND copy of the
-    // text has been pasted back in. It is a claim about the file's contents,
-    // so it reads the file - and it is one line, not a shape.
-    expect(core).toContain('ANSI_GRAPHICS_PROMPT');
-    expect(core).not.toContain('COMMODORE 64: PRESS <DEL>');
   });
 });

@@ -16,73 +16,90 @@
  *   OperatorChat caller uses (index.ts, config-routes.ts, the
  *   OPERATOR_CHAT_ACTIVE branch a few lines down): db.getOperatorChatRepository().
  *
- * This test is a source-level guard — it asserts the buggy resolve pattern
- * is gone and the new pattern is present, so future edits can't silently
- * re-introduce the crash.
+ * Driven through the real `handleCommand` with a caller waiting on a page:
+ * the board's database hands out a repository, and the cancel must reach
+ * `handleUserCancelPage` with THAT repository and without throwing. The
+ * page-cancel itself is recorded, not run - it is tested where it lives.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import * as fs from 'fs';
-import * as path from 'path';
+const handleUserCancelPage = jest.fn(async (..._args: any[]) => {});
+jest.mock('../../src/handlers/operator-chat.handler', () => ({
+  ...jest.requireActual('../../src/handlers/operator-chat.handler'),
+  handleUserCancelPage: (...args: any[]) => handleUserCancelPage(...args),
+}));
 
-const COMMAND_HANDLER_SRC = fs.readFileSync(
-  path.resolve(__dirname, '../../src/handlers/command.handler.ts'),
-  'utf8'
-);
+import { handleCommand } from '../../src/handlers/command.handler';
+import { setDatabase } from '../../src/handlers/command-handler/dependency-injection';
+import { BBSState, LoggedOnSubState } from '../../src/index';
 
-// Strip line comments + block comments so the source-level regex tests don't
-// false-positive against historical references to the buggy pattern preserved
-// in the explanatory comments alongside the fix.
-function stripComments(src: string): string {
-  // Remove block comments first, then line comments. Order matters because
-  // a `// ...` inside a /* */ would otherwise be left behind.
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+const repository = { name: 'the board\'s operator-chat repository' };
+
+let n = 0;
+function aCallerWaitingForTheSysop() {
+  const socket = {
+    id: `op-cancel-${++n}`,
+    server: {},
+    emit: () => true,
+    on: () => {}, off: () => {}, removeListener: () => {},
+  } as any;
+  const session: any = {
+    state: BBSState.LOGGEDON,
+    subState: LoggedOnSubState.OPERATOR_CHAT_WAITING,
+    connectionType: 'web',
+    nodeId: 1,
+    inputBuffer: '',
+    user: { id: 1, username: 'spot', secLevel: 10 },
+    tempData: {},
+  };
+  return { socket, session };
 }
 
 describe('OPERATOR_CHAT_WAITING cancel — repository resolution (regression for #12)', () => {
-  const SRC_NO_COMMENTS = stripComments(COMMAND_HANDLER_SRC);
-
-  // Carve out the OPERATOR_CHAT_WAITING block so we don't accidentally match
-  // patterns from elsewhere in the giant command.handler.ts file.
-  const operatorWaitingBlockMatch = SRC_NO_COMMENTS.match(
-    /session\.subState === LoggedOnSubState\.OPERATOR_CHAT_WAITING[\s\S]*?return;/
-  );
-
-  test('the OPERATOR_CHAT_WAITING block exists and is locatable in command.handler.ts', () => {
-    expect(operatorWaitingBlockMatch).not.toBeNull();
+  beforeEach(() => {
+    handleUserCancelPage.mockClear();
+    setDatabase({ getOperatorChatRepository: () => repository });
   });
 
-  test('the cancel branch resolves OperatorChatRepository via getDatabase(), not tsyringe container', () => {
-    expect(operatorWaitingBlockMatch).not.toBeNull();
-    const block = operatorWaitingBlockMatch![0];
+  test('Q cancels the page through the repository the database hands out, without throwing', async () => {
+    const { socket, session } = aCallerWaitingForTheSysop();
 
-    // The buggy pattern must not be present anywhere in this block.
-    expect(block).not.toMatch(/container\.resolve\s*\(\s*OperatorChatRepository\s*\)/);
+    await expect(handleCommand(socket, session, 'q')).resolves.toBeUndefined();
 
-    // The correct pattern must be present.
-    expect(block).toMatch(/getDatabase\s*\(\s*\)/);
-    expect(block).toMatch(/getOperatorChatRepository\s*\(\s*\)/);
+    expect(handleUserCancelPage).toHaveBeenCalledTimes(1);
+    expect(handleUserCancelPage.mock.calls[0][1]).toBe(repository);
+    expect(handleUserCancelPage.mock.calls[0][2]).toBe(session);
   });
 
-  test('cancel branch has a fallback path when the repository is unavailable (no silent crash)', () => {
-    expect(operatorWaitingBlockMatch).not.toBeNull();
-    const block = operatorWaitingBlockMatch![0];
+  test.each([
+    ['CTRL+C', '\x03'],
+    ['Q', 'Q'],
+    ['/QUIT', '/quit'],
+    ['/CANCEL', '/CANCEL'],
+  ])('%s cancels the page (express.e:2342)', async (_name, key) => {
+    const { socket, session } = aCallerWaitingForTheSysop();
 
-    // The fix includes an else branch that emits "Aborted!" and resets subState
-    // when the database isn't available, so the user is never stuck waiting.
-    expect(block).toMatch(/Aborted!/);
-    expect(block).toMatch(/DISPLAY_MENU/);
+    await handleCommand(socket, session, key);
+
+    expect(handleUserCancelPage).toHaveBeenCalledTimes(1);
   });
 
-  test('cancel triggers on Q, CTRL+C, /QUIT, or /CANCEL (matches express.e:2342)', () => {
-    expect(operatorWaitingBlockMatch).not.toBeNull();
-    const block = operatorWaitingBlockMatch![0];
+  test('any other key leaves him waiting', async () => {
+    const { socket, session } = aCallerWaitingForTheSysop();
 
-    // CTRL+C is byte 0x03
-    expect(block).toMatch(/\\x03/);
-    expect(block).toMatch(/['"]Q['"]/);
-    expect(block).toMatch(/\/QUIT/);
-    expect(block).toMatch(/\/CANCEL/);
+    await handleCommand(socket, session, 'x');
+
+    expect(handleUserCancelPage).not.toHaveBeenCalled();
+    expect(session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_WAITING);
+  });
+
+  test('with no repository to hand, the cancel still ends the wait (no silent crash)', async () => {
+    setDatabase({ getOperatorChatRepository: () => undefined });
+    const { socket, session } = aCallerWaitingForTheSysop();
+
+    await handleCommand(socket, session, 'q');
+
+    expect(handleUserCancelPage).not.toHaveBeenCalled();
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });

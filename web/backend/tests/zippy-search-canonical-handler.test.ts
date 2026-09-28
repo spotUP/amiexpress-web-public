@@ -16,82 +16,132 @@
  * The legacy export in commands/utility-commands.handler.ts used to do a
  * flat DB query and skip all three properties. It is now a forwarder.
  *
- * Pinning:
- *   - canonical handler emits getDirSpan prompt when no dir param given
- *   - canonical handler emits "Scanning directory N" per DIR
- *   - canonical handler accumulates a multi-line entry buffer (currentEntry)
- *     and emits-on-match (context-buffered output)
- *   - dispatcher require paths point at content/zippy-search.handler
- *     (a typo in any of these would silently break Z command at runtime)
- *   - legacy export forwards to the canonical handler
+ * Driven at runtime over a temp board with two DIR files: a caller types Z at
+ * the real `processCommand`, answers the search prompt and the dir-span
+ * prompt through the real `handleCommand`, and the wire is read. Each other
+ * dispatcher (command-handler/command-execution's `processBBSCommand`, which
+ * core.ts routes through, and the legacy forwarder) is driven far enough to
+ * show it lands in the canonical handler: a typo in any require path would
+ * throw here instead of silently breaking Z at runtime.
  */
+process.env.SKIP_DB_INIT = '1';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
+import { config } from '../src/config';
+import { processCommand, handleCommand } from '../src/handlers/command.handler';
+import { processBBSCommand } from '../src/handlers/command-handler/command-execution';
+import { handleZippySearchCommand } from '../src/handlers/commands/utility-commands.handler';
+import { BBSState, LoggedOnSubState } from '../src/index';
+import { flushOutput } from '../src/utils/output.util';
+
+let root: string;
+let previousDataDir: string;
+
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'zippy-'));
+  previousDataDir = config.get('dataDir');
+  config.set('dataDir', root);
+  fs.writeFileSync(path.join(root, 'ConfConfig.info'), '');
+  const conf = path.join(root, 'Conf1');
+  fs.mkdirSync(conf, { recursive: true });
+  // Two entries in DIR1; the SECOND LINE of the first one is the match.
+  fs.writeFileSync(path.join(conf, 'DIR1'), [
+    'DEMO.LHA     P    12345 01-02-95 A demo by nobody',
+    '                            featuring the WOMBAT effect',
+    'OTHER.LHA    P      999 01-02-95 Nothing to see',
+    '                            still nothing',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(conf, 'DIR2'), 'EMPTY.LHA    P        1 01-02-95 Unrelated\n');
+});
+
+afterEach(() => {
+  config.set('dataDir', previousDataDir);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+let n = 0;
+function aCaller() {
+  const bytes: string[] = [];
+  const socket = {
+    id: `zippy-${++n}`,
+    emit: (event: string, data: unknown) => {
+      if (event === 'ansi-output' && typeof data === 'string') bytes.push(data);
+      return true;
+    },
+    on: () => {}, off: () => {}, removeListener: () => {},
+  } as any;
+  const session: any = {
+    state: BBSState.LOGGEDON,
+    subState: LoggedOnSubState.PROCESS_COMMAND,
+    connectionType: 'web',
+    nodeId: 1,
+    currentConf: 1,
+    relConfNum: 1,
+    inputBuffer: '',
+    commandHistory: [],
+    user: { id: 1, username: 'spot', name: 'spot', secLevel: 100, securityFlags: 'T'.repeat(64), expert: 'X' },
+    tempData: {},
+  };
+  const wire = () => { flushOutput(socket); return bytes.join(''); };
+  return { socket, session, wire };
+}
+
+async function type(socket: any, session: any, keys: string) {
+  for (const key of keys) await handleCommand(socket, session, key);
+}
+
 describe('Z command uses canonical ZippySearchHandler (C-Z, express.e:26123-26213)', () => {
-  const root = path.join(__dirname, '..');
-  const canonical = fs.readFileSync(
-    path.join(root, 'src', 'handlers', 'content', 'zippy-search.handler.ts'),
-    'utf8'
-  );
+  test('Z asks for a string, then for a dir span, then scans each DIR and prints whole matching entries', async () => {
+    const { socket, session, wire } = aCaller();
 
-  test('canonical handler shows getDirSpan prompt when no dir param given', () => {
-    expect(canonical).toMatch(/getDirSpanPrompt/);
-    // _promptDirSpan must transition to ZIPPY_DIR_SPAN_INPUT so the user input lands in handleDirSpanInput
-    expect(canonical).toMatch(
-      /subState\s*=\s*LoggedOnSubState\.ZIPPY_DIR_SPAN_INPUT/
-    );
+    await processCommand(socket, session, 'Z', '');
+    expect(wire()).toContain('Enter string to search for: ');
+    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_SEARCH_INPUT);
+
+    await type(socket, session, 'wombat\r');
+    // getDirSpan's prompt (express.e:26165), and the input lands in handleDirSpanInput
+    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
+
+    await type(socket, session, 'A\r');
+    const out = wire();
+
+    // express.e:26185 / 26191 - one header per DIR
+    expect(out).toContain('Scanning directory 1');
+    expect(out).toContain('Scanning directory 2');
+    // express.e:27574-27586 - the WHOLE entry, though only its second line matched
+    expect(out).toContain('DEMO.LHA');
+    expect(out).toContain('featuring the WOMBAT effect');
+    expect(out).not.toContain('OTHER.LHA');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 
-  test('canonical handler emits "Scanning directory N" per DIR (express.e:26185, 26191)', () => {
-    expect(canonical).toMatch(/Scanning directory \$\{dirNum\}|Scanning directory \$\{[^}]+\}/);
-    // HOLD path also has its own header (express.e:26198)
-    expect(canonical).toMatch(/Scanning directory HOLD/);
+  test('a search string on the command line still prompts for the dir span when none is given', async () => {
+    const { socket, session } = aCaller();
+
+    await processCommand(socket, session, 'Z', 'wombat');
+
+    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
+    expect(session.tempData.zippySearchString).toBe('WOMBAT');
   });
 
-  test('canonical handler accumulates multi-line entry buffer and emits-on-match (context-buffered output)', () => {
-    // express.e:27574-27586 buffers each file-description block and emits
-    // the whole block once any line matches.
-    expect(canonical).toMatch(/currentEntry/);
-    expect(canonical).toMatch(/isNewFileEntry/);
-    expect(canonical).toMatch(/found\s*&&\s*currentEntry\.length\s*>\s*0|currentEntry\.length\s*>\s*0\s*&&\s*found/);
+  test('the dispatcher core.ts routes through reaches the canonical handler', async () => {
+    const { socket, session } = aCaller();
+
+    await processBBSCommand(socket, session, 'Z', 'wombat');
+
+    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
   });
 
-  test('all dispatchers require the canonical handler under content/zippy-search.handler', () => {
-    const cmdHandler = fs.readFileSync(
-      path.join(root, 'src', 'handlers', 'command.handler.ts'),
-      'utf8'
-    );
-    const cmdExec = fs.readFileSync(
-      path.join(root, 'src', 'handlers', 'command-handler', 'command-execution.ts'),
-      'utf8'
-    );
-    // `command-handler/internal-commands.ts` was checked here too, until it was
-    // deleted as dead: it was a SECOND copy of the dispatch switch that nothing
-    // imported, and the 2026-09-08 parity audit found fixes that had landed in
-    // it and never reached a caller. Asserting a require in a module no caller
-    // reaches is the kind of green this file exists to avoid.
+  test('the legacy utility-commands export forwards to the canonical handler', async () => {
+    const { socket, session } = aCaller();
 
-    // command.handler.ts is in src/handlers/, so require './content/zippy-search.handler'
-    expect(cmdHandler).toMatch(/require\(\s*['"]\.\/content\/zippy-search\.handler['"]\s*\)/);
-    expect(cmdHandler).not.toMatch(/require\(\s*['"]\.\/zippy-search\.handler['"]\s*\)/);
+    await handleZippySearchCommand(socket, session, 'wombat');
 
-    // command-execution.ts is in src/handlers/command-handler/, so require '../content/zippy-search.handler'
-    expect(cmdExec).toMatch(/require\(\s*['"]\.\.\/content\/zippy-search\.handler['"]\s*\)/);
-    expect(cmdExec).not.toMatch(/require\(\s*['"]\.\.\/zippy-search\.handler['"]\s*\)/);
-
-  });
-
-  test('legacy utility-commands handleZippySearchCommand forwards to canonical handler', () => {
-    const legacy = fs.readFileSync(
-      path.join(root, 'src', 'handlers', 'commands', 'utility-commands.handler.ts'),
-      'utf8'
-    );
-    expect(legacy).toMatch(
-      /handleZippySearchCommand[\s\S]{0,300}?import\(\s*['"]\.\.\/content\/zippy-search\.handler['"]\s*\)[\s\S]{0,200}?ZippySearchHandler\.handleZippySearchCommand/
-    );
-    // The flat _searchFileDescriptions DB query must not be present.
-    expect(legacy).not.toMatch(/_searchFileDescriptions\s*\(/);
+    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
+    expect(session.tempData.zippySearchString).toBe('WOMBAT');
   });
 });

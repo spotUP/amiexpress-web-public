@@ -139,35 +139,97 @@ describe('drawing the suggestion', () => {
   });
 });
 
+/*
+ * The wiring, driven through the real `handleCommand` at the main prompt with
+ * a completer installed: the keys a caller types, and what the board then
+ * runs or leaves on his line.
+ */
 describe('the wiring', () => {
+  const { handleCommand } = require('../../src/handlers/command.handler');
+  const { BBSState, LoggedOnSubState } = require('../../src/constants/bbs-states');
   const source = fs.readFileSync(
     path.resolve(__dirname, '../../src/handlers/command.handler.ts'), 'utf8'
   );
 
-  it('accepts the suggestion on ENTER, in the main prompt branch only', () => {
-    // "can we make it submit the autocompleted ghost command on enter so if
-    // i type doo[enter] doors fires?"
-    //
-    // This file holds SEVEN identical `if (data === '\\r' ...)` blocks, one
-    // per input state, so the check is anchored on the branch that follows
-    // the READ_COMMAND one - editing the wrong copy would have made every
-    // prompt in the BBS complete itself.
-    const branch = source.indexOf('_promptGhostShown && input.length > 0');
-    expect(branch).toBeGreaterThan(0);
-    const joinHandler = source.indexOf('waitingForJoinMsgBase', branch);
-    expect(joinHandler - branch).toBeLessThan(1600);
+  const firstMatch = (buffer: string, names: readonly string[]) =>
+    names.find(n => n.toLowerCase().startsWith(buffer.toLowerCase()) && n.length > buffer.length);
+  const completer = {
+    ghost: (buffer: string, names: readonly string[]) => firstMatch(buffer, names)?.slice(buffer.length) ?? '',
+    complete: (buffer: string, names: readonly string[]) => firstMatch(buffer, names) ?? buffer,
+  };
 
-    // And only where a ghost was actually on screen, so what runs is what
-    // was visible.
-    expect(source).toContain('_promptGhostShown && input.length > 0');
+  let n = 0;
+  function atTheMainPrompt(): { socket: any; session: any } {
+    return {
+      socket: { id: `prompt-completion-${++n}`, emit: () => true, on: () => {}, off: () => {}, removeListener: () => {} },
+      session: {
+        state: BBSState.LOGGEDON,
+        subState: LoggedOnSubState.READ_COMMAND,
+        connectionType: 'web',
+        nodeId: 1,
+        inputBuffer: '',
+        commandHistory: [],
+        user: { id: 1, username: 'spot', secLevel: 10, expert: 'X' },
+        tempData: {},
+      },
+    };
+  }
+
+  async function type(socket: any, session: any, keys: string) {
+    for (const key of keys) await handleCommand(socket, session, key);
+  }
+
+  beforeEach(() => {
+    commandCache.bbscmd.clear();
+    commandCache.bbscmd.set('ZZSTALL', { name: 'ZZSTALL' } as any);
+    __setCompleterForTests(completer);
+    // ENTER hands the stored command to a timer; it is discarded, not run.
+    jest.useFakeTimers();
   });
 
-  it('completes on TAB', () => {
-    expect(source).toContain("data === '\\t'");
-    expect(source).toContain('promptComplete');
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    resetPromptCompleter();
+  });
+
+  it('ENTER runs the command the grey suggestion was offering', async () => {
+    // "can we make it submit the autocompleted ghost command on enter so if
+    // i type doo[enter] doors fires?"
+    const { socket, session } = atTheMainPrompt();
+
+    await type(socket, session, 'zzs');
+    expect(session._promptGhostShown).toBe(true);
+    await handleCommand(socket, session, '\r');
+
+    expect(session.subState).toBe(LoggedOnSubState.PROCESS_COMMAND);
+    expect(session.commandText).toBe('ZZSTALL');
+  });
+
+  it('ENTER runs what was typed when no suggestion was on screen', async () => {
+    // Only where a ghost was actually shown, so what runs is what was visible.
+    __setCompleterForTests({ ghost: () => '', complete: completer.complete });
+    const { socket, session } = atTheMainPrompt();
+
+    await type(socket, session, 'zzs\r');
+
+    expect(session.commandText).toBe('ZZS');
+  });
+
+  it('TAB completes the word on the line', async () => {
+    const { socket, session } = atTheMainPrompt();
+
+    await type(socket, session, 'zzs\t');
+
+    expect(session.inputBuffer).toBe('ZZSTALL');
+    expect(session.subState).toBe(LoggedOnSubState.READ_COMMAND);
   });
 
   it('lives in READ_COMMAND and nowhere else', () => {
+    // REASONABLE source pin: it is a claim about EVERY other input state in
+    // the board (search terms, filenames, password fields), which no finite
+    // runtime drive can enumerate; the file is the only place all of them meet.
+    //
     // The main prompt only. Both targets read every line through one
     // function, so a suggestion added there would turn up in search terms,
     // filenames and password fields.
@@ -201,6 +263,9 @@ describe('the wiring', () => {
 
 describe('the internal command list cannot drift', () => {
   it('matches the switch it was copied from', () => {
+    // REASONABLE source pin: the list mirrors a switch's case labels, and
+    // running every internal command to discover them is not a test.
+    //
     // A hand-maintained copy of a switch statement drifts the first time
     // somebody adds a case. This re-parses the switch and fails when the
     // two disagree - add a case, run this, add it to the list.
