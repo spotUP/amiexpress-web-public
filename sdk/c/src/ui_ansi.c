@@ -362,6 +362,31 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
             continue;
         }
 
+        /* A CALLER'S OWN COLOUR goes through as colour. A message body, a
+         * bulletin, the Conftop results are raw ANSI, and this turned their
+         * ESC into a space, so `ESC[32m` reached the screen as ` [32m`
+         * text. The board then patched a bare `[32m` back into colour one
+         * XIM message at a time - and where a message boundary fell between
+         * the `[` and the `32m` the patch missed and the caller read
+         * `[32m17.` on the last row of a Conftop page (SUBS, 2026-09-28).
+         * An SGR moves no cursor and costs no columns (ui_doc_wrap already
+         * counts it so), so it is safe here; the colour it leaves is not
+         * the cached one, so the cache is forgotten. Any other sequence
+         * could move the cursor, and is dropped whole rather than printed. */
+        if (c == 27 && at[1] == '[') {
+            const char *q = at + 2;
+            while (*q && ((unsigned char)*q < 0x40 || (unsigned char)*q > 0x7e)) q++;
+            if (*q == 'm') {
+                const char *p;
+                for (p = at; p <= q; p++) put_char(b, *p);
+                b->last_fg = -1;
+                b->last_bg = -1;
+                b->last_bold = -1;
+            }
+            at = *q ? q + 1 : q;
+            continue;
+        }
+
         /* Control bytes become spaces: high-bit Latin-1 art passes through
          * one byte per column, but a raw ESC or CR from the server would
          * move the cursor and corrupt the entire layout. A line-at-a-time

@@ -222,9 +222,16 @@ static void paint_line(void *context, const char *start, int len)
         int bytes = 0;
         int cols = 0;
         while (bytes < copy && cols < c->st->width) {
+            int esc;
             if (start[bytes] == UI_INK && bytes + 1 < copy) {
                 bytes += ((start[bytes + 1] == 'T' || start[bytes + 1] == 'H')
                           && bytes + 2 < copy) ? 3 : 2;
+                continue;
+            }
+            /* A raw ANSI sequence is no columns either - the same rule as
+               the wrap above, or a coloured message row is cut short. */
+            if ((esc = ansi_escape_len(start + bytes)) > 0 && bytes + esc <= copy) {
+                bytes += esc;
                 continue;
             }
             bytes++;

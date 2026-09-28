@@ -628,9 +628,41 @@ static void raw_ansi_costs_no_columns_and_is_never_split(void)
     printf("  [OK] raw ANSI costs no columns and is never split across lines\n");
 }
 
+/**
+ * A message's own colour reaches the screen as colour, on every row.
+ *
+ * The pager turned the ESC of a caller's raw ANSI into a space, so a Conftop
+ * results message went out as ` [32m16.` and the board patched the bare
+ * `[32m` back into colour one XIM message at a time. Where a message boundary
+ * fell between the `[` and the `32m`, the patch missed and the caller read
+ * `[32m17.` on the page's last row (SUBS, 2026-09-28).
+ */
+static void a_messages_own_colour_reaches_the_screen(void)
+{
+    char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text = "\033[32m16.\n\033[32m17.\n\033[32m18.";
+
+    ui_doc_style_init(&st);
+    st.frameless = 1; st.height = 3; st.width = 40; st.top = 1; st.left = 1;
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+
+    ui_doc(&b, &src, &pushback, &st, "#264", text);
+
+    assert(strstr(storage, "\033[32m17.") != 0);   /* the colour, as colour */
+    assert(strstr(storage, " [32m") == 0);          /* never as text */
+    assert(strstr(storage, "[32m17") == strstr(storage, "\033[32m17") + 1);
+    printf("  [OK] a message's own colour reaches the screen as colour\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
+    a_messages_own_colour_reaches_the_screen();
     a_word_is_never_cut_in_half();
     a_pen_marker_costs_the_row_no_columns();
     a_word_wider_than_the_box_still_breaks();
