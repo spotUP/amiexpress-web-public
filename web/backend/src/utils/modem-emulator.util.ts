@@ -11,6 +11,20 @@ export interface ModemEmulatorOptions {
   bps: number;  // Bits per second (1200, 2400, 9600, etc.)
 }
 
+/**
+ * The moment this pacer meant a chunk to reach the caller, on the server's
+ * monotonic clock in milliseconds (OutputAttributes.pacedAt).
+ *
+ * The pacing is right when it leaves here; the network is what bunches it.
+ * A browser that knows each chunk's intended time replays the spacing
+ * behind a small adaptive delay (packages/terminal/src/utils/
+ * playout-buffer.ts) instead of painting a late bunch in one frame. The
+ * server stays the only clock. Byte transports ignore the attribute.
+ */
+function pacedNow(): { pacedAt: number } {
+  return { pacedAt: Number(process.hrtime.bigint() / 1000n) / 1000 };
+}
+
 export class ModemEmulator {
   private socket: Socket;
   private bps: number = 0;
@@ -221,7 +235,7 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
 
       if (isEscape) {
         // Send ANSI escape sequences immediately (they're control codes)
-        this.directEmit('ansi-output', tok);
+        this.directEmit('ansi-output', tok, pacedNow());
         continue;
       }
 
@@ -266,7 +280,7 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
 
         // Send the chunk (proper character boundaries preserved)
         const chunk = chars.slice(charOffset, charOffset + chunkChars).join('');
-        this.directEmit('ansi-output', chunk);
+        this.directEmit('ansi-output', chunk, pacedNow());
         charOffset += chunkChars;
         this.bytesSent += chunkBytes;
       }

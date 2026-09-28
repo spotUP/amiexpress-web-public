@@ -131,6 +131,27 @@ describe('one pacer per web caller', () => {
 
     expect(`metered a second time: ${rec.writes.join('') !== FRAME}`).toBe('metered a second time: false');
   });
+
+  it("replays the server's spacing when the network bunches its chunks", async () => {
+    vi.useFakeTimers({ toFake: [...FAKE_CLOCK.toFake] });
+    mountAtBaud(2400);
+
+    await act(async () => {
+      socket.fire('ansi-output', 'a', { pacedAt: 1000 });
+      await vi.advanceTimersByTimeAsync(90);
+      // Sent 10 ms apart by the server, delivered together.
+      for (let i = 1; i <= 9; i++) socket.fire('ansi-output', String(i), { pacedAt: 1000 + i * 10 });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const atArrival = rec.writes.join('');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(`bunch painted on arrival: ${atArrival === 'a123456789'}`).toBe('bunch painted on arrival: false');
+    expect(rec.writes.join('')).toBe('a123456789');
+  });
 });
 
 describe('a pre-paced frame over the ansi-output seam, at MAX', () => {

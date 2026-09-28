@@ -87,6 +87,15 @@ export interface OutputAttributes {
    * start - pinned by `tests/transport/wire-encoding.test.ts`.
    */
   sourceCharset?: "cp437" | "iso-8859-1";
+  /**
+   * When the server's modem pacer meant this chunk to reach the caller, in
+   * milliseconds on the server's monotonic clock. Set only by
+   * `utils/modem-emulator.util.ts` on the chunks it meters. The browser
+   * replays that spacing through a jitter buffer, so a bunch the network
+   * delivered at once still paints at the modem's pace. Byte transports
+   * ignore it: there is no network hop after the pacer that it could fix.
+   */
+  pacedAt?: number;
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 
 import { Terminal } from '@xterm/xterm';
+import { PlayoutBuffer } from './playout-buffer';
 
 // Use String.fromCharCode(27) for ESC to survive Terser/Vite minification
 // Terser strips literal \x1b from string constants during minification
@@ -48,6 +49,12 @@ export interface ModemEmulatorOptions {
  */
 export interface ModemWriteOptions {
   prePaced?: boolean;
+  /**
+   * When the server's pacer meant this chunk to arrive (server clock, ms).
+   * Present only while the server meters the caller; such chunks are
+   * replayed at that spacing through a PlayoutBuffer.
+   */
+  pacedAt?: number;
 }
 
 /** A payload waiting its turn, with the pacing decision made at write time. */
@@ -71,8 +78,12 @@ export class ModemEmulator {
   // applies to BBS navigation so transient prompts stay readable.
   private doorActive: boolean = false;
 
+  /** Replays the server's pacing when the network bunched it. */
+  private playout: PlayoutBuffer;
+
   constructor(terminal: Terminal) {
     this.terminal = terminal;
+    this.playout = new PlayoutBuffer((data) => this.terminal.write(data));
   }
 
   /**
@@ -82,6 +93,7 @@ export class ModemEmulator {
    */
   setDoorActive(active: boolean): void {
     this.doorActive = active;
+    this.playout.flush();
     if (active) {
       // Drain pending BBS-phase content so door output isn't behind it.
       this.flushImmediate();
@@ -100,6 +112,7 @@ export class ModemEmulator {
    * MAX_SOFT_CAP_BPS (230400 bps ≈ 87ms per 80×25 screen).
    */
   enable(bps: number): void {
+    this.playout.flush();
     const effectiveBps = bps === 0 ? MAX_SOFT_CAP_BPS : bps;
     this.bps = effectiveBps;
     // 10 bits per byte (1 start + 8 data + 1 stop)
@@ -169,6 +182,14 @@ export class ModemEmulator {
    */
   write(data: string, options?: ModemWriteOptions): void {
     const prePaced = options?.prePaced === true;
+
+    if (!this.enabled && !this.doorActive) {
+      // The server meters this caller: no rate here, only the server's own
+      // spacing restored after the network bunched it.
+      if (typeof options?.pacedAt === 'number') this.playout.paced(data, options.pacedAt);
+      else this.playout.unpaced(data);
+      return;
+    }
 
     if (!this.enabled || this.doorActive) {
       // No throttling — either the emulator is disabled or a 68K door
