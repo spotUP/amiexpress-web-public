@@ -102,11 +102,21 @@ describe('every window shape', () => {
 });
 
 describe('what yields when space runs out', () => {
-  it('drops the sidebar before squeezing the chat', () => {
-    const layout = solve(MIN_CHAT_WIDTH + MIN_SIDEBAR_WIDTH - 1, 24);
+  /*
+   * Above forty columns. At forty and below the panels stack instead of
+   * sharing a row (ab57f6054, "the chat and the lists stop sharing a C64
+   * screen"), so these two used to run at 31 and 34 columns and stopped
+   * meaning what they say; the yield rules they pin live above the compact
+   * tier now.
+   */
+  it('squeezes the sidebar, never the chat, and drops one too thin to use', () => {
+    const squeezed = solve(41, 24, 30);
+    expect(squeezed.chat.width).toBe(MIN_CHAT_WIDTH);
+    expect(squeezed.sidebar!.width).toBe(41 - MIN_CHAT_WIDTH);
 
-    expect(layout.sidebar).toBeNull();
-    expect(layout.chat.width).toBeGreaterThanOrEqual(MIN_CHAT_WIDTH);
+    const tooThin = solve(80, 24, MIN_SIDEBAR_WIDTH - 1);
+    expect(tooThin.sidebar).toBeNull();
+    expect(tooThin.chat.width).toBe(80);
   });
 
   it('keeps the sidebar when it fits', () => {
@@ -118,10 +128,10 @@ describe('what yields when space runs out', () => {
   });
 
   it('narrows the sidebar rather than dropping it, while it is still useful', () => {
-    // 15 will not fit, but 10 will.
-    const layout = solve(MIN_CHAT_WIDTH + 10, 24, 15);
+    // 30 will not fit beside the chat at 50, but 26 will.
+    const layout = solve(50, 24, 30);
 
-    expect(layout.sidebar!.width).toBe(10);
+    expect(layout.sidebar!.width).toBe(50 - MIN_CHAT_WIDTH);
     expect(layout.chat.width).toBe(MIN_CHAT_WIDTH);
   });
 
