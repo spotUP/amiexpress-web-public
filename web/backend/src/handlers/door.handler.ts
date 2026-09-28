@@ -1687,7 +1687,7 @@ function padString(str: string, length: number): string {
  *   interactive prompt state that owns the next input.
  * - 'menu': normal completion — return to menu.
  */
-export type PostDoorAction = 'leaving' | 'chat' | 'segments' | 'pause' | 'interactive' | 'menu';
+export type PostDoorAction = 'leaving' | 'chat' | 'door' | 'segments' | 'pause' | 'interactive' | 'menu';
 
 /**
  * IS THE CALLER ON HIS WAY OUT?
@@ -1728,6 +1728,17 @@ export function postDoorMenuAction(session: BBSSession): PostDoorAction {
   }
   if (session.inChat) {
     return 'chat';
+  }
+  // A door is running, and it is not the one that just finished:
+  // executeAmigaDoor clears its own door state before a RETURNCOMMAND / CHAIN
+  // runs, so this is the NEXT door - a client or TypeScript door still
+  // running after processCommand returned. The menu would paint over it and
+  // DISPLAY_MENU would take its keys (the guard the dead launchAmigaDoor had
+  // and the live path lacked; lane-14 batch B, 2026-09-28).
+  // inDoorManager, not subState: every door runner sets it on entry and
+  // executeAmigaDoor clears it before the chain, so it names a LIVE door.
+  if ((session as any).inDoorManager) {
+    return 'door';
   }
   // Presence check, NOT segments.length: a ~CC_ door in the LAST segment
   // runs after that segment was already shift()ed (length === 0), but
@@ -1794,6 +1805,8 @@ export async function applyPostDoorMenuAction(
     // completePaging() set them — chat's own exitChat() is what restores
     // the menu once the chat session actually ends.
     console.log('[executeAmigaDoor] inChat active post-page-wait - skipping displayMainMenu');
+  } else if (postAction === 'door') {
+    console.log('[executeAmigaDoor] a chained door is still running - skipping displayMainMenu');
   } else if (postAction === 'segments') {
     // ~CC_ inline door ran inside screen-segment processing
     // (express.e:5455-5461) — more segments follow (e.g. the conference

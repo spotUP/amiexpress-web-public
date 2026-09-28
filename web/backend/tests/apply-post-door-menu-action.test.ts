@@ -120,3 +120,34 @@ describe("applyPostDoorMenuAction", () => {
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });
+
+describe("applyPostDoorMenuAction after a door chains into one still running", () => {
+  // A 68K door's RETURNCOMMAND / CHAIN runs the next command before this
+  // step; executeAmigaDoor has already cleared ITS OWN door state by then
+  // (door.handler.ts, before the chain block), so a door still marked
+  // running here is the NEXT one - a client or TypeScript door that keeps
+  // running after processCommand returns. Painting the menu over it (and
+  // setting DISPLAY_MENU, which takes the caller's keys away from it) is
+  // what the dead launchAmigaDoor guarded against and the live path never
+  // did (lane-14 batch B finding, 2026-09-28).
+  function chainedIntoARunningDoor(): AnySession {
+    return {
+      state: "loggedon",
+      user: { id: "user-1", username: "SPOT" },
+      subState: LoggedOnSubState.DOOR_RUNNING,
+      inDoorManager: true,
+      menuPause: false,
+    } as unknown as AnySession;
+  }
+
+  it("leaves the running door its screen and its keys", async () => {
+    const socket = makeSocket();
+    const session = chainedIntoARunningDoor();
+    const displayMainMenuFn = jest.fn();
+
+    await applyPostDoorMenuAction(socket, session, displayMainMenuFn);
+
+    expect(displayMainMenuFn).not.toHaveBeenCalled();
+    expect(session.subState).toBe(LoggedOnSubState.DOOR_RUNNING);
+  });
+});
