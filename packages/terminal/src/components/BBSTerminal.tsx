@@ -1558,8 +1558,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     term.options.cursorStyle = 'block';
     term.options.cursorInactiveStyle = 'outline';  // see the note below
 
-    // Apply font smoothing settings
-    setTimeout(() => {
+    // Apply font smoothing settings. Cleared on unmount: it focuses the
+    // terminal, and a terminal torn down within 100 ms has nothing to focus.
+    const settleTimer = setTimeout(() => {
       term.options.theme = XTERM_CONFIG.theme;
       term.options.cursorBlink = true;
       term.options.cursorStyle = 'block';
@@ -2718,11 +2719,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // transient screens flash past unreadably. ModemEmulator.enable() now
     // soft-caps bps=0 to MAX_SOFT_CAP_BPS (230400) so MAX still feels
     // snappy but full-screen updates paint over ~87ms instead of 16ms.
-    // Always route through enable() to get that behaviour.
+    // Above 0 the server meters this caller itself, so the browser stands
+    // aside (serverPaces) - one pacer per connection, as telnet has.
     socket.on('modem-speed', (bps: number) => {
       console.log(`[ModemEmulator] Speed changed to ${bps} bps`);
       if (modemEmulatorRef.current) {
-        modemEmulatorRef.current.enable(bps);
+        modemEmulatorRef.current.serverPaces(bps);
       }
       // Persist to cookie so the next session starts at the right speed
       // before the server responds with the user's saved preference.
@@ -3537,6 +3539,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Cleanup
     return () => {
+      clearTimeout(settleTimer);
       window.removeEventListener('focus', resyncFocus);
       document.removeEventListener('visibilitychange', resyncFocus);
       mediaHandlerRef.current?.destroy();

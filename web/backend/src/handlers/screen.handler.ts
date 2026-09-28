@@ -2852,19 +2852,14 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       const ansiBuffer = getAnsiBuffer(socket);
       ansiBuffer.setFlushDelay(0);
 
-      // The forced speed has to reach the pacer that actually paces. The
-      // client's ModemEmulator meters the same printable characters this
-      // server-side throttle does, at the CALLER's baud, so without this
-      // event an animation forced to 14400 still played at the caller's
-      // rate: measured 826 ms intended, 5,774 ms at 2400 (7x) for
-      // `Screens/flt.txt` - paced twice, slowest pacer winning.
-      //
-      // NOT the PRE_PACED attribute the wipes use: this sequence is
-      // BYTE-paced, and byte pacing is exactly what Socket.IO's transport
-      // batching destroys - the reason the client pacer exists. Telling it
-      // the speed keeps one smooth pacer at the intended rate. Same shape
-      // as the door path, which emits `modem-speed` 0 on entry and the
-      // saved speed on exit (door.handler.ts:2034, 2405).
+      // The client is told the speed too. Since audit item 17 (2026-09-28)
+      // the server meters every caller at a speed above 0 and the browser
+      // stands aside when it hears one (ModemEmulator.serverPaces), so this
+      // keeps the animation on ONE pacer at 14400. Before that the browser
+      // metered the same characters at the caller's baud: measured 826 ms
+      // intended, 5,774 ms at 2400 for `Screens/flt.txt`, slowest pacer
+      // winning. Same shape as the door path, which emits `modem-speed` 0 on
+      // entry and the saved speed on exit.
       socket.emit('modem-speed', 14400);
 
       console.log(`[ANSI-ANIM] Enabled 14.4kbps modem emulation for ${screenName} (was: ${session.savedModemState.bps} bps)`);

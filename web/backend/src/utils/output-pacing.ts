@@ -41,12 +41,12 @@
  * client-side second pipeline: the overlay/sfx/RIP/mouse handling in
  * BBSTerminal's `ansi-output` handler stays the ONE path screen bytes take.
  *
- * NOT for the byte-paced server sequences. `screen.handler.emitWithModem`
- * and `utils/modem-emulator.util.ts` meter the same printable characters
- * the client does, at the same rate; marking their chunks pre-paced would
- * hand the whole modem feel back to Socket.IO's batching - the reason the
- * client pacer was written. The forced-14400 ANSI-animation path is fixed
- * by telling the client its speed (`modem-speed`), not by bypassing it.
+ * Since audit item 17 (2026-09-28) the browser meters only at MAX (its
+ * 230400 bps soft cap) and before login; at a real modem speed the server's
+ * pacer (`utils/modem-emulator.util.ts`) is the only one. The attribute
+ * still matters at MAX, where a 26-frame wipe would otherwise be re-cut by
+ * the soft cap. The byte-paced server sequences are never marked: they ARE
+ * the pacer.
  */
 
 /**

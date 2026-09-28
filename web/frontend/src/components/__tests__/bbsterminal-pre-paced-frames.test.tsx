@@ -29,6 +29,8 @@ const rec = vi.hoisted(() => ({
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
+    reset() {}
+    clear() {}
     options: Record<string, any> = {};
     textarea: HTMLTextAreaElement | null = null;
     element: HTMLElement | null = null;
@@ -47,6 +49,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     writeln() {}
     input() {}
     focus() {}
+    blur() {}
     refresh() {}
     resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
     clearSelection() {}
@@ -106,12 +109,34 @@ function mountAtBaud(bps: number) {
   rec.writes.length = 0; // drop the mount's own banner writes
 }
 
-describe('a pre-paced frame over the ansi-output seam', () => {
-  it('lands whole at 2400 baud instead of being drip-fed', async () => {
-    vi.useFakeTimers({
-      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'],
+const FAKE_CLOCK = {
+  toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] as const,
+};
+
+/*
+ * At a real modem speed the server meters the caller (audit item 17,
+ * 2026-09-28), so the browser's pacer only runs at MAX - the 230400 bps
+ * soft cap, 23,040 bytes a second. That is where PRE_PACED still matters:
+ * at 23 KB/s a 1,600-character frame costs ~70 ms, and a wipe is 26 of them.
+ */
+describe('one pacer per web caller', () => {
+  it('at 2400 baud the browser writes what arrives - the server already metered it', async () => {
+    vi.useFakeTimers({ toFake: [...FAKE_CLOCK.toFake] });
+    mountAtBaud(2400);
+
+    await act(async () => {
+      socket.fire('ansi-output', FRAME);
+      await vi.advanceTimersByTimeAsync(0);
     });
-    mountAtBaud(2400); // 240 bytes/sec: 1,600 characters would take 6.7 s
+
+    expect(`metered a second time: ${rec.writes.join('') !== FRAME}`).toBe('metered a second time: false');
+  });
+});
+
+describe('a pre-paced frame over the ansi-output seam, at MAX', () => {
+  it('lands whole instead of being drip-fed through the soft cap', async () => {
+    vi.useFakeTimers({ toFake: [...FAKE_CLOCK.toFake] });
+    mountAtBaud(0);
 
     await act(async () => {
       socket.fire('ansi-output', FRAME, { prePaced: true });
@@ -122,45 +147,41 @@ describe('a pre-paced frame over the ansi-output seam', () => {
     expect(rec.writes.filter((w) => w === FRAME)).toHaveLength(1);
   });
 
-  it('an unmarked payload is still paced at 2400 baud', async () => {
-    vi.useFakeTimers({
-      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'],
-    });
-    mountAtBaud(2400);
+  it('an unmarked payload is still paced by the soft cap', async () => {
+    vi.useFakeTimers({ toFake: [...FAKE_CLOCK.toFake] });
+    mountAtBaud(0);
 
     await act(async () => {
       socket.fire('ansi-output', FRAME);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(20);
     });
 
     const delivered = (rec.writes.join('').match(/W/g) || []).length;
-    expect(`whole frame delivered in 100 ms: ${delivered === 1600}`)
-      .toBe('whole frame delivered in 100 ms: false');
-    expect(`something delivered in 100 ms: ${delivered > 0}`)
-      .toBe('something delivered in 100 ms: true');
+    expect(`whole frame delivered in 20 ms: ${delivered === 1600}`)
+      .toBe('whole frame delivered in 20 ms: false');
+    expect(`something delivered in 20 ms: ${delivered > 0}`)
+      .toBe('something delivered in 20 ms: true');
   });
 
   it('a pre-paced frame does not overtake text queued before it', async () => {
-    vi.useFakeTimers({
-      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'],
-    });
-    mountAtBaud(2400);
+    vi.useFakeTimers({ toFake: [...FAKE_CLOCK.toFake] });
+    mountAtBaud(0);
 
     await act(async () => {
-      socket.fire('ansi-output', 'T'.repeat(240)); // one second of text
+      socket.fire('ansi-output', 'T'.repeat(2304)); // 100 ms of text at the soft cap
       socket.fire('ansi-output', FRAME, { prePaced: true });
-      await vi.advanceTimersByTimeAsync(200);
+      await vi.advanceTimersByTimeAsync(20);
     });
 
     expect(`frame overtook queued text: ${rec.writes.join('').includes('WWWW')}`)
       .toBe('frame overtook queued text: false');
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1100);
+      await vi.advanceTimersByTimeAsync(200);
     });
 
     const out = rec.writes.join('');
-    expect(`text delivered: ${(out.match(/T/g) || []).length}`).toBe('text delivered: 240');
+    expect(`text delivered: ${(out.match(/T/g) || []).length}`).toBe('text delivered: 2304');
     expect(`frame after the text: ${out.indexOf('W') > out.lastIndexOf('T')}`)
       .toBe('frame after the text: true');
   });

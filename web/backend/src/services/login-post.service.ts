@@ -310,7 +310,8 @@ export async function runPostAuthLogin(
     console.error("[LOGIN] modem emulator install failed:", err);
   }
 
-  // Web frontend uses client-side emulation; telnet/SSH ignore.
+  // The browser stands aside at a speed above 0 (this pacer meters it)
+  // and soft-caps MAX itself; telnet/SSH ignore the event.
   (session as any).modemSpeed = userBaud;
   emitter.emit("modem-speed", userBaud);
 

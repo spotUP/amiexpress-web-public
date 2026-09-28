@@ -36,6 +36,8 @@ const rec = vi.hoisted(() => ({
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
+    reset() {}
+    clear() {}
     options: Record<string, any>;
     /** Every write to options.fontFamily, in order. xterm turns each
      * CHANGED write into CharSizeService.measure(); the test uses the
@@ -71,6 +73,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     writeln() {}
     input() {}
     focus() {}
+    blur() {}
     refresh() {}
     resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
     clearSelection() {}

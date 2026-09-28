@@ -40,6 +40,8 @@ const rec = vi.hoisted<{ terminals: FakeTerminalLike[]; socket: unknown }>(() =>
  */
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
+    reset() {}
+    clear() {}
     options: Record<string, unknown>;
     textarea: HTMLTextAreaElement | null = null;
     element: HTMLElement | null = null;
@@ -62,6 +64,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     writeln() {}
     input() {}
     focus() {}
+    blur() {}
     refresh() {}
     resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
     clearSelection() {}

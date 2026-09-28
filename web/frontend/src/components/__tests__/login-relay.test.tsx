@@ -29,6 +29,8 @@ const rec = vi.hoisted(() => ({
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
+    reset() {}
+    clear() {}
     options: Record<string, any>;
     textarea: HTMLTextAreaElement | null = null;
     element: HTMLElement | null = null;
@@ -56,6 +58,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
     writeln(text: string) { this.writes.push(text + '\r\n'); }
     input() {}
     focus() {}
+    blur() {}
     refresh() {}
     resize(cols: number, rows: number) { this.cols = cols; this.rows = rows; }
     clearSelection() {}

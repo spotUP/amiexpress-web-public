@@ -4,8 +4,9 @@
  * Throttles terminal output to simulate classic modem speeds.
  * Queues output and writes it to xterm.js at the configured baud rate.
  *
- * Unlike server-side throttling, client-side throttling works correctly
- * with Socket.IO/WebSocket which batch messages at the transport layer.
+ * Once the caller is logged in at a real modem speed the server meters
+ * the output and this pacer stands aside (see `serverPaces`). It paces on
+ * its own only before login (the cookie speed) and at MAX (the soft cap).
  */
 
 import { Terminal } from '@xterm/xterm';
@@ -111,6 +112,27 @@ export class ModemEmulator {
       `[ModemEmulator] Enabled at ${effectiveBps} bps (${this.bytesPerSecond} bytes/sec)` +
         (bps === 0 ? ` — MAX soft-cap from bps=0` : '')
     );
+  }
+
+  /**
+   * The server's word on this connection's speed (`modem-speed`).
+   *
+   * At a real modem speed the SERVER meters the caller's output
+   * (web/backend/src/utils/modem-emulator.util.ts, installed at login for
+   * every transport). Metering it here as well paced every web caller
+   * twice - the reason PRE_PACED had to exist, and a second clock telnet
+   * callers never had (web-vs-telnet audit item 17, 2026-09-28). So a
+   * speed above 0 turns this pacer off, delivering what it still holds in
+   * order first. At 0 (MAX) the server sends unpaced and this pacer keeps
+   * the browser-only soft cap, which is a rendering concern: xterm.js
+   * paints a whole screen in one frame.
+   *
+   * `enable` stays for pacing the browser does on its own - the cookie
+   * speed before login, when no server pacer exists yet.
+   */
+  serverPaces(bps: number): void {
+    if (bps > 0) this.disable();
+    else this.enable(0);
   }
 
   /**

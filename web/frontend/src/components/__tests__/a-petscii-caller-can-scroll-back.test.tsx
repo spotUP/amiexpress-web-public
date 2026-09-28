@@ -24,6 +24,7 @@ const rec = vi.hoisted(() => ({ socket: null as any }));
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
   class FakeTerminal {
+    clear() {}
     options: Record<string, any> = {};
     textarea: HTMLTextAreaElement | null = null;
     element: HTMLElement | null = null;

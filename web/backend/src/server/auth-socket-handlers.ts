@@ -211,7 +211,7 @@ console.error('[Session Restore] Failed to load command history:', err);
           console.log(`[SESSION RESTORE] Modem emulation re-enabled at ${userBaud} bps for ${user.username}`);
         }
 
-        // Send modem speed to frontend for client-side emulation
+        // Tell the browser the speed: above 0 it stands aside for the server pacer
         // Also track in session so doors can query it via bbs.getModemSpeed()
         console.log(`[SESSION RESTORE] Emitting modem-speed event with userBaud=${userBaud}`);
         (session as any).modemSpeed = userBaud;
