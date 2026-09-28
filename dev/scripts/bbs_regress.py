@@ -302,6 +302,50 @@ def case_message_read(b: Board, _tmp: str) -> str:
     return "read a message, no colour code as text, back at the menu"
 
 
+def message_count(b: Board) -> int:
+    found = re.search(r"(\d+) messages here", b.render())
+    if not found:
+        raise Failed(f"the message list does not say how many messages it holds\n{b.render()}")
+    return int(found.group(1))
+
+
+def case_message_post(b: Board, _tmp: str) -> str:
+    """E posts to everyone on conference 1: the list holds one more after S.
+
+    Writes a message to the board it runs against - local by default."""
+    b.send("J 1\r")
+    to_menu(b)
+    b.send("R\r")
+    expect(b, re.compile(r"Q=Leave$", re.I), "the message list", timeout=45)
+    before = message_count(b)
+    b.send("Q")
+    to_menu(b)
+    b.send("E\r")
+    expect(b, re.compile(r"Post to everyone in this conference\? \[Y/n\]$", re.I), "the recipient question", timeout=45)
+    b.send("Y")
+    expect(b, re.compile(r"Subject:$", re.I), "the subject prompt")
+    b.send(f"regress {int(time.time())}\r")
+    expect(b, re.compile(r"1>$"), "the first body line")
+    b.send("posted by bbs_regress.py\r")
+    b.send("\r")
+    expect(b, re.compile(r"Msg\. Options: .*>:$", re.I), "the message options")
+    b.send("S\r")
+    expect(b, re.compile(r"Q=Leave$", re.I), "the list after saving", timeout=45)
+    after = message_count(b)
+    check(after == before + 1, f"the list held {before} and holds {after} after posting", b)
+    b.send("Q")
+    to_menu(b)
+    return f"posted: {before} -> {after} messages"
+
+
+def case_door_ctop(b: Board, _tmp: str) -> str:
+    """A door that draws and hands the menu back by itself."""
+    b.send("ctop\r")
+    to_menu(b, timeout=60)
+    expect_on_screen(b, r"Top Uploader Record", "the ctop table")
+    return "ctop drew its table and gave the menu back"
+
+
 def case_zmodem_upload(b: Board, tmp: str) -> str:
     set_protocol(b, "ZMODEM")
     name, body = upload(b, tmp, "zmodem")
@@ -382,6 +426,8 @@ CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("bulletins", case_bulletins),
     ("file-list", case_file_list),
     ("message-read", case_message_read),
+    ("message-post", case_message_post),
+    ("door-ctop", case_door_ctop),
     ("zmodem-upload", case_zmodem_upload),
     ("zmodem-download", case_zmodem_download),
     ("xmodem-upload", case_xmodem_upload),
