@@ -631,6 +631,22 @@ export type DoorEvent =
 import type { Socket } from 'socket.io';
 
 /**
+ * A node with a logged-in caller on it, as `getOnlineUsers()` returns it.
+ *
+ * The board answers from its own session map, in the door's process, so the
+ * call is synchronous. This was declared `Promise<User[]>` while the board
+ * returned these rows directly; a door awaiting the declared shape got rows
+ * with none of the fields it was told to expect.
+ */
+export interface OnlineNode {
+  nodeNumber: number;
+  username: string;
+  location: string;
+  ipAddress: string;
+  status: 'active';
+}
+
+/**
  * User (SDK v2.0)
  * Modern user interface for SDK v2.0 Door class
  */
@@ -893,8 +909,8 @@ export interface BBSApi {
   /** Get user by ID */
   getUser(userId: string): Promise<User | null>;
 
-  /** Get all online users */
-  getOnlineUsers(): Promise<User[]>;
+  /** Who is on the board: one row per node with a logged-in caller. */
+  getOnlineUsers(): OnlineNode[];
 
   /**
    * Send a PRIVATE message to a user, in the caller's conference.

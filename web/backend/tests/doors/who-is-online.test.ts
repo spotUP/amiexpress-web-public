@@ -29,6 +29,7 @@ jest.mock('../../src/index', () => ({}));
 // `tone` (same stub as tests/doors/ncurses-pong-takes-input.test.ts).
 jest.mock('tone', () => ({}), { virtual: true });
 
+import type { BBSApi as SdkBBSApi } from '../../../../sdk/core/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Socket } from 'socket.io';
@@ -142,18 +143,15 @@ describe('the BBS door API', () => {
   beforeEach(() => sessions.clear());
   afterEach(() => sessions.clear());
 
-  it('implements the getOnlineUsers the SDK has always declared', () => {
-    // REASONABLE source read, for the SDK half only: an interface member is a
-    // type, invisible at runtime.
-    const sdk = fs.readFileSync(
-      path.join(__dirname, '..', '..', '..', '..', 'sdk', 'core', 'types.ts'),
-      'utf8',
-    );
-    expect(sdk).toContain('getOnlineUsers()');
-
+  it('implements the getOnlineUsers the SDK declares, in the shape it declares', () => {
     putSession(4, { username: 'Spot', location: 'nEVERLaND', ip: '10.0.0.9' });
     const api = new BBSApi({ emit: () => true, on: () => undefined } as any, { nodeId: 1 } as any);
-    expect(api.getOnlineUsers()).toEqual(listOnlineNodes());
+    // The SDK declared `Promise<User[]>` while the board returned node rows
+    // synchronously. The row type is now the SDK's own (who-is-online.ts
+    // imports it), so the board's tsc fails when the two disagree; this
+    // checks the call answers synchronously with those rows.
+    const declared: ReturnType<SdkBBSApi['getOnlineUsers']> = api.getOnlineUsers();
+    expect(declared).toEqual(listOnlineNodes());
     expect(api.getOnlineUsers().map((n) => n.username)).toEqual(['Spot']);
   });
 

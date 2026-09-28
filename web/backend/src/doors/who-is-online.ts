@@ -17,14 +17,11 @@
  */
 
 import { sessions } from '../server/session-manager';
+import type { OnlineNode } from '@amiexpress/bbs-door-sdk/core/types';
 
-export interface OnlineNode {
-  nodeNumber: number;
-  username: string;
-  location: string;
-  ipAddress: string;
-  status: 'active';
-}
+// The row shape is the SDK's, so a door and the board cannot disagree about
+// it: it was declared `Promise<User[]>` there while this returned these rows.
+export type { OnlineNode };
 
 /**
  * The nodes with a logged-in user on them.
