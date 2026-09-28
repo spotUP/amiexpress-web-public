@@ -2,25 +2,13 @@
  * User Repository Tests
  */
 
-jest.mock('../../src/services/UserFileManager', () => ({
-  userFileManager: {
-    writeUserFiles: jest.fn(),
-    updateUserDataFile: jest.fn(),
-    deleteUserSlot: jest.fn(),
-  }
-}));
-jest.mock('../../src/services/UserDatabaseManager', () => ({
-  userDatabaseManager: {
-    getUserCount: jest.fn().mockReturnValue(0),
-    userToStruct: jest.fn().mockReturnValue({ slotNumber: 0 }),
-    userToKeys: jest.fn().mockReturnValue({}),
-    userToMisc: jest.fn().mockReturnValue({}),
-    appendUser: jest.fn(),
-    updateUser: jest.fn(),
-    deleteUser: jest.fn(),
-  }
-}));
-
+// NO jest.mock of UserFileManager / UserDatabaseManager: tests/setup.ts loads
+// the repository (through the global test database) before this file runs, so
+// a mock here never reaches it - the "does not write to disk" test passed on
+// mocks the repository never called (2026-09-28). The real managers write to
+// this run's guarded temp board (tests/live-data-guard.ts), and the disk
+// assertions below count what is actually there.
+import { userDatabaseManager } from '../../src/services/UserDatabaseManager';
 import { UserRepository } from '../../src/database/user-repository';
 
 async function waitForTestDb(): Promise<any> {
@@ -160,15 +148,11 @@ describe('UserRepository', () => {
       // user creation, polluting user.data with test users, admin API users, etc.
       // The disk write belongs exclusively in appendUserToDisk() called from the BBS
       // new-user registration flow.
-      const { userDatabaseManager } = require('../../src/services/UserDatabaseManager');
-      const { userFileManager } = require('../../src/services/UserFileManager');
-      (userDatabaseManager.appendUser as jest.Mock).mockClear();
-      (userFileManager.writeUserFiles as jest.Mock).mockClear();
+      const before = userDatabaseManager.getUserCount();
 
       await repo.createUser(makeUserData());
 
-      expect(userDatabaseManager.appendUser).not.toHaveBeenCalled();
-      expect(userFileManager.writeUserFiles).not.toHaveBeenCalled();
+      expect(userDatabaseManager.getUserCount()).toBe(before);
     });
   });
 
@@ -179,16 +163,11 @@ describe('UserRepository', () => {
       // deleted slot the two differ, and the live board's test account came
       // out slot 50 in the database and slot 51 on disk (2026-09-28). The disk
       // is what AmiExpress reads, so the database follows it.
-      //
-      // The REAL disk manager, in the run's guarded temp board
-      // (tests/live-data-guard.ts): tests/setup.ts loads the repository before
-      // this file's jest.mock can reach it, so the mock above never does.
-      const disk = jest.requireActual('../../src/services/UserDatabaseManager').userDatabaseManager;
       const id = await repo.createUser(makeUserData());
 
       await repo.appendUserToDisk(id);
 
-      expect((await repo.getUserById(id))!.slotNumber).toBe(disk.getUserCount());
+      expect((await repo.getUserById(id))!.slotNumber).toBe(userDatabaseManager.getUserCount());
     });
   });
 
