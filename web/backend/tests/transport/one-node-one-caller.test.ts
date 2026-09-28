@@ -58,4 +58,21 @@ describe('one node, one caller', () => {
   it('still hands out node 1 when nobody holds anything', async () => {
     expect(getNextAvailableNodeId()).toBe(1);
   });
+
+  /*
+   * ONE CAP, ONE FULL BOARD. Telnet and SSH counted to 99 whatever max_nodes
+   * said, and with 1..99 held answered 1 - a second caller on somebody's
+   * node - where the web stopped at max_nodes and refused (web-vs-telnet audit
+   * item 6, 2026-09-28).
+   */
+  it("numbers telnet callers from the board's node table and says so when it is full", async () => {
+    const table = nodeManager.configuredNodeIds();
+    expect(table.length).toBeGreaterThan(0);
+    for (const id of table) sessions.set(String(id), { nodeId: id } as any);
+
+    expect(getNextAvailableNodeId()).toBeNull();
+
+    sessions.delete(String(table[table.length - 1]));
+    expect(getNextAvailableNodeId()).toBe(table[table.length - 1]);
+  });
 });

@@ -15,7 +15,7 @@
 import { Server as NetServer, Socket } from 'net';
 import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import { EventEmitter } from 'events';
-import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
+import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession, allNodesBusyNotice } from './session-manager';
 import { LOCALHOST_IPS } from '../constants/localhost-ips';
 import { BBSSession } from '../index';
 import { config } from '../config';
@@ -236,10 +236,12 @@ export class TelnetConnection extends EventEmitter {
    */
   private terminalTypeLocked: boolean = false;
 
-  constructor(socket: Socket, options?: { petsciiDefault?: boolean }) {
+  constructor(socket: Socket, options?: { petsciiDefault?: boolean; nodeId?: number }) {
     super();
     this.socket = socket;
-    this.nodeId = getNextAvailableNodeId();
+    const nodeId = options?.nodeId ?? getNextAvailableNodeId();
+    if (nodeId === null) throw new Error('No free node');
+    this.nodeId = nodeId;
     this.sessionId = `telnet-${this.nodeId}-${Date.now()}`;
 
     if (options?.petsciiDefault) {
@@ -862,8 +864,18 @@ console.log('[Telnet Server] Stopped');
       return;
     }
 
+    // A node first, as the web path takes one: a full board says so and
+    // hangs up rather than seating a second caller on somebody's node.
+    const nodeId = getNextAvailableNodeId();
+    if (nodeId === null) {
+      console.warn(`[Telnet Server] All nodes busy - refusing ${remoteAddress}`);
+      socket.write(allNodesBusyNotice());
+      socket.end();
+      return;
+    }
+
     // Create telnet connection with IAC processing
-    const connection = new TelnetConnection(socket, { petsciiDefault: this.petsciiDefault });
+    const connection = new TelnetConnection(socket, { petsciiDefault: this.petsciiDefault, nodeId });
 
     // Store connection
     this.connections.set(connection.sessionId, connection);

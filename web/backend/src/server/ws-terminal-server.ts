@@ -30,7 +30,7 @@ type WSLike = {
 };
 
 import { BBSSession } from "../index";
-import { getNextAvailableNodeId } from "./session-manager";
+import { getNextAvailableNodeId, allNodesBusyNotice } from "./session-manager";
 
 export class WSTerminalConnection extends EventEmitter {
   private ws: WSLike;
@@ -39,10 +39,12 @@ export class WSTerminalConnection extends EventEmitter {
   public terminalType: string = "modern";
   public session: BBSSession | null = null;
 
-  constructor(ws: WSLike, remoteAddress: string) {
+  constructor(ws: WSLike, remoteAddress: string, assignedNode?: number) {
     super();
     this.ws = ws;
-    this.nodeId = getNextAvailableNodeId();
+    const nodeId = assignedNode ?? getNextAvailableNodeId();
+    if (nodeId === null) throw new Error('No free node');
+    this.nodeId = nodeId;
     this.sessionId = `wsterm-${this.nodeId}-${Date.now()}`;
     this._remoteAddress = remoteAddress;
 
@@ -139,7 +141,15 @@ export function attachWSTerminalServer(
         ?.trim() ||
       req?.socket?.remoteAddress ||
       "unknown";
-    const conn = new WSTerminalConnection(ws, remoteAddress);
+    // A node first, as every other transport takes one; a full board says so.
+    const nodeId = getNextAvailableNodeId();
+    if (nodeId === null) {
+      console.warn(`[WS-Terminal] All nodes busy - refusing ${remoteAddress}`);
+      try { ws.send(allNodesBusyNotice()); } catch { /* already gone */ }
+      try { ws.close(); } catch { /* already gone */ }
+      return;
+    }
+    const conn = new WSTerminalConnection(ws, remoteAddress, nodeId);
     console.log(
       `[WS-Terminal] Connection from ${remoteAddress} on node ${conn.nodeId}`,
     );

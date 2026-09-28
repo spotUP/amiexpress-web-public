@@ -74,6 +74,15 @@ export class NodeManager {
     return null;
   }
 
+  /**
+   * The board's nodes, 1..max_nodes. Every transport numbers its callers from
+   * this table (session-manager getNextAvailableNodeId), so one cap and one
+   * "all nodes are busy" hold for web, telnet and SSH alike.
+   */
+  configuredNodeIds(): number[] {
+    return Array.from(this.nodes.keys()).sort((a, b) => a - b);
+  }
+
   /** Nodes this table has handed out, whether or not a session holds them yet. */
   reservedNodeIds(): number[] {
     return Array.from(this.nodes.values()).filter((n) => n.status === 'busy').map((n) => n.id);

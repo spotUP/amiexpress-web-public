@@ -89,6 +89,7 @@ import {
   socketToUser,
   setSession,
   getNextAvailableNodeId,
+  allNodesBusyNotice,
   createSession,
   socketToNodeId,
 } from "./server/session-manager";
@@ -978,6 +979,9 @@ console.error(
       if (decoded.chatOnly || chatOnlyQuery) {
         // Create a proper BBS session for web chat users
         const nodeId = getNextAvailableNodeId();
+        // A full board refuses here as it does on every transport; the auth
+        // failure below tells the chat client it could not connect.
+        if (nodeId === null) throw new Error("All nodes are busy");
         const session = createSession(nodeId);
 
         // Attach user info to the session
@@ -1363,6 +1367,14 @@ console.log(
       "[ChatOnly] Launching livechat door directly (door will handle login)"
     );
 
+    // A node first, as every other transport takes one; a full board says so.
+    const chatNodeId = getNextAvailableNodeId();
+    if (chatNodeId === null) {
+      socket.emit("ansi-output", allNodesBusyNotice());
+      socket.disconnect();
+      return;
+    }
+
     // Create minimal session for chat
     const sessionStart = Date.now();
     const session: BBSSession = {
@@ -1399,7 +1411,7 @@ console.log(
       blockOLM: false,
       loginTime: Date.now(),
       nodeStartTime: Date.now(),
-      nodeId: getNextAvailableNodeId(),
+      nodeId: chatNodeId,
       loginRetryCount: 0,
       lastMsgReadConf: 0,
       lastNewReadConf: 0,
@@ -1468,19 +1480,7 @@ console.warn(
     nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
   } catch (error) {
 console.error("Failed to assign node to session:", error);
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
-    );
-    socket.emit("ansi-output", "\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n");
-    socket.emit(
-      "ansi-output",
-      "\x1b[33mPlease try again in a moment.\x1b[0m\r\n"
-    );
-    socket.emit(
-      "ansi-output",
-      "\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
-    );
+    socket.emit("ansi-output", allNodesBusyNotice());
     socket.disconnect();
     return;
   }

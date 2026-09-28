@@ -89,19 +89,34 @@ export function nodeIdsInUse(): Set<number> {
  * window is given the same number. See NodeManager.getAvailableNode for the
  * other half.
  */
-export function getNextAvailableNodeId(): number {
+export function getNextAvailableNodeId(): number | null {
   const usedNodeIds = nodeIdsInUse();
   const { nodeManager } = require('../services/node-manager.service');
   for (const id of nodeManager.reservedNodeIds() as number[]) usedNodeIds.add(id);
 
-  // Find first available node ID (1-99)
-  for (let i = 1; i < 100; i++) {
-    if (!usedNodeIds.has(i)) {
-      return i;
-    }
+  /*
+   * THE BOARD'S NODES, NOT 1..99. Telnet and SSH counted to 99 whatever
+   * max_nodes said, and when all 99 were held answered 1 - a second caller on
+   * a node somebody already had. The web path stops at max_nodes and says
+   * "all nodes are busy" (web-vs-telnet audit item 6, 2026-09-28). Null now
+   * means the same thing on every transport: the board is full. A node table
+   * not initialised yet (a test, the first instant of boot) falls back to the
+   * old range rather than refusing everyone.
+   */
+  const configured: number[] = nodeManager.configuredNodeIds();
+  const candidates = configured.length > 0 ? configured : Array.from({ length: 99 }, (_, i) => i + 1);
+  for (const id of candidates) {
+    if (!usedNodeIds.has(id)) return id;
   }
+  return null;
+}
 
-  return 1; // Fallback (shouldn't happen with 99 nodes)
+/** What a caller is told when every node is taken - one text, every transport. */
+export function allNodesBusyNotice(): string {
+  return '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n'
+    + '\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n'
+    + '\x1b[33mPlease try again in a moment.\x1b[0m\r\n'
+    + '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n';
 }
 
 /**

@@ -56,10 +56,12 @@ export class SSHConnection extends EventEmitter {
   private terminalWidth: number = 80;
   private terminalHeight: number = 24;
 
-  constructor(connection: Connection) {
+  constructor(connection: Connection, assignedNode?: number) {
     super();
     this.connection = connection;
-    this.nodeId = getNextAvailableNodeId();
+    const nodeId = assignedNode ?? getNextAvailableNodeId();
+    if (nodeId === null) throw new Error('No free node');
+    this.nodeId = nodeId;
     this.sessionId = `ssh-${this.nodeId}-${Date.now()}`;
 
     // Set up connection event handlers
@@ -375,8 +377,17 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
       return;
     }
 
+    // A node first, as the web and telnet paths take one. An SSH client is
+    // still authenticating here, so a full board just closes it.
+    const nodeId = getNextAvailableNodeId();
+    if (nodeId === null) {
+console.warn(`[SSH Server] All nodes busy - refusing ${remoteAddress}`);
+      client.end();
+      return;
+    }
+
     // Create SSH connection wrapper
-    const connection = new SSHConnection(client);
+    const connection = new SSHConnection(client, nodeId);
 
     // Store connection
     this.connections.set(connection.sessionId, connection);
