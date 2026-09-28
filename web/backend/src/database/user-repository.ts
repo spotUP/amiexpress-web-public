@@ -144,6 +144,12 @@ export class UserRepository extends BaseRepository<User> {
       const keysStruct = userDatabaseManager.userToKeys(user, slotNumber);
       const miscStruct = userDatabaseManager.userToMisc(user);
       userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
+      // The database takes the slot the record LANDED in. createUser guessed
+      // MAX(slotnumber)+1, which is a different number whenever user.data
+      // ends in a deleted slot - the live board's test account came out slot
+      // 50 in the database and 51 on disk (2026-09-28). The disk is what
+      // AmiExpress reads, so the database follows it.
+      this.run('UPDATE users SET slotnumber = ? WHERE id = ?', [slotNumber, id]);
 console.log(`[Database] Appended BBS user ${user.username} to user.data/keys/misc (slot ${slotNumber})`);
     } catch (error) {
 console.error(`[Database] Failed to append BBS user to disk:`, error);

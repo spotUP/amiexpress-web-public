@@ -172,6 +172,26 @@ describe('UserRepository', () => {
     });
   });
 
+  describe('appendUserToDisk', () => {
+    it('records the slot it wrote on disk, not the one createUser guessed', async () => {
+      // createUser takes MAX(slotnumber)+1 from the database; the disk append
+      // takes the record count + 1. On a board whose user.data ends in a
+      // deleted slot the two differ, and the live board's test account came
+      // out slot 50 in the database and slot 51 on disk (2026-09-28). The disk
+      // is what AmiExpress reads, so the database follows it.
+      //
+      // The REAL disk manager, in the run's guarded temp board
+      // (tests/live-data-guard.ts): tests/setup.ts loads the repository before
+      // this file's jest.mock can reach it, so the mock above never does.
+      const disk = jest.requireActual('../../src/services/UserDatabaseManager').userDatabaseManager;
+      const id = await repo.createUser(makeUserData());
+
+      await repo.appendUserToDisk(id);
+
+      expect((await repo.getUserById(id))!.slotNumber).toBe(disk.getUserCount());
+    });
+  });
+
   describe('getUserByUsername', () => {
     it('finds user case-insensitively', async () => {
       const data = makeUserData({ username: `CasedUser_${Date.now()}` });
