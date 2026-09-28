@@ -405,7 +405,8 @@ console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}; reading its D
           ...f,
           id: 0,
           description: '',
-          uploader: 'sysop',
+          // A DIR line names no uploader; saying 'sysop' credited one.
+          uploader: '',
           downloads: 0,
           areaId: area ? area.id : 0,
           status: 'active',

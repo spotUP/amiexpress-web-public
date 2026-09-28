@@ -50,61 +50,10 @@ import { doorConferencePath, doorTooltypes } from './conference-access';
 export { applyInstallMetadata, buildDoorList };
 export type { DoorListEntry };
 
-export interface BBSUser {
-  id: string;
-  username: string;
-  realname?: string;
-  location?: string;
-  phone?: string;
-  email?: string;
-  secLevel: number;
-  downloads?: number;
-  uploads?: number;
-  timeToday?: number;
-  lastCall?: Date;
-  numCalls?: number;
-  birthday?: string;
-  gender?: string;
-}
-
-export interface BBSConference {
-  id: number;
-  name: string;
-  description?: string;
-  accessLevel: number;
-}
-
-export interface BBSNode {
-  nodeId: number;
-  username?: string;
-  location?: string;
-  activity?: string;
-  online: boolean;
-}
-
-export interface BBSSystemInfo {
-  bbsName: string;
-  sysopName: string;
-  version: string;
-  nodes: number;
-}
-
-/**
- * The board's UI sound library, as the terminal actually implements it.
- *
- * Every name here exists in `packages/terminal/src/utils/media-handler.ts`'s
- * `soundLibrary`. The union is closed on purpose: a typo becomes a type error
- * rather than silence, which is the one bug a sound effect cannot report
- * about itself. (An unknown name falls through MediaHandler's switch and
- * plays nothing at all.)
- */
-export type UiSound =
-  | 'click' | 'hover' | 'select' | 'menu-open' | 'menu-close' | 'menu-select'
-  | 'success' | 'error' | 'warning' | 'confirm' | 'cancel'
-  | 'notification' | 'message' | 'send' | 'typing'
-  | 'join' | 'leave' | 'mention'
-  | 'popup' | 'close' | 'minimize' | 'maximize' | 'dock'
-  | 'default';
+// The door-facing shapes live in ./bbs-api-types (2026-09-28, file size);
+// re-exported so every existing import from here still resolves.
+import type { BBSUser, BBSConference, BBSNode, BBSSystemInfo, UiSound } from './bbs-api-types';
+export type { BBSUser, BBSConference, BBSNode, BBSSystemInfo, UiSound };
 
 /**
  * Shortest gap between two plays of the SAME sound.
@@ -1312,7 +1261,10 @@ console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
   async addUserNote(username: string, text: string): Promise<boolean> {
     const target = await db.getUserByUsername(username);
     if (!target?.slotNumber) return false;
-    const author = this.session?.user?.username ?? 'sysop';
+    // With no caller the note is the board's own: signed with the sysop name
+    // the board is configured with (getSystemInfo), not a literal account
+    // name - there is no account called sysop on the live board (2026-09-28).
+    const author = this.session?.user?.username ?? (await this.getSystemInfo()).sysopName;
     return appendUserNote(target.slotNumber, author, text);
   }
 

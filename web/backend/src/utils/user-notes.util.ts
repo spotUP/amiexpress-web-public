@@ -63,7 +63,7 @@ export function appendUserNote(slotNumber: number, author: string, text: string)
   const note = (text ?? '').trim();
   if (!note) return false;
   const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  const line = `[${stamp}] (${(author || 'sysop').trim()}) ${note}`;
+  const line = `[${stamp}] (${(author || 'Sysop').trim()}) ${note}`;
   const existing = readUserNotes(slotNumber) ?? '';
   const next = existing ? `${existing.replace(/\n*$/, '\n')}${line}\n` : `${line}\n`;
   return saveUserNotes(slotNumber, next);
