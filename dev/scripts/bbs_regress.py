@@ -255,6 +255,30 @@ def case_stats(b: Board, _tmp: str) -> str:
     return "stats shown, prompt back"
 
 
+def case_bulletins(b: Board, _tmp: str) -> str:
+    """B lists the bulletins, reads one, and Q leaves - walked by hand first."""
+    b.send("B\r")
+    expect(b, re.compile(r"Select Bulletin .*Quit:$", re.I), "the bulletin menu")
+    b.send("1\r")
+    expect(b, re.compile(r"Select .*Quit:$", re.I), "the bulletin reader's prompt after bulletin 1")
+    b.send("Q\r")
+    to_menu(b)
+    return "listed, read bulletin 1, back at the menu"
+
+
+def case_file_list(b: Board, _tmp: str) -> str:
+    """F on directory 1 lists files and hands back the menu after Q."""
+    b.send("F\r")
+    expect(b, re.compile(r"Directories: .*\?$", re.I), "the directory prompt")
+    b.send("1\r")
+    expect(b, re.compile(r"(More\?|Quit:)", re.I), "the end of the listing")
+    shown = b.render()
+    check("Scanning dir 1" in shown, "the listing never scanned dir 1", b)
+    b.send("Q\r")
+    to_menu(b)
+    return "dir 1 listed, back at the menu"
+
+
 def case_zmodem_upload(b: Board, tmp: str) -> str:
     set_protocol(b, "ZMODEM")
     name, body = upload(b, tmp, "zmodem")
@@ -332,6 +356,8 @@ CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("time", case_time),
     ("join", case_join),
     ("stats", case_stats),
+    ("bulletins", case_bulletins),
+    ("file-list", case_file_list),
     ("zmodem-upload", case_zmodem_upload),
     ("zmodem-download", case_zmodem_download),
     ("xmodem-upload", case_xmodem_upload),
