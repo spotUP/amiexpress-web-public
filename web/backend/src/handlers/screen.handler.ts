@@ -1423,8 +1423,27 @@ function artOfThemeWithBoardCodes(
     const board = splitScreenCodes(readScreenText(boardFile));
     if (board.head.length === 0 && board.tail.length === 0) return null;
 
+    /*
+     * A board file with NO drawing is all head: `Screens/BULL.TXT` is `~f|`
+     * and two includes. Taken as written, the theme's logo went below the
+     * whole program - under the last bulletin, on top of the pause that ends
+     * the screen ("a logo draws before the pause in super amilog", sysop,
+     * 2026-09-28). Such a file has no art slot of its own, so the theme's goes
+     * where a drawing sits in every other screen: after the leading lines that
+     * run nothing (the clear), before the first line that does.
+     */
+    let head = board.head;
+    let tail = board.tail;
+    if (tail.length === 0 && board.art.trim() === '') {
+      const firstProgram = head.findIndex(line => new RegExp(PROGRAM_CODE_IN_ART.source, 'i').test(line));
+      if (firstProgram >= 0) {
+        tail = head.slice(firstProgram);
+        head = head.slice(0, firstProgram);
+      }
+    }
+
     const plan: CarryPlan = {
-      head: board.head, tail: board.tail, lost: [], uploadHasCodes: false,
+      head, tail, lost: [], uploadHasCodes: false,
     };
 
     return {

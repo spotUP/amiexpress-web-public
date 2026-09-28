@@ -167,6 +167,36 @@ describe('a theme may restyle a program, and not re-run it', () => {
   });
 });
 
+describe('a board screen that is ALL program, worn by a theme that draws a logo', () => {
+  it('draws the logo first, not after the last bulletin where the pause lands on it', async () => {
+    /*
+     * Live 2026-09-28: `Screens/BULL.TXT` is `~f|`, `~SS_ bull1 ~SP`,
+     * `~SS_ bull6` and no drawing at all; tango's `Board/BULL.TXT` is a logo.
+     * Every line of the board's file counted as its head, so the logo went
+     * BELOW the whole program - under Super-AmiLog, right above the
+     * `(Pause)` that ends the screen ("a logo draws before the pause in super
+     * amilog", sysop). A board file with no drawing has no art slot of its
+     * own; the theme's goes where a drawing sits in every other screen -
+     * after the clear, before the first thing the program runs.
+     */
+    write('Screens/BULL.TXT', '~f|\r\n~SS_BBS:Screens/one.txt\r\n~SS_BBS:Screens/six.txt\r\n');
+    write('Themes/t1/Board/BULL.TXT', 'THEMELOGO\r\n');
+    write('Screens/one.txt', 'BULLETINONE\r\n');
+    write('Screens/six.txt', 'SUPERAMILOG\r\n');
+    invalidateScreenIndex();
+
+    const { socket, session, emits } = aCaller();
+    await displayScreen(socket, session, 'BULL', false);
+
+    // Each include is its own segment and only the first is drawn here; the
+    // logo has to be in front of it, not queued behind the last one.
+    const drawn = emits.join('');
+    expect(drawn).toContain('BULLETINONE');
+    expect(drawn).toContain('THEMELOGO');
+    expect(drawn.indexOf('THEMELOGO')).toBeLessThan(drawn.indexOf('BULLETINONE'));
+  });
+});
+
 describe("h7's own case: a code the theme's copy has LOST", () => {
   it("draws the theme's art and still runs the code that is missing from it", async () => {
     /*
