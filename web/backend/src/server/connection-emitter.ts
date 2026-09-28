@@ -91,6 +91,12 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
   const eventBus = new EventEmitter();
   eventBus.setMaxListeners(50);
 
+  // The line is up until the connection says it closed. Every connection this
+  // emitter serves (telnet, SSH, the WebSocket terminal) emits 'close' when
+  // its transport dies.
+  let lineUp = true;
+  (connection as unknown as EventEmitter).on?.('close', () => { lineUp = false; });
+
   const emitter: any = {
     // socket.io's `.once / .removeListener / .removeAllListeners /
     // .listenerCount / .listeners` all map to the synthetic event bus.
@@ -205,13 +211,17 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       return connection.session;
     },
     id: connection.sessionId,
-    // Telnet/SSH emitter doesn't have Socket.IO's `.connected` property.
-    // The BBS menu code (menu.ts:121) treats falsy `socket.connected` as
-    // "carrier dropped" and sets subState=LOGOFF, which causes every
-    // subsequent telnet keypress to be ignored ("subState: logoff -
-    // IGNORING COMMAND"). Default to true; the connection's own 'close'
-    // event handler tears down the session when the transport really dies.
-    connected: true,
+    // socket.io's `.connected`, for real: true while the line is up, false
+    // once the connection closed. It was the constant `true`, so the menu's
+    // carrier check (menu.ts, express.e:28590) could never see a telnet or
+    // SSH hang-up, and a handler still running after one kept writing into a
+    // closed connection instead of taking the LOGOFF branch (web-vs-telnet
+    // audit item 16, 2026-09-28). A constant was chosen because a missing
+    // property read as falsy - "carrier dropped" on every keypress - and a
+    // getter over the real state keeps that fixed.
+    get connected() {
+      return lineUp;
+    },
     on: (event: string, handler: (...args: any[]) => void) => {
       // Transport-level events live on the underlying telnet/SSH
       // connection; synthetic events (used by DoorManager, file
