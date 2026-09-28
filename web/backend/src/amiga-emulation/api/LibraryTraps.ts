@@ -1294,7 +1294,12 @@ console.log(
               16
             )}`
           );
-          return emu.getRegister(0);
+          // Not implemented = FAILED: 0, which AmigaOS uses for NULL, FALSE
+          // and "no" alike (a void call ignores D0). This returned D0
+          // unchanged, so OpenWindowTagList "opened" a window at whatever
+          // address the door had in D0 and EasyRequestArgs picked an
+          // arbitrary button (68K stub audit, 2026-09-28).
+          return 0;
         },
       };
       this.trapMap.set(trapAddr, vector);
