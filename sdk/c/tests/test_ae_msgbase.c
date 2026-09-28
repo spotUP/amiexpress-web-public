@@ -119,6 +119,19 @@ static void synth(unsigned char *r, char status, long number,
 
 /* ---- the layouts ------------------------------------------------------- */
 
+TEST(eall_reads_as_the_readers_own_name_all)
+{
+    char out[64];
+    ae_msg_to_label("eall", "spot", out, (int)sizeof out);
+    ASSERT_STR(out, "spot (ALL)", "EALL is the reader, as express.e shows it");
+    ae_msg_to_label("EALL", "Randy", out, (int)sizeof out);
+    ASSERT_STR(out, "Randy (ALL)", "in any case");
+    ae_msg_to_label("model", "spot", out, (int)sizeof out);
+    ASSERT_STR(out, "model", "a person stays who they are");
+    ae_msg_to_label("eall", "averyveryverylongcallername", out, 12);
+    ASSERT_STR(out, "avery (ALL)", "the name gives way, the (ALL) stays, inside the buffer");
+}
+
 TEST(a_real_amiga_headerfile_reads)
 {
     ae_msg_row rows[8];
@@ -863,6 +876,7 @@ int main(void)
         return 1;
     }
 
+    RUN_TEST(eall_reads_as_the_readers_own_name_all);
     RUN_TEST(a_real_amiga_headerfile_reads);
     RUN_TEST(a_real_port_written_headerfile_reads);
     RUN_TEST(one_file_holding_both_layouts_reads_both);

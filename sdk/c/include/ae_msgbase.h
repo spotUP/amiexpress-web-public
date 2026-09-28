@@ -111,6 +111,16 @@ typedef struct {
 void ae_msg_date_string(long unix_seconds, char *out, int cap);
 
 /**
+ * Who a message is to, as the reader sees it.
+ *
+ * `EALL` is not a person: it is "every caller", and express.e shows it as the
+ * READER's own name followed by ` (ALL)` (express.e:8902-8912). Anything else
+ * is the stored name, unchanged. Printing the raw field showed Conftop's
+ * results as "To eall" (SUBS, 2026-09-28).
+ */
+void ae_msg_to_label(const char *to, const char *reader, char *out, int cap);
+
+/**
  * Point the module at a message base and say who is reading it.
  *
  * `dir` is what the board answered to ae_msgbase_path() - e.g.

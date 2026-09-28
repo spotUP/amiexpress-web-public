@@ -276,6 +276,29 @@ static int join_path(char *out, int cap, const char *name)
  * 0000-03-01 so that February - the month with the leap day - falls at the end
  * of the year and the leap rule stops needing a special case in the middle.
  */
+void ae_msg_to_label(const char *to, const char *reader, char *out, int cap)
+{
+    const char *who = to ? to : "";
+    const char *tail = "";
+    int n = 0;
+    if (out == 0 || cap <= 0) return;
+    if (same_name(who, "eall")) {
+        who = reader ? reader : "";
+        tail = " (ALL)";
+    }
+    /* The suffix is kept whole: a reader's name is shortened before the
+       "(ALL)" that says what kind of message this is. */
+    {
+        int room = cap - 1;
+        int t = 0;
+        while (tail[t]) t++;
+        room -= t;
+        while (room > 0 && who[n]) { out[n] = who[n]; n++; room--; }
+        for (t = 0; tail[t] && n < cap - 1; t++) out[n++] = tail[t];
+    }
+    out[n] = '\0';
+}
+
 void ae_msg_date_string(long unix_seconds, char *out, int cap)
 {
     static const char *MONTHS[12] = {

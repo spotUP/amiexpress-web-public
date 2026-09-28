@@ -660,8 +660,10 @@ static int read_message(int index)
            this door lists private mail the caller is party to as well. */
         char when[8];
         ae_msg_date_string(rows[index].date, when, (int)sizeof when);
-        sprintf(doc_title, "#%ld  From %.20s  %.8s  To %.20s",
-                rows[index].number, rows[index].from, when, rows[index].to);
+        char to[40];
+        ae_msg_to_label(rows[index].to, caller, to, (int)sizeof to);
+        sprintf(doc_title, "#%ld  From %.20s  %.8s  To %.26s",
+                rows[index].number, rows[index].from, when, to);
     } else {
         sprintf(doc_title, "#%ld %.14s", rows[index].number, rows[index].from);
     }
