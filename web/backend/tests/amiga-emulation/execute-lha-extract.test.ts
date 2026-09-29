@@ -110,6 +110,24 @@ describe('dos.library Execute() runs the archiver', () => {
     ).toBe(true);
   });
 
+  test('LhA e <archive> <member> <dest/> takes just that member, in any case, without its path', () => {
+    // File Description's Depack_LHA: `Lha e %P file_id.diz %W`. LhA's grammar
+    // puts the wanted members after the archive and the destination is the
+    // argument ending in '/' or ':'. Reading argv[3] as the destination
+    // unpacked the whole archive into a directory named after the member
+    // (sysop, 2026-09-30: "it fails to find file_id's in all archives").
+    fs.mkdirSync(path.join(root, 'Work'), { recursive: true });
+    const { d0 } = runExecute(root, 'Lha e Doors:tiny-nested.lha MYDOOR.FIM Doors:Work/');
+
+    expect(d0).toBe(DOSTRUE);
+    expect(fs.readdirSync(path.join(root, 'Doors', 'Work'))).toEqual(['mydoor.fim']);
+  });
+
+  test('a member the archive does not have extracts nothing and fails', () => {
+    const { d0 } = runExecute(root, 'Lha e Doors:tiny-nested.lha file_id.diz Doors:Work/');
+    expect(d0).not.toBe(DOSTRUE);
+  });
+
   test('extracted bytes match the archive, not an empty placeholder', () => {
     runExecute(root, '"LhA" x "Doors:tiny-nested.lha" "Doors:OUT/"');
 

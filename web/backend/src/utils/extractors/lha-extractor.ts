@@ -100,9 +100,33 @@ export class LhaExtractor extends BaseArchiveExtractor {
  * partial success: Amiga-authored archives routinely carry one member that
  * a strict reader rejects while every other member unpacks perfectly.
  */
+/**
+ * An LhA member name matches an AmigaDOS pattern the way LhA itself reads
+ * one: case-insensitively (AmigaDOS does not tell FILE_ID.DIZ and file_id.diz
+ * apart), `#?` and `*` for any run, `?` for one character. A pattern with no
+ * directory part is matched against the member's own name.
+ */
+export function lhaMemberMatches(member: string, pattern: string): boolean {
+  const source = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/#\?|\*/g, '.*')
+    .replace(/\?/g, '.');
+  const re = new RegExp(`^${source}$`, 'i');
+  const name = member.split('/').pop() ?? member;
+  return re.test(member) || (!pattern.includes('/') && re.test(name));
+}
+
+export interface LhaExtractOptions {
+  /** Member patterns (LhA's `[file...]`); empty or absent means every member. */
+  members?: string[];
+  /** LhA `e`: every member lands in the destination itself, without its path. */
+  flatten?: boolean;
+}
+
 export function extractLhaArchiveSync(
   archivePath: string,
-  destDir: string
+  destDir: string,
+  options: LhaExtractOptions = {}
 ): { extracted: string[]; failed: string[] } {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const nodeFs = require('fs') as typeof import('fs');
@@ -129,8 +153,11 @@ export function extractLhaArchiveSync(
     if (!relative || relative.endsWith('/')) {
       continue; // directory entry - created below by its members
     }
+    if (options.members?.length && !options.members.some((m) => lhaMemberMatches(relative, m))) {
+      continue;
+    }
 
-    const target = nodePath.resolve(destRoot, relative);
+    const target = nodePath.resolve(destRoot, options.flatten ? nodePath.basename(relative) : relative);
     if (target !== destRoot && !target.startsWith(destRoot + nodePath.sep)) {
       failed.push(rawName);
       continue;

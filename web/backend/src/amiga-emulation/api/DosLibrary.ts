@@ -4061,9 +4061,18 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       const isArchiver = program === 'LHA' || program === 'LZX' || program === 'UNLZX';
 
       if (isArchiver) {
-        const verb = (argv[1] || '').toLowerCase();
-        const archiveArg = argv[2];
-        const destArg = argv[3];
+        // LhA's own grammar: `LhA [-opts] <cmd> <archive> [dir/] [file...]`.
+        // After the archive, the argument ending in `/` or `:` is where to
+        // unpack; the rest are the members wanted. File Description sends
+        // `Lha e %P file_id.diz BBS:Node1/Work/` - reading argv[3] as the
+        // destination unpacked the whole archive into a directory called
+        // file_id.diz and the door never found its FILE_ID (sysop, 2026-09-30).
+        const words = argv.slice(1).filter((w) => !/^-[a-z]+$/i.test(w) || w === '-x');
+        const verb = (words[0] || '').toLowerCase();
+        const archiveArg = words[1];
+        const after = words.slice(2);
+        const destArg = [...after].reverse().find((w) => /[/:]$/.test(w)) ?? (after.length === 1 ? after[0] : undefined);
+        const members = after.filter((w) => w !== destArg);
         const wantsExtract = verb === 'x' || verb === 'e' || verb === '-x';
 
         const fail = (why: string, err: number = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND) => {
@@ -4076,7 +4085,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         };
 
         if (!wantsExtract || !archiveArg || !destArg) {
-          fail('only "x <archive> <destination>" is supported');
+          fail('only "x|e <archive> [file...] <destination/>" is supported');
           return;
         }
         if (program !== 'LHA') {
@@ -4122,7 +4131,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         try {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { extractLhaArchiveSync } = require('../../utils/extractors/lha-extractor');
-          const result = extractLhaArchiveSync(realArchivePath, realDestPath);
+          const result = extractLhaArchiveSync(realArchivePath, realDestPath, { members, flatten: verb === 'e' });
           console.log(
             `[dos.library] Execute ${program}: extracted ${result.extracted.length} file(s) ` +
               `from "${archivePath}" into "${destPath}"` +
