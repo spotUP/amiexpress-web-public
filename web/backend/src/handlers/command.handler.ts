@@ -3570,6 +3570,10 @@ console.log(' In file upload state - canceling upload');
   if (session.subState === LoggedOnSubState.FILE_LIST_DIR_INPUT) {
     const { FileListingHandler } = require('./file/file-listing.handler');
     await FileListingHandler.handleFileListDirInput(socket, session, data.trim());
+    // The command is over: back round the menu loop (its pause, then the
+    // prompt), as after any command - an input branch otherwise leaves the
+    // caller at a screen with no prompt on it.
+    if ((session.subState as LoggedOnSubState) === LoggedOnSubState.DISPLAY_MENU) await advanceDisplayFlow(socket, session);
     return;
   }
 

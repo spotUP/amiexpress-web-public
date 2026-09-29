@@ -102,10 +102,10 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
       maxDirs
     );
 
-    // Always return to menu after listing
+    // express.e:27720 displayFileList returns; the menu loop's menuPause
+    // (28647, 28584) is the pause after a listing - no prompt of our own.
     (session as any).flagPauseHandler = undefined;
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
@@ -152,10 +152,10 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
       maxDirs
     );
 
-    // Always return to menu after listing
+    // express.e:27720 displayFileList returns; the menu loop's menuPause
+    // (28647, 28584) is the pause after a listing - no prompt of our own.
     (session as any).flagPauseHandler = undefined;
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 

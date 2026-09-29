@@ -89,3 +89,24 @@ describe('the T command', () => {
     expect(wire.slice(wire.indexOf('It is '))).toMatch(/Menu \(/);
   });
 });
+
+describe('F and FR after the directory prompt', () => {
+  // The answer to "Directories: ..." is handled in an input branch that never
+  // went back round the menu loop, so the board held in silence; the port
+  // papered over it with its own "Press any key to continue..." (the sysop's
+  // FR paste, 2026-09-29), which express.e's displayFileList does not have.
+  // The command ends like any other: the menu loop's pause, then the prompt.
+  it('Enter at the directory prompt comes back to the menu prompt', async () => {
+    const { socket, session, out } = aCaller();
+    session.subState = LoggedOnSubState.FILE_LIST_DIR_INPUT;
+    session.tempData = { fileListParams: { reverse: true, hasNonStop: false } };
+
+    await handleCommand(socket, session, '\r');
+    await new Promise((r) => setTimeout(r, 30));
+    flushOutput(socket);
+
+    const wire = out.join('');
+    expect(wire).not.toContain('Press any key');
+    expect(wire).toMatch(/Menu \(/);
+  });
+});
