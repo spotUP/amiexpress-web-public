@@ -16,13 +16,18 @@ static int tests_failed = 0;
 
 #define TEST(name) void test_##name(void)
 #define RUN_TEST(name) do { printf("%-55s ", #name); fflush(stdout); test_##name(); } while(0)
+/* `got` is evaluated ONCE: a decoder call re-run for the failure message
+ * reads a used-up source and printed a value it never returned (ESC for a
+ * right arrow). */
 #define ASSERT_EQ(got, expected, msg) do { \
-    if ((got) == (expected)) { \
+    long assert_got_ = (long)(got); \
+    long assert_want_ = (long)(expected); \
+    if (assert_got_ == assert_want_) { \
         tests_passed++; \
         printf("[OK]\n"); \
     } else { \
         tests_failed++; \
-        printf("[FAIL] %s (got %ld, expected %ld)\n", msg, (long)(got), (long)(expected)); \
+        printf("[FAIL] %s (got %ld, expected %ld)\n", msg, assert_got_, assert_want_); \
     } \
     tests_run++; \
 } while(0)
@@ -3406,7 +3411,7 @@ static void test_decode_escape_reads_csi_arrows(void)
     src = fake_source(&f, down, 2);
     ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_DOWN, "ESC [ B is down");
     src = fake_source(&f, ss3_right, 2);
-    ASSERT_EQ(flow_decode_escape(&src, &push), FLOW_KEY_PGDN, "ESC O C is right/page down");
+    ASSERT_EQ(flow_decode_escape(&src, &push), UI_KEY_RIGHT, "ESC O C is right (the SDK's own key since 7be9911b5)");
     ASSERT_EQ(push, -1, "a sequence hands nothing back");
 }
 
@@ -3567,9 +3572,21 @@ TEST(sibling_dir_swaps_the_last_component)
     ASSERT_EQ(flow_sibling_dir("BBS:Commands/BBSCmd/", "SysCmd", out, 10), -1, "too small a buffer");
 }
 
+TEST(door_key_pages_on_left_and_right)
+{
+    /* DoorRepo pages on left/right from EITHER input path: the board's arrow
+     * bytes and a raw escape sequence both reach flow_door_key(). */
+    ASSERT_EQ(flow_door_key(UI_KEY_RIGHT), FLOW_KEY_PGDN, "right is next page");
+    ASSERT_EQ(flow_door_key(UI_KEY_LEFT), FLOW_KEY_PGUP, "left is previous page");
+    ASSERT_EQ(flow_door_key(UI_KEY_UP), FLOW_KEY_UP, "other keys pass through");
+    ASSERT_EQ(flow_door_key('q'), 'q', "and ordinary characters too");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
+
+    RUN_TEST(door_key_pages_on_left_and_right);
 
     RUN_TEST(overlay_is_recognised_from_the_listing);
     RUN_TEST(overlay_is_recognised_under_a_wrapper_directory_and_backslashes);

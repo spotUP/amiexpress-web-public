@@ -1015,6 +1015,13 @@ int flow_key_ends_session(int key);
 #define FLOW_KEY_ENTER UI_KEY_ENTER
 #define FLOW_KEY_ESC   UI_KEY_ESC
 
+/* DoorRepo's meaning for left and right: the previous and next page. The SDK
+ * decodes them as UI_KEY_LEFT/RIGHT (7be9911b5, for texttv); the board's own
+ * arrow bytes were mapped here already, the escape-sequence path was not, so
+ * a terminal that sends raw CSI/SS3 arrows lost paging. One mapping, both
+ * paths. Any other key is returned unchanged. */
+int flow_door_key(int key);
+
 typedef ui_key_source flow_key_source;
 
 #define flow_decode_escape(src, pushback) ui_decode_escape((src), (pushback))

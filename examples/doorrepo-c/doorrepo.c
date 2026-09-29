@@ -2534,8 +2534,8 @@ static int ui_decode_key(int c)
     }
     if (c == AE_ARROW_UP)    return UI_KEY_UP;
     if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
-    if (c == AE_ARROW_LEFT)  return UI_KEY_PGUP;
-    if (c == AE_ARROW_RIGHT) return UI_KEY_PGDN;
+    if (c == AE_ARROW_LEFT)  return flow_door_key(UI_KEY_LEFT);
+    if (c == AE_ARROW_RIGHT) return flow_door_key(UI_KEY_RIGHT);
     if (c != 27) {
         return c;
     }
@@ -2557,7 +2557,7 @@ static int ui_decode_key(int c)
         if (flow_key_ends_session(c)) {
             stop_for_carrier_loss();
         }
-        return c;
+        return flow_door_key(c);
     }
 }
 

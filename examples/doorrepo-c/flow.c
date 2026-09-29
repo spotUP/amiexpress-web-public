@@ -3020,3 +3020,14 @@ int flow_sibling_dir(const char *dir, const char *leaf, char *out, unsigned long
     strcat(out, dir + end);
     return (int) strlen(out);
 }
+
+int flow_door_key(int key)
+{
+    if (key == UI_KEY_LEFT) {
+        return UI_KEY_PGUP;
+    }
+    if (key == UI_KEY_RIGHT) {
+        return UI_KEY_PGDN;
+    }
+    return key;
+}
