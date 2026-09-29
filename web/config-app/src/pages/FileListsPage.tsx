@@ -152,17 +152,20 @@ export function FileListsPage() {
     setMoveTo({ conf: activeConf ?? 1, dir: dir === -1 ? 1 : dir });
   };
 
+  // The short columns fit their content on one line; the FILE_ID takes the
+  // rest ("some columns dont resize to their content", sysop 2026-09-29).
+  const fit = 'whitespace-nowrap align-top pt-2';
   const columns = useMemo<DataTableColumn<FileListEntry>[]>(() => [
-    { id: 'filename', header: 'File', value: (e) => e.filename, mono: true, width: '12rem' },
-    { id: 'size', header: 'Size', value: (e) => e.size, align: 'right', mono: true, width: '7rem' },
-    { id: 'date', header: 'Date', value: (e) => e.date, mono: true, width: '7rem' },
-    { id: 'marker', header: 'Check', value: (e) => MARKER_LABEL[e.marker], width: '7rem' },
+    { id: 'filename', header: 'File', value: (e) => e.filename, mono: true, cellClassName: fit },
+    { id: 'size', header: 'Size', value: (e) => e.size, align: 'right', mono: true, cellClassName: fit },
+    { id: 'date', header: 'Date', value: (e) => e.date, mono: true, cellClassName: fit },
+    { id: 'marker', header: 'Check', value: (e) => MARKER_LABEL[e.marker], cellClassName: fit },
     {
       id: 'bytes',
-      header: 'File',
+      header: 'Stored',
       value: (e) => BYTES_LABEL[e.bytes].label,
       cell: (e) => <StatusDot tone={BYTES_LABEL[e.bytes].tone} label={BYTES_LABEL[e.bytes].label} />,
-      width: '10rem',
+      cellClassName: fit,
     },
     {
       id: 'description',
@@ -170,6 +173,7 @@ export function FileListsPage() {
       value: (e) => e.description.find((l) => l.trim() !== '') ?? '',
       // The whole FILE_ID, in Topaz: the art only lines up in the board's face.
       cell: (e) => <BoardText lines={e.description} />,
+      cellClassName: 'w-full align-top py-2',
     },
   ], []);
 
