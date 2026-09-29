@@ -51,6 +51,11 @@ export interface ConferenceToolFlags {
   // Private prompt is skipped (10860). Set holds the msgbase numbers
   // that have EXTSEND set.
   extSendMsgBases: Set<number>;
+  // express.e:8618-8620 clearMsgPointers - which scans a caller's new
+  // pointers for this conference start with (see defaultScanFlags).
+  defaultNewscan: boolean;
+  defaultNewFiles: boolean;
+  defaultZoom: boolean;
 }
 
 const defaultFlags: ConferenceToolFlags = {
@@ -73,6 +78,9 @@ const defaultFlags: ConferenceToolFlags = {
   requireInternetnameMsgBases: new Set<number>(),
   forwardMail: '',
   extSendMsgBases: new Set<number>(),
+  defaultNewscan: false,
+  defaultNewFiles: false,
+  defaultZoom: false,
 };
 
 const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
@@ -180,6 +188,9 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     if (flagSet.has('NO_NEWSCAN')) {
       result.noNewscan = true;
     }
+    if (flagSet.has('DEFAULT_NEWSCAN')) result.defaultNewscan = true;
+    if (flagSet.has('DEFAULT_NEW_FILES')) result.defaultNewFiles = true;
+    if (flagSet.has('DEFAULT_ZOOM')) result.defaultZoom = true;
     if (flagSet.has('SHOW_NEW_FILES')) {
       result.showNewFiles = true;
     }

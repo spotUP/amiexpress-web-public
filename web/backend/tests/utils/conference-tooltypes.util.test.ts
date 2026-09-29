@@ -92,6 +92,9 @@ describe('Conference Tooltypes Utility', () => {
           requireInternetnameMsgBases: new Set<number>(),
           forwardMail: '',
           extSendMsgBases: new Set<number>(),
+          defaultNewscan: false,
+          defaultNewFiles: false,
+          defaultZoom: false,
         });
       });
 
@@ -275,6 +278,18 @@ describe('Conference Tooltypes Utility', () => {
 
         expect(flags.forceNewscan).toBe(true);
         expect(mockAmigafsExistsSync).toHaveBeenCalledWith('/test/bbs/Conf20.info');
+      });
+
+      // express.e:8618-8620 - the scans a caller's new pointers start with.
+      it('should read DEFAULT_NEWSCAN, DEFAULT_NEW_FILES and DEFAULT_ZOOM from icon file', () => {
+        mockAmigafsExistsSync.mockReturnValue(true);
+        mockFsReadFileSync.mockReturnValue(makeBuf('DEFAULT_NEWSCAN', 'DEFAULT_NEW_FILES', 'DEFAULT_ZOOM'));
+
+        const flags = conferenceTooltypes.getConferenceToolFlags(941);
+
+        expect(flags.defaultNewscan).toBe(true);
+        expect(flags.defaultNewFiles).toBe(true);
+        expect(flags.defaultZoom).toBe(true);
       });
 
       it('should read NO_NEWSCAN from icon file', () => {

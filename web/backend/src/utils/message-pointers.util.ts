@@ -12,7 +12,8 @@
 
 import { db } from '../database';
 import type { MailStat, ConfBase } from '../types/message-pointers';
-import { DEFAULT_MAIL_STAT, DEFAULT_SCAN_FLAGS } from '../types/message-pointers';
+import { DEFAULT_MAIL_STAT } from '../types/message-pointers';
+import { getConferenceToolFlags } from './conference-tooltypes.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { messagePointerFileManager } from '../services/MessagePointerFileManager';
 
@@ -53,6 +54,24 @@ function getSqliteDb(): any {
   return sqlite;
 }
 
+/** axconsts.e:45-47 - the scan bits of confBase.handle[0]. */
+const ZOOM_SCAN_MASK = 2;
+const MAIL_SCAN_MASK = 4;
+const FILE_SCAN_MASK = 8;
+
+/**
+ * The scan flags a caller's pointers for this conference start with
+ * (express.e:8616-8621 clearMsgPointers): mail scan with DEFAULT_NEWSCAN,
+ * file scan with DEFAULT_NEW_FILES, Zoom with DEFAULT_ZOOM, and nothing
+ * else. The port started every new pointer at 0 whatever the icon said.
+ */
+export function defaultScanFlags(confNumber: number): number {
+  const flags: Partial<ReturnType<typeof getConferenceToolFlags>> = getConferenceToolFlags(confNumber) ?? {};
+  return (flags.defaultNewscan ? MAIL_SCAN_MASK : 0)
+    | (flags.defaultNewFiles ? FILE_SCAN_MASK : 0)
+    | (flags.defaultZoom ? ZOOM_SCAN_MASK : 0);
+}
+
 /**
  * Get scanFlags for a user/conference/msgbase (MAIL/FILE/ZOOM bits).
  */
@@ -66,8 +85,8 @@ export async function getConferenceScanFlags(
     `SELECT scan_flags FROM conf_base WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
   );
   const row = stmt.get(userId, conferenceId, messageBaseId);
-  // No row = new user/conf: default to scanning enabled (matches express.e DEFAULT_NEWSCAN behaviour)
-  return row ? (row.scan_flags ?? DEFAULT_SCAN_FLAGS) : DEFAULT_SCAN_FLAGS;
+  // No row: the conference's own defaults (express.e:8616-8621).
+  return row ? (row.scan_flags ?? defaultScanFlags(conferenceId)) : defaultScanFlags(conferenceId);
 }
 
 /**
@@ -176,7 +195,7 @@ export async function loadMsgPointers(
       messageBaseId,
       lastNewReadConf: 0,
       lastMsgReadConf: 0,
-      scanFlags: DEFAULT_SCAN_FLAGS,
+      scanFlags: defaultScanFlags(conferenceId),
       messagesPosted: 0,
       newSinceDate: getSystemTime(),
       bytesDownload: 0,
@@ -196,7 +215,7 @@ export async function loadMsgPointers(
     try {
       insert.run(
         userId, conferenceId, messageBaseId,
-        0, 0, DEFAULT_SCAN_FLAGS,
+        0, 0, defaultScanFlags(conferenceId),
         0, Math.floor(Date.now() / 1000),
         0, 0, 0, 0
       );
@@ -361,7 +380,7 @@ export async function updateReadPointer(
      ON CONFLICT(user_id, conference_id, message_base_id)
      DO UPDATE SET last_msg_read_conf = MAX(last_msg_read_conf, excluded.last_msg_read_conf)`
   );
-  stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
+  stmt.run(userId, conferenceId, messageBaseId, msgNum, defaultScanFlags(conferenceId));
 
   // express.e:4971 — saveMsgPointers writes `cb.confYM := lastMsgReadConf`
   // to <conf>/Conf.DB at (slot-1)*74. Mirror that here so doors that call
@@ -391,7 +410,7 @@ export async function updateScanPointer(
      ON CONFLICT(user_id, conference_id, message_base_id)
      DO UPDATE SET last_new_read_conf = excluded.last_new_read_conf`
   );
-  stmt.run(userId, conferenceId, messageBaseId, msgNum, DEFAULT_SCAN_FLAGS);
+  stmt.run(userId, conferenceId, messageBaseId, msgNum, defaultScanFlags(conferenceId));
 
   // express.e:4972 — saveMsgPointers writes `cb.confRead := lastNewReadConf`.
   await syncConfDbBestEffort(userId, conferenceId, 'confRead', msgNum);
