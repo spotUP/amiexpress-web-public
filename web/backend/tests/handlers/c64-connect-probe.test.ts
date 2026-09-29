@@ -236,7 +236,7 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
       .map((e) => e.data)
       .filter((d): d is string => typeof d === 'string')
       .join('');
-    expect(texts).toContain('Username: ');
+    expect(texts).toContain('Enter your Name: ');
   });
 
   test('the username prompt travels as ansi-output, so the PETSCII transducer sees it', async () => {
@@ -249,7 +249,7 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
     // petscii-output is the legacy PUA channel and bypasses the oracle;
     // server/c64-detected-handler.ts sends this same prompt as ansi-output.
     const carrying = socket.emitted.filter(
-      (e) => typeof e.data === 'string' && e.data.includes('Username: '),
+      (e) => typeof e.data === 'string' && e.data.includes('Enter your Name: '),
     );
     expect(carrying.length).toBeGreaterThan(0);
     expect(carrying.every((e) => e.event === 'ansi-output')).toBe(true);

@@ -260,6 +260,7 @@ import {
   getFileAreas,
   getDoors
 } from './command-handler/dependency-injection';
+import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 
 // Re-export dependency injection for external modules (backward compatibility)
 export {
@@ -1365,7 +1366,7 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
    * the screen now holds. `petscii-output` is the legacy PUA channel and
    * bypasses that.
    */
-  emitPrompt(socket, '\r\n\r\nUsername: ');
+  emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
   socket.emit('prompt-login');
 }
 
@@ -1949,7 +1950,7 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
         session.subState = undefined;
         session.tempData = session.tempData || {};
         session.tempData.loginPhase = 'username';
-        emitPrompt(socket, '\r\n\r\nUsername: ');
+        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
         socket.emit('prompt-login'); // Tell frontend to show login form
         return;
       } else if (data === '\x7f' || data === '\b') {
@@ -2016,7 +2017,7 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
           session.subState = undefined;
           session.tempData = session.tempData || {};
           session.tempData.loginPhase = 'username';
-          emitPrompt(socket, '\r\n\r\nUsername: ');
+          emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           socket.emit('prompt-login');
           return;
         }
@@ -2083,7 +2084,7 @@ console.log(' BBSTITLE viewed, transitioning to login');
       emitText(socket, '\x1b[2J\x1b[3J\x1b[H');
       emitText(socket, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
       emitText(socket, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
-      emitPrompt(socket, 'Username: ');
+      emitPrompt(socket, `${loginNamePrompt(session.nodeId ?? 0)} `);
       socket.emit('prompt-login'); // Tell frontend to show login form
       return;
     }
@@ -2250,7 +2251,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               // Setting only the first would echo the password.
               session.maskInput = true;
               socket.emit('mask-input', true);
-              emitPrompt(socket, '\r\nPassword: ');
+              emitPrompt(socket, `\r\n${loginPasswordPrompt(session.nodeId ?? 0)}`);
               return;
             }
           }
@@ -2266,7 +2267,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
-          emitPrompt(socket, '\r\nUsername: ');
+          emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           return;
         }
 
@@ -2290,7 +2291,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         // and the transport adapter all read this single field.
         session.maskInput = true;
         socket.emit('mask-input', true);
-        emitPrompt(socket, '\r\nPassword: ');
+        emitPrompt(socket, `\r\n${loginPasswordPrompt(session.nodeId ?? 0)}`);
         return;
       }
 
@@ -2324,7 +2325,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         }
         session.tempData.loginPhase = 'username';
         session.tempData.loginUsername = '';
-        emitPrompt(socket, '\r\nUsername: ');
+        emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
         return;
       }
 
@@ -2338,7 +2339,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
 
         if (!username) {
           endPasswordMask(socket, session);
-          emitPrompt(socket, '\r\nUsername: ');
+          emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           session.tempData.loginPhase = 'username';
           return;
         }
@@ -2409,7 +2410,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
                 if (resetResult.ok) {
                   // Re-prompt for username/password from the top.
                   endPasswordMask(socket, session);
-                  emitPrompt(socket, '\r\n\r\nUsername: ');
+                  emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
                   session.tempData.loginPhase = 'username';
                   session.tempData.loginUsername = '';
                 }
@@ -2432,7 +2433,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
 
             // express.e:29206-29211 - "Invalid PassWord" and the PASSWORD is
             // asked again, for the same name. It used to go back to Username:.
-            emitPrompt(socket, 'Invalid PassWord\r\n\r\nPassword: ');
+            emitPrompt(socket, `Invalid PassWord\r\n\r\n${loginPasswordPrompt(session.nodeId ?? 0)}`);
             return;
           }
 
@@ -2474,7 +2475,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         } catch (err: any) {
 console.error('[LOGIN] Error during login:', err?.message || err);
           endPasswordMask(socket, session);
-          emitPrompt(socket, '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
+          emitPrompt(socket, `\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           session.tempData.loginPhase = 'username';
           session.tempData.loginUsername = '';
         }

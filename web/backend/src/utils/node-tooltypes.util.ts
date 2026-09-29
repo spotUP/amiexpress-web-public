@@ -62,3 +62,25 @@ export function nodeFlag(nodeId: number, key: string): boolean {
 export function nodeTooltype(nodeId: number, key: string): string | undefined {
   return tooltypesFor(nodeId).get(key);
 }
+
+/**
+ * The logon name prompt, as express.e builds it for this node
+ * (express.e:31770-31775): NAME_PROMPT2 as written, or "Enter your
+ * <NAME_PROMPT>:", or "Enter your Name:". The screen shows it followed by a
+ * space (29571). The port asked "Username:" on every board.
+ */
+export function loginNamePrompt(nodeId: number): string {
+  const whole = nodeTooltype(nodeId, 'NAME_PROMPT2');
+  if (whole) return whole;
+  const noun = nodeTooltype(nodeId, 'NAME_PROMPT');
+  return noun ? `Enter your ${noun}:` : 'Enter your Name:';
+}
+
+/**
+ * The logon password prompt (express.e:31778-31780): "Password: ", or the
+ * node's PASSWORD_PROMPT with a space after it.
+ */
+export function loginPasswordPrompt(nodeId: number): string {
+  const own = nodeTooltype(nodeId, 'PASSWORD_PROMPT');
+  return own ? `${own} ` : 'Password: ';
+}

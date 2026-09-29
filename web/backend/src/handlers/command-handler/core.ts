@@ -17,6 +17,7 @@ import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
 } from "../command-execution.handler";
+import { loginNamePrompt, loginPasswordPrompt } from '../../utils/node-tooltypes.util';
 
 // Dependencies (injected)
 let db: any;
@@ -384,7 +385,7 @@ console.log(
         // is left silent without this. Same contract as
         // command.handler.ts's completeRealC64Connect and its three ANSI
         // sites; this copy is kept in step so they cannot drift.
-        socket.emit("ansi-output", "\r\n\r\nUsername: ");
+        socket.emit("ansi-output", `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
         socket.emit("prompt-login"); // Tell frontend to show login form
         return;
       } else if (data === "\x7f" || data === "\b") {
@@ -438,7 +439,7 @@ console.log("📋 BBSTITLE viewed, transitioning to login");
       );
       // The prompt TEXT as well as the cue - see the note on the other copy
       // above; `prompt-login` reaches a browser and nothing else.
-      socket.emit("ansi-output", "Username: ");
+      socket.emit("ansi-output", `${loginNamePrompt(session.nodeId ?? 0)} `);
       socket.emit("prompt-login"); // Tell frontend to show login form
       return;
     }

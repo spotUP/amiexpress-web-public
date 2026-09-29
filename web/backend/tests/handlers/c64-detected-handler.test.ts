@@ -79,7 +79,7 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     await handleC64Detected(connection);
 
     expect(displayScreenMock.mock.calls[0][0]).toBe(own);
-    expect(own.emit).toHaveBeenCalledWith('ansi-output', 'Username: ');
+    expect(own.emit).toHaveBeenCalledWith('ansi-output', 'Enter your Name: ');
   });
 
   it('drives displayScreen through buildConnectionEmitter, and the fixture .seq bytes reach connection.write byte-identically', async () => {
@@ -113,7 +113,7 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     const text = (bs: Buffer[]) => Buffer.concat(bs).toString('latin1').toLowerCase();
     expect(text(written.slice(0, title))).toContain('uccessful connection to node');
     // And the login prompt after it.
-    expect(text(written.slice(title + 1))).toContain('sername:');
+    expect(text(written.slice(title + 1))).toContain('nter your ');
   });
 
   it('a dedicated-PETSCII-port session (petsciiMode set, terminalType not literally "c64" yet) also gets the raw bytes', () => {
@@ -134,7 +134,7 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     });
   });
 
-  it('the post-title "Username: " prompt goes through the emitter (case-correct, oracle-tracked), not a raw write', async () => {
+  it('the post-title "Enter your Name: " prompt goes through the emitter (case-correct, oracle-tracked), not a raw write', async () => {
     const written: Buffer[] = [];
     const connection: any = {
       write: (b: Buffer | string) => written.push(Buffer.isBuffer(b) ? b : Buffer.from(b)),
@@ -144,7 +144,8 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     await handleC64Detected(connection);
     const all = Buffer.concat(written);
     const tail = Array.from(all.subarray(all.length - 10));
-    expect(tail).toEqual([0xD5, 0x53, 0x45, 0x52, 0x4E, 0x41, 0x4D, 0x45, 0x3A, 0x20]);
+    // "our Name: " in case-correct PETSCII: lower-case letters low, the capital N shifted.
+    expect(tail).toEqual([0x4F, 0x55, 0x52, 0x20, 0xCE, 0x41, 0x4D, 0x45, 0x3A, 0x20]);
     expect(connection.session.petsciiTransducer).toBeDefined();
   });
 

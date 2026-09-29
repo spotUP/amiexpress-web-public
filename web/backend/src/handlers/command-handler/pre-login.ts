@@ -15,6 +15,7 @@ import {
   recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 import { emitPrompt } from '../../utils/output.util';
+import { loginNamePrompt, loginPasswordPrompt } from '../../utils/node-tooltypes.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -90,7 +91,7 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
         // (completeRealC64Connect): the prompt TEXT travels as ansi-output,
         // because `prompt-login` is a browser-only cue and a byte transport
         // is left silent without it.
-        emitPrompt(socket, '\r\n\r\nUsername: ');
+        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
         socket.emit('prompt-login');
       }
       return true;
@@ -147,7 +148,7 @@ console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
     socket.emit(outputEvent, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
     socket.emit(outputEvent, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
     // Kept in step with the live copies: the prompt text, then the cue.
-    emitPrompt(socket, 'Username: ');
+    emitPrompt(socket, `${loginNamePrompt(session.nodeId ?? 0)} `);
     socket.emit('prompt-login'); // Tell frontend to show login form
     return true;
   }
@@ -446,7 +447,7 @@ async function transitionToBBSTitle(socket: any, session: BBSSession): Promise<v
   const outputEvent = getOutputEvent(session);
   socket.emit(outputEvent, '\r\n');
   // Kept in step with the live copies: the prompt text, then the cue.
-  emitPrompt(socket, '\r\nUsername: ');
+  emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
   socket.emit('prompt-login'); // Tell frontend to show login form
 }
 

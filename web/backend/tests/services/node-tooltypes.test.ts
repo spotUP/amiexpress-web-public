@@ -123,6 +123,8 @@ describe('logging on by user number', () => {
     jest.doMock('../../src/utils/node-tooltypes.util', () => ({
       nodeFlag: (_n: number, key: string) => flagOn && key === 'USERNUMBER_LOGIN',
       clearNodeTooltypeCache: jest.fn(),
+      loginNamePrompt: () => 'Enter your Name:',
+      loginPasswordPrompt: () => 'Password: ',
     }));
 
     // The handler reaches the database through the DI module, so that is the
@@ -198,5 +200,41 @@ describe('logging on by user number', () => {
 
     expect(bySlot).toHaveBeenCalledWith(999);
     expect(byName).toHaveBeenCalledWith('999');
+  });
+});
+
+/**
+ * The logon prompts come from the node's icon (express.e:31770-31780):
+ * NAME_PROMPT2 as written, "Enter your <NAME_PROMPT>:", or "Enter your
+ * Name:"; PASSWORD_PROMPT plus a space, or "Password: ". The port asked
+ * "Username:" whatever the icon said.
+ */
+describe('the logon prompts', () => {
+  let root: string;
+  afterEach(() => {
+    if (root) fs.rmSync(root, { recursive: true, force: true });
+    delete process.env.BBS_DATA_DIR;
+  });
+  function withIcon(lines: string[]) {
+    // The describe above doMocks this util; a doMock outlives resetModules.
+    jest.dontMock('../../src/utils/node-tooltypes.util');
+    root = boardWithNodeIcon(lines);
+    return freshUtil(root);
+  }
+
+  it('asks "Enter your Name:" and "Password: " by default', () => {
+    const util = withIcon(['SHOWPWFAIL']);
+    expect(util.loginNamePrompt(1)).toBe('Enter your Name:');
+    expect(util.loginPasswordPrompt(1)).toBe('Password: ');
+  });
+
+  it('names what NAME_PROMPT says, and takes NAME_PROMPT2 whole', () => {
+    expect(withIcon(['NAME_PROMPT=Handle']).loginNamePrompt(1)).toBe('Enter your Handle:');
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(withIcon(['NAME_PROMPT2=Who goes there?', 'NAME_PROMPT=Handle']).loginNamePrompt(1)).toBe('Who goes there?');
+  });
+
+  it('asks PASSWORD_PROMPT with a space after it', () => {
+    expect(withIcon(['PASSWORD_PROMPT=Secret:']).loginPasswordPrompt(1)).toBe('Secret: ');
   });
 });
