@@ -9,11 +9,10 @@
  *
  * Sites originally SQL-only:
  *   - operations/conference.handler.ts: 'Joined conference'
- *   - file/file.handler.ts: 'Deleted file'
- *   - file/file.handler.ts: 'Moved file'
+ *   (file/file.handler.ts 'Deleted file' / 'Moved file' went with the old FM, which nothing reached;
+ *    the live FM logs through file-maintenance.handler.)
  *
- * Driven through the real handlers: `joinConference`,
- * `handleFileDeleteConfirmation` and `handleFileMoveConfirmation` run with
+ * Driven through the real handler: `joinConference` runs with
  * an injected SQL `callersLog` spy and a stubbed disk `callersLogManager`,
  * and each event must reach BOTH loggers. The join harness is the one
  * tests/handlers/the-join-scan-survives-the-bulletin.test.ts uses; the DIR
@@ -67,8 +66,6 @@ import {
   setConstants,
 } from '../src/handlers/operations/conference.handler';
 import {
-  handleFileDeleteConfirmation,
-  handleFileMoveConfirmation,
   setCallersLog,
   setFileSearchDependencies,
 } from '../src/handlers/file/file.handler';
@@ -117,30 +114,4 @@ describe('callers-log dual write: SQL + disk parity', () => {
     expect(logActivity).toHaveBeenCalledWith(3, '\tJoined conference: Internal');
   });
 
-  test('Deleted file logs to both loggers', async () => {
-    const { socket, session } = aCaller({
-      operation: 'delete_files',
-      allowedFiles: [{ id: 9, filename: 'OLD.LHA', areaname: 'Uploads', areaId: 1 }],
-      filename: 'OLD.LHA',
-    });
-
-    await handleFileDeleteConfirmation(socket, session, 'ALL');
-
-    expect(sqlLog).toHaveBeenCalledWith(1, 'sysop', 'Deleted file', 'OLD.LHA (Uploads)');
-    expect(logActivity).toHaveBeenCalledWith(3, '\tDeleted file: OLD.LHA (Uploads)');
-  });
-
-  test('Moved file logs to both loggers', async () => {
-    const { socket, session } = aCaller({
-      operation: 'move_files',
-      allowedFiles: [{ id: 9, filename: 'NEW.LHA', areaname: 'Uploads' }],
-      destArea: { id: 2, name: 'Demos' },
-      filename: 'NEW.LHA',
-    });
-
-    await handleFileMoveConfirmation(socket, session, 'ALL');
-
-    expect(sqlLog).toHaveBeenCalledWith(1, 'sysop', 'Moved file', 'NEW.LHA -> Demos');
-    expect(logActivity).toHaveBeenCalledWith(3, '\tMoved file: NEW.LHA -> Demos');
-  });
 });

@@ -33,14 +33,11 @@ import { displayModeOf } from '../amiga-emulation/xim/display-mode.util';
 import { displayDoorMenu, executeDoor, doorAvailableTo } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
-  displayFileMaintenance,
   displayFileStatus,
   displayNewFiles,
   displayUploadInterface,
   displayDownloadInterface,
   startFileDownload,
-  handleFileDeleteConfirmation,
-  handleFileMoveConfirmation,
   matchesWildcard,
 } from './file/file.handler';
 import {
@@ -3657,17 +3654,6 @@ console.log(' In file upload state - canceling upload');
   if (session.subState === LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM) {
     const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
     await BatchDownloadHandler.handleBatchConfirm(socket, session, data.trim());
-    return;
-  }
-
-  // Handle file maintenance operations
-  if (session.tempData?.operation === 'delete_files') {
-    await handleFileDeleteConfirmation(socket, session, data.trim());
-    return;
-  }
-
-  if (session.tempData?.operation === 'move_files') {
-    await handleFileMoveConfirmation(socket, session, data.trim());
     return;
   }
 

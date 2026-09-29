@@ -184,11 +184,6 @@ import {
   setHelpers as setHelpersForChatHandler,
 } from "./handlers/chat/chat.handler";
 import {
-  displayFileMaintenance,
-  handleFileDelete,
-  handleFileDeleteConfirmation,
-  handleFileMove,
-  handleFileMoveConfirmation,
   handleFileSearch,
   displayFileStatus,
   displayNewFiles,

@@ -19,7 +19,6 @@ import {
 import { displayDoorMenu, executeDoor } from "../door.handler";
 import { startSysopPage } from "../chat/chat.handler";
 import {
-  displayFileMaintenance,
   displayFileStatus,
   displayNewFiles,
   displayUploadInterface,
