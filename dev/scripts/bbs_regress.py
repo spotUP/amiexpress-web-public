@@ -273,17 +273,17 @@ def login_contract(heard: str, pauses: list[str]) -> list[str]:
         elif any("lAST cALLERS" in p and "Scanning" in p for p in pauses):
             broken.append("Super-AmiLog's header is still on screen under a later screen (a clear was lost)")
 
-    # The tip of the day runs from the conference bulletin (`~CC_TIP`) as the
-    # last thing before the menu - it silently stopped once already (its
-    # .info parked at ACCESS=32767, 2026-09-29).
+    # The tip of the day runs from the MAILSCAN screen (`~CC_TIP`), at login
+    # only and before the conference join (sysop, 2026-09-29) - it silently
+    # stopped once already (its .info parked at ACCESS=32767).
     # Read from the screens, not the raw bytes: the door paints its title
     # with colour between the words.
     tips = [i for i, p in enumerate(pauses) if "TIP OF THE DAY" in p.upper()]
-    scans = [i for i, p in enumerate(pauses) if "Scanning conferences for mail" in p]
+    joins = [i for i, p in enumerate(pauses) if "Joining Conference" in p]
     if not tips:
         broken.append("the tip of the day did not run")
-    elif scans and tips[-1] < scans[-1]:
-        broken.append("the tip of the day ran before the mail scan, not last before the menu")
+    elif joins and tips[-1] > joins[-1]:
+        broken.append("the tip of the day ran after the conference join, not before it")
 
     return broken
 

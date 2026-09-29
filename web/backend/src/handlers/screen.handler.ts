@@ -883,6 +883,11 @@ async function walkInlineSentinels(
       // does not arm a second one - see doorExitOwesThePause.
       session.inlineScreenCommandDepth = (session.inlineScreenCommandDepth ?? 0) + 1;
       let result: unknown;
+      // What the screen drew before the code - text, a `~f` clear - sits in
+      // the batching buffer, and a door writes straight to the socket. Out it
+      // goes first, or the door draws and the clear lands on top of it (Conf2's
+      // `~f` + `~CC_ctop`: an empty screen and a lone pause, 2026-09-29).
+      flushOutput(socket);
       try {
         result = await processCommand(socket, session, cmdCode, cmdParams, true);
       } finally {

@@ -45,9 +45,10 @@ class TipOfTheDay(unittest.TestCase):
         self.assertIn("the tip of the day did not run",
                       login_contract(HEARD, [GLC_WHOLE, SAMI_WHOLE, SCAN_PAUSED]))
 
-    def test_the_tip_ran_before_the_mail_scan(self):
-        self.assertIn("the tip of the day ran before the mail scan, not last before the menu",
-                      login_contract(HEARD, [GLC_WHOLE, TIP, SAMI_WHOLE, SCAN_PAUSED]))
+    def test_the_tip_ran_after_the_join(self):
+        joined = "Joining Conference: C64 Demoscene\n(Pause)...Space To Resume:"
+        self.assertIn("the tip of the day ran after the conference join, not before it",
+                      login_contract(HEARD, [GLC_WHOLE, SAMI_WHOLE, SCAN_PAUSED, joined, TIP]))
 
 
 class DoorNotInstalled(unittest.TestCase):
