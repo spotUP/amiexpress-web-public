@@ -96,6 +96,9 @@ class Board:
         # Every character the board has sent, in order - what scrolled off the
         # 25 rows too, so a check can read the whole login, not its last page.
         self.heard: list[str] = []
+        # The screen as it stood at every pause advance() answered, in order:
+        # what a caller actually reads before pressing a key.
+        self.pauses: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:
@@ -195,6 +198,9 @@ class Board:
                     continue
                 log.append(f"[STOP - unknown prompt] {here[-70:]!r}")
                 break
+            if why in ("pause", "more", "press a key"):
+                with self.lock:
+                    self.pauses.append("\n".join(line.rstrip() for line in self.screen.display))
             self.send(answer, secret="{password}" in keys)
         return "\n".join(log) + "\n" + self.render()
 

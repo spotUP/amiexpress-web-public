@@ -26,6 +26,24 @@ door, and says which it is (global rule: "Ask for the test, and say WHERE").
 | LOCAL SDK | http://localhost:3001/sdk/ | |
 | LOCAL telnet | `telnet localhost 64128` | Same port as live: `TELNET_PORT` defaults to 64128 (`web/backend/src/index.ts:1061`). The 2323 in `TelnetServer`'s constructor is a default nothing passes. SSH 2222 needs `SSH_HOST_KEY_PATH` |
 
+**The login contract - run it after every deploy that touches screens, themes,
+MCI, the display flow, conference files or doors run at login:**
+
+```
+dev/scripts/.venv/bin/python dev/scripts/bbs_regress.py --host bbs.uprough.net \
+  --user regress --password @thoughts/spot/live-test-account.md --only login \
+  --results <scratch>/live-regress.json --log <scratch>/live-regress.log
+```
+
+It walks the whole live login as the `regress` test account and fails when a
+code or door error prints as text, the mail scan has no pause, Global Last
+Callers or Super-AmiLog is not one whole page at its pause, or a lost clear
+leaves one screen under the next (`login_contract` in `bbs_regress.py`,
+unit-tested by `dev/scripts/test_login_contract.py`). Every rule in it is a
+regression the sysop reported more than once on 2026-09-28/29, and each of
+them passed its jest tests while live was broken. Unit tests prove the code;
+this proves the login a caller reads.
+
 Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 
 | Action | Command |

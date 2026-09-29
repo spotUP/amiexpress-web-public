@@ -235,12 +235,52 @@ def leaked(text: str) -> list[str]:
     return sorted(set(m.group(0).strip() for m in LEAKED.finditer(plain)))
 
 
+def login_contract(heard: str, pauses: list[str]) -> list[str]:
+    """What the login must look like to a caller - every rule here is a
+    regression the sysop reported more than once (2026-09-28/29). Pure, so a
+    captured session can be checked again without a board.
+
+    `heard` is everything the board sent; `pauses` is the screen as it stood
+    at each pause the caller answered.
+    """
+    broken: list[str] = []
+    bad = leaked(heard)
+    if bad:
+        broken.append(f"codes or door errors printed as text: {bad}")
+
+    def at_pause(marker: str) -> list[str]:
+        return [p for p in pauses if marker in p]
+
+    # The mail scan is READ before anything draws over it (express.e:28145).
+    if "Scanning conferences for mail" in heard:
+        if not at_pause("Scanning conferences for mail"):
+            broken.append("no pause after the mail scan - the next screen drew over it")
+
+    # Global Last Callers is one whole page at its pause: logo, header,
+    # footer - not painted over by a theme logo or scrolled off.
+    if "GLOBAL LASTCALLERS" in heard:
+        whole = [p for p in at_pause("GLOBAL LASTCALLERS") if "USERNAME" in p and "ALLTIME RECORDS" in p]
+        if not whole:
+            broken.append("Global Last Callers is not one whole page at its pause")
+
+    # Super-AmiLog is read whole, and nothing draws on it before its pause.
+    if "Super-AmiLog" in heard:
+        whole = [p for p in at_pause("Super-AmiLog") if "The Actions" in p]
+        if not whole:
+            broken.append("Super-AmiLog is not whole at its pause")
+        elif any("lAST cALLERS" in p and "Scanning" in p for p in pauses):
+            broken.append("Super-AmiLog's header is still on screen under a later screen (a clear was lost)")
+
+    return broken
+
+
 def case_login(b: Board, _tmp: str) -> str:
     with b.lock:
         heard = "".join(b.heard)
-    bad = leaked(heard)
-    check(not bad, f"the login showed what it should have run or hidden: {bad}", b)
-    return f"at the menu prompt, {len(heard)} characters read, nothing leaked"
+        pauses = list(b.pauses)
+    broken = login_contract(heard, pauses)
+    check(not broken, "the login broke its contract:\n  " + "\n  ".join(broken), b)
+    return f"at the menu prompt, {len(pauses)} pauses read, contract holds"
 
 
 def case_time(b: Board, _tmp: str) -> str:
@@ -515,6 +555,13 @@ def main() -> int:
     ap.add_argument("--watch", action="store_true")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
+    if args.password.startswith("@"):
+        # `@<file>`: read the password from a notes file instead of the
+        # command line, where ps and the transcript would show it.
+        found = re.search(r"[Pp]assword[^:]*:\s*`?([^`\s]+)", open(args.password[1:]).read())
+        if not found:
+            raise SystemExit(f"no password in {args.password[1:]}")
+        args.password = found.group(1)
 
     if args.list:
         print("\n".join(n for n, _ in CASES))
