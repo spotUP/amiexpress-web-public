@@ -128,6 +128,36 @@ describe('dos.library Execute() runs the archiver', () => {
     expect(d0).not.toBe(DOSTRUE);
   });
 
+  test('Unzip -o <archive> file_id.diz puts FILE_ID.DIZ in the current directory, in any case', () => {
+    // File Description's Depack_ZIP: `Unzip -o %P file_id.diz` - no
+    // destination, so the file lands where the door stands (the harness's
+    // current directory is the board root). ZIP FILE_IDs were never found.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    zip.addFile('FILE_ID.DIZ', Buffer.from('ZIP DIZ'));
+    zip.addFile('program', Buffer.from('bytes'));
+    zip.writeZip(path.join(root, 'Doors', 'up.zip'));
+
+    const { d0 } = runExecute(root, 'Unzip -o Doors:up.zip file_id.diz');
+
+    expect(d0).toBe(DOSTRUE);
+    expect(fs.readFileSync(path.join(root, 'FILE_ID.DIZ'), 'latin1')).toBe('ZIP DIZ');
+    expect(fs.existsSync(path.join(root, 'program'))).toBe(false);
+  });
+
+  test('Unzip -d <dir> extracts there, and a listing verb is refused', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    zip.addFile('a.txt', Buffer.from('A'));
+    zip.writeZip(path.join(root, 'Doors', 'two.zip'));
+
+    expect(runExecute(root, 'UnZip -o Doors:two.zip -d Doors:OUTZ/').d0).toBe(DOSTRUE);
+    expect(fs.existsSync(path.join(root, 'Doors', 'OUTZ', 'a.txt'))).toBe(true);
+    expect(runExecute(root, 'UnZip -l Doors:two.zip').d0).not.toBe(DOSTRUE);
+  });
+
   test('extracted bytes match the archive, not an empty placeholder', () => {
     runExecute(root, '"LhA" x "Doors:tiny-nested.lha" "Doors:OUT/"');
 

@@ -4060,6 +4060,68 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       const program = (argv[0] || '').split(/[/:]/).pop()?.toUpperCase() || '';
       const isArchiver = program === 'LHA' || program === 'LZX' || program === 'UNLZX';
 
+      // UnZip, Info-ZIP's grammar: `UnZip [-opts] <archive> [member...] [-d dir]`,
+      // into `-d dir` or the current directory. File Description's Depack_ZIP
+      // is `Unzip -o %P file_id.diz` - no destination - and it looks for the
+      // file where the door stands. Members match case-insensitively, as
+      // AmigaDOS names do. Only extraction exists; `-l`/`-t` and the rest fail.
+      if (program === 'UNZIP') {
+        const fail = (why: string) => {
+          console.warn(`[dos.library] Execute UNZIP: ${why} ("${commandPart}")`);
+          if (ownedOutputHandle && this.fileManager) this.fileManager.close(ownedOutputHandle);
+          this.emulator.setRegister(CPURegister.D0, 0);
+          this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+        };
+        let destArg: string | null = null;
+        const rest: string[] = [];
+        for (let k = 1; k < argv.length; k++) {
+          const w = argv[k];
+          if (w === '-d') { destArg = argv[++k] ?? null; continue; }
+          if (/^-[a-z]+$/i.test(w)) {
+            if (/[ltvzZ]/.test(w)) { fail('only extraction is supported'); return; }
+            continue; // -o (overwrite), -q, -j ... : extraction either way
+          }
+          rest.push(w);
+        }
+        const [archiveArg, ...members] = rest;
+        if (!archiveArg) { fail('no archive named'); return; }
+        const archivePath = this.pathManager?.amiToSysPath(archiveArg, this.currentDirectory) || this.pathResolver.resolve(archiveArg);
+        const destPath = destArg
+          ? this.pathManager?.amiToSysPath(destArg, this.currentDirectory) || this.pathResolver.resolve(destArg)
+          : this.currentDirectory;
+        const realArchive = archivePath ? amigafs.resolvePath(archivePath) ?? archivePath : null;
+        if (!realArchive || !amigafs.existsSync(realArchive)) { fail(`archive not found at "${archivePath}"`); return; }
+        if (!destPath) { fail('could not resolve the destination'); return; }
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const AdmZip = require('adm-zip');
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { lhaMemberMatches } = require('../../utils/extractors/lha-extractor');
+          const realDest = resolveAgainstExistingParent(destPath);
+          const destRoot = path.resolve(realDest);
+          let count = 0;
+          for (const entry of new AdmZip(realArchive).getEntries()) {
+            if (entry.isDirectory) continue;
+            const name = entry.entryName.replace(/\\/g, '/');
+            if (members.length && !members.some((m: string) => lhaMemberMatches(name, m))) continue;
+            const target = path.resolve(destRoot, name);
+            if (!target.startsWith(destRoot + path.sep)) continue; // no escaping the destination
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, entry.getData());
+            count++;
+          }
+          console.log(`[dos.library] Execute UNZIP: extracted ${count} file(s) from "${archivePath}" into "${destRoot}"`);
+          if (count === 0) { fail('the archive yielded no files'); return; }
+          if (ownedOutputHandle && this.fileManager) this.fileManager.close(ownedOutputHandle);
+          this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
+          this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+          return;
+        } catch (err: any) {
+          fail(`extraction failed: ${err?.message || err}`);
+          return;
+        }
+      }
+
       if (isArchiver) {
         // LhA's own grammar: `LhA [-opts] <cmd> <archive> [dir/] [file...]`.
         // After the archive, the argument ending in `/` or `:` is where to
