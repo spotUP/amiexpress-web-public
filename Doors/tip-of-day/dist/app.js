@@ -17,6 +17,7 @@ const catalog_1 = require("./catalog");
 const layout_1 = require("./layout");
 const theme_2 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const tips_1 = require("./tips");
+const login_optout_1 = require("./login-optout");
 const SEEN_KEY = 'seen-tip-ids';
 const SEEN_CAP = 200;
 /** The curated command lessons. Content lives here, not in settings:
@@ -64,6 +65,15 @@ async function gatherFacts(bbs, catalog) {
 }
 async function createApp(session) {
     const { bbs, storage } = session;
+    // TIPLOGIN at login, TIP when the caller types it (login-optout.ts).
+    let showAtLogin = null;
+    try {
+        showAtLogin = await storage.load(login_optout_1.SHOW_AT_LOGIN_KEY);
+    }
+    catch { /* never chosen */ }
+    const choice = (0, login_optout_1.loginChoice)(String(session.bbsSession?.doorCommand ?? ''), showAtLogin);
+    if (!choice.show)
+        return;
     const theme = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
     const t = theme.tokens;
     const catalog = (0, catalog_1.loadDoorCatalog)((0, catalog_1.resolveBoardRoot)(__dirname));
@@ -184,7 +194,7 @@ async function createApp(session) {
         title: 'TIP OF THE DAY',
         masthead: mastheadRow,
         footer: footerRow,
-        hints: [{ key: 'Any key', does: 'continues' }],
+        hints: choice.hints,
         footerPad: ' ',
         styles: s,
         render: () => screen.render(),
@@ -220,9 +230,16 @@ async function createApp(session) {
         });
         // Any other key also continues: blessed only fires listed keys, so
         // the input manager forwards the rest through the screen's keypress.
-        screen.on('keypress', () => {
+        // N / L change the login choice on the way out.
+        screen.on('keypress', (_ch, key) => {
             clearTimeout(timer);
-            done();
+            const next = (0, login_optout_1.answerKey)(String(key?.name ?? ''), showAtLogin);
+            if (next === undefined) {
+                done();
+                return;
+            }
+            // Saved before the door leaves, so the next login reads it.
+            storage.save(login_optout_1.SHOW_AT_LOGIN_KEY, next).catch(() => { }).finally(done);
         });
     });
 }

@@ -21,9 +21,12 @@ import {
   themeStyles, attachDoorChrome, footerStyle,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { pickTip, type BoardFacts, type HowTo, type TipWeights } from './tips';
+import { loginChoice, answerKey, SHOW_AT_LOGIN_KEY } from './login-optout';
 
 interface DoorSession {
   bbs: any;
+  /** The board session; `doorCommand` is the command this door was run as. */
+  bbsSession?: { doorCommand?: string };
   storage: { load<T>(key: string): Promise<T | null>; save(key: string, data: any): Promise<void> };
 }
 
@@ -72,6 +75,14 @@ async function gatherFacts(bbs: any, catalog: DoorEntry[]): Promise<BoardFacts> 
 
 export async function createApp(session: DoorSession): Promise<void> {
   const { bbs, storage } = session;
+
+  // TIPLOGIN at login, TIP when the caller types it (login-optout.ts).
+  let showAtLogin: boolean | null = null;
+  try {
+    showAtLogin = await storage.load<boolean>(SHOW_AT_LOGIN_KEY);
+  } catch { /* never chosen */ }
+  const choice = loginChoice(String(session.bbsSession?.doorCommand ?? ''), showAtLogin);
+  if (!choice.show) return;
 
   const theme = bbs?.getTheme ? bbs.getTheme() : themeById('classic');
   const t = theme.tokens;
@@ -202,7 +213,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     title: 'TIP OF THE DAY',
     masthead: mastheadRow as any,
     footer: footerRow as any,
-    hints: [{ key: 'Any key', does: 'continues' }],
+    hints: choice.hints,
     footerPad: ' ',
     styles: s,
     render: () => screen.render(),
@@ -226,9 +237,13 @@ export async function createApp(session: DoorSession): Promise<void> {
     });
     // Any other key also continues: blessed only fires listed keys, so
     // the input manager forwards the rest through the screen's keypress.
-    (screen as any).on('keypress', () => {
+    // N / L change the login choice on the way out.
+    (screen as any).on('keypress', (_ch: unknown, key: { name?: string } | undefined) => {
       clearTimeout(timer);
-      done();
+      const next = answerKey(String(key?.name ?? ''), showAtLogin);
+      if (next === undefined) { done(); return; }
+      // Saved before the door leaves, so the next login reads it.
+      storage.save(SHOW_AT_LOGIN_KEY, next).catch(() => { /* try again next time */ }).finally(done);
     });
   });
 }

@@ -13,6 +13,7 @@ const TEST_MODULES = [
   './tips.test',
   './catalog.test',
   './layout.test',
+  './login-optout.test',
 ];
 
 (async () => {
