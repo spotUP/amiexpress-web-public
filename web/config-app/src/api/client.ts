@@ -51,6 +51,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Words for an answer that carried none. A response that is not the API's JSON
+ * - the proxy's page while the board restarts for a deploy - has no message,
+ * and over HTTP/2 no status text either, so the error panel showed a bare
+ * warning icon (the sysop's Drive 1 contents, 2026-09-29, taken mid-restart).
+ */
+export function statusWords(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return `The board did not answer (HTTP ${status}) - it may be restarting. Try again in a moment.`;
+  }
+  return `The request failed (HTTP ${status}).`;
+}
+
 class ApiClient {
   private token: string | null = null;
   private unauthorizedHandler: (() => void) | null = null;
@@ -87,7 +100,7 @@ class ApiClient {
       writeAdminRefreshToken(null);
       this.unauthorizedHandler?.();
     }
-    return new ApiError(body.error || body.message || fallback, status, body.data);
+    return new ApiError(body.error || body.message || fallback || statusWords(status), status, body.data);
   }
 
   constructor() {
