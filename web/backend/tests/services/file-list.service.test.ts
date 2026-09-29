@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { setStorageContext } from '../../src/storage/storage-context';
-import { deleteEntry, findEntryLines, listEntries, moveEntry } from '../../src/services/file-list.service';
+import { deleteEntry, descriptionLinesOf, findEntryLines, listEntries, moveEntry } from '../../src/services/file-list.service';
 
 const line = (name: string, date: string, desc = 'a file') => `${name.padEnd(12)} N  123456  ${date}  ${desc}`;
 const more = (text: string) => `${' '.repeat(33)}${text}`;
@@ -58,4 +58,17 @@ test('a file whose bytes are not there moves nothing', async () => {
   await expect(moveEntry(ctx(), { conf: 1, dir: 1, filename: 'KEEP.LHA' }, { conf: 2, dir: 1 })).rejects.toThrow();
   expect(read('Conf1/DIR1')).toContain('KEEP.LHA');
   expect(read('Conf2/DIR1')).not.toContain('KEEP.LHA');
+});
+
+// "there are no linebreaks in the file_id's" (sysop, 2026-09-29): a FILE_ID
+// is a picture drawn in text, so its lines come back as stored.
+test('a description comes back line by line, spacing and colour codes intact', () => {
+  const header = `LXT-EE4D.ZIP N  59257  08-25-26     |\\_  _/\\__ _/\\`;
+  const art = `${' '.repeat(33)}|  --   l a x i t y   p r e s e n t s   -- |`;
+  const colour = `${' '.repeat(33)}\x1b[35mcoloured\x1b[0m   tail`;
+  expect(descriptionLinesOf({ rawLines: [header, art, colour] })).toEqual([
+    '   |\\_  _/\\__ _/\\',
+    '|  --   l a x i t y   p r e s e n t s   -- |',
+    '\x1b[35mcoloured\x1b[0m   tail',
+  ]);
 });

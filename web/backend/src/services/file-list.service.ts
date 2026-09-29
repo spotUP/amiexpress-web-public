@@ -528,6 +528,22 @@ export function getUploadBase(ctx: FileListContext, confNum: number): string {
   return path.join(getConferenceDir(confNum, dataDir), 'Upload');
 }
 
+/**
+ * An entry's description as its lines are stored: the header's text after
+ * the date, then each continuation line after column 33 - spacing, colour
+ * codes and all. The reader's `description` joins them with spaces and
+ * collapses the runs of blanks, which is right for searching and wrong for a
+ * FILE_ID: that is a picture drawn in text (the sysop, 2026-09-29: "there
+ * are no linebreaks in the file_id's").
+ */
+export function descriptionLinesOf(entry: Pick<DirFileEntry, 'rawLines'>): string[] {
+  const [header = '', ...rest] = entry.rawLines;
+  const date = dateOfDirLine(header);
+  const at = date ? header.indexOf(date, 13) : -1;
+  const first = at >= 0 ? header.slice(at + date.length).replace(/^ {1,2}/, '') : '';
+  return [first, ...rest.map((line) => line.slice(33))];
+}
+
 /** Where a listed file's bytes are: this board's disk, the pool, nowhere, or the pool could not say. */
 export type BytesAt = 'disk' | 'pool' | 'missing' | 'unknown';
 

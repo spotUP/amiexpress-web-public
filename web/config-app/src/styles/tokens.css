@@ -66,7 +66,8 @@
    * use topaz". Shipped with the admin rather than borrowed from the board's
    * own bundle, so /admin renders the same wherever it is served.
    */
-  --font-topaz: 'Topaz_a1200', 'TopazPlus_a1200', ui-monospace, 'Courier New', monospace;
+  /* TopazPlus first: the board's default face (terminal session-font.ts DEFAULT_BBS_FONT). */
+  --font-topaz: 'TopazPlus_a1200', 'Topaz_a1200', ui-monospace, 'Courier New', monospace;
 
   --radius-sm: 4px;
   --radius-md: 6px;

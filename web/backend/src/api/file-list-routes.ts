@@ -15,6 +15,7 @@ import { conferenceNumbers, conferenceNdirs } from '../conferences/conference-pa
 import { loadConfConfig } from '../services/conf-config.service';
 import {
   bytesLocation,
+  descriptionLinesOf,
   deleteEntry,
   listEntries,
   mismatches,
@@ -73,7 +74,7 @@ export function createFileListRouter(db?: unknown): express.Router {
           marker: entry.statusMarker,
           size: entry.fileSize,
           date: entry.uploadDateDisplay,
-          description: entry.description.split('\n'),
+          description: descriptionLinesOf(entry),
           bytes: await bytesLocation(ctx(), conf, dir, filename),
         });
       }
