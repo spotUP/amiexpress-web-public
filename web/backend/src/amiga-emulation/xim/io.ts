@@ -1530,14 +1530,14 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // RTW and other doors use \r to move cursor to column 0.
     let normalized = normalizeNewlines(converted, newlineMode);
 
-    // CRITICAL: Only add newline if text doesn't already end with one
-    // Some doors send data=1 with a string that already contains a trailing \n
-    // Adding another would cause double line breaks (RTW does this)
-    //
-    // NOTE: express.e:3406-3411 does aePuts('\b\n') - backspace+newline.
-    // We skip the backspace as it's typically a no-op when at start of line.
-    const alreadyHasNewline = normalized.endsWith('\n');
-    if (!newlineMode.strict && addNewline && !alreadyHasNewline) {
+    // express.e:3406-3411 - `aePuts(msg.string); IF msg.data THEN
+    // aePuts('\b\n')`: the break is added whatever the text ends with, so a
+    // string already ending in a line break leaves a blank line. It used to
+    // be skipped then (for RTW); File Description's full-screen editor draws
+    // its header and box line by line and then places the cursor at absolute
+    // rows counted against express.e's output - the skipped blank lines put
+    // the box two rows high and line 1 out of reach (sysop, 2026-09-30).
+    if (!newlineMode.strict && addNewline) {
       normalized += '\n';
     }
 

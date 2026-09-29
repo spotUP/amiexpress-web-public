@@ -89,9 +89,10 @@ const GWALL_INFO = path.join(REPO, 'Commands/BBSCmd/GWALL.info');
 const JH_SM = 4;
 
 /**
- * The door's output as `AEDoorLibrary.writeStr` puts it on the wire: one JH_SM
- * per WriteStr call, the string carrying its own CRLF, `data` = the newline
- * flag. Split on CRLF and put it back, which is what the door's `transmit()`
+ * The door's output as AEDoor.library's writeStr puts it on the wire: one JH_SM
+ * per WriteStr call, the LINE without a break of its own, `data` = the newline
+ * flag (aedoor.library.asm:344-368); the BBS adds the break (express.e:3406-3411).
+ * Split on CRLF and drop it, which is what the door's `transmit()`
  * (WriteStr(diface, line, LF)) produces.
  */
 function writeStrMessages(text: string): string[] {
@@ -103,7 +104,7 @@ function writeStrMessages(text: string): string[] {
       if (rest.length > 0) out.push(rest);
       return out;
     }
-    out.push(rest.slice(0, at + 2));
+    out.push(rest.slice(0, at));
     rest = rest.slice(at + 2);
   }
 }
@@ -335,7 +336,8 @@ describe('i can see the top of the global wall', () => {
 
   it("the door's own bytes arrive as more than one JH_SM per screen, so nothing here counts rows in a chunk", () => {
     expect(messages.length).toBeGreaterThan(20);
-    expect(messages.join('')).toBe(fixture);
+    // Each message is a line; the BBS supplies the break between them.
+    expect(messages.join('\r\n')).toBe(fixture.replace(/\r\n$/, ''));
   });
 
   it('page one carries the masthead the sysop could not see, with the pause on its bottom row', () => {
@@ -523,7 +525,7 @@ describe('i can see the top of the global wall', () => {
     for (const text of messages.slice(before)) {
       rig.handler.handleSendMessage({ msgAddr: 0xdead0000, command: JH_SM, data: 1, replyPort: 0, string: text } as any);
     }
-    rig.handler.handleSendMessage({ msgAddr: 0xdead0000, command: JH_SM, data: 1, replyPort: 0, string: 'BYE\r\n' } as any);
+    rig.handler.handleSendMessage({ msgAddr: 0xdead0000, command: JH_SM, data: 1, replyPort: 0, string: 'BYE' } as any);
     expect(rig.pauses()).toBe(1);
 
     uninstallC64DoorAdapter(rig.socket);
@@ -598,7 +600,7 @@ describe("an 80-column caller's pause is unchanged", () => {
     // `autoPause` itself at JH_SM would have armed the adapted pause for a C64
     // caller AND started paginating every 80-column caller of every door that
     // declares no PAGINATION - sixty lines here, and not one prompt.
-    const lines = Array.from({ length: 60 }, (_, i) => `LINE ${i}\r\n`);
+    const lines = Array.from({ length: 60 }, (_, i) => `LINE ${i}`);
     const { wire, pauses } = driveAnsi(false, lines);
     expect(pauses).toBe(0);
     expect(wire).not.toContain(PAUSE_PROMPT);
@@ -606,7 +608,7 @@ describe("an 80-column caller's pause is unchanged", () => {
   });
 
   it('PAGINATION set still pauses on the SOURCE line count, at express.e:5191 exactly', () => {
-    const lines = Array.from({ length: 60 }, (_, i) => `LINE ${i}\r\n`);
+    const lines = Array.from({ length: 60 }, (_, i) => `LINE ${i}`);
     const { wire, pauses } = driveAnsi(true, lines);
     expect(pauses).toBe(1);
     // pauseLines is 24 for the ANSI session: the pause lands after the 24th

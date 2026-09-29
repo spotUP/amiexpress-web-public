@@ -662,11 +662,12 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
       const isLastChunk = offset + chunkLen >= fullText.length;
 
       // For intermediate chunks: data=0 (no newline)
-      // For final chunk: data=original newline flag
-      let chunkText = chunk;
-      if (isLastChunk && newlineFlag) {
-        chunkText += "\r\n";
-      }
+      // For final chunk: data=original newline flag - and the chunk as it is.
+      // The native writeStr (aedoor.library.asm:344-368) appends nothing; the
+      // BBS adds the break for data=1 (express.e:3406-3411 '\b\n'). Appending
+      // "\r\n" here as well doubled it once the XIM side stopped skipping the
+      // break for a string that already ended in one (2026-09-30).
+      const chunkText = chunk;
 
       // Native aedoor.library WriteStr puts D1 (newline flag) into msg.data
       // and the string into msg.string (embedded). `useStringPointer: true`
@@ -686,12 +687,8 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
 
     // Handle empty string case
     if (fullText.length === 0) {
-      let text = "";
-      if (newlineFlag) {
-        text = "\r\n";
-      }
       result = this.dispatchCommand(state, XIMCommand.JH_SM, {
-        string: text,
+        string: "",
         data: newlineFlag,
       });
     }
