@@ -907,6 +907,24 @@ console.error('No session found for socket:', socket.id);
 }
 
 /**
+ * What CallersLog says ended the call (express.e:8160-8166 logoffLog).
+ *
+ * `N` ("Off Normally") when the board ended it - G (cleanLogoff), a sysop
+ * kick, or any board-side logoff (beginLogoff leaves LOGGING_OFF: time up,
+ * too many errors). `Loss Carrier` when the line simply went: the caller
+ * closed the tab or dropped telnet. An idle timeout says what the board's
+ * TIMEOUT_LC made it (express.e:28607). Every call used to log "Off
+ * Normally", drops included (parity survey, 2026-09-29).
+ */
+export function logoffReason(
+  session: { timeoutLogoffStat?: string; cleanLogoff?: boolean; sysopKicked?: boolean; state?: unknown },
+): string {
+  if (session.timeoutLogoffStat) return session.timeoutLogoffStat;
+  if (session.cleanLogoff || session.sysopKicked || session.state === BBSState.LOGGING_OFF) return 'N';
+  return 'Loss Carrier';
+}
+
+/**
  * Whether this session tears down the moment its socket dies, skipping
  * every grace period. Two cases, both deliberate ends:
  * - sysopKicked: the sysop threw the caller off via NM.
@@ -1236,8 +1254,7 @@ console.error('[LOGOFF] Error writing user disk files:', diskErr);
       // express.e:8163-8166 - `Loss Carrier` where the call was dropped, `N`
       // where it ended normally. An idle timeout is the second unless the
       // board's TIMEOUT_LC says it is the first (express.e:28607).
-      const logoffStat = (session as unknown as { timeoutLogoffStat?: string }).timeoutLogoffStat;
-      callersLogManager.logLogoff(nodeId, session.user.username, logoffStat || 'N');
+      callersLogManager.logLogoff(nodeId, session.user.username, logoffReason(session as never));
 
       nodeFileManager.deleteNodeFiles(nodeId);
 console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
