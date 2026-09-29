@@ -24,16 +24,11 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { flagManagerOf } from '../../utils/file-flag.util';
 import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
 import { parseDirFile, DirFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.util';
+import { deleteEntry, moveEntry, readDirLines, dateCompareValue, dateOfDirLine } from '../../services/file-list.service';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as fsp from 'fs/promises';
 import { getConferenceDir } from '../../utils/file-hold.util';
-import { conferenceNumbers, conferenceDownloadDirs, conferenceUploadDirs } from '../../conferences/conference-paths';
-import { getStorageContext } from '../../storage/storage-context';
-import { usableAreasFor } from '../../storage/usable-areas';
-import { putUploadIntoPool, uploadObjectKey } from '../../storage/remote-upload';
-import { storageFailureText } from '../../storage/remote-download';
-import { objectPrefixFor } from '../../storage/remote-areas';
+import { conferenceNumbers } from '../../conferences/conference-paths';
 
 import type { BBSSession } from '../../index';
 
@@ -692,33 +687,7 @@ console.log('[FM] Starting file maintenance');
     await this.afterAction(socket, session, nextPos);
   }
 
-  /**
-   * DIR files hold Amiga text: high-bit bytes carrying ANSI art, not UTF-8.
-   * Reading one as 'utf-8' turns every such byte into U+FFFD and writing it
-   * back makes that permanent - a single FM delete destroyed 42 bytes of art
-   * belonging to OTHER entries in Conf2/Dir1 on 2026-09-06. 'latin1' is a
-   * byte-preserving round trip: every byte maps to the code point of the same
-   * value and back again unchanged.
-   */
-  private static readDirFile(dirFilePath: string): string[] {
-    return fs.readFileSync(dirFilePath, 'latin1').split(/\r?\n/);
-  }
 
-  /**
-   * Rewrite a DIR file, keeping a copy of what was there.
-   *
-   * The listing is the board's only record of a file - it is not in the
-   * database and the DIR files are gitignored, so a bad rewrite is
-   * unrecoverable. The .bak is what makes it recoverable.
-   */
-  private static writeDirFile(dirFilePath: string, lines: string[]): void {
-    try {
-      fs.copyFileSync(dirFilePath, `${dirFilePath}.bak`);
-    } catch (error) {
-      console.error('[FM] Could not back up the directory listing:', error);
-    }
-    fs.writeFileSync(dirFilePath, lines.join('\r\n'), 'latin1');
-  }
 
   private static async performDelete(
     socket: any,
@@ -731,43 +700,30 @@ console.log('[FM] Starting file maintenance');
       return;
     }
 
-    if (!fs.existsSync(dirFilePath)) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('Directory list not found'));
+    // The one place the listings are edited (services/file-list.service).
+    let outcome;
+    try {
+      outcome = await deleteEntry(
+        { dataDir: _config.get('dataDir'), db: _db },
+        session.currentConf || 1,
+        ctx.dirNum,
+        currentFile.filename,
+        { start: currentFile.lineNumber ?? 0, count: currentFile.rawLines?.length || 1 },
+      );
+    } catch (error: any) {
+      socket.emit('ansi-output', AnsiUtil.errorLine(error.message));
       return;
     }
-
-    const lines = this.readDirFile(dirFilePath);
-    const start = currentFile.lineNumber ?? 0;
-    const end = start + (currentFile.rawLines?.length || 1);
-    const updated = [...lines.slice(0, start), ...lines.slice(end)];
-
-    this.writeDirFile(dirFilePath, updated);
-
-    // Both halves matter: the pooled delete can return a RETENTION warning,
-    // and it can throw - in which case the listing entry is already gone and
-    // the sysop must be told rather than congratulated.
-    let physicalError: string | null = null;
-    let retentionWarning: string | null = null;
-    try {
-      retentionWarning = await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
-    } catch (error) {
-      physicalError = error instanceof Error ? error.message : String(error);
-      console.error('[FM] Physical delete failed:', error);
-    }
-
-    // Database sync - optional, not required for BBS operation
-    // Doors read from DIR files on disk, not from database
-    // await this.deleteDbEntries(session.currentConf || 1, currentFile.filename);
 
     if (_callersLog) {
       _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Deleted file', currentFile.filename, session.nodeId || 1);
     }
 
-    if (physicalError) {
+    if (outcome.bytesError) {
       // The listing entry is gone but the file is not. Saying "complete" here
       // is how a sysop loses a listing and keeps the bytes without knowing.
       socket.emit('ansi-output', AnsiUtil.errorLine(
-        `Removed from the listing, but the file could not be deleted: ${physicalError}`
+        `Removed from the listing, but the file could not be deleted: ${outcome.bytesError}`
       ));
       socket.emit('ansi-output', AnsiUtil.errorLine(
         `The previous listing is saved as ${path.basename(dirFilePath)}.bak`
@@ -776,39 +732,12 @@ console.log('[FM] Starting file maintenance');
     }
 
     socket.emit('ansi-output', AnsiUtil.successLine('Delete operation complete'));
-    if (retentionWarning) {
-      socket.emit('ansi-output', AnsiUtil.warningLine(retentionWarning));
+    if (outcome.retentionWarning) {
+      socket.emit('ansi-output', AnsiUtil.warningLine(outcome.retentionWarning));
     }
   }
 
-  /**
-   * express's `getDateCompareVal` (MiscFuncs.e:422-436), which is what makes
-   * two `mm-dd-yy` strings comparable:
-   *
-   *     year*10000 + month*100 + day
-   *
-   * with a two-digit year above TWODIGITYEARSWITCHOVER (axconsts.e:41, 77)
-   * meaning the 1900s. A file stamped 03-28-92 is 1992, not 2092.
-   */
-  private static dateCompareValue(dateStr: string): number {
-    const match = /^(\d{2})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim());
-    if (!match) return 0;
-    const month = Number.parseInt(match[1], 10);
-    const day = Number.parseInt(match[2], 10);
-    const twoDigit = Number.parseInt(match[3], 10);
-    const year = twoDigit > 77 ? 1900 + twoDigit : 2000 + twoDigit;
-    return year * 10000 + month * 100 + day;
-  }
 
-  /** The `mm-dd-yy` field of a DIR line, or '' when the line has none. */
-  private static dateOfDirLine(line: string): string {
-    // express blanks column 13 before splitting, because the filename column
-    // is fixed-width and can run straight into the size (express.e:27204).
-    const spaced = line.length > 13 ? `${line.slice(0, 13)} ${line.slice(14)}` : line;
-    const fields = spaced.trim().split(/\s+/);
-    const candidate = fields.length > 2 ? fields[2] : '';
-    return /^\d{2}-\d{2}-\d{2}$/.test(candidate) ? candidate : '';
-  }
 
   /**
    * `(A)uto` - express.e:27121-27138.
@@ -825,7 +754,7 @@ console.log('[FM] Starting file maintenance');
     maxDirs: number,
     ctx: any
   ): Promise<number> {
-    const fileDate = this.dateCompareValue(ctx.currentFile?.uploadDateDisplay || '');
+    const fileDate = dateCompareValue(ctx.currentFile?.uploadDateDisplay || '');
     const bbsDataPath = _config.get('dataDir');
     const conferencePath = getConferenceDir(destConf, bbsDataPath);
 
@@ -833,11 +762,11 @@ console.log('[FM] Starting file maintenance');
       try {
         const meta = this.getDirMeta(conferencePath, candidate, maxDirs);
         if (!fs.existsSync(meta.path)) continue;
-        const firstLine = this.readDirFile(meta.path).find(
-          (line) => this.dateOfDirLine(line) !== ''
+        const firstLine = readDirLines(meta.path).find(
+          (line) => dateOfDirLine(line) !== ''
         );
         if (!firstLine) continue;
-        const dirDate = this.dateCompareValue(this.dateOfDirLine(firstLine));
+        const dirDate = dateCompareValue(dateOfDirLine(firstLine));
         if (fileDate >= dirDate) return candidate;
       } catch (err) {
         console.error(`[FM] auto-destination could not read DIR${candidate}:`, err);
@@ -846,39 +775,6 @@ console.log('[FM] Starting file maintenance');
     return 1;
   }
 
-  /**
-   * Put the entry where its date belongs, rather than at the end.
-   *
-   * express.e:27196-27230 walks the destination listing and splices the moved
-   * entry in front of the first entry dated the same or LATER (`brk:=(d2>=d1)`,
-   * 27211). A DIR file runs oldest first - an upload is appended - so that
-   * keeps it in date order. Appending dropped every moved file to the bottom;
-   * the earlier fix inserted before the first OLDER entry, which put a moved
-   * file above everything older than it, at the top of an oldest-first list.
-   *
-   * An entry spans however many lines it has (a description continues on the
-   * lines after the header), so both sides move as a block.
-   */
-  private static spliceByDate(destLines: string[], entryLines: string[]): string[] {
-    const header = entryLines.find((line) => this.dateOfDirLine(line) !== '');
-    if (!header) return destLines.concat(entryLines);
-
-    const entryDate = this.dateCompareValue(this.dateOfDirLine(header));
-
-    for (let index = 0; index < destLines.length; index += 1) {
-      const lineDate = this.dateOfDirLine(destLines[index]);
-      if (lineDate === '') continue;
-      if (this.dateCompareValue(lineDate) >= entryDate) {
-        return [
-          ...destLines.slice(0, index),
-          ...entryLines,
-          ...destLines.slice(index),
-        ];
-      }
-    }
-
-    return destLines.concat(entryLines);
-  }
 
   private static async performMove(
     socket: any,
@@ -893,61 +789,26 @@ console.log('[FM] Starting file maintenance');
       return;
     }
 
-    const bbsDataPath = _config.get('dataDir');
-    // The DESTINATION conference, which is usually the point of a move.
-    // This used to be session.currentConf unconditionally, so the file could
-    // only ever land in another directory of the conference it was already in.
-    const confNum = destConf || session.currentConf || 1;
-    const conferencePath = getConferenceDir(confNum, bbsDataPath);
-    const destMeta = this.getDirMeta(conferencePath, destDir, ctx.destMaxDirs || ctx.maxDirs);
-    const destPath = destMeta.path;
-
-    // The BYTES move first, then the listings follow them. A move into a
-    // pooled area can fail for a reason that has nothing to do with this board
-    // - the bucket is down - and rewriting both DIR files before finding that
-    // out leaves the file listed in an area that does not have it. This is
-    // also the path a sysop uses to RELEASE a HOLD or PRIVATE upload into an
-    // area (srcDir -1 is HOLD), so it carries real files, not just tidy-ups.
+    // The DESTINATION conference, which is usually the point of a move. Bytes
+    // first, listings after, nothing changed if the bytes cannot move - all in
+    // services/file-list.service, the one place the listings are edited.
     try {
-      await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir, confNum);
+      await moveEntry(
+        { dataDir: _config.get('dataDir'), db: _db },
+        {
+          conf: session.currentConf || 1,
+          dir: ctx.dirNum,
+          filename: currentFile.filename,
+          at: { start: currentFile.lineNumber ?? 0, count: currentFile.rawLines?.length || 1 },
+        },
+        { conf: destConf || session.currentConf || 1, dir: destDir },
+      );
     } catch (error: any) {
       socket.emit(
         'ansi-output',
         AnsiUtil.errorLine(`Could not move ${currentFile.filename}: ${error.message}`)
       );
       return;
-    }
-
-    const srcLines = this.readDirFile(dirFilePath);
-    const start = currentFile.lineNumber ?? 0;
-    const end = start + (currentFile.rawLines?.length || 1);
-    const entryLines = srcLines.slice(start, end);
-    const remaining = [...srcLines.slice(0, start), ...srcLines.slice(end)];
-
-    this.writeDirFile(dirFilePath, remaining);
-
-    const destLines = fs.existsSync(destPath)
-      ? this.readDirFile(destPath)
-      : [];
-
-    // express.e:27196-27230 scans the destination for the right POSITION and
-    // splices the entry in there; this appended, so a moved file always landed
-    // at the bottom of a listing the board otherwise keeps in date order.
-    const merged = this.spliceByDate(destLines, entryLines);
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    this.writeDirFile(destPath, merged);
-
-    // Database sync - optional, not required for BBS operation
-    // Doors read from DIR files on disk, not from database
-    // await this.moveDbEntry(session.currentConf || 1, currentFile.filename, destDir);
-
-    // Out of Hold is how a file is released: the catalog row stops saying 'hold'.
-    if (ctx.dirNum === -1) {
-      try {
-        _db?.releaseFromHold?.(currentFile.filename, session.currentConf || 1);
-      } catch (err) {
-        console.error(`[FM] released ${currentFile.filename} from Hold but could not update its catalog row:`, err);
-      }
     }
 
     if (_callersLog) {
@@ -957,305 +818,9 @@ console.log('[FM] Starting file maintenance');
     socket.emit('ansi-output', AnsiUtil.successLine(`Move operation successful to directory ${destDir}`));
   }
 
-  /**
-   * Deletes the bytes behind a DIR entry - local disk, or the pool object
-   * when the area is pooled.
-   *
-   * Before this, a pooled area's DELETE only unlinked LOCAL candidates
-   * (HOLD/LCFILES/DIRn/DLPATH/ULPATH - see `buildFileCandidates`), none of
-   * which exist for a file whose bytes live in a bucket. The DIR line went;
-   * the object did not - it still resolved, still served through `D` and
-   * both HTTP download routes, and still consumed quota. `forget` drops it
-   * from the pool's own name index (so `D`/listings stop finding it without
-   * waiting on a re-list) and `backend.delete` removes the object itself;
-   * any local cache copy is dropped too so a stale hit does not go on
-   * serving it until the next eviction sweep happens to reclaim it.
-   *
-   * THE KEY IS RESOLVED, NOT RECONSTRUCTED - gate 2, blocker 4.
-   * `uploadObjectKey` concatenates the area prefix with the filename AS THE
-   * DIR LINE SPELLS IT, but the name index `D` reads through resolves
-   * case-insensitively (`byLowerName`). For an object whose real key differs
-   * in case from its DIR line - a hand-edited DIR file, a bucket migrated in
-   * from elsewhere - the reconstructed key names nothing: `backend.delete`
-   * no-ops (an S3 DELETE of a missing key succeeds), `forget` matches
-   * nothing, the DIR line goes, and the sysop is told the delete is complete
-   * while `D` goes on serving the file through that same case-insensitive
-   * index. So this asks the index the same question `D` asks
-   * (`locateRemoteFile`: `resolve(filename)`, then `sizeOf(key)`) and deletes
-   * what it answers. A volume that cannot answer falls back to the
-   * reconstructed key rather than treating the file as absent - the
-   * unavailable/missing distinction the whole subsystem rests on.
-   *
-   * Returns a warning to show the sysop when this drive is RETENTION-bound:
-   * `DeleteObject` on a bucket with object-lock/versioning or a lifecycle
-   * retention policy can leave the bytes recoverable (or simply retained)
-   * for the configured period despite this call succeeding - this codebase
-   * has no way to know which providers enforce that, so it says so rather
-   * than implying the delete is unconditionally final everywhere.
-   */
-  private static async deletePhysicalFile(
-    session: BBSSession,
-    filename: string,
-    dirNum?: number
-  ): Promise<string | null> {
-    const confNum = session.currentConf || 1;
-    const dataDir = _config.get('dataDir');
 
-    const storage = getStorageContext();
-    const pooledArea =
-      storage && dirNum !== undefined
-        ? usableAreasFor(confNum, storage).find(area => area.dirNumber === dirNum)
-        : undefined;
 
-    if (pooledArea && storage && pooledArea.storageVolume !== undefined) {
-      const driveNumber = pooledArea.storageVolume;
-      const prefix = objectPrefixFor(pooledArea);
-      const index = storage.names.forArea(driveNumber, prefix);
-      let key = uploadObjectKey(pooledArea, filename);
-      try {
-        const resolved = await index.resolve(filename);
-        if (resolved !== null) key = resolved;
-      } catch (error) {
-        // The volume could not answer. That is NOT "no such object": keep
-        // the reconstructed key and let the delete below report its own
-        // failure, rather than silently deciding there is nothing to remove.
-        console.error(
-          `[FileMaintenance] could not resolve ${filename} on DRIVE.${driveNumber} before deleting it, ` +
-            `falling back to ${key}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-      const state = storage.volumes.byNumber(driveNumber);
-      // Read before the delete and before `forget`, which drops it: the size
-      // the listing gave this key is what the quota credit below is worth.
-      const sizeBytes = index.sizeOf(key) ?? 0;
 
-      if (!state) {
-        // There is nothing to delete THROUGH. The DIR line is already gone by
-        // the time this runs, so returning quietly is how a sysop loses the
-        // listing and keeps bytes that still occupy the drive.
-        throw new Error(
-          `DRIVE.${driveNumber} is not mounted, so ${key} was not removed from the pool`
-        );
-      }
-
-      try {
-        await state.backend.delete(key);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[FileMaintenance] could not delete ${filename} (DRIVE.${driveNumber}:${key}) from the pool: ${message}`
-        );
-        // The object is still in the bucket. Everything below - forgetting the
-        // name index entry, crediting the quota back, dropping the local copy -
-        // describes a delete that happened, and applying any of it to one that
-        // did not makes a file that still costs quota invisible to every route
-        // that could remove it. Report the failure instead: `performDelete`
-        // tells the sysop the listing went and the file did not.
-        throw new Error(`DRIVE.${driveNumber}:${key} - ${message}`);
-      }
-
-      index.forget(key);
-
-      // Gate 2, blocker 3: a pooled delete has to give the quota back, in
-      // BOTH places that hold it, or the two disagree at the next rebuild.
-      //
-      //   - the CATALOG's location record, because `usedBytesByVolume` is
-      //     `SUM(size) WHERE storage_volume IS NOT NULL` and the boot seed
-      //     reads exactly that. Leave the record and the next rebuild
-      //     re-seeds `usedBytes` with the deleted object's bytes all over
-      //     again, undoing the in-process decrement below.
-      //   - the IN-PROCESS counter, because nothing re-reads the catalog
-      //     until that rebuild, and `roomOn` (`quota - usedBytes`) is what
-      //     the upload gate asks in the meantime.
-      //
-      // Only reached on a delete that actually happened - a failed
-      // DeleteObject throws above, because the bytes are still there and
-      // still occupy the drive, and crediting them back would be the same
-      // lie in the opposite direction.
-      storage.cache.creditDeleted(driveNumber, key, sizeBytes);
-      try {
-        // The key, not just the DIR line's spelling: the two can differ in
-        // case and the row is cleared by the key that was really deleted.
-        _db?.clearLocation?.(filename, pooledArea.id, key);
-      } catch (err) {
-        console.error(
-          `[FileMaintenance] deleted ${filename} from DRIVE.${driveNumber} but could not clear its catalog ` +
-            `location, so the next rebuild will re-seed those bytes: ` +
-            `${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-
-      // A staged, un-uploaded copy is the only copy of something the pool
-      // does not have yet - never delete a dirty local file, budget or no
-      // budget, delete command or eviction.
-      if (!storage.cache.isDirty(driveNumber, key)) {
-        try {
-          fs.unlinkSync(storage.cache.localPathFor(driveNumber, key));
-        } catch {
-          // Not cached locally right now - nothing to remove.
-        }
-      }
-
-      return state.volume.retentionDays !== undefined
-        ? `DRIVE.${driveNumber} has a ${state.volume.retentionDays}-day RETENTION policy - the provider may ` +
-            `keep these bytes recoverable for that long even though the delete succeeded here.`
-        : null;
-    }
-
-    const candidates = await this.buildFileCandidates(confNum, filename, dirNum);
-    for (const filePath of candidates) {
-      try {
-        await fsp.unlink(filePath);
-        return null;
-      } catch {
-        // Try next candidate
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Moves the file itself into the destination directory.
-   *
-   * WHEN THE DESTINATION AREA LIVES IN THE POOL this is a put, not a rename,
-   * and the difference is not cosmetic: a rename leaves the bytes on local
-   * disk, where nothing Task 8 built will ever look for them - the area's
-   * files are resolved through that drive's name index over the area's object
-   * prefix. A "successful" local rename into a pooled area is an invisible
-   * file. This is also how a HOLD or PRIVATE upload is released into an area
-   * (srcDir -1 is the HOLD listing), which is the normal route for anything
-   * that failed testFile, so it is not an exotic path.
-   *
-   * A pooled move that cannot reach the pool THROWS, where the local branch
-   * still swallows and moves on. Silence is affordable for a rename that lost
-   * a race with another node; it is not affordable when the alternative is a
-   * sysop believing a released file is downloadable.
-   */
-  private static async movePhysicalFile(
-    session: BBSSession,
-    filename: string,
-    srcDir?: number,
-    destDir?: number,
-    destConf?: number,
-  ) {
-    const confNum = session.currentConf || 1;
-    // express.e:27256 the bytes go to the DESTINATION conference's ULPATH.1.
-    // Reading the source conference here left a cross-conference move's file
-    // in the source, where a download from the destination never looks.
-    const toConf = destConf || confNum;
-    const candidates = await this.buildFileCandidates(confNum, filename, srcDir);
-
-    const storage = getStorageContext();
-    const destArea =
-      storage && destDir !== undefined
-        ? usableAreasFor(toConf, storage).find(area => area.dirNumber === destDir)
-        : undefined;
-
-    if (destArea && storage) {
-      const source = candidates.find(candidate => fs.existsSync(candidate));
-      if (!source) {
-        // Either the file is not on local disk at all, or it is already an
-        // object in some area - moving objects between prefixes is a
-        // copy-object this handler does not do yet. Either way, say so.
-        throw new Error(
-          `${filename} was not found on local disk, so it could not be filed into DRIVE.${destArea.storageVolume}`
-        );
-      }
-      let location;
-      try {
-        location = await putUploadIntoPool(source, filename, destArea, storage);
-      } catch (error) {
-        throw new Error(storageFailureText(error));
-      }
-      // Tell the catalog where the bytes landed. This is the HOLD/PRIVATE
-      // release path (srcDir -1 is the HOLD listing) - the row for this file
-      // was already inserted with `areaid = destArea.id` at upload time
-      // (status 'hold'), so this UPDATE finds it by the exact
-      // (filename, areaId) pair recordLocation matches on. Without this,
-      // routes-setup.ts's by-id download route reads a NULL storage_volume
-      // for a file that IS in the bucket and 404s it, usedBytesByVolume
-      // under-counts this drive, and entriesOnVolume omits it from the
-      // per-volume contents report.
-      //
-      // Best-effort, deliberately: the bytes are already safely in the pool
-      // (putUploadIntoPool succeeded above), and an ordinary re-move between
-      // two already-active areas can legitimately have no matching
-      // (filename, destArea.id) row yet - the catalog sync for that path is
-      // its own pre-existing gap (see the commented-out moveDbEntry below),
-      // not one this fix should turn into a failed move that leaves the
-      // object orphaned in the bucket with the sysop told it failed.
-      try {
-        _db?.recordLocation?.(filename, destArea.id, location.driveNumber, location.key);
-      } catch (err) {
-        console.error(
-          `[FileMaintenance] moved ${filename} into DRIVE.${location.driveNumber} but could not record its ` +
-            `catalog location: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-      // Only once the object is really there.
-      await fsp.unlink(source);
-      return;
-    }
-
-    const destPath = path.join(this.getUploadBase(toConf), filename);
-
-    for (const srcPath of candidates) {
-      if (!fs.existsSync(srcPath)) continue;
-      // express.e:27298 a file already in the destination's upload path has arrived.
-      if (path.resolve(srcPath) === path.resolve(destPath)) return;
-      await fsp.mkdir(path.dirname(destPath), { recursive: true });
-      try {
-        await fsp.rename(srcPath, destPath);
-      } catch {
-        // express.e:27305-27310 Rename fails across volumes: copy, then delete.
-        await fsp.copyFile(srcPath, destPath);
-        await fsp.unlink(srcPath);
-      }
-      return;
-    }
-    // express.e:27358 "Move operation failed, restoring directories" - the
-    // listings are not touched when the bytes did not move.
-    throw new Error(`${filename} was not found in the conference's file directories`);
-  }
-
-  private static async buildFileCandidates(confNum: number, filename: string, dirNum?: number): Promise<string[]> {
-    const dataDir = _config.get('dataDir');
-    const confPath = getConferenceDir(confNum, dataDir);
-    const list: string[] = [];
-
-    // HOLD / LCFILES
-    list.push(path.join(confPath, 'HOLD', filename));
-    list.push(path.join(confPath, 'LCFILES', filename));
-
-    // DIR-specific folder (best-effort)
-    if (dirNum && dirNum > 0) {
-      list.push(path.join(confPath, `DIR${dirNum}`, filename));
-    }
-
-    // express.e:27296-27299 the conference's DLPATH.n, then its ULPATH.n
-    for (const dir of [...conferenceDownloadDirs(dataDir, confNum), ...conferenceUploadDirs(dataDir, confNum)]) {
-      list.push(path.join(dir, filename));
-    }
-    // A conference whose icon names no paths keeps them where D looks for
-    // them (download.handler findFilesInConference): Upload and Files.
-    list.push(path.join(confPath, 'Upload', filename));
-    list.push(path.join(confPath, 'Files', filename));
-
-    return list;
-  }
-
-  /**
-   * Where a conference files an upload: its ULPATH.1 (express.e:27256), or
-   * the conference's own Upload directory when the icon names none - what
-   * the rest of this codebase reaches for (routes-setup.ts,
-   * batch-download.handler.ts, file-areas-loader.ts).
-   */
-  private static getUploadBase(confNum: number): string {
-    const dataDir = _config.get('dataDir');
-    const configured = conferenceUploadDirs(dataDir, confNum);
-    if (configured.length > 0) return configured[0]!;
-    return path.join(getConferenceDir(confNum, dataDir), 'Upload');
-  }
 
   private static async deleteDbEntries(confNum: number, filename: string): Promise<void> {
     if (!_db?.query) return;

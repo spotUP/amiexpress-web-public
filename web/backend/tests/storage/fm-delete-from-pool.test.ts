@@ -204,10 +204,11 @@ describe('deleting a file from a pooled area', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-delete-local-'));
     tempDirs.push(dataDir);
     const confDir = path.join(dataDir, 'Conf1');
-    fs.mkdirSync(path.join(confDir, 'DIR1'), { recursive: true });
-    const localFile = path.join(confDir, 'DIR1', 'DEMO.LHA');
+    // A board's layout: the listing is Conf1/DIR1, the bytes are in Files.
+    fs.mkdirSync(path.join(confDir, 'Files'), { recursive: true });
+    const localFile = path.join(confDir, 'Files', 'DEMO.LHA');
     fs.writeFileSync(localFile, 'a local file');
-    const dirFilePath = path.join(confDir, 'DIR1FILE');
+    const dirFilePath = path.join(confDir, 'DIR1');
     fs.writeFileSync(dirFilePath, `${DIR_LINE}\r\n`, 'utf-8');
 
     setFileMaintenanceDependencies({

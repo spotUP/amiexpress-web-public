@@ -20,6 +20,7 @@
 process.env.SKIP_DB_INIT = '1';
 
 import { FileMaintenanceHandler } from '../../src/handlers/file/file-maintenance.handler';
+import * as fileList from '../../src/services/file-list.service';
 
 const handler = FileMaintenanceHandler as any;
 
@@ -31,22 +32,22 @@ function dirLine(name: string, date: string): string {
 describe('express\'s date comparison', () => {
   it('orders two mm-dd-yy stamps the way getDateCompareVal does', () => {
     // year*10000 + month*100 + day (MiscFuncs.e:422-436).
-    expect(handler.dateCompareValue('03-28-18')).toBe(20180328);
-    expect(handler.dateCompareValue('12-01-99')).toBe(19991201);
+    expect(fileList.dateCompareValue('03-28-18')).toBe(20180328);
+    expect(fileList.dateCompareValue('12-01-99')).toBe(19991201);
   });
 
   it('uses express\'s century pivot of 77, not the usual 80', () => {
     // axconsts.e:41 TWODIGITYEARSWITCHOVER=77, MiscFuncs.e:434.
-    expect(handler.dateCompareValue('01-01-78')).toBe(19780101);
-    expect(handler.dateCompareValue('01-01-77')).toBe(20770101);
+    expect(fileList.dateCompareValue('01-01-78')).toBe(19780101);
+    expect(fileList.dateCompareValue('01-01-77')).toBe(20770101);
   });
 
   it('reads the date out of a real DIR line', () => {
-    expect(handler.dateOfDirLine(dirLine('PARTY.LHA', '05-06-07'))).toBe('05-06-07');
+    expect(fileList.dateOfDirLine(dirLine('PARTY.LHA', '05-06-07'))).toBe('05-06-07');
   });
 
   it('finds no date in a description continuation line', () => {
-    expect(handler.dateOfDirLine('                                       more words')).toBe('');
+    expect(fileList.dateOfDirLine('                                       more words')).toBe('');
   });
 });
 
@@ -63,7 +64,7 @@ describe('splicing a moved entry into the destination listing', () => {
     ];
     const entry = [dirLine('MOVED.LHA', '03-01-24')];
 
-    const merged = handler.spliceByDate(dest, entry);
+    const merged = fileList.spliceByDate(dest, entry);
 
     expect(merged[2]).toContain('MOVED.LHA');
     expect(merged[3]).toContain('NEWEST.LHA');
@@ -75,7 +76,7 @@ describe('splicing a moved entry into the destination listing', () => {
     const dest = [dirLine('NEW.LHA', '06-01-26')];
     const entry = [dirLine('MOVED.LHA', '03-01-24'), '                                       second line'];
 
-    const merged = handler.spliceByDate(dest, entry);
+    const merged = fileList.spliceByDate(dest, entry);
 
     expect(merged[0]).toContain('MOVED.LHA');
     expect(merged[1]).toContain('second line');
@@ -86,19 +87,19 @@ describe('splicing a moved entry into the destination listing', () => {
     const dest = [dirLine('OLD.LHA', '01-01-90')];
     const entry = [dirLine('RECENT.LHA', '06-01-26')];
 
-    const merged = handler.spliceByDate(dest, entry);
+    const merged = fileList.spliceByDate(dest, entry);
 
     expect(merged[merged.length - 1]).toContain('RECENT.LHA');
   });
 
   it('appends into an empty destination without losing the entry', () => {
-    expect(handler.spliceByDate([], [dirLine('ONLY.LHA', '01-01-20')])).toHaveLength(1);
+    expect(fileList.spliceByDate([], [dirLine('ONLY.LHA', '01-01-20')])).toHaveLength(1);
   });
 
   it('appends an entry that carries no readable date at all', () => {
     const dest = [dirLine('NEW.LHA', '06-01-26')];
 
-    const merged = handler.spliceByDate(dest, ['a line with no date']);
+    const merged = fileList.spliceByDate(dest, ['a line with no date']);
 
     expect(merged[merged.length - 1]).toBe('a line with no date');
   });
