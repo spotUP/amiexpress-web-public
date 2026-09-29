@@ -198,18 +198,8 @@ class InstalledView extends ViewManager_1.BaseView {
             return;
         }
         const st = d.enabled ? `{${door_theme_1.T.ok}-fg}ENABLED{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.alert}-fg}DISABLED{/${door_theme_1.T.alert}-fg}`;
-        // FILE_ID.DIZ from the catalog when this door was installed from the
-        // repo (matched by installed_as == command); falls back to description.
-        // Both are raw archive text — sanitize or blessed parses the art as tags.
-        let body = '';
-        try {
-            const cat = (0, doorman_services_1.getCatalogSvc)()?.getCatalogEntryByCmd?.(d.command);
-            if (cat?.file_id_diz)
-                body = '\n' + (0, ViewManager_1.sanitizeForTags)(cat.file_id_diz);
-        }
-        catch { /* catalog optional */ }
-        if (!body && d.description)
-            body = `\n{${door_theme_1.T.ink}-fg}${(0, ViewManager_1.sanitizeForTags)(d.description)}{/${door_theme_1.T.ink}-fg}`;
+        const repo = (0, doorman_services_1.repoTextFor)(d.command);
+        const body = (0, repo_view_helpers_2.repoTextBlock)(repo.description ?? d.description, repo.fileIdDiz);
         this.layout.setInfo([
             `{${door_theme_1.T.warn}-fg}Name:{/${door_theme_1.T.warn}-fg}    ${d.name}`,
             `{${door_theme_1.T.warn}-fg}Command:{/${door_theme_1.T.warn}-fg} ${d.command}`,
@@ -682,12 +672,7 @@ class RepoView extends ViewManager_1.BaseView {
             (e.version ? `  {${door_theme_1.T.ink}-fg}${(0, ViewManager_1.sanitizeForTags)(e.version)}{/${door_theme_1.T.ink}-fg}` : '') +
             (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
             (e.installed ? `  {${door_theme_1.T.ok}-fg}[${e.installed_as}]{/${door_theme_1.T.ok}-fg}` : '');
-        if (e.file_id_diz) {
-            content += '\n\n' + (0, ViewManager_1.sanitizeForTags)(e.file_id_diz);
-        }
-        else if (e.description) {
-            content += `\n\n{${door_theme_1.T.ink}-fg}${(0, ViewManager_1.sanitizeForTags)(e.description)}{/${door_theme_1.T.ink}-fg}`;
-        }
+        content += (0, repo_view_helpers_2.repoTextBlock)(e.description, e.file_id_diz);
         content += fileLines;
         // What the door's author configured, as the catalog read it. Shown, not
         // applied: an install takes the archive's own icon, tooltypes and all

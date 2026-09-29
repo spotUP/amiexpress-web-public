@@ -135,3 +135,38 @@ export function buildLocalCatalogLookup(svc: any = getCatalogSvc()): LocalCatalo
     }
   };
 }
+
+/**
+ * An installed door's repo text - its description and FILE_ID.DIZ - found the
+ * way the board records installs today.
+ *
+ * The installed view asked the catalog for a row whose `installed_as` was the
+ * command, but installs are recorded in `door_installs` now (Task 5), not on
+ * the catalog row, so a door installed since - SENT, from MST-FD11.LHA - found
+ * nothing and showed no FILE_ID. The install record names the archive; the
+ * catalog row for THAT archive has the text. The old `installed_as` match
+ * stays as the fallback for installs made before the move. Nothing found is
+ * nulls, never a throw: the panel is a view.
+ */
+export function repoTextFor(
+  command: string,
+  installs: any = getInstallsRepo(),
+  catalog: any = getCatalogSvc(),
+): { description: string | null; fileIdDiz: string | null } {
+  let description: string | null = null;
+  let fileIdDiz: string | null = null;
+  try {
+    const install = installs?.getInstallByCommand?.(command);
+    if (install?.archive_name) {
+      const row = catalog?.getCatalogEntryByArchive?.(install.archive_name);
+      description = row?.description ?? install.description ?? null;
+      fileIdDiz = row?.file_id_diz ?? null;
+    }
+    if (!fileIdDiz) {
+      const legacy = catalog?.getCatalogEntryByCmd?.(command);
+      fileIdDiz = legacy?.file_id_diz ?? null;
+      description = description ?? legacy?.description ?? null;
+    }
+  } catch { /* catalog and install record are optional */ }
+  return { description: description || null, fileIdDiz: fileIdDiz || null };
+}

@@ -11,6 +11,7 @@
 import type { KeyBinder } from './ViewManager';
 import type { DoorRepoMode } from './repoDataSource';
 import { T } from './door-theme';
+import { sanitizeForTags } from './ViewManager';
 
 /**
  * Wraps text to the info pane's real width, breaking on spaces.
@@ -209,4 +210,24 @@ export function registerRepoViewActionKeys(
   keys.key(['v', 'V'], () => handlers.onViewDoc());
   keys.key(['a', 'A'], () => handlers.onBrowseArchive());
   keys.key(['c', 'C'], () => handlers.onCycleFilter());
+}
+
+/**
+ * A door's repo text for the info panel: its one-line description, then its
+ * FILE_ID.DIZ as authored below it.
+ *
+ * Both, not either: the description says what the door does in the repo's
+ * words, the FILE_ID is the author's own art and credits, and the panel used
+ * to drop the description whenever a FILE_ID existed ("make sure doorman and
+ * doorrepo display the descriptions and file_id's from the door repo", sysop
+ * 2026-09-29). Raw archive text is sanitized, or blessed reads the art as tags.
+ * Empty string when there is neither.
+ */
+export function repoTextBlock(description: string | null | undefined, fileIdDiz: string | null | undefined): string {
+  const desc = (description ?? '').trim();
+  const diz = (fileIdDiz ?? '').replace(/\s+$/, '');
+  let out = '';
+  if (desc) out += `\n\n{${T.ink}-fg}${sanitizeForTags(desc)}{/${T.ink}-fg}`;
+  if (diz.trim()) out += '\n\n' + sanitizeForTags(diz);
+  return out;
 }

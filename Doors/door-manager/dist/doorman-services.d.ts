@@ -33,4 +33,20 @@ export declare function getStripLib(): any;
  * never a failed browse. Keys are lower-cased: archive names are NOCASE.
  */
 export declare function buildLocalCatalogLookup(svc?: any): LocalCatalogLookup;
+/**
+ * An installed door's repo text - its description and FILE_ID.DIZ - found the
+ * way the board records installs today.
+ *
+ * The installed view asked the catalog for a row whose `installed_as` was the
+ * command, but installs are recorded in `door_installs` now (Task 5), not on
+ * the catalog row, so a door installed since - SENT, from MST-FD11.LHA - found
+ * nothing and showed no FILE_ID. The install record names the archive; the
+ * catalog row for THAT archive has the text. The old `installed_as` match
+ * stays as the fallback for installs made before the move. Nothing found is
+ * nulls, never a throw: the panel is a view.
+ */
+export declare function repoTextFor(command: string, installs?: any, catalog?: any): {
+    description: string | null;
+    fileIdDiz: string | null;
+};
 //# sourceMappingURL=doorman-services.d.ts.map

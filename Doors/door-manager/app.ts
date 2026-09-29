@@ -47,7 +47,7 @@ import { ViewManager, BaseView, KeyBinder, sanitizeForTags, refreshDoorRegistry,
 // formatSize lives alongside installedRow(), the row builder that sizes with it.
 import { DoormanLayout, formatSize } from './doorman-layout';
 import {
-  buildLocalCatalogLookup, getCatalogSvc, getInstallsRepo, getInstallRecorder,
+  buildLocalCatalogLookup, getCatalogSvc, getInstallsRepo, getInstallRecorder, repoTextFor,
   clearInstalledFilesViaRecorder, recordInstallViaRecorder, getStripLib,
 } from './doorman-services';
 import { DocView, StripView } from './doc-strip-views';
@@ -218,15 +218,8 @@ class InstalledView extends BaseView {
     const d = this.door();
     if (!d) { this.layout.setInfo('No door selected.'); return; }
     const st = d.enabled ? `{${T.ok}-fg}ENABLED{/${T.ok}-fg}` : `{${T.alert}-fg}DISABLED{/${T.alert}-fg}`;
-    // FILE_ID.DIZ from the catalog when this door was installed from the
-    // repo (matched by installed_as == command); falls back to description.
-    // Both are raw archive text — sanitize or blessed parses the art as tags.
-    let body = '';
-    try {
-      const cat = getCatalogSvc()?.getCatalogEntryByCmd?.(d.command);
-      if (cat?.file_id_diz) body = '\n' + sanitizeForTags(cat.file_id_diz);
-    } catch { /* catalog optional */ }
-    if (!body && d.description) body = `\n{${T.ink}-fg}${sanitizeForTags(d.description)}{/${T.ink}-fg}`;
+    const repo = repoTextFor(d.command);
+    const body = repoTextBlock(repo.description ?? d.description, repo.fileIdDiz);
     this.layout.setInfo([
       `{${T.warn}-fg}Name:{/${T.warn}-fg}    ${d.name}`,
       `{${T.warn}-fg}Command:{/${T.warn}-fg} ${d.command}`,
@@ -470,6 +463,7 @@ import {
   entryHasDoc,
   renderFileLines,
   formatSuggestedTooltypes,
+  repoTextBlock,
   type RepoViewHotkeyHandlers,
   type ArchiveFileRow,
 } from './repo-view-helpers';
@@ -705,11 +699,7 @@ class RepoView extends BaseView {
       (e.archive_size ? `  ${Math.round(e.archive_size / 1024)}k` : '') +
       (e.installed ? `  {${T.ok}-fg}[${e.installed_as}]{/${T.ok}-fg}` : '');
 
-    if (e.file_id_diz) {
-      content += '\n\n' + sanitizeForTags(e.file_id_diz);
-    } else if (e.description) {
-      content += `\n\n{${T.ink}-fg}${sanitizeForTags(e.description)}{/${T.ink}-fg}`;
-    }
+    content += repoTextBlock(e.description, e.file_id_diz);
     content += fileLines;
 
     // What the door's author configured, as the catalog read it. Shown, not

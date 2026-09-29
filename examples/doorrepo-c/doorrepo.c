@@ -2404,6 +2404,20 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
          * means anything if its own line breaks are preserved, so it is
          * emitted verbatim (clipped at the pane width) and never wrapped. */
         const char *p = g_diz;
+        /* The repo's description first, then the FILE_ID: the panel showed
+         * one or the other, and a door with a FILE_ID lost its description
+         * ("make sure doorman and doorrepo display the descriptions and
+         * file_id's from the door repo", sysop 2026-09-29). DOORMAN's
+         * repoTextBlock() is the same rule. */
+        if (e->desc[0] != '\0') {
+            ansi_color(b, ANSI_WHITE, ANSI_BLACK, 1);
+            ui_wrap_text(b, g, e->desc, &row, last_row, inner - 2);
+            if (row <= last_row) {
+                ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
+                ansi_text(b, row, g->info_left + 1, "", inner);
+                row++;
+            }
+        }
         ansi_color(b, ANSI_WHITE, ANSI_BLACK, 0);
         while (*p != '\0' && row <= last_row) {
             char line2[256];

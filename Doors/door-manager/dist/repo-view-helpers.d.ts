@@ -92,4 +92,16 @@ export interface RepoViewHotkeyHandlers {
  * archive contents (A), and the system-type filter (C) register in every
  * mode. */
 export declare function registerRepoViewActionKeys(keys: KeyBinder, mode: DoorRepoMode, handlers: RepoViewHotkeyHandlers): void;
+/**
+ * A door's repo text for the info panel: its one-line description, then its
+ * FILE_ID.DIZ as authored below it.
+ *
+ * Both, not either: the description says what the door does in the repo's
+ * words, the FILE_ID is the author's own art and credits, and the panel used
+ * to drop the description whenever a FILE_ID existed ("make sure doorman and
+ * doorrepo display the descriptions and file_id's from the door repo", sysop
+ * 2026-09-29). Raw archive text is sanitized, or blessed reads the art as tags.
+ * Empty string when there is neither.
+ */
+export declare function repoTextBlock(description: string | null | undefined, fileIdDiz: string | null | undefined): string;
 //# sourceMappingURL=repo-view-helpers.d.ts.map
