@@ -226,8 +226,10 @@ STATE: dict = {}
 
 # What a screen must never put in front of a caller: an MCI code the board
 # did not run (a screen whose first line lost its `~`, 2026-09-28) and a
-# door's own error line (QuickNew's "Couldn't Open DirFile", the same day).
-LEAKED = re.compile(r"~(?:SS_|CC_|\d*SR_|SX_|XI)\S*|ERROR : [^\r\n]*")
+# door's own error line (QuickNew's "Couldn't Open DirFile", the same day), or
+# a door a screen runs that is not set up where it runs (Conf2 had lost its
+# Conftop.info: "Conference Top Uploaders is not installed", 2026-09-29).
+LEAKED = re.compile(r"~(?:SS_|CC_|\d*SR_|SX_|XI)\S*|ERROR : [^\r\n]*|[^\r\n]*is not installed in this conference\.")
 
 
 def leaked(text: str) -> list[str]:

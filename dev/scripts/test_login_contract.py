@@ -39,5 +39,11 @@ class LoginContract(unittest.TestCase):
         self.assertTrue(any("printed as text" in b for b in broken))
 
 
+class DoorNotInstalled(unittest.TestCase):
+    def test_a_screen_runs_a_door_its_conference_has_not_set_up(self):
+        broken = login_contract("Conference Top Uploaders is not installed in this conference.\r\n", [])
+        self.assertTrue(any("printed as text" in b for b in broken))
+
+
 if __name__ == "__main__":
     unittest.main()
