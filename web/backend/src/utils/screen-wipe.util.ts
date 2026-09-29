@@ -220,12 +220,34 @@ function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS
   while (i < content.length) {
     const ch = content[i];
 
-    if (ch === '\x1b') {
-      if (content[i + 1] === '[') {
-        let j = i + 2;
+    /*
+     * C1 CONTROLS, READ AS THE TERMINAL READS THEM (ECMA-48 8.3).
+     *
+     * Amiga art carries them: Screens/Conf/downloadmsg.txt opens with
+     * `\x9d\r\n\x9d\r\n\x0c\r\n`. 0x9D is OSC, the start of a control
+     * STRING, and the terminal swallows everything to its end - the line
+     * breaks included - so the art starts three rows higher than a model that
+     * prints 0x9D as a cell. The wipe painted there, the settle frame (the
+     * file's own bytes) painted where the terminal put it, and the caller got
+     * the logo twice (sysop, 2026-09-29). A string ends at BEL or ST (0x9C,
+     * ESC \); any ESC ends it too, and is then read itself.
+     */
+    if (ch === '\x90' || ch === '\x98' || ch === '\x9d' || ch === '\x9e' || ch === '\x9f') {
+      let j = i + 1;
+      while (j < content.length && content[j] !== '\x07' && content[j] !== '\x9c' && content[j] !== '\x1b') j++;
+      i = j < content.length && content[j] !== '\x1b' ? j + 1 : j;
+      if (content[j] === '\x1b' && content[j + 1] === '\\') i = j + 2;
+      continue;
+    }
+    const csiAt = ch === '\x9b' ? i + 1 : ch === '\x1b' && content[i + 1] === '[' ? i + 2 : -1;
+    if (ch >= '\x80' && ch <= '\x9f' && csiAt < 0) { i++; continue; } // no width
+
+    if (csiAt >= 0 || ch === '\x1b') {
+      if (csiAt >= 0) {
+        let j = csiAt;
         while (j < content.length && !isCsiFinalByte(content[j])) j++;
         if (j >= content.length) break; // truncated sequence: nothing left to paint
-        const params = content.substring(i + 2, j);
+        const params = content.substring(csiAt, j);
         const final = content[j];
         i = j + 1;
 
@@ -299,7 +321,9 @@ function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS
     }
 
     if (ch === '\r') { col = 0; i++; continue; }
-    if (ch === '\n') { moveTo(row + 1, 0); i++; continue; }
+    // FF and VT move down a line as LF does (xterm; the web terminal's
+    // convertEol makes LF a new line), and print nothing.
+    if (ch === '\n' || ch === '\x0c' || ch === '\x0b') { moveTo(row + 1, 0); i++; continue; }
     if (ch === '\t') { moveTo(row, Math.min(columns - 1, (Math.floor(col / 8) + 1) * 8)); i++; continue; }
     if (ch === '\b') { col = Math.max(0, col - 1); i++; continue; }
     if (ch === '\x07' || ch === '\x00') { i++; continue; }
