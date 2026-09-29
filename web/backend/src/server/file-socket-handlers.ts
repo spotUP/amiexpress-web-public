@@ -36,6 +36,7 @@ import {
   sanitizeInput,
 } from "../utils/input-normalizer.util";
 import { fileUploadedFile } from "../services/upload-filing.service";
+import { examineUpload } from "../services/upload-examine.service";
 import { getSessionBySocketId } from "./session-manager";
 import { callersLog } from "./database-helpers";
 import { SysopDebugUtil } from "../utils/sysop-debug.util";
@@ -177,9 +178,15 @@ console.log("[DIZ] File selected, checking for DIZ...");
     if (data.path) {
       try {
         const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
+        // express.e:19579 - the board's SysCmd EXAMINE door first (File
+        // Description and its kin write the description themselves); the
+        // built-in FILE_ID.DIZ reader when there is none.
+        const examined = await examineUpload(socket, session, data.path, path.basename(data.path), 10);
         socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
 
-        const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+        const dizPromise = examined
+          ? Promise.resolve(examined)
+          : extractAndReadDiz(data.path, nodeWorkDir, [], 10);
         const timeoutPromise = new Promise<null>((resolve) =>
           setTimeout(() => resolve(null), 10000)
         );
@@ -372,7 +379,7 @@ export async function processBatchFile(
       : "active";
 
     if (data.path) {
-      const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir")); // Node0/WorkDir
+      const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir")); // Node0/Work
 
       // Extract FILE_ID.DIZ (express.e:19258-19285) - skip if already extracted
       if (!session.tempData.skipDizExtraction) {
@@ -380,8 +387,13 @@ console.log(
           `[FILE_ID.DIZ] Attempting extraction for ${currentFile.filename}`
         );
         try {
-          // Add 10 second timeout to prevent hanging
-          const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+          // express.e:19579 - SysCmd EXAMINE first, the built-in reader when
+          // the board has none. The door is interactive and has its own
+          // timeout; the 10 seconds below are the built-in reader's.
+          const examined = await examineUpload(socket, session, data.path, path.basename(data.path), 10);
+          const dizPromise = examined
+            ? Promise.resolve(examined)
+            : extractAndReadDiz(data.path, nodeWorkDir, [], 10);
           const timeoutPromise = new Promise<null>((resolve) =>
             setTimeout(() => resolve(null), 10000)
           );

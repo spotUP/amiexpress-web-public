@@ -321,7 +321,7 @@ describe('BBS Paths Utility', () => {
         expect(calls).toContainEqual(expect.stringContaining('Node0'));
         expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Screens')));
         expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Playpen')));
-        expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'WorkDir')));
+        expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Work')));
       });
 
       it('should create system directory', async () => {
@@ -394,15 +394,15 @@ describe('BBS Paths Utility', () => {
     });
 
     describe('workDir method', () => {
-      it('should return Node0/WorkDir directory', () => {
-        const expected = path.join(testRoot, 'Node0', 'WorkDir');
+      it('should return Node0/Work directory (express.e:31972)', () => {
+        const expected = path.join(testRoot, 'Node0', 'Work');
         expect(nodePaths.workDir()).toBe(expected);
       });
 
       it('should handle different node numbers', () => {
         const node5 = new NodePaths(testRoot, 5);
         expect(node5.workDir()).toContain('Node5');
-        expect(node5.workDir()).toContain('WorkDir');
+        expect(node5.workDir()).toMatch(/Work$/);
       });
     });
 
@@ -416,7 +416,7 @@ describe('BBS Paths Utility', () => {
         expect(calls).toContainEqual(expect.stringContaining('Node0'));
         expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Screens')));
         expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Playpen')));
-        expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'WorkDir')));
+        expect(calls).toContainEqual(expect.stringContaining(path.join('Node0', 'Work')));
       });
 
       it('should create directories recursively', async () => {
@@ -439,16 +439,16 @@ describe('BBS Paths Utility', () => {
 
   describe('Legacy Compatibility Functions', () => {
     describe('getNodeWorkDir', () => {
-      it('should return Node0 WorkDir', () => {
+      it('should return Node0 Work (express.e:31972)', () => {
         const result = getNodeWorkDir(0, testRoot);
-        const expected = path.join(testRoot, 'Node0', 'WorkDir');
+        const expected = path.join(testRoot, 'Node0', 'Work');
         expect(result).toBe(expected);
       });
 
       it('should handle different node numbers', () => {
         const result = getNodeWorkDir(5, testRoot);
         expect(result).toContain('Node5');
-        expect(result).toContain('WorkDir');
+        expect(result).toMatch(/Work$/);
       });
     });
 

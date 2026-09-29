@@ -298,10 +298,13 @@ export class NodePaths {
   }
 
   /**
-   * Get Node#/WorkDir/ directory (temp file processing)
+   * Get Node#/Work/ directory (temp file processing) - express.e:31972
+   * `StringF(nodeWorkDir,'\\sNode\\d/Work/',cmds.bbsLoc,node)`. It said WorkDir,
+   * so a door told `BBS:Node1/Work/` (File Description's EXAMINE) wrote where
+   * the board never looked.
    */
   workDir(): string {
-    return path.join(this.root(), 'WorkDir');
+    return path.join(this.root(), 'Work');
   }
 
   /**
