@@ -54,11 +54,9 @@ export type MciFamily =
  * The character that ends the code, and it is NOT always `|`.
  *
  * Measured against the running parser, not assumed: `~CL` `~CD` `~ML` `~MD`
- * are only recognised with a PERIOD (screen.handler.ts:453-548), and `~SM_`
- * `~SX_` `~XC_` only with a DOUBLE pipe (:849, :903, :427). Writing `~CL|` in
- * a screen file produces the letters "CL" and nothing else. A builder that
- * emitted `|` for all of them would hand the sysop dead codes, which is the
- * whole failure this catalog exists to stop.
+ * take a PERIOD or express.e's own `|`, and `~SM_` one pipe or two
+ * (mci-pre-passes.ts, 2026-09-29); `~SX_` `~XC_` still need a DOUBLE pipe. The
+ * builder writes the forms below, which the parser has always accepted.
  *
  * `''` is the literal-tilde entry, which is written `~~` and ends itself.
  */

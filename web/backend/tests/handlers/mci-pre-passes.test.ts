@@ -417,6 +417,27 @@ describe('applyMciPrePasses — cross-flavour parity', () => {
     }
   });
 
+  test("express.e's own spellings - ~CL| ~CD| ~ML| ~MD| - draw the same lists as ~CL. and friends", async () => {
+    // express.e ends these with the normal terminator (5588-5650); the port
+    // knew only the period, and an imported screen printed "CL" (parity
+    // survey, 2026-09-29).
+    for (const code of ['CL', 'CD', 'ML', 'MD']) {
+      const piped = await run('ansi', `[~${code}|]`);
+      const dotted = await run('ansi', `[~${code}.]`);
+      expect(piped.text).toBe(dotted.text);
+      expect(piped.text).not.toContain(code);
+    }
+  });
+
+  test('~SM_<menu>| with ONE pipe sets the menu, in inline mode too', async () => {
+    for (const inlineMode of [true, false]) {
+      const session = makeSession();
+      const r = await applyMciPrePasses('a~SM_MAIN|b', session, { flavour: 'ansi', inlineMode });
+      expect(r.text).toBe('ab');
+      expect(session.currentMenuName).toBe('MAIN');
+    }
+  });
+
   test('~D. still retargets the terminator for the tokenizer stage that follows', async () => {
     for (const flavour of ['ansi', 'petscii'] as const) {
       const r = await applyMciPrePasses('~D.abc', makeSession(), { flavour, inlineMode: false });

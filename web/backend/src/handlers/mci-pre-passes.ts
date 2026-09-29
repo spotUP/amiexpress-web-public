@@ -262,7 +262,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Conference/Message Board Lists (express.e:5588-5620)
   const conferences = screenHandler().getConferences();
 
-  if (parsed.includes('~CL.')) {
+  // `~CL|` is express.e's own spelling (normal terminator, 5588-5650);
+  // `~CL.` is this port's older one. Both are the list - an imported screen
+  // printed "CL" (parity survey, 2026-09-29). Same for CD, ML and MD.
+  if (/~CL[.|]/.test(parsed)) {
     // express.e:5588-5607 - ~CL: vertical list, one conf per row, filtered by access.
     // Format: "                     [32m<num>[3][33m) [35m<name padEnd 30>[36m[0m\r\n"
     // Only include conferences the user has access to (checkConfAccess per entry).
@@ -281,7 +284,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const confName = conferences[i].name.padEnd(30, ' ');
       confList += `                     \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
     }
-    parsed = parsed.replace(/~CL\./g, generated(confList));
+    parsed = parsed.replace(/~CL[.|]/g, generated(confList));
   }
 
   if (parsed.includes('~BL.')) {
@@ -313,7 +316,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     parsed = parsed.replace(/~BL\./g, generated(bulletins));
   }
 
-  if (parsed.includes('~CD.')) {
+  if (/~CD[.|]/.test(parsed)) {
     // express.e:5608-5620 - ~CD: 2-column numbered list, filtered by access.
     // Format: "   [34m[[0m<num right-padded 3>[34m] [0m<name padEnd 30>" then \r\n every 2 entries.
     let confDir = '';
@@ -335,10 +338,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
     // Add final newline if odd number of entries
     if (!narrow && num % 2 !== 0) confDir += '\r\n';
-    parsed = parsed.replace(/~CD\./g, generated(confDir));
+    parsed = parsed.replace(/~CD[.|]/g, generated(confDir));
   }
 
-  if (parsed.includes('~ML.')) {
+  if (/~ML[.|]/.test(parsed)) {
     // ~ML. - Message Base List (express.e:5621-5635)
     let msgBaseList = '';
     // ONE row builder for the real bases AND the two fallbacks below. The
@@ -372,10 +375,10 @@ console.error('[parseMciCodes] Error getting message base list:', error);
       );
       msgBaseList = msgBaseRow(1, 'Default');
     }
-    parsed = parsed.replace(/~ML\./g, generated(msgBaseList));
+    parsed = parsed.replace(/~ML[.|]/g, generated(msgBaseList));
   }
 
-  if (parsed.includes('~MD.')) {
+  if (/~MD[.|]/.test(parsed)) {
     // ~MD. - Message Base Description (express.e:5636-5650)
     let msgBaseDesc = '';
     try {
@@ -408,7 +411,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
       );
       msgBaseDesc = row('   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       ');
     }
-    parsed = parsed.replace(/~MD\./g, generated(msgBaseDesc));
+    parsed = parsed.replace(/~MD[.|]/g, generated(msgBaseDesc));
   }
 
   // Process %NODELIST before %N to avoid collision
@@ -459,21 +462,24 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   // semantics, so those forms must NOT be pre-substituted in inline
   // mode.
 
+  // ~SM_<menuname>| - set current menu name (express.e:5575-5581). express.e
+  // ends it with ONE pipe; the port only knew `||` and only outside inline
+  // mode, so `~SM_MENU|` printed "SM_MENU" (parity survey, 2026-09-29).
+  parsed = parsed.replace(/~SM_([^|\r\n]+)\|\|?/g, (_match, menuName) => {
+    session.currentMenuName = menuName.trim();
+    screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
+    return '';
+  });
+
   if (!inlineMode) {
     // ~CR_<prompt>|| - prompted keypress (express.e:5571-5580).
     // Multi-word prompt; the tokenizer's space boundary would split
     // it, so handle here before the tokenizer.
-    parsed = parsed.replace(/~CR_([^|]+)\|\|/g, (_match, promptText) => {
+    parsed = parsed.replace(/~CR_([^|\r\n]+)\|\|?/g, (_match, promptText) => {
       hasPause = true;
       return generated(promptText);
     });
 
-    // ~SM_<menuname>|| - set current menu name (express.e:5575-5585).
-    parsed = parsed.replace(/~SM_([^|]+)\|\|/g, (_match, menuName) => {
-      session.currentMenuName = menuName.trim();
-      screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
-      return '';
-    });
 
     // ~CC_<cmd>| / ~CC_<cmd>|| — non-inline command queue
     // (express.e:5555-5563). Inline mode runs ~CC_ synchronously in

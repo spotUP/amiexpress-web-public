@@ -2962,13 +2962,15 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
      * exemption.
      */
     /*
-     * `~NSF` IS HOW A SCREEN SAYS IT HIMSELF. express.e's non-stop flag
-     * (mci-pre-passes.ts) means "no pauses" - so a screen that carries it is
-     * one piece of art like the title, whatever its name. The list above is
-     * the board's own four; an artist's tall screen needs no code change.
+     * `~NS` IS HOW A SCREEN SAYS IT HIMSELF. express.e:5740-5742 sets
+     * nonStopDisplayFlag - "no pauses" - so a screen that carries it is one
+     * piece of art like the title, whatever its name. `~NSF` is this port's
+     * older spelling of the same thing (mci-pre-passes.ts) and still counts.
+     * The list above is the board's own four; an artist's tall screen needs
+     * no code change.
      */
     const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName))
-      || /~NSF/.test(contentForMci);
+      || /~NSF?(?![A-Za-z0-9_])/.test(contentForMci);
     const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {

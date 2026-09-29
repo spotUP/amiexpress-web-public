@@ -241,11 +241,25 @@ describe('a screen that is one piece of art', () => {
     expect(shown.lines).toBe(TITLE_LINES);
   });
 
-  it('any screen that carries ~NSF is one piece, whatever its name', async () => {
-    const shown = await show(aScreenOf(TITLE_LINES, '~f~NSF'));
+  it("any screen that carries express.e's ~NS| is one piece, whatever its name", async () => {
+    // express.e:5740-5742 - `~NS` sets nonStopDisplayFlag. The parity survey
+    // (2026-09-29) found `~NS|` still paginated a tall screen (G-NS).
+    const shown = await show(aScreenOf(TITLE_LINES, '~f~NS|'));
 
     expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
     expect(shown.lines).toBe(TITLE_LINES);
+  });
+
+  it('and so does the port\'s older ~NSF spelling', async () => {
+    const shown = await show(aScreenOf(TITLE_LINES, '~f~NSF'));
+
+    expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+  });
+
+  it('a code that only STARTS with NS is not the non-stop flag', async () => {
+    const shown = await show(aScreenOf(40, '~f~NSX|'));
+
+    expect(shown.text).toMatch(/More\(y\/n\/ns\)/);
   });
 
   it('still paginates a screen that is text to be read', async () => {
