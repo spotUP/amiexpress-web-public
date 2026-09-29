@@ -3,6 +3,7 @@
 // Split into logical, maintainable modules with clear separation of concerns
 // 2025-11-20
 
+import { isSysopAvailable } from '../services/sysop-availability';
 import { Server, Socket } from "socket.io";
 import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
@@ -794,15 +795,9 @@ debugLog(`[AmigaDoorSession] FIM onShutdown(rc=${rc}, lastWords=${lastWords ?? "
           if (process.env.FIM_CHAT_FLAG !== undefined) return Number(process.env.FIM_CHAT_FLAG) || 0;
           // FAME chat-flag semantics (A/B-verified vs 5D_Page): 1 = NOT
           // pageable, 0 = pageable. Map from sysopAvailable accordingly.
-          // Lazy require: harness runs may not have server state loaded;
-          // boot default sysopAvailable=true => 0.
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const init = require('../server/initialization');
-            return init?.chatState?.sysopAvailable === false ? 1 : 0;
-          } catch {
-            return 0;
-          }
+          // The board's one answer (services/sysop-availability.ts); a
+          // harness with no database gets express.e's default, available.
+          return isSysopAvailable() ? 0 : 1;
         },
         runInternalCommand: (cmd: string) => {
           // CF_InternalCmd: only "C" (sysop chat/page) is supported — the

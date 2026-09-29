@@ -6,6 +6,10 @@
  * Matches express.e behavior exactly.
  */
 
+import { isSysopAvailable } from '../../services/sysop-availability';
+import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { config } from '../../config';
+import { emitText } from '../../utils/output.util';
 import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { handlePageSysop } from '../operator-chat.handler';
@@ -73,6 +77,18 @@ export async function handlePageSysopCommand(
     ErrorHandler.permissionDenied(socket as any, 'page the sysop', {
       nextState: LoggedOnSubState.DISPLAY_MENU,
     });
+    return;
+  }
+
+  // express.e:25396-25400 - an away sysop is not chatted with, unless the
+  // caller's level may override it: say so, and point at C. The port never
+  // refused (parity survey, 2026-09-29) - a caller waited on a page to
+  // someone the board already knew was not there.
+  if (!isSysopAvailable() && !checkSecurity(session.user, ACSPermission.OVERRIDE_CHAT)) {
+    const sysopName = getBoardConfig(config.get('dataDir'))?.sysop_name || 'Sysop';
+    emitText(socket as any, `\r\nSorry, ${sysopName}, is not around right now\r\n`);
+    emitText(socket as any, "You can use 'C' to leave a comment.\r\n\r\n");
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 

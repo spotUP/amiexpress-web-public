@@ -8,6 +8,7 @@
  * - D: Download files (internalCommandD - express.e:24853-24857)
  */
 
+import { isSysopAvailable } from '../../services/sysop-availability';
 import * as fs from 'fs';
 import { negotiateBinaryForTransfer } from '../file/file-delivery';
 import type { TransferResult } from '../../services/transfer-protocol.service';
@@ -911,7 +912,7 @@ console.log('[ENV] User Statistics');
   }
 
   // Sysop Here (express.e:25596)
-  const sysopHere = (session as any).sysopAvail ? 'YES' : 'NO';
+  const sysopHere = isSysopAvailable() ? 'YES' : 'NO';
   socket.emit('ansi-output', `\x1b[32mSysop  Here\x1b[33m:\x1b[0m ${sysopHere}\r\n`);
 
   // Sysop Pages Remaining (express.e:25599-25601)

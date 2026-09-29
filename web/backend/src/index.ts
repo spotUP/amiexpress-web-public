@@ -743,7 +743,6 @@ let doorSessions: DoorSession[] = [];
 
 // Chat system state (mirrors AmiExpress chatFlag, sysopAvail, pagedFlag)
 let chatState: ChatState = {
-  sysopAvailable: true, // Like AmiExpress sysopAvail - F7 toggle
   activeSessions: [],
   pagingUsers: [],
   chatToggle: true, // Like AmiExpress F7 chat toggle

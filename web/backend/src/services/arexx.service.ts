@@ -1,6 +1,7 @@
 // Enhanced AREXX Scripting Engine for AmiExpress-Web
 // Implements a subset of AREXX suitable for web-based BBS automation
 
+import { isSysopAvailable, setSysopAvailable } from './sysop-availability';
 import { db } from '../database';
 import { AREXXContext, AREXXScript } from '../types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -1695,8 +1696,7 @@ console.error('BBSCREATEDROPFILE error:', error);
       // Sysop chat flag — handled at the BBS level, not user-level.
       142: (v) => {
         try {
-          const { chatState } = require('../server/initialization');
-          if (chatState) chatState.sysopAvailable = String(v).toUpperCase() === 'ON' || v === 1 || v === true;
+          setSysopAvailable(String(v).toUpperCase() === 'ON' || v === 1 || v === true);
         } catch { /* fail-soft */ }
       },
     };
@@ -1834,8 +1834,7 @@ console.error('BBSCREATEDROPFILE error:', error);
     };
     const safeChatFlag = (): 'ON' | 'OFF' => {
       try {
-        const { chatState } = require('../server/initialization');
-        return chatState?.sysopAvailable ? 'ON' : 'OFF';
+        return isSysopAvailable() ? 'ON' : 'OFF';
       } catch {
         return 'OFF';
       }

@@ -5,6 +5,7 @@
  * From E sources (express.e:3677-3883)
  */
 
+import { isSysopAvailable } from '../../services/sysop-availability';
 import { Socket } from 'socket.io';
 import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import * as fs from 'fs';
@@ -671,7 +672,7 @@ debugLog(`[XIMBBSInfo] ${isFlag ? 'BB_CHATFLAG' : 'BB_CHATSET'} - Chat status`);
 
     if (isFlag) {
       // express.e: returns "ON"/"OFF" in the string buffer
-      const chatStr = (this.bbsSession as any)?.sysopAvail ? 'ON' : 'OFF';
+      const chatStr = isSysopAvailable() ? 'ON' : 'OFF';
       this.messageParser.writeMessageString(msg.msgAddr, chatStr);
       this.reply(msg, 1);
       return;

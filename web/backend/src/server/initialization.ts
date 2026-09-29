@@ -201,7 +201,6 @@ const SCREEN_MENU = 'MENU';
 
 // Chat system state (mirrors AmiExpress chatFlag, sysopAvail, pagedFlag)
 export let chatState: ChatState = {
-  sysopAvailable: true, // Like AmiExpress sysopAvail - F7 toggle
   activeSessions: [],
   pagingUsers: [],
   chatToggle: true // Like AmiExpress F7 chat toggle

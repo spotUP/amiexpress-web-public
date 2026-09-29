@@ -123,7 +123,6 @@ export interface ChatMessage {
 }
 
 export interface ChatState {
-  sysopAvailable: boolean;
   activeSessions: ChatSession[];
   pagingUsers: string[]; // User IDs currently paging
   chatToggle: boolean; // F7 chat toggle state

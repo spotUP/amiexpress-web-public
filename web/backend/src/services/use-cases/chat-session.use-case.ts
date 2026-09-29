@@ -5,6 +5,7 @@
  * Isolates chat management logic from handlers
  */
 
+import { isSysopAvailable, setSysopAvailable } from '../sysop-availability';
 import { singleton } from 'tsyringe';
 import { getSystemTime } from '../../utils/date-time.util';
 
@@ -31,19 +32,17 @@ export interface ChatMessage {
 }
 
 export interface ChatState {
-  sysopAvailable: boolean;
   activeSessions: ChatSession[];
   pagingUsers: string[];
   chatToggle: boolean;
 }
 
 // @singleton, not @injectable. This object OWNS chatState - activeSessions,
-// pagingUsers, sysopAvailable - and an @injectable class is resolved fresh
+// pagingUsers - and an @injectable class is resolved fresh
 // every time, so a session created by one call was invisible to the next.
 @singleton()
 export class ChatSessionUseCase {
   private chatState: ChatState = {
-    sysopAvailable: true,
     activeSessions: [],
     pagingUsers: [],
     chatToggle: true
@@ -177,16 +176,17 @@ console.log(`Chat session ended: ${sessionId}`);
    * Toggle sysop availability
    */
   toggleSysopAvailable(): boolean {
-    this.chatState.sysopAvailable = !this.chatState.sysopAvailable;
-console.log(`Sysop availability toggled: ${this.chatState.sysopAvailable}`);
-    return this.chatState.sysopAvailable;
+    const now = !isSysopAvailable();
+    setSysopAvailable(now);
+console.log(`Sysop availability toggled: ${now}`);
+    return now;
   }
 
   /**
    * Get sysop availability status
    */
   isSysopAvailable(): boolean {
-    return this.chatState.sysopAvailable;
+    return isSysopAvailable();
   }
 
   /**
@@ -198,7 +198,7 @@ console.log(`Sysop availability toggled: ${this.chatState.sysopAvailable}`);
     activeCount: number;
   } {
     return {
-      available: this.chatState.sysopAvailable,
+      available: isSysopAvailable(),
       pagingCount: this.chatState.pagingUsers.length,
       activeCount: this.chatState.activeSessions.filter(s => s.status === 'active').length
     };

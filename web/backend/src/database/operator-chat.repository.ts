@@ -539,6 +539,24 @@ export class OperatorChatRepository {
   }
 
   /**
+   * The availability of every sysop with a status row - the board-level
+   * "is the sysop around" reads this (services/sysop-availability.ts).
+   */
+  getAllSysopAvailability(): SysopAvailability[] {
+    const rows = this.db.prepare('SELECT availability FROM operator_sysop_status').all() as Array<{ availability: string }>;
+    return rows.map((r) => r.availability as SysopAvailability);
+  }
+
+  /**
+   * express.e's one flag, set for every sysop who is connected: AVAILABLE or
+   * AWAY. An OFFLINE row stays OFFLINE - he is not there to be available.
+   */
+  setConnectedSysopsAvailable(on: boolean): void {
+    this.db.prepare('UPDATE operator_sysop_status SET availability = ?, updated_at = ? WHERE availability != ?')
+      .run(on ? SysopAvailability.AVAILABLE : SysopAvailability.AWAY, Date.now(), SysopAvailability.OFFLINE);
+  }
+
+  /**
    * Update sysop status
    */
   updateSysopStatus(sysopId: string, availability: SysopAvailability, statusMessage?: string): void {
