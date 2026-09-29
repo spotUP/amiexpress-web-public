@@ -52,6 +52,14 @@ jest.mock('../../src/services/SystemStatsService', () => ({
   systemStats: { getTodayCalls: () => 17 },
 }));
 
+// ~SC is the board's caller number, <bbs>/SystemStats - on the run's shared
+// seeded board, which other suites' logins bump. Fixed here, or the pin
+// reads whatever ran before it.
+jest.mock('../../src/services/caller-number', () => ({
+  getCallerCount: () => 0,
+  updateCallerNum: () => 0,
+}));
+
 // `db` is a lazy Proxy singleton (database.ts) — jest.spyOn cannot reach
 // through it, so the module is replaced with the two methods parseMciCodes
 // actually calls.
