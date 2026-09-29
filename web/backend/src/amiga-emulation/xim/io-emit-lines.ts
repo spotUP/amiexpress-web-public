@@ -27,7 +27,6 @@ export interface PreparedLines {
   hasTrailingNewline: boolean;
   trackLines: boolean;
   autoPause: boolean;
-  containsAnsiSgr: boolean;
 }
 
 /** What the loop asks of the handler that owns the wire and the row count. */
@@ -69,7 +68,7 @@ export interface EmitLinesResult {
  * of that line re-enters as rows of its own.
  */
 export function emitPreparedLines(job: PreparedLines, sink: LineSink): EmitLinesResult {
-  const { lines, hasTrailingNewline, trackLines, autoPause, containsAnsiSgr } = job;
+  const { lines, hasTrailingNewline, trackLines, autoPause } = job;
   const newlineMode = getNewlineMode();
   let bytes = 0;
 
@@ -100,9 +99,7 @@ export function emitPreparedLines(job: PreparedLines, sink: LineSink): EmitLines
       const isLastSegment = s === segments.length - 1;
       const endsInNewline = !isLastSegment || shouldAddLineBreak;
       const suffix = endsInNewline ? newlineMode.lineSuffix : '';
-      const ansiReset = (containsAnsiSgr && isLastLine && isLastSegment && endsInNewline)
-        ? '\x1b[0m' : '';
-      const output = `${segment}${ansiReset}${suffix}`;
+      const output = `${segment}${suffix}`;
 
       // Emit output BEFORE checking pause
       sink.write(output);

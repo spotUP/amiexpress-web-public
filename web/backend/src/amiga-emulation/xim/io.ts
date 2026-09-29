@@ -446,22 +446,28 @@ export class XIMIOHandler {
       return;
     }
 
-    // For normal line input, display the default text as a prompt
-    // But skip if it looks like a file path (RAM:, T:) - those aren't prompts
-    // Check the FULL string, not sliced version (maxLen=1 would slice "RAM:..." to "R")
+    // express.e:2202-2204 lineInput: StrCopy(outputString,defaultOutput),
+    // aePuts(outputString), curpos:=StrLen(outputString). The string is the
+    // line's DEFAULT: it is printed AND is the edit buffer, so backspace erases
+    // it and Enter returns it unchanged (File Description's tagline editor,
+    // 2026-09-29: the old tagline was printed but the buffer started empty).
+    // A file path (RAM:, T:) is not a default - it gets a "press Enter" prompt
+    // and an empty buffer. Check the FULL string, not the sliced one (maxLen=1
+    // would slice "RAM:..." to "R").
+    let prefill = '';
     if (defaultText.length > 0) {
       const upperFull = fullString.toUpperCase();
       if (upperFull.startsWith('RAM:') || upperFull.startsWith('T:')) {
-        // File path detected - show a "press Enter" prompt instead
         this.directEmit('ansi-output', '(Press Enter to continue)');
       } else {
         this.directEmit('ansi-output', defaultText);
+        prefill = defaultText;
       }
     }
 
     this.waitingForLineInput = true;
     this.lineInputMessage = msg;
-    this.lineInputBuffer = '';  // Don't pre-fill with file path
+    this.lineInputBuffer = prefill;
     this.lineInputMaxLen = maxLen;
 
     // CRITICAL FIX 2026-01-15: Drain any queued input into the line buffer.
@@ -1559,14 +1565,11 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
 
     let bytesSent = 0;
 
-    // If this message sets ANSI colors/attributes and ends with a newline, reset
-    // attributes at the end to prevent bleed into the next JH_SM message.
-    // Amiga doors like AquaScan set background colors for file-listing lines but
-    // don't emit a reset, causing the color to persist into the following prompt.
-    const containsAnsiSgr = /\x1b\[\d*(?:;\d+)*m/.test(normalized);
-
+    // No attribute reset is added here: express.e's JH_SM is aePuts and a
+    // door's colour lasts until the door changes it (File Description's frame
+    // is ESC[34m once, then rows with no colour of their own).
     const sent = emitPreparedLines(
-      { lines: rawLines, hasTrailingNewline, trackLines, autoPause, containsAnsiSgr },
+      { lines: rawLines, hasTrailingNewline, trackLines, autoPause },
       this.lineSink(pendingMsg),
     );
     bytesSent += sent.bytes;
