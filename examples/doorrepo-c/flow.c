@@ -2658,3 +2658,365 @@ int flow_parse_command(const char *line, char *arg_out, unsigned long arg_cap)
 
     return flow_commands[match].id;
 }
+
+
+/* ---- Doors that ship as an overlay of the BBS (see flow.h) -------------- */
+
+/* The next row's path field: everything past the SECOND '|' (a path may
+ * itself hold pipes - see flow_command_from_listing). Separators are folded
+ * to '/'. `*cursor` advances to the following row. Returns 0 when the listing
+ * is exhausted. */
+static int overlay_next_path(const char **cursor, char *path, unsigned long size)
+{
+    while (*cursor != (const char *) 0 && **cursor != '\0') {
+        const char *line = *cursor;
+        const char *row_end = strchr(line, '\n');
+        const char *bar1;
+        const char *bar2;
+
+        if (row_end == (const char *) 0) {
+            row_end = line + strlen(line);
+        }
+        *cursor = (*row_end == '\n') ? row_end + 1 : (const char *) 0;
+        while (row_end > line && *(row_end - 1) == '\r') {
+            row_end--;
+        }
+        if (strncmp(line, "FILES|", 6) == 0) {
+            continue;
+        }
+        bar1 = (const char *) memchr(line, '|', (size_t) (row_end - line));
+        bar2 = (bar1 != (const char *) 0)
+            ? (const char *) memchr(bar1 + 1, '|', (size_t) (row_end - (bar1 + 1)))
+            : (const char *) 0;
+        if (bar2 != (const char *) 0 && (unsigned long) (row_end - (bar2 + 1)) > 0
+            && (unsigned long) (row_end - (bar2 + 1)) < size) {
+            unsigned long n = (unsigned long) (row_end - (bar2 + 1));
+            unsigned long i;
+
+            memcpy(path, bar2 + 1, (size_t) n);
+            path[n] = '\0';
+            for (i = 0; i < n; i++) {
+                if (path[i] == '\\') {
+                    path[i] = '/';
+                }
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void overlay_lower(const char *in, char *out, unsigned long size)
+{
+    unsigned long i;
+
+    for (i = 0; in[i] != '\0' && i + 1 < size; i++) {
+        out[i] = (char) tolower((unsigned char) in[i]);
+    }
+    out[i] = '\0';
+}
+
+/* Offset of `needle` (lower case) in `lower_path` where it starts a path
+ * segment, or -1. */
+static long overlay_segment(const char *lower_path, const char *needle)
+{
+    const char *at = lower_path;
+
+    while ((at = strstr(at, needle)) != (const char *) 0) {
+        if (at == lower_path || *(at - 1) == '/') {
+            return (long) (at - lower_path);
+        }
+        at++;
+    }
+    return -1;
+}
+
+int flow_overlay_from_listing(const char *listing, char *stage, unsigned long stage_size,
+                              char *sub, unsigned long sub_size)
+{
+    const char *cursor = listing;
+    char path[FLOW_OVERLAY_STAGE_MAX + 64];
+    char lower[FLOW_OVERLAY_STAGE_MAX + 64];
+    char icon_prefix[FLOW_OVERLAY_STAGE_MAX];
+    char door_prefix[FLOW_OVERLAY_STAGE_MAX];
+    char door_stage[FLOW_OVERLAY_STAGE_MAX];
+    char door_sub[FLOW_OVERLAY_SUB_MAX];
+    int have_icon = 0;
+    int have_door = 0;
+
+    if (stage == (char *) 0 || sub == (char *) 0 || stage_size == 0 || sub_size == 0) {
+        return 0;
+    }
+    stage[0] = '\0';
+    sub[0] = '\0';
+    if (listing == (const char *) 0) {
+        return 0;
+    }
+
+    while (overlay_next_path(&cursor, path, sizeof(path))) {
+        long at;
+
+        overlay_lower(path, lower, sizeof(lower));
+
+        if (!have_icon) {
+            const char *needles[2];
+            int n;
+
+            needles[0] = "commands/bbscmd/";
+            needles[1] = "commands/syscmd/";
+            for (n = 0; n < 2 && !have_icon; n++) {
+                at = overlay_segment(lower, needles[n]);
+                if (at >= 0) {
+                    unsigned long len = (unsigned long) strlen(lower);
+
+                    if (len > 5 && strcmp(lower + len - 5, ".info") == 0
+                        && (unsigned long) at < sizeof(icon_prefix)) {
+                        memcpy(icon_prefix, lower, (size_t) at);
+                        icon_prefix[at] = '\0';
+                        have_icon = 1;
+                    }
+                }
+            }
+        }
+
+        if (!have_door) {
+            at = overlay_segment(lower, "doors/");
+            if (at >= 0) {
+                const char *after = path + at + 6;
+                const char *slash = strchr(after, '/');
+
+                if (slash != (const char *) 0 && slash > after
+                    && (unsigned long) (slash - after) < sizeof(door_sub)
+                    && (unsigned long) (slash - path) < sizeof(door_stage)) {
+                    memcpy(door_prefix, lower, (size_t) at);
+                    door_prefix[at] = '\0';
+                    memcpy(door_stage, path, (size_t) (slash - path));
+                    door_stage[slash - path] = '\0';
+                    memcpy(door_sub, after, (size_t) (slash - after));
+                    door_sub[slash - after] = '\0';
+                    have_door = 1;
+                }
+            }
+        }
+    }
+
+    if (!have_icon || !have_door || strcmp(icon_prefix, door_prefix) != 0) {
+        return 0;
+    }
+    if (strlen(door_stage) + 1 > stage_size || strlen(door_sub) + 1 > sub_size) {
+        return 0;
+    }
+    strcpy(stage, door_stage);
+    strcpy(sub, door_sub);
+    return 1;
+}
+
+int flow_overlay_relative(const char *row_path, const char *stage,
+                          char *rel, unsigned long rel_size)
+{
+    char norm[FLOW_OVERLAY_STAGE_MAX + 128];
+    char lower[FLOW_OVERLAY_STAGE_MAX + 128];
+    char lstage[FLOW_OVERLAY_STAGE_MAX];
+    unsigned long i;
+    unsigned long slen;
+
+    if (row_path == (const char *) 0 || stage == (const char *) 0
+        || rel == (char *) 0 || rel_size == 0) {
+        return 0;
+    }
+    rel[0] = '\0';
+    if (strlen(row_path) + 1 > sizeof(norm)) {
+        return 0;
+    }
+    for (i = 0; row_path[i] != '\0'; i++) {
+        norm[i] = (row_path[i] == '\\') ? '/' : row_path[i];
+    }
+    norm[i] = '\0';
+    overlay_lower(norm, lower, sizeof(lower));
+    overlay_lower(stage, lstage, sizeof(lstage));
+    slen = (unsigned long) strlen(lstage);
+    if (strncmp(lower, lstage, (size_t) slen) != 0 || lower[slen] != '/' || norm[slen + 1] == '\0'
+        || strlen(norm + slen + 1) + 1 > rel_size) {
+        return 0;
+    }
+    strcpy(rel, norm + slen + 1);
+    return 1;
+}
+
+/* "FileDescription020.x" -> stem "FileDescription", cpu "020", ext ".x".
+ * The cpu is one of the builds an Amiga door is shipped in. */
+static int overlay_split_cpu(const char *name, char *stem, unsigned long stem_size,
+                             char *cpu, const char **ext)
+{
+    static const char *const cpus[] = { "000", "010", "020", "030", "040", "060" };
+    const char *dot = strrchr(name, '.');
+    unsigned long end = (dot != (const char *) 0) ? (unsigned long) (dot - name) : (unsigned long) strlen(name);
+    int k;
+
+    if (end < 4) {
+        return 0;
+    }
+    for (k = 0; k < 6; k++) {
+        if (strncmp(name + end - 3, cpus[k], 3) == 0 && end - 3 + 1 <= stem_size) {
+            memcpy(stem, name, (size_t) (end - 3));
+            stem[end - 3] = '\0';
+            strcpy(cpu, cpus[k]);
+            *ext = name + end;
+            return k + 1;
+        }
+    }
+    return 0;
+}
+
+int flow_overlay_binary(const char *listing, const char *stage,
+                        char *plain, unsigned long plain_size,
+                        char *variant, unsigned long variant_size)
+{
+    const char *cursor = listing;
+    char path[FLOW_OVERLAY_STAGE_MAX + 128];
+    char rel[FLOW_OVERLAY_STAGE_MAX + 128];
+    char best_plain[FLOW_OVERLAY_STAGE_MAX + 128];
+    char best_variant[FLOW_OVERLAY_STAGE_MAX + 128];
+    int best_rank = 0;
+
+    if (plain == (char *) 0 || variant == (char *) 0 || plain_size == 0 || variant_size == 0) {
+        return 0;
+    }
+    plain[0] = '\0';
+    variant[0] = '\0';
+    if (listing == (const char *) 0 || stage == (const char *) 0) {
+        return 0;
+    }
+
+    while (overlay_next_path(&cursor, path, sizeof(path))) {
+        char stem[FLOW_OVERLAY_STAGE_MAX];
+        char cpu[4];
+        const char *ext;
+        const char *name;
+        const char *slash;
+        int rank;
+        char candidate[FLOW_OVERLAY_STAGE_MAX + 128];
+
+        if (!flow_overlay_relative(path, stage, rel, sizeof(rel))) {
+            continue;
+        }
+        slash = strrchr(rel, '/');
+        name = (slash != (const char *) 0) ? slash + 1 : rel;
+        rank = overlay_split_cpu(name, stem, sizeof(stem), cpu, &ext);
+        if (rank == 0 || (best_rank != 0 && rank >= best_rank)) {
+            continue;
+        }
+        /* the plain name, in the same directory */
+        {
+            unsigned long dirlen = (unsigned long) (name - rel);
+
+            if (dirlen + strlen(stem) + strlen(ext) + 1 > sizeof(candidate)) {
+                continue;
+            }
+            memcpy(candidate, rel, (size_t) dirlen);
+            strcpy(candidate + dirlen, stem);
+            strcat(candidate, ext);
+        }
+        {
+            /* Ship-with-the-plain-name means there is nothing to copy. */
+            const char *again = listing;
+            char other[FLOW_OVERLAY_STAGE_MAX + 128];
+            char other_rel[FLOW_OVERLAY_STAGE_MAX + 128];
+            char l1[FLOW_OVERLAY_STAGE_MAX + 128];
+            char l2[FLOW_OVERLAY_STAGE_MAX + 128];
+            int present = 0;
+
+            while (overlay_next_path(&again, other, sizeof(other))) {
+                if (flow_overlay_relative(other, stage, other_rel, sizeof(other_rel))) {
+                    overlay_lower(other_rel, l1, sizeof(l1));
+                    overlay_lower(candidate, l2, sizeof(l2));
+                    if (strcmp(l1, l2) == 0) {
+                        present = 1;
+                        break;
+                    }
+                }
+            }
+            if (present) {
+                continue;
+            }
+        }
+        best_rank = rank;
+        strcpy(best_plain, candidate);
+        strcpy(best_variant, rel);
+    }
+
+    if (best_rank == 0 || strlen(best_plain) + 1 > plain_size || strlen(best_variant) + 1 > variant_size) {
+        return 0;
+    }
+    strcpy(plain, best_plain);
+    strcpy(variant, best_variant);
+    return 1;
+}
+
+int flow_overlay_syscmd_icon(const char *row_path, char *name, unsigned long name_size)
+{
+    char norm[FLOW_OVERLAY_STAGE_MAX + 128];
+    char lower[FLOW_OVERLAY_STAGE_MAX + 128];
+    unsigned long i;
+    unsigned long len;
+    long at;
+    const char *tail;
+
+    if (row_path == (const char *) 0 || name == (char *) 0 || name_size == 0) {
+        return 0;
+    }
+    name[0] = '\0';
+    if (strlen(row_path) + 1 > sizeof(norm)) {
+        return 0;
+    }
+    for (i = 0; row_path[i] != '\0'; i++) {
+        norm[i] = (row_path[i] == '\\') ? '/' : row_path[i];
+    }
+    norm[i] = '\0';
+    overlay_lower(norm, lower, sizeof(lower));
+    at = overlay_segment(lower, "commands/syscmd/");
+    if (at < 0) {
+        return 0;
+    }
+    tail = norm + at + 16;
+    len = (unsigned long) strlen(tail);
+    if (len < 6 || strchr(tail, '/') != (const char *) 0 || strcmp(lower + at + 16 + len - 5, ".info") != 0
+        || len + 1 > name_size) {
+        return 0;
+    }
+    strcpy(name, tail);
+    return 1;
+}
+
+int flow_sibling_dir(const char *dir, const char *leaf, char *out, unsigned long out_size)
+{
+    unsigned long len;
+    unsigned long end;
+    unsigned long start;
+    unsigned long tail;
+
+    if (dir == (const char *) 0 || leaf == (const char *) 0 || out == (char *) 0 || out_size == 0) {
+        return -1;
+    }
+    len = (unsigned long) strlen(dir);
+    end = len;
+    /* the trailing separator, if any, stays */
+    while (end > 0 && (dir[end - 1] == '/' || dir[end - 1] == ':')) {
+        end--;
+    }
+    start = end;
+    while (start > 0 && dir[start - 1] != '/' && dir[start - 1] != ':') {
+        start--;
+    }
+    if (start == end) {
+        return -1;
+    }
+    tail = len - end;
+    if (start + strlen(leaf) + tail + 1 > out_size) {
+        return -1;
+    }
+    memcpy(out, dir, (size_t) start);
+    strcpy(out + start, leaf);
+    strcat(out, dir + end);
+    return (int) strlen(out);
+}

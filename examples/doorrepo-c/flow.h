@@ -892,6 +892,57 @@ int flow_pick_door_binary(const char *files_body, const char *archive_name,
  * `out` is NULL, or `outlen` is 0. */
 int flow_command_from_listing(const char *listing, char *out, unsigned long outlen);
 
+/* ---- Doors that ship as an overlay of the BBS ---------------------------
+ *
+ * MST-FD11.LHA (File Description 1.1) holds Commands/BBScmd/SENT.info,
+ * Commands/Syscmd/EXAMINE.info and Doors/FileDescription/..., and the author's
+ * text says to copy each to its place. Extracted whole into Doors/<cmd>/ the
+ * door is nested a level too deep: nothing is where the command config will
+ * look, and there is no FileDescription.x (only ...000.x and ...020.x, one of
+ * which the author says to copy to that name). Doors/door-manager's
+ * archive-layout.ts does this for DOORMAN; these are the same decisions for a
+ * client that can only see the archive through its /files listing.
+ *
+ * `stage` is the door's directory inside the archive, as the listing spells
+ * it ("Doors/FileDescription", or "WRAP/Doors/FileDescription"); `sub` is its
+ * last segment, the name it takes on the board. All matching ignores case and
+ * treats '\\' as '/'. */
+#define FLOW_OVERLAY_STAGE_MAX 160
+#define FLOW_OVERLAY_SUB_MAX 64
+
+/* 1 when the listing holds a command icon under Commands/BBSCmd or
+ * Commands/SysCmd AND files under a Doors/<sub>/ beside it (same parent);
+ * fills `stage` and `sub` from the first such Doors/<sub>/. 0 otherwise, and
+ * the outputs are then empty. */
+int flow_overlay_from_listing(const char *listing, char *stage, unsigned long stage_size,
+                              char *sub, unsigned long sub_size);
+
+/* 1 when `row_path` lies under `stage`; `rel` gets the rest, with '/'
+ * separators and the archive's own spelling. */
+int flow_overlay_relative(const char *row_path, const char *stage,
+                          char *rel, unsigned long rel_size);
+
+/* 1 when the listing holds only per-CPU builds of the door's program under
+ * `stage` (FileDescription000.x, FileDescription020.x) and not the plain name
+ * a command icon would point at (FileDescription.x). `plain` is that name and
+ * `variant` the build to copy to it - the 68000 one when there is a choice,
+ * since it runs on every CPU. Both are relative to `stage`. */
+int flow_overlay_binary(const char *listing, const char *stage,
+                        char *plain, unsigned long plain_size,
+                        char *variant, unsigned long variant_size);
+
+/* 1 when the row is a system-command icon (Commands/SysCmd/<NAME>.info);
+ * `name` gets "<NAME>.info" in the archive's spelling. BBS commands are the
+ * ones DoorRepo writes itself; a system command has no such path, so its
+ * icon is moved into place as the author made it. */
+int flow_overlay_syscmd_icon(const char *row_path, char *name, unsigned long name_size);
+
+/* `dir` with its last path component replaced by `leaf`:
+ * "BBS:Commands/BBSCmd/" + "SysCmd" -> "BBS:Commands/SysCmd/". The result
+ * keeps the trailing separator `dir` had. -1 when it would not fit or `dir`
+ * has no component to replace. */
+int flow_sibling_dir(const char *dir, const char *leaf, char *out, unsigned long out_size);
+
 /* The door type to write into the command config, given the catalog's type
  * and the program that was actually chosen.
  *

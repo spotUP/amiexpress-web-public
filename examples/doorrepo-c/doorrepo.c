@@ -3409,6 +3409,81 @@ static void report_install_to_bbs(const dr_config *cfg, const char *cmdname,
     fclose(f);
 }
 
+/* Copies one file. C89 has no copy, and the door needs exactly one place for
+ * it: making the plain program of a door that ships per-CPU builds. */
+static int copy_file(const char *from, const char *to)
+{
+    FILE *in = fopen(from, "rb");
+    FILE *out;
+    char buf[4096];
+    size_t got;
+    int ok = 1;
+
+    if (in == (FILE *) 0) {
+        return 0;
+    }
+    out = fopen(to, "wb");
+    if (out == (FILE *) 0) {
+        fclose(in);
+        return 0;
+    }
+    while ((got = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, got, out) != got) {
+            ok = 0;
+            break;
+        }
+    }
+    fclose(in);
+    if (fclose(out) != 0) {
+        ok = 0;
+    }
+    if (!ok) {
+        (void) remove(to);
+    }
+    return ok;
+}
+
+/* What is left in the extraction directory of an overlay archive once its
+ * door directory has been moved out: the files the archive carried outside
+ * it (docs, the group's ad), then the directories that emptied. Only paths
+ * the listing named are touched, and a directory that is not empty simply
+ * stays - remove() will not take it. */
+static void overlay_clean_staging(const char *staging, const char *listing, const char *stage)
+{
+    const char *line = listing;
+    char rel[160];
+    char rest[160];
+    char full[320];
+    char *cut;
+
+    if (line != (const char *) 0 && strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+    while (line != (const char *) 0) {
+        if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0, rel, sizeof(rel)) == 0
+            && !flow_overlay_relative(rel, stage, rest, sizeof(rest))
+            && flow_build_local_path(full, sizeof(full), staging, rel) >= 0) {
+            (void) remove(full);
+            while ((cut = strrchr(rel, '/')) != (char *) 0) {
+                *cut = '\0';
+                if (flow_build_local_path(full, sizeof(full), staging, rel) < 0
+                    || remove(full) != 0) {
+                    break;
+                }
+            }
+        }
+        line = flow_files_next_line(line);
+    }
+    strcpy(rel, stage);
+    while ((cut = strrchr(rel, '/')) != (char *) 0) {
+        *cut = '\0';
+        if (flow_build_local_path(full, sizeof(full), staging, rel) >= 0) {
+            (void) remove(full);
+        }
+    }
+    (void) remove(staging);
+}
+
 /* The whole install, from an entry in the list to a runnable BBS command.
  * Reports every step to the user, because on a real node this is the one
  * action that changes what the BBS itself will do. */
@@ -3431,6 +3506,9 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     int listed_present;
     int verdict;
     int named_by_archive;
+    char overlay_stage[FLOW_OVERLAY_STAGE_MAX];
+    char overlay_sub[FLOW_OVERLAY_SUB_MAX];
+    int overlay = 0;
 
     /* The archive name has already passed the CWE-22 filename check at
      * catalog-parse time; re-checked here for the same reason the
@@ -3552,9 +3630,143 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     files_load(cfg, entry->archive);
 
     binary_rel[0] = '\0';
-    if (!g_files_ok
+
+    /* An archive that is an overlay of the BBS (MST-FD11.LHA: Commands/ and
+     * Doors/<Name>/ side by side) has just been unpacked one level too deep
+     * for its own command icons. Put each piece where the author's text
+     * says - flow.h, "Doors that ship as an overlay of the BBS". */
+    if (g_files_ok
+        && flow_overlay_from_listing(g_files, overlay_stage, sizeof(overlay_stage),
+                                     overlay_sub, sizeof(overlay_sub))) {
+        char src[420];
+        char dst[320];
+        char probe[420];
+        char plain[160];
+        char variant[160];
+        char stage_rel[160];
+        const char *row = g_files;
+        int occupied = 0;
+
+        overlay = 1;
+        if (strncmp(row, "FILES|", 6) == 0) {
+            row = flow_files_next_line(row);
+        }
+        if (flow_build_local_path(dst, sizeof(dst), cfg->doors_dir, overlay_sub) < 0
+            || flow_build_local_path(src, sizeof(src), install_dir, overlay_stage) < 0) {
+            ae_put("Install stopped: the door's directory name is too long for DoorsDir.", 1);
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+        /* Never on top of a door that is already there. */
+        while (row != (const char *) 0 && !occupied) {
+            char rel[160];
+
+            if (flow_files_parse_row(row, (unsigned long *) 0, (int *) 0, rel, sizeof(rel)) == 0
+                && flow_overlay_relative(rel, overlay_stage, stage_rel, sizeof(stage_rel))
+                && flow_build_local_path(probe, sizeof(probe), dst, stage_rel) >= 0
+                && file_exists(probe)) {
+                occupied = 1;
+            }
+            row = flow_files_next_line(row);
+        }
+        if (occupied) {
+            sprintf(msg, "Install stopped: %s already holds this door's files. Nothing was", dst);
+            ae_put(msg, 1);
+            ae_put("overwritten. Uninstall it first, or remove the directory.", 1);
+            log_line(cfg, "INSTALL REFUSED: overlay door directory already in use");
+            overlay_clean_staging(install_dir, g_files, "");
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+        if (rename(src, dst) != 0) {
+            sprintf(msg, "Install stopped: could not move %s to %s.", src, dst);
+            ae_put(msg, 1);
+            log_line(cfg, "INSTALL FAILED: could not move the overlay door directory");
+            ae_put("", 1);
+            ae_put("Press any key to return to the list.", 1);
+            (void) ae_key();
+            return;
+        }
+        sprintf(msg, "%s installed under the archive's own name.", dst);
+        ae_put(msg, 1);
+
+        /* System-command icons (Commands/SysCmd) are the author's, moved as
+         * they are: DoorRepo writes BBS command configs itself, but it has
+         * no config of its own to write for a system command. */
+        {
+            char syscmd_dir[256];
+
+            if (flow_sibling_dir(cfg->bbscmd_dir, "SysCmd", syscmd_dir, sizeof(syscmd_dir)) > 0) {
+                row = g_files;
+                if (strncmp(row, "FILES|", 6) == 0) {
+                    row = flow_files_next_line(row);
+                }
+                while (row != (const char *) 0) {
+                    char rel[160];
+                    char icon[64];
+                    char from[420];
+                    char to[420];
+
+                    if (flow_files_parse_row(row, (unsigned long *) 0, (int *) 0, rel, sizeof(rel)) == 0
+                        && flow_overlay_syscmd_icon(rel, icon, sizeof(icon))
+                        && flow_build_local_path(from, sizeof(from), install_dir, rel) >= 0
+                        && flow_build_local_path(to, sizeof(to), syscmd_dir, icon) >= 0) {
+                        if (file_exists(to)) {
+                            sprintf(msg, "%s already exists - kept.", to);
+                        } else if (rename(from, to) == 0) {
+                            sprintf(msg, "Installed system command %s.", icon);
+                        } else {
+                            sprintf(msg, "Could not install system command %s.", icon);
+                        }
+                        ae_put(msg, 1);
+                    }
+                    row = flow_files_next_line(row);
+                }
+            }
+        }
+
+        /* A door that ships only per-CPU builds is finished by the copy its
+         * author's text asks the sysop to make. */
+        if (flow_overlay_binary(g_files, overlay_stage, plain, sizeof(plain),
+                                variant, sizeof(variant))) {
+            char from[420];
+            char to[420];
+
+            if (flow_build_local_path(from, sizeof(from), dst, variant) >= 0
+                && flow_build_local_path(to, sizeof(to), dst, plain) >= 0
+                && copy_file(from, to)) {
+                sprintf(msg, "%s is %s, the build for every 68000.", plain, variant);
+                ae_put(msg, 1);
+                strncpy(binary_rel, plain, sizeof(binary_rel) - 1);
+                binary_rel[sizeof(binary_rel) - 1] = '\0';
+            }
+        }
+        overlay_clean_staging(install_dir, g_files, overlay_stage);
+        /* From here the door's directory is where it now lives. */
+        strncpy(install_dir, dst, sizeof(install_dir) - 1);
+        install_dir[sizeof(install_dir) - 1] = '\0';
+    }
+
+    if (binary_rel[0] == '\0' && overlay && g_files_ok) {
+        /* No per-CPU builds to finish: take the door's program from its own
+         * directory's files. */
+        char picked[160];
+        char inside[160];
+
+        picked[0] = '\0';
+        if (flow_pick_door_binary(g_files, entry->archive, cmdname, picked, sizeof(picked)) >= 0
+            && flow_overlay_relative(picked, overlay_stage, inside, sizeof(inside))) {
+            strcpy(binary_rel, inside);
+        }
+    }
+
+    if (binary_rel[0] == '\0' && (overlay || !g_files_ok
         || flow_pick_door_binary(g_files, entry->archive, cmdname,
-                                 binary_rel, sizeof(binary_rel)) < 0) {
+                                 binary_rel, sizeof(binary_rel)) < 0)) {
         /* Same fallback DOORMAN uses when its own search comes up empty:
          * name the command itself and let the sysop correct LOCATION. */
         strcpy(binary_rel, cmdname);
@@ -3641,6 +3853,13 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         }
     }
 
+    if (overlay) {
+        /* The door's directory was moved into place above, which is the
+         * proof files arrived; the listing's paths are the archive's, not
+         * this directory's, so the sample below cannot see them. */
+        listed_checked = 1;
+        listed_present = 1;
+    }
     verdict = flow_install_verdict(extract_ok, have_listing, program_readable,
                                    listed_checked, listed_present);
 
@@ -3704,7 +3923,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * Caught on the live board with CALC, 2026-08-31. */
     if (flow_build_info_content(info_content, sizeof(info_content),
                                  flow_effective_door_type(entry->type, binary_rel),
-                                 cmdname, binary_rel, -1, -1) < 0) {
+                                 overlay ? overlay_sub : cmdname, binary_rel, -1, -1) < 0) {
         ae_put("Install failed: the command config would not fit its buffer.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -3742,7 +3961,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
      * author put there, and a sysop may want to read one. entry->junk is -1
      * against a server that does not report the count, in which case the
      * listing itself still knows and the offer is made from that. */
-    if (g_files_ok) {
+    if (g_files_ok && !overlay) {
         int junk_total = 0;
         const char *line = g_files;
 
@@ -3922,6 +4141,10 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
     int owns_dir = 0;
     uninstall_sweep sweep;
     dr_info_fields fields;
+    char removal_root[320];
+    char overlay_stage[FLOW_OVERLAY_STAGE_MAX];
+    char overlay_sub[FLOW_OVERLAY_SUB_MAX];
+    int overlay = 0;
 
     /* Read the LOCATION before the .info is gone: everything below needs to
      * know which binary this command named. */
@@ -3970,6 +4193,27 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
     }
 
     files_load(cfg, archive);
+
+    /* An overlay archive (flow.h) put its door under the archive's own
+     * directory name, not under the command: the files to remove are the
+     * listing's rows inside that directory, and the directory is the one the
+     * command's LOCATION names. */
+    strcpy(removal_root, install_dir);
+    if (g_files_ok
+        && flow_overlay_from_listing(g_files, overlay_stage, sizeof(overlay_stage),
+                                     overlay_sub, sizeof(overlay_sub))) {
+        overlay = 1;
+        if (door_dir[0] != '\0') {
+            strncpy(removal_root, door_dir, sizeof(removal_root) - 1);
+            removal_root[sizeof(removal_root) - 1] = '\0';
+        } else if (flow_build_local_path(removal_root, sizeof(removal_root),
+                                         cfg->doors_dir, overlay_sub) < 0) {
+            ae_put("Could not work out the door's directory; no files were removed.", 1);
+            index_remove(cfg, archive);
+            return;
+        }
+    }
+
     if (g_files_ok) {
         const char *line = g_files;
 
@@ -3978,11 +4222,19 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
         }
         while (line != (const char *) 0) {
             char rel[160];
+            char inside[160];
             char full[320];
 
             if (flow_files_parse_row(line, (unsigned long *) 0, (int *) 0,
                                       rel, sizeof(rel)) == 0) {
-                if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
+                const char *under = rel;
+
+                if (overlay) {
+                    under = flow_overlay_relative(rel, overlay_stage, inside, sizeof(inside))
+                        ? inside : (const char *) 0;
+                }
+                if (under != (const char *) 0
+                    && flow_build_local_path(full, sizeof(full), removal_root, under) >= 0) {
                     if (remove(full) == 0) {
                         removed++;
                     }
@@ -3990,9 +4242,23 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
             }
             line = flow_files_next_line(line);
         }
+        if (overlay) {
+            /* The copy the install made from a per-CPU build is not in the
+             * listing, and would keep the directory from emptying. */
+            char plain[160];
+            char variant[160];
+            char full[320];
+
+            if (flow_overlay_binary(g_files, overlay_stage, plain, sizeof(plain),
+                                    variant, sizeof(variant))
+                && flow_build_local_path(full, sizeof(full), removal_root, plain) >= 0
+                && remove(full) == 0) {
+                removed++;
+            }
+        }
     }
 
-    sprintf(msg, "Removed %d file(s) from %s.", removed, install_dir);
+    sprintf(msg, "Removed %d file(s) from %s.", removed, removal_root);
     ae_put(msg, 1);
 
     if (sweep.cotenants > 0) {
@@ -4001,12 +4267,33 @@ static void uninstall_door_apply(const dr_config *cfg, const char *archive,
          * about. Said out loud, because the directory staying is a
          * decision, not a failure. */
         sprintf(msg, "%s kept - %d other command(s) still point into it.",
-                install_dir, sweep.cotenants);
+                removal_root, sweep.cotenants);
         ae_put(msg, 1);
-    } else if (remove(install_dir) != 0) {
-        sprintf(msg, "%s still exists - it is not empty. Anything left there was not", install_dir);
+    } else if (remove(removal_root) != 0) {
+        sprintf(msg, "%s still exists - it is not empty. Anything left there was not", removal_root);
         ae_put(msg, 1);
         ae_put("part of the archive and has been left alone.", 1);
+    }
+
+    if (overlay && g_files_ok) {
+        /* A system command's icon is not DoorRepo's to judge: it may be one
+         * the sysop already had. Named, so it can be removed by hand. */
+        const char *row = g_files;
+
+        if (strncmp(row, "FILES|", 6) == 0) {
+            row = flow_files_next_line(row);
+        }
+        while (row != (const char *) 0) {
+            char rel[160];
+            char icon[64];
+
+            if (flow_files_parse_row(row, (unsigned long *) 0, (int *) 0, rel, sizeof(rel)) == 0
+                && flow_overlay_syscmd_icon(rel, icon, sizeof(icon))) {
+                sprintf(msg, "System command %s was left in Commands/SysCmd - remove it by hand if unwanted.", icon);
+                ae_put(msg, 1);
+            }
+            row = flow_files_next_line(row);
+        }
     }
 
     index_remove(cfg, archive);

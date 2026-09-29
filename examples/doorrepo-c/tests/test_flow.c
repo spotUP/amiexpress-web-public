@@ -3455,9 +3455,130 @@ static void test_decode_escape_unknown_sequence_is_no_key(void)
     ASSERT_EQ(flow_decode_escape(&src, &push), 0, "an unknown CSI final byte is no key");
 }
 
+
+/* MST-FD11.LHA, File Description 1.1: an overlay of the BBS. */
+#define MST_LISTING \
+    "FILES|13|2\n" \
+    "33856|0|Doors/FileDescription/FileDescription000.x\n" \
+    "33756|0|Doors/FileDescription/FileDescription020.x\n" \
+    "11093|0|Doors/FileDescription/FileDescription.Doc\n" \
+    "2306|0|Doors/FileDescription/FileDescription.Config\n" \
+    "814|0|Commands/Syscmd/EXAMINE.info\n" \
+    "814|0|Commands/BBScmd/SENT.info\n" \
+    "495|0|file_id.diz\n" \
+    "988|1|reference-board.txt\n"
+
+TEST(overlay_is_recognised_from_the_listing)
+{
+    char stage[FLOW_OVERLAY_STAGE_MAX];
+    char sub[FLOW_OVERLAY_SUB_MAX];
+
+    ASSERT_EQ(flow_overlay_from_listing(MST_LISTING, stage, sizeof(stage), sub, sizeof(sub)), 1,
+              "Commands/ beside Doors/<sub>/ is an overlay");
+    ASSERT_STR_EQ(stage, "Doors/FileDescription", "the door's directory in the archive");
+    ASSERT_STR_EQ(sub, "FileDescription", "the name it takes on the board");
+}
+
+TEST(overlay_is_recognised_under_a_wrapper_directory_and_backslashes)
+{
+    char stage[FLOW_OVERLAY_STAGE_MAX];
+    char sub[FLOW_OVERLAY_SUB_MAX];
+
+    ASSERT_EQ(flow_overlay_from_listing(
+                  "FILES|2|0\n1|0|WRAP\\COMMANDS\\BBSCMD\\X.info\n1|0|WRAP\\DOORS\\Thing\\prog\n",
+                  stage, sizeof(stage), sub, sizeof(sub)), 1, "a wrapper and DOS separators");
+    ASSERT_STR_EQ(stage, "WRAP/DOORS/Thing", "the wrapper is part of the stage");
+    ASSERT_STR_EQ(sub, "Thing", "the door's own name");
+}
+
+TEST(a_flat_door_is_not_an_overlay)
+{
+    char stage[FLOW_OVERLAY_STAGE_MAX];
+    char sub[FLOW_OVERLAY_SUB_MAX];
+
+    ASSERT_EQ(flow_overlay_from_listing("FILES|2|0\n1|0|door.info\n1|0|door\n",
+                                        stage, sizeof(stage), sub, sizeof(sub)), 0,
+              "an icon and a program side by side");
+    ASSERT_EQ(flow_overlay_from_listing("FILES|1|0\n1|0|Doors/Thing/prog\n",
+                                        stage, sizeof(stage), sub, sizeof(sub)), 0,
+              "a Doors/ tree with no command icon");
+    ASSERT_EQ(flow_overlay_from_listing("FILES|2|0\n1|0|Commands/BBSCmd/X.info\n1|0|Other/Doors/T/p\n",
+                                        stage, sizeof(stage), sub, sizeof(sub)), 0,
+              "Commands/ and Doors/ that are not siblings");
+}
+
+TEST(overlay_paths_are_taken_relative_to_the_door_directory)
+{
+    char rel[128];
+
+    ASSERT_EQ(flow_overlay_relative("Doors\\FileDescription\\Sub\\A.x", "doors/filedescription", rel, sizeof(rel)), 1,
+              "case and separators ignored");
+    ASSERT_STR_EQ(rel, "Sub/A.x", "the rest, in the archive's spelling");
+    ASSERT_EQ(flow_overlay_relative("Doors/FileDescriptionX/A", "Doors/FileDescription", rel, sizeof(rel)), 0,
+              "a longer name is not inside the directory");
+    ASSERT_EQ(flow_overlay_relative("Commands/BBScmd/SENT.info", "Doors/FileDescription", rel, sizeof(rel)), 0,
+              "outside the directory");
+}
+
+TEST(overlay_makes_the_plain_program_from_the_68000_build)
+{
+    char plain[128];
+    char variant[128];
+
+    ASSERT_EQ(flow_overlay_binary(MST_LISTING, "Doors/FileDescription", plain, sizeof(plain), variant, sizeof(variant)), 1,
+              "only per-CPU builds ship");
+    ASSERT_STR_EQ(plain, "FileDescription.x", "the name the command icon uses");
+    ASSERT_STR_EQ(variant, "FileDescription000.x", "the 68000 build runs everywhere");
+}
+
+TEST(overlay_binary_is_left_alone_when_the_plain_program_ships)
+{
+    char plain[128];
+    char variant[128];
+
+    ASSERT_EQ(flow_overlay_binary(
+                  "FILES|3|0\n1|0|Doors/T/T.x\n1|0|Doors/T/T000.x\n1|0|Doors/T/T020.x\n",
+                  "Doors/T", plain, sizeof(plain), variant, sizeof(variant)), 0,
+              "nothing to copy");
+    ASSERT_EQ(flow_overlay_binary("FILES|1|0\n1|0|Doors/T/Config000\n", "Doors/T",
+                                  plain, sizeof(plain), variant, sizeof(variant)), 1,
+              "an extension-less name works too");
+    ASSERT_STR_EQ(plain, "Config", "no extension");
+}
+
+TEST(overlay_finds_the_system_command_icon)
+{
+    char name[64];
+
+    ASSERT_EQ(flow_overlay_syscmd_icon("Commands/Syscmd/EXAMINE.info", name, sizeof(name)), 1, "a SysCmd icon");
+    ASSERT_STR_EQ(name, "EXAMINE.info", "its file name, as the archive spells it");
+    ASSERT_EQ(flow_overlay_syscmd_icon("Commands/BBScmd/SENT.info", name, sizeof(name)), 0, "a BBSCmd icon is not one");
+    ASSERT_EQ(flow_overlay_syscmd_icon("Commands/Syscmd/sub/X.info", name, sizeof(name)), 0, "nested is not one");
+}
+
+TEST(sibling_dir_swaps_the_last_component)
+{
+    char out[64];
+
+    ASSERT_EQ(flow_sibling_dir("BBS:Commands/BBSCmd/", "SysCmd", out, sizeof(out)) > 0, 1, "fits");
+    ASSERT_STR_EQ(out, "BBS:Commands/SysCmd/", "trailing separator kept");
+    ASSERT_EQ(flow_sibling_dir("Commands/BBSCmd", "SysCmd", out, sizeof(out)) > 0, 1, "no trailing separator");
+    ASSERT_STR_EQ(out, "Commands/SysCmd", "and none added");
+    ASSERT_EQ(flow_sibling_dir("BBS:Commands/BBSCmd/", "SysCmd", out, 10), -1, "too small a buffer");
+}
+
 int main(void)
 {
     printf("====== flow (pure decision logic) Tests ======\n");
+
+    RUN_TEST(overlay_is_recognised_from_the_listing);
+    RUN_TEST(overlay_is_recognised_under_a_wrapper_directory_and_backslashes);
+    RUN_TEST(a_flat_door_is_not_an_overlay);
+    RUN_TEST(overlay_paths_are_taken_relative_to_the_door_directory);
+    RUN_TEST(overlay_makes_the_plain_program_from_the_68000_build);
+    RUN_TEST(overlay_binary_is_left_alone_when_the_plain_program_ships);
+    RUN_TEST(overlay_finds_the_system_command_icon);
+    RUN_TEST(sibling_dir_swaps_the_last_component);
 
     RUN_TEST(decode_escape_lone_esc_is_the_esc_key);
     RUN_TEST(decode_escape_reads_csi_arrows);
