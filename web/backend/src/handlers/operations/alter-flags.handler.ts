@@ -14,7 +14,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { FileFlagManager, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../../utils/file-flag.util';
+import { flagManagerOf, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../../utils/file-flag.util';
 
 /**
  * Alter Flags Handler
@@ -63,15 +63,7 @@ export class AlterFlagsHandler {
     // setEnvStat(ENV_FILES) - express.e:24603
 console.log('[ENV] Files');
 
-    // Initialize flag manager if not exists
-    if (!session.flagManager) {
-      session.flagManager = new FileFlagManager(
-        config.get('dataDir'),
-        session.user?.slotNumber || 0,
-        0 // node number
-      );
-      await session.flagManager.load();
-    }
+    await flagManagerOf(session, config.get('dataDir'));
 
     // Call alterFlags - express.e:24604
     await this.alterFlags(socket, session, params);

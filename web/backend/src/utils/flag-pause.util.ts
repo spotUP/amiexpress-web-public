@@ -14,7 +14,8 @@ import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 // Session type - using any for now since BBSSession is defined in index.ts
 type Session = any;
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { FileFlagManager } from './file-flag.util';
+import { flagManagerOf } from './file-flag.util';
+import { config } from '../config';
 
 /**
  * Display pause prompt and handle user response
@@ -130,8 +131,7 @@ export async function flagPause(
 
         if (response.startsWith('F')) {
           const filename = response.substring(1).trim();
-          const flagManager = session.flagManager || new FileFlagManager('', 0, session.nodeId || 0);
-          session.flagManager = flagManager;
+          const flagManager = await flagManagerOf(session, config.get('dataDir'));
 
           if (filename) {
             flagManager.addFlag(filename, session.currentConf);

@@ -21,7 +21,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
-import { FileFlagManager } from '../../utils/file-flag.util';
+import { flagManagerOf } from '../../utils/file-flag.util';
 import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
 import { parseDirFile, DirFileEntry } from '../../utils/dir-file-reader.util';
 import * as path from 'path';
@@ -130,7 +130,7 @@ console.log('[FM] Starting file maintenance');
     }
 
     // express.e:24927-24944 - Check if user has flagged files
-    const flagManager = new FileFlagManager('', 0, 0);
+    const flagManager = await flagManagerOf(session, _config.get('dataDir'));
     const userFlags = flagManager.getAll();
 
     if (userFlags.length > 0) {
@@ -211,7 +211,7 @@ console.log('[FM] Starting file maintenance');
 
     // express.e:24937-24943 - If yes, use flagged files
     if (response === 'Y' || response === 'YES' || response === '') {
-      const flagManager = new FileFlagManager('', 0, 0);
+      const flagManager = await flagManagerOf(session, _config.get('dataDir'));
       const userFlags = flagManager.getAll();
       const flagFileList = userFlags.map(f => f.filename);
 
@@ -1387,8 +1387,9 @@ console.error('[FM] Failed to map dir to area:', error);
     socket.emit('ansi-output', '\r\n');
 
     if (currentFile && (response === 'Y' || response === 'YES' || response === '')) {
-      const flagManager = new FileFlagManager('', 0, 0);
+      const flagManager = await flagManagerOf(session, _config.get('dataDir'));
       flagManager.removeFlag(currentFile.filename, session.currentConf);
+      await flagManager.save();
       socket.emit('ansi-output', AnsiUtil.successLine(`Removed ${currentFile.filename} from flagged list`));
     }
 

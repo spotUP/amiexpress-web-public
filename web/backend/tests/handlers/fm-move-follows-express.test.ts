@@ -220,3 +220,51 @@ describe('the bytes follow the entry', () => {
     expect(fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1')).toBe(before2);
   });
 });
+
+describe('FM works with the caller\'s own flagged files', () => {
+  // express.e:24924-24944 asks "You have flagged files, do you wish to work
+  // with these files" when the caller's flag list is not empty, and
+  // 25025-25033 offers "Remove from flagged list" after each. FM read a
+  // brand-new FileFlagManager('', 0, 0) - always empty - so it never asked,
+  // and the removal acted on that throwaway list.
+  const fs = require('fs') as typeof import('fs');
+  const os = require('os') as typeof import('os');
+  const path = require('path') as typeof import('path');
+  const { setFileMaintenanceDependencies } = require('../../src/handlers/file/file-maintenance.handler');
+  const { FileFlagManager } = require('../../src/utils/file-flag.util');
+
+  let root: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-flags-'));
+    fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), dirLine('FLAGGED.LHA', '03-01-24'));
+    setFileMaintenanceDependencies({ db: undefined, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  function caller() {
+    const out: string[] = [];
+    const socket: any = { emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); } };
+    const flagManager = new FileFlagManager(root, 1, 1);
+    flagManager.addFlag('FLAGGED.LHA', 1);
+    const session: any = {
+      currentConf: 1, nodeId: 1, flagManager, tempData: {},
+      user: { id: 1, username: 'sysop', secLevel: 255, slotNumber: 1, securityFlags: 'T'.repeat(100) },
+    };
+    return { socket, session, said: () => out.join('') };
+  }
+
+  it('asks whether to work with them', async () => {
+    const c = caller();
+    await handler.handleFileMaintenanceCommand(c.socket, c.session, '');
+    expect(c.said()).toContain('You have flagged files, do you wish to work with these files');
+  });
+
+  it('"Remove from flagged list" takes the file off the caller\'s list', async () => {
+    const c = caller();
+    c.session.tempData.fmContext = { currentFile: { filename: 'FLAGGED.LHA' }, nextPos: 99 };
+    handler.continueSearch = jest.fn(async () => undefined);
+    await handler.handleRemoveFlagInput(c.socket, c.session, 'Y');
+    expect(c.session.flagManager.getAll()).toHaveLength(0);
+  });
+});

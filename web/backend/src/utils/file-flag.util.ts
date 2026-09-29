@@ -296,6 +296,26 @@ console.error('Error saving flagged files:', error);
  * Show flags prompt
  * Port from express.e:12486+ showFlags()
  */
+/**
+ * The caller's flag list - the one loadFlagged opened at logon, or, where
+ * nothing has yet, opened and loaded now and kept on the session.
+ *
+ * One way in. FM built `new FileFlagManager('', 0, 0)` - an empty list with
+ * no file behind it - so "You have flagged files" was never asked and
+ * "Remove from flagged list" removed nothing (express.e:24924-24944,
+ * 25025-25033); the pause's F key kept flags under the wrong directory.
+ */
+export async function flagManagerOf(
+  session: { flagManager?: FileFlagManager; user?: { slotNumber?: number } | null; nodeId?: number },
+  dataDir: string,
+): Promise<FileFlagManager> {
+  if (!session.flagManager) {
+    session.flagManager = new FileFlagManager(dataDir, session.user?.slotNumber || 0, session.nodeId || 0);
+    await session.flagManager.load();
+  }
+  return session.flagManager;
+}
+
 export function getShowFlagsMessage(manager: FileFlagManager): string {
   if (manager.getCount() === 0) {
     return 'No file flags\r\n';
