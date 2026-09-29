@@ -2298,6 +2298,11 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
             if (updates.timeLimit !== undefined) dbUpdates.timeLimit = updates.timeLimit;
             if (updates.expert !== undefined) dbUpdates.expert = updates.expert;
             if (updates.ansi !== undefined) dbUpdates.ansi = updates.ansi;
+            // The row too: updateUser re-syncs the WHOLE user from the row to
+            // disk (user-repository updateUser), so a row still saying 'XXX'
+            // wrote 'XXX' back over the access area the first edit set, on
+            // the next edit of anything else.
+            if (updates.confAccess !== undefined) dbUpdates.confAccess = updates.confAccess;
             await database.updateUser(dbUser.id, dbUpdates);
           }
         } catch (error) {
