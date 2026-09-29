@@ -37,16 +37,24 @@ describe('parseMciCodes — user info MCI substitutions', () => {
     expect(result.parsed).toContain('42');
   });
 
-  test('~BR| always outputs 57600', async () => {
-    const session = makeSession();
+  test("~BR| is the caller's speed, not a constant (express.e:5335 onlineBaud)", async () => {
+    const session = makeSession({ modemBps: 2400 });
     const result = await parseMciCodes('Baud: ~BR|', session);
-    expect(result.parsed).toContain('57600');
+    expect(result.parsed).toBe('Baud: 2400');
   });
 
-  test('~TR| substitutes minutes of timeRemaining', async () => {
-    const session = makeSession({ timeRemaining: 1800 });
-    const result = await parseMciCodes('Time Left: ~TR| min', session);
-    expect(result.parsed).toContain('30');
+  test('~TR| and ~TL| are what is left and the limit, in minutes (express.e:5343-5350)', async () => {
+    // ~TR is the number the menu prompt shows ("(29 mins. left)"); it read a
+    // session field only AREXX wrote, and ~TL a user field nothing filled.
+    const session = makeSession({ user: { username: 'X', secLevel: 20, timeLimit: 3600, timeTotal: 3600, timeUsed: 1860 } });
+    const result = await parseMciCodes('~TR| of ~TL|', session);
+    expect(result.parsed).toBe('29 of 60');
+  });
+
+  test('~HW| is the computer the caller chose (express.e:5339)', async () => {
+    const session = makeSession({ user: { username: 'X', secLevel: 20, computer: 'Amiga 1200' } });
+    const result = await parseMciCodes('~HW|', session);
+    expect(result.parsed).toBe('Amiga 1200');
   });
 
   test('~TC| substitutes times called', async () => {

@@ -45,7 +45,7 @@
     "currentMenuName": null
   },
   "counts": {
-    "parsed": "tc=91 tt=3 m=12 a=55 s=4242 ca=XYZ br=57600 hw=Web Browser",
+    "parsed": "tc=91 tt=3 m=12 a=55 s=4242 ca=XYZ br=0 hw=",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,
@@ -63,7 +63,7 @@
     "currentMenuName": null
   },
   "time": {
-    "parsed": "tl=120 tr=60",
+    "parsed": "tl=120 tr=0",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,
@@ -72,7 +72,7 @@
     "currentMenuName": null
   },
   "bytes": {
-    "parsed": "ub=1,048,576 su=1mb sd=3mb fu=5 fd=22 bd=9999",
+    "parsed": "ub=1048576 su=1mb sd=3mb fu=5 fd=22 bd=9999",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,
@@ -90,7 +90,7 @@
     "currentMenuName": null
   },
   "DB-download-bytes": {
-    "parsed": "db=3,145,728x",
+    "parsed": "db=3145728x",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,
@@ -117,7 +117,7 @@
     "currentMenuName": null
   },
   "clocks": {
-    "parsed": "ct=09:15:30 vd=2.00 ve=AmiExpress-Web 2.0 ot=09:15:30 od=09-02-26 sc=17",
+    "parsed": "ct=09:15:30 vd=2.00 ve=AmiExpress-Web 2.0 ot=09:15:30 od=09-02-26 sc=0",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,

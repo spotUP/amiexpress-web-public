@@ -296,6 +296,15 @@ export async function runPreLoginConnect(
     return { ok: true, passwordResetActive: true };
   }
 
+  // express.e:29565 updateCallerNum() - every connect takes the next caller
+  // number, before the name is asked; S shows it and ~SC reads the file.
+  try {
+    const { updateCallerNum } = require("./caller-number");
+    (session as any).callerNum = updateCallerNum();
+  } catch (err) {
+    console.error("[PreLoginConnect] caller number failed:", err);
+  }
+
   // 5. Graphics prompt + parked state — express.e:29527-29528. A real C64
   // has already answered it: the PETSCII title and the login prompt instead.
   if (ctx.c64) {

@@ -21,6 +21,8 @@
  * Plan: `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, Task 4.
  * express.e parity references are kept inline, unchanged, on each row.
  */
+import { getCallerCount } from '../services/caller-number';
+import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
 import { db } from '../database';
 import { columnTabPadding } from '../utils/mci-column.util';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
@@ -262,8 +264,6 @@ export async function buildMciDispatch(
     ? new Date(session.logonTime * 1000)
     : (session.loginTime ? new Date(session.loginTime) : now);
 
-  // Format a number with commas (express.e formatBCD / formatUnsignedLong style)
-  const formatWithCommas = (n: number): string => n.toLocaleString('en-US');
 
   const lcRaw = user.lastLogin || user.timeLastOn;
   const lcDate: Date | null = lcRaw instanceof Date ? lcRaw : (lcRaw ? new Date(lcRaw) : null);
@@ -295,8 +295,6 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       { error: (error as Error).message }, DebugSeverity.WARNING);
   }
 
-  const { systemStats } = await import('../services/SystemStatsService');
-  const todayCalls = systemStats.getTodayCalls();
   const nodeNumStr = (session.nodeId || 1).toString();
 
   // Flagged files (express.e:5439-5454) — pre-compute so the dispatch
@@ -327,14 +325,21 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     A:  (w) => applyMciWidth(secLevel.toString(), w),
     S:  (w) => applyMciWidth(user.id?.toString() || '0', w),
     CA: (w) => applyMciWidth(user.confAccess || 'XXX', w),
-    BR: (w) => applyMciWidth('57600', w),
-    HW: (w) => applyMciWidth('Web Browser', w),
+    // express.e:5335 onlineBaud - the speed this caller is on (the modem
+    // emulation's, else the connection's), not a constant.
+    BR: (w) => applyMciWidth(String(session.modemBps || session.connectionBaud || 0), w),
+    // express.e:5339 - the computer the caller chose (W / sign-up).
+    HW: (w) => applyMciWidth(user.computer || '', w),
     // Time (express.e:5343-5350)
-    TL: (w) => applyMciWidth(Math.floor((user.dailyTimeLimit || 120) / 60).toString(), w),
-    TR: (w) => applyMciWidth(Math.floor(session.timeRemaining / 60).toString(), w),
+    // express.e:5343-5350: the account's time limit and what is left of it,
+    // in minutes - timeLimit is seconds; the remainder is the one the menu
+    // prompt shows.
+    TL: (w) => applyMciWidth(Math.floor((user.timeLimit || user.dailyTimeLimit || 0) / 60).toString(), w),
+    TR: (w) => applyMciWidth(getTimeRemainingMinutes(session).toString(), w),
     // Bytes / files (express.e:5351-5378)
-    UB: (w) => applyMciWidth(formatWithCommas(uploadBytes), w),
-    DB: (w) => applyMciWidth(formatWithCommas(downloadBytes), w),
+    // express.e:5351-5358 formatBCD: the digits, no separators (bcd.e:23).
+    UB: (w) => applyMciWidth(String(uploadBytes), w),
+    DB: (w) => applyMciWidth(String(downloadBytes), w),
     SU: (w) => applyMciWidth(calcSizeText(uploadBytes), w),
     SD: (w) => applyMciWidth(calcSizeText(downloadBytes), w),
     FU: (w) => applyMciWidth(uploads.toString(), w),
@@ -346,7 +351,8 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     IN: (w) => applyMciWidth(user.email || '', w),
     RN: (w) => applyMciWidth(user.realName || username, w),
     // Conference info (express.e:5413-5427)
-    CF: (w) => applyMciWidth(((session.currentConf || 0) + 1).toString(), w),
+    // express.e:5413 relConfNum - the conference's number as the caller sees it.
+    CF: (w) => applyMciWidth(String(session.relConfNum || session.currentConf || 1), w),
     CN: (w) => applyMciWidth(session.currentConfName || 'Main', w),
     MB: (w) => applyMciWidth(currentMsgBase.toString(), w),
     MN: (w) => applyMciWidth(msgBaseName, w),
@@ -371,7 +377,8 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     DT: (w) => applyMciWidth(formatLongDate(now), w),
     OT: (w) => applyMciWidth(formatLongTime(logonDate), w),
     OD: (w) => applyMciWidth(formatLongDate(logonDate), w),
-    SC: (w) => applyMciWidth(todayCalls.toString(), w),
+    // express.e:5399 getCallerCount() - the board's caller number (SystemStats).
+    SC: (w) => applyMciWidth(getCallerCount().toString(), w),
     // Flagged files (express.e:5439-5454)
     FC: (w) => applyMciWidth(sessionFlaggedFiles.length.toString(), w),
     FF: (w) => applyMciWidth(flaggedFilesSpaceSep, w),

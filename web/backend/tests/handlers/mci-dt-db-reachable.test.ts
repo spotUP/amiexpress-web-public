@@ -79,18 +79,19 @@ describe('~DT and ~DB reach their dispatch handlers (regression)', () => {
     expect(await render('dt=~DT|x')).toBe('dt=09-02-26x');
   });
 
+  // express.e:5357 formatBCD: digits only, no separators (bcd.e:23).
   test('~DB| renders the download byte count', async () => {
-    expect(await render('db=~DB|x')).toBe('db=3,145,728x');
+    expect(await render('db=~DB|x')).toBe('db=3145728x');
   });
 
   test('~DT and ~DB are exact keys at every tokenizer boundary, not only `|`', async () => {
-    expect(await render('~DT ~DB')).toBe('09-02-26 3,145,728');
-    expect(await render('~DT\n~DB\n')).toBe('09-02-26\n3,145,728\n');
-    expect(await render('~DB')).toBe('3,145,728');
+    expect(await render('~DT ~DB')).toBe('09-02-26 3145728');
+    expect(await render('~DT\n~DB\n')).toBe('09-02-26\n3145728\n');
+    expect(await render('~DB')).toBe('3145728');
   });
 
   test('~DT keeps working after ~D. has retargeted the terminator', async () => {
-    expect(await render('~D.dt=~DT.db=~DB.')).toBe('dt=09-02-26db=3,145,728');
+    expect(await render('~D.dt=~DT.db=~DB.')).toBe('dt=09-02-26db=3145728');
   });
 
   test('the single-letter ~D<char> terminator change still works', async () => {

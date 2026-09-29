@@ -263,7 +263,8 @@ export function getTimeRemainingMinutes(session: BBSSession): number {
     return 9999; // Display as unlimited
   }
 
-  const timeRemaining = session.user.timeTotal - session.user.timeUsed;
+  // A user record without the fields counts as none left, never NaN.
+  const timeRemaining = (Number(session.user.timeTotal) || 0) - (Number(session.user.timeUsed) || 0);
   // Ensure we never return negative time remaining
   return Math.max(0, Math.floor(timeRemaining / 60)); // Convert seconds to minutes
 }
