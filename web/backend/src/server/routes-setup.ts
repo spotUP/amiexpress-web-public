@@ -207,6 +207,11 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const { createBotPluginRouter } = require('../api/bot-plugin-routes');
   app.use('/api/config/bots', authenticateToken(db), requireSysop(), createBotPluginRouter(db));
 
+  // ===== File lists - the admin file manager (sysop) =====
+  // The same services/file-list.service FM uses at the prompt.
+  const { createFileListRouter } = require('../api/file-list-routes');
+  app.use('/api/files', authenticateToken(db), requireSysop(), createFileListRouter(db));
+
   // ===== Import/Export API - Sysop-only Routes =====
   const importRouter = createImportRouter(db);
   app.use('/api/import', authenticateToken(db), requireSysop(), importRouter);

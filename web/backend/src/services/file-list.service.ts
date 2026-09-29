@@ -527,3 +527,94 @@ export function getUploadBase(ctx: FileListContext, confNum: number): string {
   if (configured.length > 0) return configured[0]!;
   return path.join(getConferenceDir(confNum, dataDir), 'Upload');
 }
+
+/** Where a listed file's bytes are: this board's disk, the pool, nowhere, or the pool could not say. */
+export type BytesAt = 'disk' | 'pool' | 'missing' | 'unknown';
+
+/** The same question D asks: the conference's disk candidates, then the pool. */
+export async function bytesLocation(ctx: FileListContext, conf: number, dir: number, filename: string): Promise<BytesAt> {
+  for (const candidate of await buildFileCandidates(ctx, conf, filename, dir)) {
+    if (fs.existsSync(candidate)) return 'disk';
+  }
+  const storage = getStorageContext();
+  if (!storage) return 'missing';
+  const { locateRemoteFile } = await import('../storage/remote-download');
+  const found = await locateRemoteFile(filename, conf, storage);
+  if (found.files.length > 0) return 'pool';
+  return found.storageError ? 'unknown' : 'missing';
+}
+
+/**
+ * Replace an entry's description: the header line keeps its name, marker,
+ * size and date (express.e's columns) and takes the first line; the rest are
+ * continuation lines at column 33, as the board writes them.
+ */
+export async function updateDescription(
+  ctx: FileListContext,
+  conf: number,
+  dir: number,
+  filename: string,
+  description: string[],
+): Promise<void> {
+  const file = listingPath(ctx, conf, dir);
+  const lines = readDirLines(file);
+  const where = findEntryLines(lines, filename);
+  if (!where) throw new Error(`${filename} is not in that listing`);
+  const header = lines[where.start];
+  const date = dateOfDirLine(header);
+  const dateAt = header.indexOf(date, 13);
+  const prefix = header.slice(0, dateAt + date.length);
+  const [first = '', ...rest] = description.map((l) => l.replace(/\r?\n/g, ''));
+  const entry = [`${prefix}  ${first}`, ...rest.map((l) => `${' '.repeat(33)}${l}`)];
+  writeDirLines(file, [...lines.slice(0, where.start), ...entry, ...lines.slice(where.start + where.count)]);
+}
+
+/** Files the board writes itself, never a caller's upload. */
+const BOARD_FILES = new Set(['FILES.BBS', 'FILE_ID.DIZ', '.GITKEEP', 'HELD']);
+
+export interface Mismatches {
+  /** Bytes in a download, upload or Hold folder that no listing names. */
+  unlisted: Array<{ folder: string; filename: string; size: number }>;
+  /** Listed entries whose bytes are on neither this disk nor the pool. */
+  missing: Array<{ dir: number; filename: string }>;
+}
+
+/**
+ * Where a conference's listings and folders disagree (admin plan D3): a
+ * file on disk no listing names is invisible to F, Z and D; a listed file
+ * with no bytes is one D cannot send.
+ */
+export async function mismatches(ctx: FileListContext, conf: number): Promise<Mismatches> {
+  const { conferenceNdirs } = await import('../conferences/conference-paths');
+  const dirs = [...Array.from({ length: conferenceNdirs(ctx.dataDir, conf) }, (_v, i) => i + 1), -1];
+  const listed = new Set<string>();
+  const missing: Mismatches['missing'] = [];
+  for (const dir of dirs) {
+    for (const entry of await listEntries(ctx, conf, dir)) {
+      const name = entry.filename.trim();
+      listed.add(name.toUpperCase());
+      if ((await bytesLocation(ctx, conf, dir, name)) === 'missing') missing.push({ dir, filename: name });
+    }
+  }
+  const conferencePath = getConferenceDir(conf, ctx.dataDir);
+  const folders = new Set<string>([
+    ...conferenceDownloadDirs(ctx.dataDir, conf),
+    ...conferenceUploadDirs(ctx.dataDir, conf),
+    path.join(conferencePath, 'Files'),
+    path.join(conferencePath, 'Upload'),
+    path.dirname(getHoldDirFilePath(conferencePath)),
+  ].map((f) => path.resolve(f)));
+  const unlisted: Mismatches['unlisted'] = [];
+  for (const folder of folders) {
+    if (!fs.existsSync(folder)) continue;
+    for (const name of fs.readdirSync(folder)) {
+      const full = path.join(folder, name);
+      if (name.toLowerCase().endsWith('.info') || /\.(bak|backup)$/i.test(name) || name.includes('.pre-')) continue;
+      if (BOARD_FILES.has(name.toUpperCase()) || listed.has(name.toUpperCase())) continue;
+      const stat = fs.statSync(full);
+      if (!stat.isFile()) continue;
+      unlisted.push({ folder: path.relative(ctx.dataDir, folder), filename: name, size: stat.size });
+    }
+  }
+  return { unlisted, missing };
+}
