@@ -114,43 +114,25 @@ describe('file-hold.util', () => {
       expect(realFs.existsSync(holdDir)).toBe(true);
     });
 
-    it('should update HELD tracking file when not exists', async () => {
-      await moveToHold(srcFile, 'file.zip', confDir);
-
-      const heldFile = realPath.join(confDir, 'HOLD', 'HELD');
-      expect(realFs.existsSync(heldFile)).toBe(true);
-      expect(realFs.readFileSync(heldFile, 'utf8')).toBe('1');
-    });
-
-    it('should increment HELD count when file exists', async () => {
+    // HOLD/HELD is the Hold directory's DIR listing (express.e:19488 appends
+    // entries to it); moving bytes into Hold must never rewrite it. The port
+    // wrote a bare count there, which glued a digit onto the first entry's
+    // filename on the live board ("65D-DP001.LHA", 2026-09-29).
+    it('leaves the HELD listing exactly as it was', async () => {
       const holdDir = realPath.join(confDir, 'HOLD');
       realFs.mkdirSync(holdDir, { recursive: true });
-      realFs.writeFileSync(realPath.join(holdDir, 'HELD'), '5');
+      const listing = '5D-DP001.LHA D  15801  09-08-26  5TH\r\n';
+      realFs.writeFileSync(realPath.join(holdDir, 'HELD'), listing);
 
       await moveToHold(srcFile, 'file.zip', confDir);
 
-      expect(realFs.readFileSync(realPath.join(holdDir, 'HELD'), 'utf8')).toBe('6');
+      expect(realFs.readFileSync(realPath.join(holdDir, 'HELD'), 'utf8')).toBe(listing);
     });
 
-    it('should handle invalid HELD tracking content', async () => {
-      const holdDir = realPath.join(confDir, 'HOLD');
-      realFs.mkdirSync(holdDir, { recursive: true });
-      realFs.writeFileSync(realPath.join(holdDir, 'HELD'), 'invalid');
-
+    it('does not create a HELD file of its own', async () => {
       await moveToHold(srcFile, 'file.zip', confDir);
 
-      // parseInt('invalid') = NaN, treated as 0, incremented to 1
-      expect(realFs.readFileSync(realPath.join(holdDir, 'HELD'), 'utf8')).toBe('1');
-    });
-
-    it('should handle whitespace in HELD tracking', async () => {
-      const holdDir = realPath.join(confDir, 'HOLD');
-      realFs.mkdirSync(holdDir, { recursive: true });
-      realFs.writeFileSync(realPath.join(holdDir, 'HELD'), '  10  \n');
-
-      await moveToHold(srcFile, 'file.zip', confDir);
-
-      expect(realFs.readFileSync(realPath.join(holdDir, 'HELD'), 'utf8')).toBe('11');
+      expect(realFs.existsSync(realPath.join(confDir, 'HOLD', 'HELD'))).toBe(false);
     });
 
     it('should log success message', async () => {
@@ -435,15 +417,5 @@ describe('file-hold.util', () => {
       expect(realFs.existsSync(result)).toBe(true);
     });
 
-    it('should handle negative count in HELD tracking gracefully', async () => {
-      const holdDir = realPath.join(confDir, 'HOLD');
-      realFs.mkdirSync(holdDir, { recursive: true });
-      realFs.writeFileSync(realPath.join(holdDir, 'HELD'), '-5');
-
-      await moveToHold(srcFile, 'file.zip', confDir);
-
-      const count = realFs.readFileSync(realPath.join(holdDir, 'HELD'), 'utf8');
-      expect(parseInt(count)).toBe(-4);
-    });
   });
 });

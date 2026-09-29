@@ -56,8 +56,10 @@ export async function moveToHold(
     await fs.rename(sourcePath, targetPath);
 console.log(`[HOLD] Moved ${filename} to HOLD directory`);
 
-    // Update HOLD/HELD tracking file (express.e:19488)
-    await updateHeldTracking(conferencePath, filename, 'add');
+    // HOLD/HELD is the Hold directory's LISTING (express.e:19488 appends the
+    // DIR entry to it; the upload filing does that). It is not a counter -
+    // writing a count into it glued a digit onto the first entry's name
+    // ("65D-DP001.LHA", live Conf1, 2026-09-29).
 
     return targetPath;
   } catch (error: any) {
@@ -95,50 +97,6 @@ console.log(`[LCFILES] Moved ${filename} to LCFILES directory`);
   } catch (error: any) {
 console.error(`[LCFILES] Error moving file: ${error.message}`);
     throw error;
-  }
-}
-
-/**
- * Update HOLD/HELD tracking file
- * Express.e:19488 - StrAdd(ray,'HOLD/HELD')
- *
- * This file tracks the number of files in HOLD directory
- *
- * @param conferencePath Path to conference directory
- * @param filename Filename being added/removed
- * @param action 'add' or 'remove'
- */
-async function updateHeldTracking(
-  conferencePath: string,
-  filename: string,
-  action: 'add' | 'remove'
-): Promise<void> {
-  const heldFile = path.join(conferencePath, 'HOLD', 'HELD');
-
-  try {
-    let count = 0;
-
-    // Read current count
-    try {
-      const content = await fs.readFile(heldFile, 'utf-8');
-      count = parseInt(content.trim()) || 0;
-    } catch {
-      // File doesn't exist, start at 0
-      count = 0;
-    }
-
-    // Update count
-    if (action === 'add') {
-      count++;
-    } else if (action === 'remove' && count > 0) {
-      count--;
-    }
-
-    // Write updated count
-    await fs.writeFile(heldFile, count.toString());
-console.log(`[HOLD] Updated HELD tracking: ${count} files`);
-  } catch (error: any) {
-console.error(`[HOLD] Error updating HELD tracking: ${error.message}`);
   }
 }
 
