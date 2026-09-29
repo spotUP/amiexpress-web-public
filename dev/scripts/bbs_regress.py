@@ -298,13 +298,18 @@ def case_login(b: Board, _tmp: str) -> str:
 
 
 def case_time(b: Board, _tmp: str) -> str:
+    """T prints the time under the caller's typed T, then the menu comes back.
+
+    A non-expert caller gets express.e's menuPause before the menu
+    (28584 - every command sets it), so a pause is answered, not failed;
+    what must not happen is the board waiting silently for a key."""
     b.send("T\r")
-    expect(b, MENU_PROMPT, "the menu after T - with no extra key")
     shown = expect_on_screen(b, r"It is \d\d-\d\d-\d\d \d\d:\d\d:\d\d", "the time")
+    to_menu(b)
     mo, d, y, hh, mm, ss = (int(x) for x in re.findall(r"\d+", shown))
     drift = abs((dt.datetime.now() - dt.datetime(2000 + y, mo, d, hh, mm, ss)).total_seconds())
     check(drift < 120, f"board time is {drift:.0f}s from this machine's local time", b)
-    return f"time within {drift:.0f}s, prompt back without a key"
+    return f"time within {drift:.0f}s, prompt back"
 
 
 def case_join(b: Board, _tmp: str) -> str:

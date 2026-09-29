@@ -4830,6 +4830,10 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
       const command = parts[0];
       const params = parts.slice(1).join(' ');
       try {
+        // The command line's echo is still in emitText's buffer; many command
+        // handlers write with a direct socket.emit, which would overtake it
+        // (T printed its time above the "T" the caller typed, live 2026-09-29).
+        flushOutput(socket);
         // Express.e:28244-28256 - Command priority: SysCommand  BbsCommand  InternalCommand
         const result = await processCommand(socket, session, command, params);
         if (result === 'NOT_ALLOWED') {

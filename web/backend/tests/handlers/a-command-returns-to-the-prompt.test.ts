@@ -57,6 +57,26 @@ describe('the T command', () => {
     expect(wire.slice(wire.indexOf('It is '))).toMatch(/Menu \(/);
   });
 
+  // The echo of the typed "T" sat in emitText's buffer while T wrote its
+  // time with a direct emit, so the time landed above the caller's own
+  // keystroke (live telnet walk, 2026-09-29).
+  it('prints the time after the caller\'s echoed "T", not above it', async () => {
+    const { socket, session, out } = aCaller();
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    session.skipNextDisplayFlowMenu = true;
+    session.manualMenuTargetState = LoggedOnSubState.READ_COMMAND;
+
+    await handleCommand(socket, session, 'T');
+    await handleCommand(socket, session, '\r');
+    await new Promise((r) => setTimeout(r, 30));
+    flushOutput(socket);
+
+    const wire = out.join('');
+    const echo = wire.indexOf('T');
+    expect(echo).toBeGreaterThanOrEqual(0);
+    expect(echo).toBeLessThan(wire.indexOf('It is '));
+  });
+
   it('is followed by the menu prompt without another key', async () => {
     const { socket, session, out } = aCaller();
     session.commandText = 'T';
