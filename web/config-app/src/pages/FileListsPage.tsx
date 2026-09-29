@@ -17,6 +17,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { Modal } from '../components/ui/Modal';
 import { StatusDot } from '../components/ui/StatusDot';
+import { BoardText } from '../components/BoardText';
 import type { StatusTone } from '../types/ui';
 
 interface ListedConference {
@@ -167,6 +168,8 @@ export function FileListsPage() {
       id: 'description',
       header: 'Description',
       value: (e) => e.description.find((l) => l.trim() !== '') ?? '',
+      // The whole FILE_ID, in Topaz: the art only lines up in the board's face.
+      cell: (e) => <BoardText lines={e.description} />,
     },
   ], []);
 
@@ -294,6 +297,8 @@ export function FileListsPage() {
           rows={12}
           className="input-field w-full font-mono"
         />
+        <p className="text-sm text-content-secondary mt-3 mb-1">As callers see it:</p>
+        <BoardText lines={descriptionText.split('\n')} className="card" />
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
           <button

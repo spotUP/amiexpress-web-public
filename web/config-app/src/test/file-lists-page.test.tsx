@@ -71,6 +71,15 @@ describe('File lists', () => {
     expect(await screen.findByText('STRAY.LHA')).toBeInTheDocument();
   });
 
+  // "the file_id's needs to use the topaz font to make sense" (sysop,
+  // 2026-09-29): a FILE_ID is Amiga art and only lines up in Topaz.
+  it('shows each description whole, in the board font', async () => {
+    renderPage();
+    const art = await screen.findByText('First file');
+    expect(art.tagName).toBe('PRE');
+    expect(art.className).toContain('font-topaz');
+  });
+
   it('deletes through the API after asking', async () => {
     renderPage();
     await screen.findByText('ONE.LHA');

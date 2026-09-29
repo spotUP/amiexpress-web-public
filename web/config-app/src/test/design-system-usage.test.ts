@@ -77,6 +77,8 @@ function offenders(pattern: RegExp): string[] {
 const TOPAZ_SURFACES = [
   'styles/tokens.css',
   'components/ScreenEditor.tsx',
+  // FILE_ID.DIZ / DIR descriptions - board art, shown on File lists.
+  'components/BoardText.tsx',
 ];
 
 describe('every admin page', () => {
