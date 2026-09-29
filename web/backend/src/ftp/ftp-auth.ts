@@ -22,6 +22,7 @@ import { checkDownloadRatios, updateDownloadStats } from '../utils/download-rati
 import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
 import { fileUploadedFile, areaForConference } from '../services/upload-filing.service';
+import { examineTaglineFor } from '../services/examine-tagline.service';
 import { extractAndReadDiz } from '../utils/file-diz.util';
 import { registerFtpCaller, releaseFtpCaller } from './ftp-presence';
 import { conferenceDir, conferenceDownloadDirs } from '../conferences/conference-paths';
@@ -333,6 +334,17 @@ console.log(`[FTP] FILE_ID.DIZ used for ${request.filename} (${dizLines.length} 
         }
       } catch (error) {
 console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // The uploader's tagline, which the board's EXAMINE door would have added
+      // (services/examine-tagline.service - a deliberate deviation: FTP cannot
+      // answer the door's prompts, so the door is not run).
+      try {
+        const slot = (await db.getUserById(String(request.user.id)))?.slotNumber;
+        const tagline = examineTaglineFor(config.get('dataDir'), slot);
+        if (tagline) description = `${description}\n${tagline}`;
+      } catch (error) {
+console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       // The area the board implies, created from the conference's own icons

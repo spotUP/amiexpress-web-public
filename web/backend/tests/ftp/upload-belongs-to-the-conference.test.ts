@@ -117,13 +117,30 @@ describe('the FTP upload gate', () => {
    * with the collaborators stubbed and reads what it decided: the description
    * it filed, and the area it filed against.
    */
-  const acceptAnUpload = async (opts: { diz: string[] | null }) => {
+  const acceptAnUpload = async (opts: { diz: string[] | null; tagline?: { text: string; use: number } }) => {
     jest.resetModules();
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftp-accept-'));
     const filed: Array<Record<string, unknown>> = [];
     const areaAsked: number[] = [];
     const THE_CONFERENCE_AREA = { id: 77, name: 'Conference 7 Files', path: 'Conf7/Uploads' };
+
+    // File Description as the board's EXAMINE door, with its tag data: one
+    // 102-byte record per slot, tagline at 0, Use Tagline at byte 81.
+    if (opts.tagline) {
+      const door = path.join(root, 'Doors', 'FileDescription');
+      fs.mkdirSync(door, { recursive: true });
+      fs.writeFileSync(path.join(door, 'FileDescription.x'), 'x');
+      const tagdata = Buffer.alloc(102 * 3);
+      tagdata.write(opts.tagline.text, 102 * 1, 'latin1'); // slot 2
+      tagdata[102 * 1 + 81] = opts.tagline.use;
+      fs.writeFileSync(path.join(door, 'FileDescription.Tagdata'), tagdata);
+    }
+    jest.doMock('../../src/handlers/command-execution.handler', () => ({
+      commandCache: {
+        syscmd: new Map(opts.tagline ? [['EXAMINE', { location: 'DOORS:FileDescription/FileDescription.x' }]] : []),
+      },
+    }));
 
     jest.doMock('../../src/utils/file-diz.util', () => ({
       extractAndReadDiz: jest.fn(async () => opts.diz),
@@ -144,7 +161,10 @@ describe('the FTP upload gate', () => {
       }),
     }));
     jest.doMock('../../src/database', () => ({
-      db: { getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: true }) }) },
+      db: {
+        getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: true }) }),
+        getUserById: async () => ({ slotNumber: 2 }),
+      },
     }));
     jest.doMock('../../src/config', () => ({
       config: { get: (key: string) => (key === 'dataDir' ? root : undefined) },
@@ -169,6 +189,19 @@ describe('the FTP upload gate', () => {
   it('describes the file by its own FILE_ID.DIZ, as a menu upload does', async () => {
     const { filed } = await acceptAnUpload({ diz: ['ARTPACK #7', 'twelve screens'] });
     expect(filed.description).toBe('ARTPACK #7\ntwelve screens');
+  });
+
+  // A deliberate deviation (sysop, 2026-09-30): FTP cannot answer File
+  // Description's prompts, so the door is not run - but the line it would
+  // have added, the uploader's own tagline, is.
+  it('adds the uploader\'s File Description tagline under the FILE_ID', async () => {
+    const { filed } = await acceptAnUpload({ diz: ['ARTPACK #7'], tagline: { text: '/// //// KNUT', use: 1 } });
+    expect(filed.description).toBe('ARTPACK #7\n/// //// KNUT');
+  });
+
+  it('leaves the tagline off when the uploader set Use Tagline to No', async () => {
+    const { filed } = await acceptAnUpload({ diz: ['ARTPACK #7'], tagline: { text: '/// //// KNUT', use: 0 } });
+    expect(filed.description).toBe('ARTPACK #7');
   });
 
   it('keeps the placeholder when the archive carries no DIZ', async () => {
