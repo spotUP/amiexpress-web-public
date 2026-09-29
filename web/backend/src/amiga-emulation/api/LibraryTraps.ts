@@ -2111,22 +2111,19 @@ console.log(
   }
 
   /**
-   * Load the LVO definitions from dev/docs/LVOs.i so we can stub missing vectors.
+   * Load the LVO definitions (constants/LVOs.i) so we can stub missing vectors.
    */
   private loadLvoOffsetsFromFile(): void {
+    /*
+     * BESIDE THE CODE THAT READS IT. The table lived under Documentation/,
+     * which .dockerignore leaves out of the image - so on the live board every
+     * door start said "LVOs.i not found; stub vectors disabled": no auto-stubs,
+     * no "a stub returns 0" (b581b15c6), and the gap log (amiga-gaps.ts) could
+     * never record a library call. Found 2026-09-29 by the emulation-gap
+     * survey. web/backend/src ships with the image, so the table does too.
+     */
     const candidates = [
-      // Primary location: Documentation tree (where the file actually lives)
-      path.resolve(process.cwd(), "Documentation/7-Reference Sources/LVOs.i"),
-      path.resolve(process.cwd(), "../Documentation/7-Reference Sources/LVOs.i"),
-      path.resolve(process.cwd(), "../../Documentation/7-Reference Sources/LVOs.i"),
-      path.resolve(__dirname, "../../../../Documentation/7-Reference Sources/LVOs.i"),
-      path.resolve(__dirname, "../../../../../Documentation/7-Reference Sources/LVOs.i"),
-      // Legacy/optional location
-      path.resolve(process.cwd(), "dev/docs/LVOs.i"),
-      path.resolve(process.cwd(), "../dev/docs/LVOs.i"),
-      path.resolve(process.cwd(), "../../dev/docs/LVOs.i"),
-      path.resolve(__dirname, "../../../../dev/docs/LVOs.i"),
-      path.resolve(__dirname, "../../../../../dev/docs/LVOs.i"),
+      path.resolve(__dirname, "../constants/LVOs.i"),
     ];
 
     let data: string | null = null;

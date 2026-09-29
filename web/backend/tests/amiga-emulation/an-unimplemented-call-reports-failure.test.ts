@@ -121,3 +121,22 @@ it("is written to the board's gap log, under the door that asked", () => {
   const gap = logged.find((g: any) => g.kind === 'library' && /OpenWindowTagList/.test(g.what));
   expect(gap).toMatchObject({ count: 1, doors: { '5D_Page': 1 } });
 });
+
+it('finds its LVO table inside web/backend, the tree the image ships', () => {
+  // The table lived under Documentation/, which .dockerignore keeps out of the
+  // image: on live every door start logged "LVOs.i not found; stub vectors
+  // disabled", so the two tests above never held there (2026-09-29).
+  const said: string[] = [];
+  const spy = jest.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { said.push(a.join(' ')); });
+  const warn = jest.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => { said.push(a.join(' ')); });
+  try {
+    const { emu } = makeFake();
+    new LibraryTraps(emu, new ExecLibrary(emu)).installStubVectorsForLibrary('intuition.library', 0x200000);
+  } finally {
+    spy.mockRestore();
+    warn.mockRestore();
+  }
+  const loaded = said.find((l) => l.includes('Loaded LVOs from'));
+  expect(said.some((l) => l.includes('LVOs.i not found'))).toBe(false);
+  expect(loaded).toMatch(/[\\/]web[\\/]backend[\\/]src[\\/]/);
+});
