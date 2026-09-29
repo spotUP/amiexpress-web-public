@@ -10,6 +10,7 @@
 const TEST_MODULES = ['./backport.test',
   './black-screen.test',
   './opens.test',
+  './fulledit.test',
 ];
 
 (async () => {

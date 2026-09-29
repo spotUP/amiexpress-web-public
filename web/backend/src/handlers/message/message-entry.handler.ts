@@ -20,6 +20,7 @@ import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
 import { wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
 import { reportMessage } from '../../achievements/sites';
+import { fullEditOffered, editInFullScreen } from './message-full-editor';
 
 
 // Dependencies (injected from index.ts)
@@ -562,7 +563,7 @@ export function handleMessagePrivateInput(socket: any, session: BBSSession, inpu
     return;
   }
 
-  promptForMessageBody(socket, session);
+  void promptForMessageBody(socket, session);
 }
 
 /**
@@ -849,7 +850,7 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
 
   if (ch !== 'Y') {
     // No quote — go straight to body editor
-    promptForMessageBody(socket, session);
+    await promptForMessageBody(socket, session);
     return;
   }
 
@@ -858,7 +859,7 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
   const parentMsg = await _db.getMessage(parentId);
 
   if (!parentMsg) {
-    promptForMessageBody(socket, session);
+    await promptForMessageBody(socket, session);
     return;
   }
 
@@ -1385,14 +1386,14 @@ function promptForPrivate(socket: any, session: BBSSession): void {
   // path.
   if (session.tempData.messageEntry.isComment) {
     session.tempData.messageEntry.isPrivate = true;
-    promptForMessageBody(socket, session);
+    void promptForMessageBody(socket, session);
     return;
   }
 
   // Messages to ALL/EALL cannot be private - express.e:10850
   if (toUser === 'ALL' || toUser === 'EALL') {
     session.tempData.messageEntry.isPrivate = false;
-    promptForMessageBody(socket, session);
+    void promptForMessageBody(socket, session);
     return;
   }
 
@@ -1401,7 +1402,7 @@ function promptForPrivate(socket: any, session: BBSSession): void {
   // doesn't get to choose Private since these go off-system.
   if (isExtSendMsgBase(session)) {
     session.tempData.messageEntry.isPrivate = false;
-    promptForMessageBody(socket, session);
+    void promptForMessageBody(socket, session);
     return;
   }
 
@@ -1598,7 +1599,7 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
   const firstChar = (raw[0] || '').toUpperCase();
 
   if (!quoteData) {
-    promptForMessageBody(socket, session);
+    void promptForMessageBody(socket, session);
     return;
   }
 
@@ -1608,7 +1609,7 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
     delete session.tempData.quoteData;
     messageData.body = [];
     messageData.currentLine = 1;
-    promptForMessageBody(socket, session);
+    void promptForMessageBody(socket, session);
     return;
   }
 
@@ -1671,13 +1672,78 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
   delete session.tempData.quoteData;
 
   // express.e falls through to edit() which shows header+ruler+pre-existing lines
-  promptForMessageBody(socket, session);
+  void promptForMessageBody(socket, session);
 }
 
 /**
- * Helper: Prompt for message body - express.e:10898-10909
+ * The start of express.e's edit() (10093-10141): the full-screen editor
+ * when it is on offer - asked "FullScreen Editor (y/N)?" unless the caller
+ * chose it outright (editorType 2) - and the line editor otherwise.
  */
-export function promptForMessageBody(socket: any, session: BBSSession): void {
+export async function promptForMessageBody(socket: any, session: BBSSession): Promise<void> {
+  if (fullEditOffered(session)) {
+    if ((session.user as { editorType?: number } | undefined)?.editorType === 2) {
+      await runFullEdit(socket, session);
+      return;
+    }
+    // express.e:10099-10100 aePuts('[36mFullScreen Editor[0m'); yesNo(2)
+    emitText(socket, '\x1b[36mFullScreen Editor\x1b[0m\x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ');
+    session.subState = LoggedOnSubState.POST_MESSAGE_FULLEDIT_CONFIRM;
+    return;
+  }
+  showLineEditor(socket, session);
+}
+
+/** express.e yesNo(2) at "FullScreen Editor": Y runs it, N or Enter the line editor. */
+export async function handleFullEditConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
+  const ch = (input[0] || '').toUpperCase();
+  if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') return;
+  emitText(socket, ch === 'Y' ? 'Yes\r\n' : 'No\r\n');
+  if (ch === 'Y') {
+    await runFullEdit(socket, session);
+    return;
+  }
+  showLineEditor(socket, session);
+}
+
+/**
+ * express.e:10106-10141. What the caller has so far goes to msg.i, SysCmd
+ * FULLEDIT runs, and the message is what it leaves in msg: saved straight
+ * away, as edit() returns RESULT_SUCCESS to enterMSG (10962-10972). No msg
+ * means the caller left without saving - the message is abandoned, as A
+ * does. A FULLEDIT that did not run falls back to the line editor.
+ */
+async function runFullEdit(socket: any, session: BBSSession): Promise<void> {
+  const entry = session.tempData.messageEntry;
+  let outcome: string[] | 'abandoned' | 'not-run';
+  // Several callers are synchronous and do not await this; a failure to run
+  // the editor must end in the line editor, never in an unhandled rejection.
+  try {
+    outcome = await editInFullScreen(socket, session, entry?.body ?? []);
+  } catch (err) {
+    console.error('[FULLEDIT] full-screen editor failed, falling back to the line editor:', err);
+    outcome = 'not-run';
+  }
+  session.tempData = session.tempData || {};
+  session.tempData.messageEntry = entry;
+  if (outcome === 'not-run') {
+    showLineEditor(socket, session);
+    return;
+  }
+  emitText(socket, '\r\n');
+  if (outcome === 'abandoned') {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
+    return;
+  }
+  entry.body = outcome;
+  await saveMessage(socket, session);
+}
+
+/**
+ * The line editor - express.e:10148-10165 onwards.
+ */
+function showLineEditor(socket: any, session: BBSSession): void {
   // express.e: aePuts("   Enter your text. (Enter) alone to end. (75 chars/line)\n")
   emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
   // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)

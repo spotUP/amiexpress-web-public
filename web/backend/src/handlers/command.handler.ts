@@ -220,6 +220,7 @@ import {
   handleMessageOptionsInput,
   handleMessageAbortConfirm,
   handleMessageQuoteReplyConfirm,
+  handleFullEditConfirm,
   handleMessageDeleteLineInput,
   handleMessageDeleteConfirm,
   handleMessageEditLineInput,
@@ -528,6 +529,9 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       return;
     case LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM:
       await handleMessageQuoteReplyConfirm(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_FULLEDIT_CONFIRM:
+      await handleFullEditConfirm(socket, session, data.trim());
       return;
     case LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM:
       await handleMessageAbortConfirm(socket, session, data.trim());
@@ -1455,6 +1459,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     LoggedOnSubState.POST_MESSAGE_OPTIONS,          // single-char: A/C/D/E/L/S/?
     LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM,    // single-char yesNo(0)
     LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM, // single-char yesNo(2)
+    LoggedOnSubState.POST_MESSAGE_FULLEDIT_CONFIRM,    // single-char yesNo(2)
     LoggedOnSubState.POST_MESSAGE_DELETE_LINE,
     LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM,
     LoggedOnSubState.POST_MESSAGE_EDIT_LINE,

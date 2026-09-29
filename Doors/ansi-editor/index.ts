@@ -73,6 +73,24 @@ let S: ThemeStyles = themeStyles(themeById('classic'));
 /** The theme itself, for the chrome - it needs the rail and the glitches. */
 let THEME: Theme = themeById('classic');
 
+/**
+ * Run as the board's full-screen message editor (SysCmd FULLEDIT).
+ *
+ * express.e's edit() (10106-10141) hands the editor two files in the node's
+ * Work directory: msg.i, what to start with (the quote, or the message being
+ * edited), and msg, which the editor writes when the caller saves. No msg
+ * means the caller left without saving. The board reads msg back as the
+ * message body, one line per row.
+ */
+export function fullEditFiles(nodeId: number): { include: string; result: string } {
+  return { include: `Node${nodeId}/Work/msg.i`, result: `Node${nodeId}/Work/msg` };
+}
+
+/** Was this door launched as FULLEDIT? */
+export function isFullEdit(ctx: { bbsSession?: { doorCommand?: string } }): boolean {
+  return String(ctx.bbsSession?.doorCommand ?? '').toUpperCase() === 'FULLEDIT';
+}
+
 export class ANSIEditorDoor {
   private ctx!: DoorContext;
   private screen!: Screen;
@@ -81,6 +99,7 @@ export class ANSIEditorDoor {
   private currentFilename: string | null = null;
   private currentBBSPath: string | null = null;  // For BBS files (sysop mode)
   private isBBSFile = false;                      // True if editing a BBS file
+  private fullEdit = false;                       // Run as SysCmd FULLEDIT (message editor)
   private exitResolve: (() => void) | null = null;
   private hasExited = false;
   /**
@@ -112,8 +131,20 @@ export class ANSIEditorDoor {
     // Enable input handling
     this.inputManager.enable();
 
-    // Go directly to editor (skip main menu)
-    await this.openEditor('');
+    if (isFullEdit(this.ctx as any)) {
+      // The message editor: start from msg.i, save to msg, leave on save.
+      const files = fullEditFiles(this.ctx.nodeId);
+      const bbs = (this.ctx as any).bbs;
+      const hasInclude = bbs ? await bbs.fileExists(files.include) : false;
+      const initial = hasInclude ? (await bbs.readFile(files.include)) ?? '' : '';
+      this.fullEdit = true;
+      this.isBBSFile = true;
+      this.currentBBSPath = files.result;
+      await this.openEditor(initial);
+    } else {
+      // Go directly to editor (skip main menu)
+      await this.openEditor('');
+    }
 
     // Wait for exit
     await new Promise<void>((resolve) => {
@@ -692,7 +723,9 @@ export class ANSIEditorDoor {
 
     // Build title based on file type
     let editorTitle = 'New File';
-    if (this.isBBSFile && this.currentBBSPath) {
+    if (this.fullEdit) {
+      editorTitle = 'Message - save to post it, exit without saving to abandon it';
+    } else if (this.isBBSFile && this.currentBBSPath) {
       editorTitle = `[BBS] ${this.currentBBSPath}`;
     } else if (this.currentFilename) {
       editorTitle = `Editing: ${this.currentFilename}`;
@@ -706,7 +739,7 @@ export class ANSIEditorDoor {
       height: '100%',
       title: editorTitle,
       initialContent,
-      initialMode: 'draw',
+      initialMode: this.fullEdit ? 'text' : 'draw',
       showLineNumbers: false,
       showMenuBar: true,
       showToolbar: true,
@@ -741,6 +774,11 @@ export class ANSIEditorDoor {
         // Handle BBS file saving (sysop mode)
         if (this.isBBSFile && this.currentBBSPath) {
           const success = await this.saveBBSFile(this.currentBBSPath, content);
+          if (success && this.fullEdit) {
+            // The board takes the message from msg once the editor is gone.
+            this.cleanup();
+            return true;
+          }
           if (success) {
             this.showMessage('Saved', `BBS file saved: ${this.currentBBSPath}`, 'green');
             return true;

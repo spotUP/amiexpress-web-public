@@ -1054,7 +1054,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     // ruler, existing lines, then drops to POST_MESSAGE_BODY.
     const { promptForMessageBody } = require('./message-entry.handler');
     if (typeof promptForMessageBody === 'function') {
-      promptForMessageBody(socket, session);
+      void promptForMessageBody(socket, session);
     } else {
       // Fallback: emit prompt manually if the helper isn't exposed.
       emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');

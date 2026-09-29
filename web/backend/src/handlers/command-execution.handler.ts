@@ -301,6 +301,15 @@ export async function reloadDoorCommands(
  * @param params - Command parameters
  * @returns Result code
  */
+/**
+ * Is a system command registered (Commands/SysCmd/<NAME>.info)? express.e
+ * asks this before offering what the command provides - edit()'s
+ * configFileExists('Commands/SysCmd/FULLEDIT') (10094-10095).
+ */
+export function hasSysCommand(name: string): boolean {
+  return commandCache.syscmd.has(name.toUpperCase());
+}
+
 export async function runSysCommand(
   socket: any,
   session: any,

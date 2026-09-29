@@ -119,6 +119,7 @@ export enum LoggedOnSubState {
   POST_MESSAGE_ATTACH_FILE = 'post_message_attach_file',
   POST_MESSAGE_ATTACH_DELETE_CONFIRM = 'post_message_attach_delete_confirm',
   POST_MESSAGE_QUOTE_REPLY_CONFIRM = 'post_message_quote_reply_confirm', // "Quote in Reply (y/N)?" — express.e:10878
+  POST_MESSAGE_FULLEDIT_CONFIRM = 'post_message_fulledit_confirm', // "FullScreen Editor (y/N)?" — express.e:10098-10100
   POST_MESSAGE_QUOTE_RANGE = 'post_message_quote_range',        // Quote message line range input
   POST_MESSAGE_REPLACE_SEARCH = 'post_message_replace_search',  // Replace search string input
   POST_MESSAGE_REPLACE_WITH = 'post_message_replace_with',      // Replace replacement string input
