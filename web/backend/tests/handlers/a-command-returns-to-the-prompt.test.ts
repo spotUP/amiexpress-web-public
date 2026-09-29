@@ -110,3 +110,59 @@ describe('F and FR after the directory prompt', () => {
     expect(wire).toMatch(/Menu \(/);
   });
 });
+
+describe('N and FI end at the menu loop, not a "Press any key" of their own', () => {
+  // The same invented ending F had: express.e's myNewFiles (27906-28023) and
+  // the file record print no prompt; the menu loop's menuPause is the pause.
+  // The prompt was added when a finished command sat in silence (2026-09-07),
+  // which the dispatcher now answers for every command (2026-09-27, T above).
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { config } = require('../../src/config');
+  let root: string;
+  let previous: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'n-fi-prompt-'));
+    fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), 'PROBE.LHA    P   12345  09-29-26  A probe file\r\n', 'latin1');
+    previous = config.get('dataDir');
+    config.set('dataDir', root);
+  });
+  afterEach(() => {
+    config.set('dataDir', previous);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  async function run(command: string, tempData: Record<string, unknown> = {}) {
+    const { socket, session, out } = aCaller();
+    session.commandText = command;
+    session.tempData = tempData;
+    await handleCommand(socket, session, '');
+    await new Promise((r) => setTimeout(r, 30));
+    flushOutput(socket);
+    return out.join('');
+  }
+
+  it('N comes back to the menu prompt', async () => {
+    // Wired as boot wires it (index.ts): the command's real body, not the
+    // unwired fallback.
+    const { setNavigationCommandsDependencies } = require('../../src/handlers/commands/navigation-commands.handler');
+    const { displayNewFiles } = require('../../src/handlers/file/file.handler');
+    setNavigationCommandsDependencies({
+      conferences: [], messageBases: [], joinConference: async () => undefined,
+      checkConfAccess: () => true, displayNewFiles,
+    });
+    const wire = await run('N');
+    expect(wire).toContain('Searching for files newer than');
+    expect(wire).not.toContain('Press any key');
+    expect(wire).toMatch(/Menu \(/);
+  });
+
+  it('FI <n> shows the record and comes back to the menu prompt', async () => {
+    const wire = await run('FI 1', { fileListIndex: [{ dirNumber: 1, filename: 'PROBE.LHA' }] });
+    expect(wire).toContain('PROBE.LHA');
+    expect(wire).not.toContain('Press any key');
+    expect(wire).toMatch(/Menu \(/);
+  });
+});

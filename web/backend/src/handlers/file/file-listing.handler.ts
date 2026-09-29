@@ -467,14 +467,12 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       }
     }
 
-    // END THE WAY `F` DOES, and for the reason the sysop found: the board
-    // holds for a keypress after a listing, and without this prompt it holds
-    // in SILENCE. "it gets stuck there as well ... i can exit with enter"
-    // (2026-09-07, a PETSCII session that had just scanned an empty
-    // conference). Same three lines as handleFileList's ending.
+    // END THE WAY `F` DOES: express.e's myNewFiles (27906-28023) prints no
+    // prompt of its own; the menu loop's menuPause is the pause after a
+    // listing. A "Press any key" was added here when a finished scan sat in
+    // silence (2026-09-07) - the dispatcher now takes every finished command
+    // round the menu loop (2026-09-27), so that silence cannot happen.
     (session as any).flagPauseHandler = undefined;
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -586,9 +584,8 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     }
 
     await this.showFileRecord(socket, session, entry, ordinal);
+    // The menu loop's pause, as for F and N - no prompt of our own.
     (session as any).flagPauseHandler = undefined;
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
