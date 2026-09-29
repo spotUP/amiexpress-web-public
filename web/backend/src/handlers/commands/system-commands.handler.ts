@@ -9,6 +9,7 @@
  * - E: Enter message (internalCommandE - express.e:24860-24868) - See messaging.handler.ts
  */
 
+import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
 import { checkSecurity } from '../../utils/acs.util';
 import * as path from 'path';
 import { boardRoot } from '../../utils/board-root.util';
@@ -336,7 +337,12 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   // Anything written since the screen - the fallback goodbye, a relogon
   // notice - goes out before the goodbye lines, for the same reason.
   flushOutput(socket);
-  socket.emit('ansi-output', '\r\nClick...\r\nNO CARRIER\r\n');
+  // The line drops with the caller's terminal as the board found it: a mouse
+  // mode a door left on outlives the connection, and his shell then prints
+  // the reports ("35;6;8M35;6;8M" after "Connection closed by foreign host",
+  // sysop, 2026-09-29). Door exit already resets it; this covers a door the
+  // line dropped out of.
+  socket.emit('ansi-output', MOUSE_REPORTING_OFF + '\r\nClick...\r\nNO CARRIER\r\n');
 
   // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {

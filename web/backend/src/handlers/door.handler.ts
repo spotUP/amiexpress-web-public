@@ -507,6 +507,8 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
 export { AMIGA_68K_DOOR_TYPES } from '../constants/door-types';
 import { AMIGA_68K_DOOR_TYPES as AMIGA_TYPES } from '../constants/door-types';
 import { withDoorReporting } from '../achievements/sites';
+import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
+export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
   return (AMIGA_TYPES as readonly string[]).includes((t || '').toUpperCase());
@@ -2145,6 +2147,14 @@ console.error(`Unknown door type: ${door.type}`);
           DebugSeverity.CRITICAL
         );
     }
+
+    // A door that turned on mouse reporting does not always turn it off -
+    // blessed enables ?1000/?1003/?1006 and only a clean destroy undoes it.
+    // Left on, the caller's own terminal keeps sending mouse reports after
+    // the board hangs up: "35;38;29M35;..." at a GNOME Terminal shell prompt
+    // after a telnet logoff (sysop, 2026-09-29). The board ends every door
+    // with the terminal the way it found it.
+    socket.emit('ansi-output', MOUSE_REPORTING_OFF);
 
     // Clean up drop files after door exit
     doorDropFileManager.cleanupDropFiles(nodeId);
