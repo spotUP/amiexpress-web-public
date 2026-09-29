@@ -1,16 +1,12 @@
 /**
- * "BARA ETT SVART FÄLT DÄR DET LIGGER EN DOLD PRESS RETURN" (the sysop,
- * 2026-09-23, walking the upload command).
+ * Every `~SP` is a pause - express.e:5455-5460 calls doPause whatever follows.
  *
- * The board's own `Conf1/uploadmsg.txt` ends with `~SP|` after ten blank
- * rows. `~SP` is a pause, and it splits the screen there - so the caller was
- * stopped in front of a black field and made to press a key to be shown the
- * blank lines behind it. The prompt is real and visible; what it leads to is
- * nothing, which is what makes it read as hidden.
- *
- * A pause is for something the caller has not seen yet. MCI counts as
- * something: a segment that looks blank but carries `~CC_gl` runs a door that
- * draws the screen the pause exists to protect, and that pause must stay.
+ * 2026-09-23 made a trailing `~SP` after blank rows a no-op ("bara ett svart
+ * fält där det ligger en dold press return", walking U). The prompt was
+ * hidden because the U command cleared the screen over a pause it had not
+ * waited for; the pause protects what the COMMAND draws next. 2026-09-29, the
+ * sysop again: "there is no pause after the screen when i press u". The pause
+ * is back, and U waits for it (continueAfterScreen).
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -41,15 +37,14 @@ const promptShown = (socket: ReturnType<typeof aSocket>) =>
   socket.wire.join('').includes('Space To Resume');
 
 describe('a boundary pause', () => {
-  it('is not armed when there is nothing behind it', () => {
+  it('is armed with only blank rows behind it, as express.e pauses at every ~SP', () => {
     const socket = aSocket();
     // What `~SP|` at the end of uploadmsg.txt leaves: a blank row and the
     // reset the art signed off with.
     const session = aSessionWith([`\r\n   \r\n${ESC}[0m`]);
 
-    expect(armSegmentBoundaryPause(socket, session)).toBe(false);
-    expect(promptShown(socket)).toBe(false);
-    expect(session.paginatedScreen).toBeUndefined();
+    expect(armSegmentBoundaryPause(socket, session)).toBe(true);
+    expect(promptShown(socket)).toBe(true);
   });
 
   it('is armed when a single glyph is behind it', () => {

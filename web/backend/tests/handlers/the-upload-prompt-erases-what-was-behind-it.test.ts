@@ -283,3 +283,58 @@ describe('sendCLS on a web terminal', () => {
     expect(sent).not.toContain('\x0c');
   });
 });
+
+describe('the upload screen\'s own pause', () => {
+  // "there is no pause after the screen when i press u" (sysop, 2026-09-29).
+  // uploadmsg.txt ends in `~SP`; the interface clears the screen. Run at once,
+  // it cleared the art and the prompt, and the pause waited unseen.
+  it('holds the upload interface until the caller answers the screen\'s ~SP', async () => {
+    const { handleUploadCommand, setUserCommandsDependencies } =
+      require('../../src/handlers/commands/user-commands.handler');
+    const { socket } = aTerminal();
+    const session = uploader();
+    let interfaceDrawn = 0;
+    setUserCommandsDependencies({
+      conferences: [], messageBases: [], db: {} as never,
+      joinConference: async () => undefined,
+      checkConfAccess: () => true,
+      displayScreen: async (_s: any, sess: any, name: string) => {
+        if (name !== 'UPLOADMSG') return false;
+        // What displayScreen leaves for a screen with a trailing ~SP.
+        sess.screenSegments = { segments: ['\r\n\x1b[0m'], eventName: 'ansi-output' };
+        return true;
+      },
+      displayUploadInterface: () => { interfaceDrawn++; },
+      displayDownloadInterface: () => undefined,
+    });
+
+    await handleUploadCommand(socket, session);
+
+    expect(interfaceDrawn).toBe(0);
+    expect(session.paginatedScreen?.kind).toBe('doPause');
+
+    const { handlePaginatedScreenInput } = require('../../src/handlers/screen.handler');
+    await handlePaginatedScreenInput(socket, session, ' ');
+
+    expect(interfaceDrawn).toBe(1);
+  });
+
+  it('draws the interface straight away when the screen has no pause', async () => {
+    const { handleUploadCommand, setUserCommandsDependencies } =
+      require('../../src/handlers/commands/user-commands.handler');
+    const { socket } = aTerminal();
+    let interfaceDrawn = 0;
+    setUserCommandsDependencies({
+      conferences: [], messageBases: [], db: {} as never,
+      joinConference: async () => undefined,
+      checkConfAccess: () => true,
+      displayScreen: async () => false,
+      displayUploadInterface: () => { interfaceDrawn++; },
+      displayDownloadInterface: () => undefined,
+    });
+
+    await handleUploadCommand(socket, uploader());
+
+    expect(interfaceDrawn).toBe(1);
+  });
+});

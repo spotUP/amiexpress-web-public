@@ -1229,13 +1229,21 @@ console.log('[ENV] Uploading');
 
   // express.e:18986 - IF(uLFType=0) THEN displayScreen(SCREEN_UPLOAD). The
   // command path is always uLFType 0 here; an attach is a different entry.
-  // No pause: express.e pauses after the DOWNLOAD screen, not this one.
+  // The command adds no pause of its own (express.e pauses after the DOWNLOAD
+  // screen, not this one) - but the screen may carry one: the board's
+  // uploadmsg.txt ends in `~SP`, and the interface below clears the screen.
   await _displayScreen(socket, session, 'UPLOADMSG', true, true);
 
-  // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
-  // The first parameter 0 means show upload interface first, not immediate ZMODEM
-  // This lets user select file area before starting ZMODEM transfer
-  _displayUploadInterface(socket, session, '');
+  // express.e:25656 - uploadaFile(0, cmdcode, FALSE), once the screen is done.
+  // Held behind the screen's `~SP` rather than drawn over it: run at once, it
+  // cleared the art and the pause prompt, and the pause sat waiting unseen.
+  const { continueAfterScreen } = require('../screen.handler');
+  const deferred = await continueAfterScreen(
+    socket, session, () => _displayUploadInterface(socket, session, ''), 'upload-screen',
+  );
+  // Out of the display flow while the pause is up, as the join does, so the
+  // menu is not drawn under it; the interface sets its own state after.
+  if (deferred) session.subState = LoggedOnSubState.READ_COMMAND;
 }
 
 /**

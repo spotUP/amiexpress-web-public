@@ -244,6 +244,42 @@ export function doorExitOwesThePause(session: BBSSession): boolean {
 }
 
 /**
+ * Run `continuation` once the screen just displayed is finished with.
+ *
+ * express.e's displayScreen returns only when the whole file has been shown,
+ * `~SP` pauses included, so a command that draws a screen and then goes on
+ * does so AFTER them. Here displayScreen shows the first segment and parks the
+ * rest; the display flow and the join put up the prompt themselves, and a
+ * command calling displayScreen directly has to as well - or it runs on while
+ * the pause is still owed. The U command did: its interface cleared the screen
+ * over the art AND over the pause prompt, which then sat waiting, invisible
+ * ("en dold press return", the sysop, 2026-09-23; "there is no pause after
+ * the screen when i press u", 2026-09-29).
+ *
+ * Returns true when the continuation was deferred to a pause, false when it
+ * ran now (the screen had no pause left in it).
+ */
+export async function continueAfterScreen(
+  socket: any,
+  session: BBSSession,
+  continuation: () => void | Promise<void>,
+  site: string,
+): Promise<boolean> {
+  if (session.paginatedScreen) {
+    session.paginatedScreen.onComplete = continuation;
+    return true;
+  }
+  if (session.screenSegments && session.screenSegments.segments.length > 0) {
+    (session.screenSegments as any).onComplete = continuation;
+    if (armSegmentBoundaryPause(socket, session, site)) return true;
+    session.screenSegments = undefined;
+  }
+  await continuation();
+  return false;
+}
+
+
+/**
  * THE PAUSE A `~SP` BOUNDARY STANDS FOR.
  *
  * A boundary between two segments exists BECAUSE the screen had a `~SP`
@@ -262,20 +298,6 @@ export function doorExitOwesThePause(session: BBSSession): boolean {
  * @returns true when a pause was armed, false when no segments remain and the
  *          screen is simply over.
  */
-/**
- * Is this segment something the caller would see, or hear about?
- *
- * Glyphs, an MCI code, or any escape that is not a plain colour/attribute
- * reset all count. The rest is blank rows and the SGR the art left behind.
- */
-function nothingLeftToShow(segment: string): boolean {
-  if (segment.includes('~')) return false;
-  const bare = segment
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/[\r\n\t ]/g, '');
-  return bare.length === 0;
-}
-
 export function armSegmentBoundaryPause(
   socket: any,
   session: BBSSession,
@@ -350,24 +372,15 @@ export function armSegmentBoundaryPause(
   }
 
   /*
-   * A PAUSE IS FOR SOMETHING THE CALLER HAS NOT SEEN YET.
+   * EVERY `~SP` IS A PAUSE (express.e:5455-5460: doPause, whatever follows).
    *
-   * A `~SP` at the END of a screen - the board's own `Conf1/uploadmsg.txt`
-   * carries one, after ten blank rows - splits off a segment with nothing in
-   * it. The caller was stopped in front of a black field and made to press a
-   * key to be shown blank lines: "kommer dessutom ett extra ställe här, där
-   * man måste trycka return... bara ett svart fält där det ligger en dold
-   * press return" (the sysop, 2026-09-23).
-   *
-   * MCI COUNTS AS CONTENT, and that is the load-bearing half: a segment that
-   * looks blank but carries `~CC_gl` runs a door which draws the screen the
-   * pause is protecting. Only a segment with no glyphs, no `~`, and no `\x1b`
-   * beyond plain SGR is nothing at all.
+   * A trailing one after blank rows used to be skipped as "leading to
+   * nothing" (2026-09-23). It leads to what the COMMAND draws next: the
+   * board's `Conf1/uploadmsg.txt` ends in one so the art is seen before the
+   * upload interface clears it. The "hidden press return" that prompted the
+   * skip was that interface clearing over a pause it had not waited for -
+   * fixed where it lives, in continueAfterScreen.
    */
-  if (segState.segments.every(nothingLeftToShow)) {
-    return false;
-  }
-
   session.paginatedScreen = {
     lines: [''],  // No additional content, just hold for a key
     nextIndex: 1,
