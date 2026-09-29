@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
+import { createLoginCredentials, type LoginCredentials } from '../utils/login-credentials';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { createDoubleHeightFilter, type DoubleHeightFilter } from '../utils/teletext-double-height';
@@ -311,6 +312,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * doing that still needs doing.
    */
   const tokenLoginPending = useRef<boolean>(false);
+  /** The browser's password manager, typed into the server's login prompts. */
+  const loginCredentials = useRef<LoginCredentials | null>(null);
   const doorActive = useRef<boolean>(false);
   /**
    * The same fact as `doorActive`, as STATE, because the PETSCII canvas takes
@@ -1957,6 +1960,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       ...reconnectPolicy(isDevelopment),
     });
     socketRef.current = socket;
+    loginCredentials.current = createLoginCredentials((line) => socket.emit('command', line));
 
     // Publish which browser-side door is running so the host page can swap in
     // door-specific UI. The backend never emits door:unload-client, so the
@@ -2061,6 +2065,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Socket event handlers
     socket.on('connect', () => {
       console.log('[Terminal] Connected to BBS backend');
+      loginCredentials.current!.onConnect();
       stopGuruAnimation();
 
       // Re-enable auto-reconnection if it was disabled by a previous forced disconnect
@@ -3017,13 +3022,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * browser's own editor; now it only records that this session is not past
      * login, because the prompt itself - and its echo - is the server's.
      */
+    socket.on('mask-input', (masked: boolean) => {
+      loginCredentials.current!.onMaskInput(masked);
+    });
+
     socket.on('prompt-login', () => {
+      loginCredentials.current!.onPromptLogin();
       loginState.current = 'server-driven';
       tokenLoginPending.current = false;
     });
 
     socket.on('login-success', (data: any) => {
       console.log('Login successful:', data);
+      loginCredentials.current!.onLoginSuccess();
       loginState.current = 'loggedin';
       reconnectPending.current = false;
 
@@ -3143,6 +3154,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const retryFrom = typeof data === 'object' ? data.retryFrom : 'username';
 
       console.log('Login failed:', reason, 'retryFrom:', retryFrom);
+      loginCredentials.current!.onLoginFailed();
       localStorage.removeItem('bbs_auth_token');
       clearSessionState();
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
@@ -3492,6 +3504,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         socket.emit('door:terminate');
         return;
       }
+      loginCredentials.current!.onTyped(data);
       socket.emit('command', data);
     };
     /**
