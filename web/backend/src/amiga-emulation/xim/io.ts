@@ -600,6 +600,11 @@ debugLog(
       debugLog(`[DEBUG JH_LI] Also wrote to stringPtr at 0x${msg.stringPtr.toString(16)}`);
     }
 
+    // express.e:2378 - lineInput ends `IF ftpConn=FALSE THEN aePuts('\b\n')`:
+    // the caller's Enter moves to a new row before the door draws its next
+    // prompt. getPass2 (SIG_LI) has no such line.
+    if (!this.secureLineInput) this.directEmit('ansi-output', '\r\n');
+
     // JH_LI/JH_PM reply: Data = 1 on success, -1 on timeout/carrier; String carries the input
     const dataVal = this.state.carrierDropped ? -1 : 1;
     this.reply(msg, dataVal);

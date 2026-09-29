@@ -146,6 +146,18 @@ describe('JH_LI edits the default it is given (express.e:2202-2204)', () => {
     expect(ctx.emits.some(([, p]) => p === '\u00e5')).toBe(true);
   });
 
+  test('Enter ends the line with CR LF, so the door\'s next prompt starts on a new row', () => {
+    // express.e:2378 - lineInput ends `IF ftpConn=FALSE THEN aePuts('\\b\\n')`.
+    // File Description asks each description line with JH_PM; without the
+    // break, line 9's prompt was drawn after line 8's text (sysop, 2026-09-30).
+    const ctx = buildHandler();
+    ctx.handler.handleLineInput(lineInput(''));
+    for (const ch of 'test') (ctx.handler as any).queueInput(ch);
+    (ctx.handler as any).queueInput('\r');
+    const wire = ctx.emits.filter(([ev]) => ev === 'ansi-output').map(([, p]) => p).join('');
+    expect(wire).toBe('test\r\n');
+  });
+
   test('a temp-file path is shown as a prompt, never handed back as the answer', () => {
     const ctx = buildHandler();
     ctx.handler.handleLineInput(lineInput('RAM:list.txt', 40));
