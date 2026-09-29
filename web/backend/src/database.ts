@@ -998,17 +998,12 @@ console.log('[+] door_installs migrated to COLLATE NOCASE on command');
         }
       }
 
-      // Reset all non-zero scan_flags to 0. File scanning is controlled exclusively by the
-      // SHOW_NEW_FILES conference .info tooltype — DB scan_flags no longer gate AquaScan.
-      {
-        const confBaseInfo = this.db.prepare('PRAGMA table_info(conf_base)').all() as any[];
-        if (confBaseInfo.length > 0) {
-          const changed = this.db.prepare('UPDATE conf_base SET scan_flags = 0 WHERE scan_flags != 0').run();
-          if (changed.changes > 0) {
-console.log(`[migration] Reset ${changed.changes} conf_base rows to scan_flags=0 (file scan now controlled by SHOW_NEW_FILES tooltype only)`);
-          }
-        }
-      }
+      // NO scan_flags reset here. One ran on EVERY boot from 0de5840ad
+      // (2026-04-28) to stop AquaScan launching from the file-scan bit, and it
+      // cleared the mail-scan and zoom bits too - every deploy forgot every
+      // caller's CF choices (express.e parity survey, 2026-09-29). File
+      // scanning reads the SHOW_NEW_FILES tooltype, not this column, so the
+      // bits it cleared are nothing the scan still consults.
 
       // Which volume holds a file, and under what key. NULL means local disk,
       // which is every row on every board that has not configured a bucket.
