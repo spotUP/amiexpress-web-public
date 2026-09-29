@@ -19,6 +19,10 @@
  * him - a prompt he never got the chance to answer, and the tip door wiping
  * the join listing again behind it.
  *
+ * The tip door is no longer run by the flow (a screen runs it, `~CC_TIP`, at
+ * the sysop's word on 2026-09-29), so the step the second kick must not reach
+ * is now the menu itself.
+ *
  * THIS ONE IS DRIVEN FROM THE LIVE SIGNATURE. Three earlier attempts at the
  * neighbouring double-pause bug were abandoned because their fixtures passed
  * on broken code; this file reproduces the exact sequence the board logged -
@@ -29,14 +33,7 @@ process.env.SKIP_DB_INIT = '1';
 
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 
-/** The tip door: reaching it at the wrong moment IS the defect. */
-const executeDoor = jest.fn(async () => {});
-jest.mock('../../src/handlers/door.handler', () => ({
-  executeDoor: (...args: any[]) => executeDoor(...(args as [])),
-  doorAvailableTo: () => true,
-  displayDoorMenu: jest.fn(),
-}));
-
+/** The menu: reaching it before the pause is answered IS the defect. */
 const displayMainMenu = jest.fn(async () => {});
 jest.mock('../../src/handlers/command-handler/menu', () => ({
   ...jest.requireActual('../../src/handlers/command-handler/menu'),
@@ -44,7 +41,6 @@ jest.mock('../../src/handlers/command-handler/menu', () => ({
 }));
 
 import { advanceDisplayFlow } from '../../src/handlers/command.handler';
-import { setDoors } from '../../src/handlers/command-handler/dependency-injection';
 
 interface Emit { event: string; data: string }
 
@@ -64,7 +60,7 @@ function aCallerLeavingAJoin() {
     relConfNum: 2,
     // What joinConference leaves behind: the pause it owes for what it drew.
     menuPause: true,
-    user: { username: 'sysop', name: 'sysop', secLevel: 255, expert: 'X' },
+    user: { username: 'sysop', name: 'sysop', secLevel: 255, expert: 'N' },
     tempData: {},
   } as any;
   return { socket, session, emits };
@@ -74,20 +70,18 @@ const wire = (emits: Emit[]) => emits.map((e) => e.data).join('');
 
 describe('the flow being kicked twice for one keystroke', () => {
   beforeEach(() => {
-    executeDoor.mockClear();
     displayMainMenu.mockClear();
-    setDoors([{ command: 'TIP', enabled: true, accessLevel: 0, conferenceId: null }] as any);
   });
 
-  it('does not run the door the second kick would have reached', async () => {
+  it('does not draw the menu the second kick would have reached', async () => {
     // Red before the guard: the first call installs the pause, the second
-    // ignores it and opens TIP - which clears the screen the prompt was on.
+    // ignores it and draws the menu over the screen the prompt was on.
     const { socket, session } = aCallerLeavingAJoin();
 
     await advanceDisplayFlow(socket, session);   // continueJoinAfterBull's kick
     await advanceDisplayFlow(socket, session);   // handleCommand's kick
 
-    expect(executeDoor).not.toHaveBeenCalled();
+    expect(displayMainMenu).not.toHaveBeenCalled();
   });
 
   it('leaves the pause standing for him to answer', async () => {
@@ -116,7 +110,7 @@ describe('the flow being kicked twice for one keystroke', () => {
     session.paginatedScreen = undefined;
     await advanceDisplayFlow(socket, session);
 
-    expect(executeDoor).toHaveBeenCalledTimes(1);
+    expect(displayMainMenu).toHaveBeenCalledTimes(1);
   });
 
   it('is not tripped by a flow with no pause outstanding', async () => {
@@ -127,6 +121,6 @@ describe('the flow being kicked twice for one keystroke', () => {
 
     await advanceDisplayFlow(socket, session);
 
-    expect(executeDoor).toHaveBeenCalledTimes(1);
+    expect(displayMainMenu).toHaveBeenCalledTimes(1);
   });
 });

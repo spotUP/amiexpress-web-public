@@ -304,30 +304,6 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
-/**
- * TIP runs last, right before the menu - not at EXECUTE_ON_LOGON time.
- * The early hook fires before the LOGON screen and bulletins, so a tip
- * there is buried; here it is the last thing before the prompt. Once
- * per login (tempData, not storage: this is flow position, not rotation -
- * the door owns seen-ids), skipped on quick ('Q') logins, and skipped
- * silently when TIP is not installed (no retry loop, no error - the
- * board without the door is a board without the tip).
- */
-export function tipDoorBeforeMenu(
-  session: BBSSession,
-  doors: Array<{ command?: string; enabled?: boolean; accessLevel?: number; conferenceId?: number | null }>,
-): boolean {
-  if ((session as any).quickFlag) return false;
-  if (session.tempData?.tipShown) return false;
-  // A door the caller could not open from the DOORS menu is not run AT them
-  // on the way to it. doorAvailableTo is the same answer that menu uses -
-  // switching TIP off in the admin parks its ACCESS, and before this the
-  // login hook read neither the level nor the switch.
-  return doors.some(
-    (d) => (d.command ?? '').toUpperCase() === 'TIP' && doorAvailableTo(d, session),
-  );
-}
-
 /** Printable ASCII: the characters express.e's editor has always taken. */
 function isTypableAscii(data: string): boolean {
   return data >= ' ' && data <= '~';
@@ -1224,60 +1200,6 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           session.subState = session.manualMenuTargetState || LoggedOnSubState.READ_COMMAND;
           session.manualMenuTargetState = undefined;
           return;
-        }
-        // TIP last: the tip door runs here, after bulletins, scans and
-        // rejoin, with the menu one keypress behind it. Marked shown
-        // BEFORE running so a door that errors cannot loop the login;
-        // a failed tip falls through to the menu, never strands it.
-        if (tipDoorBeforeMenu(session, getDoors())) {
-          /*
-           * SPEND THE PAUSE BEFORE THE WIPE, NOT AFTER IT.
-           *
-           * TIP is a modal: it clears the screen, draws its frame and waits
-           * for a key. Everything the join left on screen goes with that
-           * clear - and on this board the join's LAST act is the conference
-           * bulletin's second `~SP` segment, which is `~f`, `~CC_ctop` and
-           * `~XISUBSCAN`: the conference top and the new-topic listing, drawn
-           * and wiped in the same breath. The sysop, 2026-09-14: "something
-           * draws before tip of the day without a pause prompt so its not
-           * readable".
-           *
-           * `menuPause` is the pause the board already owes him - joinConference
-           * sets it (conference.handler.ts) exactly so the join's output is
-           * read before the next screen. It was being spent AFTER this door,
-           * on the menu, by which time the thing it was protecting had been
-           * erased.
-           *
-           * NOT gated on `shouldDisplayMenu` like the menu's own pause below.
-           * That gate is expert mode, and expert mode means "do not redraw the
-           * menu at me" - the sysop runs it (`expert:="X"`, express.e:26119),
-           * which is why he saw no pause at all. It has never meant "wipe the
-           * conference bulletin before I can read it". The pause still costs
-           * nothing on a login that drew nothing: `menuPause` is only set by a
-           * join.
-           */
-          if (session.menuPause) {
-            const { doPause } = require('./screen.handler');
-            doPause(socket, session);
-            session.menuPause = false;
-            displayFlowLog('pause before TIP');
-            return;
-          }
-          if (!session.tempData) session.tempData = {};
-          session.tempData.tipShown = true;
-          const tip = getDoors().find(
-            (d) => (d.command ?? '').toUpperCase() === 'TIP' && doorAvailableTo(d, session),
-          );
-          if (tip) {
-            displayFlowLog('running TIP before MENU');
-            try {
-              await executeDoor(socket, session, tip);
-            } catch (error) {
-              console.error('[DISPLAY FLOW] TIP door failed, continuing to menu:', (error as Error)?.message);
-            }
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            continue;
-          }
         }
         const relConfNumber = session.relConfNum || 1;
         const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
