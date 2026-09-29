@@ -220,13 +220,11 @@ console.log('[ENV] Mail - Read');
     return;
   }
 
-  // express.e:11984: msgNum:=lastMsgReadConf+1 — start from first unread
+  // express.e:11984: msgNum:=lastMsgReadConf+1 — start from first unread.
+  // All read: msgNum is past the end, and the prompt says ( QUIT ).
   const lastRead = session.lastMsgReadConf || 0;
   let startIndex = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) > lastRead);
-  if (startIndex < 0) {
-    // All messages already read — start from beginning (express.e allows backwards nav)
-    startIndex = 0;
-  }
+  if (startIndex < 0) startIndex = messages.length;
 
   // express.e:11991-11997 — 'S' param: error out if past end (no new messages)
   if (skipToNew) {
@@ -239,10 +237,12 @@ console.log('[ENV] Mail - Read');
   }
 
   // express.e:12000-12005 — explicit jump target overrides default startIndex
+  let jumped = false;
   if (jumpMsgNum !== null) {
     const idx = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) === jumpMsgNum);
     if (idx >= 0) {
       startIndex = idx;
+      jumped = true;
     }
   }
 
@@ -253,14 +253,24 @@ console.log('[ENV] Mail - Read');
   session.tempData.msgReaderHighestRead = lastRead;
   session.tempData.msgReaderFwdDir = initialDir;
   session.tempData.nonStopMail = nonStopMail;
+  // express.e's tempFlag: no message has been read yet, so the commands that
+  // act on "this" message (A, R, F, D, M, K, E, U, T) do nothing.
+  session.tempData.msgReaderNoneRead = true;
 
-  // Display first message (or burst-display in nonstop mode)
+  // express.e:12080-12085 — NS never prompts: every message from here on.
   if (nonStopMail) {
-    // express.e:12080-12085 — NS mode skips the prompt loop, runs through messages
-    await displaySingleMessage(socket, session, startIndex);
-  } else {
-    await displaySingleMessage(socket, session, startIndex);
+    await readNonStop(socket, session, startIndex);
+    return;
   }
+  // express.e:11991-11998 (S) and 12000-12005 (a number, + or -) read at once.
+  if ((skipToNew || jumped || firstParam) && startIndex < messages.length) {
+    await displaySingleMessage(socket, session, startIndex);
+    return;
+  }
+  // express.e:12007-12022 — otherwise the reader opens on its prompt, and
+  // <CR> reads the message it names.
+  session.tempData.msgReaderIndex = startIndex - 1;
+  displayMessageNavigationPrompt(socket, session);
 }
 
 /**
@@ -333,6 +343,7 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
 
   // Update current index
   session.tempData.msgReaderIndex = messageIndex;
+  session.tempData.msgReaderNoneRead = false;
   if (!session.tempData.msgReaderHighestRead || msgNumber > session.tempData.msgReaderHighestRead) {
     session.tempData.msgReaderHighestRead = msgNumber;
   }
@@ -350,10 +361,12 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
     const headers = messageIndexManager.readHeaderFile(confId);
     const liveHeader = headers.find((h: any) => h.msgNumb === msgNumber);
     if (liveHeader && liveHeader.status === MsgStatus.DELETED) {
-      emitText(socket, '\r\nThat message has been deleted.\r\n\r\n');
       // Drop the deleted entry from the local list and advance.
       messages.splice(messageIndex, 1);
       session.tempData.msgReaderMessages = messages;
+      // express.e:12356 IF(noDirF<>0) THEN JUMP nextMSG - NS passes it silently.
+      if (session.tempData.nonStopMail) return;
+      emitText(socket, '\r\nThat message has been deleted.\r\n\r\n');
       if (messages.length === 0) {
         await saveMessagePointerAndExit(socket, session);
         return;
@@ -500,62 +513,29 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
     session.tempData.msgReaderHighestRead = msg.id;
   }
 
-  // Display navigation prompt - express.e:11009-11036
-  displayMessageNavigationPrompt(socket, session);
+  // Display navigation prompt - express.e:11009-11036. NS asks nothing.
+  if (!session.tempData.nonStopMail) displayMessageNavigationPrompt(socket, session);
 }
 
 /**
- * Display messages in non-stop mode
- * From express.e:8954-8958, 11055-11057
- * Displays messages continuously without waiting for input until end or interrupted
+ * NS: every message from `startIndex` on, with no prompt and no pause, then
+ * out of the reader (express.e:12080-12085; readit at the end returns
+ * RESULT_FAILURE and readMSG prints a blank line and returns - no
+ * "last message" line, noMorePlus is silent under NS).
  */
-async function displayMessagesNonStop(socket: any, session: BBSSession, startIndex: number): Promise<void> {
+async function readNonStop(socket: any, session: BBSSession, startIndex: number): Promise<void> {
   const messages = session.tempData.msgReaderMessages;
-
-  for (let i = startIndex; i < messages.length; i++) {
-    const msg = messages[i];
-    const msgNumber = (msg as any).msgNumber || msg.id;
-
-    session.tempData.msgReaderIndex = i;
-    if (!session.tempData.msgReaderHighestRead || msgNumber > session.tempData.msgReaderHighestRead) {
-      session.tempData.msgReaderHighestRead = msgNumber;
-    }
-
-    // express.e:8897-8951: same header as normal displayMessage (nonStopMail only skips pause)
-    const SCRNCLR_FLAG = 8;
-    if ((session.user?.userFlags || 0) & SCRNCLR_FLAG) {
-      emitText(socket, clearTheScreen(socket)); // sendCLS(); see display-file-commands
-    } else {
-      emitText(socket, '\r\n');
-    }
-    const dateStr = formatLongDateTime(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp));
-    const toDisplay = formatRecipientDisplay(msg, session);
-    const recvd = (msg.toUser || '').toUpperCase() === 'ALL' ? 'N/A' : 'No';
-    const statusStr = msg.isPrivate ? 'Private Message' : 'Public Message';
-    const headerLines = buildMessageHeaderLines({
-      dateStr,
-      msgNumber,
-      toDisplay,
-      recvd,
-      from: msg.author || '',
-      statusStr,
-      subject: msg.subject,
-    }, isNarrow(session));
-    for (let h = 0; h < headerLines.length; h++) {
-      emitText(socket, `${headerLines[h]}\r\n${h === headerLines.length - 1 ? '\r\n' : ''}`);
-    }
-
-    // Body — express.e:8954-8958: nonStopMail=TRUE → displayFile with checkForPause=FALSE
-    // Convert raw \n line breaks to \r\n so xterm.js returns to col 1 between lines.
-    const bodyForDisplay = (msg.body || '').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-    emitText(socket, `${bodyForDisplay}\r\n\r\n`);
+  session.tempData.nonStopMail = true;
+  // express.e:12233-12234 NS always reads forward.
+  session.tempData.msgReaderFwdDir = 1;
+  let i = startIndex;
+  while (i < messages.length) {
+    const before = messages.length;
+    await displaySingleMessage(socket, session, i);
+    // A message deleted under us is spliced out; the next one is now at i.
+    if (messages.length === before) i++;
   }
-
-  // End of messages - save pointer and exit
   session.tempData.nonStopMail = false;
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('End of messages', 'yellow'));
-  emitText(socket, '\r\n');
   await saveMessagePointerAndExit(socket, session);
 }
 
@@ -687,14 +667,18 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // NS - Non-stop mode - express.e:11055, 12080
+  // NS - Non-stop mode - express.e:12080-12085: the rest, unprompted
   if (command === 'NS') {
-    session.tempData.nonStopMail = true;
+    await readNonStop(socket, session, currentIndex + 1);
+    return;
+  }
+
+  // express.e:12087 IF(tempFlag) - before a message has been read, the
+  // commands that act on it do nothing; only <CR>, a number, +, -, L and Q
+  // (outside that block) and the help above work.
+  if (session.tempData.msgReaderNoneRead && !/^(|N|Q|L|\d+[+-]?|[+-])$/.test(command)) {
     emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Non-stop mode enabled', 'yellow'));
-    emitText(socket, '\r\n');
-    // Start displaying messages non-stop
-    await displayMessagesNonStop(socket, session, currentIndex + 1);
+    displayMessageNavigationPrompt(socket, session);
     return;
   }
 
@@ -707,8 +691,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       if (currentIndex > 0) {
         await displaySingleMessage(socket, session, currentIndex - 1);
       } else {
-        const lowestNum = (messages[0] as any).msgNumber || messages[0].id;
-        emitText(socket, `\r\nThe first message in this conference is ${lowestNum}\r\n`);
+        // express.e:12082 <CR> sets noDirF, so noMoreMinus says nothing.
         await saveMessagePointerAndExit(socket, session);
       }
     } else {
@@ -716,9 +699,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       if (currentIndex < messages.length - 1) {
         await displaySingleMessage(socket, session, currentIndex + 1);
       } else {
-        const lastMsg = messages[messages.length - 1];
-        const lastMsgNum = (lastMsg as any).msgNumber || lastMsg.id;
-        emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
+        // express.e:12082 <CR> sets noDirF, so noMorePlus says nothing.
         await saveMessagePointerAndExit(socket, session);
       }
     }
@@ -1116,8 +1097,16 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     if (numWithDir[2] === '-') session.tempData.msgReaderFwdDir = -1;
     else if (numWithDir[2] === '+') session.tempData.msgReaderFwdDir = 1;
     const targetIdx = messages.findIndex((m: any) => ((m as any).msgNumber || m.id) === targetNum);
+    const numOf = (m: any) => (m as any).msgNumber || m.id;
     if (targetIdx >= 0) {
       await displaySingleMessage(socket, session, targetIdx);
+    } else if (messages.length > 0 && targetNum > numOf(messages[messages.length - 1])) {
+      // express.e:12290-12298 readit -> noMorePlus, then out of the reader
+      emitText(socket, `\r\nThe last message in this conference is ${numOf(messages[messages.length - 1])}\r\n`);
+      await saveMessagePointerAndExit(socket, session);
+    } else if (messages.length > 0 && targetNum < numOf(messages[0])) {
+      emitText(socket, `\r\nThe first message in this conference is ${numOf(messages[0])}\r\n`);
+      await saveMessagePointerAndExit(socket, session);
     } else {
       emitText(socket, '\r\n');
       displayMessageNavigationPrompt(socket, session);
@@ -1131,9 +1120,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     if (currentIndex < messages.length - 1) {
       await displaySingleMessage(socket, session, currentIndex + 1);
     } else {
-      const lastMsgNum = (messages[messages.length - 1] as any).msgNumber || messages[messages.length - 1].id;
-      emitText(socket, `\r\nThe last message in this conference is ${lastMsgNum}\r\n`);
-      displayMessageNavigationPrompt(socket, session);
+      // express.e:12245 a bare + jumps to goNextMsg with noDirF set: silent, and out
+      await saveMessagePointerAndExit(socket, session);
     }
     return;
   }
@@ -1144,16 +1132,14 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     if (currentIndex > 0) {
       await displaySingleMessage(socket, session, currentIndex - 1);
     } else {
-      const lowestNum = (messages[0] as any).msgNumber || messages[0].id;
-      emitText(socket, `\r\nThe first message in this conference is ${lowestNum}\r\n`);
-      displayMessageNavigationPrompt(socket, session);
+      // express.e:12257 a bare - jumps to goNextMsg with noDirF set: silent, and out
+      await saveMessagePointerAndExit(socket, session);
     }
     return;
   }
 
-  // Invalid command — express.e:11213 aePuts('No such command!!\b\n') then JUMP contloop
+  // Anything else: express.e:12291 nextMenu - a blank line and the prompt again.
   emitText(socket, '\r\n');
-  emitText(socket, 'No such command!!\r\n');
   displayMessageNavigationPrompt(socket, session);
 }
 
