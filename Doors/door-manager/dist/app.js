@@ -98,33 +98,6 @@ function sound(bbs, name) {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 // The require.cache service getters moved to doorman-services.ts when app.ts
 // reached the 2000-line ceiling.
-/** Adapts the local catalog service's getCatalogEntryByArchive into the
- * LocalCatalogLookup shape repoDataSource's mapManifestDoorToEntry expects
- * (consumer mode: resolving what's installed on THIS BBS is always a local
- * lookup, never something the central manifest knows). Missing service or a
- * thrown lookup error both fold into "nothing known locally" rather than
- * propagating -- a lookup failure must never abort the whole browse. */
-function buildLocalCatalogLookup() {
-    const svc = (0, doorman_services_1.getCatalogSvc)();
-    return (archiveName) => {
-        try {
-            const row = svc?.getCatalogEntryByArchive?.(archiveName);
-            if (!row)
-                return null;
-            return {
-                id: row.id,
-                installed: row.installed,
-                installed_as: row.installed_as ?? null,
-                install_dir: row.install_dir ?? null,
-                binary_name: row.binary_name ?? null,
-                archive_path: row.archive_path ?? null,
-            };
-        }
-        catch {
-            return null;
-        }
-    };
-}
 /** Adapts the installs repository into the InstallLookup shape
  * mapManifestDoorToEntry expects. Reads listInstalls() ONCE into a Map
  * rather than opening a sqlite connection per manifest row (was 3300 opens
@@ -609,7 +582,7 @@ class RepoView extends ViewManager_1.BaseView {
         this.layout.render();
         try {
             const cacheFile = (0, repoDataSource_1.consumerCacheFilePath)(PROJECT_ROOT);
-            const lookupLocal = buildLocalCatalogLookup();
+            const lookupLocal = (0, doorman_services_1.buildLocalCatalogLookup)();
             const lookupInstall = buildInstallLookup();
             const result = await (0, repoDataSource_1.loadConsumerCatalog)(this.repoMode.url, cacheFile, lookupLocal, repo_client_1.fetchManifest, lookupInstall);
             this.consumerEntries = result.entries;
@@ -1067,7 +1040,7 @@ class RepoView extends ViewManager_1.BaseView {
                             extractArchiveTo: install_core_1.extractArchiveTo,
                             findExtractedBinary: install_core_1.findExtractedBinary,
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
-                            lookupLocal: buildLocalCatalogLookup(),
+                            lookupLocal: (0, doorman_services_1.buildLocalCatalogLookup)(),
                             getInstallByCommand: (command) => (0, doorman_services_1.getInstallsRepo)()?.getInstallByCommand(command) ?? null,
                             recordInstall: doorman_services_1.recordInstallViaRecorder,
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,

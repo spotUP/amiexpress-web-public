@@ -142,6 +142,28 @@ export function getCatalogEntry(id: string): CatalogEntry | null {
   }
 }
 
+/**
+ * Every catalog row's local facts, keyed by archive name, in ONE connection.
+ *
+ * `getCatalogEntryByArchive` opens, seeds-checks and closes a connection per
+ * call - 13 ms on the live board. A caller that resolves a whole manifest
+ * (DOORMAN's central catalog, 5,690 rows) with it blocks the process's event
+ * loop for over a minute and the browser sits on "Loading central door-repo
+ * catalog..." (sysop, 2026-09-29). Those callers read this once instead.
+ */
+export function listCatalogArchiveIndex(): Array<
+  Pick<CatalogEntry, 'id' | 'archive_name' | 'installed' | 'installed_as' | 'install_dir' | 'binary_name' | 'archive_path'>
+> {
+  const db = openDb();
+  try {
+    return db
+      .prepare('SELECT id, archive_name, installed, installed_as, install_dir, binary_name, archive_path FROM door_catalog')
+      .all() as never;
+  } finally {
+    db.close();
+  }
+}
+
 export function getCatalogEntryByArchive(archiveName: string): CatalogEntry | null {
   const db = openDb();
   try {

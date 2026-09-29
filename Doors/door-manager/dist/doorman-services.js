@@ -47,6 +47,7 @@ exports.getInstallRecorder = getInstallRecorder;
 exports.clearInstalledFilesViaRecorder = clearInstalledFilesViaRecorder;
 exports.recordInstallViaRecorder = recordInstallViaRecorder;
 exports.getStripLib = getStripLib;
+exports.buildLocalCatalogLookup = buildLocalCatalogLookup;
 const path = __importStar(require("path"));
 const ViewManager_1 = require("./ViewManager");
 const PROJECT_ROOT = (0, ViewManager_1.resolveBbsRoot)(__dirname);
@@ -128,5 +129,46 @@ function getStripLib() {
         if (k.includes('ami-stripper.lib'))
             return require.cache[k]?.exports ?? null;
     return null;
+}
+/**
+ * The local catalog as a lookup by archive name, read ONCE.
+ *
+ * A consumer browse resolves every manifest row (5,690 on the live board)
+ * against this. The service's per-archive getter opens a database connection
+ * for each call - 13 ms, so over a minute of a frozen process before the list
+ * ever drew. The whole index comes from one query into a Map; a service
+ * without that query (an older backend) falls back to the per-archive getter,
+ * and a missing service or a thrown read folds into "nothing known locally",
+ * never a failed browse. Keys are lower-cased: archive names are NOCASE.
+ */
+function buildLocalCatalogLookup(svc = getCatalogSvc()) {
+    const toRow = (row) => ({
+        id: row.id,
+        installed: row.installed,
+        installed_as: row.installed_as ?? null,
+        install_dir: row.install_dir ?? null,
+        binary_name: row.binary_name ?? null,
+        archive_path: row.archive_path ?? null,
+    });
+    let index = null;
+    try {
+        if (typeof svc?.listCatalogArchiveIndex === 'function') {
+            index = new Map(svc.listCatalogArchiveIndex().map((row) => [String(row.archive_name).toLowerCase(), toRow(row)]));
+        }
+    }
+    catch {
+        index = null;
+    }
+    return (archiveName) => {
+        if (index)
+            return index.get(archiveName.toLowerCase()) ?? null;
+        try {
+            const row = svc?.getCatalogEntryByArchive?.(archiveName);
+            return row ? toRow(row) : null;
+        }
+        catch {
+            return null;
+        }
+    };
 }
 //# sourceMappingURL=doorman-services.js.map

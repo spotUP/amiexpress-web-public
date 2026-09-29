@@ -47,7 +47,7 @@ import { ViewManager, BaseView, KeyBinder, sanitizeForTags, refreshDoorRegistry,
 // formatSize lives alongside installedRow(), the row builder that sizes with it.
 import { DoormanLayout, formatSize } from './doorman-layout';
 import {
-  getCatalogSvc, getInstallsRepo, getInstallRecorder,
+  buildLocalCatalogLookup, getCatalogSvc, getInstallsRepo, getInstallRecorder,
   clearInstalledFilesViaRecorder, recordInstallViaRecorder, getStripLib,
 } from './doorman-services';
 import { DocView, StripView } from './doc-strip-views';
@@ -108,32 +108,6 @@ type CatalogEntry = RepoCatalogEntry;
 
 // The require.cache service getters moved to doorman-services.ts when app.ts
 // reached the 2000-line ceiling.
-
-/** Adapts the local catalog service's getCatalogEntryByArchive into the
- * LocalCatalogLookup shape repoDataSource's mapManifestDoorToEntry expects
- * (consumer mode: resolving what's installed on THIS BBS is always a local
- * lookup, never something the central manifest knows). Missing service or a
- * thrown lookup error both fold into "nothing known locally" rather than
- * propagating -- a lookup failure must never abort the whole browse. */
-function buildLocalCatalogLookup(): LocalCatalogLookup {
-  const svc = getCatalogSvc();
-  return (archiveName: string): LocalCatalogRow | null => {
-    try {
-      const row = svc?.getCatalogEntryByArchive?.(archiveName);
-      if (!row) return null;
-      return {
-        id: row.id,
-        installed: row.installed,
-        installed_as: row.installed_as ?? null,
-        install_dir: row.install_dir ?? null,
-        binary_name: row.binary_name ?? null,
-        archive_path: row.archive_path ?? null,
-      };
-    } catch {
-      return null;
-    }
-  };
-}
 
 /** Adapts the installs repository into the InstallLookup shape
  * mapManifestDoorToEntry expects. Reads listInstalls() ONCE into a Map

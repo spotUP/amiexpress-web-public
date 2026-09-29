@@ -10,6 +10,7 @@
 import * as path from 'path';
 import { resolveBbsRoot } from './ViewManager';
 import type { DoorInstallEntry } from './install-core';
+import type { LocalCatalogLookup, LocalCatalogRow } from './repoDataSource';
 
 const PROJECT_ROOT = resolveBbsRoot(__dirname);
 
@@ -90,4 +91,47 @@ export function getStripLib(): any {
   for (const k of Object.keys(require.cache))
     if (k.includes('ami-stripper.lib')) return require.cache[k]?.exports ?? null;
   return null;
+}
+
+/**
+ * The local catalog as a lookup by archive name, read ONCE.
+ *
+ * A consumer browse resolves every manifest row (5,690 on the live board)
+ * against this. The service's per-archive getter opens a database connection
+ * for each call - 13 ms, so over a minute of a frozen process before the list
+ * ever drew. The whole index comes from one query into a Map; a service
+ * without that query (an older backend) falls back to the per-archive getter,
+ * and a missing service or a thrown read folds into "nothing known locally",
+ * never a failed browse. Keys are lower-cased: archive names are NOCASE.
+ */
+export function buildLocalCatalogLookup(svc: any = getCatalogSvc()): LocalCatalogLookup {
+  const toRow = (row: any): LocalCatalogRow => ({
+    id: row.id,
+    installed: row.installed,
+    installed_as: row.installed_as ?? null,
+    install_dir: row.install_dir ?? null,
+    binary_name: row.binary_name ?? null,
+    archive_path: row.archive_path ?? null,
+  });
+
+  let index: Map<string, LocalCatalogRow> | null = null;
+  try {
+    if (typeof svc?.listCatalogArchiveIndex === 'function') {
+      index = new Map(
+        (svc.listCatalogArchiveIndex() as any[]).map((row) => [String(row.archive_name).toLowerCase(), toRow(row)])
+      );
+    }
+  } catch {
+    index = null;
+  }
+
+  return (archiveName: string): LocalCatalogRow | null => {
+    if (index) return index.get(archiveName.toLowerCase()) ?? null;
+    try {
+      const row = svc?.getCatalogEntryByArchive?.(archiveName);
+      return row ? toRow(row) : null;
+    } catch {
+      return null;
+    }
+  };
 }
