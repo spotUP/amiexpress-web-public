@@ -389,19 +389,6 @@ export async function runPostAuthLogin(
    * what the Amiga board showed.
    */
 
-  // EXECUTE_ON_LOGON from bbsConfig.info (express.e:6715).
-  runExecuteOn("LOGON", session.nodeId || 1, {
-    username: user.username,
-    location: user.location,
-  }).catch((err: any) => {
-    console.error("[LOGIN] EXECUTE_ON_LOGON failed:", err);
-  });
-
-  // MAIL_ON_LOGON (express.e:6716-6720).
-  mailOnLogon(user.username, user.location || "").catch((err: any) => {
-    console.error("[LOGIN] MAIL_ON_LOGON failed:", err);
-  });
-
   // LOGON / LOGON{n} syscmds (express.e:8222, 8231).
   try {
     const { runSysCommand } = require("../handlers/command-execution.handler");
@@ -786,6 +773,21 @@ export async function runPostAuthLogin(
 
   // Log successful login (express.e:9493 callersLog).
   await callersLog(user.id, user.username, "Logged on");
+
+  // EXECUTE_ON_LOGON (express.e:6715) and MAIL_ON_LOGON (6716-6720), called
+  // at 29847-29849 - AFTER every gate. They ran before the lockout, deleted-
+  // account, already-online, account-locked and password-expiry checks, so
+  // the sysop got logon mail and the logon hook ran for callers the board then
+  // threw out (express.e parity survey, 2026-09-29).
+  runExecuteOn("LOGON", session.nodeId || 1, {
+    username: user.username,
+    location: user.location,
+  }).catch((err: any) => {
+    console.error("[LOGIN] EXECUTE_ON_LOGON failed:", err);
+  });
+  mailOnLogon(user.username, user.location || "").catch((err: any) => {
+    console.error("[LOGIN] MAIL_ON_LOGON failed:", err);
+  });
 
   // SystemStats for ~SC MCI.
   try {

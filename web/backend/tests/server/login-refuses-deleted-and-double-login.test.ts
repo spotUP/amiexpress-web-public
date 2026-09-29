@@ -42,6 +42,18 @@ jest.mock('../../src/services/user-already-online', () => ({
   userAlreadyOnNode,
 }));
 
+/** The logon notifications (express.e:29847-29849) - after every gate. */
+const mailOnLogon = jest.fn(async () => undefined);
+jest.mock('../../src/services/mail-notification.service', () => ({
+  ...jest.requireActual('../../src/services/mail-notification.service'),
+  mailOnLogon,
+}));
+const runExecuteOn = jest.fn(async () => undefined);
+jest.mock('../../src/services/batch-scheduler', () => ({
+  ...jest.requireActual('../../src/services/batch-scheduler'),
+  runExecuteOn,
+}));
+
 const displayScreen = jest.fn(async () => true);
 jest.mock('../../src/handlers/screen.handler', () => ({
   ...jest.requireActual('../../src/handlers/screen.handler'),
@@ -121,6 +133,10 @@ describe('a deleted account', () => {
     expect(result).toEqual({ ok: false, terminated: 'deleted-account' });
     expect(output(socket)).toContain('That account has been deleted.');
     expect(beginLogoff).toHaveBeenCalledTimes(1);
+    // Refused callers are not announced: no logon mail to the sysop, no
+    // EXECUTE_ON_LOGON hook (they ran before the gates until 2026-09-29).
+    expect(mailOnLogon).not.toHaveBeenCalled();
+    expect(runExecuteOn).not.toHaveBeenCalled();
   });
 
   it('lets a live account past that gate', async () => {
@@ -147,6 +163,7 @@ describe('the same account logging in twice', () => {
     });
 
     expect(result).toEqual({ ok: false, terminated: 'already-on-another-node' });
+    expect(mailOnLogon).not.toHaveBeenCalled();
     expect(userAlreadyOnNode).toHaveBeenCalled();
     expect(displayScreen).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), 'ONENODE', false,

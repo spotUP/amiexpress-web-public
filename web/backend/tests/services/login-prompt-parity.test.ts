@@ -199,11 +199,15 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
       await flow;
     });
 
-    /** A telnet caller at the Password: prompt, one wrong answer from the limit. */
+    /**
+     * A telnet caller at the Password: prompt, one wrong answer from the limit:
+     * two tries spent of express.e's three per call (express.e:29156).
+     */
     const atThePasswordPrompt = (): any => ({
       state: BBSState.LOGON,
       connectionType: 'telnet',
       nodeId: 1,
+      loginRetryCount: 2,
       tempData: { loginPhase: 'password', loginUsername: 'spot', inputBuffer: 'wrong' },
     });
 

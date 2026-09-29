@@ -209,12 +209,53 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
     expect(session.subState).toBe(LoggedOnSubState.NEW_USER_GDPR_CONSENT);
   });
 
-  it('Enter alone means the same as C - express.e:29646', async () => {
+  it('Enter alone is a retry, not an account - express.e:29619', async () => {
+    // `IF StrCmp(tempStr,'C') THEN newUser:=TRUE ELSE retryCount++`: only C
+    // makes an account. Enter used to (parity survey, 2026-09-29).
     const socket = makeSocket();
     const session = loginSession('telnet');
     await type(socket, session, 'newcomer\r');
     await type(socket, session, '\r');
-    expect(startNewUserRegistration).toHaveBeenCalledTimes(1);
+    expect(startNewUserRegistration).not.toHaveBeenCalled();
+    expect(session.tempData.loginPhase).toBe('username');
+  });
+
+  it('an empty name asks for the name again, not the password', async () => {
+    const socket = makeSocket();
+    const session = loginSession('telnet');
+    await type(socket, session, '\r');
+    expect(session.tempData.loginPhase ?? 'username').toBe('username');
+    expect(session.maskInput).toBeFalsy();
+    expect(wire(socket)).not.toContain('Password:');
+  });
+
+  it('a wrong password asks for the password again, and the third is the last', async () => {
+    // express.e:29140-29211: "Invalid PassWord", the password prompt again
+    // for the same name, three tries per call whatever MAX_PASSWORD_FAILS says
+    // (this file mocks it to 1 - the old code logged off on the FIRST miss).
+    const { container } = require('../../src/container');
+    const { AuthenticationUseCase } = require('../../src/services/use-cases/authentication.use-case');
+    container.registerInstance(AuthenticationUseCase, { authenticate: jest.fn(async () => ({ success: false, error: 'bad' })) });
+    try {
+      const socket = makeSocket();
+      const session = loginSession('telnet');
+      await type(socket, session, 'sysop\r');
+      await type(socket, session, 'wrong1\r');
+      expect(session.tempData.loginPhase).toBe('password');
+      expect(session.tempData.loginUsername).toBe('sysop');
+      await type(socket, session, 'wrong2\r');
+      expect(session.tempData.loginPhase).toBe('password');
+      expect(wire(socket)).not.toContain('Excessive Password Failure');
+      // The third miss ends the tries: the reset offer (when mail is set up)
+      // or PWFAIL - either way no fourth Password: prompt. Not awaited: the
+      // reset offer waits for an answer.
+      const before = (wire(socket).match(/Password: /g) || []).length;
+      void type(socket, session, 'wrong3\r');
+      await new Promise((r) => setTimeout(r, 200));
+      expect((wire(socket).match(/Password: /g) || []).length).toBe(before);
+    } finally {
+      container.registerInstance(AuthenticationUseCase, new AuthenticationUseCase());
+    }
   });
 
   it('R goes back to the name prompt, and five refusals are a disconnect', async () => {

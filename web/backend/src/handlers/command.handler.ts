@@ -282,6 +282,9 @@ export { loadCommands, setCommandExecutionDependencies } from './command-executi
 // Constants (injected)
 let SCREEN_MENU: string = 'MENU';
 
+/** express.e:29156 `IF(tries>2)`: three password tries per call. */
+const PASSWORD_TRIES_PER_CALL = 3;
+
 const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.DISPLAY_BULL,
   LoggedOnSubState.DISPLAY_NODE_BULL,
@@ -2253,6 +2256,20 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           }
         }
 
+        // express.e:29587/29627 - an empty name is not a name: it counts
+        // toward the five retries and the name is asked again. It used to go
+        // on to the password prompt with no name at all.
+        if (typed.length === 0) {
+          session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
+          if (session.usernameRetryCount >= 5) {
+            const { beginLogoff } = require('../server/logoff');
+            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
+            return;
+          }
+          emitPrompt(socket, '\r\nUsername: ');
+          return;
+        }
+
         if (typed.length > 0) {
           const existing = await getDatabase().getUserByUsername(typed);
           if (!existing) {
@@ -2278,15 +2295,16 @@ function endPasswordMask(socket: any, session: BBSSession): void {
       }
 
       /**
-       * The answer to that question. `C` or Enter creates the account through
-       * the SAME `startNewUserRegistration` the web path calls; anything else
-       * is a retry, and five of those is express.e's disconnect
-       * (`:29633-29637`).
+       * The answer to that question. `C` creates the account through the SAME
+       * `startNewUserRegistration` the web path calls; anything else - Enter
+       * included - is a retry, and five of those is express.e's disconnect
+       * (express.e:29619 `IF StrCmp(tempStr,'C') THEN newUser:=TRUE ELSE
+       * retryCount++`, 29627-29637). Enter used to create an account.
        */
       if (phase === 'new-user-confirm') {
         const answer = input.trim().toUpperCase();
         const wanted = (session.tempData.loginUsername || '').trim();
-        if (answer === 'C' || answer === '') {
+        if (answer === 'C') {
           session.tempData.loginPhase = 'username';
           const { startNewUserRegistration } = require('./user/new-user.handler');
           await startNewUserRegistration(socket, session, wanted);
@@ -2369,7 +2387,12 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               // A failure to record must never block the login flow itself.
               console.warn('[AUTH] Could not record password failure:', err);
             }
-            if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
+            // express.e:29140-29156 - THREE tries per call, hard-coded
+            // (`IF(tries>2)`), whatever MAX_PASSWORD_FAILS says: that tooltype
+            // is the separate, persisted account lock recorded above
+            // (express.e:1008-1016). With the tooltype unset the per-call cap
+            // was -1 and a caller could guess for ever.
+            if (session.loginRetryCount >= PASSWORD_TRIES_PER_CALL) {
               // express.e:29152-29213 — try the email-based password reset
               // flow first (parity with web). If MAIL_ON_PWD_FAIL is
               // enabled, SMTP is configured, AND the user has an email
@@ -2407,10 +2430,9 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               return;
             }
 
-            endPasswordMask(socket, session);
-            emitPrompt(socket, '\r\nInvalid PassWord\r\nUsername: ');
-            session.tempData.loginPhase = 'username';
-            session.tempData.loginUsername = '';
+            // express.e:29206-29211 - "Invalid PassWord" and the PASSWORD is
+            // asked again, for the same name. It used to go back to Username:.
+            emitPrompt(socket, 'Invalid PassWord\r\n\r\nPassword: ');
             return;
           }
 
