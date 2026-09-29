@@ -28,7 +28,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import { getConferenceDir } from '../../utils/file-hold.util';
-import { conferenceNumbers } from '../../conferences/conference-paths';
+import { conferenceNumbers, conferenceDownloadDirs, conferenceUploadDirs } from '../../conferences/conference-paths';
 import { getStorageContext } from '../../storage/storage-context';
 import { usableAreasFor } from '../../storage/usable-areas';
 import { putUploadIntoPool, uploadObjectKey } from '../../storage/remote-upload';
@@ -850,9 +850,11 @@ console.log('[FM] Starting file maintenance');
    * Put the entry where its date belongs, rather than at the end.
    *
    * express.e:27196-27230 walks the destination listing and splices the moved
-   * entry in front of the first entry OLDER than it, so the listing stays in
-   * the order the board maintains everywhere else. Appending - which is what
-   * this did - dropped every moved file to the bottom.
+   * entry in front of the first entry dated the same or LATER (`brk:=(d2>=d1)`,
+   * 27211). A DIR file runs oldest first - an upload is appended - so that
+   * keeps it in date order. Appending dropped every moved file to the bottom;
+   * the earlier fix inserted before the first OLDER entry, which put a moved
+   * file above everything older than it, at the top of an oldest-first list.
    *
    * An entry spans however many lines it has (a description continues on the
    * lines after the header), so both sides move as a block.
@@ -866,7 +868,7 @@ console.log('[FM] Starting file maintenance');
     for (let index = 0; index < destLines.length; index += 1) {
       const lineDate = this.dateOfDirLine(destLines[index]);
       if (lineDate === '') continue;
-      if (entryDate >= this.dateCompareValue(lineDate)) {
+      if (this.dateCompareValue(lineDate) >= entryDate) {
         return [
           ...destLines.slice(0, index),
           ...entryLines,
@@ -907,7 +909,7 @@ console.log('[FM] Starting file maintenance');
     // also the path a sysop uses to RELEASE a HOLD or PRIVATE upload into an
     // area (srcDir -1 is HOLD), so it carries real files, not just tidy-ups.
     try {
-      await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
+      await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir, confNum);
     } catch (error: any) {
       socket.emit(
         'ansi-output',
@@ -1120,14 +1122,24 @@ console.log('[FM] Starting file maintenance');
    * a race with another node; it is not affordable when the alternative is a
    * sysop believing a released file is downloadable.
    */
-  private static async movePhysicalFile(session: BBSSession, filename: string, srcDir?: number, destDir?: number) {
+  private static async movePhysicalFile(
+    session: BBSSession,
+    filename: string,
+    srcDir?: number,
+    destDir?: number,
+    destConf?: number,
+  ) {
     const confNum = session.currentConf || 1;
+    // express.e:27256 the bytes go to the DESTINATION conference's ULPATH.1.
+    // Reading the source conference here left a cross-conference move's file
+    // in the source, where a download from the destination never looks.
+    const toConf = destConf || confNum;
     const candidates = await this.buildFileCandidates(confNum, filename, srcDir);
 
     const storage = getStorageContext();
     const destArea =
       storage && destDir !== undefined
-        ? usableAreasFor(confNum, storage).find(area => area.dirNumber === destDir)
+        ? usableAreasFor(toConf, storage).find(area => area.dirNumber === destDir)
         : undefined;
 
     if (destArea && storage) {
@@ -1176,21 +1188,25 @@ console.log('[FM] Starting file maintenance');
       return;
     }
 
-    const destBase = await this.getUploadBase(confNum);
-    if (!destBase) {
-      return;
-    }
-    const destPath = path.join(destBase, filename);
+    const destPath = path.join(this.getUploadBase(toConf), filename);
 
     for (const srcPath of candidates) {
+      if (!fs.existsSync(srcPath)) continue;
+      // express.e:27298 a file already in the destination's upload path has arrived.
+      if (path.resolve(srcPath) === path.resolve(destPath)) return;
+      await fsp.mkdir(path.dirname(destPath), { recursive: true });
       try {
-        await fsp.mkdir(path.dirname(destPath), { recursive: true });
         await fsp.rename(srcPath, destPath);
-        return;
       } catch {
-        // Try next candidate
+        // express.e:27305-27310 Rename fails across volumes: copy, then delete.
+        await fsp.copyFile(srcPath, destPath);
+        await fsp.unlink(srcPath);
       }
+      return;
     }
+    // express.e:27358 "Move operation failed, restoring directories" - the
+    // listings are not touched when the bytes did not move.
+    throw new Error(`${filename} was not found in the conference's file directories`);
   }
 
   private static async buildFileCandidates(confNum: number, filename: string, dirNum?: number): Promise<string[]> {
@@ -1207,59 +1223,28 @@ console.log('[FM] Starting file maintenance');
       list.push(path.join(confPath, `DIR${dirNum}`, filename));
     }
 
-    // Configured download/upload paths
-    const paths = await this.getConfiguredPaths(['DLPATH', 'ULPATH']);
-    for (const p of paths) {
-      const base = path.isAbsolute(p) ? p : path.join(dataDir, p);
-      list.push(path.join(base, filename));
+    // express.e:27296-27299 the conference's DLPATH.n, then its ULPATH.n
+    for (const dir of [...conferenceDownloadDirs(dataDir, confNum), ...conferenceUploadDirs(dataDir, confNum)]) {
+      list.push(path.join(dir, filename));
     }
+    // A conference whose icon names no paths keeps them where D looks for
+    // them (download.handler findFilesInConference): Upload and Files.
+    list.push(path.join(confPath, 'Upload', filename));
+    list.push(path.join(confPath, 'Files', filename));
 
     return list;
   }
 
   /**
-   * Extra file paths a sysop has configured, beyond the conference's own
-   * directories.
-   *
-   * There are none to read today, and that is deliberate. This used to run
-   *
-   *     SELECT value FROM system_config WHERE key LIKE ? || '.%'
-   *
-   * against a table that is a SINGLE ROW OF NAMED COLUMNS - no `key`, no
-   * `value`. It threw "no such column: value" on every board on every call,
-   * was swallowed by the catch, and returned an empty list anyway. On
-   * 2026-09-06 that silence let a delete strip an entry out of Conf2/Dir1
-   * while never locating the file, and still report success.
-   *
-   * Returning empty HONESTLY is the same answer without the lie. DLPATH and
-   * ULPATH in AmiExpress live in the conference's own `.info` tooltypes, not
-   * in `system_config`; wiring them up means reading them through the
-   * conference path helpers (`utils/file-hold.util.ts#getConferenceDir` and
-   * `services/conferences/conference-paths.ts`), never by guessing a column.
+   * Where a conference files an upload: its ULPATH.1 (express.e:27256), or
+   * the conference's own Upload directory when the icon names none - what
+   * the rest of this codebase reaches for (routes-setup.ts,
+   * batch-download.handler.ts, file-areas-loader.ts).
    */
-  private static async getConfiguredPaths(_keys: Array<'DLPATH' | 'ULPATH'>): Promise<string[]> {
-    return [];
-  }
-
-  private static async getUploadBase(confNum: number): Promise<string | null> {
+  private static getUploadBase(confNum: number): string {
     const dataDir = _config.get('dataDir');
-
-    const paths = await this.getConfiguredPaths(['ULPATH']);
-    if (paths.length > 0) {
-      const base = paths[0];
-      return path.isAbsolute(base) ? base : path.join(dataDir, base);
-    }
-
-    // No ULPATH configured is the NORMAL case, not a reason to give up: the
-    // conference's own Upload directory is where AmiExpress files an upload,
-    // and it is what the rest of this codebase reaches for (routes-setup.ts,
-    // batch-download.handler.ts, file-areas-loader.ts all join 'Upload' onto
-    // the conference path).
-    //
-    // Returning null here meant a local FM move silently moved nothing. That
-    // was every move on every board, because getConfiguredPaths queried a
-    // column that does not exist and its throw was swallowed into an empty
-    // list - the failure was invisible from the outside.
+    const configured = conferenceUploadDirs(dataDir, confNum);
+    if (configured.length > 0) return configured[0]!;
     return path.join(getConferenceDir(confNum, dataDir), 'Upload');
   }
 

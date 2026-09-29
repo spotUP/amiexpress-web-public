@@ -51,39 +51,44 @@ describe('express\'s date comparison', () => {
 });
 
 describe('splicing a moved entry into the destination listing', () => {
-  it('puts it before the first OLDER entry, not at the end', () => {
+  // A DIR file runs oldest first (an upload is appended), and express.e
+  // inserts before the first entry dated the same or later
+  // (`brk:=(d2>=d1)`, express.e:27211). The earlier port inserted before the
+  // first OLDER entry, which put a moved file at the top of the listing.
+  it('puts it before the first entry dated the same or later', () => {
     const dest = [
-      dirLine('NEWEST.LHA', '06-01-26'),
-      dirLine('OLDER.LHA', '01-01-20'),
       dirLine('OLDEST.LHA', '01-01-10'),
+      dirLine('OLDER.LHA', '01-01-20'),
+      dirLine('NEWEST.LHA', '06-01-26'),
     ];
     const entry = [dirLine('MOVED.LHA', '03-01-24')];
 
     const merged = handler.spliceByDate(dest, entry);
 
-    expect(merged[1]).toContain('MOVED.LHA');
+    expect(merged[2]).toContain('MOVED.LHA');
+    expect(merged[3]).toContain('NEWEST.LHA');
     expect(merged).toHaveLength(4);
   });
 
   it('keeps a multi-line entry together', () => {
     // A description runs on past the header line; both must move as a block.
-    const dest = [dirLine('OLD.LHA', '01-01-10')];
+    const dest = [dirLine('NEW.LHA', '06-01-26')];
     const entry = [dirLine('MOVED.LHA', '03-01-24'), '                                       second line'];
 
     const merged = handler.spliceByDate(dest, entry);
 
     expect(merged[0]).toContain('MOVED.LHA');
     expect(merged[1]).toContain('second line');
-    expect(merged[2]).toContain('OLD.LHA');
+    expect(merged[2]).toContain('NEW.LHA');
   });
 
-  it('appends when every entry in the destination is newer', () => {
-    const dest = [dirLine('NEW.LHA', '06-01-26')];
-    const entry = [dirLine('ANCIENT.LHA', '01-01-90')];
+  it('appends when every entry in the destination is older', () => {
+    const dest = [dirLine('OLD.LHA', '01-01-90')];
+    const entry = [dirLine('RECENT.LHA', '06-01-26')];
 
     const merged = handler.spliceByDate(dest, entry);
 
-    expect(merged[merged.length - 1]).toContain('ANCIENT.LHA');
+    expect(merged[merged.length - 1]).toContain('RECENT.LHA');
   });
 
   it('appends into an empty destination without losing the entry', () => {
@@ -147,5 +152,71 @@ describe('the destination conference step', () => {
     expect(text).toContain('Conference List');
     expect(text).toContain('Conference Number to move to (L to List):');
     expect(sess.subState).toBe('fm_move_conf_input');
+  });
+});
+
+describe('the bytes follow the entry', () => {
+  // express.e:27256-27340 moves the file into ULPATH.1 of the DESTINATION
+  // conference. The port looked up the source conference's upload path, so
+  // a move into another conference left the bytes where a download from the
+  // destination never looks (parity survey, 2026-09-29). And a file it could
+  // not find was silently not moved while both listings were rewritten;
+  // express.e says "Move operation failed" and leaves them alone (27358).
+  const fs = require('fs') as typeof import('fs');
+  const os = require('os') as typeof import('os');
+  const path = require('path') as typeof import('path');
+  const { setFileMaintenanceDependencies } = require('../../src/handlers/file/file-maintenance.handler');
+
+  let root: string;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-move-bytes-'));
+    for (const conf of ['Conf1', 'Conf2']) fs.mkdirSync(path.join(root, conf, 'Files'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Conf1', 'Files', 'MOVE.LHA'), 'THE BYTES');
+    fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), [dirLine('MOVE.LHA', '03-01-24'), dirLine('STAY.LHA', '04-01-24')].join('\n'));
+    fs.writeFileSync(path.join(root, 'Conf2', 'DIR1'), dirLine('THERE.LHA', '01-01-20'));
+    setFileMaintenanceDependencies({ db: undefined, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  function context(filename: string) {
+    return {
+      dirFilePath: path.join(root, 'Conf1', 'DIR1'),
+      dirNum: 1,
+      maxDirs: 1,
+      destMaxDirs: 1,
+      currentFile: { filename, lineNumber: 0, rawLines: [dirLine(filename, '03-01-24')] },
+    };
+  }
+
+  function caller() {
+    const out: string[] = [];
+    const socket: any = { emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); } };
+    const session: any = { currentConf: 1, nodeId: 1, user: { id: 1, username: 'sysop' } };
+    return { socket, session, said: () => out.join('') };
+  }
+
+  it('lands in the destination conference, where D looks for it', async () => {
+    const c = caller();
+    await handler.performMove(c.socket, c.session, context('MOVE.LHA'), 1, 2);
+
+    expect(fs.readFileSync(path.join(root, 'Conf2', 'Upload', 'MOVE.LHA'), 'utf8')).toBe('THE BYTES');
+    expect(fs.existsSync(path.join(root, 'Conf1', 'Files', 'MOVE.LHA'))).toBe(false);
+    expect(fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1')).toContain('MOVE.LHA');
+    expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).not.toContain('MOVE.LHA');
+  });
+
+  it('a file that is not there moves nothing, listings included', async () => {
+    const c = caller();
+    const before1 = fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1');
+    const before2 = fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1');
+    await handler.performMove(c.socket, c.session, context('GHOST.LHA'), 1, 2);
+
+    expect(c.said()).toContain('Could not move GHOST.LHA');
+    expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).toBe(before1);
+    expect(fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1')).toBe(before2);
   });
 });
