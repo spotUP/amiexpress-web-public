@@ -23,7 +23,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { flagManagerOf } from '../../utils/file-flag.util';
 import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
-import { parseDirFile, DirFileEntry } from '../../utils/dir-file-reader.util';
+import { parseDirFile, DirFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.util';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
@@ -404,7 +404,7 @@ console.log('[FM] Starting file maintenance');
     // getDirSpan's `L` (dirScan 0), is DIR<n> - so L scans DIR0. There is no
     // LCFILES listing in FM; the port read an LCFILES/LCFILES nothing writes.
     const dirPath = isHold
-      ? path.join(conferencePath, 'hold', 'held')
+      ? getHoldDirFilePath(conferencePath)
       : path.join(conferencePath, `DIR${dirNum}`);
 
     return { path: dirPath, label, isHold };

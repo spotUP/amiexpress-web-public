@@ -7,6 +7,7 @@
 
 import * as path from 'path';
 import { conferenceDir } from '../conferences/conference-paths';
+import { findCaseInsensitive } from './amigafs';
 import * as fs from 'fs/promises';
 
 /**
@@ -17,7 +18,9 @@ import * as fs from 'fs/promises';
  * @returns Full path to HOLD directory
  */
 export function getHoldDir(conferencePath: string): string {
-  return path.join(conferencePath, 'HOLD');
+  // The same directory the Hold listing lives in (dir-file-reader
+  // getHoldDirFilePath): an existing one in any case, else HOLD.
+  return findCaseInsensitive(conferencePath, 'HOLD') ?? path.join(conferencePath, 'HOLD');
 }
 
 /**

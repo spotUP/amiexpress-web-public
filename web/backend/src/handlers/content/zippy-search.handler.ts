@@ -16,7 +16,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { isNewFileEntry } from '../../utils/dir-file-reader.util';
+import { isNewFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.util';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs } from '../../utils/max-dirs.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
@@ -235,7 +235,7 @@ console.log('[ENV] Files');
 
         if (dirNum === -1) {
           // HOLD directory - express.e:26200-26202
-          dirFilePath = path.join(confPath, 'hold', 'held');
+          dirFilePath = getHoldDirFilePath(confPath);
           socket.emit('ansi-output', 'Scanning directory HOLD\r\n');
         } else {
           // Regular directory - express.e:26188-26198

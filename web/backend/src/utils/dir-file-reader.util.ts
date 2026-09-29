@@ -263,8 +263,19 @@ export function getDirFilePath(conferencePath: string, dirNumber: number): strin
 }
 
 /**
- * Get HOLD directory file path
+ * A conference's Hold listing - the ONE place every reader and writer gets it.
+ *
+ * express.e writes it as HOLD/HELD (19488) and reads it as hold/held
+ * (24983, 26197, 27687); on the Amiga those are one file. On this board's
+ * disk they were two: an imported Hold/Held and the port's HOLD/HELD, and
+ * which one a reader opened depended on directory order. HOLD/HELD is the
+ * name; the sysop merged the twins into it (2026-09-29, "the amiga is not
+ * case sensitive so it would see them as one").
  */
 export function getHoldDirFilePath(conferencePath: string): string {
-  return path.join(conferencePath, 'hold', 'held');
+  // An existing listing is found in any case, as the Amiga would (a board
+  // not yet merged, or one imported with Hold/Held); a new one is HOLD/HELD.
+  const holdDir = findCaseInsensitive(conferencePath, 'HOLD');
+  const held = holdDir ? findCaseInsensitive(holdDir, 'HELD') : null;
+  return held ?? path.join(holdDir ?? path.join(conferencePath, 'HOLD'), 'HELD');
 }

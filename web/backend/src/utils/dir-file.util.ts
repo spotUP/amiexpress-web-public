@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import { formatFileSize, formatUploadDate } from './file-upload.util';
 import { looksLikeAsciiArt } from './ascii-art.util';
 import { toAmigaText } from './amiga-text.util';
+import { getHoldDirFilePath } from './dir-file-reader.util';
 
 const LINE_BREAK = '\n';
 
@@ -31,8 +32,8 @@ export function getDirFilePath(
   maxDirs: number = 1
 ): string {
   if (status === 'hold' || status === 'private') {
-    // Express.e:19488 - StrAdd(ray,'HOLD/HELD')
-    return path.join(conferencePath, 'HOLD', 'HELD');
+    // Express.e:19488 - StrAdd(ray,'HOLD/HELD'); one resolver for every reader
+    return getHoldDirFilePath(conferencePath);
   } else {
     // Express.e:19475-19478 - currentConfDir/DIR#
     // StrCopy(ray,currentConfDir);

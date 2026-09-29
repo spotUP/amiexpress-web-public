@@ -624,17 +624,17 @@ file2.txt    P  200K  02-Feb-25  Second file`;
   });
 
   describe('getHoldDirFilePath', () => {
-    it('should return hold directory path', () => {
-      const result = getHoldDirFilePath('/conf1');
-
-      expect(result).toBe(path.join('/conf1', 'hold', 'held'));
+    // One Hold listing, HOLD/HELD (express.e writes it so, 19488); the
+    // sysop merged the imported Hold/Held twin into it, 2026-09-29.
+    it('names a new Hold listing HOLD/HELD', () => {
+      mockFindCaseInsensitive.mockReturnValue(null);
+      expect(getHoldDirFilePath('/conf1')).toBe(path.join('/conf1', 'HOLD', 'HELD'));
     });
 
-    it('should handle conference with trailing slash', () => {
-      const result = getHoldDirFilePath('/conf1/');
-
-      expect(result).toContain('hold');
-      expect(result).toContain('held');
+    it('finds an existing listing in whatever case it was written', () => {
+      mockFindCaseInsensitive.mockImplementation((dir: string, name: string) =>
+        name === 'HOLD' ? path.join(dir, 'Hold') : path.join(dir, 'Held'));
+      expect(getHoldDirFilePath('/conf1')).toBe(path.join('/conf1', 'Hold', 'Held'));
     });
 
     it('should handle different conference paths', () => {

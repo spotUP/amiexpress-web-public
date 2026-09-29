@@ -295,7 +295,7 @@ describe('FM directory spans', () => {
     expect(meta.label).toBe('0');
   });
 
-  it('Hold is hold/held', () => {
-    expect(handler.getDirMeta('/board/Conf1', -1, 3).path).toBe(require('path').join('/board/Conf1', 'hold', 'held'));
+  it('Hold is the one Hold listing, HOLD/HELD', () => {
+    expect(handler.getDirMeta('/board/Conf1', -1, 3).path).toBe(require('path').join('/board/Conf1', 'HOLD', 'HELD'));
   });
 });
