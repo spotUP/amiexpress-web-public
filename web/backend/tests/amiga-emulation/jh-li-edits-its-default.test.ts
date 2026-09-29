@@ -125,6 +125,27 @@ describe('JH_LI edits the default it is given (express.e:2202-2204)', () => {
     expect(returned(ctx)).toBe('abcde');
   });
 
+  test('a key no Amiga can hold is not stored, so backspace never erases past the line', () => {
+    // Live 2026-09-29: Option-key characters (U+2260, U+2265) were stored but
+    // not echoed; each later backspace ate a cell of the prompt.
+    const ctx = buildHandler();
+    ctx.handler.handleLineInput(lineInput('ab'));
+    for (const ch of ['\u2260', '\u2265', '\u220e', '\x1b[A', '\x1b[D']) (ctx.handler as any).queueInput(ch);
+    for (let i = 0; i < 10; i++) (ctx.handler as any).queueInput('\x7f');
+    (ctx.handler as any).queueInput('\r');
+    expect(returned(ctx)).toBe('');
+    expect(ctx.emits.filter(([, p]) => p === '\b \b').length).toBe(2);
+  });
+
+  test('a Latin-1 letter is stored and echoed, as a byte the Amiga has', () => {
+    const ctx = buildHandler();
+    ctx.handler.handleLineInput(lineInput(''));
+    (ctx.handler as any).queueInput('\u00e5');
+    (ctx.handler as any).queueInput('\r');
+    expect(returned(ctx)).toBe('\u00e5');
+    expect(ctx.emits.some(([, p]) => p === '\u00e5')).toBe(true);
+  });
+
   test('a temp-file path is shown as a prompt, never handed back as the answer', () => {
     const ctx = buildHandler();
     ctx.handler.handleLineInput(lineInput('RAM:list.txt', 40));

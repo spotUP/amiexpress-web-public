@@ -297,29 +297,7 @@ export class XIMIOHandler {
       }
 
       if (this.waitingForLineInput) {
-        if (token === '\r' || token === '\n') {
-          this.completeLineInput();
-          continue;
-        }
-
-        if (token === '\b' || token === '\x7f') {
-          if (this.lineInputBuffer.length > 0) {
-            this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
-            // Echo backspace to terminal
-            this.directEmit('ansi-output', '\b \b');
-          }
-          continue;
-        }
-
-        // For line input, add token to buffer (even if it's an escape sequence)
-        if (this.lineInputBuffer.length < this.lineInputMaxLen) {
-          this.lineInputBuffer += token;
-          // Echo typed character (only for single visible characters).
-          // express.e:1543-1544 — SIG_LI echoes '*' instead of the literal char.
-          if (token.length === 1 && token >= ' ' && token <= '~') {
-            this.directEmit('ansi-output', this.secureLineInput ? '*' : token);
-          }
-        }
+        this.lineInputKey(token);
         continue;
       }
 
@@ -366,6 +344,43 @@ export class XIMIOHandler {
    *
    * IMPORTANT: Pause emulator to wait for user input.
    */
+  /**
+   * One key at a JH_LI / SIG_LI line. Returns true when it ended the line.
+   *
+   * The rule is express.e lineInput's (2319-2343): a byte above 31 goes into
+   * the line AND is echoed, backspace takes one back off and erases it, and
+   * nothing else is stored. What is in the buffer is exactly what is on the
+   * screen, one cell each.
+   *
+   * A door reads Latin-1, so a character is one this can hold: printable
+   * ASCII or 0xA0-0xFF. The browser also sends characters no Amiga has
+   * (Option+= is U+2260) and whole escape sequences (an arrow key); both were
+   * stored without being echoed, and each later backspace erased a cell of the
+   * prompt that was never part of the line (File Description's tagline,
+   * 2026-09-29: seven such keys, seven cells of "Current Tagline: (" gone).
+   */
+  private lineInputKey(token: string): boolean {
+    if (token === '\r' || token === '\n') {
+      this.completeLineInput();
+      return true;
+    }
+    if (token === '\b' || token === '\x7f') {
+      if (this.lineInputBuffer.length > 0) {
+        this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
+        this.directEmit('ansi-output', '\b \b');
+      }
+      return false;
+    }
+    const code = token.length === 1 ? token.charCodeAt(0) : -1;
+    const printableLatin1 = (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff);
+    if (printableLatin1 && this.lineInputBuffer.length < this.lineInputMaxLen) {
+      this.lineInputBuffer += token;
+      // express.e:1543-1544 - SIG_LI echoes '*' instead of the character.
+      this.directEmit('ansi-output', this.secureLineInput ? '*' : token);
+    }
+    return false;
+  }
+
   handleLineInput(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
     debugLog(`[XIMIOHandler] JH_LI (Line Input) received - setting usedXimInput=true`);
@@ -474,26 +489,8 @@ export class XIMIOHandler {
     // Due to async socket events, user input can arrive BEFORE we set waitingForLineInput.
     // Such input ends up in inputQueue instead of being captured for line input.
     // This caused 5D-Edit and other doors to ignore typed characters.
-    while (this.inputQueue.length > 0 && this.lineInputBuffer.length < maxLen) {
-      const token = this.inputQueue.shift()!;
-      if (token === '\r' || token === '\n') {
-        // Enter key - complete line input immediately
-        this.completeLineInput();
-        return;
-      }
-      if (token === '\b' || token === '\x7f') {
-        // Backspace
-        if (this.lineInputBuffer.length > 0) {
-          this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
-          this.directEmit('ansi-output', '\b \b');
-        }
-        continue;
-      }
-      // Add to buffer and echo (SIG_LI echoes '*' per express.e:1543-1544).
-      this.lineInputBuffer += token;
-      if (token.length === 1 && token >= ' ' && token <= '~') {
-        this.directEmit('ansi-output', this.secureLineInput ? '*' : token);
-      }
+    while (this.inputQueue.length > 0) {
+      if (this.lineInputKey(this.inputQueue.shift()!)) return;
     }
 
     // CRITICAL FIX 2026-01-15: Pause emulator while waiting for line input!
@@ -551,25 +548,10 @@ export class XIMIOHandler {
     this.lineInputBuffer = '';
     this.lineInputMaxLen = maxLen;
 
-    // Drain any input that arrived before we set the flags. Echo '*' for
-    // visible chars (matches express.e:1544 conPuts('*')).
-    while (this.inputQueue.length > 0 && this.lineInputBuffer.length < maxLen) {
-      const token = this.inputQueue.shift()!;
-      if (token === '\r' || token === '\n') {
-        this.completeLineInput();
-        return;
-      }
-      if (token === '\b' || token === '\x7f') {
-        if (this.lineInputBuffer.length > 0) {
-          this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
-          this.directEmit('ansi-output', '\b \b');
-        }
-        continue;
-      }
-      this.lineInputBuffer += token;
-      if (token.length === 1 && token >= ' ' && token <= '~') {
-        this.directEmit('ansi-output', '*');
-      }
+    // Drain any input that arrived before we set the flags (echoed as '*',
+    // express.e:1544 conPuts('*')).
+    while (this.inputQueue.length > 0) {
+      if (this.lineInputKey(this.inputQueue.shift()!)) return;
     }
 
     this.emulator.pause();
