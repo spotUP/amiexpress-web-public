@@ -133,10 +133,6 @@ describe('getDirFilePath: active status → DIR1', () => {
     expect(result).toMatch(/HOLD[\\/]HELD$/);
   });
 
-  test('lcfiles status routes to LCFILES subdirectory', () => {
-    const result = getDirFilePath('/data/bbs/Conf2', 'lcfiles', 1);
-    expect(result).toMatch(/LCFILES/);
-  });
 });
 
 // ─── 3. getMaxDirs is no longer the upload-destination logic ─────────────────

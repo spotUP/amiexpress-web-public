@@ -21,22 +21,18 @@ const LINE_BREAK = '\n';
  * Uploads go to DIR{maxDirs} (the upload directory)
  *
  * @param conferencePath Path to conference directory (e.g., Conf1)
- * @param status File status (active, hold, lcfiles)
+ * @param status File status (active, hold, private)
  * @param maxDirs Maximum DIR file number (for normal uploads)
  * @returns Full path to DIR file
  */
 export function getDirFilePath(
   conferencePath: string,
-  status: 'active' | 'hold' | 'lcfiles' | 'private',
+  status: 'active' | 'hold' | 'private',
   maxDirs: number = 1
 ): string {
   if (status === 'hold' || status === 'private') {
     // Express.e:19488 - StrAdd(ray,'HOLD/HELD')
     return path.join(conferencePath, 'HOLD', 'HELD');
-  } else if (status === 'lcfiles') {
-    // Express.e:19483-19487 - LCFILES/purgeScanNM.lc
-    // For simplicity, use a default name
-    return path.join(conferencePath, 'LCFILES', 'uploads.lc');
   } else {
     // Express.e:19475-19478 - currentConfDir/DIR#
     // StrCopy(ray,currentConfDir);
@@ -260,7 +256,7 @@ console.error(`[DIR] Error writing DIR entry: ${error.message}`);
  * @param statusMarker P/F/N/D status
  * @param username Uploader's username
  * @param conferencePath Path to conference directory
- * @param fileStatus File status (active/hold/lcfiles/private)
+ * @param fileStatus File status (active/hold/private)
  * @param maxDirs Maximum DIR file number (uploads go to DIR{maxDirs})
  * @param addSentBy Whether to add 'Sent by:' line
  */
@@ -272,7 +268,7 @@ export async function writeUploadToDirFile(
   statusMarker: 'P' | 'F' | 'N' | 'D',
   username: string,
   conferencePath: string,
-  fileStatus: 'active' | 'hold' | 'lcfiles' | 'private',
+  fileStatus: 'active' | 'hold' | 'private',
   maxDirs: number = 1,
   addSentBy: boolean = true
 ): Promise<void> {
@@ -289,7 +285,6 @@ export async function writeUploadToDirFile(
     statusMarker,
     username,
     addSentBy,
-    fileStatus === 'lcfiles'
   );
 }
 

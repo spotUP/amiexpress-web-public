@@ -399,13 +399,13 @@ console.log('[FM] Starting file maintenance');
 
   private static getDirMeta(conferencePath: string, dirNum: number, maxDirs?: number) {
     const isHold = dirNum === -1;
-    const isLcFiles = dirNum === 0;
-    const label = isHold ? 'HOLD' : isLcFiles ? 'LCFILES' : dirNum === maxDirs ? `${dirNum} (Upload)` : `${dirNum}`;
+    const label = isHold ? 'HOLD' : dirNum === maxDirs ? `${dirNum} (Upload)` : `${dirNum}`;
+    // express.e:24965-24984: Hold is hold/held; every other span, including
+    // getDirSpan's `L` (dirScan 0), is DIR<n> - so L scans DIR0. There is no
+    // LCFILES listing in FM; the port read an LCFILES/LCFILES nothing writes.
     const dirPath = isHold
       ? path.join(conferencePath, 'hold', 'held')
-      : isLcFiles
-        ? path.join(conferencePath, 'LCFILES', 'LCFILES')
-        : path.join(conferencePath, `DIR${dirNum}`);
+      : path.join(conferencePath, `DIR${dirNum}`);
 
     return { path: dirPath, label, isHold };
   }

@@ -90,20 +90,9 @@ describe('DIR File Writing Utility', () => {
       expect(result).toBe(path.join('/conf1', 'HOLD', 'HELD'));
     });
 
-    it('should return LCFILES/uploads.lc for lcfiles status', () => {
-      const result = getDirFilePath('/conf1', 'lcfiles', 5);
-      expect(result).toBe(path.join('/conf1', 'LCFILES', 'uploads.lc'));
-    });
-
     it('should ignore maxDirs for hold status', () => {
       const result1 = getDirFilePath('/conf1', 'hold', 1);
       const result2 = getDirFilePath('/conf1', 'hold', 99);
-      expect(result1).toBe(result2);
-    });
-
-    it('should ignore maxDirs for lcfiles status', () => {
-      const result1 = getDirFilePath('/conf1', 'lcfiles', 1);
-      const result2 = getDirFilePath('/conf1', 'lcfiles', 99);
       expect(result1).toBe(result2);
     });
 
@@ -622,27 +611,6 @@ describe('DIR File Writing Utility', () => {
       );
     });
 
-    it('should write to LCFILES directory', async () => {
-      const date = new Date(2025, 0, 15);
-      await writeUploadToDirFile(
-        'test.txt',
-        1024,
-        date,
-        'Test',
-        'P',
-        'User',
-        '/conf1',
-        'lcfiles',
-        5
-      );
-
-      expect(mockAppendFile).toHaveBeenCalledWith(
-        path.join('/conf1', 'LCFILES', 'uploads.lc'),
-        expect.any(String),
-        'latin1'
-      );
-    });
-
     it('should write to HOLD for private status', async () => {
       const date = new Date(2025, 0, 15);
       await writeUploadToDirFile(
@@ -662,24 +630,6 @@ describe('DIR File Writing Utility', () => {
         expect.any(String),
         'latin1'
       );
-    });
-
-    it('should mark LC files with isLCFile flag', async () => {
-      const date = new Date(2025, 0, 15);
-      await writeUploadToDirFile(
-        'verylongfilename.txt',
-        1024,
-        date,
-        'LC file',
-        'P',
-        'User',
-        '/conf1',
-        'lcfiles',
-        5
-      );
-
-      const writtenContent = mockAppendFile.mock.calls[0][1] as string;
-      expect(writtenContent).toContain('verylongfilename.txt');
     });
 
     it('should include sent by line by default', async () => {

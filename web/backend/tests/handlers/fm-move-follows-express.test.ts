@@ -268,3 +268,18 @@ describe('FM works with the caller\'s own flagged files', () => {
     expect(c.session.flagManager.getAll()).toHaveLength(0);
   });
 });
+
+describe('FM directory spans', () => {
+  // express.e:24965-24984: Hold is hold/held and every other span is DIR<n>,
+  // so getDirSpan's L (dirScan 0) scans DIR0. The port read an LCFILES/LCFILES
+  // listing that nothing - here or in express.e - ever writes.
+  it('L scans DIR0, not an LCFILES listing', () => {
+    const meta = handler.getDirMeta('/board/Conf1', 0, 3);
+    expect(meta.path).toBe(require('path').join('/board/Conf1', 'DIR0'));
+    expect(meta.label).toBe('0');
+  });
+
+  it('Hold is hold/held', () => {
+    expect(handler.getDirMeta('/board/Conf1', -1, 3).path).toBe(require('path').join('/board/Conf1', 'hold', 'held'));
+  });
+});
