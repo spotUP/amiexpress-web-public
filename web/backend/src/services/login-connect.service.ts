@@ -306,6 +306,10 @@ export async function runPreLoginConnect(
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: "" };
   }
+  // One line per connect that says the question went out. A telnet walk on
+  // 2026-09-29 sat after FRONTEND's exit for forty seconds with no graphics
+  // prompt and nothing in the log to say whether it had been sent.
+  console.log(`[PreLoginConnect] node ${session.nodeId}: ${ctx.c64 ? "C64 title and login prompt" : "graphics prompt"} sent`);
 
   // 6. AREXX 'login' trigger — fires on every connect, regardless of
   // transport. Sysop AREXX scripts use this to log connections or
