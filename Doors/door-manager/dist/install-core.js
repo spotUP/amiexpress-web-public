@@ -334,7 +334,7 @@ async function installOverlayDoor(installDir, doorType, fileCount, deps, archive
         const primary = good.find((c) => c.kind === 'BBSCmd') ?? good[0];
         const extras = good.filter((c) => c !== primary || c.kind !== 'BBSCmd').map((c) => c.infoPath);
         try {
-            deps.recordInstall(primary.command, `Doors/${firstDoorDir}`, archiveName, extras);
+            deps.recordInstall(primary.command, `Doors/${firstDoorDir}`, archiveName, { files: extras, wroteCommandIcon: true });
             steps.push({ kind: 'ok', text: `recorded the install as ${primary.command}` });
         }
         catch (err) {
@@ -510,10 +510,10 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             findExtractedBinary: deps.findExtractedBinary,
             writeInfoFile: deps.writeInfoFile,
             refreshDoorRegistry: deps.refreshDoorRegistry,
-            recordInstall: (installedCmd, installedDir, archive, extraFiles) => {
+            recordInstall: (installedCmd, installedDir, archive, extras) => {
                 // installedCmd, not finalCmd: the archive may name its own command,
                 // and the record has to describe what is actually on disk.
-                if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive))
+                if (!extras?.wroteCommandIcon && commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive))
                     return;
                 deps.recordInstall({
                     id: `install-${installedCmd}`,
@@ -530,7 +530,7 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
                     release_group: manifestRow.releaseGroup ?? null,
                     source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
                     source_revision: manifest.revision ?? null, // the revision this install actually came from
-                    extra_files: extraFiles,
+                    extra_files: extras?.files,
                 });
                 registeredLocally = true;
             },

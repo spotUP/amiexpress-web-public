@@ -53,7 +53,7 @@ function extractOverlay(destDir: string, opts: { cpuBuilds?: boolean; files?: st
 }
 
 let root: string;
-let recorded: Array<{ command: string; dir: string; archive: string; extras?: string[] }>;
+let recorded: Array<{ command: string; dir: string; archive: string; extras?: unknown }>;
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'overlay-install-'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
@@ -108,7 +108,7 @@ describe('an archive that is an overlay of the BBS', () => {
       command: 'SENT',
       dir: 'Doors/FileDescription',
       archive: 'MST-FD11.LHA',
-      extras: [path.join(root, 'Commands', 'SysCmd', 'EXAMINE.info')],
+      extras: { files: [path.join(root, 'Commands', 'SysCmd', 'EXAMINE.info')], wroteCommandIcon: true },
     }]);
   });
 
@@ -137,5 +137,37 @@ describe('an archive that is an overlay of the BBS', () => {
     expect(recorded.every((r) => r.dir !== 'Doors/FileDescription')).toBe(true);
     expect(outcome.ok).toBe(true);
     expect(fs.existsSync(path.join(root, 'Doors', 'FileDescription'))).toBe(false);
+  });
+});
+
+describe('a record left by an install whose command icon is gone', () => {
+  // SENT, 2026-09-29: door_installs still said SENT belonged to TRSI-F20.LHA
+  // although its SENT.info had been removed. The overlay wrote a fresh
+  // SENT.info, the collision guard saw the old row, refused to record, and the
+  // door showed as not installed with nothing tracked to delete.
+  it('is superseded by an install that wrote the command\'s icon itself', async () => {
+    await install();
+    const extras = recorded[0].extras as { wroteCommandIcon: boolean };
+    expect(extras.wroteCommandIcon).toBe(true);
+  });
+
+  it('still guards a flat install, which says nothing about having written the icon', async () => {
+    const installDir = path.join(root, 'Doors', 'FLAT');
+    fs.mkdirSync(installDir, { recursive: true });
+    await extractAndRegisterDoor(
+      'FLAT.LHA', installDir, path.join(root, 'Commands', 'BBSCmd', 'FLAT.info'), 'XIM', 'prog', 'FLAT',
+      {
+        extractArchiveTo: async (_a, dest) => {
+          fs.writeFileSync(path.join(dest, 'prog'), 'x');
+          return { ok: true, fileCount: 1 };
+        },
+        findExtractedBinary: () => 'prog',
+        writeInfoFile: (p, c) => fs.writeFileSync(p, c),
+        recordInstall: (command, dir, archive, extras) => recorded.push({ command, dir, archive, extras }),
+        refreshDoorRegistry: async () => true,
+      },
+      'FLAT.LHA'
+    );
+    expect(recorded[0].extras).toBeUndefined();
   });
 });

@@ -97,8 +97,26 @@ export interface InstallDeps {
      * consumer mode) -- passed through so the recorder can write the install
      * as a link to that archive rather than reconstructing a guess.
      */
-    recordInstall: (command: string, installDirRelative: string, archiveName: string, extraFiles?: string[]) => void;
+    recordInstall: (command: string, installDirRelative: string, archiveName: string, extras?: InstallExtras) => void;
     refreshDoorRegistry: () => Promise<boolean>;
+}
+/**
+ * What an overlay install adds to the record beyond the command and directory.
+ *
+ * `files`: absolute paths it put OUTSIDE the door's directory (a SysCmd icon),
+ * so a delete finds them.
+ *
+ * `wroteCommandIcon`: this install created the command's icon itself - it
+ * did not exist a moment ago (an existing one is kept, never overwritten). Any
+ * record still naming another archive for that command therefore describes an
+ * icon that was already gone, and this install supersedes it. Without this the
+ * collision guard refused to record the install and the door showed as not
+ * installed with nothing tracked to delete (SENT, 2026-09-29: a TRSI-F20 row
+ * whose SENT.info had been removed).
+ */
+export interface InstallExtras {
+    files: string[];
+    wroteCommandIcon: boolean;
 }
 /**
  * What the install did, step by step, for the panel the sysop watches.

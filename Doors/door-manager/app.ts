@@ -1126,10 +1126,10 @@ class RepoView extends BaseView {
                   writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                   // Same door_installs shape + collision guard as consumer
                   // mode, using the real local catalog row's id (e.id).
-                  recordInstall: (installedCmd, installedDir, archive, extraFiles) => {
+                  recordInstall: (installedCmd, installedDir, archive, extras) => {
                     // The archive's own command wins, so record that one.
                     const chk = (cmd: string) => getInstallsRepo()?.getInstallByCommand(cmd) ?? null;
-                    if (commandClaimedByOtherArchive(chk, installedCmd, archive)) return;
+                    if (!extras?.wroteCommandIcon && commandClaimedByOtherArchive(chk, installedCmd, archive)) return;
                     recordInstallViaRecorder({
                       id: `install-${installedCmd}`,
                       catalog_id: e.id ?? null,
@@ -1145,7 +1145,7 @@ class RepoView extends BaseView {
                       release_group: e.release_group ?? null,
                       source_url: null, // resolved from this BBS's own local archive corpus, not the central repo
                       source_revision: null,
-                      extra_files: extraFiles,
+                      extra_files: extras?.files,
                     });
                   },
                   refreshDoorRegistry,

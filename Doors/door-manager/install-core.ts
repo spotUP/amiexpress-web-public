@@ -188,8 +188,27 @@ export interface InstallDeps {
    * consumer mode) -- passed through so the recorder can write the install
    * as a link to that archive rather than reconstructing a guess.
    */
-  recordInstall: (command: string, installDirRelative: string, archiveName: string, extraFiles?: string[]) => void;
+  recordInstall: (command: string, installDirRelative: string, archiveName: string, extras?: InstallExtras) => void;
   refreshDoorRegistry: () => Promise<boolean>;
+}
+
+/**
+ * What an overlay install adds to the record beyond the command and directory.
+ *
+ * `files`: absolute paths it put OUTSIDE the door's directory (a SysCmd icon),
+ * so a delete finds them.
+ *
+ * `wroteCommandIcon`: this install created the command's icon itself - it
+ * did not exist a moment ago (an existing one is kept, never overwritten). Any
+ * record still naming another archive for that command therefore describes an
+ * icon that was already gone, and this install supersedes it. Without this the
+ * collision guard refused to record the install and the door showed as not
+ * installed with nothing tracked to delete (SENT, 2026-09-29: a TRSI-F20 row
+ * whose SENT.info had been removed).
+ */
+export interface InstallExtras {
+  files: string[];
+  wroteCommandIcon: boolean;
 }
 
 /**
@@ -357,7 +376,7 @@ async function installOverlayDoor(
     const primary = good.find((c) => c.kind === 'BBSCmd') ?? good[0];
     const extras = good.filter((c) => c !== primary || c.kind !== 'BBSCmd').map((c) => c.infoPath);
     try {
-      deps.recordInstall(primary.command, `Doors/${firstDoorDir}`, archiveName, extras);
+      deps.recordInstall(primary.command, `Doors/${firstDoorDir}`, archiveName, { files: extras, wroteCommandIcon: true });
       steps.push({ kind: 'ok', text: `recorded the install as ${primary.command}` });
     } catch (err: any) {
       steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
@@ -621,10 +640,10 @@ export async function installConsumerDoor(
       findExtractedBinary: deps.findExtractedBinary,
       writeInfoFile: deps.writeInfoFile,
       refreshDoorRegistry: deps.refreshDoorRegistry,
-      recordInstall: (installedCmd, installedDir, archive, extraFiles) => {
+      recordInstall: (installedCmd, installedDir, archive, extras) => {
         // installedCmd, not finalCmd: the archive may name its own command,
         // and the record has to describe what is actually on disk.
-        if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive)) return;
+        if (!extras?.wroteCommandIcon && commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive)) return;
         deps.recordInstall({
           id: `install-${installedCmd}`,
           catalog_id: localRow?.id ?? null,
@@ -640,7 +659,7 @@ export async function installConsumerDoor(
           release_group: manifestRow.releaseGroup ?? null,
           source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
           source_revision: manifest.revision ?? null, // the revision this install actually came from
-          extra_files: extraFiles,
+          extra_files: extras?.files,
         });
         registeredLocally = true;
       },
