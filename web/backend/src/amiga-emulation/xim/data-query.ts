@@ -20,8 +20,11 @@ import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
 import * as amigafs from '../../utils/amigafs';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setUserPermission } from '../../utils/acs.util';
 import { formatCDateTime } from '../../utils/date-time.util';
+
+/** express.e:3662 ACTIVE_NODES answers 32 characters, one per node 0..31. */
+const ACTIVE_NODE_SLOTS = 32;
 import { ACSPermission } from '../../constants/acs-permissions';
 
 /*
@@ -160,7 +163,8 @@ debugLog(`  [WRITE] DT_NAME: "${newName}"`);
 debugLog(`  [READ] DT_PASSWORD: (blocked)`);
         } else {
           const newPwd = this.messageParser.readString(stringAddr, 40);
-          if (user) {
+          // express.e:3508 IF StrLen(tempstring)>0 - an empty string sets nothing.
+          if (user && newPwd.length > 0) {
             try {
               const hash = bcrypt.hashSync(newPwd, 10);
               user.passwordHash = hash;
@@ -809,12 +813,31 @@ debugLog(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
         }
         break;
 
-      case XIMCommand.DT_ANSICOLOR:
       case XIMCommand.DT_ISANSI:
-        if (isRead) {
-          const isAnsi = user?.ansi || true;
-          this.messageParser.writeString(stringAddr, isAnsi ? '1' : '0', 200);
-debugLog(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${isAnsi}`);
+        {
+          // express.e:3907 IF ansiColour THEN msg.data:=1 ELSE msg.data:=0 -
+          // the answer is msg.data, and it is the caller's mode (`user?.ansi
+          // || true` said ANSI to everyone).
+          const session = this.bbsSession as { ansiMode?: boolean } | undefined;
+          const isAnsi = (session?.ansiMode ?? user?.ansi) !== false;
+          replyData = isAnsi ? 1 : 0;
+debugLog(`  [READ] DT_ISANSI: ${replyData}`);
+        }
+        break;
+
+      case XIMCommand.DT_ANSICOLOR:
+        {
+          // express.e:3904-3906: the door switches this call's colour -
+          // ansiColour := data<>0, and data=2 is RIP. The session only; M is
+          // what saves a caller's choice.
+          const session = this.bbsSession as { ansiMode?: boolean; ripMode?: boolean } | undefined;
+          const on = msg.data !== 0;
+          if (session) {
+            session.ansiMode = on;
+            if (msg.data === 2) session.ripMode = true;
+          }
+          if (user) user.ansi = on;
+debugLog(`  [WRITE] DT_ANSICOLOR: ${msg.data}`);
         }
         break;
 
@@ -830,7 +853,6 @@ debugLog('  DT_FILECODE: 0');
 
       case XIMCommand.DT_QUICKFLAG:
       case XIMCommand.DT_GOODFILE:
-      case XIMCommand.DT_ANSICOLOR:
       case XIMCommand.DT_GOODFILE_FLAG:
         if (isRead) {
           const val = (this.state as any)[msg.command] ?? 0;
@@ -868,21 +890,17 @@ console.error(`  [WRITE] DT_DUMP: Failed to save to ${filename}:`, err);
         break;
 
       case XIMCommand.ACTIVE_NODES:
-        // Per doordocs.txt: "string 10 bytes in length, with 'X's marking active nodes"
-        // NOTE: Original limit was 9 nodes, docs say "will surely be changing"
-        // Using underscore for inactive to match DT_CONFACCESS convention
+        // express.e:3661-3666: 32 spaces, then 'X' at index i for every
+        // node i whose AmiExpress_Node.i port exists (i = 0..MAXNODES-1).
+        // Node n is character n - the old 10-byte '_' string put node 1 at
+        // index 0 and stopped at node 9.
         if (isRead) {
           const { nodeFileManager } = require('../../services/NodeFileManager');
-          let nodesStatus = '';
-          // Check first 9 nodes (1-9) per original spec, padded to 10 bytes
-          for (let i = 1; i <= 9; i++) {
-            const isActive = nodeFileManager.nodeUserFilesExist(i);
-            nodesStatus += isActive ? 'X' : '_';
-          }
-          // Pad to 10 bytes total
-          nodesStatus += '_';
-          this.messageParser.writeString(stringAddr, nodesStatus, 10);
-debugLog(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
+          const nodes = Array.from({ length: ACTIVE_NODE_SLOTS }, (_unused, node) =>
+            nodeFileManager.nodeUserFilesExist(node) ? 'X' : ' ');
+          const nodesStatus = nodes.join('');
+          this.messageParser.writeString(stringAddr, nodesStatus, ACTIVE_NODE_SLOTS + 1);
+debugLog(`  [READ] ACTIVE_NODES: "${nodesStatus}"`);
         }
         break;
 
@@ -890,30 +908,16 @@ debugLog(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
       case XIMCommand.DT_REMBIT:
       case XIMCommand.DT_QUERYBIT:
         {
+          // msg.data is an ACS index for all three, never a bitmask.
           const bitMask = msg.data;
-          const currentFlags = user?.userFlags ?? 0;
-          let updated = currentFlags;
 
-          if (msg.command === XIMCommand.DT_ADDBIT) {
-            // express.e:3853-3854: setTempSecurityFlags(msg.data)
-            updated = currentFlags | bitMask;
-            if (user) user.userFlags = updated;
-            replyData = updated;
-debugLog(
-              `  [WRITE] DT_ADDBIT: mask=0x${bitMask.toString(
-                16
-              )}, flags=0x${updated.toString(16)}`
-            );
-          } else if (msg.command === XIMCommand.DT_REMBIT) {
-            // express.e:3855-3856: clearTempSecurityFlags(msg.data)
-            updated = currentFlags & ~bitMask;
-            if (user) user.userFlags = updated;
-            replyData = updated;
-debugLog(
-              `  [WRITE] DT_REMBIT: mask=0x${bitMask.toString(
-                16
-              )}, flags=0x${updated.toString(16)}`
-            );
+          if (msg.command === XIMCommand.DT_ADDBIT || msg.command === XIMCommand.DT_REMBIT) {
+            // express.e:3853-3856, 8430-8442 setTempSecurityFlags /
+            // clearTempSecurityFlags: securityFlags[n] := "T" / "F" for this
+            // call, which checkSecurity reads first. ORing n into userFlags
+            // granted nothing and flipped unrelated user-flag bits.
+            if (user) setUserPermission(user, bitMask as ACSPermission, msg.command === XIMCommand.DT_ADDBIT);
+debugLog(`  [WRITE] ${msg.command === XIMCommand.DT_ADDBIT ? 'DT_ADDBIT' : 'DT_REMBIT'}: ACS ${bitMask} (${ACSPermission[bitMask] ?? '?'})`);
           } else {
             // express.e:3857-3858: msg.command:=checkSecurity(msg.data)
             // msg.data is an ACS permission index, not a bitmask.
