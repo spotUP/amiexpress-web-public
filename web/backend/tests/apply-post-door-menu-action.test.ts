@@ -151,3 +151,35 @@ describe("applyPostDoorMenuAction after a door chains into one still running", (
     expect(session.subState).toBe(LoggedOnSubState.DOOR_RUNNING);
   });
 });
+
+describe("applyPostDoorMenuAction after a door the board ran inside its own flow", () => {
+  // The upload's EXAMINE door (File Description) exits and the upload goes
+  // on: express.e's runSysCommand returns to its caller. Drawing the menu here
+  // put "Menu (9999 mins. left):" in the middle of the upload (sysop's paste,
+  // 2026-09-29).
+  it("draws no menu and leaves the flow's state alone", async () => {
+    const socket = makeSocket();
+    const session = {
+      state: "loggedon",
+      user: { id: "user-1", username: "SPOT" },
+      // What the web upload holds while it processes a file
+      // (file-socket-handlers.ts) - the state the old exit drew the menu in.
+      subState: LoggedOnSubState.DISPLAY_MENU,
+      sysCommandCallerContinues: true,
+      menuPause: false,
+    } as unknown as AnySession;
+    const displayMainMenuFn = jest.fn();
+
+    await applyPostDoorMenuAction(socket, session, displayMainMenuFn);
+
+    expect(displayMainMenuFn).not.toHaveBeenCalled();
+    expect(socket.emitted).toEqual([]);
+  });
+
+  it("runSysCommandInFlow marks the flow only for the run, even when the command is not there", async () => {
+    const { runSysCommandInFlow } = require("../src/handlers/command-execution.handler");
+    const session: any = { user: { secLevel: 255 }, nodeId: 1 };
+    await runSysCommandInFlow(makeSocket(), session, "NO_SUCH_SYSCMD_HERE", "");
+    expect(session.sysCommandCallerContinues).toBeUndefined();
+  });
+});

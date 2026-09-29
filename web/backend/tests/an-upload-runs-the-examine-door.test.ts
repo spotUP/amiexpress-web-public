@@ -46,7 +46,8 @@ const ran: Array<{ cmd: string; params: string; subState: unknown }> = [];
 let doorWrites: { file: string; text: string } | null = null;
 jest.mock('../src/handlers/command-execution.handler', () => ({
   hasSysCommand: (name: string) => sysCommands.has(name.toUpperCase()),
-  runSysCommand: jest.fn(async (_socket: any, session: any, cmd: string, params: string) => {
+  // The flow's variant: the door's exit must not draw the menu mid-upload.
+  runSysCommandInFlow: jest.fn(async (_socket: any, session: any, cmd: string, params: string) => {
     ran.push({ cmd, params, subState: session.subState });
     if (!sysCommands.has(cmd.toUpperCase())) return -1;
     if (doorWrites) fs.writeFileSync(doorWrites.file, doorWrites.text, 'latin1');

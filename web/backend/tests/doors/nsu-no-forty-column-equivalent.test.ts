@@ -107,6 +107,9 @@ beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'nsu-no-equiv-'));
   mockRootRef.value = root;
   fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+  // NDIRS on the conference's icon is how many directories it has
+  // (express.e maxDirs; conferenceNdirs) - a DIR file alone is not an area.
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
   fs.writeFileSync(
     path.join(root, 'Conf1', 'DIR1'),
     [dirLine('CHASE.LHA', 'A demo'), ''].join('\r\n'),
@@ -234,7 +237,8 @@ describe('a command the board DOES answer keeps falling through silently', () =>
   it('FR gets the listing and no "no 40 column" line', async () => {
     await register(aquaScanOver('FR'));
     const socket = makeSocket();
-    await handleCommand(socket as any, c64Session('FR'), '');
+    // `FR A`: a bare FR asks "Directories:" first, as express.e's does.
+    await handleCommand(socket as any, c64Session('FR A'), '');
 
     const out = allOutput(socket);
     expect(out).toContain('CHASE.LHA');

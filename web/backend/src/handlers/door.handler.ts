@@ -1689,7 +1689,7 @@ function padString(str: string, length: number): string {
  *   interactive prompt state that owns the next input.
  * - 'menu': normal completion — return to menu.
  */
-export type PostDoorAction = 'leaving' | 'chat' | 'door' | 'segments' | 'pause' | 'interactive' | 'menu';
+export type PostDoorAction = 'leaving' | 'chat' | 'caller' | 'door' | 'segments' | 'pause' | 'interactive' | 'menu';
 
 /**
  * IS THE CALLER ON HIS WAY OUT?
@@ -1730,6 +1730,13 @@ export function postDoorMenuAction(session: BBSSession): PostDoorAction {
   }
   if (session.inChat) {
     return 'chat';
+  }
+  // The board ran this door in the middle of its own flow (runSysCommandInFlow:
+  // the upload's EXAMINE) and that flow carries on when the door returns -
+  // express.e's runSysCommand returns to its caller, not to the menu. The
+  // menu drawn here landed in the middle of an upload (sysop, 2026-09-29).
+  if ((session as any).sysCommandCallerContinues) {
+    return 'caller';
   }
   // A door is running, and it is not the one that just finished:
   // executeAmigaDoor clears its own door state before a RETURNCOMMAND / CHAIN
@@ -1807,6 +1814,8 @@ export async function applyPostDoorMenuAction(
     // completePaging() set them — chat's own exitChat() is what restores
     // the menu once the chat session actually ends.
     console.log('[executeAmigaDoor] inChat active post-page-wait - skipping displayMainMenu');
+  } else if (postAction === 'caller') {
+    console.log('[executeAmigaDoor] run inside a board flow that carries on - skipping displayMainMenu');
   } else if (postAction === 'door') {
     console.log('[executeAmigaDoor] a chained door is still running - skipping displayMainMenu');
   } else if (postAction === 'segments') {

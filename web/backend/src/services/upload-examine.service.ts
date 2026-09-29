@@ -38,7 +38,7 @@ export async function examineUpload(
   filename: string,
   maxLines: number,
 ): Promise<string[] | null> {
-  const { hasSysCommand, runSysCommand } = require('../handlers/command-execution.handler');
+  const { hasSysCommand, runSysCommandInFlow: runSysCommand } = require('../handlers/command-execution.handler');
   const { RESULT_SUCCESS } = require('../constants/command-results');
   if (!hasSysCommand('EXAMINE')) return null;
 

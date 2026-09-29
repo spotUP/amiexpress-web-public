@@ -322,6 +322,27 @@ export async function runSysCommand(
 }
 
 /**
+ * A system command the board runs in the middle of its own flow - the
+ * upload's EXAMINE - rather than one a caller typed at the menu. Same run;
+ * the door's exit does not draw the menu, because the flow that called it
+ * carries on (express.e's runSysCommand returns to its caller).
+ */
+export async function runSysCommandInFlow(
+  socket: any,
+  session: any,
+  cmd: string,
+  params: string = ''
+): Promise<number> {
+  const previous = session.sysCommandCallerContinues;
+  session.sysCommandCallerContinues = true;
+  try {
+    return await runSysCommand(socket, session, cmd, params);
+  } finally {
+    session.sysCommandCallerContinues = previous;
+  }
+}
+
+/**
  * Run a BBS command (BBSCMD)
  * 1:1 port from express.e:4807-4811 runBbsCommand()
  *
