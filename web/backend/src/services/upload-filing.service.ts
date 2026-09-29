@@ -206,6 +206,8 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
   // 2. The move: into the pool for an active pooled area, else onto disk.
   let pool: RemoteLocation | null = null;
   let orphaned = false;
+  // Where the bytes landed on local disk, for the fallback below.
+  let placedAt: string | null = null;
   const storage = getStorageContext();
   // HOLD and LCFILES are sysop-review directories, not areas a caller
   // downloads from, so a file bound for one never goes to the pool.
@@ -237,7 +239,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
         );
       }
     } else {
-      await moveUploadedFile(
+      placedAt = await moveUploadedFile(
         request.playpenPath!,
         request.filename,
         status,
@@ -285,33 +287,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
     }
   }
 
-  // 5. The catalogue row. Not for a duplicate (the row is already there, and
-  //    the file went to HOLD rather than into the area), and not for an
-  //    orphan (a row claiming HOLD would point at a file that is not there).
-  if (!duplicate && !orphaned) {
-    await db.createFileEntry({
-      filename: request.filename,
-      description: request.description,
-      size: request.size,
-      uploader: request.uploader.username,
-      uploadDate: getSystemTime(),
-      downloads: 0,
-      areaId: areaId,
-      fileIdDiz: request.description,
-      rating: undefined,
-      votes: undefined,
-      status,
-      checked: marker,
-      comment: undefined,
-      // In the SAME insert rather than a follow-up: the row and its location
-      // are one fact, and a second statement matching on the filename would
-      // have to get this codebase's non-canonical filename case right.
-      storageVolume: pool?.driveNumber,
-      objectKey: pool?.key,
-    } as never);
-  }
-
-  // 6. The DIR entry, FILES.BBS and ctop - the board's own listings. Skipped
+  // 5. The DIR entry, FILES.BBS and ctop - the board's own listings. Skipped
   //    for an orphan for the same reason as the row.
   if (!orphaned) {
     const conferencePath = getConferenceDir(request.conferenceId, config.get('dataDir'));
@@ -320,24 +296,89 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
     // new DIR instead of the upload area.
     const uploadDirNum = 1;
 
+    // The DIR entry is the board's record of the file (the board reads its
+    // listings, not the catalogue), so it is written straight after the bytes
+    // land and nothing may stand in front of it. A file on disk with no entry
+    // is invisible to F, Z and D - Conf3's lxt-ee4d.ZIP sat like that from
+    // 2026-08-25 until the sysop found it.
+    const listIt = (as: typeof status) => writeUploadToDirFile(
+      request.filename,
+      request.size,
+      getSystemTime(),
+      request.description,
+      marker,
+      request.uploader.username,
+      conferencePath,
+      as,
+      uploadDirNum,
+      request.addSentBy
+    );
     try {
-      await writeUploadToDirFile(
-        request.filename,
-        request.size,
-        getSystemTime(),
-        request.description,
-        marker,
-        request.uploader.username,
-        conferencePath,
-        status,
-        uploadDirNum,
-        request.addSentBy
-      );
+      await listIt(status);
     } catch (error) {
       console.error(
         `[Filing] Error writing the DIR entry for ${request.filename}: ${
           error instanceof Error ? error.message : String(error)}`
       );
+      // Not listed where it belongs: file it in HOLD with a HELD entry, as a
+      // failed pooled put is (step 3), so the sysop has it in front of him.
+      try {
+        if (!placedAt || status === 'hold' || status === 'private') throw error;
+        const { moveToHold } = await import('../utils/file-hold.util');
+        placedAt = await moveToHold(placedAt, request.filename, conferencePath);
+        status = 'hold';
+        await listIt(status);
+        notices.push({
+          kind: 'quarantined',
+          text: `Moving to ${sysopName}'s private Directory.`,
+        });
+      } catch (holdError) {
+        orphaned = true;
+        notices.push({
+          kind: 'orphaned',
+          text: `${request.filename} could not be listed and needs a sysop`,
+        });
+        console.error(
+          `[Filing] UNLISTED: node ${request.nodeId} filed ${request.filename} at ${placedAt ?? '(pool)'} ` +
+            `but no DIR listing could be written: ${
+              holdError instanceof Error ? holdError.message : String(holdError)}`
+        );
+      }
+    }
+
+    // 6. The catalogue row - the web's mirror, written AFTER the listing so a
+    //    database failure can never leave a file unlisted. Not for a
+    //    duplicate (the row is already there, and the file went to HOLD rather
+    //    than into the area), and not for an orphan (a row would point at a
+    //    file that is not listed).
+    if (!duplicate && !orphaned) {
+      try {
+        await db.createFileEntry({
+          filename: request.filename,
+          description: request.description,
+          size: request.size,
+          uploader: request.uploader.username,
+          uploadDate: getSystemTime(),
+          downloads: 0,
+          areaId: areaId,
+          fileIdDiz: request.description,
+          rating: undefined,
+          votes: undefined,
+          status,
+          checked: marker,
+          comment: undefined,
+          // In the SAME insert rather than a follow-up: the row and its location
+          // are one fact, and a second statement matching on the filename would
+          // have to get this codebase's non-canonical filename case right.
+          storageVolume: pool?.driveNumber,
+          objectKey: pool?.key,
+        } as never);
+      } catch (error) {
+        console.error(
+          `[Filing] ${request.filename} is listed but its catalogue row failed: ${
+            error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
     if (status === 'active') {
