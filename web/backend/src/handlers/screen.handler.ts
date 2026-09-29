@@ -3323,8 +3323,6 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
       screenDebug(`[displayScreen] Commands:`, commands);
       screenDebug(`[displayScreen] ==========================================`);
       screenFlowLog(screenName, `Executing ${commands.length} command(s) from ${screenName}`);
-      const { handleCommand } = require('./command-handler/core');
-
       session.pendingScreenCommand = new Promise<void>(resolve => {
         session.screenCommandResolver = resolve;
       });
@@ -3339,7 +3337,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
             screenDebug(`[displayScreen] Command type:`, commandStr.includes(':') ? 'DOOR PATH' : 'BBSCMD');
             try {
               screenDebug(`[displayScreen] Calling handleCommand with:`, commandStr);
-              const result = await handleCommand(socket, session, commandStr);
+              const result = await runScreenCommand(socket, session, commandStr);
               screenDebug(`[displayScreen]  Command completed:`, commandStr, 'Result:', result);
             } catch (error) {
 console.error(`[displayScreen]  ERROR executing command ${commandStr}:`, error);
@@ -3740,7 +3738,6 @@ export async function runScreenCommands(
     return;
   }
 
-  const { handleCommand } = require('./command-handler/core');
   session.pendingScreenCommand = new Promise<void>(resolve => {
     session.screenCommandResolver = resolve;
   });
@@ -3752,7 +3749,7 @@ export async function runScreenCommands(
       screenDebug(`[displayScreen] ------------------------------------------`);
       screenDebug(`[displayScreen] EXECUTING QUEUED COMMAND ${i + 1}/${commands.length}:`, commandStr);
       try {
-        await handleCommand(socket, session, commandStr);
+        await runScreenCommand(socket, session, commandStr);
       } catch (error) {
 console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, error);
         SysopDebugUtil.debug(
@@ -3773,6 +3770,32 @@ console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, 
       session.pendingScreenCommand = undefined;
     }
   }
+}
+
+/**
+ * One command a screen runs (`~CC_x|`, `~XC_x||`), through the board's ONE
+ * dispatcher - the same `processCommand` the inline walker and the menu use,
+ * with the SYSCMD tier on, as express.e:5561 runs it (`processSysCommand(cmd,
+ * TRUE)`).
+ *
+ * This path used to go to command-handler/core.ts and on to
+ * command-execution.ts, a second copy of the command set that had drifted:
+ * it cleared the screen before every command (wiping the art the screen had
+ * just drawn), never searched SYSCMD, had no WHO, read and posted the wrong
+ * base in custom-msgbase conferences, and lacked the port's newer commands
+ * (express.e parity survey, 2026-09-29). A `DOORS:` helper path is the one
+ * thing only that module knows how to run, so it keeps going there.
+ */
+export async function runScreenCommand(socket: any, session: BBSSession, commandStr: string): Promise<unknown> {
+  const trimmed = (commandStr || '').trim();
+  if (/^DOORS:/i.test(trimmed)) {
+    const { handleCommand } = require('./command-handler/core');
+    return handleCommand(socket, session, trimmed);
+  }
+  const [command, ...rest] = trimmed.toUpperCase().split(/\s+/);
+  if (!command) return undefined;
+  const { processCommand } = require('./command.handler');
+  return processCommand(socket, session, command, rest.join(' '), true);
 }
 
 /**
