@@ -21,7 +21,7 @@ import { formatBytes, formatCount } from '../lib/format';
 
 /** A stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_DRIVES: DriveConfig[] = [];
-const EMPTY_CONTENTS: FileEntryRow[] = [];
+const EMPTY_CONTENTS: DriveContents = { areas: [], files: [] };
 
 type VolumeClass = 'FREE' | 'PAID';
 type EgressPosture = 'FREE' | 'METERED' | '3X';
@@ -55,11 +55,18 @@ interface DriveConfig {
 }
 
 interface FileEntryRow {
-  id: number;
   filename: string;
   size: number;
   uploader: string;
   downloads: number;
+  conference: number;
+  dir: number;
+}
+
+/** GET /config/drives/:n/contents - the directories stored on the drive and their files. */
+interface DriveContents {
+  areas: Array<{ conference: number; dir: number }>;
+  files: FileEntryRow[];
 }
 
 interface ParkedFileRow {
@@ -377,7 +384,7 @@ export function DrivesPage() {
     if (drive.kind !== 's3') return whatHappens;
     try {
       const res = await apiClient.getDriveContents(drive.drive_number);
-      const files = (res?.data ?? []) as FileEntryRow[];
+      const files = ((res?.data as DriveContents | undefined)?.files ?? []);
       if (files.length === 0) return whatHappens;
       return (
         `Drive ${drive.drive_number} holds ${files.length} file${files.length === 1 ? '' : 's'} ` +
@@ -476,7 +483,7 @@ export function DrivesPage() {
   const poolStatus = poolStatusQuery.data?.data as PoolStatus | undefined;
   const parkedFiles = poolStatus?.parkedFiles ?? EMPTY_PARKED;
   const brokenAreas = poolStatus?.brokenAreas ?? EMPTY_BROKEN;
-  const contents = (contentsQuery.data?.data ?? EMPTY_CONTENTS) as FileEntryRow[];
+  const contents = (contentsQuery.data?.data ?? EMPTY_CONTENTS) as DriveContents;
 
   const columns: DataTableColumn<DriveConfig>[] = [
     {
@@ -1256,6 +1263,13 @@ export function DrivesPage() {
               columns={[
                 { id: 'filename', header: 'Filename', value: (r: FileEntryRow) => r.filename, mono: true },
                 {
+                  id: 'where',
+                  header: 'Directory',
+                  value: (r: FileEntryRow) => `${r.conference}.${r.dir}`,
+                  cell: (r: FileEntryRow) => <span>Conference {r.conference}, dir {r.dir}</span>,
+                  width: '11rem',
+                },
+                {
                   id: 'size',
                   header: 'Size',
                   value: (r: FileEntryRow) => r.size,
@@ -1273,11 +1287,15 @@ export function DrivesPage() {
                   width: '8rem',
                 },
               ]}
-              rows={contents}
-              getRowId={(r: FileEntryRow) => String(r.id)}
+              rows={contents.files}
+              getRowId={(r: FileEntryRow) => `${r.conference}/${r.dir}/${r.filename}`}
               isLoading={contentsQuery.isLoading}
               error={contentsQuery.error as Error | null}
-              emptyMessage="No files on this drive."
+              emptyMessage={
+                contents.areas.length === 0
+                  ? 'No directory is stored on this drive. A conference icon assigns one with STORAGEDRIVE=n (every directory) or STORAGEDRIVE.<dir>=n.'
+                  : 'The directories stored on this drive list no files.'
+              }
             />
           </div>
         </Modal>

@@ -139,6 +139,12 @@ export interface PoolStatus {
   pendingUploads?: number;
 }
 
+/** A drive's directories and the files their lists name. */
+export interface DriveContents {
+  areas: Array<{ conference: number; dir: number }>;
+  files: Array<{ filename: string; size: number; uploader: string; downloads: number; conference: number; dir: number }>;
+}
+
 export class DriveConfigService {
   private configRepo: ConfigRepository;
 
@@ -684,8 +690,44 @@ console.error(
   // -------------------------------------------------------------- contents
 
   /** The catalog rows on one drive - "what would be lost if this volume disappeared". */
-  async contentsOf(driveNumber: number): Promise<FileEntry[]> {
-    return this.database.entriesOnVolume(driveNumber);
+  /**
+   * What is stored on a drive: the file lists of the directories whose
+   * conference icon names this drive (STORAGEDRIVE[.n]), read from disk.
+   *
+   * The lists are the board's record of its files; this used to read the
+   * web catalogue instead (`entriesOnVolume`), which only web uploads fill,
+   * so the sysop opened Drive 1 and got nothing (2026-09-29, "the file lists
+   * are on disk..."). A drive no directory is assigned to says so, rather
+   * than claiming to be empty.
+   */
+  async contentsOf(driveNumber: number): Promise<DriveContents> {
+    const bbsRoot = appConfig.get('dataDir');
+    const areas = loadFileAreasFromDisk(bbsRoot, this.conferencesForAreaScan(bbsRoot))
+      .filter((area) => area.storageVolume === driveNumber);
+    const downloads = new Map<string, number>();
+    for (const row of this.database.entriesOnVolume?.(driveNumber) ?? []) {
+      downloads.set(String(row.filename).toUpperCase(), Number(row.downloads) || 0);
+    }
+    const { listEntries } = await import('../file-list.service');
+    const files: DriveContents['files'] = [];
+    for (const area of areas) {
+      for (const entry of await listEntries({ dataDir: bbsRoot }, area.conferenceId, area.dirNumber)) {
+        const filename = entry.filename.trim();
+        const sentBy = /Sent by:\s*(.+)$/im.exec(entry.description)?.[1]?.trim() ?? '';
+        files.push({
+          filename,
+          size: entry.fileSize,
+          uploader: sentBy,
+          downloads: downloads.get(filename.toUpperCase()) ?? 0,
+          conference: area.conferenceId,
+          dir: area.dirNumber,
+        });
+      }
+    }
+    return {
+      areas: areas.map((area) => ({ conference: area.conferenceId, dir: area.dirNumber })),
+      files,
+    };
   }
 
   // ----------------------------------------------------------- pool status

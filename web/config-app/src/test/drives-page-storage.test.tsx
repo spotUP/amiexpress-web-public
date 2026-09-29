@@ -129,7 +129,7 @@ beforeEach(() => {
   confirmMock.mockResolvedValue(true);
   getDrivePoolStatus.mockResolvedValue({ success: true, data: EMPTY_POOL_STATUS });
   getStorageProviders.mockResolvedValue({ success: true, data: PROVIDERS });
-  getDriveContents.mockResolvedValue({ success: true, data: [] });
+  getDriveContents.mockResolvedValue({ success: true, data: { areas: [], files: [] } });
 });
 
 describe('DrivesPage - pool facts', () => {
@@ -314,7 +314,7 @@ describe('DrivesPage - contents and retention', () => {
       success: true,
       data: [s3Drive({ retentionDays: 90 })],
     });
-    getDriveContents.mockResolvedValue({ success: true, data: [{ id: 1, filename: 'DEMO.LHA', size: 100, uploader: 'sysop', downloads: 0 }] });
+    getDriveContents.mockResolvedValue({ success: true, data: { areas: [{ conference: 1, dir: 1 }], files: [{ filename: 'DEMO.LHA', size: 100, uploader: 'sysop', downloads: 0, conference: 1, dir: 1 }] } });
     renderPage();
 
     await userEvent.click(await screen.findByRole('button', { name: /contents of drive 2/i }));
@@ -375,7 +375,10 @@ describe('DrivesPage - delete and edit say what they orphan', () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive({ usedBytes: 5 * 1024 ** 3 })] });
     getDriveContents.mockResolvedValue({
       success: true,
-      data: Array.from({ length: 412 }, (_, i) => ({ id: i, filename: `F${i}.LHA`, size: 1, uploader: 'sysop', downloads: 0 })),
+      data: {
+        areas: [{ conference: 1, dir: 1 }],
+        files: Array.from({ length: 412 }, (_, i) => ({ filename: `F${i}.LHA`, size: 1, uploader: 'sysop', downloads: 0, conference: 1, dir: 1 })),
+      },
     });
     renderPage();
 
@@ -391,7 +394,7 @@ describe('DrivesPage - delete and edit say what they orphan', () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive({ drive_path: 's3://old-bucket' })] });
     getDriveContents.mockResolvedValue({
       success: true,
-      data: [{ id: 1, filename: 'DEMO.LHA', size: 1024, uploader: 'sysop', downloads: 0 }],
+      data: { areas: [{ conference: 1, dir: 1 }], files: [{ filename: 'DEMO.LHA', size: 1024, uploader: 'sysop', downloads: 0, conference: 1, dir: 1 }] },
     });
     updateDrive.mockResolvedValue({ success: true, data: {} });
     renderPage();

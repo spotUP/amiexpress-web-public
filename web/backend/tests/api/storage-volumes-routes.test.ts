@@ -299,20 +299,29 @@ describe('Drive Setup storage routes', () => {
   });
 
   describe('GET /api/config/drives/:n/contents', () => {
-    it('lists what would be lost if this volume disappeared', async () => {
-      const raw = (db as any).db;
-      const filename = unique('DEMO') + '.LHA';
-      seedCatalogEntry(raw, { storageVolume: 2, filename, size: 999 });
+    // A drive's contents are the file LISTS of the directories assigned to it
+    // (STORAGEDRIVE on the conference icon), read from disk - not the web
+    // catalogue, which only web uploads fill ("the file lists are on disk...",
+    // the sysop, 2026-09-29).
+    it('lists the files of the directories stored on this drive, from their lists', async () => {
+      fs.writeFileSync(path.join(root, 'ConfConfig.info'), 'NCONFS=1\nNAME.1=Main\nLOCATION.1=BBS:Conf1/\n');
+      fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\nDLPATH.1=BBS:Conf1/Files\nSTORAGEDRIVE=2\n');
+      fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'),
+        'DEMO.LHA     N  999      01-01-24  A demo\r\n                                 Sent by: spot\r\n');
 
       const res = await request(app).get('/api/config/drives/2/contents');
       expect(res.status).toBe(200);
-      expect(res.body.data.map((r: any) => r.filename)).toContain(filename);
+      expect(res.body.data.areas).toEqual([{ conference: 1, dir: 1 }]);
+      expect(res.body.data.files).toEqual([
+        { filename: 'DEMO.LHA', size: 999, uploader: 'spot', downloads: 0, conference: 1, dir: 1 },
+      ]);
     });
 
-    it('is empty for a drive with nothing on it', async () => {
+    it('says a drive with no directory assigned has no areas, not merely no files', async () => {
       const res = await request(app).get('/api/config/drives/1/contents');
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual([]);
+      expect(res.body.data).toEqual({ areas: [], files: [] });
     });
 
     it('refuses a drive number parseVolumes does not know', async () => {
