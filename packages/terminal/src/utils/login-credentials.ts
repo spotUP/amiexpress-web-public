@@ -13,6 +13,14 @@
  *                   phase before it emitted, so the answer can go at once
  *   `login-success` / `login-failed`
  *
+ * SILENT, never the account chooser: Chrome's chooser is a browser dialog
+ * over the board (sysop, 2026-09-29: "it uses an ugly browser dialog"). A
+ * silent read answers only when the browser may sign in without asking -
+ * one saved login for this site, auto sign-in on (chrome://settings/passwords)
+ * and not switched off by `forgetSilentAccess`. Otherwise it returns nothing
+ * and the caller types as before; a typed login that succeeds is stored
+ * again, which re-enables silent access.
+ *
  * One fill per connection: a wrong saved password re-prompts, and answering
  * that too would feed the server's attempt counter and the IP ban.
  */
@@ -39,7 +47,7 @@ export function browserCredentialStore(): CredentialStore | null {
   if (!Ctor || !container) return null;
   return {
     async get() {
-      const found = (await container.get({ password: true, mediation: 'optional' } as CredentialRequestOptions)) as
+      const found = (await container.get({ password: true, mediation: 'silent' } as CredentialRequestOptions)) as
         | (Credential & { password?: string })
         | null;
       return found && found.password ? { id: found.id, password: found.password } : null;
