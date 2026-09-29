@@ -10,11 +10,10 @@ import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { deliverFilesToCaller } from '../file/file-delivery';
-import { bookDownloads, isFreeDownload, conferencesOf } from '../../services/download-booking.service';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { bookDownloads, isFreeDownload, checkRatiosAndTime } from '../../services/download-booking.service';
+import { checkSecurity } from '../../utils/acs.util';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkDownloadRatios } from '../../utils/download-ratios.util';
 import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -206,7 +205,6 @@ export class BatchDownloadHandler {
     let successCount = 0;
     let failCount = 0;
     const downloadList: any[] = [];
-    const ratioRequests: { size: number; isFree?: boolean; conference?: number }[] = [];
 
     // Validate and prepare each file - express.e:15671+
     for (const flagItem of flaggedFiles) {
@@ -249,14 +247,9 @@ export class BatchDownloadHandler {
         continue;
       }
 
-      const isFree = isFreeDownload(fileInfo);
-      fileInfo.isFree = isFree;
+      fileInfo.confNum = fileInfo.confNum ?? flagItem.confNum;
+      fileInfo.isFree = isFreeDownload(fileInfo);
       downloadList.push(fileInfo);
-      ratioRequests.push({
-        size: fileInfo.size,
-        isFree,
-        conference: flagItem.confNum
-      });
       socket.emit('ansi-output', `\x1b[32m[OK] Queued: ${flagItem.fileName} (${fileInfo.size} bytes)\x1b[0m\r\n`);
       successCount++;
     }
@@ -267,16 +260,10 @@ export class BatchDownloadHandler {
       return;
     }
 
-    // Global ratio/byte gating (express.e:19823+)
-    const ratioCheck = await checkDownloadRatios(
-      session.user,
-      ratioRequests,
-      await conferencesOf(session),
-      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING),
-      getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
-    );
-    if (!ratioCheck.canDownload) {
-      socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
+    // express.e:19823-19926 checkRatiosAndTime - the same gate D asks
+    const ratioCheck = await checkRatiosAndTime(session, downloadList);
+    if (ratioCheck.status === 0) {
+      socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.error}\x1b[0m\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }

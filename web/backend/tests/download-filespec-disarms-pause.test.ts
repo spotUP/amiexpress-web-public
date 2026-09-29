@@ -37,10 +37,10 @@ function armedSession(extra: Record<string, unknown> = {}) {
 }
 
 describe('DS filespec prompt disarms a stale pagination gate', () => {
-  test('showFilespecPrompt clears the gate before reading a line', () => {
+  test('showFilespecPrompt clears the gate before reading a line', async () => {
     const { socket, out } = fakeSocket();
     const session = armedSession();
-    (DownloadHandler as any).showFilespecPrompt(socket, session);
+    await (DownloadHandler as any).showFilespecPrompt(socket, session);
     expect(session.paginatedScreen).toBeUndefined();
     expect(session.menuPause).toBe(false);
     expect(out.join('')).toMatch(/Filespec\(2\):/);
@@ -51,7 +51,7 @@ describe('DS filespec prompt disarms a stale pagination gate', () => {
     const session = armedSession();
     // The prompt disarms first (previous test's contract), then blank input
     // ends the list per express.e:20139.
-    (DownloadHandler as any).showFilespecPrompt(socket, session);
+    await (DownloadHandler as any).showFilespecPrompt(socket, session);
     await DownloadHandler.handleFilenameInput(socket, session, '');
     expect(session.subState).toBe(LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT);
     expect(session.paginatedScreen).toBeUndefined();
@@ -61,7 +61,7 @@ describe('DS filespec prompt disarms a stale pagination gate', () => {
   test('LAST CHANCE prompt disarms the gate before reading the key', async () => {
     const { socket, out } = fakeSocket();
     const session = armedSession({ subState: LoggedOnSubState.DOWNLOAD_FILENAME_INPUT });
-    (DownloadHandler as any).showFilespecPrompt(socket, session);
+    await (DownloadHandler as any).showFilespecPrompt(socket, session);
     // Re-arm between prompt and answer: the mid-loop case from the live log.
     session.paginatedScreen = { lines: ['\r\n'], nextIndex: 0, pageSize: 1, kind: 'doPause' };
     await DownloadHandler.handleFilenameInput(socket, session, '');

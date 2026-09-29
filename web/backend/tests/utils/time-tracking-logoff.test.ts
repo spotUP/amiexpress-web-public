@@ -40,7 +40,7 @@ jest.mock('../../src/utils/command-history.util', () => ({
   saveHistory: (...args: any[]) => mockSaveHistory(...args),
 }));
 
-import { checkTimeUsed } from '../../src/utils/time-tracking.util';
+import { checkTimeUsed } from '../../src/handlers/time-limit.handler';
 
 function makeSocket() {
   return {

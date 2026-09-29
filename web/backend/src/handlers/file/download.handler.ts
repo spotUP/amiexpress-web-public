@@ -17,7 +17,7 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { deliverFilesToCaller, deliveryRouteFor } from './file-delivery';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
-import { updateDownloadStats } from '../../utils/download-ratios.util';
+import { updateDownloadStats, creditAccountEnabled } from '../../utils/download-ratios.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { db } from '../../database';
 import { config } from '../../config';
@@ -27,7 +27,7 @@ import * as amigafs from '../../utils/amigafs';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { resolveFileDescription, isRestrictedComment } from '../../utils/file-restriction.util';
-import { bookDownloads, isFreeDownload } from '../../services/download-booking.service';
+import { bookDownloads, isFreeDownload, checkRatiosAndTime, estimatedDownloadCps } from '../../services/download-booking.service';
 import {
   listRemoteMatches,
   locateRemoteFile,
@@ -36,6 +36,8 @@ import {
   type RemoteListingResult,
 } from '../../storage/remote-download';
 import { getStorageContext } from '../../storage/storage-context';
+import { getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { DEFAULT_CONNECTION_BAUD } from '../../constants/modem';
 
 export class DownloadHandler {
   /**
@@ -252,18 +254,20 @@ export class DownloadHandler {
     };
 
     // express.e:20107 LOOP — show filespec prompt, wait for filename input
-    this.showFilespecPrompt(socket, session);
+    await this.showFilespecPrompt(socket, session);
     session.subState = LoggedOnSubState.DOWNLOAD_FILENAME_INPUT;
   }
 
   /**
-   * express.e:19784-19789 downloadPrompt
-   * Formats the filespec prompt line.
+   * express.e:20107-20124 - the top of the filespec loop: checkRatiosAndTime
+   * for the set so far, then downloadPrompt (19784-19789) with what is left.
+   * Refused: the reason, and the command ends. The file allowance used up
+   * exactly: no more filespecs, straight to LAST CHANCE.
    * ratioType = loggedOnUser.secBoard (0=bytes, 1=bytes+files, 2=files)
    */
-  private static showFilespecPrompt(socket: Socket, session: BBSSession): void {
+  private static async showFilespecPrompt(socket: Socket, session: BBSSession): Promise<void> {
     const user = session.user!;
-    const numFiles = session.tempData?.downloadNumFiles || 0;
+    const fileList: any[] = session.tempData?.downloadFileList || [];
     // A line-input prompt and a pagination gate are mutually exclusive:
     // express.e's lineInput() never has a pending pause, but a stale gate
     // can sit armed here (preamble doPause, re-armed screen gate), and
@@ -275,10 +279,25 @@ export class DownloadHandler {
     // (Filespec 1-3 worked, Filespec 4 ate one Enter).
     session.paginatedScreen = undefined;
     session.menuPause = false;
-    const filespecNum = numFiles + 1;
-    const minsLeft = (session as any).timeRemaining || 60;
 
-    if (!user.secLibrary || (session as any).creditAccountEnabled) {
+    const check = await checkRatiosAndTime(session, fileList);
+    if (check.status === 0) {
+      // express.e:20109-20112 StrAdd(string,'\b\n\b\n'); aePuts(string)
+      socket.emit('ansi-output', `${check.error}\r\n\r\n`);
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+      return;
+    }
+    // express.e:20113 IF status=1 THEN JUMP astart
+    if (check.status === 1) {
+      await this.showLastChance(socket, session);
+      return;
+    }
+
+    const filespecNum = fileList.length + 1;
+    const minsLeft = check.minsLeft;
+
+    if (!user.secLibrary || creditAccountEnabled(user)) {
       // express.e:20118 '\b\n\d mins, (Ratio Disabled), Filespec(\d): '
       socket.emit('ansi-output', `\r\n${minsLeft} mins, (Ratio Disabled), Filespec(${filespecNum}): `);
     } else {
@@ -286,19 +305,15 @@ export class DownloadHandler {
       // ratioType=0: bytes only  '\b\n\d mins, \d bytes, Filespec(\d): '
       // ratioType=2: files only  '\b\n\d mins, \d files, Filespec(\d): '
       // ratioType=1: bytes+files '\b\n\d mins, \d bytes, \d files, Filespec(\d): '
-      // bytesADL=$7fffffff means unlimited — web always uses $7fffffff so show 'Infinite'
       const ratioType = (user as any).secBoard || 0;
-      const bytesAvail = 'Infinite'; // bytesADL=$7fffffff for web (no daily byte cap)
-      const filesAvail = (user.secLibrary * ((user.uploads || 0) + 1)) - (user.downloads || 0);
+      const bytesAvail = check.bytesLeft ?? 0;
+      const filesAvail = check.filesLeft ?? 0;
 
       if (ratioType === 2) {
-        // express.e:19787 ratioType=2: files only
         socket.emit('ansi-output', `\r\n${minsLeft} mins, ${filesAvail} files, Filespec(${filespecNum}): `);
       } else if (ratioType === 1) {
-        // express.e:19788 ratioType=1: bytes + files
         socket.emit('ansi-output', `\r\n${minsLeft} mins, ${bytesAvail} bytes, ${filesAvail} files, Filespec(${filespecNum}): `);
       } else {
-        // express.e:19786 ratioType=0: bytes only (default)
         socket.emit('ansi-output', `\r\n${minsLeft} mins, ${bytesAvail} bytes, Filespec(${filespecNum}): `);
       }
     }
@@ -349,7 +364,7 @@ export class DownloadHandler {
     const err = this.validateFilenameStr(trimmed, checkSecurity(user, ACSPermission.FILE_EXPANSION));
     if (err) {
       socket.emit('ansi-output', `\r\n${err}\r\n`);
-      this.showFilespecPrompt(socket, session);
+      await this.showFilespecPrompt(socket, session);
       return;
     }
 
@@ -360,13 +375,13 @@ export class DownloadHandler {
     if (found === null) {
       // The volume could not answer. It is NOT a missing file, and the
       // caller has been told which drive and to try again later.
-      this.showFilespecPrompt(socket, session);
+      await this.showFilespecPrompt(socket, session);
       return;
     }
 
     if (found.length === 0) {
       socket.emit('ansi-output', `File not found: ${trimmed}\r\n`);
-      this.showFilespecPrompt(socket, session);
+      await this.showFilespecPrompt(socket, session);
       return;
     }
 
@@ -400,7 +415,7 @@ export class DownloadHandler {
     session.tempData.downloadNumFiles = fileList.length;
 
     // Show next filespec prompt — stay in DOWNLOAD_FILENAME_INPUT
-    this.showFilespecPrompt(socket, session);
+    await this.showFilespecPrompt(socket, session);
   }
 
   /**
@@ -411,9 +426,7 @@ export class DownloadHandler {
    */
   private static printFileFound(socket: Socket, session: BBSSession, file: any): void {
     const user = session.user!;
-    const onlineBaud = (session as any).baudRate || (session as any).onlineBaud || 19200;
-    const lastDlCPS = (user as any).topDownloadCPS || 0;
-    const estDlCPS  = lastDlCPS > 0 ? lastDlCPS : Math.floor(onlineBaud / 10);
+    const estDlCPS  = estimatedDownloadCps(session);
     const fsize = file.size || 0;
     const tsec  = estDlCPS > 0 ? Math.floor(fsize / estDlCPS) : 0;
     const min   = Math.floor(tsec / 60);
@@ -449,8 +462,8 @@ export class DownloadHandler {
 
     // express.e:19973-19977: estDlCPS = lastDlCPS or onlineBaud/10
     const lastDlCPS = (user as any).topDownloadCPS || 0;
-    const onlineBaud = (session as any).onlineBaud || 38400;
-    const estDlCPS  = lastDlCPS > 0 ? lastDlCPS : Math.floor(onlineBaud / 10);
+    const onlineBaud = session.modemBps || session.connectionBaud || DEFAULT_CONNECTION_BAUD;
+    const estDlCPS  = estimatedDownloadCps(session);
 
     const estSecs    = estDlCPS > 0 ? Math.floor(totalSize / estDlCPS) : 0;
     const estMins    = Math.floor(estSecs / 60);
@@ -483,7 +496,13 @@ export class DownloadHandler {
     // express.e:20202 '   \d files, \dk bytes, \d mins \d secs\b\n'
     socket.emit('ansi-output', `   ${fileList.length} files, ${totalKb}k bytes, ${estMins} mins ${estSecsRem} secs\r\n`);
 
-    // express.e:20205-20208 time check (simplified — no timelimit enforcement for web)
+    // express.e:20205-20208 - the whole set must fit the time left
+    if (estMins > getTimeRemainingMinutes(session) && !checkSecurity(user, ACSPermission.OVERRIDE_TIMELIMIT)) {
+      socket.emit('ansi-output', '  Insufficent time for transfer.\r\n\r\n'); // express.e's spelling
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+      return;
+    }
 
     // express.e:20210 '\b\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? '
     socket.emit('ansi-output', '\r\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? ');

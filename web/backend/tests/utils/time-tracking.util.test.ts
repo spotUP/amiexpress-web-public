@@ -11,9 +11,9 @@ jest.mock('../../src/handlers/screen.handler', () => ({
 
 import {
   updateTimeUsed,
-  checkTimeUsed,
   getTimeRemainingMinutes,
 } from '../../src/utils/time-tracking.util';
+import { checkTimeUsed } from '../../src/handlers/time-limit.handler';
 import { BBSSession } from '../../src/index';
 
 describe('Time Tracking Utility Functions', () => {

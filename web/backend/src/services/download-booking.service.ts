@@ -23,9 +23,11 @@ import type { BBSSession } from '../index';
 import { db } from '../database';
 import { ACSPermission } from '../constants/acs-permissions';
 import { ConferenceRepository } from '../database/conference-repository';
-import { checkSecurity } from '../utils/acs.util';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
-import { updateDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
+import { updateDownloadStats, creditAccountTrackDownloads, checkDownloadRatios } from '../utils/download-ratios.util';
+import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
+import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { logDownload } from '../utils/download-logging.util';
 import { userFileManager } from './UserFileManager';
 import { doorDropFileManager } from './DoorDropFileManager';
@@ -63,6 +65,72 @@ export async function conferencesOf(session: BBSSession): Promise<any[] | undefi
     console.error('[download-booking] could not load conferences for accounting:', err);
     return undefined;
   }
+}
+
+/**
+ * express.e:19973-19977 estDlCPS: the caller's best download rate so far, or
+ * the line speed over ten before they have one.
+ */
+export function estimatedDownloadCps(session: BBSSession): number {
+  const best = Number((session.user as { topDownloadCPS?: number } | undefined)?.topDownloadCPS) || 0;
+  if (best > 0) return best;
+  const baud = session.modemBps || session.connectionBaud || DEFAULT_CONNECTION_BAUD;
+  return Math.max(1, Math.floor(baud / 10));
+}
+
+/** What express.e's checkRatiosAndTime answers for a download set. */
+export interface RatiosAndTime {
+  /**
+   * 0: refused (`error` says why). 1: the caller's file allowance is used
+   * exactly - express.e stops asking for more and goes to LAST CHANCE.
+   * 2: there is room for more.
+   */
+  status: 0 | 1 | 2;
+  error?: string;
+  /** Minutes left once this set has transferred. */
+  minsLeft: number;
+  /** Bytes the caller may still take, where a byte ratio applies. */
+  bytesLeft?: number;
+  /** Files the caller may still take, where a file ratio applies. */
+  filesLeft?: number;
+}
+
+/**
+ * express.e:19823-19926 checkRatiosAndTime - the one gate D and DB ask
+ * before each filespec and before a transfer: is there time for the set,
+ * daily byte allowance, and ratio room (bytes and files, per conference
+ * when the caller has conference accounting).
+ */
+export async function checkRatiosAndTime(
+  session: BBSSession,
+  files: readonly BookableFile[],
+): Promise<RatiosAndTime> {
+  const user = session.user;
+  const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
+  // express.e:19836-19838 tsec:=Div(tempsize,estDlCPS); min:=tsec/60
+  const min = Math.floor(Math.floor(totalBytes / estimatedDownloadCps(session)) / 60);
+  const minsLeft = getTimeRemainingMinutes(session) - min;
+
+  // express.e:19840-19843
+  if (minsLeft < 0 && !(user && checkSecurity(user, ACSPermission.OVERRIDE_TIMELIMIT))) {
+    return { status: 0, error: 'Not enough time for requested downloads.', minsLeft };
+  }
+
+  const accounting = !!user && checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+  const ratio = await checkDownloadRatios(
+    user,
+    files.map(f => ({ size: f.size || 0, isFree: isFreeDownload(f), conference: f.confNum || session.currentConf })),
+    accounting ? await conferencesOf(session) : undefined,
+    accounting,
+    getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true,
+    session.currentConf,
+  );
+  if (!ratio.canDownload) {
+    return { status: 0, error: ratio.errorMessage, minsLeft };
+  }
+  // express.e:19920-19924 RETURN 1 when nad=freeDFlag under a file ratio
+  const status = ratio.remainingFiles === 0 ? 1 : 2;
+  return { status, minsLeft, bytesLeft: ratio.remainingBytes, filesLeft: ratio.remainingFiles };
 }
 
 /** The conference's own download count, where the board keeps accounts for it. */

@@ -260,7 +260,7 @@ describe('download-ratios.util', () => {
         const result = await checkDownloadRatios(user, requests);
         expect(result).toEqual({
           canDownload: false,
-          errorMessage: 'Not enough free files for requested downloads.',
+          errorMessage: 'Not enough free files for requested number of downloads.',
           remainingFiles: 4
         });
       });

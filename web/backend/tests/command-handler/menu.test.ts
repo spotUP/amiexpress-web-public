@@ -29,8 +29,10 @@ jest.mock('../../src/utils/conference-tooltypes.util', () => ({
 }));
 jest.mock('../../src/utils/time-tracking.util', () => ({
   updateTimeUsed: jest.fn(),
-  checkTimeUsed: jest.fn().mockResolvedValue(false),
   getTimeRemainingMinutes: jest.fn().mockReturnValue(60),
+}));
+jest.mock('../../src/handlers/time-limit.handler', () => ({
+  checkTimeUsed: jest.fn().mockResolvedValue(false),
 }));
 jest.mock('../../src/utils/output.util', () => ({
   emitText: jest.fn(),

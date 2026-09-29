@@ -17,7 +17,8 @@ import {
 import { parseMciCodes } from '../screen.handler';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
-import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { updateTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
+import { checkTimeUsed } from '../time-limit.handler';
 import { buildMenuPrompt } from '../../utils/menu-prompt.util';
 import { recordPromptColumn, SAVE_CURSOR } from '../../utils/line-input.util';
 import { setEnvStat } from '../../utils/acs.util';

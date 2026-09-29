@@ -22,7 +22,7 @@ export const TRACK_UPLOADS_BIT = 2;
 
 const MAX_INT = 0x7fffffff;
 
-function creditAccountEnabled(user: User): boolean {
+export function creditAccountEnabled(user: User): boolean {
   const days = user.creditDays || 0;
   if (days <= 0) return false;
   const start = user.creditStartDate || 0; // seconds since epoch
@@ -66,7 +66,9 @@ export async function checkDownloadRatios(
   requests: DownloadRequest[] | number,
   conferences?: Conference[],
   conferenceAccountingEnabled: boolean = false,
-  creditByKb: boolean = false
+  creditByKb: boolean = false,
+  /** The conference the caller is in: express.e reports what is left there even before a file is picked. */
+  currentConf?: number
 ): Promise<{
   canDownload: boolean;
   errorMessage?: string;
@@ -124,6 +126,7 @@ export async function checkDownloadRatios(
     // Per-conference check mirrors express.e checkRatiosAndTime per-conf block
     // Aggregate requested bytes/files per conference
     const perConfTotals: Record<number, { bytes: number; files: number; freeFiles: number }> = {};
+    if (currentConf) perConfTotals[currentConf] = { bytes: 0, files: 0, freeFiles: 0 };
     for (const req of requestList) {
       const confNum = req.conference || user.confRJoin || 1;
       if (!perConfTotals[confNum]) perConfTotals[confNum] = { bytes: 0, files: 0, freeFiles: 0 };
@@ -175,7 +178,7 @@ export async function checkDownloadRatios(
           if (requestedCount > allowedFilesConf) {
             return {
               canDownload: false,
-              errorMessage: `Conf ${conf?.id ?? confId}: Not enough free files for requested downloads.`,
+              errorMessage: `Conf ${conf?.id ?? confId}: Not enough free files for requested number of downloads.`,
               remainingFiles: allowedFilesConf
             };
           }
@@ -223,7 +226,7 @@ export async function checkDownloadRatios(
     if (requestedFiles > allowedFiles) {
       return {
         canDownload: false,
-        errorMessage: 'Not enough free files for requested downloads.',
+        errorMessage: 'Not enough free files for requested number of downloads.',
         remainingFiles: allowedFiles
       };
     }
@@ -239,7 +242,7 @@ export async function checkDownloadRatios(
     if (requestedFiles > allowedFiles) {
           return {
             canDownload: false,
-            errorMessage: 'Not enough free files for requested downloads.',
+            errorMessage: 'Not enough free files for requested number of downloads.',
             remainingFiles: allowedFiles
           };
         }
