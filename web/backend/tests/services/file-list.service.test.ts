@@ -72,3 +72,18 @@ test('a description comes back line by line, spacing and colour codes intact', (
     '\x1b[35mcoloured\x1b[0m   tail',
   ]);
 });
+
+test('a delete removes every copy of the file, in any case, and says when there was none', async () => {
+  // Live 2026-09-29: uploads sat in both Upload and Files; the delete took
+  // the first copy and left the other on disk, unlisted.
+  fs.mkdirSync(path.join(root, 'Conf1', 'Upload'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Conf1', 'Upload', 'old.lha'), 'SECOND COPY');
+  const outcome = await deleteEntry(ctx(), 1, 1, 'OLD.LHA');
+  expect(outcome.bytesError).toBeNull();
+  expect(fs.readdirSync(path.join(root, 'Conf1', 'Files'))).toEqual([]);
+  expect(fs.readdirSync(path.join(root, 'Conf1', 'Upload'))).toEqual([]);
+
+  const missing = await deleteEntry(ctx(), 1, 1, 'KEEP.LHA');
+  expect(missing.bytesError).toMatch(/not found/);
+  expect(read('Conf1/DIR1')).not.toContain('KEEP.LHA');
+});

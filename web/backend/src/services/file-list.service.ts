@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { findCaseInsensitive, forgetDirectoryListings } from '../utils/amigafs';
 
 import { getConferenceDir } from '../utils/file-hold.util';
 import { getHoldDirFilePath, parseDirFile, type DirFileEntry } from '../utils/dir-file-reader.util';
@@ -372,14 +373,29 @@ export async function deleteBytes(
       : null;
   }
 
-  const candidates = await buildFileCandidates(ctx, confNum, filename, dirNum);
-  for (const filePath of candidates) {
-    try {
-      await fsp.unlink(filePath);
-      return null;
-    } catch {
-      // Try next candidate
-    }
+  // express.e:maintenanceFileDelete removes a held file from Hold, and any
+  // other from EVERY DLPATH.n - not the first copy found. A file uploaded to
+  // Upload and later copied to Files is two copies; stopping at the first
+  // left the second on disk, unlisted (live, 2026-09-29: 34 of 41 admin
+  // deletes in Conf1). Each folder is asked once, in any case, as the Amiga
+  // would.
+  const holdDir = path.dirname(getHoldDirFilePath(getConferenceDir(confNum, dataDir)));
+  const folders = new Set(
+    (await buildFileCandidates(ctx, confNum, filename, dirNum))
+      .map((candidate) => path.dirname(candidate))
+      .filter((folder) => (dirNum === -1) === (path.resolve(folder).toLowerCase() === path.resolve(holdDir).toLowerCase()))
+  );
+  if (dirNum === -1) folders.add(holdDir);
+  let removed = 0;
+  for (const folder of folders) {
+    const found = findCaseInsensitive(folder, filename);
+    if (!found) continue;
+    await fsp.unlink(found);
+    removed++;
+  }
+  forgetDirectoryListings();
+  if (removed === 0) {
+    throw new Error(`${filename} was not found in the conference's file directories`);
   }
   return null;
 }
