@@ -481,10 +481,6 @@ console.error(`[testFile] Error:`, error);
     //
     // What stays here is what is genuinely this front end's: saying on the
     // caller's screen what happened to his file.
-    const nodeConfigForFiling = (db as any)
-      .getConfigRepository()
-      .getNodeConfig(session.nodeId || 1);
-
     const filing = await fileUploadedFile({
       playpenPath: data.path,
       filename: currentFile.filename,
@@ -499,7 +495,6 @@ console.error(`[testFile] Error:`, error);
       },
       initialStatus: fileStatus,
       marker: checkedMarker as 'P' | 'F' | 'N',
-      addSentBy: nodeConfigForFiling?.sentby_files ?? true,
     });
 
     for (const notice of filing.notices) {

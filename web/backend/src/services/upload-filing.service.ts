@@ -32,6 +32,7 @@
  *     catalogued: the file is in the playpen, and a row or a DIR entry
  *     claiming HOLD points a sysop at a file that is not there.
  */
+import { nodeFlag } from '../utils/node-tooltypes.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -149,8 +150,16 @@ export interface FilingRequest {
   initialStatus: 'active' | 'private' | 'hold';
   /** P passed, F failed, N not tested. `D` is decided here, by the dupe check. */
   marker: 'P' | 'F' | 'N';
-  /** SENTBY_FILES for this node, which decides whether the DIR entry names the uploader. */
-  addSentBy: boolean;
+}
+
+/**
+ * express.e:19506 - the DIR entry ends 'Sent by: <name>' only when the node's
+ * icon carries SENTBY_FILES. It was a database column defaulting to TRUE, so
+ * a board whose icons never set it signed every upload - under the tagline a
+ * FILE_ID door had already added (sysop, 2026-09-30).
+ */
+function sentByFor(nodeId: number): boolean {
+  return nodeFlag(nodeId, 'SENTBY_FILES');
 }
 
 export interface FilingOutcome {
@@ -311,7 +320,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
       conferencePath,
       as,
       uploadDirNum,
-      request.addSentBy
+      sentByFor(request.nodeId)
     );
     try {
       await listIt(status);
@@ -395,7 +404,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
           request.description,
           marker,
           request.uploader.username,
-          request.addSentBy,
+          sentByFor(request.nodeId),
           'Upload'
         );
       } catch (error) {

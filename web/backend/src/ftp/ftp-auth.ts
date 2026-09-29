@@ -338,7 +338,6 @@ console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Er
       // The area the board implies, created from the conference's own icons
       // when the mirror has none - the same one the menu upload files into.
       const area = await areaForConference(request.conferenceId, config.get('dataDir'));
-      const nodeConfig = db.getConfigRepository().getNodeConfig(request.nodeId || 1);
 
       const outcome = await fileUploadedFile({
         playpenPath,
@@ -354,7 +353,6 @@ console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Er
         },
         initialStatus,
         marker,
-        addSentBy: nodeConfig?.sentby_files ?? true,
       });
 
       // ftpd.e:1690 - 426 when the upload did not survive. A file the board

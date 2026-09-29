@@ -25,7 +25,8 @@ const mockDb = {
   createFileEntry: jest.fn(async () => 1),
   recordLocation: jest.fn(),
   run: jest.fn(async () => undefined),
-  getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: false }) }),
+  // The live board's database says TRUE; the node icon is what decides.
+  getConfigRepository: () => ({ getNodeConfig: () => ({ sentby_files: true }) }),
   getConferences: jest.fn(async () => []),
   updateConference: jest.fn(async () => undefined),
   getConferenceById: jest.fn(async () => ({ id: 1, name: 'Conf1' })),
@@ -137,6 +138,26 @@ describe('an upload runs the board\'s EXAMINE door', () => {
     expect(dir1).not.toContain('THE BUILT-IN READER FOUND THIS');
     // The door's exit does not end the upload.
     expect(session.subState).not.toBe('display_menu');
+  });
+
+  // express.e:19506 - "Sent by:" only when the node icon says SENTBY_FILES.
+  // It was a database column defaulting to TRUE: every upload got the line,
+  // under the tagline File Description had already added (sysop,
+  // 2026-09-30). The live board's node icons do not carry it.
+  test('an upload on a node whose icon has no SENTBY_FILES is not signed', async () => {
+    const { clearNodeTooltypeCache } = require('../src/utils/node-tooltypes.util');
+    clearNodeTooltypeCache();
+    await upload();
+    expect(fs.readFileSync(path.join(confDir, 'DIR1'), 'latin1')).not.toContain('Sent by:');
+  });
+
+  test('an upload on a node whose icon has SENTBY_FILES is signed', async () => {
+    const { clearNodeTooltypeCache } = require('../src/utils/node-tooltypes.util');
+    fs.writeFileSync(path.join(dataDir, 'Node1.info'), 'SENTBY_FILES\n');
+    clearNodeTooltypeCache();
+    await upload();
+    clearNodeTooltypeCache();
+    expect(fs.readFileSync(path.join(confDir, 'DIR1'), 'latin1')).toContain('Sent by: spot');
   });
 
   test('a board with no EXAMINE door keeps the built-in FILE_ID.DIZ reader', async () => {
