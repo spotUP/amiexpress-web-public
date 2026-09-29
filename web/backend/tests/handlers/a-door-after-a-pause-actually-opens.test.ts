@@ -42,9 +42,10 @@ import * as path from 'path';
  * about REACHING; running one would drag the emulator in.
  */
 const handleCommand = jest.fn(async () => {});
-jest.mock('../../src/handlers/command-handler/core', () => ({
-  ...jest.requireActual('../../src/handlers/command-handler/core'),
-  handleCommand: (...args: any[]) => handleCommand(...(args as [])),
+// Screen commands go through the board's one dispatcher (runScreenCommand ->
+// command.handler processCommand, ab13c68f9); the command is its third arg.
+jest.mock('../../src/handlers/command.handler', () => ({
+  processCommand: (...args: any[]) => handleCommand(...(args as [])),
 }));
 
 import {
