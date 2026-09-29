@@ -12,7 +12,6 @@ import * as amigafs from './utils/amigafs';
 import { userFileManager } from './services/UserFileManager';
 import { messageFileManager } from './services/MessageFileManager';
 import { conferenceFileManager } from './services/ConferenceFileManager';
-import { fileAreaManager } from './services/FileAreaManager';
 import { messageIndexManager } from './services/MessageIndexManager';
 import { userDatabaseManager } from './services/UserDatabaseManager';
 import { dbProfiler } from './utils/database-profiler.util';
@@ -339,10 +338,6 @@ console.log('Message directories initialized');
 console.log('Initializing conference database...');
       conferenceFileManager.initializeConfDB();
 console.log('Conference database initialized');
-
-console.log('Initializing file area directories...');
-      fileAreaManager.initializeFileAreaDirs();
-console.log('File area directories initialized');
 
 console.log('Initializing message index files (HeaderFile, MailStats, MailLock)...');
       // Initialize for conferences 1-10
@@ -2752,6 +2747,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
 
   recordLocation(...args: Parameters<FileRepository['recordLocation']>): void {
     this.fileRepo!.recordLocation(...args);
+  }
+
+  releaseFromHold(...args: Parameters<FileRepository['releaseFromHold']>): number {
+    return this.fileRepo!.releaseFromHold(...args);
   }
 
   clearLocation(...args: Parameters<FileRepository['clearLocation']>): boolean {

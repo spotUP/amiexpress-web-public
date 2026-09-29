@@ -37,6 +37,7 @@ beforeEach(() => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd-ratios-'));
   const files = path.join(dataDir, 'Conf1', 'Files');
   fs.mkdirSync(files, { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'Conf1.info'), 'NDIRS=1\n'); // express.e maxDirs = icon NDIRS
   fs.writeFileSync(path.join(files, 'SMALL.LHA'), Buffer.alloc(400));
   fs.writeFileSync(path.join(files, 'BIG.LHA'), Buffer.alloc(5000));
   // Two minutes of transfer at CPS.

@@ -90,15 +90,16 @@ export async function getDirFiles(confNum: number, bbsDataPath: string): Promise
  * Get maximum directory number for a conference
  * Port from express.e maxDirs usage
  *
- * Scans for DIR files (DIR1, DIR2, DIR3, ...) and named .dir files to determine count
+ * The conference icon's NDIRS (conferences/conference-paths conferenceNdirs).
  *
  * @param confNum Conference number
  * @param bbsDataPath BBS data directory path
  * @returns Maximum directory number (0 if no directories exist)
  */
 export async function getMaxDirs(confNum: number, bbsDataPath: string): Promise<number> {
-  const dirFiles = await getDirFiles(confNum, bbsDataPath);
-  return dirFiles.length;
+  // express.e's maxDirs is the icon's NDIRS, not what happens to be on disk.
+  const { conferenceNdirs } = require('../conferences/conference-paths') as typeof import('../conferences/conference-paths');
+  return conferenceNdirs(bbsDataPath, confNum);
 }
 
 /**

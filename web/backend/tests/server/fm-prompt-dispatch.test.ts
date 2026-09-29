@@ -56,6 +56,8 @@ it('gets a typed filename through FM without losing the handler receiver', async
     const d = getConferenceDir(conf, board);
     fs.mkdirSync(d, { recursive: true });
     fs.writeFileSync(path.join(d, 'DIR1'), 'TESTFILE.LHA  1024  01-01-26  a test file\n');
+    // The conference icon declares that one file area (express.e 5006/15264).
+    fs.writeFileSync(`${d}.info`, 'NDIRS=1\n');
     console.log('CONF', conf, '->', d);
   }
 

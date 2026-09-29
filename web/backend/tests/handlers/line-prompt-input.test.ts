@@ -52,6 +52,8 @@ beforeAll(() => {
   // search and the V command refuse to prompt at all when a conference has no
   // file areas (express.e:26136, express.e:20399).
   fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+  // The icon declares that one directory (express.e 5006/15264 read NDIRS).
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
   fs.writeFileSync(
     path.join(root, 'Conf1', 'DIR1'),
     [dirLine('CHASE.LHA', 'A demo'), dirLine('SCOOPEX.LHA', 'Another one'), ''].join('\r\n'),

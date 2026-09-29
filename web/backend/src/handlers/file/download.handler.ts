@@ -76,17 +76,16 @@ export class DownloadHandler {
     socket.emit('ansi-output', '\r\n');
 
     // express.e:19961-19964 IF(maxDirs=0) myError(5) RETURN RESULT_FAILURE
-    // Check whether any file directories exist for this conference
-    try {
-      const { fileAreaManager } = require('../../services/FileAreaManager');
-      const areas = fileAreaManager?.getAreasForConference?.(session.currentConf || 1);
-      if (Array.isArray(areas) && areas.length === 0) {
-        // express.e:8528-8530 myError(ERR_NOFILES=5): 'No files available in this conference.\b\n\b\n'
-        socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
-      }
-    } catch { /* fileAreaManager may not expose this API — continue */ }
+    // The conference's own count - the icon's NDIRS - as express.e's maxDirs.
+    // (This asked a FileAreaManager method that never existed, so the check
+    // never ran.)
+    const { getMaxDirs } = require('../../utils/max-dirs.util');
+    if ((await getMaxDirs(session.currentConf || 1, config.get('dataDir'))) === 0) {
+      // express.e:8528-8530 myError(ERR_NOFILES=5): 'No files available in this conference.\b\n\b\n'
+      socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
 
     // express.e:19966-19971 IF(quietDownload=FALSE) IF(displayScreen(SCREEN_DOWNLOAD)) doPause() \b\n
     // The DOWNLOAD screen is optional (express.e treats a missing file as a falsy return and

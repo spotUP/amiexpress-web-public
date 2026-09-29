@@ -158,6 +158,28 @@ export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, .
  * anything unreadable dropped: a sysop's typo in DLPATH.7 must not cost the
  * caller DLPATH.1.
  */
+/**
+ * How many file directories a conference has: `NDIRS` on its icon, the one
+ * number express.e reads (5006, 15264 `maxDirs:=readToolTypeInt(...,'NDIRS')`)
+ * and the bound on every directory it offers. No NDIRS - no file areas
+ * (readToolTypeInt answers -1, and 1 <= n <= -1 never holds).
+ *
+ * The port had three answers: this tooltype in some places, a plain NDIRS
+ * FILE in the screen index, and a count of the DIR files on disk in F, FR,
+ * FM, Z, V and A - so a leftover DIR file became a directory the board
+ * offered and express.e does not.
+ */
+export function conferenceNdirs(bbsRoot: string, conferenceNumber: number): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readTooltypeMap } = require('../utils/info-file.util') as typeof import('../utils/info-file.util');
+    const count = parseInt(readTooltypeMap(`${conferenceDir(bbsRoot, conferenceNumber)}.info`).get('NDIRS') ?? '', 10);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function conferenceDownloadDirs(bbsRoot: string, conferenceNumber: number): string[] {
   return conferencePathDirs(bbsRoot, conferenceNumber, 'DLPATH');
 }

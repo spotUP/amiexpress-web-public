@@ -56,6 +56,8 @@ beforeEach(() => {
     '',
   ].join('\n'));
   fs.writeFileSync(path.join(conf, 'DIR2'), 'EMPTY.LHA    P        1 01-02-95 Unrelated\n');
+  // The conference icon declares both directories (express.e 5006/15264).
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=2\n');
 });
 
 afterEach(() => {

@@ -39,7 +39,9 @@ beforeEach(() => {
   write('Bulletins/bull20.txt', 'the leaders\n');
   write('Bulletins/bull3.txt', 'the news\n');
   write('Bulletins/bull9.txt', 'unnamed but real\n');
-  write('Conf2/NDIRS', '3');
+  // The conference icon's NDIRS tooltype - the one number express.e reads
+  // (5006, 15264), not a plain NDIRS file inside the conference directory.
+  write('Conf2.info', 'NDIRS=3\n');
   fs.mkdirSync(path.join(root, 'Conf2', 'MsgBase'), { recursive: true });
 });
 

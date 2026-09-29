@@ -3,7 +3,6 @@
  * Handles all file area and file entry related database operations
  */
 
-import { fileAreaManager } from '../services/FileAreaManager';
 import type { FileArea, FileEntry } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
@@ -79,6 +78,28 @@ export class FileRepository extends BaseRepository<any> {
         `recordLocation: no file_entries row for filename "${filename}" in area ${areaId}`
       );
     }
+  }
+
+  /**
+   * A file the sysop has released from Hold is an active file again.
+   *
+   * An upload that failed its check is catalogued with status 'hold' (or
+   * 'private'), and releasing it is FM Move out of Hold (express.e has no
+   * other release). The move rewrote the DIR files and left the row saying
+   * 'hold', so everything that lists by the catalog - QuickNew's generator
+   * asks for status 'active' - never showed the file.
+   *
+   * Case-insensitive on the name, as the DIR line and the row may spell it
+   * differently; only rows in the conference it was held in. Returns rows changed.
+   */
+  releaseFromHold(filename: string, conferenceId: number): number {
+    const result = this.run(
+      `UPDATE file_entries SET status = 'active'
+        WHERE UPPER(filename) = UPPER(?) AND status IN ('hold', 'private')
+          AND areaid IN (SELECT id FROM file_areas WHERE conferenceid = ?)`,
+      [filename, conferenceId]
+    );
+    return result.changes;
   }
 
   /**
@@ -171,34 +192,6 @@ export class FileRepository extends BaseRepository<any> {
 
     const fileId = result.lastInsertRowid as number;
 
-    // CRITICAL: Write to .dir file for Amiga door compatibility
-    try {
-      // Get file area info
-      const area = await this.getFileAreaById(file.areaId);
-      if (area) {
-        const fullEntry: FileEntry = {
-          ...file,
-          id: fileId
-        };
-        fileAreaManager.addFileEntry(fullEntry, area);
-console.log(`[Database] Synced file entry "${file.filename}" to ${area.name}.dir`);
-      }
-    } catch (error) {
-console.error(`[Database] Failed to sync file entry to disk:`, error);
-      SysopDebugUtil.debug(
-        null,
-        null,
-        'Database',
-        `Failed to sync file entry "${file.filename}" to disk (.dir file)`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          areaId: file.areaId,
-          filename: file.filename
-        },
-        DebugSeverity.WARNING
-      );
-      // Don't throw - DB insert succeeded
-    }
 
     return fileId;
   }
@@ -260,30 +253,6 @@ console.error(`[Database] Failed to sync file entry to disk:`, error);
     const stmt = this.prepare(sql);
     stmt.run(...values, id);
 
-    // CRITICAL: Sync to .dir file for Amiga door compatibility
-    try {
-      const selectStmt = this.prepare('SELECT * FROM file_entries WHERE id = ?');
-      const row = selectStmt.get(id) as any;
-
-      if (row) {
-        const area = await this.getFileAreaById(row.areaid);
-        if (area) {
-          const fullEntry: FileEntry = this.mapFileEntryRow(row);
-          fileAreaManager.updateFileEntry(fullEntry, area);
-console.log(`[Database] Synced updated file entry "${row.filename}" to ${area.name}.dir`);
-        }
-      }
-    } catch (error) {
-console.error(`[Database] Failed to sync updated file entry to disk:`, error);
-      SysopDebugUtil.debug(
-        null,
-        null,
-        'Database',
-        `Failed to sync updated file entry to disk (.dir file)`,
-        { error: error instanceof Error ? error.message : String(error), fileId: id },
-        DebugSeverity.WARNING
-      );
-    }
   }
 
   async getFileEntry(id: number): Promise<FileEntry | null> {
@@ -336,31 +305,6 @@ console.error(`[Database] Failed to sync updated file entry to disk:`, error);
     const stmt = this.prepare('DELETE FROM file_entries WHERE id = ?');
     stmt.run(id);
 
-    // CRITICAL: Delete from .dir file for Amiga door compatibility
-    if (row) {
-      try {
-        const area = await this.getFileAreaById(row.areaid);
-        if (area) {
-          fileAreaManager.deleteFileEntry(row.filename, area);
-console.log(`[Database] Deleted file entry "${row.filename}" from ${area.name}.dir`);
-        }
-      } catch (error) {
-console.error(`[Database] Failed to delete file entry from disk:`, error);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Database',
-          `Failed to delete file entry from disk (.dir file)`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-            fileId: id,
-            filename: row.filename,
-            areaId: row.areaid
-          },
-          DebugSeverity.WARNING
-        );
-      }
-    }
   }
 
   async incrementDownloadCount(id: number): Promise<void> {
@@ -384,31 +328,6 @@ console.error(`[Database] Failed to delete file entry from disk:`, error);
 
     const areaId = result.lastInsertRowid as number;
 
-    // CRITICAL: Create .dir file for Amiga door compatibility
-    try {
-      const fullArea: FileArea = {
-        ...area,
-        id: areaId,
-        created: getSystemTime(),
-        updated: getSystemTime()
-      };
-      fileAreaManager.createAreaDirFile(fullArea);
-console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);
-    } catch (error) {
-console.error(`[Database] Failed to create .dir file:`, error);
-      SysopDebugUtil.debug(
-        null,
-        null,
-        'Database',
-        `Failed to create .dir file for file area "${area.name}"`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          areaName: area.name,
-          conferenceId: area.conferenceId
-        },
-        DebugSeverity.WARNING
-      );
-    }
 
     return areaId;
   }

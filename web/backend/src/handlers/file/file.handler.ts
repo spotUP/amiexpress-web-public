@@ -12,7 +12,6 @@ import { config } from '../../config';
 import { emitText, emitPrompt, emitLine, flushOutput, eraseRestOfLine } from '../../utils/output.util';
 import * as path from 'path';
 import { conferenceDir } from '../../conferences/conference-paths';
-import { fileAreaManager } from '../../services/FileAreaManager';
 import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
@@ -222,27 +221,8 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
 
   await Promise.all(deletePromises);
 
-  // DISK-BASED: Delete files from DIR files
-  for (const file of filesToDelete) {
-    try {
-      const bbsRoot = config.get('dataDir');
-      const confDir = conferenceDir(bbsRoot, session.currentConf || 1);
-      const areaId = file.areaId || file.area_id || 1;
-      const dirFilePath = path.join(confDir, `DIR${areaId}`);
-
-      // Load file area to pass to deleteFileEntry
-      const fileArea = {
-        id: areaId,
-        conferenceId: session.currentConf || 1,
-        dirFilePath: dirFilePath
-      };
-
-      fileAreaManager.deleteFileEntry(file.filename, fileArea as any);
-console.log(`[FileDelete] Removed ${file.filename} from DIR${areaId}`);
-    } catch (error) {
-console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, error);
-    }
-  }
+  // The DIR files are not touched here: this old FM path is unreachable
+  // (displayFileMaintenance is never called); FM is FileMaintenanceHandler.
 
   emitText(socket, `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
 

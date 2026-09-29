@@ -64,6 +64,8 @@ let restoreConfig: (() => void) | null = null;
 function harness(): Harness {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'board-e2e-'));
   fs.mkdirSync(path.join(dataDir, 'Conf1', 'Files'), { recursive: true });
+  // One file directory, declared the way a board declares it (express.e maxDirs = icon NDIRS).
+  fs.writeFileSync(path.join(dataDir, 'Conf1.info'), 'NDIRS=1\n');
 
   const original = config.get.bind(config);
   const spy = jest

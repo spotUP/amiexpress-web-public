@@ -39,6 +39,8 @@ beforeEach(() => {
   config.set('dataDir', root);
   fs.mkdirSync(path.join(root, 'Conf1', 'Dir1'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Conf1', 'Dir2'), { recursive: true });
+  // The conference icon declares both file areas (express.e 5006/15264).
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=2\n');
   fs.writeFileSync(path.join(root, 'Conf1', 'Dir2', 'NOTES.TXT'), 'THE NOTES BODY\r\n');
   for (const text of [path.join(root, 'Conf1', 'TEXT'), path.join(root, 'TEXT')]) {
     fs.mkdirSync(text, { recursive: true });

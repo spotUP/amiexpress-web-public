@@ -175,6 +175,8 @@ describe('the bytes follow the entry', () => {
     fs.writeFileSync(path.join(root, 'Conf1', 'Files', 'MOVE.LHA'), 'THE BYTES');
     fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), [dirLine('MOVE.LHA', '03-01-24'), dirLine('STAY.LHA', '04-01-24')].join('\n'));
     fs.writeFileSync(path.join(root, 'Conf2', 'DIR1'), dirLine('THERE.LHA', '01-01-20'));
+    // Each conference's icon declares its one file area (express.e 5006/15264).
+    for (const conf of ['Conf1', 'Conf2']) fs.writeFileSync(path.join(root, `${conf}.info`), 'NDIRS=1\n');
     setFileMaintenanceDependencies({ db: undefined, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
   });
 
@@ -209,6 +211,19 @@ describe('the bytes follow the entry', () => {
     expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).not.toContain('MOVE.LHA');
   });
 
+  it('moving a file out of Hold releases its catalog row', async () => {
+    const releaseFromHold = jest.fn();
+    setFileMaintenanceDependencies({ db: { releaseFromHold }, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
+    fs.mkdirSync(path.join(root, 'Conf1', 'HOLD'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Conf1', 'HOLD', 'HELD.LHA'), 'HELD BYTES');
+    fs.writeFileSync(path.join(root, 'Conf1', 'hold', 'held'), dirLine('HELD.LHA', '03-01-24'));
+    const c = caller();
+    const ctx = { ...context('HELD.LHA'), dirNum: -1, dirFilePath: path.join(root, 'Conf1', 'hold', 'held') };
+    await handler.performMove(c.socket, c.session, ctx, 1, 1);
+
+    expect(releaseFromHold).toHaveBeenCalledWith('HELD.LHA', 1);
+  });
+
   it('a file that is not there moves nothing, listings included', async () => {
     const c = caller();
     const before1 = fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1');
@@ -238,6 +253,7 @@ describe('FM works with the caller\'s own flagged files', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-flags-'));
     fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
     fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), dirLine('FLAGGED.LHA', '03-01-24'));
+    fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
     setFileMaintenanceDependencies({ db: undefined, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));

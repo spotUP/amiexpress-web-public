@@ -178,11 +178,17 @@ describe('Max Dirs Utility (Conference Directory Scanning)', () => {
     });
   });
 
+  // getMaxDirs answers what express.e reads: the NDIRS tooltype on the
+  // conference icon `<conferenceDir>.info` (express.e 5006, 15264
+  // maxDirs:=readToolTypeInt(...,'NDIRS')). DIR files on disk do not count.
   describe('getMaxDirs', () => {
-    it('should return count of DIR files', async () => {
+    const declare = (ndirs: string) => fs.writeFileSync(path.join(testBbsPath, 'Conf1.info'), `NDIRS=${ndirs}\n`);
+
+    it('should return the NDIRS the conference icon declares', async () => {
       fs.writeFileSync(path.join(confPath, 'DIR1'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR2'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR3'), 'files');
+      declare('3');
 
       const result = await getMaxDirs(1, testBbsPath);
 
@@ -201,36 +207,49 @@ describe('Max Dirs Utility (Conference Directory Scanning)', () => {
       expect(result).toBe(0);
     });
 
-    it('should count only numbered DIR files', async () => {
+    it('should return 0 when the icon has no NDIRS, whatever DIR files are on disk', async () => {
+      fs.writeFileSync(path.join(confPath, 'DIR1'), 'files');
+      fs.writeFileSync(path.join(confPath, 'DIR2'), 'files');
+      fs.writeFileSync(path.join(testBbsPath, 'Conf1.info'), 'REALNAME=1\n');
+
+      const result = await getMaxDirs(1, testBbsPath);
+
+      expect(result).toBe(0);
+    });
+
+    it('should not be raised by extra DIR files on disk', async () => {
       fs.writeFileSync(path.join(confPath, 'DIR1'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR2'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIRS'), 'files');
       fs.writeFileSync(path.join(confPath, 'README.txt'), 'files');
+      declare('2');
 
       const result = await getMaxDirs(1, testBbsPath);
 
       expect(result).toBe(2);
     });
 
-    it('should handle large numbers of DIR files', async () => {
+    it('should handle large NDIRS values', async () => {
       for (let i = 1; i <= 50; i++) {
         fs.writeFileSync(path.join(confPath, `DIR${i}`), 'files');
       }
+      declare('50');
 
       const result = await getMaxDirs(1, testBbsPath);
 
       expect(result).toBe(50);
     });
 
-    it('should count correctly with gaps in numbering', async () => {
+    it('should answer NDIRS, not the count or the highest number of the DIR files', async () => {
       fs.writeFileSync(path.join(confPath, 'DIR1'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR5'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR10'), 'files');
+      declare('2');
 
       const result = await getMaxDirs(1, testBbsPath);
 
-      expect(result).toBe(3); // Count is 3, not 10
+      expect(result).toBe(2); // Not 3 (files on disk), not 10 (highest number)
     });
   });
 
@@ -268,6 +287,7 @@ describe('Max Dirs Utility (Conference Directory Scanning)', () => {
       fs.writeFileSync(path.join(confPath, 'DIR2'), 'Uploads');
       fs.writeFileSync(path.join(confPath, 'DIR3'), 'Games');
       fs.writeFileSync(path.join(confPath, 'DIR4'), 'Utilities');
+      fs.writeFileSync(path.join(testBbsPath, 'Conf1.info'), 'NDIRS=4\n');
 
       const result = await getDirFiles(1, testBbsPath);
       const maxDirs = await getMaxDirs(1, testBbsPath);
@@ -310,12 +330,15 @@ describe('Max Dirs Utility (Conference Directory Scanning)', () => {
       // DIR2 was deleted but DIR1 and DIR3 remain
       fs.writeFileSync(path.join(confPath, 'DIR1'), 'files');
       fs.writeFileSync(path.join(confPath, 'DIR3'), 'files');
+      // The icon still declares three areas; a missing DIR file does not
+      // lower what express.e reads.
+      fs.writeFileSync(path.join(testBbsPath, 'Conf1.info'), 'NDIRS=3\n');
 
       const result = await getDirFiles(1, testBbsPath);
       const maxDirs = await getMaxDirs(1, testBbsPath);
 
       expect(result).toHaveLength(2);
-      expect(maxDirs).toBe(2); // Count is 2, not 3
+      expect(maxDirs).toBe(3); // The icon's NDIRS, not the 2 files on disk
       expect(result.map(d => d.index)).toEqual([1, 3]);
     });
   });

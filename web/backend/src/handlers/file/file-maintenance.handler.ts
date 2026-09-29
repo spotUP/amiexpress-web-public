@@ -941,6 +941,15 @@ console.log('[FM] Starting file maintenance');
     // Doors read from DIR files on disk, not from database
     // await this.moveDbEntry(session.currentConf || 1, currentFile.filename, destDir);
 
+    // Out of Hold is how a file is released: the catalog row stops saying 'hold'.
+    if (ctx.dirNum === -1) {
+      try {
+        _db?.releaseFromHold?.(currentFile.filename, session.currentConf || 1);
+      } catch (err) {
+        console.error(`[FM] released ${currentFile.filename} from Hold but could not update its catalog row:`, err);
+      }
+    }
+
     if (_callersLog) {
       _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Moved file', `${currentFile.filename} -> ${destDir}`, session.nodeId || 1);
     }

@@ -8,14 +8,6 @@
  * looks like: every by-name download of a pooled file would be quietly
  * classified as local and then not be found on disk.
  */
-jest.mock('../../src/services/FileAreaManager', () => ({
-  fileAreaManager: {
-    addFileEntry: jest.fn(),
-    updateFileEntry: jest.fn(),
-    deleteFileEntry: jest.fn(),
-    createAreaDirFile: jest.fn(),
-  },
-}));
 
 /** The board's `db` as the socket handler sees it: the lookup under test and inert writes. */
 const pooledRow = { id: 42, filename: 'POOLED.LHA', size: 7, downloads: 3, storageVolume: 2, objectKey: 'Conf1/Files/POOLED.LHA' };

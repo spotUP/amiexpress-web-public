@@ -2,13 +2,6 @@
  * File Repository Tests
  */
 
-jest.mock('../../src/services/FileAreaManager', () => ({
-  fileAreaManager: {
-    addFileEntry: jest.fn(),
-    updateFileEntry: jest.fn(),
-    removeFileEntry: jest.fn(),
-  }
-}));
 
 import { FileRepository } from '../../src/database/file-repository';
 
@@ -57,6 +50,26 @@ describe('FileRepository', () => {
 
   beforeEach(() => {
     rawDb.exec(`DELETE FROM file_entries WHERE uploader = 'testuser'`);
+  });
+
+  // A file released from Hold (FM Move out of dir -1) is active again; the
+  // row used to keep saying 'hold', so QuickNew (status 'active') never
+  // listed it (research 2026-09-29, admin file manager).
+  describe('releaseFromHold', () => {
+    it('makes a held file active again, whatever the name\'s case', async () => {
+      const entry = makeFileEntry({ filename: `held_${Date.now()}.lha`, status: 'hold' });
+      const id = await repo.createFileEntry(entry as any);
+      const areaConf = rawDb.prepare('SELECT conferenceid FROM file_areas WHERE id = ?').get(TEST_AREA_ID).conferenceid;
+
+      expect(repo.releaseFromHold(entry.filename.toUpperCase(), areaConf)).toBe(1);
+      expect(rawDb.prepare('SELECT status FROM file_entries WHERE id = ?').get(id).status).toBe('active');
+    });
+
+    it('leaves an active file, and another conference\'s held file, alone', async () => {
+      const held = makeFileEntry({ filename: `other_${Date.now()}.lha`, status: 'hold' });
+      await repo.createFileEntry(held as any);
+      expect(repo.releaseFromHold(held.filename, 99999)).toBe(0);
+    });
   });
 
   describe('createFileEntry', () => {

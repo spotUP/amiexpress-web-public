@@ -107,6 +107,8 @@ beforeAll(() => {
   // ConfConfig.info, so conferenceDir() falls back to Conf<n> (its documented
   // default for a board that has never been renumbered).
   fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
+  // The icon declares the one file area (express.e 5006/15264 read NDIRS).
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
   fs.writeFileSync(
     path.join(root, 'Conf1', 'DIR1'),
     [dirLine('CHASE.LHA', 'A demo'), dirLine('SCOOPEX.LHA', 'Another one'), ''].join('\r\n'),
@@ -189,6 +191,11 @@ function teletextSession(commandText: string): any {
   };
 }
 
+/*
+ * F and FR are sent with `A`: a bare F asks "Directories: ..." first, as
+ * express.e's getDirSpan('') does (27647, eed158efe); this file is about which
+ * handler a forty-column caller reaches, not that prompt.
+ */
 describe('a 40-column caller who types FR gets the file list', () => {
   beforeEach(async () => {
     await register(doorOver('FR'));
@@ -196,7 +203,7 @@ describe('a 40-column caller who types FR gets the file list', () => {
 
   it('receives the listing, not THIS DOOR NEEDS AN 80 COLUMN SCREEN', async () => {
     const socket = makeSocket();
-    await handleCommand(socket as any, c64Session('FR'), '');
+    await handleCommand(socket as any, c64Session('FR A'), '');
 
     const out = allOutput(socket);
     expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
@@ -214,7 +221,7 @@ describe('a 40-column caller who types FR gets the file list', () => {
 
   it('refuses the door for a TELETEXT caller too, and falls through', async () => {
     const socket = makeSocket();
-    await handleCommand(socket as any, teletextSession('FR'), '');
+    await handleCommand(socket as any, teletextSession('FR A'), '');
 
     const out = allOutput(socket);
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
@@ -232,7 +239,7 @@ describe('a 40-column caller who types FR gets the file list', () => {
      */
     await register(doorOver('FR', { C64_ADAPT: '40', MIN_COLUMNS: '80' }));
     const socket = makeSocket();
-    await handleCommand(socket as any, teletextSession('FR'), '');
+    await handleCommand(socket as any, teletextSession('FR A'), '');
 
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
     expect(allOutput(socket)).toContain('Reverse scanning directory 1');
@@ -259,7 +266,7 @@ describe('a 40-column caller who types FR gets the file list', () => {
   it('and the teletext caller skips that same door', async () => {
     await register({ ...doorOver('FR', { C64_ADAPT: '40', MIN_COLUMNS: '80' }), type: 'XIM' });
     const socket = makeSocket();
-    await handleCommand(socket as any, teletextSession('FR'), '');
+    await handleCommand(socket as any, teletextSession('FR A'), '');
 
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
     expect(allOutput(socket)).toContain('Reverse scanning directory 1');
@@ -284,7 +291,7 @@ describe('a 40-column caller who types F gets the file list', () => {
   it('reaches the internal F handler the same way FR does', async () => {
     await register(doorOver('F'));
     const socket = makeSocket();
-    await handleCommand(socket as any, c64Session('F'), '');
+    await handleCommand(socket as any, c64Session('F A'), '');
 
     const out = allOutput(socket);
     expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');

@@ -43,6 +43,8 @@ beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'diz-colour-'));
   fs.mkdirSync(path.join(tmp, 'Conf1'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'Conf1', 'DIR1'), DIR, 'binary');
+  // The icon declares the one file area (express.e 5006/15264 read NDIRS).
+  fs.writeFileSync(path.join(tmp, 'Conf1.info'), 'NDIRS=1\n');
   previousDataDir = config.get('dataDir');
   config.set('dataDir', tmp);
   resetFileViewLayoutCache();

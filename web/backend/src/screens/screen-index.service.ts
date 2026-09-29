@@ -32,7 +32,7 @@ import { parseMciReferences, type MciReference } from './mci-references';
 import { mciGateOpen, screenIsProgram } from './screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { BBSPaths } from '../utils/bbs-paths.util';
-import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
+import { conferenceDir, conferenceNumbers, conferenceNdirs } from '../conferences/conference-paths';
 import { readThemeRegistry, themeDirectory } from './theme-registry';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
@@ -1114,10 +1114,7 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
 
     // NDIRS is the count express.e reads; neither the areas nor the message
     // bases carry names on this board, so the count is the honest answer.
-    let fileAreas = 0;
-    try {
-      fileAreas = parseInt(fs.readFileSync(path.join(dir, 'NDIRS'), 'latin1').trim(), 10) || 0;
-    } catch { /* a conference with no NDIRS declares none */ }
+    const fileAreas = conferenceNdirs(baseDir, id);
 
     let messageBases = 0;
     try {

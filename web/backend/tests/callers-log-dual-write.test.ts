@@ -25,9 +25,6 @@ const logActivity = jest.fn();
 jest.mock('../src/services/CallersLogManager', () => ({
   callersLogManager: { logActivity: (...args: unknown[]) => logActivity(...args) },
 }));
-jest.mock('../src/services/FileAreaManager', () => ({
-  fileAreaManager: { deleteFileEntry: jest.fn() },
-}));
 jest.mock('../src/services/custom-msgbase', () => ({
   MailFunction: { READ: 1, CREATE: 2, SCAN: 3, STATS: 4, SYSOP_COMMENT: 6, ZOOM: 7 },
   runCustomMsgbaseCommand: jest.fn(async () => true),

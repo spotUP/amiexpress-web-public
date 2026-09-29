@@ -129,6 +129,9 @@ describe('the download screen (express.e:19966-19971)', () => {
     // so the command is left waiting at that pause and the screen is read
     // off the wire before it.
     write('Conf1/DownloadMsg.txt', 'THE DOWNLOAD SCREEN\r\n');
+    // D refuses a conference with no file areas before the screen
+    // (express.e:19961 maxDirs=0); the icon declares one (NDIRS, 5006/15264).
+    fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
     const { DownloadHandler } = require('../../src/handlers/file/download.handler');
     const emits: Array<{ event: string; data: any }> = [];
 
@@ -204,7 +207,8 @@ describe('the file-listing help screen (express.e:27646)', () => {
   it('is shown for a bare F, and not when the caller named a directory', async () => {
     write('Conf1/FileHelp.txt', 'HOW THE FILE LISTS WORK\r\n');
     write('Conf1/DIR1', 'DEMO.LHA      1024  01-01-26  a file\r\n');
-    fs.writeFileSync(path.join(root, 'Conf1.info'), '');
+    // The icon declares the one file area (express.e 5006/15264 read NDIRS).
+    fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
 
     const { FileListingHandler } = require('../../src/handlers/file/file-listing.handler');
 

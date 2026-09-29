@@ -79,6 +79,8 @@ beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-art-crop-'));
   fs.mkdirSync(path.join(tmp, 'Conf1'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'Conf1', 'Dir1'), DIR_LINES.join('\n'), 'binary');
+  // The icon declares the one file area (express.e 5006/15264 read NDIRS).
+  fs.writeFileSync(path.join(tmp, 'Conf1.info'), 'NDIRS=1\n');
   config.set('dataDir', tmp);
 });
 

@@ -6,13 +6,6 @@ jest.mock('../../../src/utils/max-dirs.util', () => ({
   getDirFiles: jest.fn().mockResolvedValue([]),
 }));
 
-// Mock fileAreaManager so DownloadHandler.beginDLF doesn't bail out on
-// "no file directories" before the flagged-files block runs.
-jest.mock('../../../src/services/FileAreaManager', () => ({
-  fileAreaManager: {
-    getAreasForConference: jest.fn().mockReturnValue([{ id: 1, name: 'AREA1', conferenceid: 1 }]),
-  },
-}));
 
 // Mock the screen handler so we can assert displayScreen() is called with
 // silent=true for optional screens (DOWNLOAD), and skip its IO.
