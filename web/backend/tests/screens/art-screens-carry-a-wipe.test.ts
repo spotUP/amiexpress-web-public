@@ -91,13 +91,6 @@ const EXEMPTIONS: Exemption[] = [
     reason: 'logoff screen - shown as the session ends, and reached by ~3SR_',
   },
   {
-    // Displayed by a 68K door through the XIM JH_SF file path
-    // (amiga-emulation/xim/io-file-display.ts): it parses MCI but has no
-    // wipe stage, so a code would be printed literally mid-door.
-    match: /^(Conf\d+\/(uploadmsg|downloadmsg|bull20|-?filehelp)\.txt|Conf\d+\/Screens\/[Cc]allers!?\.txt)$/,
-    reason: 'displayed by a 68K door through the XIM file path - no wipe stage there',
-  },
-  {
     // Bulletins/ holds bulletin DATA, not screens: no screen name resolves
     // into it (screen.handler.ts:1108 excludes it from the BULL search on
     // purpose), it is reached only through `~SS_BBS:bulletins/...`, and
@@ -125,8 +118,17 @@ const EXEMPTIONS: Exemption[] = [
   },
 ];
 
-/** Where a screen can live: `Screens/`, `Bulletins/`, and any `ConfN`/`NodeN`. */
-const SCREEN_ROOT_RE = /^(Screens|Bulletins|Conf\d+|Node\d+)\//;
+/**
+ * Where a screen can live: `Screens/`, `Bulletins/`, any `ConfN`/`NodeN`, and
+ * every theme the board offers (`Themes/<name>/`; a theme renamed
+ * `*.removed-<date>` is retired and not served).
+ *
+ * A door showing one of these files (the XIM JH_SF path) does not print the
+ * code - parseMciCodes drops it (jh-sf-sync-fastpath.test.ts) - so screens a
+ * door can show are held to the rule too ("many screens are missing the
+ * random wipe mci ... upload has none", sysop 2026-09-29).
+ */
+const SCREEN_ROOT_RE = /^(Screens|Bulletins|Conf\d+|Node\d+|Themes\/(?![^/]*\.removed-)[^/]+)\//;
 
 /**
  * Every ANSI text screen the board SHIPS, repo-relative, sorted.

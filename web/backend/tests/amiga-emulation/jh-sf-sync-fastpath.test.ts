@@ -169,6 +169,20 @@ describe('XIMIOHandler sync fast path: emit lands before Promise resolves', () =
     expect(emits[0][0]).toBe('ansi-output');
   });
 
+  test('handleShowFile: a screen\'s wipe code is not printed by a door', async () => {
+    // A door shows a board screen (Conf<n>/uploadmsg.txt) that carries `~WX`
+    // for displayScreen's wipe. This path has no wipe: parseMciCodes drops the
+    // code and the file paints plainly. Pinned because the wipe-coverage test
+    // used to exempt door-shown screens on the belief that it printed.
+    const wiped = path.join(tmpDir, 'wiped.txt');
+    fs.writeFileSync(wiped, '~WX\n~f|\nTHE UPLOAD ART\n', 'binary');
+    const { handler, emits } = buildHandler();
+    await handler.handleShowFile(buildMsg(wiped));
+    const shown = emits.filter(([ev]) => ev === 'ansi-output').map(([, p]) => p).join('');
+    expect(shown).toContain('THE UPLOAD ART');
+    expect(shown).not.toMatch(/~W/);
+  });
+
   test('handleDisplayFileNonStop: sync emit (forwards to handleShowFile)', () => {
     const { handler, emits, emitOrder } = buildHandler();
     const promise = handler.handleDisplayFileNonStop(buildMsg(tmpFile));
