@@ -1062,6 +1062,11 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/mismatches`);
   }
 
+  async deleteUnlistedFile(conf: number, folder: string, filename: string) {
+    const query = new URLSearchParams({ folder, name: filename });
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/unlisted?${query}`, { method: 'DELETE' });
+  }
+
   // Computer Types
   async getComputerTypes() {
     return this.request<ApiResponse>(`${API_BASE}/config/computers`);

@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { setStorageContext } from '../../src/storage/storage-context';
-import { deleteEntry, descriptionLinesOf, findEntryLines, listEntries, moveEntry } from '../../src/services/file-list.service';
+import { deleteEntry, deleteUnlisted, descriptionLinesOf, findEntryLines, listEntries, moveEntry } from '../../src/services/file-list.service';
 
 const line = (name: string, date: string, desc = 'a file') => `${name.padEnd(12)} N  123456  ${date}  ${desc}`;
 const more = (text: string) => `${' '.repeat(33)}${text}`;
@@ -86,4 +86,15 @@ test('a delete removes every copy of the file, in any case, and says when there 
   const missing = await deleteEntry(ctx(), 1, 1, 'KEEP.LHA');
   expect(missing.bytesError).toMatch(/not found/);
   expect(read('Conf1/DIR1')).not.toContain('KEEP.LHA');
+});
+
+test('a file no list names can be purged; a listed file or a path outside the folders cannot', async () => {
+  fs.writeFileSync(path.join(root, 'Conf1', 'Files', 'TEST.LHA'), 'BROKEN UPLOAD');
+  await deleteUnlisted(ctx(), 1, path.join('Conf1', 'Files'), 'TEST.LHA');
+  expect(fs.existsSync(path.join(root, 'Conf1', 'Files', 'TEST.LHA'))).toBe(false);
+
+  await expect(deleteUnlisted(ctx(), 1, path.join('Conf1', 'Files'), 'OLD.LHA')).rejects.toThrow(/not found/);
+  expect(fs.existsSync(path.join(root, 'Conf1', 'Files', 'OLD.LHA'))).toBe(true);
+  await expect(deleteUnlisted(ctx(), 1, 'Conf1', 'DIR1')).rejects.toThrow(/not found/);
+  expect(fs.existsSync(path.join(root, 'Conf1', 'DIR1'))).toBe(true);
 });

@@ -629,6 +629,14 @@ export async function mismatches(ctx: FileListContext, conf: number): Promise<Mi
     }
   }
   const conferencePath = getConferenceDir(conf, ctx.dataDir);
+  // A DIRn file past NDIRS (or an icon whose NDIRS cannot be read) still
+  // names its files: they are not stray uploads, and the purge below must
+  // never be offered them.
+  for (const name of fs.existsSync(conferencePath) ? fs.readdirSync(conferencePath) : []) {
+    const n = /^DIR(\d+)$/i.exec(name);
+    if (!n || dirs.includes(Number(n[1]))) continue;
+    for (const entry of await listEntries(ctx, conf, Number(n[1]))) listed.add(entry.filename.trim().toUpperCase());
+  }
   const folders = new Set<string>([
     ...conferenceDownloadDirs(ctx.dataDir, conf),
     ...conferenceUploadDirs(ctx.dataDir, conf),
@@ -649,4 +657,18 @@ export async function mismatches(ctx: FileListContext, conf: number): Promise<Mi
     }
   }
   return { unlisted, missing };
+}
+
+/**
+ * Delete a file no listing names (the admin page's "Files no list names").
+ * Only a file `mismatches` reports right now is removed: a name the sysop
+ * saw minutes ago may have been filed since, and the folder is taken from
+ * that report, never from the request, so no path outside the conference's
+ * own folders can be reached.
+ */
+export async function deleteUnlisted(ctx: FileListContext, conf: number, folder: string, filename: string): Promise<void> {
+  const target = (await mismatches(ctx, conf)).unlisted.find((u) => u.folder === folder && u.filename === filename);
+  if (!target) throw new Error(`${folder}/${filename} is not found among this conference's unlisted files`);
+  await fsp.unlink(path.join(ctx.dataDir, target.folder, target.filename));
+  forgetDirectoryListings();
 }

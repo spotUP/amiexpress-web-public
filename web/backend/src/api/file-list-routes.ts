@@ -15,8 +15,10 @@ import { conferenceNumbers, conferenceNdirs } from '../conferences/conference-pa
 import { loadConfConfig } from '../services/conf-config.service';
 import {
   bytesLocation,
+  dateCompareValue,
   descriptionLinesOf,
   deleteEntry,
+  deleteUnlisted,
   listEntries,
   mismatches,
   moveEntry,
@@ -74,6 +76,8 @@ export function createFileListRouter(db?: unknown): express.Router {
           marker: entry.statusMarker,
           size: entry.fileSize,
           date: entry.uploadDateDisplay,
+          // yyyymmdd, so the page can sort by date across the century
+          dateValue: dateCompareValue(entry.uploadDateDisplay),
           description: descriptionLinesOf(entry),
           bytes: await bytesLocation(ctx(), conf, dir, filename),
         });
@@ -120,6 +124,19 @@ export function createFileListRouter(db?: unknown): express.Router {
   router.get('/conferences/:conf/mismatches', async (req: Request, res: Response) => {
     try {
       ok(res, await mismatches(ctx(), num(req.params.conf, 'conf')));
+    } catch (error) {
+      fail(res, error);
+    }
+  });
+
+  /** Delete a file no listing names; folder and filename as the mismatch report gave them. */
+  router.delete('/conferences/:conf/unlisted', async (req: Request, res: Response) => {
+    try {
+      const folder = req.query.folder;
+      const filename = req.query.name;
+      if (typeof folder !== 'string' || typeof filename !== 'string') throw new Error('folder and name must be given');
+      await deleteUnlisted(ctx(), num(req.params.conf, 'conf'), folder, filename);
+      ok(res, null, 'Deleted');
     } catch (error) {
       fail(res, error);
     }
