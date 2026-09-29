@@ -85,7 +85,7 @@ describe('FI <n>, after a listing', () => {
     const wire: string[] = [];
     const socket = makeSocket(session, wire);
 
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     wire.length = 0;                      // only what FI emits
     await FileListingHandler.handleFileInfoCommand(socket, session, '2');
 
@@ -100,7 +100,7 @@ describe('FI <n>, after a listing', () => {
     const wire: string[] = [];
     const socket = makeSocket(session, wire);
 
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     const listed = glass(wire.join(''));
     expect(listed).not.toContain('A door from the Outlaws');   // not in a list row
 
@@ -114,7 +114,7 @@ describe('FI <n>, after a listing', () => {
     const wire: string[] = [];
     const socket = makeSocket(session, wire);
 
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     wire.length = 0;
     await FileListingHandler.handleFileInfoCommand(socket, session, '99');
     expect(glass(wire.join(''))).toMatch(/No file 99/);
@@ -135,8 +135,8 @@ describe('FI <n>, after a listing', () => {
     const wire: string[] = [];
     const socket = makeSocket(session, wire);
 
-    await FileListingHandler.handleFileList(socket, session, '', false);
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     expect(FileListingHandler.listedRecord(session, 1)?.filename).toBe('OTL-DOOR.LHA');
     expect(FileListingHandler.listedRecord(session, 3)).toBeNull();
   });
@@ -145,7 +145,7 @@ describe('FI <n>, after a listing', () => {
     const session = makeSession();
     const wire: string[] = [];
     const socket = makeSocket(session, wire);
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     wire.length = 0;
     await FileListingHandler.handleFileInfoCommand(socket, session, '1');
     expect(wire.join('')).not.toMatch(/~[A-Za-z0-9_]*\|/);
@@ -177,7 +177,7 @@ describe('FI reaches its handler from a typed command', () => {
     // Populate the pass memory the way a listing does, then clear the pause it
     // leaves armed - a real caller presses a key there, and without that the
     // dispatcher reads `FI 1` as the keypress rather than as a command.
-    await FileListingHandler.handleFileList(socket, session, '', false);
+    await FileListingHandler.handleFileList(socket, session, 'A', false);
     session.menuPause = false;
     session.subState = LoggedOnSubState.PROCESS_COMMAND;
     (session as any).flagPauseHandler = undefined;

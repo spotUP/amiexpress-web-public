@@ -76,7 +76,7 @@ async function wireFor(width: number): Promise<string> {
     on: () => socket, once: () => socket, off: () => socket,
     removeListener: () => socket, removeAllListeners: () => socket,
   };
-  await FileListingHandler.handleFileList(socket, session, '', false);
+  await FileListingHandler.handleFileList(socket, session, 'A', false);
   return wire.join('');
 }
 

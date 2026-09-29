@@ -75,12 +75,11 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
         await displayScreen(socket, session, 'FILEHELP', true, true);
       } catch { /* a screen the conference does not have is not an error */ }
 
-      // Default to entire conference directories when no params provided
-      dirSpan = {
-        startDir: 1,
-        endDir: maxDirs,
-        success: true
-      };
+      // express.e:27647 getDirSpan('') - ask which directories (26862-26869).
+      socket.emit('ansi-output', getDirSpanPrompt(maxDirs, this.canAccessHold(session)));
+      session.tempData = { ...(session.tempData || {}), fileListParams: { reverse, hasNonStop } };
+      session.subState = LoggedOnSubState.FILE_LIST_DIR_INPUT;
+      return;
     }
 
     // Check if directory parse was successful
@@ -123,6 +122,12 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
 
     // Add line break after directory input
     socket.emit('ansi-output', '\r\n');
+
+    // express.e:26871-26874 Enter = none: a blank line and back to the menu.
+    if (!input.trim()) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
 
     // Parse directory span
     const dirSpan = parseDirSpan(input, maxDirs, this.canAccessHold(session));

@@ -260,6 +260,7 @@ describe('the line-prompt table is the one declaration', () => {
   it('lists the prompts express.e reads with lineInput()', () => {
     expect([...LINE_PROMPT_SUBSTATES.keys()].sort()).toEqual(
       [
+        LoggedOnSubState.FILE_LIST_DIR_INPUT,
         LoggedOnSubState.UPLOAD_FILENAME_INPUT,
         LoggedOnSubState.VIEW_FILE_INPUT,
         LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT,

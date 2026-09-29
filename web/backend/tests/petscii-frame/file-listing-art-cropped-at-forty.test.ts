@@ -135,7 +135,7 @@ async function runEightyColumnList(session: any): Promise<string[]> {
     on: () => socket, once: () => socket, off: () => socket,
     removeListener: () => socket, removeAllListeners: () => socket,
   };
-  await FileListingHandler.handleFileList(socket, session, '', true);
+  await FileListingHandler.handleFileList(socket, session, 'A', true);
   return wire;
 }
 

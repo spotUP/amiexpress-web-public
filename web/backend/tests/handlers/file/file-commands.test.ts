@@ -266,7 +266,32 @@ describe('FileListingHandler.handleFileList — with file areas', () => {
     const socket = makeSocket();
     const session = makeFileListSession();
     // getDirFiles returns [] so no actual files to list — still sets DISPLAY_MENU
+    await FileListingHandler.handleFileList(socket, session, 'A');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  // express.e:27647 -> getDirSpan('') 26862-26874. The port listed every
+  // directory on a bare F and never asked (parity survey, 2026-09-29).
+  test('bare F asks which directories, and waits for the answer', async () => {
+    const socket = makeSocket();
+    const session = makeFileListSession();
     await FileListingHandler.handleFileList(socket, session, '');
+    const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
+    expect(said.replace(/\x1b\[[0-9;]*m/g, '')).toContain('Directories: (1-3), (A)ll, (U)pload, ');
+    expect(session.subState).toBe(LoggedOnSubState.FILE_LIST_DIR_INPUT);
+
+    await FileListingHandler.handleFileListDirInput(socket, session, 'A');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  test('Enter at the directory prompt lists nothing and goes back to the menu', async () => {
+    const socket = makeSocket();
+    const session = makeFileListSession();
+    await FileListingHandler.handleFileList(socket, session, '');
+    socket.emit.mockClear();
+    await FileListingHandler.handleFileListDirInput(socket, session, '');
+    const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
+    expect(said).toBe('\r\n');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 

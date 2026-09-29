@@ -203,10 +203,6 @@ export async function collectLine(
  * `lineInput()`. A `readChar()` / `yesNo()` prompt - one key, no Enter - must
  * NOT be listed, or the caller would have to press Return after Y.
  *
- * Not listed, deliberately: FILE_LIST_DIR_INPUT. It has the same shape and
- * the same fault, but nothing in the tree assigns it, so there is no path
- * that could prove an entry for it right. Give it a setter and add it here in
- * the same change.
  */
 export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new Map<string, LineInputOptions>([
   // express.e:26151 - lineInput('','',78,...) "Enter string to search for: ".
@@ -216,6 +212,8 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   // spans ("1-3"), not single keys, and handleDirSpanInput emits its own
   // newline on both the cancel and the search path.
   [LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT, { maxLen: 8 }],
+  // The same getDirSpan prompt, asked by a bare F (express.e:27647).
+  [LoggedOnSubState.FILE_LIST_DIR_INPUT, { maxLen: 8 }],
   // express.e:20414 - lineInput('','',40,...) "Enter filename of file to view?"
   // handleFilenameInput emits express.e:20418's newline when the line is empty.
   [LoggedOnSubState.VIEW_FILE_INPUT, { maxLen: 40 }],
