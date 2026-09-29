@@ -22,6 +22,7 @@ import { NodesPage } from './NodesPage';
 import { ConferencesPage } from './ConferencesPage';
 import { AccessAreasPage } from './AccessAreasPage';
 import { DrivesPage } from './DrivesPage';
+import { FileListsPage } from './FileListsPage';
 import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
 import { ArtistStudioPage } from './ArtistStudioPage';
@@ -56,6 +57,9 @@ export function NodesWorkspace() {
 const CONFERENCE_TABS: TabDefinition[] = [
   { id: 'conferences', label: 'Conferences', render: () => <ConferencesPage /> },
   { id: 'file-areas', label: 'File areas', render: () => <DrivesPage /> },
+  // The files themselves: each directory's list, Hold, and where the lists
+  // and the folders disagree (admin file-manager plan, P3).
+  { id: 'file-lists', label: 'File lists', render: () => <FileListsPage /> },
   // Who may JOIN which conference, which is a different question from what the
   // conference is - and one nothing in the admin could answer before.
   { id: 'access-areas', label: 'Access areas', render: () => <AccessAreasPage /> },

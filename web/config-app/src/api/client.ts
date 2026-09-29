@@ -1015,6 +1015,40 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/config/drives/${driveNumber}/contents`);
   }
 
+  // File lists - the admin file manager (/api/files, backend api/file-list-routes.ts)
+  async getFileListConferences() {
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences`);
+  }
+
+  async getFileListEntries(conf: number, dir: number) {
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/dirs/${dir}/entries`);
+  }
+
+  async updateFileListDescription(conf: number, dir: number, filename: string, description: string[]) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/files/conferences/${conf}/dirs/${dir}/entries/${encodeURIComponent(filename)}`,
+      { method: 'PATCH', body: JSON.stringify({ description }) },
+    );
+  }
+
+  async moveFileListEntry(conf: number, dir: number, filename: string, toConf: number, toDir: number) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/files/conferences/${conf}/dirs/${dir}/entries/${encodeURIComponent(filename)}/move`,
+      { method: 'POST', body: JSON.stringify({ toConf, toDir }) },
+    );
+  }
+
+  async deleteFileListEntry(conf: number, dir: number, filename: string) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/files/conferences/${conf}/dirs/${dir}/entries/${encodeURIComponent(filename)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async getFileListMismatches(conf: number) {
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/mismatches`);
+  }
+
   // Computer Types
   async getComputerTypes() {
     return this.request<ApiResponse>(`${API_BASE}/config/computers`);
