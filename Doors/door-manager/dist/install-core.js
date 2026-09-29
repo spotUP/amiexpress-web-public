@@ -55,6 +55,7 @@ exports.installConsumerDoor = installConsumerDoor;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const archive_command_1 = require("./archive-command");
+const archive_layout_1 = require("./archive-layout");
 /**
  * The backend's shared archive extractor, if it is loaded in this process.
  *
@@ -211,6 +212,151 @@ function renameInstallDir(installDir, command) {
         return null;
     }
 }
+/** Where a command's icon belongs on the board. */
+function commandIconDir(bbsRoot, kind) {
+    return path.join(bbsRoot, 'Commands', kind);
+}
+/**
+ * Install an archive that is an overlay of the BBS (see archive-layout.ts):
+ * its Doors/<Name>/ goes to BBS:Doors/<Name>/ under the author's own name,
+ * every command icon in it to its own Commands directory, byte for byte.
+ * That is what the author's install text asks the sysop to do by hand, and
+ * it is what makes the icon's LOCATION true.
+ *
+ * Returns null when the archive is not an overlay (the caller carries on with
+ * the flat install). Otherwise the whole outcome - and a door whose binary is
+ * not there when it is done is a FAILED install that leaves nothing behind,
+ * not a success the sysop finds out about at the first run.
+ */
+async function installOverlayDoor(installDir, doorType, fileCount, deps, archiveName, steps) {
+    if (!fs.existsSync(installDir))
+        return null; // nothing extracted to look at
+    const bbsRoot = path.resolve(installDir, '..', '..');
+    // Out of the way first: the archive's own Doors/<Name> may be called
+    // exactly what the caller named this directory.
+    const staging = `${installDir}.staging`;
+    fs.rmSync(staging, { recursive: true, force: true });
+    fs.renameSync(installDir, staging);
+    let overlay = null;
+    try {
+        overlay = (0, archive_layout_1.findOverlay)(staging);
+        if (overlay && !overlay.commands.some((c) => (0, archive_layout_1.overlayBinaryFor)(overlay, c)))
+            overlay = null;
+    }
+    finally {
+        if (!overlay)
+            fs.renameSync(staging, installDir);
+    }
+    if (!overlay)
+        return null;
+    const fail = (step, detail) => {
+        steps.push({ kind: 'fail', text: detail });
+        return { ok: false, step, detail, steps };
+    };
+    const movedDirs = [];
+    const copiedInfos = [];
+    const rollBack = () => {
+        for (const info of copiedInfos)
+            fs.rmSync(info, { force: true });
+        for (const dir of movedDirs)
+            fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(staging, { recursive: true, force: true });
+    };
+    try {
+        const doorsRoot = path.join(bbsRoot, 'Doors');
+        for (const dir of overlay.doorDirs) {
+            const target = path.join(doorsRoot, path.basename(dir));
+            if (fs.existsSync(target)) {
+                fs.rmSync(staging, { recursive: true, force: true });
+                return fail('conflict', `Doors/${path.basename(dir)} already exists - not overwritten`);
+            }
+        }
+        for (const dir of overlay.doorDirs) {
+            const target = path.join(doorsRoot, path.basename(dir));
+            fs.renameSync(dir, target);
+            movedDirs.push(target);
+            steps.push({ kind: 'ok', text: `Doors/${path.basename(dir)}/ installed under the archive's own name` });
+        }
+        const installed = [];
+        for (const command of overlay.commands) {
+            const dir = commandIconDir(bbsRoot, command.kind);
+            const target = path.join(dir, `${command.command}.info`);
+            if (fs.existsSync(target)) {
+                steps.push({ kind: 'skip', text: `Commands/${command.kind}/${command.command}.info already exists - kept` });
+                continue;
+            }
+            fs.mkdirSync(dir, { recursive: true });
+            fs.copyFileSync(command.infoPath, target);
+            copiedInfos.push(target);
+            installed.push({ ...command, infoPath: target });
+            steps.push({ kind: 'ok', text: `installed Commands/${command.kind}/${command.command}.info` });
+        }
+        if (installed.length === 0) {
+            rollBack();
+            return fail('conflict', 'every command this archive installs already exists - nothing installed');
+        }
+        // Every icon has to lead to a program that is there.
+        const good = [];
+        let firstBinary = null;
+        let firstDoorDir = null;
+        let firstType = null;
+        for (const command of installed) {
+            const location = (0, archive_layout_1.readTooltype)(command.infoPath, 'LOCATION');
+            const rel = location ? (0, archive_layout_1.locationUnderDoors)(location) : null;
+            if (!rel) {
+                fs.rmSync(command.infoPath, { force: true });
+                steps.push({ kind: 'skip', text: `${command.command}.info has no usable LOCATION - not installed` });
+                continue;
+            }
+            let found = (0, archive_layout_1.resolveInsensitive)(doorsRoot, rel);
+            if (!found) {
+                const dir = (0, archive_layout_1.resolveInsensitive)(doorsRoot, path.posix.dirname(rel));
+                const variant = dir ? (0, archive_layout_1.cpuVariantOf)(dir, path.posix.basename(rel)) : null;
+                if (dir && variant) {
+                    fs.copyFileSync(path.join(dir, variant), path.join(dir, path.posix.basename(rel)));
+                    found = path.join(dir, path.posix.basename(rel));
+                    steps.push({ kind: 'ok', text: `${path.posix.basename(rel)} is ${variant}, the build for every 68000` });
+                }
+            }
+            if (!found) {
+                // One icon that leads nowhere does not sink the others; it is not
+                // installed, and the log says so.
+                fs.rmSync(command.infoPath, { force: true });
+                steps.push({ kind: 'skip', text: `${command.command}.info points at Doors:${rel}, which the archive does not contain - not installed` });
+                continue;
+            }
+            good.push(command);
+            firstBinary ?? (firstBinary = rel);
+            firstDoorDir ?? (firstDoorDir = rel.split('/')[0]);
+            firstType ?? (firstType = (0, archive_layout_1.readTooltype)(command.infoPath, 'TYPE'));
+        }
+        fs.rmSync(staging, { recursive: true, force: true });
+        const primary = good.find((c) => c.kind === 'BBSCmd') ?? good[0];
+        const extras = good.filter((c) => c !== primary || c.kind !== 'BBSCmd').map((c) => c.infoPath);
+        try {
+            deps.recordInstall(primary.command, `Doors/${firstDoorDir}`, archiveName, extras);
+            steps.push({ kind: 'ok', text: `recorded the install as ${primary.command}` });
+        }
+        catch (err) {
+            steps.push({ kind: 'skip', text: `install record not written: ${err?.message ?? err}` });
+            console.log(`[DOORMAN] install failed: record-install: ${err?.message ?? err}`);
+        }
+        if (await deps.refreshDoorRegistry()) {
+            steps.push({ kind: 'ok', text: 'door registry reloaded' });
+        }
+        else {
+            steps.push({ kind: 'skip', text: 'registry refresh unavailable - the door is hidden until the BBS restarts' });
+        }
+        return {
+            ok: true, doorType: (firstType || doorType || 'XIM').toUpperCase(), fileCount,
+            binaryRel: firstBinary, steps,
+        };
+    }
+    catch (err) {
+        rollBack();
+        return fail('overlay', err?.message ?? String(err));
+    }
+}
 async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorType, binaryName, finalCmd, deps, archiveName) {
     const steps = [];
     let command = finalCmd;
@@ -222,6 +368,10 @@ async function extractAndRegisterDoor(archivePath, installDir, infoPath, doorTyp
         return { ok: false, step: 'extract', detail: result.error ?? 'unknown error', steps };
     }
     steps.push({ kind: 'ok', text: `extracted ${result.fileCount} files to ${installDir}` });
+    // An archive that is an overlay of the BBS installs as one.
+    const overlayOutcome = await installOverlayDoor(installDir, doorType, result.fileCount, deps, archiveName, steps);
+    if (overlayOutcome)
+        return overlayOutcome;
     // The archive names its own command. An AmiExpress door ships
     // Commands/BBSCmd/<COMMAND>.info, and that file carries the tooltypes the
     // door was built with - TYPE, LOCATION, STACK, PRIORITY, NAME. Asking the
@@ -360,7 +510,7 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
             findExtractedBinary: deps.findExtractedBinary,
             writeInfoFile: deps.writeInfoFile,
             refreshDoorRegistry: deps.refreshDoorRegistry,
-            recordInstall: (installedCmd, installedDir, archive) => {
+            recordInstall: (installedCmd, installedDir, archive, extraFiles) => {
                 // installedCmd, not finalCmd: the archive may name its own command,
                 // and the record has to describe what is actually on disk.
                 if (commandClaimedByOtherArchive(deps.getInstallByCommand, installedCmd, archive))
@@ -380,6 +530,7 @@ async function installConsumerDoor(cfg, archiveName, doorType, binaryName, final
                     release_group: manifestRow.releaseGroup ?? null,
                     source_url: cfg.url, // the resolved URL actually used, not the possibly-unset raw env var
                     source_revision: manifest.revision ?? null, // the revision this install actually came from
+                    extra_files: extraFiles,
                 });
                 registeredLocally = true;
             },

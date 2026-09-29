@@ -1134,7 +1134,7 @@ class RepoView extends ViewManager_1.BaseView {
                             writeInfoFile: (p, c) => fs.writeFileSync(p, c, 'latin1'),
                             // Same door_installs shape + collision guard as consumer
                             // mode, using the real local catalog row's id (e.id).
-                            recordInstall: (installedCmd, installedDir, archive) => {
+                            recordInstall: (installedCmd, installedDir, archive, extraFiles) => {
                                 // The archive's own command wins, so record that one.
                                 const chk = (cmd) => (0, doorman_services_1.getInstallsRepo)()?.getInstallByCommand(cmd) ?? null;
                                 if ((0, install_core_2.commandClaimedByOtherArchive)(chk, installedCmd, archive))
@@ -1154,6 +1154,7 @@ class RepoView extends ViewManager_1.BaseView {
                                     release_group: e.release_group ?? null,
                                     source_url: null, // resolved from this BBS's own local archive corpus, not the central repo
                                     source_revision: null,
+                                    extra_files: extraFiles,
                                 });
                             },
                             refreshDoorRegistry: ViewManager_1.refreshDoorRegistry,

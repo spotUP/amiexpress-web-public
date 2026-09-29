@@ -97,7 +97,7 @@ export interface InstallDeps {
      * consumer mode) -- passed through so the recorder can write the install
      * as a link to that archive rather than reconstructing a guess.
      */
-    recordInstall: (command: string, installDirRelative: string, archiveName: string) => void;
+    recordInstall: (command: string, installDirRelative: string, archiveName: string, extraFiles?: string[]) => void;
     refreshDoorRegistry: () => Promise<boolean>;
 }
 /**
@@ -147,6 +147,8 @@ export interface DoorInstallEntry {
     release_group: string | null;
     source_url: string | null;
     source_revision: string | null;
+    /** Absolute paths of files an install put OUTSIDE its door directory (a SysCmd icon), so a delete finds them. */
+    extra_files?: string[];
 }
 /**
  * Consumer-mode install: download + verify the archive from the central

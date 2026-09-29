@@ -70,6 +70,7 @@ export function recordInstallViaRecorder(entry: DoorInstallEntry): void {
     archiveName: entry.archive_name,
     installDir: path.join(PROJECT_ROOT, entry.install_dir),
     infoPath: path.join(PROJECT_ROOT, 'Commands', 'BBSCmd', `${entry.command}.info`),
+    extraFiles: entry.extra_files,
     metadata: {
       catalogId: entry.catalog_id,
       name: entry.name,
