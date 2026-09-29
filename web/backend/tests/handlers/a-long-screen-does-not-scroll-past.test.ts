@@ -226,6 +226,28 @@ describe('a screen that is one piece of art', () => {
     expect(shown.lines).toBe(TITLE_LINES);
   });
 
+  it('the logo is not paginated when the pool asks for it WITHOUT an extension', async () => {
+    // What the ~SR_ include actually asks for on the live board:
+    // `/app/data/bbs/Screens/logoff/001.logoff` - the name lost its `.logoff`
+    // to the extension strip and matched no exemption (2026-09-29).
+    const dir = path.join(root, 'Screens', 'logoff');
+    fs.mkdirSync(dir, { recursive: true });
+    const body = Array.from({ length: TITLE_LINES }, (_, i) => `line ${i + 1}`).join('\r\n');
+    fs.writeFileSync(path.join(dir, '002.logoff.txt'), `~f\r\n${body}\r\n`, 'latin1');
+
+    const shown = await show(path.join(dir, '002.logoff'));
+
+    expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+    expect(shown.lines).toBe(TITLE_LINES);
+  });
+
+  it('any screen that carries ~NSF is one piece, whatever its name', async () => {
+    const shown = await show(aScreenOf(TITLE_LINES, '~f~NSF'));
+
+    expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+    expect(shown.lines).toBe(TITLE_LINES);
+  });
+
   it('still paginates a screen that is text to be read', async () => {
     // BULL: in the board's catalogue like the three above, and deliberately
     // NOT exempt - it is text to be read. By name, so what is under test is

@@ -193,7 +193,11 @@ const SCREENS_NEVER_PAGINATE = new Set(['AWAITSCREEN', 'BBSTITLE', 'LOGON', 'LOG
 export function screenCatalogueName(screenName: string): string {
   const base = screenName.split(/[\\/]/).pop() ?? screenName;
   return base
-    .replace(/\.[^.]+$/, '')     // .txt / .seq / .rip
+    // Only a SCREEN extension. `.[^.]+$` also ate the `.logoff` of a random
+    // pool's `001.logoff` - the name the ~SR_ include asks for - leaving `001`,
+    // which matched no exemption, so the tall goodbye screen paginated
+    // (sysop, 2026-09-29).
+    .replace(/\.(?:txt|ans|asc|seq|rip|ttx|tti|gr)$/i, '')
     .replace(/^[0-9]+\./, '')    // 001.logoff -> logoff
     .toUpperCase();
 }
@@ -2957,7 +2961,14 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
      * `~SS_BBS:bulletins/bull6.txt` inside LOGON is untouched by LOGON's
      * exemption.
      */
-    const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName));
+    /*
+     * `~NSF` IS HOW A SCREEN SAYS IT HIMSELF. express.e's non-stop flag
+     * (mci-pre-passes.ts) means "no pauses" - so a screen that carries it is
+     * one piece of art like the title, whatever its name. The list above is
+     * the board's own four; an artist's tall screen needs no code change.
+     */
+    const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName))
+      || /~NSF/.test(contentForMci);
     const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {
