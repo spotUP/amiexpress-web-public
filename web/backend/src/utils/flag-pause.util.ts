@@ -16,6 +16,10 @@ type Session = any;
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { flagManagerOf } from './file-flag.util';
 import { config } from '../config';
+// Every write here goes through the board's ordered output: a pause prompt
+// sent straight to the socket overtook the rows still in the 16 ms buffer
+// and stood ABOVE the text it was pausing (the logon scan, 2026-09-30).
+import { emitPrompt } from './output.util';
 
 /**
  * Display pause prompt and handle user response
@@ -94,7 +98,7 @@ export async function flagPause(
       };
 
       const promptAgain = () => {
-        socket.emit('ansi-output', prompt);
+        emitPrompt(socket, prompt);
         registerListener(handleInput);
       };
 
@@ -102,7 +106,7 @@ export async function flagPause(
         const response = input.trim().toUpperCase();
 
         if (response === '' || response === 'Y') {
-          socket.emit('ansi-output', '\r\x1b[K');
+          emitPrompt(socket, '\r\x1b[K');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(true);
           return;
@@ -115,7 +119,7 @@ export async function flagPause(
         // Q fell through to the re-prompt path and the listing got
         // stuck forever — surfaced on live by FR + Q.
         if (response === 'N' || response === 'Q') {
-          socket.emit('ansi-output', '\r\n');
+          emitPrompt(socket, '\r\n');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(false);
           return;
@@ -123,7 +127,7 @@ export async function flagPause(
 
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
-          socket.emit('ansi-output', '\r\x1b[K');
+          emitPrompt(socket, '\r\x1b[K');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(true);
           return;
@@ -136,21 +140,21 @@ export async function flagPause(
           if (filename) {
             flagManager.addFlag(filename, session.currentConf);
             await flagManager.save();
-            socket.emit('ansi-output', `\r\n\x1b[32mFlagged: ${filename}\x1b[0m\r\n`);
-            socket.emit('ansi-output', '\x1b[A\x1b[K');
+            emitPrompt(socket, `\r\n\x1b[32mFlagged: ${filename}\x1b[0m\r\n`);
+            emitPrompt(socket, '\x1b[A\x1b[K');
             resolveFn!(true);
             return;
           }
 
-          socket.emit('ansi-output', '\r\nFilename to flag: ');
+          emitPrompt(socket, '\r\nFilename to flag: ');
           registerListener(async (filenameInput: string) => {
             const trimmed = filenameInput.trim();
             if (trimmed) {
               flagManager.addFlag(trimmed, session.currentConf);
               await flagManager.save();
-              socket.emit('ansi-output', `\x1b[32mFlagged: ${trimmed}\x1b[0m\r\n`);
+              emitPrompt(socket, `\x1b[32mFlagged: ${trimmed}\x1b[0m\r\n`);
             }
-            socket.emit('ansi-output', '\x1b[A\x1b[K');
+            emitPrompt(socket, '\x1b[A\x1b[K');
             session.tempData.flagPausePromise = undefined;
             resolveFn!(true);
           });
@@ -158,8 +162,8 @@ export async function flagPause(
         }
 
         // Invalid input: re-prompt without clearing promise
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', prompt);
+        emitPrompt(socket, '\r\n');
+        emitPrompt(socket, prompt);
         registerListener(handleInput);
       };
 
@@ -234,7 +238,7 @@ export async function checkForPause(
       };
 
       const promptAgain = () => {
-        socket.emit('ansi-output', prompt);
+        emitPrompt(socket, prompt);
         registerListener(handleInput);
       };
 
@@ -243,7 +247,7 @@ export async function checkForPause(
 
         // Y or Enter = continue (express.e:5196)
         if (response === '' || response === 'Y') {
-          socket.emit('ansi-output', '\r\n');
+          emitPrompt(socket, '\r\n');
           session.tempData.checkPausePromise = undefined;
           resolveFn!(true);
           return;
@@ -251,7 +255,7 @@ export async function checkForPause(
 
         // N or Q = stop (see flagPause for Q-quit rationale)
         if (response === 'N' || response === 'Q') {
-          socket.emit('ansi-output', '\r\n');
+          emitPrompt(socket, '\r\n');
           session.tempData.checkPausePromise = undefined;
           resolveFn!(false);
           return;
@@ -260,15 +264,15 @@ export async function checkForPause(
         // NS = non-stop mode
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
-          socket.emit('ansi-output', '\r\n');
+          emitPrompt(socket, '\r\n');
           session.tempData.checkPausePromise = undefined;
           resolveFn!(true);
           return;
         }
 
         // Invalid input: re-prompt
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', prompt);
+        emitPrompt(socket, '\r\n');
+        emitPrompt(socket, prompt);
         registerListener(handleInput);
       };
 

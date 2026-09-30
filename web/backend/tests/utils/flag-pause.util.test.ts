@@ -17,7 +17,10 @@ describe('flag-pause.util', () => {
     jest.clearAllMocks();
 
     // Mock socket
+    // A socket of its own: the pause prompt goes through the output
+    // buffer, which is kept per socket id.
     mockSocket = {
+      id: `flag-pause-${Math.random()}`,
       emit: jest.fn()
     };
 
