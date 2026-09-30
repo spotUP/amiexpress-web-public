@@ -16,11 +16,37 @@ import { findUserAnswerBlocks } from '../../utils/user-answers.util';
 import { getUserNotesPath, readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
+import { readChar } from '../../utils/await-input';
 
 /**
  * Out of the account editor: back to whoever opened it - the message reader's
  * U (express.e 12196-12211, editInfo then displayMessage) - or the menu.
  */
+/**
+ * checkChanges (express.e:21200-21209): with nothing changed, go on; else ask,
+ * take one key, erase the question, and go on only on Y. The port asked
+ * "Save before exiting? (Y/N)" and nothing read the answer - the next key was
+ * taken as an editor command and the caller could not leave.
+ */
+async function checkChanges(socket: any, session: BBSSession): Promise<boolean> {
+  if (!session.tempData?.changes) return true;
+  socket.emit('ansi-output', 'You have unsaved changes. Do you wish to lose them (Y/N)? ');
+  const ch = await readChar(socket, session);
+  socket.emit('ansi-output', '\x1b[F\x1b[E\x1b[K');
+  return ch === 'Y' || ch === 'y';
+}
+
+/**
+ * Run `then` once checkChanges says go on. Started, not awaited: the answer is
+ * the NEXT keystroke, and handleCommand takes keys one at a time - awaiting it
+ * inside this key's handler would hold the queue that key must come through.
+ */
+function afterCheckChanges(socket: any, session: BBSSession, then: () => Promise<void>): void {
+  void checkChanges(socket, session)
+    .then((go) => (go ? then() : undefined))
+    .catch((err) => console.error('[account editor] checkChanges failed:', err));
+}
+
 function leaveAccountEditor(session: BBSSession): void {
   const done = session.accountEditDone;
   session.accountEditDone = undefined;
@@ -48,22 +74,16 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
 
   // TAB - Exit (express.e:21250-21253)
   if (command === '\t') {
-    if (session.tempData.changes) {
-      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before exiting? (Y/N): \x1b[0m');
-      session.tempData.waitingForSaveConfirm = true;
-      session.tempData.saveAction = 'exit';
-      return;
-    }
-    leaveAccountEditor(session);
+    afterCheckChanges(socket, session, async () => leaveAccountEditor(session));
     return;
   }
 
   // X - No-Save Exit (express.e:21254-21258)
   if (command === 'X') {
-    if (session.tempData.changes) {
-      socket.emit('ansi-output', '\r\n\x1b[31mExiting without saving changes.\x1b[0m\r\n');
-    }
-    leaveAccountEditor(session);
+    afterCheckChanges(socket, session, async () => {
+      socket.emit('ansi-output', '\x1b[JNo-Save\r\n');
+      leaveAccountEditor(session);
+    });
     return;
   }
 
@@ -80,25 +100,19 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
 
   // + - Next user (express.e:21263-21276)
   if (command === '+') {
-    if (session.tempData.changes) {
-      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before changing users? (Y/N): \x1b[0m');
-      session.tempData.waitingForSaveConfirm = true;
-      session.tempData.saveAction = 'next';
-      return;
-    }
-    await loadNextUser(socket, session, 1);
+    afterCheckChanges(socket, session, async () => {
+      session.tempData.changes = false;
+      await loadNextUser(socket, session, 1);
+    });
     return;
   }
 
   // - - Previous user (express.e:21277-21286)
   if (command === '-') {
-    if (session.tempData.changes) {
-      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before changing users? (Y/N): \x1b[0m');
-      session.tempData.waitingForSaveConfirm = true;
-      session.tempData.saveAction = 'prev';
-      return;
-    }
-    await loadNextUser(socket, session, -1);
+    afterCheckChanges(socket, session, async () => {
+      session.tempData.changes = false;
+      await loadNextUser(socket, session, -1);
+    });
     return;
   }
 
