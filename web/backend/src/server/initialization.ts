@@ -417,6 +417,17 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
   const { MessageBaseLoaderService } = await import('../services/message-base-loader.service.js');
   const messageBaseLoader = new MessageBaseLoaderService(bbsRoot);
   replaceInPlace(messageBases, messageBaseLoader.loadAllMessageBases(conferences));
+  // The per-base pointer rows are keyed by these ids (conf_base -> message_bases).
+  try {
+    const mb = await db.syncMessageBasesFromDisk(
+      messageBases.map((b: any) => ({ id: b.id, conferenceId: b.conferenceId, name: b.name })),
+    );
+    if (mb.inserted > 0 || mb.updated > 0) {
+      console.log(`[INIT] Synced message_bases from disk: ${mb.inserted} inserted, ${mb.updated} updated`);
+    }
+  } catch (e: any) {
+    console.warn('[INIT] message_bases disk sync failed:', e?.message || e);
+  }
 
   // Inject dependencies into conference handler
   setConferencesForConferenceHandler(conferences);

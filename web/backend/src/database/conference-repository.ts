@@ -97,6 +97,46 @@ console.error(`[Database] Failed to sync conference to disk:`, error);
   }
 
   /**
+   * The message_bases mirror follows the bases read from disk
+   * (services/message-base-loader.service), by the ids the loader gives them.
+   *
+   * Those ids are what every per-base row is keyed by - conf_base's read and
+   * scan pointers carry a FOREIGN KEY to message_bases(id) - and the table
+   * kept only its three seeded rows. A board whose bases run to id 5 had no
+   * row for 4 or 5, so saving a scan pointer in conference 4 (Requests)
+   * failed with "FOREIGN KEY constraint failed" mid-scan and left the caller
+   * at a reader that answered no key (sysop, 2026-09-30).
+   *
+   * Rows are inserted or brought to the disk's name and conference; none is
+   * removed - a delete would cascade and take callers' pointers with it.
+   */
+  async syncMessageBasesFromDisk(
+    diskBases: { id: number; conferenceId: number; name: string }[],
+  ): Promise<{ inserted: number; updated: number }> {
+    let inserted = 0;
+    let updated = 0;
+    const select = this.prepare('SELECT id, name, conferenceid FROM message_bases WHERE id = ?');
+    const insert = this.prepare('INSERT INTO message_bases (id, name, conferenceid) VALUES (?, ?, ?)');
+    const update = this.prepare('UPDATE message_bases SET name = ?, conferenceid = ? WHERE id = ?');
+    for (const base of diskBases) {
+      if (!base?.id || !base?.conferenceId || !base?.name) continue;
+      const row = select.get(base.id) as { name: string; conferenceid: number } | undefined;
+      try {
+        if (!row) {
+          insert.run(base.id, base.name, base.conferenceId);
+          inserted += 1;
+        } else if (row.name !== base.name || row.conferenceid !== base.conferenceId) {
+          update.run(base.name, base.conferenceId, base.id);
+          updated += 1;
+        }
+      } catch (err: any) {
+        console.warn(`[message_bases] could not mirror base ${base.id} (conf ${base.conferenceId}):`, err?.message || err);
+      }
+    }
+    return { inserted, updated };
+  }
+
+  /**
    * Sync SQLite `conferences` rows from the disk source of truth
    * (ConfConfig.info parsed by loadConfConfig). Express.e treats the
    * disk file as canonical; SQLite is a downstream mirror used by
