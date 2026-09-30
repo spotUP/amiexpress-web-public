@@ -260,7 +260,13 @@ import {
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 
+/** One key's escape sequence (CSI or SS3), as a terminal sends for a key press. */
+function isKeySequence(data: string): boolean {
+  return /^\x1b(\[[0-9;]*[A-Za-z~]|O[A-Za-z])$/.test(data);
+}
+
 // Re-export dependency injection for external modules (backward compatibility)
+
 export {
   setDatabase,
   setConfig,
@@ -472,9 +478,13 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
           setX(x + pad.length);
           emitText(socket, pad);
         }
-      } else if (data === '\x1b') {
-        // ESC alone — ignored. Multi-byte escape sequences are matched
-        // explicitly above (cursor/Home/End/DEL).
+      } else if (data === '\x1b' || isKeySequence(data)) {
+        // ESC alone, or a key the editor has no use for - up/down, PgUp,
+        // F-keys. express.e's edit() reads them as control codes and drops
+        // them (10292 `IF(c<" ") THEN JUMP next2`). Taken as text, ESC[A was
+        // stored in the line and echoed, and the echo moved the cursor up a
+        // row, so the next line prompt overwrote an earlier one (sysop
+        // 2026-09-30: "two arrow up and then enter overwrites row").
       } else if (data.length === 1 && (isTypableAscii(data) || isPetsciiGlyph(data))) {
         /*
          * Insert printable char at cursor position.
