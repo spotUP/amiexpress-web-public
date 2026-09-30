@@ -241,6 +241,21 @@ describe('a screen that is one piece of art', () => {
     expect(shown.lines).toBe(TITLE_LINES);
   });
 
+  it('the logo is not paginated when it is plain art with no MCI line', async () => {
+    // An artist's file starts with its art, not `~`, so MCI is off and the
+    // screen takes the string path - which paginated past the exemption: the
+    // h7 goodbye logo asked `More(y/n/ns)?` on its way out (sysop, 2026-09-30).
+    const dir = path.join(root, 'Screens', 'logoff');
+    fs.mkdirSync(dir, { recursive: true });
+    const body = Array.from({ length: TITLE_LINES }, (_, i) => `\x1b[0mline ${i + 1}`).join('\r\n');
+    fs.writeFileSync(path.join(dir, '003.logoff.txt'), `${body}\r\n`, 'latin1');
+
+    const shown = await show(path.join(dir, '003.logoff'));
+
+    expect(shown.text).not.toMatch(/More\(y\/n\/ns\)/);
+    expect(shown.lines).toBe(TITLE_LINES);
+  });
+
   it("any screen that carries express.e's ~NS| is one piece, whatever its name", async () => {
     // express.e:5740-5742 - `~NS` sets nonStopDisplayFlag. The parity survey
     // (2026-09-29) found `~NS|` still paginated a tall screen (G-NS).

@@ -3516,7 +3516,9 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
     }
 
   // Skip pagination if wipe animation is active - wipes handle their own display
-  if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight && !hasWipeAnimation) {
+  // A screen that is one piece of art (neverPaginates, above) is not paged on
+  // this path either: plain art with no `~` line has MCI off and lands here.
+  if (allowPagination && !neverPaginates && !session.lastScreenHadPause && lines.length > pageHeight && !hasWipeAnimation) {
     session.paginatedScreen = {
       lines,
       nextIndex: pageSize,
