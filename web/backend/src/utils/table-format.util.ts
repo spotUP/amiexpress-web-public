@@ -385,7 +385,12 @@ export function messageBodyLineLimit(
   session: { screenWidth?: number; petsciiMode?: boolean; texttvMode?: boolean } | null | undefined
 ): number {
   if (!isNarrow(session)) return MESSAGE_RULES.bodyRuler.wideInner;
-  return Math.max(8, sessionColumns(session ?? {}) - BODY_LINE_PROMPT_WIDTH);
+  // One column more is given back for the key that wraps. edit() echoes the
+  // key and only THEN finds x>maxLineLen and carries the word down
+  // (express.e 10300-10335); at eighty columns that key lands in column 80
+  // (4 + 75 + 1). At forty, a limit of 36 put it in column 41, and the C64
+  // screen wrapped before the editor did.
+  return Math.max(8, sessionColumns(session ?? {}) - BODY_LINE_PROMPT_WIDTH - 1);
 }
 
 /** ` N> `, the prompt every body line is listed behind. */
