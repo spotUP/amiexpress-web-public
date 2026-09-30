@@ -82,7 +82,11 @@ function caller() {
     await settle();
   };
   const take = () => { const t = out.join(''); out.length = 0; return t; };
-  return { socket, session, type, take, settle };
+  /** Until the output holds `text` - a save writes files and can outlast a settle. */
+  const until = async (text: string) => {
+    for (let i = 0; i < 100 && !out.join('').includes(text); i++) await new Promise((r) => setTimeout(r, 20));
+  };
+  return { socket, session, type, take, settle, until };
 }
 
 describe('the R reader', () => {
@@ -209,6 +213,7 @@ describe('the R reader', () => {
     await c.type('n');     // Quote in Reply (y/N)? No
     await c.type('thanks\r\r');
     await c.type('S\r');
+    await c.until('Msg. Options: \x1b[33mA\x1b[36m,\x1b[33mD');
     const saved = c.take();
     expect(saved).toMatch(/Message Number 4\.\.\.done!/);
     const reply = messageIndexManager.readHeaderFile(1).find((x) => x.msgNumb === 4)!;
