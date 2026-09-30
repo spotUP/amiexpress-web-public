@@ -24,6 +24,7 @@ import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { RexxPathResolver } from './rexx-path';
+import { matchAmigaPattern, parseAmigaPattern } from '../../utils/amiga-pattern';
 
 export class RexxArpLibrary {
   private emulator: MoiraEmulator;
@@ -46,8 +47,7 @@ export class RexxArpLibrary {
     console.log(`[RexxArp] FILELIST("${pattern}", "${basePath}")`);
 
     try {
-      // Convert AmigaDOS pattern to regex
-      const regex = this.amigaPatternToRegex(pattern);
+      const parsed = parseAmigaPattern(pattern, true);
 
       // Read directory and filter by pattern
       const entries = amigafs.readdirSync(basePath);
@@ -55,7 +55,7 @@ export class RexxArpLibrary {
         try {
           const fullPath = path.join(basePath, entry);
           const stats = amigafs.statSync(fullPath);
-          return stats.isFile() && regex.test(entry);
+          return stats.isFile() && parsed.matches(entry);
         } catch {
           return false;
         }
@@ -76,9 +76,7 @@ export class RexxArpLibrary {
   matchpattern(pattern: string, str: string): number {
     console.log(`[RexxArp] MATCHPATTERN("${pattern}", "${str}")`);
 
-    // Convert AmigaDOS pattern to regex
-    const regex = this.amigaPatternToRegex(pattern);
-    return regex.test(str) ? 1 : 0;
+    return matchAmigaPattern(pattern, str, true) ? 1 : 0;
   }
 
   /**
@@ -225,23 +223,6 @@ export class RexxArpLibrary {
    */
   mkbaddr(cptr: number): number {
     return cptr >> 2;
-  }
-
-  // =========================================================================
-  // Pattern conversion helpers
-  // =========================================================================
-
-  /**
-   * Convert AmigaDOS pattern to regex
-   */
-  private amigaPatternToRegex(pattern: string): RegExp {
-    let regex = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
-      .replace(/#\?/g, '.*')                 // #? -> .*
-      .replace(/\?/g, '.')                   // ? -> .
-      .replace(/~/g, '^');                   // ~ -> ^ (not at start)
-
-    return new RegExp(`^${regex}$`, 'i'); // Case insensitive
   }
 
   /**

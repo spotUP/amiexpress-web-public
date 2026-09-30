@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import { BaseArchiveExtractor, ArchiveEntry } from '../archive-extractor';
+import { parseAmigaPattern } from '../amiga-pattern';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const LHA = require('../lha.js');
@@ -103,17 +104,13 @@ export class LhaExtractor extends BaseArchiveExtractor {
 /**
  * An LhA member name matches an AmigaDOS pattern the way LhA itself reads
  * one: case-insensitively (AmigaDOS does not tell FILE_ID.DIZ and file_id.diz
- * apart), `#?` and `*` for any run, `?` for one character. A pattern with no
- * directory part is matched against the member's own name.
+ * apart), with the full AmigaDOS grammar (utils/amiga-pattern). A pattern
+ * with no directory part is matched against the member's own name.
  */
 export function lhaMemberMatches(member: string, pattern: string): boolean {
-  const source = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/#\?|\*/g, '.*')
-    .replace(/\?/g, '.');
-  const re = new RegExp(`^${source}$`, 'i');
+  const parsed = parseAmigaPattern(pattern, true);
   const name = member.split('/').pop() ?? member;
-  return re.test(member) || (!pattern.includes('/') && re.test(name));
+  return parsed.matches(member) || (!pattern.includes('/') && parsed.matches(name));
 }
 
 export interface LhaExtractOptions {
