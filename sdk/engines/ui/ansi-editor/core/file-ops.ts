@@ -4,7 +4,7 @@
  */
 
 import {
-  decodeCP437, encodeCP437, decoderForFont,
+  decodeCP437, encodeCP437, decoderForFont, encodeForFont,
 } from './cp437';
 import type { Cell } from '../types';
 import * as Canvas from './canvas';
@@ -476,10 +476,11 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
   // Add reset code at end
   ansiContent += '\x1B[0m';
 
-  // Encode content as CP437, the character set the art is drawn in.
-  // TextEncoder would write UTF-8 here, turning each block glyph into three
-  // bytes and shifting every column after it.
-  const contentData = encodeCP437(ansiContent);
+  // Encode in the character set the art is drawn in - the one its SAUCE font
+  // names, as loadANSFile decoded it (decoderForFont): CP437, or Latin-1 for
+  // Amiga art. TextEncoder would write UTF-8 here, turning each block glyph
+  // into three bytes and shifting every column after it.
+  const contentData = encodeForFont(ansiContent, sauce?.tInfoS);
 
   /**
    * A file that USES iCE colours has to SAY it uses them.
@@ -503,7 +504,9 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
       fileType: 1, // ANSi
       tInfo1: width,
       tInfo2: height,
-      tFlags: iceColors ? 1 : 0
+      // iCE is bit 0; the record's other flags (letter spacing, aspect
+      // ratio) are the artist's and survive the save.
+      tFlags: ((sauce?.tFlags ?? 0) & ~1) | (iceColors ? 1 : 0),
     });
 
     // Combine content + SAUCE

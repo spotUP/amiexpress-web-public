@@ -20,6 +20,7 @@
 import type { Cell, DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { EditorState } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/editor-state';
 import { cloneCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
+import type { SAUCERecord } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 import {
   handleDrawEvent, paintCell, snapshotUndoState, undoDrawing, redoDrawing,
   copySelection, pasteSelection, getSelectionBounds, clearSelection,
@@ -38,9 +39,11 @@ export interface EditorSurface {
   state: EditorState;
   /** The cell a stroke started on, while the pointer is still down. */
   pending: { x: number; y: number } | null;
+  /** The opened file's SAUCE record: its font decides the save's character set. */
+  sauce?: SAUCERecord;
 }
 
-export function createSurface(canvas: Cell[][]): EditorSurface {
+export function createSurface(canvas: Cell[][], sauce?: SAUCERecord): EditorSurface {
   const state = new EditorState();
   // The SDK draws in place, so the state gets a copy: the array the caller
   // handed over stays exactly as it was, and so does every surface already
@@ -61,6 +64,7 @@ export function createSurface(canvas: Cell[][]): EditorSurface {
     char: state.getCurrentChar(),
     state,
     pending: null,
+    sauce,
   };
 }
 

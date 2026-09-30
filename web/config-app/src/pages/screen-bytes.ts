@@ -15,6 +15,7 @@ import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types
 import {
   loadANSFile, saveANSFile,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
+import type { SAUCERecord } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 import { isCellEmpty } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 
 export function base64ToBytes(base64: string): Uint8Array {
@@ -64,9 +65,19 @@ export function firstRows(bytes: Uint8Array, rows: number): Uint8Array {
  *                them deletes them on save.
  */
 export async function screenToCanvas(base64: string, maxRows?: number): Promise<Cell[][]> {
+  return (await screenToArt(base64, maxRows)).canvas;
+}
+
+/**
+ * The canvas and the file's SAUCE record. An editor needs both: the record
+ * names the font, and so the character set the save must write back - an
+ * Amiga (Topaz) piece is Latin-1, anything else CP437 - and it carries the
+ * artist's name and flags, which a save without it throws away.
+ */
+export async function screenToArt(base64: string, maxRows?: number): Promise<{ canvas: Cell[][]; sauce?: SAUCERecord }> {
   const bytes = base64ToBytes(base64);
-  const { canvas } = await loadANSFile(maxRows ? firstRows(bytes, maxRows) : bytes);
-  return canvas;
+  const { canvas, sauce } = await loadANSFile(maxRows ? firstRows(bytes, maxRows) : bytes);
+  return { canvas, sauce };
 }
 
 /**
@@ -88,8 +99,8 @@ export function inkedHeight(canvas: Cell[][]): number {
   return height;
 }
 
-export function canvasToScreen(canvas: Cell[][]): string {
-  return bytesToBase64(saveANSFile(canvas.slice(0, inkedHeight(canvas))));
+export function canvasToScreen(canvas: Cell[][], sauce?: SAUCERecord): string {
+  return bytesToBase64(saveANSFile(canvas.slice(0, inkedHeight(canvas)), false, sauce));
 }
 
 /**

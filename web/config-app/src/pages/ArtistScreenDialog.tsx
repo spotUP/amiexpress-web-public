@@ -25,7 +25,7 @@ import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
 import { fanOutOptions, savingLabel } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
-import { screenToCanvas, readAsBase64 } from './screen-bytes';
+import { screenToCanvas, screenToArt, readAsBase64 } from './screen-bytes';
 import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
 import { describeProblem, formatLabel, formatSiblings, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
@@ -222,8 +222,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       return;
     }
     let live = true;
-    screenToCanvas(file.content)
-      .then(canvas => { if (live) setEditing(createSurface(canvas)); })
+    screenToArt(file.content)
+      .then(({ canvas, sauce }) => { if (live) setEditing(createSurface(canvas, sauce)); })
       // A screen the browser cannot decode is a screen, not a crash: say so
       // and leave the artist their way out. Without the catch this was an
       // unhandled rejection and a dialog that stayed blank for ever.

@@ -156,3 +156,25 @@ export function isAmigaFont(fontName: string | undefined): boolean {
 export function decoderForFont(fontName: string | undefined): (byte: number) => string {
   return isAmigaFont(fontName) ? latin1ByteToChar : cp437ByteToChar;
 }
+
+/**
+ * The inverse of decoderForFont: a piece is written back in the character set
+ * it was read in. Amiga (Topaz) art is Latin-1 - one byte per character, and
+ * a character Latin-1 does not have becomes a space, as charToCP437Byte does
+ * for CP437.
+ *
+ * Writing an Amiga piece through the CP437 table instead remapped every
+ * character CP437 also has (¼ -> 0xAC, · -> 0xFA, ² -> 0xFD) and left the
+ * rest (Ø, ø, ¯) as Latin-1 - a file in two character sets at once, which no
+ * reader draws right (h7's logoff screen, sysop 2026-09-30).
+ */
+export function encodeForFont(text: string, fontName: string | undefined): Uint8Array {
+  if (!isAmigaFont(fontName)) return encodeCP437(text);
+  const chars = Array.from(text);
+  const out = new Uint8Array(chars.length);
+  for (let i = 0; i < chars.length; i++) {
+    const code = chars[i].codePointAt(0) ?? 0x20;
+    out[i] = code <= 0xff ? code : 0x20;
+  }
+  return out;
+}
