@@ -25,18 +25,9 @@
 
 import { renderRunDiff } from '@amiexpress/bbs-door-sdk/common/run-diff';
 
-export type WipeType =
-  | 'matrix'     // ~WM
-  | 'hblinds'    // ~WH
-  | 'vblinds'    // ~WV
-  | 'spiral'     // ~WS
-  | 'checker'    // ~WC
-  | 'radial'     // ~WR
-  | 'blocks'     // ~WB
-  | 'noise'      // ~WN
-  | 'typewriter' // ~WT
-  | 'explode'    // ~WE
-  | 'random';    // ~WX
+import { WIPE_CODES, type WipeType } from '../screens/wipe-codes';
+
+export { WIPE_CODES, type WipeType };
 
 export interface WipeFrame {
   content: string;
@@ -1068,26 +1059,6 @@ function animationStaysInsideFinalGrid(grids: Cell[][][]): boolean {
 
   return true;
 }
-
-/**
- * The wipe codes - `~W` and one letter, on a line of their own - and the
- * animation each one plays. This port's own codes, not express.e's; the MCI
- * catalogue lists them from here, so a screen whose only code is a wipe is
- * known to carry one (screens/mci-carry.ts).
- */
-export const WIPE_CODES: Readonly<Record<string, WipeType>> = {
-  M: 'matrix',
-  H: 'hblinds',
-  V: 'vblinds',
-  S: 'spiral',
-  C: 'checker',
-  R: 'radial',
-  B: 'blocks',
-  N: 'noise',
-  T: 'typewriter',
-  E: 'explode',
-  X: 'random',
-};
 
 const WIPE_LETTERS = Object.keys(WIPE_CODES).join('');
 

@@ -24,7 +24,7 @@
  *   - `~~` is a literal tilde (express.e:5749), so a code cannot follow one.
  */
 
-import { WIPE_CODES } from '../utils/screen-wipe.util';
+import { WIPE_CODES } from './wipe-codes';
 
 /**
  * What has to be chosen before a code can be written down.
@@ -323,7 +323,7 @@ export const MCI_CATALOG: MciCode[] = [
   /*
    * THE WIPES, this port's own: `~WM` ... `~WX` on a line of their own play an
    * animation as the screen is drawn (utils/screen-wipe.util). Listed from the
-   * wipe module's table so the two cannot disagree. Unlisted, a screen whose
+   * wipe table (./wipe-codes) so the two cannot disagree. Unlisted, a screen whose
    * only code was a wipe counted as carrying none, and replacing it carried
    * the old file's wipe on top of the new one's - the second then printed as
    * text (sysop, 2026-09-30: h7's menu showed "WX").
