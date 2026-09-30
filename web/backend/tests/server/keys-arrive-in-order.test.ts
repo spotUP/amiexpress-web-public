@@ -116,4 +116,31 @@ describe('input right after a transfer ends', () => {
     await settle();
     expect(typed).toEqual(['G']);
   });
+
+  it('an answer reaches the procedure waiting for it at once, not after the cap', async () => {
+    // A key whose handler waits on the NEXT key (utils/await-input): the
+    // answer must not queue behind it.
+    const session: any = {};
+    const seen: string[] = [];
+    let answer: (key: string) => void = () => {};
+    const handle = async (piece: string) => {
+      seen.push(piece);
+      if (piece === 'q') {
+        session.inputWaiter = { kind: 'char' };
+        await new Promise<string>((resolve) => { answer = resolve; });
+        return;
+      }
+      if (session.inputWaiter) {
+        session.inputWaiter = undefined;
+        answer(piece);
+      }
+    };
+    dispatchInOrder(session, ['q'], handle, () => {});
+    await new Promise((r) => setTimeout(r, 10));
+    const started = Date.now();
+    dispatchInOrder(session, ['y'], handle, () => {});
+    await new Promise((r) => setTimeout(r, 10));
+    expect(seen).toEqual(['q', 'y']);
+    expect(Date.now() - started).toBeLessThan(KEY_ORDER_WAIT_MS);
+  });
 });

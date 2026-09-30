@@ -240,7 +240,15 @@ export function dispatchInOrder(
     return Promise.race([run.then(() => undefined), cap]);
   };
   for (const piece of pieces) {
-    const holder = session as { keyChain?: Promise<void>; keyBusy?: boolean };
+    const holder = session as { keyChain?: Promise<void>; keyBusy?: boolean; inputWaiter?: unknown };
+    if (holder.keyBusy && holder.inputWaiter) {
+      // The key in flight is WAITING FOR THIS ONE: a procedure ported from
+      // express.e is parked on lineInput / readChar / yesNo
+      // (utils/await-input). Queued behind it, the answer would sit out
+      // KEY_ORDER_WAIT_MS first - or, one key at a time, never reach it.
+      handle(piece).catch(onError);
+      continue;
+    }
     if (!holder.keyBusy) {
       // Nothing in flight: the key goes to the board NOW, as it always did.
       holder.keyBusy = true;
