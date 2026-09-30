@@ -242,101 +242,8 @@ export async function handleCaptureInternetNameInput(socket: any, session: BBSSe
   }
 }
 
-/**
- * express.e:10787-10788 — EXTSEND.<msgBase> tooltype on the conf icon marks
- * a msgbase as "external" (e.g. routed to a UUCP/FidoNet gateway). When set:
- *   - express.e:10805-10808: EALL is forbidden
- *   - express.e:10860: Private prompt is skipped
- */
-export function isExtSendMsgBase(session: BBSSession): boolean {
-  const confId = session.currentConf || 1;
-  const msgBaseId = session.currentMsgBase || 1;
-  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-  const flags = getConferenceToolFlags(confId);
-  return !!flags?.extSendMsgBases?.has?.(msgBaseId);
-}
-
-/**
- * Compute the user's display name FOR THIS CONFERENCE — express.e
- * confMailName (declared at express.e:237, populated at express.e:12459-
- * 12466 inside the messages PROC):
- *
- *   SELECT confNameType
- *     CASE NAME_TYPE_USERNAME    StrCopy(confMailName, userName, 31)
- *     CASE NAME_TYPE_REALNAME    StrCopy(confMailName, realName, 26)
- *     CASE NAME_TYPE_INTERNETNAME StrCopy(confMailName, internetName, 10)
- *
- * confNameType itself is resolved per express.e:5017-5024:
- *   - REALNAME (or REALNAME.<msgBaseNum>)        → NAME_TYPE_REALNAME
- *   - ELSEIF INTERNETNAME (or INTERNETNAME.<n>)  → NAME_TYPE_INTERNETNAME
- *   - ELSE                                       → NAME_TYPE_USERNAME (default)
- * REALNAME wins over INTERNETNAME if both are configured.
- *
- * Note: USERNAME / USERNAME.<n> is a SEPARATE tooltype that gates the
- * TO: field validation (captureRealAndInternetNames, express.e:4078-
- * 4087); it does NOT change confNameType. Earlier versions of this
- * helper conflated the two and used `requireUsername` to short-circuit
- * to the username branch, which is wrong but harmless because
- * USERNAME without REALNAME/INTERNETNAME yields the default
- * NAME_TYPE_USERNAME anyway.
- *
- * Express.e then uses confMailName for `mh.fromName` (10649), all
- * "is this my mail?" checks (8854, 8943, 9854, 9899, 11114, 11125,
- * 11179, 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348).
- */
-export function getConfMailName(session: BBSSession): string {
-  return getConfMailNameFor(session.user, session.currentConf || 1, session.currentMsgBase || 1);
-}
-
-/**
- * Session-less variant of getConfMailName — pass user + conf/msgbase
- * explicitly. Used by mail-scan helpers that iterate multiple conferences
- * outside of a single session context (countNewMessages,
- * getMessagesForConfScan). Same express.e semantics as getConfMailName;
- * see that JSDoc for the full rules.
- */
-export function getConfMailNameFor(user: any, confId: number, msgBaseId: number): string {
-  const username = user?.username || '';
-  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-  const flags = getConferenceToolFlags(confId);
-  const requireRealname = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
-  const requireInternetname = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
-  const userMisc: any = user || {};
-  const realName = String(userMisc.realName || userMisc.realname || '').trim();
-  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
-
-  // express.e:5017-5024 priority: REALNAME wins over INTERNETNAME.
-  if (requireRealname && realName) {
-    return realName.substring(0, 26);
-  }
-  if (requireInternetname && internetName) {
-    return internetName.substring(0, 10);
-  }
-  // Default = NAME_TYPE_USERNAME (express.e:12460-12461)
-  return username.substring(0, 31);
-}
-
-/**
- * Express.e:9918-9919 — `loadAccount(1, tempUser, ...)` then
- * `stringCompare(name, tempUser.name)`. The "is this the sysop?" check
- * matches the slot-1 user (the actual configured sysop), not just the
- * literal token 'SYSOP'. We accept either the literal 'SYSOP'
- * (handleMessageToInput maps that to slot 1) OR a case-insensitive
- * match against bbsConfig.sysop_name (vanilla AmiExpress sets slot 1's
- * userName from this config field).
- */
-export function isSysopRecipient(name: string): boolean {
-  const trimmed = (name || '').trim();
-  if (trimmed.toUpperCase() === 'SYSOP') return true;
-  try {
-    const { loadBBSConfig } = require('../../services/bbs-config-file.service');
-    const { config } = require('../../config');
-    const bbsConfig = loadBBSConfig(config.get('dataDir'));
-    const sysopName = String(bbsConfig?.sysop_name || '').trim();
-    if (sysopName && sysopName.toLowerCase() === trimmed.toLowerCase()) return true;
-  } catch { /* config load failed — fall back to literal SYSOP only */ }
-  return false;
-}
+export { isExtSendMsgBase, getConfMailName, getConfMailNameFor, isSysopRecipient } from './conf-mail-name';
+import { isExtSendMsgBase, getConfMailName, isSysopRecipient } from './conf-mail-name';
 
 /**
  * express.e:9909-9950 checkToForward(check=1) — when the conf has
@@ -629,9 +536,18 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
  *     so saveNewMSG triggers Zmodem batch upload. Web BBS uses F file-attach instead.
  *     See task #34 for the rationale; intentional divergence.
  */
+/**
+ * express.e `checkSecurity(ACS_ATTACH_FILES) AND fileattach` (10376, 10385,
+ * 10511): an edit a door asked for (JH_EF) clears fileattach.
+ */
+function attachAllowed(session: BBSSession): boolean {
+  return checkSecurity(session.user, ACSPermission.ATTACH_FILES)
+    && session.tempData?.messageEntry?.fileAttach !== false;
+}
+
 function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): void {
   session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
-  const hasAttach = checkSecurity(session.user, ACSPermission.ATTACH_FILES);
+  const hasAttach = attachAllowed(session);
   const hasParent = !!(session.tempData?.messageEntry?.parentId);
   if (!helpList) {
     // express.e:10375-10379 short menu — extended with WEB_ I/R/Q
@@ -761,7 +677,7 @@ export async function handleMessageOptionsInput(socket: any, session: BBSSession
 
   // express.e:10376 — F: File Attachment (gated on ACS_ATTACH_FILES)
   if (cmd === 'F') {
-    if (!checkSecurity(session.user, ACSPermission.ATTACH_FILES)) {
+    if (!attachAllowed(session)) {
       showOptionsMenu(socket, session, false);
       return;
     }
@@ -828,6 +744,12 @@ export async function handleMessageAbortConfirm(socket: any, session: BBSSession
   }
   if (ch === 'Y') {
     emitText(socket, 'Yes\r\n');
+    // edit() returns -1 to whoever called it (express.e:10571).
+    const finish = session.tempData?.messageEntry?.finishOutside;
+    if (finish) {
+      await finish(null);
+      return;
+    }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
     return;
@@ -901,6 +823,13 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
  */
 async function saveMessage(socket: any, session: BBSSession): Promise<void> {
   const entry = session.tempData.messageEntry;
+
+  // edit() returned RESULT_SUCCESS to a caller that is not message entry -
+  // JH_EF saves the lines to its own file (express.e:1148-1150).
+  if (entry?.finishOutside) {
+    await entry.finishOutside(entry.body);
+    return;
+  }
 
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
   emitText(socket, '\r\nSaving...');
@@ -1681,7 +1610,7 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
  * chose it outright (editorType 2) - and the line editor otherwise.
  */
 export async function promptForMessageBody(socket: any, session: BBSSession): Promise<void> {
-  if (fullEditOffered(session)) {
+  if (!session.tempData?.messageEntry?.lineEditorOnly && fullEditOffered(session)) {
     if ((session.user as { editorType?: number } | undefined)?.editorType === 2) {
       await runFullEdit(socket, session);
       return;
