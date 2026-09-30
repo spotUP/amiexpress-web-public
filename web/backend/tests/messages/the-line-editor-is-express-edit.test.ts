@@ -325,7 +325,7 @@ describe('Msg. Options (express.e 10373-10578)', () => {
     await d.type('y');
     d.since();
     await d.type('1,2abcd', '\x7f');
-    expect(d.since()).toBe('1,2abc\b \b');
+    expect(d.since()).toBe('1,2abc\b \x1b[1D');
     expect(d.session.subState).toBe(LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE);
   });
 

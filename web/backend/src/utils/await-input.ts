@@ -17,14 +17,21 @@
  * procedures, where a prompt is a line in the middle of the code.
  */
 import { emitText, flushOutput } from './output.util';
-import { acceptBackspace } from './line-input.util';
 
 type Waiter =
-  | { kind: 'line'; maxLen: number; buffer: string; resolve: (line: string) => void }
+  | { kind: 'line'; maxLen: number; text: string; curpos: number; resolve: (line: string) => void }
   | { kind: 'char'; resolve: (key: string) => void };
+
+/** lineInput's history (express.e addToHistory, 2150-2160): twenty lines, cycled. */
+interface LineHistory {
+  items: string[];
+  num: number;
+  cycle: number;
+}
 
 export interface InputWaitingSession {
   inputWaiter?: Waiter;
+  lineHistory?: LineHistory;
 }
 
 /** One key's escape sequence (CSI or SS3) - an arrow, a function key. */
@@ -46,11 +53,11 @@ export function lineInput(
   maxLen: number,
   defaultOutput = '',
 ): Promise<string> {
-  const start = defaultOutput.slice(0, maxLen);
-  if (start) emitText(socket, start);
+  // 2202-2204: the default is copied whole and printed; the cursor after it.
+  if (defaultOutput) emitText(socket, defaultOutput);
   flushOutput(socket);
   return new Promise<string>((resolve) => {
-    session.inputWaiter = { kind: 'line', maxLen, buffer: start, resolve };
+    session.inputWaiter = { kind: 'line', maxLen, text: defaultOutput, curpos: defaultOutput.length, resolve };
   });
 }
 
@@ -104,30 +111,144 @@ export function feedInputWaiter(socket: any, session: InputWaitingSession, data:
     return true;
   }
 
-  if (isKeySequence(data)) return true;
   let echo = '';
-  for (const key of data) {
-    if (key === '\r' || key === '\n') {
+  for (const key of lineKeys(data)) {
+    if (key === 13) {
       if (echo) emitText(socket, echo);
-      emitText(socket, '\r\n');
+      if (waiter.text.length > 0) addToHistory(session, waiter.text);
+      emitText(socket, '\r\n'); // 2378
       flushOutput(socket);
       session.inputWaiter = undefined;
-      waiter.resolve(waiter.buffer);
+      waiter.resolve(waiter.text);
       return true;
     }
-    if (key === '\b' || key === '\x7f') {
-      const edit = acceptBackspace(waiter.buffer);
-      waiter.buffer = edit.buffer;
-      echo += edit.echo;
-      continue;
-    }
-    const code = key.charCodeAt(0);
-    const printable = (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff);
-    if (printable && waiter.buffer.length < waiter.maxLen) {
-      waiter.buffer += key;
-      echo += key;
-    }
+    echo += lineInputKey(session, waiter, key);
   }
   if (echo) emitText(socket, echo);
   return true;
+}
+
+type LineKey = number | 'left' | 'right' | 'up' | 'down';
+
+/**
+ * What arrived, as lineInput's keys. Terminal translation, not a deviation:
+ * express.e's readChar turned the serial arrow sequences into its arrow
+ * codes (7515-7530); xterm sends 0x7F for Backspace where an Amiga sent 8,
+ * and ESC[3~ for Delete (127). Other sequences - F-keys, Home - are dropped.
+ */
+function lineKeys(data: string): LineKey[] {
+  const keys: LineKey[] = [];
+  let i = 0;
+  while (i < data.length) {
+    if (data[i] === '\x1b') {
+      const m = /^\x1b(\[[0-9;]*[A-Za-z~]|O[A-Za-z])/.exec(data.slice(i));
+      if (m) {
+        const seq = m[0];
+        const last = seq[seq.length - 1];
+        if (last === 'D') keys.push('left');
+        else if (last === 'C') keys.push('right');
+        else if (last === 'A') keys.push('up');
+        else if (last === 'B') keys.push('down');
+        else if (seq === '\x1b[3~') keys.push(127);
+        i += seq.length;
+        continue;
+      }
+    }
+    const code = data.charCodeAt(i++);
+    if (code === 0x7f) keys.push(8);
+    else if (code === 0x0a) keys.push(13);
+    else if (code <= 0xff) keys.push(code);
+  }
+  return keys;
+}
+
+const RIGHT = '\x1b[1C';
+const LEFT = '\x1b[1D';
+
+/** The screen bytes that rub out the whole line from wherever the cursor is (2243-2251). */
+function eraseLine(w: { text: string; curpos: number }): string {
+  return RIGHT.repeat(w.text.length - w.curpos) + '\b \b'.repeat(w.text.length);
+}
+
+/** One key at a lineInput prompt - express.e 2242-2350, statement by statement. */
+function lineInputKey(
+  session: InputWaitingSession,
+  w: { maxLen: number; text: string; curpos: number },
+  key: LineKey,
+): string {
+  const history = session.lineHistory;
+  if (key === 2) { // Ctrl-B clears the history (2229-2234)
+    session.lineHistory = undefined;
+    return '';
+  }
+  if (key === 24) { // Ctrl-X (2242-2254)
+    const out = eraseLine(w);
+    w.text = '';
+    w.curpos = 0;
+    return out;
+  }
+  if ((key === 'up' || key === 'down') && history && history.items.length > 0) {
+    const out = eraseLine(w);
+    w.text = history.items[history.cycle].slice(0, w.maxLen);
+    if (key === 'up') {
+      history.cycle -= 1;
+      if (history.cycle < 0) history.cycle = history.items.length - 1;
+    } else {
+      history.cycle += 1;
+      if (history.cycle >= history.items.length) history.cycle = 0;
+    }
+    w.curpos = w.text.length;
+    return out + w.text;
+  }
+  if (key === 'left') {
+    if (w.curpos > 0) {
+      w.curpos -= 1;
+      return LEFT;
+    }
+    return '';
+  }
+  if (key === 'right') {
+    if (w.curpos < w.text.length) {
+      w.curpos += 1;
+      return RIGHT;
+    }
+    return '';
+  }
+  if (typeof key !== 'number') return '';
+  if (key === 8) { // backspace (2305-2320)
+    if (w.curpos === 0) return '';
+    const oldLen = w.text.length;
+    w.curpos -= 1;
+    w.text = w.text.slice(0, w.curpos) + w.text.slice(w.curpos + 1);
+    return '\b' + w.text.slice(w.curpos) + ' ' + LEFT.repeat(oldLen - w.curpos);
+  }
+  if (key === 127) { // delete (2321-2333)
+    if (w.curpos >= w.text.length) return '';
+    const oldLen = w.text.length;
+    w.text = w.text.slice(0, w.curpos) + w.text.slice(w.curpos + 1);
+    return w.text.slice(w.curpos) + ' ' + LEFT.repeat(oldLen - w.curpos);
+  }
+  if (key > 31 && w.text.length < w.maxLen) { // insert (2334-2350)
+    const ch = String.fromCharCode(key);
+    w.text = w.text.slice(0, w.curpos) + ch + w.text.slice(w.curpos);
+    w.curpos += 1;
+    const tail = w.text.slice(w.curpos);
+    return ch + tail + LEFT.repeat(tail.length);
+  }
+  return '';
+}
+
+/** addToHistory (2150-2160). */
+function addToHistory(session: InputWaitingSession, text: string): void {
+  const h = session.lineHistory ?? (session.lineHistory = { items: [], num: 0, cycle: 0 });
+  if (h.items.length < 20) {
+    h.items.push(text);
+    h.num = h.items.length - 1;
+    h.cycle = h.num;
+  } else {
+    h.items[h.num] = text;
+    h.cycle = h.num;
+    h.num += 1;
+    if (h.num >= h.items.length) h.num = 0;
+  }
 }

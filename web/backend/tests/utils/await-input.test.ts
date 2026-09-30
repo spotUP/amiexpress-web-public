@@ -22,7 +22,8 @@ describe('lineInput through handleCommand', () => {
     const line = lineInput(h.socket, h.session, 3);
     await h.type(['a', 'b', '\x7f', 'c', 'd', 'e', '\r']);
     expect(await line).toBe('acd');
-    expect(await h.text()).toBe('ab\b \bcd\r\n');
+    // backspace at the end: BS, the (empty) tail, a space, one ESC[1D (2305-2320)
+    expect(await h.text()).toBe('ab\b \x1b[1Dcd\r\n');
     expect(h.session.inputWaiter).toBeUndefined();
   });
 
@@ -33,11 +34,29 @@ describe('lineInput through handleCommand', () => {
     expect(await line).toBe('Re: hi!');
   });
 
-  it('drops an arrow key', async () => {
+  it('moves the cursor with the arrows and inserts where it stands, redrawing the tail', async () => {
     const h = harness();
     const line = lineInput(h.socket, h.session, 10);
-    await h.type(['\x1b[A', 'x', '\r']);
-    expect(await line).toBe('x');
+    await h.type(['a', 'c', '\x1b[D', 'b', '\r']);
+    expect(await line).toBe('abc');
+    expect(await h.text()).toBe('ac\x1b[1Dbc\x1b[1D\r\n');
+  });
+
+  it('keeps what was entered: up brings the last line back (addToHistory)', async () => {
+    const h = harness();
+    const first = lineInput(h.socket, h.session, 10);
+    await h.type(['h', 'i', '\r']);
+    await first;
+    const second = lineInput(h.socket, h.session, 10);
+    await h.type(['\x1b[A', '\r']);
+    expect(await second).toBe('hi');
+  });
+
+  it('prints the default whole, not cut to the field (2202-2203)', async () => {
+    const h = harness();
+    const line = lineInput(h.socket, h.session, 3, 'longer');
+    await h.type(['\r']);
+    expect(await line).toBe('longer');
   });
 });
 
