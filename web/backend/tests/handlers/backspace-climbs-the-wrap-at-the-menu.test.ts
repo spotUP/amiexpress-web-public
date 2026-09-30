@@ -266,4 +266,26 @@ describe('a redraw needs a width we were told', () => {
     };
     expect(backspaceEcho('AAAAAAAAAA', 'AAAAAAAAA', wide)).toBe('\x1b8\x1b[0JAAAAAAAAA');
   });
+
+  it('a later prompt\'s backspace does not restore the cursor the menu prompt saved', async () => {
+    // The menu prompt saves the cursor (ESC 7) for its own line. After the
+    // Enter that answers it, a prompt that saves none - the Z search, a
+    // filename - must erase with BS-space-BS, not ESC 8 back at the menu row.
+    const socket = makeSocket();
+    const session = makeSession();
+    displayMenuPrompt(socket as any, session);
+    flushOutput(socket as any);
+    expect(session.promptCursorSaved).toBe(true);
+
+    await handleCommand(socket as any, session, '\r'); // the menu line answered
+    expect(session.promptCursorSaved).toBe(false);
+
+    session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
+    const before = socket.emitted.length;
+    await handleCommand(socket as any, session, 'a');
+    await handleCommand(socket as any, session, '\x7f');
+    flushOutput(socket as any);
+    const echoed = socket.emitted.slice(before).map((e: any) => String(e.data ?? '')).join('');
+    expect(echoed).toBe('a\b \b');
+  });
 });

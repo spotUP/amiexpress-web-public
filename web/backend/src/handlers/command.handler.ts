@@ -1088,6 +1088,11 @@ console.log('=== handleCommand called ===');
 console.log('data:', keysForLog(session, data));
 console.log('session.state:', session.state);
 console.log('session.subState:', session.subState);
+  // The cursor a prompt saved (ESC 7, recordPromptColumn) belongs to that
+  // prompt until the Enter that answers it. Left set, the next prompt's
+  // backspace restored it and redrew from the menu line (ESC 8 ESC[0J);
+  // a prompt that saves again sets it again when it is printed.
+  if (data === '\r' || data === '\n') (session as any).promptCursorSaved = false;
   // A procedure ported whole from express.e waits on lineInput / readChar /
   // yesNo (utils/await-input); it takes the keystroke before any branch.
   if (feedInputWaiter(socket, session, data)) return;
