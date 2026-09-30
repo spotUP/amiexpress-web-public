@@ -1029,6 +1029,11 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   // canonical body file at msgBaseLocation/<N>. We re-use the existing body
   // editor (POST_MESSAGE_BODY + Msg. Options menu) and route the Save action
   // through overwriteMessageBody when editingExistingMsgId is set.
+  //
+  // WEB_ deviation, sysop's call (2026-09-30: "keep it as it is"): plain E is
+  // editEMessage in express.e (10011) - runSysCommand('EDITOR', <msg file>),
+  // MicroEmacs. This board has no EDITOR SysCmd, so the faithful E would do
+  // nothing; E opens the line editor, as EM does.
   if ((command === 'E' || command === 'EM') && checkSecurity(session.user, ACSPermission.MESSAGE_EDIT)) {
     const msg = messages[currentIndex];
     const msgNum = (msg as any).msgNumber || msg.id;
