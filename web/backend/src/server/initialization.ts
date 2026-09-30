@@ -820,6 +820,7 @@ export async function initializeData(io?: SocketIOServer) {
     // Inject dependencies into advanced commands handler
     setAdvancedCommandsDependencies({
       conferences,
+      messageBases,
       messages,
       checkConfAccess
     });

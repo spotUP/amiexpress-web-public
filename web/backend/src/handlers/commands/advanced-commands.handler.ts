@@ -46,12 +46,14 @@ let _checkConfAccess: (user: any, conferenceId: number) => boolean;
  */
 export function setAdvancedCommandsDependencies(deps: {
   conferences: Conference[];
-  messageBases?: MessageBase[];
+  // Required: MS walks them, and a board wired without them scanned nothing
+  // (sysop, 2026-09-30: "Scanning conferences for mail..." and the prompt).
+  messageBases: MessageBase[];
   messages: Message[];
   checkConfAccess: typeof _checkConfAccess;
 }) {
   _conferences = deps.conferences;
-  _messageBases = deps.messageBases || [];
+  _messageBases = deps.messageBases;
   _messages = deps.messages;
   _checkConfAccess = deps.checkConfAccess;
 }
