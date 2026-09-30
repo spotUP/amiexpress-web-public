@@ -147,8 +147,8 @@ describe('typing a line (express.e 10166-10360)', () => {
 
   it('K5: Home, End, Ctrl-A and Ctrl-E do not move the cursor', async () => {
     const d = drive();
-    await d.type('abc', ['\x01', '\x1b[H', '\x05', '\x1b[F'], 'z');
-    expect(d.session.inputBuffer).toBe('abcz');
+    await d.type('abc', ['\x01'], 'z', ['\x1b[H'], 'y', [LEFT, LEFT, '\x05', '\x1b[F'], 'x');
+    expect(d.session.inputBuffer).toBe('abcxzy');
   });
 
   it('K6: a tab in a line that is nearly full does not push it past the edge', async () => {
