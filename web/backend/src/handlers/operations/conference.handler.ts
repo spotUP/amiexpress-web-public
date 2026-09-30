@@ -502,12 +502,11 @@ async function runJoinMailScan(
         }
         if (!scannedByDoor) {
           try {
-            // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum)
-            // In our implementation this is the per-conference mail scan (display new message list)
-            const { performSingleConfMailScan } = require('../message/message-scan.handler');
-            if (performSingleConfMailScan) {
-              await performSingleConfMailScan(socket, session, confId, msgBaseId);
-            }
+            // express.e:5122 - callMsgFuncs(MAIL_SCAN, conf, msgBaseNum) -> searchNewMail.
+            // A join is currentConf<>0: "Found Mail!", "Would you like to read it
+            // now" and replyPrompt per message - no table (11667-11760).
+            const { searchNewMail } = require('../message/read-msg');
+            await searchNewMail(socket, session, confId, msgBaseId, null);
           } catch (err) {
   console.warn('[joinConference] Mail scan error:', err);
           }

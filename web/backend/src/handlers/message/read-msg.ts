@@ -1337,17 +1337,27 @@ export async function searchNewMail(
   emitText(socket, '\r\n');
   if (!yes) return 'success';
 
-  r.msgNum = displayMsg;
-  while (r.msgNum < stats.highMsgNum) {
-    const h = loadMessageHeader(r);
-    if (h && h.status !== MsgStatus.DELETED && isForMe(h)) {
-      r.header = h;
-      await displayMessage(socket, session, r, h);
-      const outcome = await replyPrompt(socket, session, r);
-      if (!r.kMsgFlag) session.lastNewReadConf = r.msgNum + 1;
-      if (outcome === 'failure') return 'success';
+  // Reading: keys belong to replyPrompt's lineInput, and one that arrives
+  // between prompts is dropped (command.handler's MSG_READER_NAV guard).
+  const was = session.subState;
+  session.subState = LoggedOnSubState.MSG_READER_NAV;
+  reading.add(session);
+  try {
+    r.msgNum = displayMsg;
+    while (r.msgNum < stats.highMsgNum) {
+      const h = loadMessageHeader(r);
+      if (h && h.status !== MsgStatus.DELETED && isForMe(h)) {
+        r.header = h;
+        await displayMessage(socket, session, r, h);
+        const outcome = await replyPrompt(socket, session, r);
+        if (!r.kMsgFlag) session.lastNewReadConf = r.msgNum + 1;
+        if (outcome === 'failure') return 'success';
+      }
+      r.msgNum++;
     }
-    r.msgNum++;
+    return 'success';
+  } finally {
+    reading.delete(session);
+    session.subState = was;
   }
-  return 'success';
 }
