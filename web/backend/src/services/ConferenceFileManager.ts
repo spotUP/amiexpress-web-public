@@ -16,6 +16,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { boardRoot } from '../utils/board-root.util';
 
 interface Conference {
   id: number;
@@ -54,7 +55,7 @@ export class ConferenceFileManager {
 
   constructor() {
     // Path resolution: 4 levels up from src/services/ to project root
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = boardRoot();
     this.confDBPath = path.join(this.bbsRoot, 'Conf.DB');
     this.suppressConfDbErrors = process.env.NODE_ENV === 'test' || process.env.SUPPRESS_CONF_DB_ERRORS === '1';
   }

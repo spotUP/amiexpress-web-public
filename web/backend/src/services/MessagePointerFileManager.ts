@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { boardRoot } from '../utils/board-root.util';
 
 export const CONFBASE_RECORD_SIZE = 74;
 
@@ -136,7 +137,7 @@ export class MessagePointerFileManager {
   private readonly suppressErrors: boolean;
 
   constructor(bbsRoot?: string) {
-    this.bbsRoot = bbsRoot || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = bbsRoot || boardRoot();
     this.suppressErrors = process.env.NODE_ENV === 'test' || process.env.SUPPRESS_CONF_DB_ERRORS === '1';
   }
 

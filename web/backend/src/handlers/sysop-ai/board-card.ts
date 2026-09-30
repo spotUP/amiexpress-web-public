@@ -25,6 +25,7 @@ import { conferenceDir } from '../../conferences/conference-paths';
 import { checkSecurity } from '../../utils/acs.util';
 import { chunkBbsHelp } from './corpus';
 import { ACSPermission } from '../../constants/acs-permissions';
+import { boardRoot } from '../../utils/board-root.util';
 
 // DISK, NOT REGISTRIES. The in-memory door registry is filled once at boot
 // (server/initialization.ts:674) and a door installed or deleted at runtime is
@@ -60,7 +61,7 @@ export function conferencesFromDisk(bbsRoot: string): ConferenceOnCard[] {
     .filter((c) => c.name && c.name.trim() !== '');
 }
 
-const defaultRoot = () => process.env.BBS_ROOT || path.join(__dirname, '../../../../..');
+const defaultRoot = () => boardRoot();
 
 function section(name: string, build: () => string[]): string[] {
   try {

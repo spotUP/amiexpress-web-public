@@ -3,6 +3,7 @@ import { classifyMsgHeaderRecord, classifyHeaderFile, portRecordToAmiga, type Ms
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRootConferenceDir } from '../utils/file-hold.util';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * MessageIndexManager - Manages AmiExpress message index files
@@ -122,7 +123,7 @@ export class MessageIndexManager {
   private bbsRoot: string;
 
   constructor() {
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = boardRoot();
   }
 
   /**

@@ -26,19 +26,20 @@ const CONF = 1;
 const MSG_NUMBER = 4242;
 
 let root = '';
-let previousRoot: string | undefined;
+let previousDataDir: string | undefined;
 let manager: MessageFileManager;
 
+// The board's files are wherever BBS_DATA_DIR says (utils/board-root.util).
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'msg-encoding-'));
-  previousRoot = process.env.BBS_ROOT;
-  process.env.BBS_ROOT = root;
+  previousDataDir = process.env.BBS_DATA_DIR;
+  process.env.BBS_DATA_DIR = root;
   manager = new MessageFileManager();
 });
 
 afterEach(() => {
-  if (previousRoot === undefined) delete process.env.BBS_ROOT;
-  else process.env.BBS_ROOT = previousRoot;
+  if (previousDataDir === undefined) delete process.env.BBS_DATA_DIR;
+  else process.env.BBS_DATA_DIR = previousDataDir;
   fs.rmSync(root, { recursive: true, force: true });
 });
 

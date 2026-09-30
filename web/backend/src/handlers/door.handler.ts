@@ -508,6 +508,7 @@ export { AMIGA_68K_DOOR_TYPES } from '../constants/door-types';
 import { AMIGA_68K_DOOR_TYPES as AMIGA_TYPES } from '../constants/door-types';
 import { withDoorReporting } from '../achievements/sites';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
+import { boardRoot } from '../utils/board-root.util';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -3807,7 +3808,7 @@ console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
 
   // Process MCI codes inline (express.e:4297 calls processMci())
   // Passing socket enables inline emission and command execution
-  const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+  const bbsRoot = boardRoot();
   const { loadBBSConfig } = require('../services/bbs-config-file.service');
   const bbsConfig = loadBBSConfig(bbsRoot);
   

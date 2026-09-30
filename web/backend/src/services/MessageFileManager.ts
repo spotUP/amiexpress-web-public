@@ -10,13 +10,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Message } from '../database';
 import { messageIndexManager, MsgStatus, MsgHeader } from './MessageIndexManager';
+import { boardRoot } from '../utils/board-root.util';
 
 export class MessageFileManager {
   private bbsRoot: string;
 
   constructor() {
     // Path resolution: 4 levels up from src/services/ to project root
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = boardRoot();
   }
 
   /** `<bbsRoot>/Conf{N}/MsgBase/` — express.e msgBaseLocation default. */

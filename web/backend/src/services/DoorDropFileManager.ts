@@ -65,6 +65,7 @@ import { User } from '../database';
 import { loadBBSConfig } from './bbs-config-file.service';
 import { getSystemTime } from '../utils/date-time.util';
 import { formatDateSlash, formatTime as formatTimeUtil } from '../utils/date-format.util';
+import { boardRoot } from '../utils/board-root.util';
 
 // Cache for previous caller info per node (avoids reading logs repeatedly)
 interface PreviousCallerInfo {
@@ -80,7 +81,7 @@ export class DoorDropFileManager {
   private previousCallerCache: Map<number, PreviousCallerInfo> = new Map();
 
   constructor() {
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = boardRoot();
     // Load BBS name and sysop name from disk (bbsConfig.info)
     this.loadConfigFromDisk();
 console.log('[DoorDropFile] Initialized');
