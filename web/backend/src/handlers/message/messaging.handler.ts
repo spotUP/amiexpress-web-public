@@ -1045,7 +1045,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       // creating a new entry. Reader returns to nav prompt afterwards.
       editingExistingMsgId: msgNum,
       editingReturnIndex: currentIndex,
-      // Disable file-attach during body edit (express.e:11144 fileattach:=FALSE)
+      // express.e:11143 fileattach:=FALSE - no F at "Msg. Options"
+      fileAttach: false,
       attachedFiles: [],
     };
     session.inputBuffer = '';
