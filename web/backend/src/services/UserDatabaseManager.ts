@@ -188,10 +188,10 @@ export class UserDatabaseManager {
 
   private parseUserStruct(buffer: Buffer): UserStruct {
     let offset = 0;
-    const name = buffer.toString('ascii', offset, offset + 31).replace(/\0.*$/, ''); offset += 31;
-    const pass = buffer.toString('ascii', offset, offset + 9).replace(/\0.*$/, ''); offset += 9;
-    const location = buffer.toString('ascii', offset, offset + 30).replace(/\0.*$/, ''); offset += 30;
-    const phoneNumber = buffer.toString('ascii', offset, offset + 13).replace(/\0.*$/, ''); offset += 13;
+    const name = buffer.toString('latin1', offset, offset + 31).replace(/\0.*$/, ''); offset += 31;
+    const pass = buffer.toString('latin1', offset, offset + 9).replace(/\0.*$/, ''); offset += 9;
+    const location = buffer.toString('latin1', offset, offset + 30).replace(/\0.*$/, ''); offset += 30;
+    const phoneNumber = buffer.toString('latin1', offset, offset + 13).replace(/\0.*$/, ''); offset += 13;
     offset += 1; // PAD
     const slotNumber = buffer.readInt16BE(offset); offset += 2;
     const secStatus = buffer.readInt16BE(offset); offset += 2;
@@ -259,7 +259,7 @@ export class UserDatabaseManager {
 
   private parseUserKeysStruct(buffer: Buffer): UserKeysStruct {
     let offset = 0;
-    const userName = buffer.toString('ascii', offset, offset + 31).replace(/\0.*$/, ''); offset += 31;
+    const userName = buffer.toString('latin1', offset, offset + 31).replace(/\0.*$/, ''); offset += 31;
     offset += 1; // PAD
     const number = buffer.readInt32BE(offset); offset += 4;
     const newUser = buffer.readUInt8(offset++);
@@ -276,11 +276,11 @@ export class UserDatabaseManager {
 
   private parseUserMiscStruct(buffer: Buffer): UserMiscStruct {
     let offset = 0;
-    const internetName = buffer.toString('ascii', offset, offset + 10).replace(/\0.*$/, ''); offset += 10;
-    const realName = buffer.toString('ascii', offset, offset + 26).replace(/\0.*$/, ''); offset += 26;
+    const internetName = buffer.toString('latin1', offset, offset + 10).replace(/\0.*$/, ''); offset += 10;
+    const realName = buffer.toString('latin1', offset, offset + 26).replace(/\0.*$/, ''); offset += 26;
     const downloadBytesBCD = Buffer.alloc(8); buffer.copy(downloadBytesBCD, 0, offset, offset + 8); offset += 8;
     const uploadBytesBCD = Buffer.alloc(8); buffer.copy(uploadBytesBCD, 0, offset, offset + 8); offset += 8;
-    const eMail = buffer.toString('ascii', offset, offset + 50).replace(/\0.*$/, ''); offset += 50;
+    const eMail = buffer.toString('latin1', offset, offset + 50).replace(/\0.*$/, ''); offset += 50;
     const lastDlCPS = buffer.readInt32BE(offset); offset += 4;
     const pwdHash = Buffer.alloc(32); buffer.copy(pwdHash, 0, offset, offset + 32); offset += 32;
     const salt = Buffer.alloc(8); buffer.copy(salt, 0, offset, offset + 8); offset += 8;
@@ -425,7 +425,7 @@ export class UserDatabaseManager {
 
   private writeString(buffer: Buffer, offset: number, str: string, length: number): number {
     const temp = Buffer.alloc(length, 0);
-    Buffer.from(str.substring(0, length), "ascii").copy(temp);
+    Buffer.from(str.substring(0, length), "latin1").copy(temp);
     temp.copy(buffer, offset);
     return offset + length;
   }
