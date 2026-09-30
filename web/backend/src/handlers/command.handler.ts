@@ -808,6 +808,7 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
         // auto=FALSE per express.e:28574; auto=TRUE would trigger S command and Auto-ReJoined display which does NOT happen here
         const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, false, FORCE_MAILSCAN_SKIP);
+        if (session.tempData?.quickLogon) session.tempData.quickLogon = false;
 
         session.blockOLM = false;
 

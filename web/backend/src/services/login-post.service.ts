@@ -831,16 +831,20 @@ export async function runPostAuthLogin(
   session.doorInputHandler = undefined;
   if ((session as any).shortcuts) (session as any).shortcuts.clear();
 
-  // QuickLogon ('Q' at ANSI prompt) → straight to menu.
+  // QuickLogon ('Q' at the graphics prompt, "[Q=SKIP BULLS]"): no bulletins
+  // and no logon mail scan, but the caller still rejoins their conference -
+  // express.e's rejoin (28574), the AUTO_REJOIN step of the display flow.
+  // Going straight to the menu left the session on its start-up placeholder,
+  // conference 0 "General" (sysop, 2026-09-30: "[0:General] Menu"). The
+  // quickLogon flag stays set until that rejoin, which skips CONF_BULL for it.
   if (session.tempData?.quickLogon) {
-    session.tempData.quickLogon = false;
     session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.subState = LoggedOnSubState.AUTO_REJOIN;
     try {
-      const { displayMainMenu } = require("../handlers/command-handler/menu");
-      await displayMainMenu(emitter as any, session);
+      const { handleCommand } = require("../handlers/command.handler");
+      await handleCommand(emitter as any, session, "", ctx.io);
     } catch (err) {
-      console.error("[LOGIN] quick-logon displayMainMenu failed:", err);
+      console.error("[LOGIN] quick-logon rejoin failed:", err);
     }
     return { ok: false, terminated: "quick-logon-handled" };
   }

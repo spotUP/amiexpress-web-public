@@ -285,7 +285,9 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     // AUTO_REJOIN display-flow branch put it back, so manual `j N`
     // via handleJoinConferenceCommand → joinConference skipped the
     // BULL entirely. Putting it back inline matches express.e 1:1.
-    if (!confScan) {
+    // A quick logon ("[Q=SKIP BULLS]") rejoins without the conference
+    // bulletin; login-post.service sets the flag and AUTO_REJOIN clears it.
+    if (!confScan && !session.tempData?.quickLogon) {
       // currentMenuName must be cleared so MCI codes inside CONF_BULL
       // that reference the menu name don't render the prior conf's
       // stale value (express.e:5057 StrCopy(currentMenuName,'')).
