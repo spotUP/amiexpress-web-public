@@ -99,7 +99,6 @@ import { handlePageSysopCommand } from './command-handler/page-sysop-command';
 import { processBatchFile } from '../server/file-socket-handlers';
 import { config } from '../config';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
-import { parseInfoFile } from '../utils/amiga-command-parser.util';
 import {
   handleLiveChatCommand
 } from './chat/chat-commands.handler';
@@ -576,6 +575,13 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
       `state=${session.subState}`);
     return;
   }
+  // The logon scan is one awaited procedure (message-scan performConferenceScan).
+  // A key that reaches the flow while it runs - between its questions - must
+  // not start it again; the flow goes on when the scan returns.
+  if (session.inConfScan) {
+    displayFlowLog('the conference scan is running; not advancing', `state=${session.subState}`);
+    return;
+  }
 
   let loopCount = 0;
   const maxLoops = 20; // Prevent infinite loops
@@ -725,53 +731,15 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
-        // express.e:28073 - displayScreen(SCREEN_MAILSCAN) — always shown before scan/prompt
+        // express.e:28073 - displayScreen(SCREEN_MAILSCAN), then confScan runs
+        // to its end: every question in it is awaited where express.e asks it.
         await displayScreen(socket, session, 'MAILSCAN');
-        // express.e:28075 - IF (checkToolTypeExists(TOOLTYPE_NODE,node,'MAILSCAN_PROMPT'))
-        const nodeInfoPath = path.join(config.get('dataDir'), `Node${session.nodeId}.info`);
-        let hasMailscanPrompt = false;
-        try {
-          const tooltypes = parseInfoFile(nodeInfoPath);
-          hasMailscanPrompt = tooltypes.has('MAILSCAN_PROMPT');
-        } catch (_e) {
-          // no node info file — no prompt
-        }
-        if (hasMailscanPrompt) {
-          displayFlowLog('CONF_SCAN: MAILSCAN_PROMPT tooltype found, showing prompt');
-          // Pre-init confScanState with promptShown=TRUE so advanceConferenceScan
-          // knows to skip per-conf checkMailConfScan() when user answers Y.
-          if (!session.tempData) session.tempData = {};
-          if (!session.tempData.confScanState) {
-            session.tempData.confScanState = {
-              confIndex: 0,
-              mscan: true,
-              promptShown: true,   // express.e:28075 prompt=TRUE
-              fileScanDone: false,
-              pendingConf: 0,
-              pendingMsgBase: 0,
-              pendingMessages: []
-            };
-          } else {
-            session.tempData.confScanState.promptShown = true;
-          }
-          // express.e:28076 aePuts('\b\n[0mScan for Mail ') then yesNo(1) → (Y/n)?
-          emitText(socket, '\r\n\x1b[0mScan for Mail \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m ');
-          session.subState = LoggedOnSubState.MAILSCAN_PROMPT_INPUT;
-          return;
-        }
         displayFlowLog('CONF_SCAN: performing conference scan');
         const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);
-        // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL.
-        // NOTE: performConferenceScan may have yielded mid-scan (CONF_SCAN_MAIL_PROMPT),
-        // or may have already advanced to DISPLAY_CONF_BULL via finishConferenceScan.
-        // Only set DISPLAY_CONF_BULL ourselves when no yield happened.
-        if (session.subState === LoggedOnSubState.CONF_SCAN) {
-          session.menuPause = true;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          continue;
-        }
-        return; // subState was changed by performConferenceScan — stop display-flow loop
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        continue;
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
@@ -1182,117 +1150,6 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
     await afterMessageEntryInput(socket, session, prevMessageSubState);
-    return;
-  }
-
-  // express.e:28075-28080 - MAILSCAN_PROMPT yesNo(1): Y/Enter=yes (scan), N=no (skip), loop on unknown
-  if (session.subState === LoggedOnSubState.MAILSCAN_PROMPT_INPUT) {
-    const ch = (data[0] || '').toUpperCase();
-    if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
-      return; // loop — yesNo(1) ignores unknown chars
-    }
-    const doScan = (ch !== 'N'); // default yes: Y or Enter = scan
-    // Use direct emit (not emitText) so the echo lands BEFORE the
-    // subsequent "Scanning conferences…" lines that performConferenceScan
-    // emits directly. emitText is 16ms-buffered; the scan flushes ahead
-    // of it and the user sees a delayed "Yes" trailing the scan output.
-    socket.emit('ansi-output', doScan ? 'Yes\r\n' : 'No\r\n');
-
-    // express.e:28079 - mscan:=(mystat=1)
-    // Propagate the Y/N answer into confScanState so advanceConferenceScan can
-    // gate the file scan phase (express.e:28082 IF (prompt=FALSE) OR (mscan=TRUE)).
-    if (!session.tempData) session.tempData = {};
-    if (session.tempData.confScanState) {
-      session.tempData.confScanState.mscan = doScan;
-    }
-
-    if (doScan) {
-      // express.e:28082-28085 — mscan=TRUE: show "Scanning conferences..." and do scan
-      const { performConferenceScan } = require('./message/message-scan.handler');
-      await performConferenceScan(socket, session);
-      // performConferenceScan may have yielded mid-scan (CONF_SCAN_MAIL_PROMPT)
-      // or already advanced to DISPLAY_CONF_BULL via finishConferenceScan.
-      // Only transition ourselves when scan finished synchronously.
-      if (session.subState === LoggedOnSubState.MAILSCAN_PROMPT_INPUT ||
-          session.subState === LoggedOnSubState.CONF_SCAN) {
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        await advanceDisplayFlow(socket, session);
-      }
-      return;
-    }
-    // express.e:28082 - (prompt=TRUE AND mscan=FALSE): skip entire scan block
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    await advanceDisplayFlow(socket, session);
-    return;
-  }
-
-  // express.e:11739 - per-conference "Would you like to read it now (Y/n)?"
-  // Yielded from advanceConferenceScan when new mail is found in a conference.
-  if (session.subState === LoggedOnSubState.CONF_SCAN_MAIL_PROMPT) {
-    const ch = (data[0] || '').toUpperCase();
-    if (ch !== 'Y' && ch !== 'N' && ch !== 'Q' && ch !== '\r' && ch !== '\n' && ch !== '') {
-      return; // loop — yesNo(1) ignores unknown chars
-    }
-    if (ch === 'Q') {
-      // Q - Quit mail scan entirely, skip to file scan phase
-      // Clear pending mail state and jump to file scan phase
-      if (session.tempData?.confScanState) {
-        session.tempData.confScanState.mscan = false;
-        session.tempData.confScanState.confIndex = session.tempData.confScanState.confIndex + 1;
-      }
-      const { advanceConferenceScan } = require('./message/message-scan.handler');
-      await advanceConferenceScan(socket, session);
-      return;
-    }
-    const doRead = (ch !== 'N'); // default yes
-    // See MAILSCAN_PROMPT_INPUT above — direct emit so the echo doesn't
-    // get reordered after subsequent buffered output.
-    socket.emit('ansi-output', doRead ? 'Yes\r\n' : 'No\r\n');
-
-    if (doRead && session.tempData?.confScanState?.pendingMessages?.length > 0) {
-      const state = session.tempData.confScanState;
-      const pendingConf: number = state.pendingConf;
-      const bbsDataPath = config.get('dataDir');
-      const { readMessageFile } = require('../utils/message-file.util');
-      const fullMessages: any[] = [];
-
-      for (const m of state.pendingMessages) {
-        try {
-          const msg = await readMessageFile(pendingConf, m.msgNum, bbsDataPath);
-          if (msg) {
-            fullMessages.push({
-              id: m.msgNum,
-              msgNumber: m.msgNum,
-              subject: msg.subject,
-              body: msg.body,
-              author: msg.from,
-              toUser: msg.to,
-              timestamp: new Date(msg.date),
-              isPrivate: msg.isPrivate
-            });
-          }
-        } catch (_e) { /* skip unreadable messages */ }
-      }
-
-      if (fullMessages.length > 0) {
-        session.tempData.msgReaderMessages = fullMessages;
-        session.tempData.msgReaderIndex = 0;
-        session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
-        session.tempData.confScanReturnAfterRead = true;
-        session.subState = LoggedOnSubState.MSG_READER_NAV;
-        const { displaySingleMessage } = require('./message/messaging.handler');
-        await displaySingleMessage(socket, session, 0);
-      } else {
-        // Headers found but no readable files — continue scan
-        const { advanceConferenceScan } = require('./message/message-scan.handler');
-        await advanceConferenceScan(socket, session);
-      }
-    } else {
-      // N pressed or no pending messages — continue scan
-      const { advanceConferenceScan } = require('./message/message-scan.handler');
-      await advanceConferenceScan(socket, session);
-    }
     return;
   }
 
@@ -4851,7 +4708,7 @@ async function dispatchInternalCommand(
       return;
 
     case 'MS': // Mail Scan (internalCommandMS) - express.e:25250-25279
-      handleMailScanCommand(socket, session);
+      await handleMailScanCommand(socket, session);
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503

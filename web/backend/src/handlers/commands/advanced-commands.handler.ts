@@ -214,46 +214,33 @@ export function handleGreetingsCommand(socket: any, session: BBSSession): void {
  * Scans all accessible conferences for new messages addressed to the user.
  */
 export async function handleMailScanCommand(socket: any, session: BBSSession): Promise<void> {
-  // express.e:25250-25269 internalCommandMS
-  // Loops through all accessible conferences/msgbases calling joinConf with FORCE_MAILSCAN_ALL
-  const { joinConference, FORCE_MAILSCAN_ALL } = require('../operations/conference.handler');
+  // express.e:25250-25273 internalCommandMS: every conference and message base
+  // the caller can reach, joined as the logon scan joins them, with
+  // FORCE_MAILSCAN_ALL; then back to where they were.
+  const { joinConference, FORCE_MAILSCAN_ALL, FORCE_MAILSCAN_SKIP } = require('../operations/conference.handler');
+  const { emitText } = require('../../utils/output.util');
 
-  socket.emit('ansi-output', '\r\nScanning conferences for mail...\r\n\r\n');
+  if (!session.tempData) session.tempData = {};
+  session.tempData.nonStopDisplayFlag = false;
+  const oldConf = session.currentConf;
+  const oldMsgBase = session.currentMsgBase;
+  session.currentConf = 0;
+  session.currentConference = 0;
+  session.tempData.lineCount = 2;
+  emitText(socket, '\r\nScanning conferences for mail...\r\n\r\n');
 
-  // Save current conference/msgbase to restore later
-  const savedConf = session.currentConf;
-  const savedMsgBase = session.currentMsgBase;
-
-  // Get all conferences user has access to
-  const accessibleConferences = _conferences.filter(conf => _checkConfAccess(session.user, conf.id));
-  let scannedConferences = 0;
-
-  // express.e:25260-25268 - Loop through all conferences and message bases
-  for (const conf of accessibleConferences) {
-    // Get message bases for this conference
-    const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf.id);
-
-    for (const msgBase of confMsgBases) {
-      // express.e:25264 - joinConf(conf,msgbase,TRUE,FALSE,FORCE_MAILSCAN_ALL)
-      // TRUE = silent display, FALSE = not auto-rejoin
-      const result = await joinConference(socket, session, conf.id, msgBase.id, true, false, FORCE_MAILSCAN_ALL);
-      if (!result) {
-        // express.e:25267 - EXIT mystat=RESULT_FAILURE
-        break;
-      }
+  for (const conf of _conferences) {
+    if (!_checkConfAccess(session.user, conf.id)) continue;
+    for (const msgBase of _messageBases.filter(mb => mb.conferenceId === conf.id)) {
+      // joinConf(conf,msgbase,TRUE,FALSE,FORCE_MAILSCAN_ALL): TRUE is confScan.
+      await joinConference(socket, session, conf.id, msgBase.id, true, false, FORCE_MAILSCAN_ALL, true);
     }
-    scannedConferences++;
   }
 
-  // Restore original conference/msgbase
-  if (savedConf && savedMsgBase) {
-    await joinConference(socket, session, savedConf, savedMsgBase, true, false, 1); // FORCE_MAILSCAN_SKIP
-  }
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `Conferences scanned: ${scannedConferences}\r\n`);
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  await joinConference(socket, session, oldConf, oldMsgBase, true, false, FORCE_MAILSCAN_SKIP);
+  session.currentConf = oldConf;
+  session.currentConference = oldConf;
+  session.currentMsgBase = oldMsgBase;
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;

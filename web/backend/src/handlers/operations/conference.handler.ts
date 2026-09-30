@@ -451,15 +451,10 @@ async function runJoinMailScan(
     // Runs when: auto=FALSE AND forceMailScan != FORCE_MAILSCAN_SKIP
     // Then scans if: FORCE_MAILSCAN_ALL OR checkMailConfScan() returns true
     // After scan: saveMsgPointers() persists updated read pointers to disk
-    //
-    // WEB_: when called from confScan (advanceConferenceScan), skip the
-    // per-conf mail scan here. advanceConferenceScan iterates the same
-    // conferences and runs the scan + "Would you like to read it now" prompt
-    // itself (express.e:11737-11765 — the prompt lives in searchNewMail). If
-    // we ran it here too, performSingleConfMailScan would advance the read
-    // pointer first and the outer loop's getMessagesForConfScan would find
-    // nothing, suppressing the prompt.
-    if (!auto && !confScan && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
+
+    // express.e:5119 - IF (auto=FALSE) AND (forceMailScan<>FORCE_MAILSCAN_SKIP): a
+    // scan of every conference (confScan, MS) comes through here too.
+    if (!auto && forceMailScan !== FORCE_MAILSCAN_SKIP && session.user) {
       let shouldScan = forceMailScan === FORCE_MAILSCAN_ALL;
       if (!shouldScan) {
         // express.e:5120 - checkMailConfScan(conf, msgBaseNum)
@@ -506,7 +501,19 @@ async function runJoinMailScan(
             // A join is currentConf<>0: "Found Mail!", "Would you like to read it
             // now" and replyPrompt per message - no table (11667-11760).
             const { searchNewMail } = require('../message/read-msg');
-            await searchNewMail(socket, session, confId, msgBaseId, null);
+            // confScan / MS run with currentConf=0: the conference line and the
+            // table (11667-11735). A join is currentConf<>0.
+            let scanning: { confName: string; msgBaseName: string; msgBaseNum: number } | null = null;
+            if (confScan) {
+              const bases = messageBases.filter(mb => mb.conferenceId === confId);
+              const idx = bases.findIndex(mb => mb.id === msgBaseId);
+              scanning = {
+                confName: conferences.find(c => c.id === confId)?.name ?? '',
+                msgBaseName: (bases[idx] as any)?.declaredName ?? '',
+                msgBaseNum: idx >= 0 ? idx + 1 : 1,
+              };
+            }
+            await searchNewMail(socket, session, confId, msgBaseId, scanning);
           } catch (err) {
   console.warn('[joinConference] Mail scan error:', err);
           }

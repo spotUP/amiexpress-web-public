@@ -1262,7 +1262,7 @@ export async function searchNewMail(
   session: BBSSession,
   conf: number,
   msgBase: number,
-  scanning: { confName: string; msgBaseName: string } | null,
+  scanning: { confName: string; msgBaseName: string; msgBaseNum: number } | null,
 ): Promise<'success' | 'failure'> {
   const stats = readStats(conf);
   const r: Reader = {
@@ -1275,9 +1275,11 @@ export async function searchNewMail(
   if (stats.highMsgNum < (session.lastNewReadConf || 0)) session.lastNewReadConf = stats.lowestKey;
 
   if (scanning) {
-    if (msgBase === 1) emitText(socket, `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${scanning.confName} - `);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { scanningConferenceLine } = require('./message-scan.handler');
+    if (scanning.msgBaseNum === 1) emitText(socket, scanningConferenceLine(scanning.confName));
     if (scanning.msgBaseName.length > 0) {
-      if (msgBase === 1) emitText(socket, '\r\n');
+      if (scanning.msgBaseNum === 1) emitText(socket, '\r\n');
       emitText(socket, ` \x1b[32mMessage Base\x1b[33m: \x1b[0m${scanning.msgBaseName} - `);
     }
   }
@@ -1305,17 +1307,29 @@ export async function searchNewMail(
     const h = loadMessageHeader(r);
     if (h && h.status !== MsgStatus.DELETED && isForMe(h) && h.recv === 0) {
       if (scanning) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { buildMailScanRow } = require('./message-scan.handler');
+        const narrow = isNarrow(session);
         if (!mailFlag) {
           displayMsg = r.msgNum;
           emitText(socket, '\r\n\r\n');
-          emitText(socket, '\x1b[32mType     From                           Subject                Msg    \r\n');
-          emitText(socket, '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+          if (narrow) {
+            // A C64 row cannot hold 29/21 columns; the board's stacked form.
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { narrowRule } = require('../../utils/table-format.util');
+            emitText(socket, `\x1b[32mMsg    Type\r\n\x1b[33m${narrowRule()}\r\n`);
+          } else {
+            emitText(socket, '\x1b[32mType     From                           Subject                Msg    \r\n');
+            emitText(socket, '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+          }
           emitText(socket, '\x1b[0m');
           if (!session.tempData.nonStopDisplayFlag) session.tempData.lineCount = (session.tempData.lineCount || 0) + 4;
           mailFlag = true;
         }
-        const type = isPublic(h) ? 'Public ' : 'Private';
-        emitText(socket, `${type}  ${h.fromName.slice(0, 29).padEnd(29)}  ${h.subject.slice(0, 21).padEnd(21)}  \x1b[0m${String(h.msgNumb).padStart(6, '0')}\r\n`);
+        const rows: string[] = buildMailScanRow(
+          { isPrivate: !isPublic(h), from: h.fromName, subject: h.subject, msgNum: h.msgNumb }, narrow,
+        );
+        emitText(socket, rows.map((row) => `${row}\r\n`).join(''));
         if ((await checkForPause(socket, session)) === false) return 'success';
       } else if (!mailFlag) {
         displayMsg = r.msgNum;

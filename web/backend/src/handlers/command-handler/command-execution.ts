@@ -224,7 +224,7 @@ console.log("Entering switch statement for command:", command);
       return;
 
     case "MS": // Mail Scan (internalCommandMS) - express.e:25250-25279
-      handleMailScanCommand(socket, session);
+      await handleMailScanCommand(socket, session);
       return;
 
     case "OLM": // Online Message (internalCommandOLM) - express.e:25406-25503

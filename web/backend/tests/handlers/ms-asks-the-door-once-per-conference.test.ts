@@ -165,6 +165,9 @@ describe('the MS walk itself', () => {
       [1, 2],
       [2, 1],
     ]);
+    // joinConf(conf,msgbase,TRUE,...): TRUE is confScan (express.e:25264), so
+    // each base answers with the logon scan's table, not a J's "Found Mail!".
+    expect(scans.every((c: any[]) => c[7] === true)).toBe(true);
   });
 
   it('does not join a conference the caller cannot reach', async () => {

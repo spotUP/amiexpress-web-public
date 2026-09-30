@@ -1169,14 +1169,6 @@ export async function saveMessagePointerAndExit(socket: any, session: BBSSession
   emitText(socket, '\r\n');
   session.menuPause = false;
 
-  // If we were reading mail during confScan, return to scan (express.e:11772+)
-  if (session.tempData?.confScanReturnAfterRead) {
-    delete session.tempData.confScanReturnAfterRead;
-    const { advanceConferenceScan } = require('../message/message-scan.handler');
-    await advanceConferenceScan(socket, session);
-    return;
-  }
-
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 

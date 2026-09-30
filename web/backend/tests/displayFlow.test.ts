@@ -109,10 +109,7 @@ jest.mock('../src/handlers/operations/conference.handler', () => ({
 
 // Mock confScan so it doesn't call the real message scanner or set menuPause
 jest.mock('../src/handlers/message/message-scan.handler', () => ({
-  performConferenceScan: jest.fn(async (_socket: any, session: any) => {
-    const { LoggedOnSubState } = require('../src/constants/bbs-states');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  }),
+  performConferenceScan: jest.fn(async () => 0),
 }));
 
 jest.mock('../src/handlers/door.handler', () => ({
@@ -210,22 +207,17 @@ describe('Display flow parity', () => {
     // No-pause doPause so the loop drives through every state in order.
     doPauseMock.mockImplementation(() => { /* no paginatedScreen — keep flowing */ });
 
-    // First call: DISPLAY_BULL → ... → CONF_SCAN → performConferenceScan
-    // (mocked to land on DISPLAY_CONF_BULL) → return.
+    // DISPLAY_BULL -> ... -> CONF_SCAN (the scan runs to its end, express.e
+    // confScan) -> DISPLAY_CONF_BULL -> AUTO_REJOIN -> displayScreen('CONF_BULL').
+    // CONF_BULL is rendered by the join (express.e:5058). See
+    // tests/conference-join-conf-bull.test.ts for the architectural pin.
     await handleCommand(socket, session, '');
     expect(displayScreenMock).toHaveBeenCalled();
-    const screenNames1 = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
-    expect(screenNames1).toContain('BULL');
-    expect(screenNames1).toContain('NODE_BULL');
+    const names = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(names).toContain('BULL');
+    expect(names).toContain('NODE_BULL');
     expect(doPauseMock).toHaveBeenCalled();
-
-    // Second call: DISPLAY_CONF_BULL → AUTO_REJOIN → displayScreen('CONF_BULL').
-    // CONF_BULL is rendered here (express.e:5058) — not in displayConferenceBulletins
-    // anymore. See tests/conference-join-conf-bull.test.ts for the architectural pin.
-    displayScreenMock.mockClear();
-    await handleCommand(socket, session, '');
-    const screenNames2 = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
-    expect(screenNames2).toContain('CONF_BULL');
+    expect(names.indexOf('CONF_BULL')).toBeGreaterThan(names.indexOf('MAILSCAN'));
   });
 
   /**

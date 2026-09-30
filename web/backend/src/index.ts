@@ -138,8 +138,6 @@ import {
   setConstants,
 } from "./handlers/operations/conference.handler";
 import {
-  performConferenceScan,
-  displayMailScanScreen,
   setMessageScanDependencies,
   checkConfAccess,
 } from "./handlers/message/message-scan.handler";
