@@ -2973,7 +2973,7 @@ static int run_extractor(const dr_config *cfg, const char *archive_path, const c
  * case - the one where nothing was unpacked at all. */
 #define INSTALL_CENSUS_MAX 12
 
-static int ui_show_ad_files(const char *files_body)
+static int ui_show_ad_files(const char *files_body, const char *stage)
 {
     const char *line = files_body;
     int found = 0;
@@ -2988,14 +2988,15 @@ static int ui_show_ad_files(const char *files_body)
 
     while (line != (const char *) 0) {
         char rel[160];
+        char inside[160];
         int junk = 0;
 
         if (flow_files_parse_row(line, (unsigned long *) 0, &junk, rel, sizeof(rel)) == 0
-            && junk) {
+            && junk && flow_ad_path(rel, stage, inside, sizeof(inside))) {
             found++;
             if (shown < AD_LIST_MAX) {
                 char msg[192];
-                sprintf(msg, "    %.170s", rel);
+                sprintf(msg, "    %.170s", inside);
                 ae_put(msg, 1);
                 shown++;
             }
@@ -3012,7 +3013,7 @@ static int ui_show_ad_files(const char *files_body)
     return found;
 }
 
-static int strip_ad_files(const char *install_dir, const char *files_body)
+static int strip_ad_files(const char *install_dir, const char *files_body, const char *stage)
 {
     const char *line = files_body;
     int removed = 0;
@@ -3023,12 +3024,13 @@ static int strip_ad_files(const char *install_dir, const char *files_body)
 
     while (line != (const char *) 0) {
         char rel[160];
+        char inside[160];
         char full[320];
         int junk = 0;
 
         if (flow_files_parse_row(line, (unsigned long *) 0, &junk, rel, sizeof(rel)) == 0
-            && junk) {
-            if (flow_build_local_path(full, sizeof(full), install_dir, rel) >= 0) {
+            && junk && flow_ad_path(rel, stage, inside, sizeof(inside))) {
+            if (flow_build_local_path(full, sizeof(full), install_dir, inside) >= 0) {
                 if (remove(full) == 0) {
                     removed++;
                 }
@@ -3055,6 +3057,9 @@ static void strip_installed_door_apply(const dr_config *cfg, const char *archive
 {
     char msg[320];
     int removed;
+    char overlay_stage[FLOW_OVERLAY_STAGE_MAX];
+    char overlay_sub[FLOW_OVERLAY_SUB_MAX];
+    char door_dir[320];
 
     files_load(cfg, archive);
     if (!g_files_ok) {
@@ -3063,12 +3068,25 @@ static void strip_installed_door_apply(const dr_config *cfg, const char *archive
         return;
     }
 
+    /* An overlay archive's door lives under the archive's own directory
+     * name, not the command's (install_door), and its listing rows are
+     * archive-rooted: the ads are the rows inside that directory. */
+    overlay_stage[0] = '\0';
+    if (flow_overlay_from_listing(g_files, overlay_stage, sizeof(overlay_stage),
+                                  overlay_sub, sizeof(overlay_sub))) {
+        if (flow_build_local_path(door_dir, sizeof(door_dir), cfg->doors_dir, overlay_sub) < 0) {
+            ae_put("The door's directory name is too long for DoorsDir. Nothing was removed.", 1);
+            return;
+        }
+        install_dir = door_dir;
+    }
+
     {
         int listed;
 
         sprintf(msg, "Ad files in %s:", cmdname);
         ae_put(msg, 1);
-        listed = ui_show_ad_files(g_files);
+        listed = ui_show_ad_files(g_files, overlay_stage);
 
         if (listed == 0) {
             /* The catalog row said there were ads but the listing names
@@ -3087,7 +3105,7 @@ static void strip_installed_door_apply(const dr_config *cfg, const char *archive
                 ae_put("Nothing was removed.", 1);
                 return;
             }
-            removed = strip_ad_files(install_dir, g_files);
+            removed = strip_ad_files(install_dir, g_files, overlay_stage);
             sprintf(msg, "Removed %d ad file(s) from %s.", removed, install_dir);
             ae_put(msg, 1);
             {
@@ -3195,7 +3213,7 @@ static void strip_repo_archive(const dr_config *cfg, const char *archive,
 
     sprintf(msg, "Ad files in %s:", archive);
     ae_put(msg, 1);
-    found = ui_show_ad_files(g_files);
+    found = ui_show_ad_files(g_files, (const char *) 0);
 
     if (found == 0) {
         ae_put("No ad files found in listing.", 1);
@@ -3974,8 +3992,10 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     /* Ads are offered, never removed silently: they are files the archive's
      * author put there, and a sysop may want to read one. entry->junk is -1
      * against a server that does not report the count, in which case the
-     * listing itself still knows and the offer is made from that. */
-    if (g_files_ok && !overlay) {
+     * listing itself still knows and the offer is made from that. An overlay
+     * archive's ads are the ones inside its door directory; any beside it
+     * went with the staging area. */
+    if (g_files_ok && flow_count_door_ads(g_files, overlay ? overlay_stage : "") > 0) {
         int junk_total = 0;
         const char *line = g_files;
 
@@ -4001,7 +4021,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
 
             sprintf(msg, "This archive contains %d ad file(s):", junk_total);
             ae_put(msg, 1);
-            listed = ui_show_ad_files(g_files);
+            listed = ui_show_ad_files(g_files, overlay ? overlay_stage : "");
             if (listed > 0 && listed != junk_total) {
                 /* The header and the rows disagree. What gets deleted is the
                  * rows, so say so rather than quietly using the other number. */
@@ -4012,7 +4032,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
             {
                 int key = ae_key();
                 if (key == 'y' || key == 'Y') {
-                    int removed = strip_ad_files(install_dir, g_files);
+                    int removed = strip_ad_files(install_dir, g_files, overlay ? overlay_stage : "");
                     sprintf(msg, "Removed %d of %d ad file(s).", removed, junk_total);
                     ae_put("", 1);
                     ae_put(msg, 1);

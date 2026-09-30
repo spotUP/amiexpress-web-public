@@ -3473,6 +3473,38 @@ static void test_decode_escape_unknown_sequence_is_no_key(void)
     "495|0|file_id.diz\n" \
     "988|1|reference-board.txt\n"
 
+/* An overlay door's own ad sits inside Doors/<Name>/; the group's ad beside
+ * Commands/ never reaches the door directory. */
+#define MST_LISTING_WITH_DOOR_AD \
+    MST_LISTING \
+    "120|1|Doors/FileDescription/MST.nfo\n"
+
+TEST(an_overlay_door_ad_is_found_inside_the_door_directory)
+{
+    char out[160];
+
+    ASSERT_EQ(flow_ad_path("Doors/FileDescription/MST.nfo", "Doors/FileDescription", out, sizeof(out)), 1,
+              "an ad under the stage is in the door");
+    ASSERT_STR_EQ(out, "MST.nfo", "relative to the door directory, not the archive");
+    ASSERT_EQ(flow_ad_path("reference-board.txt", "Doors/FileDescription", out, sizeof(out)), 0,
+              "the group's ad beside Commands/ is not in the door");
+    ASSERT_EQ(flow_count_door_ads(MST_LISTING_WITH_DOOR_AD, "Doors/FileDescription"), 1,
+              "only the ad inside the door counts for an overlay");
+    ASSERT_EQ(flow_count_door_ads(MST_LISTING, "Doors/FileDescription"), 0,
+              "MST-FD11 itself has no ad inside the door, so an install asks nothing");
+}
+
+TEST(a_flat_door_ad_keeps_its_archive_path)
+{
+    char out[160];
+
+    ASSERT_EQ(flow_ad_path("docs/ad.txt", "", out, sizeof(out)), 1, "flat archive: every ad is in the door");
+    ASSERT_STR_EQ(out, "docs/ad.txt", "unchanged");
+    ASSERT_EQ(flow_ad_path("docs/ad.txt", (const char *) 0, out, sizeof(out)), 1, "NULL stage is flat too");
+    ASSERT_EQ(flow_count_door_ads(MST_LISTING, ""), 1, "flat reading counts reference-board.txt");
+    ASSERT_EQ(flow_ad_path("docs/ad.txt", "", out, 4), 0, "a path that does not fit is refused");
+}
+
 TEST(overlay_is_recognised_from_the_listing)
 {
     char stage[FLOW_OVERLAY_STAGE_MAX];
@@ -3588,6 +3620,8 @@ int main(void)
 
     RUN_TEST(door_key_pages_on_left_and_right);
 
+    RUN_TEST(an_overlay_door_ad_is_found_inside_the_door_directory);
+    RUN_TEST(a_flat_door_ad_keeps_its_archive_path);
     RUN_TEST(overlay_is_recognised_from_the_listing);
     RUN_TEST(overlay_is_recognised_under_a_wrapper_directory_and_backslashes);
     RUN_TEST(a_flat_door_is_not_an_overlay);

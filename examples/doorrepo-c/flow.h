@@ -943,6 +943,20 @@ int flow_overlay_syscmd_icon(const char *row_path, char *name, unsigned long nam
  * has no component to replace. */
 int flow_sibling_dir(const char *dir, const char *leaf, char *out, unsigned long out_size);
 
+/* Where an ad file the /files listing names lives in the INSTALLED door.
+ * Listing paths are archive-rooted. A flat archive is extracted into the
+ * door's directory as it is, so the path is unchanged (`stage` NULL or "").
+ * An overlay archive's door directory is `stage` inside the archive, so only
+ * rows under it are in the door, relative to it; an ad outside it (the
+ * group's ad beside Commands/) never reaches the door directory - the install
+ * cleans it out of the staging area with every other file there. 1 and `out`
+ * filled when the ad is in the door, 0 otherwise. */
+int flow_ad_path(const char *row_path, const char *stage, char *out, unsigned long out_size);
+
+/* How many rows the listing flags as ads that flow_ad_path() places in the
+ * installed door - the files a strip would actually delete. */
+int flow_count_door_ads(const char *listing, const char *stage);
+
 /* The door type to write into the command config, given the catalog's type
  * and the program that was actually chosen.
  *

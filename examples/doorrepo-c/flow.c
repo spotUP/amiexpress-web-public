@@ -2988,6 +2988,47 @@ int flow_overlay_syscmd_icon(const char *row_path, char *name, unsigned long nam
     return 1;
 }
 
+int flow_ad_path(const char *row_path, const char *stage, char *out, unsigned long out_size)
+{
+    if (row_path == (const char *) 0 || out == (char *) 0 || out_size == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (stage == (const char *) 0 || stage[0] == '\0') {
+        if (row_path[0] == '\0' || strlen(row_path) + 1 > out_size) {
+            return 0;
+        }
+        strcpy(out, row_path);
+        return 1;
+    }
+    return flow_overlay_relative(row_path, stage, out, out_size);
+}
+
+int flow_count_door_ads(const char *listing, const char *stage)
+{
+    const char *line = listing;
+    int count = 0;
+
+    if (line == (const char *) 0) {
+        return 0;
+    }
+    if (strncmp(line, "FILES|", 6) == 0) {
+        line = flow_files_next_line(line);
+    }
+    while (line != (const char *) 0) {
+        char rel[160];
+        char inside[160];
+        int junk = 0;
+
+        if (flow_files_parse_row(line, (unsigned long *) 0, &junk, rel, sizeof(rel)) == 0
+            && junk && flow_ad_path(rel, stage, inside, sizeof(inside))) {
+            count++;
+        }
+        line = flow_files_next_line(line);
+    }
+    return count;
+}
+
 int flow_sibling_dir(const char *dir, const char *leaf, char *out, unsigned long out_size)
 {
     unsigned long len;
