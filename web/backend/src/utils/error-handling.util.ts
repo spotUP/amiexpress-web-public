@@ -18,14 +18,17 @@ import { LoggedOnSubState } from '../constants/bbs-states';
  * CR+LF idiom - every other aePuts in the port renders it as `\r\n`.
  *
  * This is the ONLY place the string lives. express.e calls higherAccess()
- * from exactly two sites and so does this port:
+ * from three sites and so does this port:
  *
  *   - express.e:4705 - `runCommand`'s ACCESS tooltype gate, for the
  *     SYSCMD/BBSCMD door tiers (`command-execution.handler.ts`).
  *   - express.e:28400 - `processInternalCommand`'s tail, for the internal
  *     command tier (`command.handler.ts` processBBSCommand).
  *
- * Both are suppressed when `privcmd` is true, i.e. when the user did not type
+ *   - express.e:10555 - edit()'s Msg. Options F without ACS_ATTACH_FILES
+ *     (`message-entry.handler.ts` attachFile), inside the editor itself.
+ *
+ * The first two are suppressed when `privcmd` is true, i.e. when the user did not type
  * the command. Never call this from a command handler: a handler that refuses
  * returns RESULT_NOT_ALLOWED and lets its dispatcher speak, or the caller
  * hears the same refusal once per tier.

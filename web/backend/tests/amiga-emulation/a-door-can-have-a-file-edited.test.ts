@@ -19,11 +19,8 @@ import { XIMMessageParser } from '../../src/amiga-emulation/xim/messages';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 import { DoorConstants } from '../../src/amiga-emulation/DoorTypes';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
-import {
-  handleMessageBodyInput,
-  handleMessageOptionsInput,
-  handleMessageAbortConfirm,
-} from '../../src/handlers/message/message-entry.handler';
+import { handleMessageBodyInput } from '../../src/handlers/message/message-entry.handler';
+import { feedInputWaiter } from '../../src/utils/await-input';
 import { loadMsgLines, saveMsgText } from '../../src/handlers/message/door-edit-file';
 
 class StubEmulator {
@@ -49,6 +46,14 @@ class StubEmulator {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+/** Keys typed at Msg. Options: its lineInput / yesNo take them first, as handleCommand hands them. */
+async function type(t: { socket: any; session: any }, keys: string): Promise<void> {
+  for (const key of keys) {
+    feedInputWaiter(t.socket, t.session, key);
+    await flush();
+  }
+}
 
 function setUp(fileText: string | null) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jh-ef-'));
@@ -92,8 +97,7 @@ describe('a door asking the board to edit a file (JH_EF)', () => {
     await handleMessageBodyInput(t.socket, t.session, 'third line');
     await handleMessageBodyInput(t.socket, t.session, '');
     expect(t.output.join('')).not.toMatch(/\x1b\[33mF\x1b\[36m/); // fileattach:=FALSE
-    await handleMessageOptionsInput(t.socket, t.session, 'S');
-    await flush();
+    await type(t, 'S\r');
 
     expect(fs.readFileSync(t.file, 'latin1')).toBe('first line\nsecond line\nthird line\n');
     expect(t.data()).toBe(1);
@@ -110,9 +114,7 @@ describe('a door asking the board to edit a file (JH_EF)', () => {
     await flush();
     await handleMessageBodyInput(t.socket, t.session, 'thrown away');
     await handleMessageBodyInput(t.socket, t.session, '');
-    await handleMessageOptionsInput(t.socket, t.session, 'A');
-    await handleMessageAbortConfirm(t.socket, t.session, 'Y');
-    await flush();
+    await type(t, 'A\rY');
 
     expect(fs.readFileSync(t.file, 'latin1')).toBe('keep me\n');
     expect(t.data()).toBe(-1);

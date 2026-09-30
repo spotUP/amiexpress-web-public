@@ -18,7 +18,11 @@ import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
-import { wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
+import { lineInput, yesNo } from '../../utils/await-input';
+import { higherAccess } from '../../utils/error-handling.util';
+import { findAssign, resolveAssignPath } from '../../utils/path-util';
+import { isFileRestricted } from '../../utils/file-restriction.util';
+import { editKey, editorKeyCodes } from './line-editor';
 import { reportMessage } from '../../achievements/sites';
 import { fullEditOffered, editInFullScreen } from './message-full-editor';
 
@@ -473,114 +477,125 @@ export function handleMessagePrivateInput(socket: any, session: BBSSession, inpu
   void promptForMessageBody(socket, session);
 }
 
+/** The line editor's cursor - express.e edit()'s `x` - kept beside `space` (inputBuffer). */
+type EditorSession = BBSSession & { bodyCursorX?: number };
+
 /**
- * Handle message body input - express.e edit() body entry loop.
- * Blank line ends body entry and shows the options menu (A/C/D/E/L/S/?).
- * No slash-command handling here — commands are at the options menu.
+ * Keys typed into the line editor - express.e edit() 10166-10360.
+ *
+ * Each key is one pass of edit()'s loop (line-editor.ts editKey). A pass
+ * that ends the line stores it and opens the next (brk / bEG_IN); Enter on
+ * an empty line ends entry and opens Msg. Options.
+ */
+export async function handleMessageBodyKeys(socket: any, session: BBSSession, data: string): Promise<void> {
+  const s = session as EditorSession;
+  const maxLineLen = messageBodyLineLimit(session);
+  for (const c of editorKeyCodes(data)) {
+    // A key after the one that ended entry is not the editor's to take.
+    if (session.subState !== LoggedOnSubState.POST_MESSAGE_BODY) return;
+    const r = editKey({ space: session.inputBuffer || '', x: s.bodyCursorX ?? 0 }, c, maxLineLen);
+    session.inputBuffer = r.space;
+    s.bodyCursorX = r.x;
+    if (r.echo) emitText(socket, r.echo);
+    if (r.brk === 'blank') endOfBody(socket, session);
+    else if (r.brk === 'line') storeBodyLine(socket, session, r.committed ?? '');
+  }
+}
+
+/**
+ * A whole line entered at the line editor: an empty one ends entry, any
+ * other is stored as `brk:` stores it. The key path (handleMessageBodyKeys)
+ * comes through the same two functions.
  */
 export async function handleMessageBodyInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const line = input;
-
-  // Blank line = end of body entry → show options menu (express.e: bkFlag=1 → REPEAT/UNTIL)
-  if (line === '') {
-    showOptionsMenu(socket, session, false);
+  if (input === '') {
+    endOfBody(socket, session);
     return;
   }
-
-  /*
-   * Add line to body, WRAPPED to what this caller's screen holds.
-   *
-   * express.e's `maxLineLen` is 75 and an eighty-column caller keeps it. A
-   * C64 caller was given 75 too, under a thirty-seven column ruler - so he
-   * could type a line his own screen cannot hold, and the wrap downstream
-   * had to cut it. A run of PETSCII graphics has no spaces, so that cut
-   * lands mid-figure. `messageBodyLineLimit` is the one place that decides.
-   *
-   * IT USED TO TRUNCATE, and threw the rest of the sentence away. The
-   * caller never saw it happen: his own screen WRAPS the echo, so the words
-   * were in front of him while the board kept the first 36 characters. The
-   * sysop found it by writing a message on a PETSCII session and reading it
-   * back on an ANSI one, 2026-09-23: "the text is cut off ... i discovered
-   * it when i logged in with ansi to read it".
-   *
-   * `wrapLineToWidth` is the board's own wrap (the one the C64 door adapter
-   * and `wrapForSession` use), so a word moves to the next line whole and a
-   * spaceless run of graphics is split at the screen edge - which is where
-   * his screen broke it anyway.
-   */
-  const limit = messageBodyLineLimit(session);
-  const parts = line.length > limit ? wrapLineToWidth(line, limit) : [line];
-  for (const part of parts) {
-    session.tempData.messageEntry.body.push(part);
-    session.tempData.messageEntry.currentLine++;
-  }
-
-  // 800-line hard limit (express.e: maxMsgLines = 800)
-  if (session.tempData.messageEntry.body.length >= 800) {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  // Next line prompt: " N> " — 2-digit for lines ≤99, 3-digit for 100+ (express.e format)
-  emitLinePrompt(socket, session.tempData.messageEntry.currentLine);
+  session.inputBuffer = '';
+  (session as EditorSession).bodyCursorX = 0;
+  storeBodyLine(socket, session, input);
 }
 
 /**
- * express.e:10374-10391 "Msg. Options: A,C,D,E[,F],L,S[,X],? >:"
- *
- * WEB_ divergences from express.e cont2 menu:
- *   - WEB_ I (Insert Line)         — convenience; not in express.e (use C/E)
- *   - WEB_ R (Replace Text)        — search-and-replace; not in express.e
- *   - WEB_ Q (Quote from Reply)    — re-quote mid-compose; express.e only quotes at entry
- *   - MISSING X (Xfer Files / Zmodem batch) — express.e:10378,10562-10566 sets rzmsg=1
- *     so saveNewMSG triggers Zmodem batch upload. Web BBS uses F file-attach instead.
- *     See task #34 for the rationale; intentional divergence.
+ * express.e:10358-10375 `brk: lines++` and `bEG_IN:` - the line is stored
+ * and the next ` N> ` is printed with whatever the word wrap carried onto
+ * it. There is no line limit: express removed it (10360-10362).
  */
+function storeBodyLine(socket: any, session: BBSSession, line: string): void {
+  const entry = session.tempData.messageEntry;
+  entry.body.push(line);
+  entry.currentLine = entry.body.length + 1;
+  // Prompt and carried text in ONE call, so the width choke measures the row.
+  emitText(socket, linePromptFor(entry.currentLine) + (session.inputBuffer || ''));
+}
+
+/**
+ * express.e:10364-10371 - Enter on an empty line: `lines--`, rawArrow off,
+ * `aePuts('\b\n')`, and on into the Msg. Options loop.
+ */
+function endOfBody(socket: any, session: BBSSession): void {
+  session.inputBuffer = '';
+  (session as EditorSession).bodyCursorX = 0;
+  emitText(socket, '\r\n');
+  startMsgOptions(socket, session, false);
+}
+
 /**
  * express.e `checkSecurity(ACS_ATTACH_FILES) AND fileattach` (10376, 10385,
- * 10511): an edit a door asked for (JH_EF) clears fileattach.
+ * 10511): an edit a door asked for (JH_EF) or EM clears fileattach.
  */
 function attachAllowed(session: BBSSession): boolean {
-  return checkSecurity(session.user, ACSPermission.ATTACH_FILES)
-    && session.tempData?.messageEntry?.fileAttach !== false;
+  return checkSecurity(session.user, ACSPermission.ATTACH_FILES) && fileAttach(session);
 }
 
+/** express.e `fileattach` - cleared by JH_EF (3477) and EM (11143). */
+function fileAttach(session: BBSSession): boolean {
+  return session.tempData?.messageEntry?.fileAttach !== false;
+}
+
+/** express.e mailHeader.status: "R" private, "P" public. */
+function isPublic(session: BBSSession): boolean {
+  return !session.tempData?.messageEntry?.isPrivate;
+}
+
+/**
+ * express.e:10378 / 10388 - X shows when
+ *   fileattach AND (((status="P") AND ACS_PUB_MSGFILES) OR (ACS_PRI_MSGFILES AND (status<>"P")))
+ */
+function xferShown(session: BBSSession): boolean {
+  if (!fileAttach(session)) return false;
+  return isPublic(session)
+    ? checkSecurity(session.user, ACSPermission.PUB_MSGFILES)
+    : checkSecurity(session.user, ACSPermission.PRI_MSGFILES);
+}
+
+/**
+ * express.e:10374-10391 - the short menu, or with helplist the long one.
+ */
 function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): void {
-  session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
-  const hasAttach = attachAllowed(session);
-  const hasParent = !!(session.tempData?.messageEntry?.parentId);
   if (!helpList) {
-    // express.e:10375-10379 short menu — extended with WEB_ I/R/Q
-    let menu = '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE\x1b[36m';
-    if (hasAttach) menu += ',\x1b[33mF\x1b[36m';
-    menu += ',\x1b[33mI\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mR\x1b[36m,\x1b[33mS\x1b[36m';
-    if (hasParent) menu += ',\x1b[33mQ\x1b[36m';
-    menu += ',\x1b[33m? \x1b[0m>:';
+    let menu = '\r\n\x1b[32mMsg. Options: \x1b[33mA\x1b[36m,\x1b[33mC\x1b[36m,\x1b[33mD\x1b[36m,\x1b[33mE';
+    if (attachAllowed(session)) menu += '\x1b[36m,\x1b[33mF';
+    menu += '\x1b[36m,\x1b[33mL\x1b[36m,\x1b[33mS';
+    if (xferShown(session)) menu += '\x1b[36m,\x1b[33mX';
+    menu += '\x1b[36m,\x1b[33m? \x1b[0m>:';
     emitText(socket, menu);
-  } else {
-    // express.e:10381-10390 long menu — extended with WEB_ I/R/Q
-    emitText(socket, '\r\n\x1b[33mA\x1b[32m>\x1b[36mbort\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mC\x1b[32m>\x1b[36montinue\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Lines\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mE\x1b[32m>\x1b[36mdit\x1b[0m');
-    if (hasAttach) emitText(socket, '\r\n\x1b[33mF\x1b[32m>\x1b[36mile Attachment\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mI\x1b[32m>\x1b[36mnsert Line\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mL\x1b[32m>\x1b[36mist\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mR\x1b[32m>\x1b[36meplace Text\x1b[0m');
-    emitText(socket, '\r\n\x1b[33mS\x1b[32m>\x1b[36mave\x1b[0m');
-    if (hasParent) emitText(socket, '\r\n\x1b[33mQ\x1b[32m>\x1b[36muote from Reply\x1b[0m');
-    // express.e:10389 helplist:=0 resets so next prompt shows short menu
-    emitText(socket, '\r\n\x1b[0m >: ');
+    return;
   }
+  let menu = '\r\n\x1b[33mA\x1b[32m>\x1b[36mbort\x1b[0m';
+  menu += '\r\n\x1b[33mC\x1b[32m>\x1b[36montinue\x1b[0m';
+  menu += '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Lines\x1b[0m';
+  menu += '\r\n\x1b[33mE\x1b[32m>\x1b[36mdit\x1b[0m';
+  if (attachAllowed(session)) menu += '\r\n\x1b[33mF\x1b[32m>\x1b[36mile Attachment\x1b[0m';
+  menu += '\r\n\x1b[33mL\x1b[32m>\x1b[36mist\x1b[0m';
+  menu += '\r\n\x1b[33mS\x1b[32m>\x1b[36mave\x1b[0m';
+  if (xferShown(session)) menu += '\r\n\x1b[33mX\x1b[32m>\x1b[36mfer Files\x1b[0m';
+  menu += '\r\n\x1b[0m >: ';
+  emitText(socket, menu);
 }
 
-/** Line prompt exactly matching express.e: " N> " format */
-function emitLinePrompt(socket: any, lineNum: number): void {
-  emitText(socket, linePromptFor(lineNum));
-}
-
-/** The ` N> ` a body line is typed behind, as text - so a caller listing an
- * existing line can send the prompt and the line as ONE row. */
+/** The ` N> ` a body line is typed behind - `\d[2]> `, `\d[3]> ` from line 100. */
 function linePromptFor(lineNum: number): string {
   const n = lineNum <= 99
     ? String(lineNum).padStart(2)
@@ -588,174 +603,302 @@ function linePromptFor(lineNum: number): string {
   return `${n}> `;
 }
 
+/** E's Val(): the leading integer, 0 when there is none. */
+function val(str: string): number {
+  const n = parseInt(str.trim(), 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+/** Where one pass of the Msg. Options loop goes next. */
+type MsgOptionsNext = 'cont2' | 'help' | 'return';
+
 /**
- * Handle the "Msg. Options:" menu — express.e cont2: loop.
- * Single-letter commands: A, C, D, E, L, S, ?
+ * express.e edit() 10373-10578, the Msg. Options loop:
+ *
+ *   REPEAT
+ *   cont2:
+ *     <menu>; stat:=lineInput('','',10,INPUT_TIMEOUT,str)
+ *     ... one command ...
+ *   UNTIL stat<0
+ *
+ * Every prompt in it is express's own lineInput / yesNo (utils/await-input),
+ * which echo, end on Enter and print their own line break. Whatever a
+ * command does not RETURN from comes back round to cont2 and the menu -
+ * a bare Enter included.
  */
-export async function handleMessageOptionsInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  // express.e:10394 messageMenuChar:=str[0] — only first char matters
-  const cmd = (input.trim()[0] || '').toUpperCase();
-  // Bare CR/empty input arriving while a previous async command (e.g. S=save) is still
-  // running would race with the subState transition and re-emit "Msg. Options:" before
-  // the BBS menu prompt. Express.e's lineInput is synchronous; ours is not, so swallow
-  // empty inputs at this prompt instead of looping back.
-  if (!cmd) return;
-  const messageData = session.tempData.messageEntry;
-  const lines: string[] = messageData.body;
-
-  if (cmd === '?') {
-    showOptionsMenu(socket, session, true);
-    return;
+async function msgOptions(socket: any, session: BBSSession, helplist: boolean): Promise<void> {
+  session.subState = LoggedOnSubState.POST_MESSAGE_OPTIONS;
+  for (;;) {
+    showOptionsMenu(socket, session, helplist);
+    const str = await lineInput(socket, session, 10);
+    const next = await msgOption(socket, session, str);
+    if (next === 'return') return;
+    helplist = next === 'help';
   }
-
-  if (cmd === 'A') {
-    // Abort — confirm first (express.e: 'Abort message entry (y/n)?')
-    emitText(socket, '\r\nAbort message entry (y/n)? ');
-    session.subState = LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM;
-    return;
-  }
-
-  if (cmd === 'C') {
-    // express.e:10452-10466: lines--, restore last line content into space, JUMP bEG_IN
-    // BEG_IN pre-fills the edit buffer (space) so pressing Enter commits existing content.
-    emitText(socket, '\r\n');
-    let restoreContent = '';
-    if (messageData.body.length > 0) {
-      restoreContent = messageData.body.pop()!;
-      messageData.currentLine = messageData.body.length + 1;
-    }
-    // Pre-fill inputBuffer so pressing Enter immediately commits the restored line
-    // (express.e: space = msgBuf.item(lines); bkFlag=0; x=StrLen(space); JUMP bEG_IN)
-    session.inputBuffer = restoreContent;
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-    // Show prompt + pre-filled content (express.e BEG_IN: StringF(str,'\d[2]> \s',...))
-    emitLinePrompt(socket, messageData.currentLine);
-    emitText(socket, restoreContent);
-    return;
-  }
-
-  if (cmd === 'D') {
-    // Delete line
-    if (lines.length === 0) {
-      emitText(socket, '\r\nNo lines to delete.\r\n');
-      showOptionsMenu(socket, session, false);
-      return;
-    }
-    emitText(socket, `\r\n\x1b[36mLine number to delete \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length}\x1b[32m]\x1b[0m? `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_LINE;
-    return;
-  }
-
-  if (cmd === 'E') {
-    // Edit line
-    if (lines.length === 0) {
-      emitText(socket, '\r\nNo Lines to edit!\r\n');
-      showOptionsMenu(socket, session, false);
-      return;
-    }
-    emitText(socket, `\r\n\x1b[36mLine number to edit \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length}\x1b[32m]\x1b[0m? `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE;
-    return;
-  }
-
-  if (cmd === 'L') {
-    // List all lines (express.e: FOR j:=0 TO lines-1 … aePuts(space))
-    emitText(socket, '\r\n');
-    lines.forEach((bodyLine, index) => {
-      const n = index >= 99 ? String(index + 1).padStart(3) : String(index + 1).padStart(2);
-      emitText(socket, `${n}> ${bodyLine}\r\n`);
-    });
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  if (cmd === 'S') {
-    // Save (express.e: RETURN RESULT_SUCCESS)
-    await saveMessage(socket, session);
-    return;
-  }
-
-  // express.e:10376 — F: File Attachment (gated on ACS_ATTACH_FILES)
-  if (cmd === 'F') {
-    if (!attachAllowed(session)) {
-      showOptionsMenu(socket, session, false);
-      return;
-    }
-    emitText(socket, "\r\nEnter path/filename to attach ('5 <DIR>'=DIR): ");
-    session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_FILE;
-    return;
-  }
-
-  // WEB_: I — Insert line at position
-  if (cmd === 'I') {
-    emitText(socket, `\r\n\x1b[36mInsert before line \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${lines.length + 1}\x1b[32m]\x1b[0m? `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_LINE;
-    return;
-  }
-
-  // WEB_: R — Replace text throughout message
-  if (cmd === 'R') {
-    emitText(socket, '\r\n\x1b[36mSearch for: \x1b[0m');
-    session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH;
-    return;
-  }
-
-  // WEB_: Q — Quote from parent message (only when replying)
-  if (cmd === 'Q') {
-    if (!messageData.parentId) {
-      showOptionsMenu(socket, session, false);
-      return;
-    }
-    const parentMsg = await _db.getMessage(messageData.parentId);
-    if (!parentMsg) {
-      showOptionsMenu(socket, session, false);
-      return;
-    }
-    const parentLines: string[] = parentMsg.body.split('\n');
-    emitText(socket, '\r\n');
-    parentLines.forEach((line: string, index: number) => {
-      emitLinePrompt(socket, index + 1);
-      emitText(socket, `${line}\r\n`);
-    });
-    emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
-    session.tempData.quoteData = {
-      parentMessage: parentMsg,
-      parentLines,
-      totalLines: parentLines.length,
-      appendToEnd: true  // WEB_: mid-compose quote appends rather than prepends
-    };
-    session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
-    return;
-  }
-
-  // Unknown — redisplay menu (express.e loops back to cont2:)
-  showOptionsMenu(socket, session, false);
 }
 
 /**
- * Handle abort confirmation "Abort message entry (y/n)?"
- * express.e:10567-10572: yesNo(0), IF stat>0 RETURN -1
+ * Run the Msg. Options loop. It waits on the caller's keys, so it is not
+ * awaited here (a keystroke's dispatch would wait on the next keystroke);
+ * when edit() returns, the board carries on as it does after any
+ * message-entry key (command.handler afterMessageEntryInput).
  */
-export async function handleMessageAbortConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
-  // express.e yesNo(0): single char, no default — loops on CR and unknown; only Y or N exits
-  const ch = (input[0] || '').toUpperCase();
-  if (ch !== 'Y' && ch !== 'N') {
-    return; // loop — stay in POST_MESSAGE_ABORT_CONFIRM (matches yesNo(0) loop on CR/unknown)
+function startMsgOptions(socket: any, session: BBSSession, helplist: boolean): void {
+  const before = session.subState;
+  msgOptions(socket, session, helplist)
+    .then(() => {
+      const { afterMessageEntryInput } = require('../command.handler');
+      return afterMessageEntryInput(socket, session, before);
+    })
+    .catch((err: unknown) => console.error('[Msg. Options] failed:', err));
+}
+
+/**
+ * One line typed at Msg. Options, acted on as the body of edit()'s REPEAT
+ * (10394-10576). Loops back to the menu unless the command returned.
+ */
+export async function handleMessageOptionsInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const next = await msgOption(socket, session, input);
+  if (next !== 'return') startMsgOptions(socket, session, next === 'help');
+}
+
+async function msgOption(socket: any, session: BBSSession, str: string): Promise<MsgOptionsNext> {
+  const entry = session.tempData?.messageEntry;
+  if (!entry) return 'return';
+  // express.e:10394 messageMenuChar:=str[0]
+  const c = str[0] ?? '';
+
+  // express.e:10397-10400
+  if (c === '?') return 'help';
+
+  if (c === 'D' || c === 'd') {
+    await deleteLine(socket, session);
+    return 'cont2';
   }
-  if (ch === 'Y') {
-    emitText(socket, 'Yes\r\n');
-    // edit() returns -1 to whoever called it (express.e:10571).
-    const finish = session.tempData?.messageEntry?.finishOutside;
-    if (finish) {
-      await finish(null);
+
+  if (c === 'C' || c === 'c') {
+    continueEntry(socket, session);
+    return 'return';
+  }
+
+  if (c === 'E' || c === 'e') {
+    await editLine(socket, session);
+    return 'cont2';
+  }
+
+  // express.e:10495-10506
+  if (c === 'L' || c === 'l') {
+    emitText(socket, '\r\n');
+    entry.body.forEach((bodyLine: string, j: number) => {
+      emitText(socket, `${linePromptFor(j + 1)}${bodyLine}\r\n`);
+    });
+    return 'cont2';
+  }
+
+  if (c === 'F' || c === 'f') {
+    await attachFile(socket, session);
+    return 'cont2';
+  }
+
+  // express.e:10557-10560
+  if (c === 'S' || c === 's') {
+    await saveMessage(socket, session);
+    return 'return';
+  }
+
+  // express.e:10562-10566 - rzmsg:=1: the save that follows takes a batch
+  // upload into the message's F<n> directory (saveNewMSG 10721-10740).
+  if (fileAttach(session) && (c === 'X' || c === 'x') && (
+    (checkSecurity(session.user, ACSPermission.PRI_MSGFILES) && !isPublic(session))
+    || (checkSecurity(session.user, ACSPermission.PUB_MSGFILES) && isPublic(session))
+  )) {
+    entry.rzmsg = true;
+    await saveMessage(socket, session);
+    return 'return';
+  }
+
+  // express.e:10567-10572
+  if (c === 'A' || c === 'a') {
+    emitText(socket, '\r\nAbort message entry (y/n)? ');
+    if (await yesNo(socket, session, 0)) {
+      await abortEntry(socket, session);
+      return 'return';
+    }
+  }
+
+  return 'cont2';
+}
+
+/**
+ * express.e:10401-10450 - D. The line number is read with lineInput(5);
+ * an empty answer goes back to the menu, an unknown one says so and asks
+ * again, and yesNo(0) confirms.
+ */
+async function deleteLine(socket: any, session: BBSSession): Promise<void> {
+  const body: string[] = session.tempData.messageEntry.body;
+  let stat: number;
+  for (;;) {
+    if (body.length === 0) {
+      emitText(socket, '\r\nNo lines to delete.\r\n');
       return;
     }
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.tempData = undefined;
+    emitText(socket, `\r\n\x1b[36mLine number to delete \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${body.length}\x1b[32m]\x1b[0m? `);
+    const str = await lineInput(socket, session, 5);
+    if (str.length === 0) return;
+    stat = val(str);
+    if (stat >= 1 && stat <= body.length) break;
+    emitText(socket, `\r\nLine ${stat} does not exist.\r\n`);
+  }
+  emitText(socket, `\r\n${linePromptFor(stat)}${body[stat - 1]}\r\n`);
+  emitText(socket, '\r\n\x1b[36mIs this the correct line \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mN\x1b[32m)\x1b[0m? ');
+  if (await yesNo(socket, session, 0)) {
+    body.splice(stat - 1, 1);
+    session.tempData.messageEntry.currentLine = body.length + 1;
+    emitText(socket, `\r\nDeleted line ${stat}.\r\n`);
+  }
+}
+
+/**
+ * express.e:10452-10466 - C. The last line is opened again with the cursor
+ * at its end (x:=StrLen(space)) and entry goes on from bEG_IN.
+ */
+function continueEntry(socket: any, session: BBSSession): void {
+  const entry = session.tempData.messageEntry;
+  emitText(socket, '\r\n');
+  const space: string = entry.body.length > 0 ? entry.body.pop() : '';
+  entry.currentLine = entry.body.length + 1;
+  session.inputBuffer = space;
+  (session as EditorSession).bodyCursorX = space.length;
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  emitText(socket, linePromptFor(entry.currentLine) + space);
+}
+
+/**
+ * express.e:10467-10493 - E. `loopHere:` asks for the line with
+ * lineInput(5) until it exists or the answer is empty.
+ */
+async function editLine(socket: any, session: BBSSession): Promise<void> {
+  const body: string[] = session.tempData.messageEntry.body;
+  if (body.length < 1) {
+    emitText(socket, '\r\nNo Lines to edit!\r\n');
     return;
   }
-  emitText(socket, 'No\r\n');
-  showOptionsMenu(socket, session, false);
+  for (;;) {
+    emitText(socket, `\r\n\x1b[36mLine number to edit \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${body.length}\x1b[32m]\x1b[0m? `);
+    const str = await lineInput(socket, session, 5);
+    if (str.length === 0) return;
+    const x = val(str);
+    if (x >= 1 && x <= body.length) {
+      await editMessageLine(socket, session, x);
+      return;
+    }
+    emitText(socket, `\r\nLine ${x} does not exist.\r\n`);
+  }
+}
+
+/**
+ * express.e:10485-10491 - the line under the Edit Line rule, re-typed with
+ * lineInput('\b\n    ',temp,maxLineLen,...): the old text is the default
+ * and the field holds maxLineLen, as the editor's own lines do.
+ */
+export async function editMessageLine(socket: any, session: BBSSession, x: number): Promise<void> {
+  const body: string[] = session.tempData.messageEntry.body;
+  emitText(socket, '\r\n    Edit Line');
+  emitText(socket, `\r\n${messageRule(session, 'editLine')}`);
+  emitText(socket, `\r\n${messageIndent(session, 'editLine')}`);
+  body[x - 1] = await lineInput(socket, session, messageBodyLineLimit(session), body[x - 1]);
+}
+
+/**
+ * express.e:10508-10555 - F. One path (the console's file requester is not
+ * a caller's), `5 <dir>` lists and goes back to the menu, and each path must
+ * be on a mounted device, exist and not be Restricted, or it is dropped.
+ * What survives is asked about with yesNo(2) and the answer goes in front.
+ * The list starts afresh every time (attachedFiles.clear(), 10524).
+ */
+async function attachFile(socket: any, session: BBSSession): Promise<void> {
+  if (!attachAllowed(session)) {
+    higherAccess(socket);
+    return;
+  }
+  const entry = session.tempData.messageEntry;
+  emitText(socket, "\r\nEnter path/filename to attach ('5 <DIR>'=DIR): ");
+  const attachedFile = await lineInput(socket, session, 250);
+  if (attachedFile[0] === '5' && attachedFile[1] === ' ') {
+    await displayDirectoryListing(socket, session, attachedFile.substring(2).trim() || '.');
+    return;
+  }
+  const attachedFiles: string[] = [attachedFile];
+  for (let i = attachedFiles.length - 1; i >= 0; i--) {
+    const file = attachedFiles[i];
+    if (file.length > 0) {
+      if (!deviceMounted(file)) {
+        emitText(socket, '\r\nDevice not Mounted.\r\n');
+        emitText(socket, '\r\n');
+        attachedFiles.splice(i, 1);
+      }
+      // No ELSE in express: an unmounted path is examined too, fails its
+      // Lock and is removed a second time - a no-op for the one path here.
+      if (await restricted(socket, session, file)) attachedFiles.splice(i, 1);
+    }
+  }
+  entry.attachedFiles = attachedFiles;
+  if (attachedFiles.length > 0) {
+    emitText(socket, 'Delete file(s) when message is deleted ');
+    const yes = await yesNo(socket, session, 2);
+    attachedFiles.unshift(yes ? 'Y' : 'N');
+  }
+}
+
+/**
+ * MiscFuncs.e findAssign(): the path must name a device - the part before
+ * its first `:` - and that device must be mounted. A path with no colon
+ * names none.
+ */
+function deviceMounted(file: string): boolean {
+  const colon = file.indexOf(':');
+  if (colon < 0) return false;
+  return findAssign(file.slice(0, colon + 1)) !== null;
+}
+
+/**
+ * express.e:9579-9608 restricted(). TRUE unless the path can be examined:
+ * a path that cannot be locked is refused without a word, and one whose
+ * comment starts "Restricted" is reported and logged. This board keeps a
+ * file's comment as its DIR description (utils/file-restriction.util).
+ */
+async function restricted(socket: any, session: BBSSession, file: string): Promise<boolean> {
+  const hostPath = resolveAssignPath(file);
+  if (!amigafs.existsSync(hostPath)) return true;
+  const conf = session.currentConf ?? 1;
+  if (await isFileRestricted(conf, config.get('dataDir'), path.basename(hostPath))) {
+    emitText(socket, '\r\n ');
+    emitText(socket, file);
+    emitText(socket, '\r\n >>Restricted File<< Updating CallersLog\r\n');
+    await _callersLog?.(
+      session.user?.id ?? null,
+      session.user?.username ?? 'unknown',
+      `\tAttempt to examine RESTRICTED file ${file.slice(0, 100)}`,
+    );
+    return true;
+  }
+  return false;
+}
+
+/**
+ * edit() returned -1 (express.e:10571). A caller that is not message entry
+ * (JH_EF) takes it; enterMSG prints its `\b\n` (10966) and goes back. EM
+ * (11145) prints nothing of its own.
+ */
+async function abortEntry(socket: any, session: BBSSession): Promise<void> {
+  const entry = session.tempData?.messageEntry;
+  if (entry?.finishOutside) {
+    await entry.finishOutside(null);
+    return;
+  }
+  if (!entry?.editingExistingMsgId) emitText(socket, '\r\n');
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  session.tempData = undefined;
 }
 
 /**
@@ -806,15 +949,23 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
     if (cont === false) break;  // user pressed N — stop showing further lines
   }
 
-  // express.e:10902: aePuts('\b\n Enter Startline,Endline or (*=ALL, A=Abort): ') — plain text
-  emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
-
   session.tempData.quoteData = {
     parentMessage: parentMsg,
     parentLines,
     totalLines: parentLines.length
   };
+  void askQuoteRange(socket, session);
+}
+
+/**
+ * express.e:10901-10903 - the range is read with lineInput(6): echoed, at
+ * most six characters, and ended with lineInput's own line break.
+ */
+async function askQuoteRange(socket: any, session: BBSSession): Promise<void> {
   session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
+  emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
+  const str = await lineInput(socket, session, 6);
+  quoteRange(socket, session, str);
 }
 
 
@@ -1184,116 +1335,6 @@ console.error('[saveMessage] Error:', error);
 }
 
 /**
- * Handle delete line number input - express.e:10555-10607
- */
-export function handleMessageDeleteLineInput(socket: any, session: BBSSession, input: string): void {
-  const lineNumber = parseInt(input.trim());
-  const messageData = session.tempData.messageEntry;
-
-  // Blank = back to options menu (express.e:10414-10416: stat=0 JUMP cont2)
-  if (input.trim() === '') {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  // Validate line number — express.e:10420-10423: show "Line N does not exist."
-  const parsedNum = isNaN(lineNumber) ? 0 : lineNumber;
-  if (parsedNum < 1 || parsedNum > messageData.body.length) {
-    emitText(socket, `\r\nLine ${parsedNum} does not exist.\r\n`);
-    emitText(socket, `\r\n\x1b[36mLine number to delete \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${messageData.body.length}\x1b[32m]\x1b[0m? `);
-    return;
-  }
-
-  // Show the line then confirmation (no extra blank line — express.e:10431-10438)
-  const lineIndex = parsedNum - 1;
-  const lineNum = parsedNum <= 99 ? String(parsedNum).padStart(2) : String(parsedNum).padStart(3);
-  emitText(socket, `\r\n${lineNum}> ${messageData.body[lineIndex]}\r\n`);
-  emitText(socket, '\r\n\x1b[36mIs this the correct line \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mN\x1b[32m)\x1b[0m? ');
-
-  // Store the line number for confirmation
-  session.tempData.messageEntry.pendingDeleteLine = lineIndex;
-  session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM;
-}
-
-/**
- * Handle delete confirmation - express.e:10555-10607
- */
-export function handleMessageDeleteConfirm(socket: any, session: BBSSession, input: string): void {
-  // express.e yesNo(0): single char, loops on CR/unknown — only Y or N exits
-  const ch = (input[0] || '').toUpperCase();
-  if (ch !== 'Y' && ch !== 'N') {
-    return; // loop — stay in POST_MESSAGE_DELETE_CONFIRM
-  }
-  const messageData = session.tempData.messageEntry;
-  const lineIndex = messageData.pendingDeleteLine;
-  const lineNum = lineIndex + 1;
-
-  if (ch === 'Y') {
-    emitText(socket, 'Yes\r\n');
-    // express.e:10443-10447: msgBuf.remove(stat-1); lines--; aePuts("Deleted line N.\n")
-    messageData.body.splice(lineIndex, 1);
-    if (messageData.currentLine > messageData.body.length + 1) {
-      messageData.currentLine = messageData.body.length + 1;
-    }
-    emitText(socket, `\r\nDeleted line ${lineNum}.\r\n`);
-  } else {
-    emitText(socket, 'No\r\n');
-  }
-
-  delete messageData.pendingDeleteLine;
-  showOptionsMenu(socket, session, false);
-}
-
-/**
- * Handle edit line number input - express.e:10608-10630
- */
-export function handleMessageEditLineInput(socket: any, session: BBSSession, input: string): void {
-  const lineNumber = parseInt(input.trim());
-  const messageData = session.tempData.messageEntry;
-
-  // Blank = back to options menu (express.e:10478: StrLen(str)=0 JUMP cont2)
-  if (input.trim() === '') {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  // Validate line number — express.e:10481-10484: loops back to loopHere
-  const parsedLine = isNaN(lineNumber) ? 0 : lineNumber;
-  if (parsedLine < 1 || parsedLine > messageData.body.length) {
-    emitText(socket, `\r\nLine ${parsedLine} does not exist.\r\n`);
-    emitText(socket, `\r\n\x1b[36mLine number to edit \x1b[32m[\x1b[33m1\x1b[32m..\x1b[33m${messageData.body.length}\x1b[32m]\x1b[0m? `);
-    return;
-  }
-
-  // express.e:10486-10489: lineInput('\b\n    ',temp,maxLineLen,...) — pre-fills with current content
-  const lineIndex = parsedLine - 1;
-  const currentContent = messageData.body[lineIndex];
-  emitText(socket, '\r\n    Edit Line');
-  emitText(socket, `\r\n${messageRule(session, 'editLine')}\r\n${messageIndent(session, 'editLine')}`);
-  emitText(socket, currentContent);
-  // Pre-fill inputBuffer so pressing Enter immediately commits existing content unchanged
-  // (matches express.e lineInput pre-fill: Enter = keep, typing = replace)
-  session.inputBuffer = currentContent;
-
-  messageData.pendingEditLine = lineIndex;
-  session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT;
-}
-
-/**
- * Handle edit line content input - express.e:10608-10630
- */
-export function handleMessageEditLineContent(socket: any, session: BBSSession, input: string): void {
-  const messageData = session.tempData.messageEntry;
-  const lineIndex = messageData.pendingEditLine;
-
-  // express.e:10491 msgBuf.setItem(x-1,temp) — update with whatever user submitted
-  // inputBuffer was pre-filled; Enter immediately = original content; typing replaces it
-  messageData.body[lineIndex] = input;
-  delete messageData.pendingEditLine;
-  showOptionsMenu(socket, session, false);
-}
-
-/**
  * Helper: Prompt for message subject - express.e:10839-10849
  */
 function promptForSubject(socket: any, session: BBSSession): void {
@@ -1341,186 +1382,9 @@ function promptForPrivate(socket: any, session: BBSSession): void {
 }
 
 /**
- * Handle file attachment input - express.e:10515-10556
+ * The answer to the quote range - express.e:10904-10944.
  */
-export async function handleMessageAttachFileInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const messageData = session.tempData.messageEntry;
-  const attachedFile = input.trim();
-
-  // Blank = cancel attachment, return to options menu
-  if (attachedFile === '') {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  // Check for directory command (express.e:10518-10521)
-  if (attachedFile.startsWith('5 ')) {
-    const dirPath = attachedFile.substring(2).trim() || '.';
-    await displayDirectoryListing(socket, session, dirPath);
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Enter path/filename to attach ', 'cyan'));
-    emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-    return;
-  }
-
-  // Add file to attachedFiles array (express.e:10523-10524)
-  if (!messageData.attachedFiles) {
-    messageData.attachedFiles = [];
-  }
-  messageData.attachedFiles.push(attachedFile);
-
-  // Ask if file should be deleted when message is deleted (express.e:10538-10549)
-  emitText(socket, '\r\n');
-  emitText(socket, `${AnsiUtil.colorize('Delete file(s) when message is deleted ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
-  session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM;
-}
-
-/**
- * Handle file attachment delete confirmation - express.e:10538-10549
- */
-export function handleMessageAttachDeleteConfirm(socket: any, session: BBSSession, input: string): void {
-  const answer = input.trim().toUpperCase();
-  const messageData = session.tempData.messageEntry;
-
-  // Store delete flag at position 0 of attachedFiles array (express.e:10545-10549)
-  if (answer === 'Y' || answer === 'YES') {
-    messageData.attachedFiles.unshift('Y');
-  } else {
-    messageData.attachedFiles.unshift('N');
-  }
-
-  showOptionsMenu(socket, session, false);
-}
-
-/**
- * Handle /R (Replace Text) - Search String Input
- */
-export function handleMessageReplaceSearchInput(socket: any, session: BBSSession, input: string): void {
-  const searchStr = input.trim();
-
-  // Empty = cancel, return to options menu
-  if (searchStr === '') {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  // Store search string for next step
-  if (!session.tempData.messageEntry.replaceData) {
-    session.tempData.messageEntry.replaceData = {};
-  }
-  session.tempData.messageEntry.replaceData.search = searchStr;
-
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Replace with: ', 'cyan'));
-  session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_WITH;
-}
-
-/**
- * Handle /R (Replace Text) - Replacement String Input
- */
-export function handleMessageReplaceWithInput(socket: any, session: BBSSession, input: string): void {
-  const replaceStr = input;  // Allow empty replacement
-  const messageData = session.tempData.messageEntry;
-  const searchStr = messageData.replaceData?.search || '';
-
-  if (!searchStr) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine('No search string!'));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-    return;
-  }
-
-  // Perform replacement (case-sensitive, all occurrences)
-  let replaceCount = 0;
-  for (let i = 0; i < messageData.body.length; i++) {
-    const oldLine = messageData.body[i];
-    const newLine = oldLine.split(searchStr).join(replaceStr);
-    if (oldLine !== newLine) {
-      messageData.body[i] = newLine;
-      replaceCount += (oldLine.split(searchStr).length - 1);
-    }
-  }
-
-  emitText(socket, '\r\n');
-  if (replaceCount > 0) {
-    emitText(socket, AnsiUtil.colorize(`Replaced ${replaceCount} occurrence(s)`, 'green'));
-  } else {
-    emitText(socket, AnsiUtil.warningLine('No matches found'));
-  }
-  emitText(socket, '\r\n');
-
-  // Clean up temp data
-  delete messageData.replaceData;
-
-  showOptionsMenu(socket, session, false);
-}
-
-/**
- * Handle /I (Insert Line) - Line Number Input
- */
-export function handleMessageInsertLineInput(socket: any, session: BBSSession, input: string): void {
-  const lineNumStr = input.trim();
-  const messageData = session.tempData.messageEntry;
-
-  // Empty = cancel, return to options menu
-  if (lineNumStr === '') {
-    showOptionsMenu(socket, session, false);
-    return;
-  }
-
-  const lineNum = parseInt(lineNumStr, 10);
-
-  // Validate line number
-  if (isNaN(lineNum) || lineNum < 1 || lineNum > messageData.body.length + 1) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Invalid line number! Must be 1..${messageData.body.length + 1}`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Insert before line ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length + 1), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
-    return;
-  }
-
-  // Store line number for next step
-  if (!messageData.insertData) {
-    messageData.insertData = {};
-  }
-  messageData.insertData.lineNum = lineNum;
-
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('Enter text: ', 'cyan'));
-  session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_TEXT;
-}
-
-/**
- * Handle /I (Insert Line) - Text Input
- */
-export function handleMessageInsertTextInput(socket: any, session: BBSSession, input: string): void {
-  const text = input;  // Allow empty line
-  const messageData = session.tempData.messageEntry;
-  const lineNum = messageData.insertData?.lineNum || 1;
-
-  // Insert line at position (array index is lineNum - 1)
-  messageData.body.splice(lineNum - 1, 0, text);
-
-  // Update current line counter
-  messageData.currentLine++;
-
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize(`Line inserted at position ${lineNum}`, 'green'));
-  emitText(socket, '\r\n');
-
-  // Clean up temp data
-  delete messageData.insertData;
-
-  showOptionsMenu(socket, session, false);
-}
-
-/**
- * Handle /Q (Quote) - Line Range Input
- * express.e:10902-10944
- */
-export function handleQuoteRangeInput(socket: any, session: BBSSession, input: string): void {
+function quoteRange(socket: any, session: BBSSession, input: string): void {
   const quoteData = session.tempData.quoteData;
   const messageData = session.tempData.messageEntry;
   const raw = input.trim();
@@ -1566,8 +1430,8 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
 
   if (!valid) {
     // express.e loops back to LOOP label and re-shows prompt — no error message
-    emitText(socket, '\r\n Enter Startline,Endline or (*=ALL, A=Abort): ');
-    return; // subState stays POST_MESSAGE_QUOTE_RANGE
+    void askQuoteRange(socket, session);
+    return;
   }
 
   // express.e:10931-10944: copy selected lines, then append separator, ' ', ''
@@ -1589,13 +1453,7 @@ export function handleQuoteRangeInput(socket: any, session: BBSSession, input: s
   quotedLines.push(' ');             // express.e:10942 msgBuf.setItem(lines,' ')
   // express.e:10944 msgBuf.setItem(lines,'') — empty line is where cursor starts in BEG_IN
 
-  // WEB_: mid-compose quote (from options menu) appends to existing body;
-  // initial reply quote (appendToEnd=false) prepends per express.e:10931-10935
-  if (quoteData.appendToEnd) {
-    messageData.body.push(...quotedLines);
-  } else {
-    messageData.body.splice(0, 0, ...quotedLines);
-  }
+  messageData.body.splice(0, 0, ...quotedLines);
   messageData.currentLine = messageData.body.length + 1;
 
   delete session.tempData.quoteData;
@@ -1673,8 +1531,10 @@ async function runFullEdit(socket: any, session: BBSSession): Promise<void> {
  * The line editor - express.e:10148-10165 onwards.
  */
 function showLineEditor(socket: any, session: BBSSession): void {
-  // express.e: aePuts("   Enter your text. (Enter) alone to end. (75 chars/line)\n")
-  emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
+  // express.e:10146-10148: aePuts('\b\n') then
+  //   StringF(tempstr,'   Enter your text. (Enter) alone to end. (\d chars/line)\b\n',maxLineLen)
+  // - the length this caller's lines wrap at, not a fixed 75.
+  emitText(socket, `\r\n   Enter your text. (Enter) alone to end. (${messageBodyLineLimit(session)} chars/line)\r\n`);
   // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)
   // SetStr to 75: 9 full |-------| groups (72 chars) + |-- (3 chars) = 75
   emitText(socket, `${messageRule(session, 'bodyRuler')}\r\n`);
@@ -1685,9 +1545,7 @@ function showLineEditor(socket: any, session: BBSSession): void {
   if (!entry.body) {
     entry.body = [];
   }
-  if (!entry.currentLine) {
-    entry.currentLine = entry.body.length + 1;
-  }
+  entry.currentLine = entry.body.length + 1;
 
   /*
    * Show any pre-existing lines (a quote preamble, or the lines already
@@ -1705,7 +1563,10 @@ function showLineEditor(socket: any, session: BBSSession): void {
     });
   }
 
-  emitLinePrompt(socket, entry.currentLine);
+  // express.e:10162-10175 - an empty `space`, x at 0, and bEG_IN's prompt.
+  session.inputBuffer = '';
+  (session as EditorSession).bodyCursorX = 0;
+  emitText(socket, linePromptFor(entry.currentLine));
   session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
 }
 
@@ -1725,93 +1586,6 @@ export {
 
 
 /**
- * Handle text file upload input
- * Web extension: Import text file contents into message body
- */
-export async function handleUploadFileInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const filePath = input.trim();
-
-  // Check for directory listing command
-  if (filePath.startsWith('5 ')) {
-    const dirPath = filePath.substring(2).trim() || '.';
-    await displayDirectoryListing(socket, session, dirPath);
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-    return;
-  }
-
-  // Empty input = cancel
-  if (filePath === '') {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize('Upload cancelled.', 'yellow'));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-    return;
-  }
-
-  // Resolve file path
-  const bbsRoot = config.get('dataDir');
-  const fullPath = path.isAbsolute(filePath) ? filePath : path.join(bbsRoot, filePath);
-
-  // Check if file exists
-  if (!amigafs.existsSync(fullPath)) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`File not found: ${filePath}`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-    return;
-  }
-
-  // Check if it's a file (not directory)
-  const stats = amigafs.statSync(fullPath);
-  if (!stats.isFile()) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Path is not a file: ${filePath}`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
-    return;
-  }
-
-  // Read file contents
-  try {
-    const fileContents = amigafs.readFileSync(fullPath, 'utf-8');
-    const contentStr = typeof fileContents === 'string' ? fileContents : fileContents.toString('utf-8');
-    const lines = contentStr.split(/\r?\n/);
-
-    // Import lines into message body
-    const messageData = session.tempData.messageEntry;
-    let importedLines = 0;
-
-    for (const line of lines) {
-      // Limit to 200 lines total
-      if (messageData.body.length >= 200) {
-        emitText(socket, '\r\n');
-        emitText(socket, AnsiUtil.warningLine(`Maximum message length reached (200 lines). Imported ${importedLines} lines.`));
-        break;
-      }
-
-      messageData.body.push(line);
-      importedLines++;
-    }
-
-    messageData.currentLine = messageData.body.length + 1;
-
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.colorize(`Imported ${importedLines} line(s) from ${path.basename(filePath)}`, 'green'));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-  } catch (error) {
-    emitText(socket, '\r\n');
-    emitText(socket, AnsiUtil.errorLine(`Error reading file: ${(error as Error).message}`));
-    emitText(socket, '\r\n');
-    emitText(socket, `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
-    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-  }
-}
-
-/**
  * Display directory listing for file attachment selection
  * 1:1 port from express.e:8343-8387 myDirRecurse()
  *
@@ -1822,9 +1596,10 @@ export async function handleUploadFileInput(socket: any, session: BBSSession, in
 async function displayDirectoryListing(socket: any, session: BBSSession, dirPath: string): Promise<void> {
   emitText(socket, '\r\n');
 
-  // Resolve path relative to BBS root
+  // An Amiga path (`BBS:Conf01`) through its assign; anything else relative to the BBS root.
   const bbsRoot = config.get('dataDir');
-  const fullPath = path.isAbsolute(dirPath) ? dirPath : path.join(bbsRoot, dirPath);
+  const assigned = resolveAssignPath(dirPath);
+  const fullPath = path.isAbsolute(assigned) ? assigned : path.join(bbsRoot, assigned);
 
   // Check if path exists (express.e:8353-8364)
   if (!amigafs.existsSync(fullPath)) {

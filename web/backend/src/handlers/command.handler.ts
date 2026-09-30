@@ -201,7 +201,7 @@ import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import type { LineInputOptions } from '../utils/line-input.util';
 // express.e:2335 - a prompt refuses the key that would overflow its field.
 import {
-  MAX_COMMAND_LINE, MAX_MSG_LINE_NUMBER, MAX_MSG_LINE_TEXT,
+  MAX_COMMAND_LINE,
   MAX_MSG_TO, MAX_MSG_SUBJECT, MAX_DOOR_PASSWORD,
   redrawFromSavedStart, acceptTypedChar, acceptBackspace, SAVE_CURSOR,
   backspaceEcho, recordPromptColumn, ANSI_PROMPT_MAX_LEN,
@@ -213,23 +213,9 @@ import {
   handleMessageToInput,
   handleMessageSubjectInput,
   handleMessagePrivateInput,
-  handleMessageBodyInput,
-  handleMessageOptionsInput,
-  handleMessageAbortConfirm,
+  handleMessageBodyKeys,
   handleMessageQuoteReplyConfirm,
   handleFullEditConfirm,
-  handleMessageDeleteLineInput,
-  handleMessageDeleteConfirm,
-  handleMessageEditLineInput,
-  handleMessageEditLineContent,
-  handleMessageAttachFileInput,
-  handleMessageAttachDeleteConfirm,
-  handleMessageReplaceSearchInput,
-  handleMessageReplaceWithInput,
-  handleMessageInsertLineInput,
-  handleMessageInsertTextInput,
-  handleQuoteRangeInput,
-  handleUploadFileInput,
   handleForwardMessageToInput,
   handleForwardMessageSubjectInput,
   handleForwardMessagePrivateInput,
@@ -260,11 +246,6 @@ import {
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 import { feedInputWaiter } from '../utils/await-input';
-
-/** One key's escape sequence (CSI or SS3), as a terminal sends for a key press. */
-function isKeySequence(data: string): boolean {
-  return /^\x1b(\[[0-9;]*[A-Za-z~]|O[A-Za-z])$/.test(data);
-}
 
 // Re-export dependency injection for external modules (backward compatibility)
 
@@ -313,27 +294,6 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
-/** Printable ASCII: the characters express.e's editor has always taken. */
-function isTypableAscii(data: string): boolean {
-  return data >= ' ' && data <= '~';
-}
-
-/**
- * A PETSCII cell a caller drew, or the pen he drew it with.
- *
- * Bank 0 is refused: the board runs one charset board-wide
- * (`sdk/petscii/board-rules.ts`), and a bank-0 glyph makes the transducer
- * emit `$8E`, which reflows every letter already on the caller's screen.
- * The pen markers (`U+E200`+) are accepted for the same reason the glyphs
- * are - they are what the caller typed, and a body is where they belong.
- */
-function isPetsciiGlyph(data: string): boolean {
-  const code = data.codePointAt(0) ?? 0;
-  const glyph = code >= 0xe100 && code <= 0xe1ff;
-  const pen = code >= 0xe200 && code <= 0xe20f;
-  return glyph || pen;
-}
-
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
@@ -376,164 +336,9 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       // express.e yesNo(2): single-char read, no Enter needed; default=N on CR
       await handleMessagePrivateInput(socket, session, data);
       return;
-    case LoggedOnSubState.POST_MESSAGE_BODY: {
-      // Line-input editor with cursor-position tracking — express.e edit()
-      // at 10168+. session.inputBuffer holds the line content; an x cursor
-      // (session.bodyCursorX) tracks where edits + arrow keys land within
-      // that buffer. Without x tracking, arrow keys would do nothing and
-      // DEL/insert-mid-line would be broken.
-      if (!session.inputBuffer) {
-        session.inputBuffer = '';
-      }
-      if (typeof (session as any).bodyCursorX !== 'number') {
-        (session as any).bodyCursorX = 0;
-      }
-      const buf = () => session.inputBuffer || '';
-      const setBuf = (v: string) => { session.inputBuffer = v; };
-      let x: number = (session as any).bodyCursorX;
-      const setX = (v: number) => { x = v; (session as any).bodyCursorX = v; };
-
-      if (data === '\r' || data === '\n') {
-        const line = buf();
-        setBuf('');
-        setX(0);
-        emitText(socket, '\r\n'); // Move to the next line like express.e
-        await handleMessageBodyInput(socket, session, line);
-      } else if (data === '\x1e' || data === '\x18') {
-        // express.e:10195-10205 — Ctrl-X clears current line. Move cursor
-        // back to column 0, erase visible chars, reset buffer + x.
-        const len = buf().length;
-        if (len > 0) {
-          let erase = '';
-          // Move cursor to start, then erase to end-of-line, then position 0.
-          // Use \b \b walk so we don't depend on terminal CSI.
-          // First walk back from current x to 0:
-          for (let i = 0; i < x; i++) erase += '\b';
-          // Then erase len chars and walk back:
-          for (let i = 0; i < len; i++) erase += ' ';
-          for (let i = 0; i < len; i++) erase += '\b';
-          emitText(socket, erase);
-          setBuf('');
-          setX(0);
-        }
-      } else if (data === '\x7f' || data === '\b') {
-        // express.e:10207-10224 backspace — delete CHAR BEFORE cursor.
-        if (x > 0) {
-          const cur = buf();
-          const before = cur.slice(0, x - 1);
-          const after = cur.slice(x);
-          setBuf(before + after);
-          setX(x - 1);
-          // Re-render: backspace, erase tail with spaces, restore cursor.
-          let out = '\b' + after + ' ';
-          for (let i = 0; i < after.length + 1; i++) out += '\b';
-          emitText(socket, out);
-        }
-      } else if (data === '\x1b[3~' || data === '\x7e') {
-        // express.e:10226-10240 DEL — delete CHAR AT cursor (forward).
-        // Standard xterm sends ESC[3~ for DEL key.
-        if (x < buf().length) {
-          const cur = buf();
-          const before = cur.slice(0, x);
-          const after = cur.slice(x + 1);
-          setBuf(before + after);
-          // Render: emit chars after cursor, blank-pad, walk back.
-          let out = after + ' ';
-          for (let i = 0; i < after.length + 1; i++) out += '\b';
-          emitText(socket, out);
-        }
-      } else if (data === '\x1b[D' || data === '\x1bOD') {
-        // express.e:10166 rawArrow=TRUE — left arrow moves cursor.
-        if (x > 0) {
-          setX(x - 1);
-          emitText(socket, '\x1b[D');
-        }
-      } else if (data === '\x1b[C' || data === '\x1bOC') {
-        // Right arrow moves cursor (bounded by buffer end).
-        if (x < buf().length) {
-          setX(x + 1);
-          emitText(socket, '\x1b[C');
-        }
-      } else if (data === '\x1b[H' || data === '\x01') {
-        // Home / Ctrl-A → start of line.
-        if (x > 0) {
-          emitText(socket, `\x1b[${x}D`);
-          setX(0);
-        }
-      } else if (data === '\x1b[F' || data === '\x05') {
-        // End / Ctrl-E → end of line.
-        const len = buf().length;
-        if (x < len) {
-          emitText(socket, `\x1b[${len - x}C`);
-          setX(len);
-        }
-      } else if (data === '\t') {
-        // express.e:10242-10257 Tab — expand to next 8-column boundary by
-        // padding spaces. Truncated if it would exceed maxLineLen-3.
-        const maxLineLen = 75;
-        const tabStop = (Math.floor(x / 8) + 1) * 8;
-        if (tabStop <= maxLineLen - 3) {
-          const pad = ' '.repeat(tabStop - x);
-          const cur = buf();
-          setBuf(cur.slice(0, x) + pad + cur.slice(x));
-          setX(x + pad.length);
-          emitText(socket, pad);
-        }
-      } else if (data === '\x1b' || isKeySequence(data)) {
-        // ESC alone, or a key the editor has no use for - up/down, PgUp,
-        // F-keys. express.e's edit() reads them as control codes and drops
-        // them (10292 `IF(c<" ") THEN JUMP next2`). Taken as text, ESC[A was
-        // stored in the line and echoed, and the echo moved the cursor up a
-        // row, so the next line prompt overwrote an earlier one (sysop
-        // 2026-09-30: "two arrow up and then enter overwrites row").
-      } else if (data.length === 1 && (isTypableAscii(data) || isPetsciiGlyph(data))) {
-        /*
-         * Insert printable char at cursor position.
-         *
-         * A PETSCII glyph counts as printable HERE, and only here. It is a
-         * cell a caller drew - the markers the board carries PETSCII in -
-         * and a message body is the one place they belong; a graphic in a
-         * filename or a recipient's name is meaningless, so
-         * `line-input.util.ts` stays ASCII-only. One UTF-16 unit either
-         * way, so every cursor and column count above is unchanged.
-         */
-        const cur = buf();
-        const before = cur.slice(0, x);
-        const after = cur.slice(x);
-        setBuf(before + data + after);
-        setX(x + 1);
-        if (after.length === 0) {
-          emitText(socket, data);
-        } else {
-          // Re-render: char + tail, then walk cursor back over tail.
-          let out = data + after;
-          for (let i = 0; i < after.length; i++) out += '\b';
-          emitText(socket, out);
-        }
-      } else if (data.length > 1) {
-        // express.e:10118 ED_ANSI_ALLOWED — accept multi-byte ANSI in line
-        // buffer at cursor position. We've already handled known cursor/edit
-        // sequences above; anything left through here is treated as content.
-        const cleaned = data.replace(/[\x00-\x08\x0a-\x1a\x1c-\x1f\x7f]/g, '');
-        if (cleaned) {
-          const cur = buf();
-          const before = cur.slice(0, x);
-          const after = cur.slice(x);
-          setBuf(before + cleaned + after);
-          setX(x + cleaned.length);
-          if (after.length === 0) {
-            emitText(socket, cleaned);
-          } else {
-            let out = cleaned + after;
-            for (let i = 0; i < after.length; i++) out += '\b';
-            emitText(socket, out);
-          }
-        }
-      }
-      return;
-    }
-    case LoggedOnSubState.POST_MESSAGE_OPTIONS:
-      await handleMessageOptionsInput(socket, session, data.trim());
+    case LoggedOnSubState.POST_MESSAGE_BODY:
+      // express.e edit()'s key loop, 10166-10360 (message/line-editor.ts).
+      await handleMessageBodyKeys(socket, session, data);
       return;
     case LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM:
       await handleMessageQuoteReplyConfirm(socket, session, data.trim());
@@ -541,135 +346,12 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
     case LoggedOnSubState.POST_MESSAGE_FULLEDIT_CONFIRM:
       await handleFullEditConfirm(socket, session, data.trim());
       return;
-    case LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM:
-      await handleMessageAbortConfirm(socket, session, data.trim());
-      return;
-    case LoggedOnSubState.POST_MESSAGE_DELETE_LINE:
-      // express.e: lineInput('','',5,...) — line-buffered, user types number then Enter
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        emitText(socket, '\r\n');
-        await handleMessageDeleteLineInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
-        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM:
-      // express.e yesNo(0): single char, no Enter needed — pass directly
-      await handleMessageDeleteConfirm(socket, session, data.trim());
-      return;
-    case LoggedOnSubState.POST_MESSAGE_EDIT_LINE:
-      // express.e: lineInput('','',5,...) — line-buffered, user types number then Enter
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        emitText(socket, '\r\n');
-        await handleMessageEditLineInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
-        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT:
-      // express.e: lineInput('\b\n    ',temp,maxLineLen,...) — full line replacement, line-buffered
-      if (data === '\r' || data === '\n') {
-        const input = session.inputBuffer || '';
-        session.inputBuffer = '';
-        emitText(socket, '\r\n');
-        await handleMessageEditLineContent(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
-        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_ATTACH_FILE:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleMessageAttachFileInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM:
-      await handleMessageAttachDeleteConfirm(socket, session, data.trim());
-      return;
-    case LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleMessageReplaceSearchInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_REPLACE_WITH:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleMessageReplaceWithInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_INSERT_LINE:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        emitText(socket, '\r\n');
-        await handleMessageInsertLineInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_NUMBER) {
-        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_INSERT_TEXT:
-      if (data === '\r' || data === '\n') {
-        const input = session.inputBuffer || '';
-        session.inputBuffer = '';
-        emitText(socket, '\r\n');
-        await handleMessageInsertTextInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) { session.inputBuffer = session.inputBuffer.slice(0, -1); emitText(socket, '\b \b'); }
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
-        session.inputBuffer = (session.inputBuffer || '') + data; emitText(socket, data);
-      }
-      return;
-    case LoggedOnSubState.POST_MESSAGE_UPLOAD_FILE:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleUploadFileInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data);
-      }
-      return;
+    case LoggedOnSubState.POST_MESSAGE_OPTIONS:
     case LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleQuoteRangeInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_LINE_TEXT) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data); // Echo printable characters
-      }
+      // Read by express's own lineInput / yesNo (utils/await-input), which
+      // take every key before handleCommand reaches a branch. A key landing
+      // here arrived while nothing was waiting - a save still writing - and
+      // is dropped.
       return;
 
     // Account Editor - Single-key editing (express.e:21228-21650)
@@ -1382,6 +1064,33 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
   socket.emit('prompt-login');
 }
 
+/**
+ * Where message entry goes once a step of it is done - after a key at one of
+ * its prompts, or when edit()'s Msg. Options loop (awaiting its own keys,
+ * message-entry.handler) returns.
+ */
+export async function afterMessageEntryInput(
+  socket: any, session: BBSSession, prevMessageSubState: LoggedOnSubState | undefined,
+): Promise<void> {
+  // Locked-out comment form (login-post accountLocked/pwd-change-denied):
+  // express.e runs C to completion before Thanks + logoff, but the
+  // immediate beginLogoff used to fire 1.5 s after the form opened,
+  // cutting it off mid-fill. Fire the deferred Thanks + logoff when the
+  // flow lands back on the menu instead of advancing into it.
+  if (session.logoffAfterComment && session.subState === LoggedOnSubState.DISPLAY_MENU) {
+    session.logoffAfterComment = false;
+    socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
+    beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
+    return;
+  }
+  // express.e yesNo()/abort/save all return to the menu immediately — no extra keypress needed.
+  // If the handler left us in a display-flow state (e.g. DISPLAY_MENU after abort Y or save),
+  // advance now so the menu appears without requiring the user to press an extra key.
+  if (prevMessageSubState !== session.subState && isDisplayFlowState(session.subState)) {
+    await advanceDisplayFlow(socket, session);
+  }
+}
+
 // Handle user commands (processCommand equivalent)
 export async function handleCommand(socket: any, session: BBSSession, data: string, io?: any) {
 console.log('=== handleCommand called ===');
@@ -1467,44 +1176,16 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     LoggedOnSubState.POST_MESSAGE_SUBJECT,
     LoggedOnSubState.POST_MESSAGE_PRIVATE,
     LoggedOnSubState.POST_MESSAGE_BODY,
-    LoggedOnSubState.POST_MESSAGE_OPTIONS,          // single-char: A/C/D/E/L/S/?
-    LoggedOnSubState.POST_MESSAGE_ABORT_CONFIRM,    // single-char yesNo(0)
+    LoggedOnSubState.POST_MESSAGE_OPTIONS,          // edit() cont2 loop, lineInput(10)
     LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM, // single-char yesNo(2)
     LoggedOnSubState.POST_MESSAGE_FULLEDIT_CONFIRM,    // single-char yesNo(2)
-    LoggedOnSubState.POST_MESSAGE_DELETE_LINE,
-    LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM,
-    LoggedOnSubState.POST_MESSAGE_EDIT_LINE,
-    LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT,
-    LoggedOnSubState.POST_MESSAGE_SAVE,
-    LoggedOnSubState.POST_MESSAGE_ATTACH_FILE,
-    LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM,
     LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE,
-    LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH,
-    LoggedOnSubState.POST_MESSAGE_REPLACE_WITH,
-    LoggedOnSubState.POST_MESSAGE_INSERT_LINE,
-    LoggedOnSubState.POST_MESSAGE_INSERT_TEXT
   ]);
 
   if (messageSubStates.has(session.subState as string)) {
     const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
-    // Locked-out comment form (login-post accountLocked/pwd-change-denied):
-    // express.e runs C to completion before Thanks + logoff, but the
-    // immediate beginLogoff used to fire 1.5 s after the form opened,
-    // cutting it off mid-fill. Fire the deferred Thanks + logoff when the
-    // flow lands back on the menu instead of advancing into it.
-    if (session.logoffAfterComment && session.subState === LoggedOnSubState.DISPLAY_MENU) {
-      session.logoffAfterComment = false;
-      socket.emit('ansi-output', '\r\nThanks you will now be disconnected...\r\n\r\n');
-      beginLogoff(socket, session, { finalState: BBSState.AWAIT, readDelayMs: 1500 });
-      return;
-    }
-    // express.e yesNo()/abort/save all return to the menu immediately — no extra keypress needed.
-    // If the handler left us in a display-flow state (e.g. DISPLAY_MENU after abort Y or save),
-    // advance now so the menu appears without requiring the user to press an extra key.
-    if (prevMessageSubState !== session.subState && isDisplayFlowState(session.subState)) {
-      await advanceDisplayFlow(socket, session);
-    }
+    await afterMessageEntryInput(socket, session, prevMessageSubState);
     return;
   }
 
@@ -3849,165 +3530,11 @@ console.log(' In conference selection state');
    * reader fix the wrong one and watch nothing change.
    */
 
-  // Handle message editor delete line prompt
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_DELETE_LINE) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageDeleteLineInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle message editor delete confirmation
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageDeleteConfirm(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle message editor edit line prompt
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_EDIT_LINE) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageEditLineInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle message editor edit line content
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '');
-      session.inputBuffer = '';
-      handleMessageEditLineContent(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle message editor file attachment input (express.e:10515-10556)
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_ATTACH_FILE) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMessageAttachFileInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle message editor file attachment delete confirmation (express.e:10538-10549)
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageAttachDeleteConfirm(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle /R (Replace Text) - Search String Input
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageReplaceSearchInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle /R (Replace Text) - Replacement String Input
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_REPLACE_WITH) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '');  // Don't trim - allow empty replacement
-      session.inputBuffer = '';
-      handleMessageReplaceWithInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle /I (Insert Line) - Line Number Input
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_INSERT_LINE) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageInsertLineInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle /I (Insert Line) - Text Input
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_INSERT_TEXT) {
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '');  // Don't trim - preserve spaces
-      session.inputBuffer = '';
-      handleMessageInsertTextInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
+  /*
+   * The editor's sub-prompts (D, E, F, the quote range) had dead copies
+   * here too, all unreachable for the same reason. Removed 2026-09-30 when
+   * Msg. Options became express's own lineInput / yesNo calls.
+   */
 
   // Handle message reader navigation (R command)
   // express.e:11046 — single-character getMSGCommand, not line input.

@@ -147,7 +147,7 @@ describe('80-column identity: the message header is byte-identical', () => {
   it('the Edit Line rule and its pre-fill indent (express.e:10486-10489)', () => {
     const d = drive(false);
     d.session.tempData.messageEntry.body = ['hello world'];
-    require('../../../src/handlers/message/message-entry.handler').handleMessageEditLineInput(d.socket, d.session, '1');
+    void require('../../../src/handlers/message/message-entry.handler').editMessageLine(d.socket, d.session, 1);
     expect(d.out()).toBe(
       '\r\n    Edit Line\r\n' +
         '   (---------------------------------------------------------------------------)\r\n' +
@@ -263,7 +263,7 @@ describe('40-column layout: nothing folds', () => {
   it('the Edit Line rule is one row and its pre-fill is indented for forty', () => {
     const d = drive(true);
     d.session.tempData.messageEntry.body = ['hello world'];
-    require('../../../src/handlers/message/message-entry.handler').handleMessageEditLineInput(d.socket, d.session, '1');
+    void require('../../../src/handlers/message/message-entry.handler').editMessageLine(d.socket, d.session, 1);
     const rows = d.rows();
     expect(rows).toContain(` (${'-'.repeat(37)})`);
     expect(rows).toContain('  hello world');

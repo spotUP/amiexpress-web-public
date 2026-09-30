@@ -13,9 +13,9 @@
  * his own screen wraps the echo, so the words are in front of him while the
  * board keeps the first thirty-six.
  *
- * A line that does not fit now WRAPS onto the next body line, through the
- * board's own `wrapLineToWidth`, so a word moves whole and a spaceless run of
- * graphics breaks at the screen edge - where his screen broke it anyway.
+ * A line that does not fit now WRAPS onto the next body line as he types,
+ * with express.e edit()'s own word wrap (10320-10357): a word moves whole and
+ * a spaceless run of graphics breaks at the screen edge.
  *
  * Driven through `handleCommand`, the entry point every keystroke takes.
  */
@@ -95,7 +95,9 @@ describe('a line longer than the caller\'s screen', () => {
 
     const body = await typeLine(session, bar);
 
-    expect(body[0].length).toBe(limit);
+    // express.e:10320-10335: no space to break at, so the line is stored as
+    // it stands when the key past maxLineLen arrives - limit + 1 cells.
+    expect(body[0].length).toBe(limit + 1);
     expect(body.join('')).toBe(bar);
   });
 

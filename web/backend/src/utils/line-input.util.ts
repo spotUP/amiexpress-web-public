@@ -77,10 +77,6 @@ export function acceptBackspace(buffer: string): LineEdit {
  */
 /** The menu command line. express.e:28624 - lineInput('','',255,...). */
 export const MAX_COMMAND_LINE = 255;
-/** A line NUMBER inside the message editor - "delete which line". */
-export const MAX_MSG_LINE_NUMBER = 5;
-/** A line of message text. express.e:10117 - editor.editorMaxWidth:=76. */
-export const MAX_MSG_LINE_TEXT = 76;
 /** Who a message is to. express.e:9817, and 10779 for a new message. */
 export const MAX_MSG_TO = 30;
 /** A message subject. express.e:9826, and 10847 for a new message. */

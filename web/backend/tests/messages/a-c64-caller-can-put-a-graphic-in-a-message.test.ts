@@ -100,7 +100,9 @@ describe('a C64 caller writing a message', () => {
     // on the next line. It used to be truncated, and the caller could not see
     // it happen because his own screen wraps the echo (the sysop, 2026-09-23:
     // "the text is cut off"). See a-long-line-keeps-its-tail.test.ts.
-    expect(body[0].length).toBe(limit);
+    // express.e:10320-10335: the key past maxLineLen is appended first, and
+    // a line with no space to break at is stored whole - limit + 1.
+    expect(body[0].length).toBe(limit + 1);
     expect(body.join('')).toBe('x'.repeat(limit + 12));
   });
 
@@ -111,7 +113,8 @@ describe('a C64 caller writing a message', () => {
     await typeLine(wide, 'y'.repeat(90));
     const body: string[] = wide.tempData.messageEntry.body;
 
-    expect(body[0].length).toBe(75);
+    // 76: the 76th key is appended before the wrap test (express.e:10313-10335).
+    expect(body[0].length).toBe(76);
     expect(body.join('')).toBe('y'.repeat(90));
   });
 });
