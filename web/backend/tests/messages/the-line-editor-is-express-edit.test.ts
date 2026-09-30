@@ -9,6 +9,12 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
+// The replied-to message is read off disk; O8 hands one over.
+jest.mock('../../src/utils/message-file.util', () => {
+  const actual = jest.requireActual('../../src/utils/message-file.util');
+  return { ...actual, readMessageFile: jest.fn(actual.readMessageFile) };
+});
+
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -308,9 +314,11 @@ describe('Msg. Options (express.e 10373-10578)', () => {
 
   it('O8: the quote range echoes and holds six characters', async () => {
     const d = drive();
-    messageEntry.setMessageEntryDependencies({
-      db: { getMessage: async () => ({ body: 'first\nsecond', author: 'Zaphod', createdAt: new Date(0) }) },
-      callersLog: async () => {},
+    // Quote in Reply reads the replied-to message from its file (10887).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const files = require('../../src/utils/message-file.util');
+    (files.readMessageFile as jest.Mock).mockResolvedValueOnce({
+      from: 'Zaphod', to: 'ALL', subject: 's', date: '', msgNum: 7, msgDate: 0, body: 'first\nsecond',
     });
     d.session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM;
     d.session.tempData.messageEntry.parentId = 7;
