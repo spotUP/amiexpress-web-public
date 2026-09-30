@@ -259,6 +259,7 @@ import {
   getDoors
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
+import { feedInputWaiter } from '../utils/await-input';
 
 /** One key's escape sequence (CSI or SS3), as a terminal sends for a key press. */
 function isKeySequence(data: string): boolean {
@@ -1387,6 +1388,9 @@ console.log('=== handleCommand called ===');
 console.log('data:', keysForLog(session, data));
 console.log('session.state:', session.state);
 console.log('session.subState:', session.subState);
+  // A procedure ported whole from express.e waits on lineInput / readChar /
+  // yesNo (utils/await-input); it takes the keystroke before any branch.
+  if (feedInputWaiter(socket, session, data)) return;
   // If the menu was just displayed and the user pressed *anything* (including Enter),
   // drop into READ_COMMAND so the keystroke is handled instead of being eaten by the
   // display-flow loop. We only keep DISPLAY_MENU when handleCommand is invoked with

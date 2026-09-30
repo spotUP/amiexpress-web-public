@@ -579,6 +579,8 @@ export interface BBSSession {
    * it back; the door is paused waiting for its reply.
    */
   doorLentTerminal?: boolean;
+  /** An express.e lineInput / readChar a ported procedure is awaiting (utils/await-input). */
+  inputWaiter?: import('./utils/await-input').InputWaitingSession['inputWaiter'];
   paginatedScreen?: {
     lines: string[];
     nextIndex: number;
