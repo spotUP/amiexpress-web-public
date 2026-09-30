@@ -159,6 +159,17 @@ export function keyOverride(ev: KeyLike): string | null {
 export function colourChordText(ev: KeyLike): string | null {
   if (ev.type && ev.type !== 'keydown') return null;
   if (!ev.code || ev.metaKey) return null;
+  /*
+   * A CHARACTER THE KEYBOARD MADE IS TYPED, NOT A CHORD.
+   *
+   * On a Mac, Option is how a layout reaches its third level: on a Swedish
+   * keyboard Option+2 is `@`, Option+7 `|`, Option+8 and 9 `[` and `]`. The
+   * browser reports those as the character itself in `key`; a chord with
+   * nothing to type reports the digit. Taking Option+2 as the Commodore key
+   * cost the sysop the `@` of an email address at new-user signup
+   * (2026-09-30). So Alt is a chord only when the key is still its digit.
+   */
+  if (ev.altKey && !ev.ctrlKey && !/^[0-9]$/.test(ev.key)) return null;
   const byte = ev.ctrlKey && !ev.altKey
     ? controlColourToPetscii(ev.code)
     : ev.altKey && !ev.ctrlKey
