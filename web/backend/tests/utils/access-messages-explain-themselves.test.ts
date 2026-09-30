@@ -9,13 +9,12 @@
  * ErrorHandler.permissionDenied discarded every one of them behind a `_action`
  * parameter.
  *
- * EALL was worse: express.e answers a caller who may not use it with "User
- * does not exist!!" (express.e:10814), which is true of no user and explains
- * nothing - EALL is not a user, it is the public recipient, and the real cause
- * is a missing ACS.EALL_MESSAGES. That message cost the sysop an afternoon on
- * 2026-09-08, which is what prompted this.
+ * EALL used to add a line of its own after express.e's "User does not
+ * exist!!"; the sysop's rule since 2026-09-30 is "always 1:1 with amiexpress
+ * sources", so EALL says express.e's line and nothing else
+ * (tests/handlers/message/entering-a-message-names-the-recipient-like-express.test.ts).
  *
- * Both changes are ADDITIVE on purpose: express.e's own line still comes
+ * The refusal text is ADDITIVE on purpose: express.e's own line still comes
  * first, unchanged, so parity is preserved and the explanation follows it.
  */
 
@@ -73,38 +72,5 @@ describe('an access refusal names what was refused', () => {
     higherAccess(socket);
 
     expect(text()).toBe('\r\nCommand requires higher access.\r\n');
-  });
-});
-
-describe('the EALL refusal explains the permission', () => {
-  // Driven through the REAL message-entry handler, the way
-  // tests/handlers/message/message-entry.test.ts drives the To: prompt: a
-  // caller with no EALL_MESSAGES grant (no securityFlags, no ACS files) types
-  // EALL, and what reaches his terminal is read back in order.
-  it("says express.e's line first, then names ACS.EALL_MESSAGES", async () => {
-    const { handleMessageToInput } = require('../../src/handlers/message/message-entry.handler');
-    const { flushOutput } = require('../../src/utils/output.util');
-    const out: string[] = [];
-    const socket: any = {
-      id: 'eall-refused',
-      emit: (event: string, text: unknown) => { if (event === 'ansi-output') out.push(String(text)); return true; },
-      on: () => socket,
-    };
-    const session: any = {
-      state: 'logged_in', nodeId: 1, currentConf: 1,
-      user: { username: 'Low', secLevel: 5, confAccess: 'X' },
-      tempData: { messageEntry: { toUser: '', subject: '', isPrivate: false, body: [] } },
-    };
-
-    await handleMessageToInput(socket, session, 'EALL');
-    flushOutput(socket);
-    const said = out.join('');
-
-    const parity = said.indexOf('User does not exist!!');
-    const explain = said.indexOf('ACS.EALL_MESSAGES');
-    expect(parity).toBeGreaterThan(-1);
-    expect(explain).toBeGreaterThan(-1);
-    // express.e's line first, the explanation after it.
-    expect(explain).toBeGreaterThan(parity);
   });
 });

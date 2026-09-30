@@ -163,7 +163,8 @@ describe('80-column identity: the message header is byte-identical', () => {
       d.session,
       'Hi there'
     );
-    expect(d.out()).toBe('\r\n         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    // yesNo(2)'s own bytes (express.e:2134): ESC[32m again before the `?`.
+    expect(d.out()).toBe('\r\n         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ');
   });
 
   it('the reply header box (express.e:9881-9884)', async () => {

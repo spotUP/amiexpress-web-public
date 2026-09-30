@@ -38,6 +38,7 @@ export interface MessageFile {
   to: string;
   subject: string;
   date: string;             // formatted "DD-MMM-YY HH:MM:SS"
+  msgDate?: number;         // mailHeader.msgDate, seconds, as the HeaderFile holds it
   msgNum: number;
   body: string;
   isPrivate?: boolean;
@@ -304,6 +305,7 @@ export async function readMessageFile(
     to: header.toName,
     subject: header.subject,
     date: formatMessageDate(new Date(header.msgDate * 1000)),
+    msgDate: header.msgDate,
     msgNum: header.msgNumb,
     body,
     isPrivate: header.toName.toUpperCase() !== 'ALL',

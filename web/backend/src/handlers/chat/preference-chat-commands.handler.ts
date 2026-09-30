@@ -13,6 +13,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { emitText } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { displayMainMenu } from '../command-handler/menu';
@@ -143,61 +144,48 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
     return;
   }
 
-  // express.e:8762 captureRealAndInternetNames before commentToSYSOP body.
-  try {
-    const { captureRealAndInternetNames } = require('../message/message-entry.handler');
-    if (typeof captureRealAndInternetNames === 'function' &&
-        !captureRealAndInternetNames(socket, session)) {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-  } catch { /* helper not available — proceed without check */ }
-
 console.log('[ENV] Mail');
 
-  // express.e:8779-8783 commentToSYSOP():
-  // separator box, To: sysopName line, then Subject prompt.
-  // express.e:8792 mailHeader.status:="R" — comments are always Private.
-  // express.e:8793 comment:=1 → enterMSG JUMPs to skipAll, bypassing To/
-  //  Subject/Private prompts. Our state machine emits Subject prompt here
-  //  directly (since toUser is pre-set), then handleMessageSubjectInput
-  //  routes via the isComment flag below straight to the body editor —
-  //  matching express.e's "no Private prompt for comments" semantic.
-  const sysopName = session.tempData?.sysopName || 'sysop';
-  socket.emit('ansi-output', '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
-  socket.emit('ansi-output', `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m ${sysopName}\r\n`);
+  // express.e:8762 stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
+  // - a missing real / internet name is asked for here, and the comment
+  // carries on once it is given.
+  const { captureRealAndInternetNames } = require('../message/message-entry.handler');
+  if (!captureRealAndInternetNames(socket, session, () => commentToSysop(socket, session))) return;
+  commentToSysop(socket, session);
+}
 
-  // Set up message entry with recipient pre-set to sysop. isComment=true
-  // signals the post-Subject handler to skip the Private prompt and force
-  // isPrivate=true (express.e:8792 status='R').
+/**
+ * express.e:8765-8785 commentToSYSOP after the name capture: the sysop is
+ * account 1, addressed the way this conference names people (8765-8776),
+ * then the header box and To: line, checkToForward(str,toName,0), Subject.
+ * express.e:8792-8793 status "R" and comment:=1 - no Private or Quote
+ * question; the Subject handler reads isComment for that.
+ */
+function commentToSysop(socket: any, session: BBSSession): void {
+  const { loadAccount, sysopNameForConf, checkToForward } = require('../message/msg-names');
+  // express.e:8765 stat:=loadAccount(1,...) ; IF(stat<0) THEN RETURN stat
+  if (!loadAccount(1)) return;
+  const sysopName: string = sysopNameForConf(session);
+
+  emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+  emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m ${sysopName}\r\n`);
+
+  // express.e:8782 checkToForward(str,mailHeader.toName,0) - with check=0 the
+  // FORWARDMAIL account takes the comment whoever it was addressed to.
+  const fwd = checkToForward(socket, session, sysopName, false);
+
   session.inputBuffer = '';
   session.tempData = {
     isPrivate: true,
     messageEntry: {
-      toUser: sysopName,
+      toUser: fwd.name,
+      toSlot: fwd.account ? fwd.account.slot : 1,
       isComment: true,
       isPrivate: true,  // express.e:8792 status='R'
     }
   };
 
-  // express.e:8782 checkToForward(str, mailHeader.toName, 0) — apply
-  // FORWARDMAIL on the conf icon. The check=0 path (express.e:9934-9947)
-  // unconditionally redirects to the FORWARDMAIL target if any.
-  try {
-    const confId = (session.currentConf as number) || 1;
-    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-    const flags = getConferenceToolFlags(confId);
-    const fwdUser = flags?.forwardMail || '';
-    if (fwdUser) {
-      socket.emit('ansi-output', `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`);
-      session.tempData.messageEntry.toUser = fwdUser;
-    }
-  } catch {
-    /* tooltype lookup failed — proceed without forward */
-  }
-
-  socket.emit('ansi-output', '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
-  // Go directly to subject input since recipient is already set
+  emitText(socket, '\x1b[36mSubject\x1b[33m: \x1b[32m(\x1b[33mBlank\x1b[32m)\x1b[0m=\x1b[33mabort\x1b[32m?\x1b[0m ');
   session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
 }
 

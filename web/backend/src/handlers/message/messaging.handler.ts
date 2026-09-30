@@ -1362,7 +1362,8 @@ export function handleEnterMessageFullCommand(
   session.inputBuffer = '';
   session.tempData = { isPrivate: true, messageEntry: {} };
 
-  const firstParam = params.trim();
+  // express.e:10764 firstparam:=parsedParams.item(0) - the first word only.
+  const firstParam = params.trim().split(/\s+/)[0] || '';
   if (firstParam && firstParam.length <= 30) {
     // express.e:10762-10774: parsedParams[0] ≤ 30 chars → pre-fill To:, JUMP skipEntry
     //   AstrCopy(mailHeader.toName, firstparam, 31)
@@ -1379,7 +1380,8 @@ export function handleEnterMessageFullCommand(
     // sysop comment routing, conference-access checks, and FORWARDMAIL.
     emitText(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${firstParam}\r\n`);
     const { processToRecipient } = require('./message-entry.handler');
-    void processToRecipient(socket, session, firstParam);
+    session.subState = LoggedOnSubState.POST_MESSAGE_TO;
+    void processToRecipient(socket, session, firstParam).catch((err: unknown) => console.error('[E]', err));
   } else {
     // No params — show To: prompt (express.e:10778-10780)
     emitText(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m `);

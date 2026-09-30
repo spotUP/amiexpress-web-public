@@ -1,9 +1,7 @@
 // @ts-nocheck
 import {
-  handleMessageToInput,
   handleMessageSubjectInput,
   handleMessagePrivateInput,
-  processToRecipient,
   getConfMailName,
   isSysopRecipient,
 } from '../../../src/handlers/message/message-entry.handler';
@@ -37,72 +35,8 @@ function makeSession(overrides: any = {}): any {
   };
 }
 
-describe('handleMessageToInput', () => {
-  test('blank input sets toUser to ALL', () => {
-    const socket = makeSocket();
-    const session = makeSession();
-    handleMessageToInput(socket, session, '');
-    expect(session.tempData.messageEntry.toUser).toBe('ALL');
-  });
-
-  test('SYSOP input sets toUser to SYSOP', () => {
-    const socket = makeSocket();
-    const session = makeSession();
-    handleMessageToInput(socket, session, 'sysop');
-    expect(session.tempData.messageEntry.toUser).toBe('SYSOP');
-  });
-
-  test('SYSOP check is case-insensitive', () => {
-    const socket = makeSocket();
-    const session = makeSession();
-    handleMessageToInput(socket, session, 'SYSOP');
-    expect(session.tempData.messageEntry.toUser).toBe('SYSOP');
-  });
-
-  test('regular recipient stored verbatim', () => {
-    const socket = makeSocket();
-    const session = makeSession();
-    handleMessageToInput(socket, session, 'JohnDoe');
-    expect(session.tempData.messageEntry.toUser).toBe('JohnDoe');
-  });
-
-  test('leading/trailing whitespace trimmed from recipient', () => {
-    const socket = makeSocket();
-    const session = makeSession();
-    handleMessageToInput(socket, session, '  Alice  ');
-    expect(session.tempData.messageEntry.toUser).toBe('Alice');
-  });
-
-  test('EALL accepted when user has EALL_MESSAGES permission', () => {
-    // Post c316ada1e fix(security): no more secLevel >= 10 fallback. Grant
-    // EALL_MESSAGES (ACS index 34) via securityFlags so the check resolves
-    // without depending on ACS files on disk.
-    const securityFlags = '?'.repeat(87).split('');
-    securityFlags[34] = 'T';
-    const socket = makeSocket();
-    const session = makeSession({
-      user: {
-        username: 'Op',
-        secLevel: 20,
-        confAccess: 'X',
-        securityFlags: securityFlags.join(''),
-        secOverride: '',
-      },
-    });
-    handleMessageToInput(socket, session, 'eall');
-    expect(session.tempData.messageEntry.toUser).toBe('EALL');
-  });
-
-  test('EALL rejected when user lacks EALL_MESSAGES permission', () => {
-    const socket = makeSocket();
-    // No securityFlags grant + no ACS files → checkSecurity denies.
-    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
-    handleMessageToInput(socket, session, 'EALL');
-    // Should be rejected: tempData cleared and state changed to DISPLAY_MENU
-    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-    expect(session.tempData).toBeUndefined();
-  });
-});
+// The To: line (blank = ALL, EALL, sysop, names) is
+// entering-a-message-names-the-recipient-like-express.test.ts.
 
 describe('handleMessageSubjectInput', () => {
   test('blank subject aborts entry and returns to DISPLAY_MENU', () => {
@@ -137,40 +71,6 @@ describe('handleMessageSubjectInput', () => {
     const session = makeSession();
     handleMessageSubjectInput(socket, session, '   ');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-  });
-});
-
-describe('processToRecipient — express.e:10802 EALL exact match', () => {
-  // express.e:10802 `StrCmp(str, 'eall', 5)` requires exact 'eall' (the
-  // length-5 strncmp compares the trailing null too). `eallice` must NOT
-  // be treated as EALL; pre-2026-05-03 the E-command params branch
-  // accepted it via startsWith().
-  test("'eallice' is NOT EALL (no EALL_MESSAGES permission required)", async () => {
-    const socket = makeSocket();
-    // No EALL flag. If startsWith('eall') were used we would early-exit
-    // with "User does not exist!!" — but exact match falls through to
-    // the chooseAName path which (with no _db wired) accepts the literal
-    // recipient.
-    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
-    await processToRecipient(socket, session, 'eallice');
-    expect(session.tempData?.messageEntry?.toUser).toBe('eallice');
-    expect(session.subState).not.toBe(LoggedOnSubState.DISPLAY_MENU);
-  });
-
-  test('EALL with extra trailing chars not treated as EALL', async () => {
-    const socket = makeSocket();
-    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
-    await processToRecipient(socket, session, 'eallx');
-    // Falls through to regular-recipient path
-    expect(session.tempData?.messageEntry?.toUser).toBe('eallx');
-  });
-
-  test('exact EALL still triggers permission check (rejected for low sec)', async () => {
-    const socket = makeSocket();
-    const session = makeSession({ user: { username: 'Low', secLevel: 5, confAccess: 'X' } });
-    await processToRecipient(socket, session, 'eall');
-    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-    expect(session.tempData).toBeUndefined();
   });
 });
 

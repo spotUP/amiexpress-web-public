@@ -19,6 +19,27 @@ export function isExtSendMsgBase(session: BBSSession): boolean {
   return !!flags?.extSendMsgBases?.has?.(msgBaseId);
 }
 
+/** express.e NAME_TYPE_USERNAME / NAME_TYPE_REALNAME / NAME_TYPE_INTERNETNAME. */
+export type ConfNameType = 'username' | 'realname' | 'internetname';
+
+/**
+ * express.e:5017-5024 confNameType for a conference and message base:
+ *
+ *   confNameType:=NAME_TYPE_USERNAME
+ *   IF checkToolTypeExists(TOOLTYPE_CONF,conf,'REALNAME') OR checkToolTypeExists(TOOLTYPE_MSGBASE,conf,'REALNAME.<n>')
+ *     confNameType:=NAME_TYPE_REALNAME
+ *   ELSEIF checkToolTypeExists(TOOLTYPE_CONF,conf,'INTERNETNAME') OR ...'INTERNETNAME.<n>'
+ *     confNameType:=NAME_TYPE_INTERNETNAME
+ *   ENDIF
+ */
+export function getConfNameType(confId: number, msgBaseId: number): ConfNameType {
+  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
+  const flags = getConferenceToolFlags(confId);
+  if (flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId)) return 'realname';
+  if (flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId)) return 'internetname';
+  return 'username';
+}
+
 /**
  * Compute the user's display name FOR THIS CONFERENCE — express.e
  * confMailName (declared at express.e:237, populated at express.e:12459-

@@ -437,16 +437,6 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
     case LoggedOnSubState.REPLY_DELETE_ORIGINAL:
       await handleReplyDeleteOriginalInput(socket, session, data.toUpperCase());
       return;
-    case LoggedOnSubState.MSG_CAPTURE_REAL_NAME: {
-      const { handleCaptureRealNameInput } = require('./message/message-entry.handler');
-      await handleCaptureRealNameInput(socket, session, data);
-      return;
-    }
-    case LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME: {
-      const { handleCaptureInternetNameInput } = require('./message/message-entry.handler');
-      await handleCaptureInternetNameInput(socket, session, data);
-      return;
-    }
 
     default:
       return;

@@ -9,7 +9,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/security.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
-import { writeMessageFile, formatMessageDate } from '../../utils/message-file.util';
+import { writeMessageFile, formatMessageDate, readMessageFile } from '../../utils/message-file.util';
 import { config } from '../../config';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
@@ -40,18 +40,15 @@ export function setMessageEntryDependencies(deps: {
 }
 
 /**
- * express.e:28151-28230 captureRealAndInternetNames — when the conf or
- * msgbase requires REALNAME / INTERNETNAME (per-conf or per-msgbase
- * tooltype) and the user hasn't filled those fields, prompt inline for
- * the missing field(s) before allowing message entry.
+ * express.e:28151 captureRealAndInternetNames, for the callers that are still
+ * sub-state driven: E, C, and the reader's R and F. The procedure itself is
+ * msg-names.ts captureRealAndInternetNames, which prompts inline with
+ * lineInput the way express.e does.
  *
- * Returns:
- *   true       — fields already set; caller proceeds with command.
- *   false      — capture in progress (substate set, prompt emitted).
- *                Caller MUST return; the handler will resume the
- *                deferred command after the user supplies the value.
- *                Pass `resume` to schedule what happens on success.
- *   throws     — none (defensive: never throws).
+ * Returns true when nothing is missing - the caller carries on. Otherwise the
+ * prompt is running and it returns false: the caller returns, and `resume`
+ * runs once the caller has typed the name(s). An empty line is express.e's
+ * RESULT_FAILURE - the command ends and the menu comes back.
  */
 export function captureRealAndInternetNames(
   socket: any,
@@ -60,359 +57,162 @@ export function captureRealAndInternetNames(
 ): boolean {
   const confId = session.currentConf || 1;
   const msgBaseId = session.currentMsgBase || 1;
-  if (confId < 1 || msgBaseId < 1) return true;
+  if (!namesMissing(session, confId, msgBaseId)) return true;
 
+  void (async () => {
+    const stat = await captureNames(socket, session, confId, msgBaseId);
+    if (stat === RESULT_SUCCESS) {
+      if (resume) await resume();
+      return;
+    }
+    await endMessageEntry(socket, session);
+  })().catch((err) => console.error('[captureRealAndInternetNames]', err));
+  return false;
+}
+
+/** The test at the top of each half of captureRealAndInternetNames (28166, 28195). */
+function namesMissing(session: BBSSession, confId: number, msgBaseId: number): boolean {
+  if (confId < 1 || msgBaseId < 1) return false;
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
-  // express.e:28159-28164 OR's all four checks (REALNAME, REALNAME.<n>,
-  // INTERNETNAME, INTERNETNAME.<n>) into realNamesUsed/internetNamesUsed.
   const realNamesUsed = !!(flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId));
   const internetNamesUsed = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
-  const userMisc: any = (session.user as any) || {};
-  const realName = String(userMisc.realName || userMisc.realname || '').trim();
-  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
-
-  // express.e:28166-28193 — REALNAME first (matches express.e order).
-  if (realNamesUsed && realName.length === 0) {
-    if (!resume) {
-      // Legacy callers that don't pass a resume callback get the previous
-      // blocking-notice fallback. Keeps backwards compat for any path that
-      // hasn't been migrated yet.
-      emitText(socket, '\r\nReal Names are required for messages in this conference/msgbase\r\n');
-      emitText(socket, 'Use the account editor to set your real name first.\r\n\r\n');
-      return false;
-    }
-    if (!session.tempData) session.tempData = {};
-    session.tempData.captureResume = resume;
-    emitText(socket, '\r\n');
-    // express.e:28169-28173 - the sysop's REALNAMES screen if the board has
-    // one, and the bare sentence ONLY when it does not. This port always
-    // printed the sentence, so a board that had drawn the screen never showed
-    // it.
-    void showNameScreen(socket, session, 'REALNAMES').then(shown => {
-      if (!shown) {
-        emitText(socket, 'Real Names are required for messages in this conference/msgbase \r\n');
-      }
-      emitText(socket, '\r\n');
-      emitText(socket, 'Real Name (Alpha Numeric): ');
-    });
-    session.subState = LoggedOnSubState.MSG_CAPTURE_REAL_NAME;
-    return false;
-  }
-
-  // express.e:28195-28225 — INTERNETNAME after REALNAME.
-  if (internetNamesUsed && internetName.length === 0) {
-    if (!resume) {
-      emitText(socket, '\r\nInternet Names are required for messages in this conference/msgbase\r\n');
-      emitText(socket, 'Use the account editor to set your internet name first.\r\n\r\n');
-      return false;
-    }
-    if (!session.tempData) session.tempData = {};
-    session.tempData.captureResume = resume;
-    emitText(socket, '\r\n');
-    // express.e:28199-28202 - same rule as REALNAMES above.
-    void showNameScreen(socket, session, 'INTERNETNAMES').then(shown => {
-      if (!shown) {
-        emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
-      }
-      emitText(socket, '\r\n');
-      emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
-    });
-    session.subState = LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME;
-    return false;
-  }
-
-  return true;
+  const misc: any = session.user || {};
+  const realName = String(misc.realName || misc.realname || '');
+  const internetName = String(misc.internetName || misc.internetname || '');
+  return (realNamesUsed && realName.length === 0) || (internetNamesUsed && internetName.length === 0);
 }
 
 /**
- * Handle capture-real-name input — express.e:28173-28191 REPEAT loop.
- * Empty input → RESULT_FAILURE (return user to safe state).
- * Otherwise: validate (no wildcards), accept, advance to internet capture
- * if needed, else call the resume callback.
+ * A message command that ends early (enterMSG RETURN RESULT_FAILURE) goes back
+ * to the menu. The key handler that started it has already returned, so the
+ * menu is brought up here.
  */
-export async function handleCaptureRealNameInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = (input || '').trim().substring(0, 25); // express.e:28175 lineInput max=25
-  // express.e:28177 — empty → RESULT_FAILURE → bail to safe state.
-  if (trimmed.length === 0) {
-    emitText(socket, '\r\n');
-    delete session.tempData?.captureResume;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
-  // express.e:28181-28185 — wildcards are rejected.
-  if (trimmed.includes('*') || trimmed.includes('?')) {
-    emitText(socket, '\r\nNo wildcards allowed in a name.\r\n');
-    emitText(socket, 'Real Name (Alpha Numeric): ');
-    return; // stay in MSG_CAPTURE_REAL_NAME (express.e REPEAT/UNTIL loop)
-  }
-
-  // express.e:28184 findUserFromName(NAME_TYPE_REALNAME, ...) — duplicate
-  // name rejection. "Already in use!, try another." stays in the prompt.
-  emitText(socket, '\r\nChecking for duplicate name...');
-  if (_db?.getUserByRealname) {
-    try {
-      const existing = await _db.getUserByRealname(trimmed);
-      if (existing && existing.id !== session.user?.id) {
-        emitText(socket, '\r\nAlready in use!, try another.\r\n\r\n');
-        emitText(socket, 'Real Name (Alpha Numeric): ');
-        return; // loop
-      }
-    } catch (err) {
-      console.error('[CaptureRealName] Duplicate-check failed:', err);
-      // Fall through — accept the value rather than block on a DB hiccup.
-    }
-  }
-
-  // Persist on the live user object so subsequent messages don't re-prompt.
-  const userMisc: any = (session.user as any) || {};
-  userMisc.realName = trimmed;
-  // (Sync to disk via UserFileManager / DB happens at logoff; the in-memory
-  // value covers the rest of this session, matching express.e's
-  // loggedOnUserMisc.realName which is also session-scoped.)
-  emitText(socket, '\r\nOk!\r\n');
-
-  // Now check if internet name is also needed (express.e:28195-28225).
-  const confId = session.currentConf || 1;
-  const msgBaseId = session.currentMsgBase || 1;
-  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-  const flags = getConferenceToolFlags(confId);
-  const internetNamesUsed = !!(flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId));
-  const internetName = String(userMisc.internetName || userMisc.internetname || '').trim();
-  if (internetNamesUsed && internetName.length === 0) {
-    emitText(socket, '\r\n');
-    emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
-    emitText(socket, '\r\n');
-    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
-    session.subState = LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME;
-    return;
-  }
-
-  // All captures done — invoke the resume callback.
-  const resume = session.tempData?.captureResume;
-  delete session.tempData?.captureResume;
-  if (typeof resume === 'function') {
-    await resume();
-  }
-}
-
-/**
- * Handle capture-internet-name input — express.e:28204-28223.
- */
-export async function handleCaptureInternetNameInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = (input || '').trim().substring(0, 9); // express.e:28206 lineInput max=9
-  if (trimmed.length === 0) {
-    emitText(socket, '\r\n');
-    delete session.tempData?.captureResume;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
-  if (trimmed.includes('*') || trimmed.includes('?')) {
-    emitText(socket, '\r\nNo wildcards allowed in a name.\r\n');
-    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
-    return;
-  }
-  if (/\s/.test(trimmed)) {
-    // express.e:28205 prompt explicitly says "No Spaces" — enforce.
-    emitText(socket, '\r\nNo spaces allowed.\r\n');
-    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
-    return;
-  }
-
-  // express.e:28216 findUserFromName(NAME_TYPE_INTERNETNAME, ...) —
-  // duplicate-name rejection on internetName.
-  emitText(socket, '\r\nChecking for duplicate name...');
-  if (_db?.getUserByInternetname) {
-    try {
-      const existing = await _db.getUserByInternetname(trimmed);
-      if (existing && existing.id !== session.user?.id) {
-        emitText(socket, '\r\nAlready in use!, try another.\r\n\r\n');
-        emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
-        return;
-      }
-    } catch (err) {
-      console.error('[CaptureInternetName] Duplicate-check failed:', err);
-    }
-  }
-
-  const userMisc: any = (session.user as any) || {};
-  userMisc.internetName = trimmed;
-  emitText(socket, '\r\nOk!\r\n');
-
-  const resume = session.tempData?.captureResume;
-  delete session.tempData?.captureResume;
-  if (typeof resume === 'function') {
-    await resume();
-  }
+async function endMessageEntry(socket: any, session: BBSSession): Promise<void> {
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  session.tempData = undefined;
+  const { advanceDisplayFlow } = require('../command.handler');
+  await advanceDisplayFlow(socket, session);
 }
 
 export { isExtSendMsgBase, getConfMailName, getConfMailNameFor, isSysopRecipient } from './conf-mail-name';
-import { isExtSendMsgBase, getConfMailName, isSysopRecipient } from './conf-mail-name';
+import { isExtSendMsgBase, getConfMailName } from './conf-mail-name';
+import {
+  RESULT_SUCCESS,
+  accountHasConfAccess,
+  accountName,
+  captureRealAndInternetNames as captureNames,
+  checkToForward,
+  chooseAName,
+  confNameTypeOf,
+  loadAccount,
+  type DiskAccount,
+} from './msg-names';
 
 /**
- * express.e:9909-9950 checkToForward(check=1) — when the conf has
- * FORWARDMAIL=<user> tooltype set AND the recipient is the sysop, redirect
- * to <user> and print "    Forwarding mail To: <name>".
- *
- * Mutates session.tempData.messageEntry.toUser in place. Caller should run
- * this AFTER the recipient name is finalized (matches express.e:10845/9885).
+ * express.e:9909-9950 checkToForward(check=1) on the recipient being entered
+ * (the reply and forward flows). See msg-names.ts checkToForward.
  */
 export function applyConfForwardMail(socket: any, session: BBSSession): void {
   const entry = session.tempData?.messageEntry;
   if (!entry?.toUser) return;
-  const confId = session.currentConf || 1;
-  const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-  const flags = getConferenceToolFlags(confId);
-  const fwdUser = flags?.forwardMail || '';
-  if (!fwdUser) return;
-  if (isSysopRecipient(entry.toUser)) {
-    entry.toUser = fwdUser;
-    emitText(socket, `    \x1b[36mForwarding mail To\x1b[33m:\x1b[0m ${fwdUser}\r\n`);
-  }
+  const fwd = checkToForward(socket, session, entry.toUser, true);
+  entry.toUser = fwd.name;
+  if (fwd.account) entry.toSlot = fwd.account.slot;
 }
 
 /**
- * Run the express.e enterMSG "skipEntry" check sequence on a recipient
- * (express.e:10785-10845). Used by both the interactive To: prompt
- * (handleMessageToInput) and the pre-filled `E <name>` entry path
- * (handleEnterMessageFullCommand). Caller is responsible for emitting the
- * post-Enter '\r\n' that lineInput would have produced — this function
- * starts directly at the EALL/sysop/chooseAName logic.
+ * express.e:10785-10845, enterMSG from `skipEntry` to the Subject prompt:
+ * the recipient the caller typed (or gave as `E <name>`) becomes the
+ * message's toName.
  *
- * Express.e:10802 StrCmp(str,'eall',5) requires EXACT 'eall' match (the
- * length-5 strncmp compares the trailing null too). We mirror that here.
+ *   - blank is ALL (10796); nothing else is - `all` typed is looked up
+ *   - `eall` needs ACS_EALL_MESSAGES and a non-EXTSEND base (10800-10816)
+ *   - `sysop` is account 1 (10818-10820)
+ *   - anything else goes through chooseAName (10822), which says
+ *     "User does not exist!!" and ends the command when nobody has that
+ *     name - except on an EXTSEND base, where any name may leave the board
+ *   - a found account is addressed by the conference's confNameType
+ *     (10828-10836) and must have access to the conference (10837-10840)
+ *   - then checkToForward(str,toName,1) (10845)
  *
- * On success: sets messageEntry.toUser, runs checkToForward, calls
- * promptForSubject. On failure: emits the express.e error string and
- * returns the user to DISPLAY_MENU.
+ * chooseAName may ask ` Expand: <name> Correct (Y/n)?`, so this waits on the
+ * caller's keys: start it with `void`, never await it from a key handler.
  */
 export async function processToRecipient(socket: any, session: BBSSession, input: string): Promise<void> {
-  // express.e:10762,10779 — lineInput max 30 chars; truncate silently if longer
-  const recipient = input.trim().substring(0, 30);
+  const entry = session.tempData.messageEntry;
+  // AstrCopy(mailHeader.toName,tempStr,31)
+  let toName = input.substring(0, 30);
+  let aFlag = 0;
+  let toAccount: DiskAccount | null = null;
+  const extSend = isExtSendMsgBase(session);
 
-  // Blank = ALL (express.e:10796-10798)
-  if (recipient === '') {
-    session.tempData.messageEntry.toUser = 'ALL';
-    // express.e:10845 checkToForward runs after recipient is finalized.
-    // ALL is not the sysop so this is a no-op, but keep the call symmetric
-    // with the other branches.
-    applyConfForwardMail(socket, session);
-    promptForSubject(socket, session);
-    return;
-  }
-
-  // Check for EALL - express.e:10800-10816
-  // express.e:10802 StrCmp(str,'eall',5) — exact match only.
-  const recipientLower = recipient.toLowerCase();
-  if (recipientLower === 'eall') {
-    // express.e:10805-10808 — extSend (msgbase has EXTSEND.<n>) blocks EALL
-    if (isExtSendMsgBase(session)) {
-      emitText(socket, "\r\nCan't use EALL in external message bases!!\r\n\r\n");
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-      return;
-    }
-    // express.e:10810 - Check ACS_EALL_MESSAGES permission
-    if (checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
-      session.tempData.messageEntry.toUser = 'EALL';
-      applyConfForwardMail(socket, session);
-      promptForSubject(socket, session);
+  if (toName.length === 0) {
+    // express.e:10796-10798
+    aFlag = 1;
+    toName = 'ALL';
+  } else {
+    // express.e:10800 StrCopy(str,toName,31); LowerStr(str); StrCmp(str,'eall',5)
+    const str = toName.toLowerCase();
+    if (str === 'eall') {
+      if (extSend) {
+        emitText(socket, "\r\nCan't use EALL in external message bases!!\r\n\r\n");
+        await endMessageEntry(socket, session);
+        return;
+      }
+      if (!checkSecurity(session.user, ACSPermission.EALL_MESSAGES)) {
+        // express.e:10814
+        emitText(socket, '\r\nUser does not exist!!\r\n\r\n');
+        await endMessageEntry(socket, session);
+        return;
+      }
+      aFlag = 2;
+      toName = 'EALL';
     } else {
-      // express.e:10814 - No permission, reject.
-      //
-      // express.e answers a caller who may not use EALL with "User does not
-      // exist!!", which is true of no user and explains nothing: EALL is not a
-      // user, it is the public recipient, and the real reason is the missing
-      // permission. The express.e line stays first for parity; the sentence
-      // after it is the one that lets a sysop fix his own board.
-      emitText(socket, '\r\nUser does not exist!!\r\n');
-      emitText(
-        socket,
-        '[INFO] EALL posts to everyone and needs ACS.EALL_MESSAGES, which your access level does not grant.\r\n\r\n',
-      );
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-    }
-    return;
-  }
-
-  // Check for SYSOP - express.e:10818-10820 maps to slot 1.
-  // We pass through the literal 'SYSOP' token; saveMessage normalizes via
-  // doCommentNotify path. checkConfAccess for sysop is implicitly allowed.
-  if (recipientLower === 'sysop') {
-    session.tempData.messageEntry.toUser = 'SYSOP';
-    // express.e:10845 — FORWARDMAIL redirect kicks in here for sysop comments
-    applyConfForwardMail(socket, session);
-    promptForSubject(socket, session);
-    return;
-  }
-
-  // express.e:10822-10841 — chooseAName + canonical-form copy + checkConfAccess.
-  // Lookup the recipient by username (the most common case). When we find
-  // a match: normalize to the user's stored username, then verify they have
-  // access to the current conference.
-  let resolved = recipient;
-  let resolvedUser: any = null;
-  try {
-    if (_db?.getUserByUsername) {
-      resolvedUser = await _db.getUserByUsername(recipient);
-    }
-  } catch {
-    // DB error → treat as unresolved, fall through (matches express.e
-    // chooseAName behavior when user db is unavailable: aePuts a generic
-    // error and proceeds — for safety we just skip access check here).
-  }
-
-  if (resolvedUser) {
-    // express.e:10828-10836 — copy canonical name based on confNameType.
-    //   NAME_TYPE_USERNAME    → tempUserKeys.userName(31)
-    //   NAME_TYPE_REALNAME    → tempUserMisc.realName(26)
-    //   NAME_TYPE_INTERNETNAME → tempUserMisc.internetName(10)
-    // confNameType resolves per express.e:5017-5024 — REALNAME wins over
-    // INTERNETNAME, INTERNETNAME wins over default USERNAME.
-    const confId = session.currentConf || 1;
-    const msgBaseId = session.currentMsgBase || 1;
-    const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
-    const flags = getConferenceToolFlags(confId);
-    const requireRealname = flags?.requireRealname || flags?.requireRealnameMsgBases?.has?.(msgBaseId);
-    const requireInternetname = flags?.requireInternetname || flags?.requireInternetnameMsgBases?.has?.(msgBaseId);
-    if (requireRealname && resolvedUser.realName) {
-      resolved = String(resolvedUser.realName).substring(0, 26);
-    } else if (requireInternetname && (resolvedUser.internetName || resolvedUser.internetname)) {
-      resolved = String(resolvedUser.internetName || resolvedUser.internetname).substring(0, 10);
-    } else if (resolvedUser.username) {
-      // Default NAME_TYPE_USERNAME — normalize to canonical username casing
-      resolved = String(resolvedUser.username).substring(0, 31);
-    }
-
-    // express.e:10837-10840 — checkConfAccess.
-    const { checkConfAccess } = require('./message-scan.handler');
-    if (typeof checkConfAccess === 'function' && !checkConfAccess(resolvedUser, confId)) {
-      emitText(socket, '\r\nUser does not have access to this conference!\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-      return;
+      let found = true;
+      if (str === 'sysop') {
+        // express.e:10819 loadAccount(1,tempUser,tempUserKeys,tempUserMisc)
+        toAccount = loadAccount(1);
+      } else {
+        // express.e:10823 chooseAName(toName,...,IF extSend THEN 0 ELSE 1)
+        toAccount = await chooseAName(socket, session, toName, !extSend);
+        if (!toAccount) {
+          if (!extSend) {
+            await endMessageEntry(socket, session);
+            return;
+          }
+          found = false;
+        }
+      }
+      if (found && toAccount) {
+        toName = accountName(toAccount, confNameTypeOf(session));
+        if (!accountHasConfAccess(toAccount, session.currentConf || 1)) {
+          // express.e:10838
+          emitText(socket, '\r\nUser does not have access to this conference!\r\n\r\n');
+          await endMessageEntry(socket, session);
+          return;
+        }
+      }
     }
   }
-  // express.e: when chooseAName fails AND extSend=FALSE we'd RETURN stat (10825).
-  // For web: unresolved recipient is still accepted as a string — matches the
-  // "unknown recipient → message gets stored, sysop can review" workflow that
-  // the modern admin UI assumes. Flagged here for future strict-mode option.
 
-  session.tempData.messageEntry.toUser = resolved;
-  applyConfForwardMail(socket, session);
+  // express.e:10845 checkToForward(str,mailHeader.toName,1)
+  const fwd = checkToForward(socket, session, toName, true);
+  if (fwd.account) toAccount = fwd.account;
+  entry.toUser = fwd.name;
+  entry.aFlag = aFlag;
+  entry.toSlot = toAccount?.slot;
   promptForSubject(socket, session);
 }
 
 /**
- * Handle recipient (To:) input - express.e:10771-10838
- *
- * Emits the post-Enter '\r\n' (mirrors lineInput's CR/LF on submit), then
- * delegates to processToRecipient for the express.e:10785+ skipEntry logic.
+ * The To: line the caller typed (express.e:10779 lineInput). lineInput's own
+ * line break, then the rest of enterMSG - which may prompt, so it runs on its
+ * own rather than holding up the key that ended the line.
  */
 export async function handleMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
   emitText(socket, '\r\n');
-  await processToRecipient(socket, session, input);
+  void processToRecipient(socket, session, input).catch((err) => console.error('[processToRecipient]', err));
 }
 
 /**
@@ -467,13 +267,26 @@ export function handleMessagePrivateInput(socket: any, session: BBSSession, inpu
   // echo "Yes\r\n" or "No\r\n" like yesNo() (express.e:2147-2155)
   emitText(socket, isPrivate ? 'Yes\r\n' : 'No\r\n');
 
-  // express.e:10878-10884: IF(replyFlag=1) show "  Quote in Reply (y/N)?"
+  promptQuoteOrBody(socket, session);
+}
+
+/**
+ * express.e yesNo(2)'s prompt, byte for byte (express.e:2134; the same bytes
+ * utils/await-input yesNo prints): `(y/N)?` with ESC[32m before the `?`.
+ */
+const YES_NO_2 = '\x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ';
+
+/**
+ * express.e:10877-10880, after the Private question (or its skip):
+ *   IF(replyFlag=1) ... aePuts('  [36mQuote in Reply ') ; yesNo(2)
+ * and otherwise straight to the editor.
+ */
+function promptQuoteOrBody(socket: any, session: BBSSession): void {
   if (session.tempData.messageEntry.parentId) {
-    emitText(socket, '  \x1b[36mQuote in Reply \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    emitText(socket, `  \x1b[36mQuote in Reply ${YES_NO_2}`);
     session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_REPLY_CONFIRM;
     return;
   }
-
   void promptForMessageBody(socket, session);
 }
 
@@ -919,14 +732,23 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
     return;
   }
 
-  // Load parent message (express.e:10887-10888: IF(stat:=loadMsg(...)))
-  const parentId = session.tempData.messageEntry.parentId;
-  const parentMsg = await _db.getMessage(parentId);
+  // express.e:10886-10887 the message being replied to, off disk:
+  //   StringF(tempStr,'\s\d',msgBaseLocation,mailHeader.msgNumb)
+  //   IF(stat:=loadMsg(tempStr))
+  // parentId is that msgNumb (the reader's message ids are message numbers).
+  const parentId = Number(session.tempData.messageEntry.parentId);
+  const file = await readMessageFile(session.currentConf || 1, parentId, config.get('dataDir')).catch(() => null);
 
-  if (!parentMsg) {
+  if (!file) {
     await promptForMessageBody(socket, session);
     return;
   }
+  // The quote's trailer names mailHeader.fromName and mailHeader.msgDate (10936-10938).
+  const parentMsg = {
+    author: file.from,
+    timestamp: new Date((file.msgDate ?? 0) * 1000),
+    body: file.body,
+  };
 
   const parentLines: string[] = parentMsg.body.split('\n');
 
@@ -1210,7 +1032,9 @@ console.log('[Message] Webhook call completed');
       // We accept both the literal 'SYSOP' token AND a DB lookup that
       // resolves to slot 1, so sysops who don't go by 'sysop' still
       // get the notification.
-      toUserIsSysop = entry.toUser.toLowerCase() === 'sysop';
+      // entry.toSlot is the account enterMSG / commentToSYSOP loaded as
+      // tempUser - slot 1 is the sysop (express.e:10717).
+      toUserIsSysop = entry.toSlot === 1 || entry.toUser.toLowerCase() === 'sysop';
       if (!toUserIsSysop && entry.toUser) {
         try {
           const resolved = await _db?.getUserByUsername?.(entry.toUser);
@@ -1347,7 +1171,6 @@ function promptForSubject(socket: any, session: BBSSession): void {
  * Helper: Prompt for Private/Public - express.e:10851-10864
  */
 function promptForPrivate(socket: any, session: BBSSession): void {
-  const toUser = session.tempData.messageEntry.toUser.toUpperCase();
 
   // express.e:10760 IF(comment=1) THEN JUMP skipAll — comments to sysop
   // skip ALL prompts (including Private) and go directly to the body editor.
@@ -1360,24 +1183,17 @@ function promptForPrivate(socket: any, session: BBSSession): void {
     return;
   }
 
-  // Messages to ALL/EALL cannot be private - express.e:10850
-  if (toUser === 'ALL' || toUser === 'EALL') {
+  // express.e:10859 IF(aFlag=FALSE) AND (extSend=FALSE) - aFlag is set only
+  // by a blank To: (ALL) and by EALL, so a message to either is public. An
+  // EXTSEND base keeps its default status: the message leaves the board.
+  if (session.tempData.messageEntry.aFlag || isExtSendMsgBase(session)) {
     session.tempData.messageEntry.isPrivate = false;
-    void promptForMessageBody(socket, session);
+    promptQuoteOrBody(socket, session);
     return;
   }
 
-  // express.e:10860 — skip Private prompt entirely if msgbase is EXTSEND.
-  // External msgbases (UUCP/FidoNet gateway) keep the default status; user
-  // doesn't get to choose Private since these go off-system.
-  if (isExtSendMsgBase(session)) {
-    session.tempData.messageEntry.isPrivate = false;
-    void promptForMessageBody(socket, session);
-    return;
-  }
-
-  // express.e:10861 aePuts('         [36mPrivate ') then yesNo(2) → '[32m([33my[32m/[33mN[32m)[32m?[0m '
-  emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m `);
+  // express.e:10861 aePuts('         [36mPrivate ') ; yesNo(2)
+  emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate ${YES_NO_2}`);
   session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
 }
 
@@ -1672,21 +1488,4 @@ function displayFileInfo(socket: any, filename: string, stats: any): void {
   emitText(socket, ' ');
   emitText(socket, AnsiUtil.colorize(timeStr, 'cyan'));
   emitText(socket, '\r\n');
-}
-
-/**
- * The screen a board may have drawn for a name requirement, or nothing.
- *
- * express.e prints its own sentence ONLY when the screen is absent
- * (`IF displayScreen(...)=FALSE THEN aePuts(...)`), so a board that drew one
- * gets the art and a board that did not gets the words. Silent, because not
- * having the file is the ordinary case and not a fault to report.
- */
-async function showNameScreen(socket: any, session: any, screen: string): Promise<boolean> {
-  try {
-    const { displayScreen } = require('../screen.handler');
-    return await displayScreen(socket, session, screen, true, true);
-  } catch {
-    return false;
-  }
 }
