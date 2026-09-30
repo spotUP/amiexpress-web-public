@@ -6,6 +6,7 @@
  */
 
 import { displayScreen } from '../screen.handler';
+import { emitText } from '../../utils/output.util';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { displayMainMenu } from '../command-handler/menu';
@@ -565,70 +566,67 @@ async function continueJoinAfterBull(
     } catch { /* config unreadable — fall through to noisy default */ }
 
     // express.e:5065 - IF quietJoin=FALSE THEN aePuts('\b\n')
-    if (!quietJoin) socket.emit('ansi-output', '\r\n');
+    if (!quietJoin) emitText(socket, '\r\n');
 
-    // express.e:5066-5088 - auto-rejoin shows user stats and different message
+    // express.e:5066-5088 - the join line: "Auto-ReJoined" for an auto join
+    // (after the S command), "Joining Conference" for any other.
+    const baseCount = messageBases.filter(mb => mb.conferenceId === confId).length;
     if (auto) {
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
       // express.e:5067 - scanHoldDesc() — WEB_: not applicable
-      // express.e:5068 - processSysCommand('S') - Display user stats
-      // processSysCommand always allows SYSCMD (express.e:28249).
-      // Note: stats display runs unconditionally — express.e doesn't gate
-      // S command output on QUIET_JOIN; only the verbose strings around it.
+      // express.e:5068 - processSysCommand('S'): no SysCmd S on this board, so
+      // it falls through to the internal S with privcmd (express.e:28282).
       const { processCommand } = require('../command.handler');
       await processCommand(socket, session, 'S', '', true);
-
-      // express.e:5071-5075,5080,5084,5088 — "Auto-ReJoined" / "Joining
-      // Conference" lines all gated on quietJoin=FALSE.
       if (!quietJoin) {
-        const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
+        emitText(socket, baseCount > 1
           ? `Conference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
-          : `Conference ${confId}: ${conference.name} Auto-ReJoined`;
-        socket.emit('ansi-output', autoReJoinMsg + '\r\n');
+          : `Conference ${confId}: ${conference.name} Auto-ReJoined`);
+      }
+    } else if (!quietJoin) {
+      emitText(socket, baseCount > 1
+        ? `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name} [${messageBase.name}]`
+        : `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name}`);
+    }
+    // express.e:5087
+    if (!quietJoin) emitText(socket, '\r\n');
 
-        // express.e:5092-5113 — message-stats block.
-        //   IF (quietJoin=FALSE)
-        //     IF checkToolTypeExists CUSTOM=FALSE → standard range/total
-        //     ELSE → customMsgbaseCmd(MAIL_STATS, conf, 0)
-        //   ENDIF
-        let statsByDoor = false;
-        if (isCustom) {
-          // The door says what its own base holds; the board's range and
-          // totals are about a HeaderFile a custom base may not even have.
-          try {
-            const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
-            statsByDoor = await runCustomMsgbaseCommand(
-              socket, session, MailFunction.STATS, confId, '',
-            );
-          } catch (err) {
+    // express.e:5092-5113 - the message stats, on EVERY join that is not
+    // quiet (not only an auto one).
+    if (!quietJoin) {
+      let statsByDoor = false;
+      if (isCustom) {
+        // The door says what its own base holds; the board's range and
+        // totals are about a HeaderFile a custom base may not even have.
+        try {
+          const { runCustomMsgbaseCommand, MailFunction } = require('../../services/custom-msgbase');
+          statsByDoor = await runCustomMsgbaseCommand(
+            socket, session, MailFunction.STATS, confId, '',
+          );
+        } catch (err) {
 console.warn('[joinConference] custom message base stats failed:', err);
-          }
-        }
-        if (!isCustom || !statsByDoor) {
-          // express.e:5094 - IF(mailStat.lowestKey>1): show range; ELSE: show total
-          const lowestKey = mailStat?.lowestKey || 0;
-          const highMsgNum = mailStat?.highMsgNum || 1;
-          const totalMessages = highMsgNum - 1;
-          if (lowestKey > 1) {
-            socket.emit('ansi-output', `\r\n\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${totalMessages} \x1b[33m)\x1b[0m\r\n`);
-          } else {
-            socket.emit('ansi-output', `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
-          }
-          const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
-          const lastRead = session.lastMsgReadConf || 0;
-          socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
-          socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
         }
       }
-      // express.e:5115 - IF (auto) THEN displaySysopULStats() — WEB_: not applicable
-    } else {
-      // Normal join - express.e:5079-5086 (leading \r\n already emitted above at 5065)
-      if (!quietJoin) {
-        const joinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
-          ? `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name} [${messageBase.name}]`
-          : `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name}`;
-        socket.emit('ansi-output', `${joinMsg}\r\n`);
+      if (!isCustom || !statsByDoor) {
+        const lowestKey = mailStat?.lowestKey || 0;
+        const highMsgNum = mailStat?.highMsgNum || 1;
+        if (lowestKey > 1) {
+          emitText(socket, `\x1b[32mMessages range from \x1b[33m( \x1b[0m${lowestKey} \x1b[32m- \x1b[0m${highMsgNum - 1} \x1b[33m)\x1b[0m\r\n`);
+        } else {
+          emitText(socket, `\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${highMsgNum - 1}\r\n`);
+        }
+        // express.e:5102-5103 - temp:=lastNewReadConf-1; IF(temp<0) THEN temp:=1
+        let lastScanned = (session.lastNewReadConf || 0) - 1;
+        if (lastScanned < 0) lastScanned = 1;
+        emitText(socket, `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
+        emitText(socket, `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${session.lastMsgReadConf || 0}\r\n`);
       }
+    }
+
+    // express.e:5115 - IF (auto) THEN displaySysopULStats()
+    if (auto) {
+      const { displaySysopULStats } = require('../../utils/upload-notify.util');
+      await displaySysopULStats(socket, session, conferences);
     }
 
     /*

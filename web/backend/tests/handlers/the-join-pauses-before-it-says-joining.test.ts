@@ -82,6 +82,7 @@ jest.mock('../../src/utils/message-pointers.util', () => ({
   validatePointers: jest.fn((p: any) => p),
 }));
 
+import { flushOutput } from '../../src/utils/output.util';
 import {
   joinConference,
   FORCE_MAILSCAN_ALL,
@@ -123,6 +124,8 @@ async function joinAndFinishTheBulletin(socket: any, session: any) {
   const onComplete = (session.screenSegments as any)?.onComplete;
   expect(typeof onComplete).toBe('function');   // the join must leave one
   await onComplete();
+  // The join writes through the ordered output buffer; read the wire.
+  flushOutput(socket);
 }
 
 function aCaller() {

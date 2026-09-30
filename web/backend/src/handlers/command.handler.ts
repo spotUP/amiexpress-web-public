@@ -806,8 +806,12 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         displayFlowLog(`AUTO_REJOIN: confId=${confId}, msgBaseNum=${msgBaseNum}, msgBaseId=${msgBaseId}`);
 
         // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
-        // auto=FALSE per express.e:28574; auto=TRUE would trigger S command and Auto-ReJoined display which does NOT happen here
-        const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, false, FORCE_MAILSCAN_SKIP);
+        // joinConf is (conf, msgBaseNum, confScan, auto, forceMailScan=NOFORCE):
+        // the FOURTH argument is `auto`, and FORCE_MAILSCAN_SKIP (2, axenums.e:40)
+        // is TRUE there. So the logon rejoin IS an auto join - the S command,
+        // "Conference N: X Auto-ReJoined", the stats and displaySysopULStats -
+        // with no mail scan (5119 wants auto=FALSE). Audit M9.
+        const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, true, FORCE_MAILSCAN_SKIP);
         if (session.tempData?.quickLogon) session.tempData.quickLogon = false;
 
         session.blockOLM = false;

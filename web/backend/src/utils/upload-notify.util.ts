@@ -210,3 +210,40 @@ console.error(`[UploadStats] Error reading stats: ${error.message}`);
 
   return summary;
 }
+
+/**
+ * displaySysopULStats (express.e:18682-18711), shown by an auto-rejoin: for
+ * a caller with ACS_USER_ULSTATS, each reachable conference whose NumULs has
+ * moved since they last looked says how many files arrived, and their
+ * Conf.DB `uploadTracking` is brought up to date. NumULs is the counter
+ * `updateSysopUploadStats` above keeps.
+ */
+export async function displaySysopULStats(
+  socket: any,
+  session: any,
+  conferences: Array<{ id: number; name: string }>,
+): Promise<void> {
+  const { checkSecurity } = require('./acs.util');
+  const { ACSPermission } = require('../constants/acs-permissions');
+  if (!session.user || !checkSecurity(session.user, ACSPermission.USER_ULSTATS)) return;
+  const { checkConfAccess } = require('../handlers/message/message-scan.handler');
+  const { getConferenceDir } = require('./file-hold.util');
+  const { messagePointerFileManager } = require('../services/MessagePointerFileManager');
+  const { config } = require('../config');
+  const { emitText } = require('./output.util');
+  const slot = session.user.slotNumber;
+
+  for (const conf of conferences) {
+    if (!checkConfAccess(session.user, conf.id)) continue;
+    let num = 0;
+    try {
+      const text = await fs.readFile(path.join(getConferenceDir(conf.id, config.get('dataDir')), 'NumULs'), 'latin1');
+      num = (parseInt(text.trim(), 10) || 0) & 0xffff;
+    } catch { /* no uploads counted yet: 0 */ }
+    const record = slot > 0 ? messagePointerFileManager.readRecord(conf.id, slot) : null;
+    let num2 = num - ((record?.uploadTracking ?? 0) & 0xffff);
+    if (num2 < 0) num2 += 65536;
+    if (slot > 0) messagePointerFileManager.patchRecord(conf.id, slot, { uploadTracking: num });
+    if (num2 !== 0) emitText(socket, `\r\n${conf.name} has ${num2} new file(s) uploaded.\r\n`);
+  }
+}

@@ -153,7 +153,10 @@ describe('joining a conference whose message base is a door', () => {
 
     await joinConference(socket, session, 2, 2, false, false, FORCE_MAILSCAN_ALL, false);
 
-    expect(runCustomMsgbaseCommand).toHaveBeenCalledTimes(1);
+    // The door is asked twice, as express.e asks it: MAIL_STATS for the join's
+    // stats (5109), then MAIL_SCAN (5124). Exactly one scan.
+    const scans = runCustomMsgbaseCommand.mock.calls.filter((c: any[]) => c[2] === 3);
+    expect(scans).toHaveLength(1);
   });
 
   it('asks the door for that conference, not for whichever was current', async () => {
@@ -163,7 +166,7 @@ describe('joining a conference whose message base is a door', () => {
 
     await joinConference(socket, session, 2, 2, false, false, FORCE_MAILSCAN_ALL, false);
 
-    const args = runCustomMsgbaseCommand.mock.calls[0] as unknown as any[];
+    const args = runCustomMsgbaseCommand.mock.calls.find((c: any[]) => c[2] === 3) as unknown as any[];
     expect(args[3]).toBe(2);
   });
 });
