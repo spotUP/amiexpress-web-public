@@ -16,6 +16,7 @@ import { DEFAULT_MAIL_STAT } from '../types/message-pointers';
 import { getConferenceToolFlags } from './conference-tooltypes.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { messagePointerFileManager } from '../services/MessagePointerFileManager';
+import { messageIndexManager } from '../services/MessageIndexManager';
 
 /**
  * Best-effort sync of confBase pointer fields to `<conf>/Conf.DB` so 68K doors
@@ -90,76 +91,25 @@ export async function getConferenceScanFlags(
 }
 
 /**
- * Get mail statistics for a conference/message base
- * Based on express.e getMailStatFile() - lines 8672-8707
+ * getMailStatFile (express.e:8672-8707): the conference's MailStats FILE.
  *
- * Returns message range boundaries:
- * - lowestKey: Lowest message number (usually 1)
- * - highMsgNum: Next message to be written (exclusive upper bound)
- * - lowestNotDel: Lowest non-deleted message
+ * The board writes MailStats on disk as it saves and deletes messages
+ * (MessageIndexManager), and express.e reads that file. This read a
+ * `mail_stats` DB table instead, which nothing kept current: on live it said
+ * highMsgNum 1 for conferences holding hundreds of messages, so every join's
+ * validatePointers rewound the caller's pointer to the lowest message and
+ * all EALL mail was offered again at every login (sysop, 2026-09-30).
  *
- * @param conferenceId - Conference ID
- * @param messageBaseId - Message base ID
- * @returns MailStat or default if not found
+ * `messageBaseId` is kept for the callers; the file is per conference until
+ * per-base message locations exist.
  */
 export async function getMailStatFile(
   conferenceId: number,
-  messageBaseId: number
+  _messageBaseId: number
 ): Promise<MailStat> {
-  const sqlite = getSqliteDb();
-  const select = sqlite.prepare(
-    `SELECT lowest_key, high_msg_num, lowest_not_del
-     FROM mail_stats
-     WHERE conference_id = ? AND message_base_id = ?`
-  );
-  const row = select.get(conferenceId, messageBaseId);
-
-  if (!row) {
-    const insert = sqlite.prepare(
-      `INSERT INTO mail_stats (conference_id, message_base_id, lowest_key, high_msg_num, lowest_not_del)
-       VALUES (?, ?, ?, ?, ?)`
-    );
-    try {
-      insert.run(
-        conferenceId,
-        messageBaseId,
-        DEFAULT_MAIL_STAT.lowestKey,
-        DEFAULT_MAIL_STAT.highMsgNum,
-        DEFAULT_MAIL_STAT.lowestNotDel
-      );
-    } catch {
-      // ignore conflict
-    }
-    return { ...DEFAULT_MAIL_STAT };
-  }
-
-  return {
-    lowestKey: row.lowest_key,
-    highMsgNum: row.high_msg_num,
-    lowestNotDel: row.lowest_not_del
-  };
-}
-
-/**
- * Update high message number after posting a message
- * Called when a new message is created
- *
- * @param conferenceId - Conference ID
- * @param messageBaseId - Message base ID
- * @param newHighMsgNum - New high message number
- */
-export async function updateHighMsgNum(
-  conferenceId: number,
-  messageBaseId: number,
-  newHighMsgNum: number
-): Promise<void> {
-  const sqlite = getSqliteDb();
-  const stmt = sqlite.prepare(
-    `UPDATE mail_stats
-     SET high_msg_num = ?
-     WHERE conference_id = ? AND message_base_id = ?`
-  );
-  stmt.run(newHighMsgNum, conferenceId, messageBaseId);
+  const stats = messageIndexManager.readMailStats(conferenceId);
+  if (!stats) return { ...DEFAULT_MAIL_STAT };
+  return { lowestKey: stats.lowestKey, highMsgNum: stats.highMsgNum, lowestNotDel: stats.lowestNotDel };
 }
 
 /**

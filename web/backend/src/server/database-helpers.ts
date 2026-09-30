@@ -400,30 +400,18 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
 /**
  * Update message number range in mailstat
  */
-export async function updateMessageNumberRange(conferenceId: number, messageBaseId: number, lowestKey?: number, highMsgNum?: number): Promise<boolean> {
+export async function updateMessageNumberRange(conferenceId: number, _messageBaseId: number, lowestKey?: number, highMsgNum?: number): Promise<boolean> {
+  // CM's B and C edit the conference's MailStats file, the one the board
+  // reads (message-pointers getMailStatFile). This wrote a `mailstat` table
+  // no code reads, with Postgres placeholders, so the edit went nowhere.
+  if (lowestKey === undefined && highMsgNum === undefined) return false;
   try {
-    const updates: string[] = [];
-    const values: any[] = [conferenceId, messageBaseId];
-    let paramIndex = 3;
-
-    if (lowestKey !== undefined) {
-      updates.push(`lowest_key = $${paramIndex++}`);
-      values.push(lowestKey);
-    }
-
-    if (highMsgNum !== undefined) {
-      updates.push(`high_msg_num = $${paramIndex++}`);
-      values.push(highMsgNum);
-    }
-
-    if (updates.length === 0) return false;
-
-    await db.query(`
-      UPDATE mailstat
-      SET ${updates.join(', ')}
-      WHERE conferenceid = $1 AND messagebaseid = $2
-    `, values);
-
+    const { messageIndexManager } = require('../services/MessageIndexManager');
+    const stats = messageIndexManager.readMailStats(conferenceId)
+      ?? { lowestKey: 1, highMsgNum: 1, lowestNotDel: 0, pad: Buffer.alloc(6) };
+    if (lowestKey !== undefined) stats.lowestKey = lowestKey;
+    if (highMsgNum !== undefined) stats.highMsgNum = highMsgNum;
+    messageIndexManager.writeMailStats(conferenceId, stats);
     return true;
   } catch (error) {
 console.error('[updateMessageNumberRange] Error:', error);
