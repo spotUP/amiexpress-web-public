@@ -258,7 +258,8 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
    * Check if waiting for line input from user
    */
   isWaitingForLineInput(): boolean {
-    return this.ioHandler.isWaitingForLineInput();
+    // JH_EF's editor too: its handler replies and resumes the door itself.
+    return this.ioHandler.isWaitingForLineInput() || this.systemCommandsHandler.isEditingForCaller();
   }
 
   /**
@@ -283,7 +284,7 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
    */
   /** True while a prompt is parked on the caller - see XIMIOHandler. */
   isWaitingForCaller(): boolean {
-    return this.ioHandler.isWaitingForCaller();
+    return this.ioHandler.isWaitingForCaller() || this.systemCommandsHandler.isEditingForCaller();
   }
 
   queueInput(data: string): void {

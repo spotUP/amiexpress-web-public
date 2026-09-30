@@ -61,6 +61,11 @@ export interface DoorInputState {
   /** A BBS-owned pause (doPause) is on screen underneath the door. */
   bbsPauseActive: boolean;
   /**
+   * The door lent the terminal to a board flow (JH_EF's editor) and is
+   * paused until it ends: every key is the board's.
+   */
+  boardHoldsTerminal?: boolean;
+  /**
    * This door's frames are shown through the adapter's WINDOW (C64_VIEWPORT),
    * so the cursor keys pan it instead of reaching the door.
    */
@@ -111,6 +116,11 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
   };
 
   if (!state.doorActive) {
+    route.toBbs = true;
+    return route;
+  }
+
+  if (state.boardHoldsTerminal) {
     route.toBbs = true;
     return route;
   }

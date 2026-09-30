@@ -34,7 +34,7 @@ import type { XIMProtocol } from "../../XIMProtocol.js";
 import type { ExecutionState } from "../DoorLifecycleManager.js";
 
 /** Blocking I/O XIM command codes — must pre-pause before handleMessage. */
-const BLOCKING_COMMANDS = [6, 0, 5, 15]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15
+const BLOCKING_COMMANDS = [6, 0, 5, 15, 9]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15, JH_EF=9 (the caller edits)
 
 /**
  * Output-emitting commands whose handlers must finish ALL of their async work

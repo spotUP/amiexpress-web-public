@@ -31,6 +31,12 @@ const running = {
 };
 
 describe('a keystroke while a door runs', () => {
+  it('goes to the board while the door has lent it the terminal (JH_EF editor)', () => {
+    const route = routeDoorInput('x', { ...running, boardHoldsTerminal: true });
+    expect(route.toBbs).toBe(true);
+    expect(route.toDoorHandler).toBe(false);
+  });
+
   it('reaches the door', () => {
     const route = routeDoorInput('x', running);
     expect(route.toDoorHandler).toBe(true);

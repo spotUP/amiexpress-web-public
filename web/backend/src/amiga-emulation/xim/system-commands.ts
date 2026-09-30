@@ -20,6 +20,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
+import type { BBSSession } from '../../index';
 import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -34,6 +35,8 @@ export class XIMSystemCommandsHandler {
   private state: XIMState;
   private ximPortAddr: number;
   private transferRawActive = false;
+  /** JH_EF's editor is open: the door's reply waits on the caller. */
+  private editingForCaller = false;
 
   // Old-style door compatibility fallback
   private oldStyleDoorTimer: NodeJS.Timeout | null = null;
@@ -688,19 +691,44 @@ console.warn(`[XIMSystem] JH_SF: File not found at ${resolved}`);
   }
 
   /**
-   * Handle JH_EF (Edit File)
-   * From E sources (express.e:3477-3485, 1145-1154)
+   * Handle JH_EF (Edit File) - express.e:3477-3485, 1145-1154.
+   *
+   * The board's line editor edits the file (handlers/message/door-edit-file);
+   * the door waits, paused, for data = 1 (saved) or -1 (aborted). It used to
+   * be told 1 at once, with nothing edited and nothing saved.
    */
   handleEditFile(msg: XIMMessage): void {
     const fileName = this.getMessageString(msg);
+    debugLog(`[XIMSystem] JH_EF - Edit file "${fileName}"`);
 
-debugLog('[XIMSystem] JH_EF - Edit file');
-debugLog(`  File: "${fileName}"`);
+    if (this.state.carrierDropped) {
+      this.reply(msg, -1);
+      return;
+    }
 
-    this.messageParser.writeData(msg.msgAddr, 1);
-debugLog('  [SUCCESS] File edit acknowledged');
+    const hostPath = this.resolvePath(fileName);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { editFileForDoor } = require('../../handlers/message/door-edit-file') as typeof import('../../handlers/message/door-edit-file');
+    this.emulator.pause();
+    this.editingForCaller = true;
+    editFileForDoor(this.socket, this.bbsSession as unknown as BBSSession, hostPath)
+      .then((saved) => {
+        debugLog(`[XIMSystem] JH_EF - ${saved ? 'saved' : 'aborted'} "${hostPath}"`);
+        this.reply(msg, saved && !this.state.carrierDropped ? 1 : -1);
+      })
+      .catch((err) => {
+        console.error('[XIMSystem] JH_EF editor failed:', err);
+        this.reply(msg, -1);
+      })
+      .finally(() => {
+        this.editingForCaller = false;
+        this.emulator.resume();
+      });
+  }
 
-    this.reply(msg, 1);
+  /** True while JH_EF's editor holds the door's message for the caller. */
+  isEditingForCaller(): boolean {
+    return this.editingForCaller;
   }
 
   /**

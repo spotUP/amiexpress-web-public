@@ -401,6 +401,7 @@ console.log(
         hasDoorInputHandler: Boolean(session.doorInputHandler),
         hasCommandListener: emitter.listenerCount('command') > 0,
         bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
+        boardHoldsTerminal: Boolean(session.doorLentTerminal),
         // A door shown through the adapter's WINDOW gives its cursor keys to
         // the window (C64_VIEWPORT, the adapter's rule 6).
         viewportPan: viewportAdapter() !== null,

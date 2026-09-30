@@ -711,6 +711,7 @@ console.error('No session found for socket:', socket.id);
         hasDoorInputHandler: Boolean(session.doorInputHandler),
         hasCommandListener: false,
         bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
+        boardHoldsTerminal: Boolean(session.doorLentTerminal),
         viewportPan: viewport !== null,
       });
       if (route.pan) {

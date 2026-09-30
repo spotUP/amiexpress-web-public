@@ -573,6 +573,12 @@ export interface BBSSession {
   forcedPwdChangeMinLen?: number;      // Cached MIN_PASSWORD_LENGTH tooltype value
   forcedPwdChangeMinStrength?: number; // Cached MIN_PASSWORD_STRENGTH tooltype value
   callerNum?: number; // Caller number for this session (total calls to BBS)
+  /**
+   * A running door has lent the terminal to a board flow - JH_EF's edit()
+   * (express.e:3477-3485). Every key goes to the board until the flow hands
+   * it back; the door is paused waiting for its reply.
+   */
+  doorLentTerminal?: boolean;
   paginatedScreen?: {
     lines: string[];
     nextIndex: number;
