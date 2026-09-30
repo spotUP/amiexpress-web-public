@@ -15,6 +15,7 @@
 import { Server as NetServer, Socket } from 'net';
 import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import { EventEmitter } from 'events';
+import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession, allNodesBusyNotice } from './session-manager';
 import { LOCALHOST_IPS } from '../constants/localhost-ips';
 import { BBSSession } from '../index';
@@ -697,9 +698,17 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
   }
 
   /**
-   * Close connection
+   * Close connection.
+   *
+   * Mouse reporting off first: a caller's terminal keeps whatever modes the
+   * board left on, and one left in xterm any-motion mode sprays
+   * `35;54;15M` reports at the caller's own shell after the hangup (sysop,
+   * 2026-09-30: "massive mouse leak when they log off"). Every board-side
+   * hangup ends here - G, the idle and time-limit logoffs, a sysop kick, a
+   * door dropping carrier - so this is the one place that cannot be missed.
    */
   public close(): void {
+    if (!this.socket.destroyed) this.write(MOUSE_REPORTING_OFF);
     this.socket.end();
   }
 

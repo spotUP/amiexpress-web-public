@@ -15,6 +15,7 @@
 
 import { Server as SSHServer, Connection, AcceptConnection } from 'ssh2';
 import { EventEmitter } from 'events';
+import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
 import { BBSSession } from '../index';
 import { config } from '../config';
@@ -247,10 +248,12 @@ console.log(`[SSH] Flushing ${queued.length} write(s) queued before the shell op
   }
 
   /**
-   * Close connection
+   * Close connection - mouse reporting off first; see TelnetConnection.close
+   * (sysop, 2026-09-30: "massive mouse leak when they log off").
    */
   public close(): void {
     if (this.stream) {
+      this.stream.write(MOUSE_REPORTING_OFF);
       this.stream.close();
     }
     this.connection.end();
