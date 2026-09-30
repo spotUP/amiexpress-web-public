@@ -411,7 +411,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     session.currentConf = 0;
     session.currentConference = 0;
 
-    const { runSysCommand } = require('../command-execution.handler');
+    const { runSysCommandInFlow } = require('../command-execution.handler');
     const numConf = _conferences?.length || 0;
     for (let conf = 1; conf <= numConf; conf++) {
       if (!checkConfAccess(user, conf)) continue;
@@ -429,7 +429,8 @@ export async function performConferenceScan(socket: any, session: any): Promise<
         session.newFilesPauseFlag = true;
         session.currentConf = conf;
         session.currentConference = conf;
-        await runSysCommand(socket, session, 'N', 'S U');
+        // Inside confScan: the door's exit returns here, not to the menu.
+        await runSysCommandInFlow(socket, session, 'N', 'S U');
         session.currentConf = 0;
         session.currentConference = 0;
         session.newFilesPauseFlag = false;

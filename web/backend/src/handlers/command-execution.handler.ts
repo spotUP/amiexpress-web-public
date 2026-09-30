@@ -322,24 +322,30 @@ export async function runSysCommand(
 }
 
 /**
- * A system command the board runs in the middle of its own flow - the
- * upload's EXAMINE - rather than one a caller typed at the menu. Same run;
- * the door's exit does not draw the menu, because the flow that called it
- * carries on (express.e's runSysCommand returns to its caller).
+ * Run `work` as part of a board procedure - the upload's EXAMINE, a join's
+ * `S`, confScan's `N` - rather than as a command a caller typed at the menu.
+ * A door it starts returns to the procedure: its exit does not draw the menu
+ * (door.handler postDoorMenuAction 'caller'), because express.e's
+ * runSysCommand / processSysCommand return to their caller.
  */
+export async function inCallerFlow<T>(session: any, work: () => Promise<T>): Promise<T> {
+  const previous = session.sysCommandCallerContinues;
+  session.sysCommandCallerContinues = true;
+  try {
+    return await work();
+  } finally {
+    session.sysCommandCallerContinues = previous;
+  }
+}
+
+/** A system command run by the board inside its own flow (see inCallerFlow). */
 export async function runSysCommandInFlow(
   socket: any,
   session: any,
   cmd: string,
   params: string = ''
 ): Promise<number> {
-  const previous = session.sysCommandCallerContinues;
-  session.sysCommandCallerContinues = true;
-  try {
-    return await runSysCommand(socket, session, cmd, params);
-  } finally {
-    session.sysCommandCallerContinues = previous;
-  }
+  return inCallerFlow(session, () => runSysCommand(socket, session, cmd, params));
 }
 
 /**

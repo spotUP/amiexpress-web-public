@@ -574,10 +574,15 @@ async function continueJoinAfterBull(
     if (auto) {
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
       // express.e:5067 - scanHoldDesc() — WEB_: not applicable
-      // express.e:5068 - processSysCommand('S'): no SysCmd S on this board, so
-      // it falls through to the internal S with privcmd (express.e:28282).
+      // express.e:5068 - processSysCommand('S'): the SysCmd S if the board has
+      // one (this board's is the zOOsTAtS door), else the internal S
+      // (express.e:28258-28282). Run inside the join, so the door's exit
+      // returns here instead of drawing the menu over the rest of the join
+      // (sysop, 2026-09-30: the menu prompt above "Auto-ReJoined", then an
+      // invisible one).
       const { processCommand } = require('../command.handler');
-      await processCommand(socket, session, 'S', '', true);
+      const { inCallerFlow } = require('../command-execution.handler');
+      await inCallerFlow(session, () => processCommand(socket, session, 'S', '', true));
       if (!quietJoin) {
         emitText(socket, baseCount > 1
           ? `Conference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
