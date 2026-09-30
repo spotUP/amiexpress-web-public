@@ -541,12 +541,14 @@ async function readNonStop(socket: any, session: BBSSession, startIndex: number)
 
 /**
  * Display short help menu (helplist=1) — express.e:12020-12032
- * Note: short help does NOT include A>gain (that's in full help only).
+ * Starts with A>gain, as express.e's helplist=1 does (12024).
  */
 function displayShortHelp(socket: any, session: BBSSession): void {
   const navStr = getMsgNavStr(session.tempData.msgReaderMessages, session.tempData.msgReaderIndex);
 
-  // express.e:12020-12030 — leading \b\n before each entry, reset [0m at end
+  // express.e:12024-12030 — A>gain first (the caller's line break went
+  // before it), then a leading \b\n before each entry, reset [0m at end
+  emitText(socket, '\x1b[33mA\x1b[32m>\x1b[36mgain\x1b[0m');
   if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Message\x1b[0m');
   }
@@ -570,7 +572,7 @@ function displayShortHelp(socket: any, session: BBSSession): void {
 function displayFullHelp(socket: any, session: BBSSession): void {
   const navStr = getMsgNavStr(session.tempData.msgReaderMessages, session.tempData.msgReaderIndex);
 
-  // express.e:12035 — no leading \b\n on A (continuation of nav prompt line)
+  // express.e:12035 — no leading \b\n on A: the caller's line break (12067) went first
   emitText(socket, '\x1b[33mA\x1b[32m>\x1b[36mgain\x1b[0m');
   if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     emitText(socket, '\r\n\x1b[33mD\x1b[32m>\x1b[36melete Message\x1b[0m');
@@ -657,12 +659,15 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
 
   // ? - Short help (helplist=1) - express.e:11054-11056
   if (command === '?') {
+    // express.e:12067 lineInput's '\b\n', then the list (12024)
+    emitText(socket, '\r\n');
     displayShortHelp(socket, session);
     return;
   }
 
   // ?? - Full help (helplist=2) - express.e:11051-11053
   if (command === '??') {
+    emitText(socket, '\r\n'); // express.e:12067
     displayFullHelp(socket, session);
     return;
   }
@@ -872,7 +877,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     const canForward = !msg.isPrivate || isAddressedToMe || isAddressedToAll || isEallAddressed;
     if (!canForward) {
       // express.e:11920: '\b\nMessage not deleted, not your mail.\b\n\b\n'
-      emitText(socket, '\r\nMessage not deleted, not your mail.\r\n\r\n');
+      // express.e:12067 lineInput's break, then 11920's own leading one
+      emitText(socket, '\r\n\r\nMessage not deleted, not your mail.\r\n\r\n');
       displayMessageNavigationPrompt(socket, session);
       return;
     }
@@ -1013,9 +1019,10 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     // the cursor still rests inside the row.
     const fromNarrow = isNarrow(session);
     const author = fromNarrow ? narrowClip(msg.author || '', 21) : (msg.author || '');
+    // express.e:12067 lineInput's break, then editHeader's own (11610).
     emitText(
       socket,
-      '\r\n' +
+      '\r\n\r\n' +
         `${fromNarrow ? '' : '     '}${AnsiUtil.colorize('From', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} ` +
         `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Enter', 'yellow')}${AnsiUtil.colorize(')', 'green')}` +
         `=${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize(author, 'yellow')}${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize('?', 'green')} `
@@ -1055,6 +1062,9 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       attachedFiles: [],
     };
     session.inputBuffer = '';
+    // express.e:12067 - the caller's Enter ends the line before edit() asks
+    // "FullScreen Editor(y/N)?" (sysop 2026-09-30: "missing linebreak").
+    emitText(socket, '\r\n');
 
     // Use the existing promptForMessageBody flow — it shows the header,
     // ruler, existing lines, then drops to POST_MESSAGE_BODY.
