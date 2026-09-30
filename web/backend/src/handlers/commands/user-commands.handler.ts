@@ -989,7 +989,7 @@ console.log('[ENV] User Statistics');
  * @param confRelative  - Value of sopt.toggles[TOGGLES_CONFRELATIVE]
  * @returns Absolute conference number, or 0 if out of range
  */
-function getInverse(cn: number, user: any, confRelative: boolean): number {
+export function getInverse(cn: number, user: any, confRelative: boolean): number {
   // express.e:8571 - IF(cn<1) THEN RETURN 0
   if (cn < 1) return 0;
   // express.e:8572 - IF (force=FALSE) AND (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
@@ -1023,7 +1023,7 @@ function getInverse(cn: number, user: any, confRelative: boolean): number {
  * rather than a bespoke tooltype name/parse of this file.
  * Returns false if not found (default = absolute numbering).
  */
-function getConfRelativeToggle(session: BBSSession): boolean {
+export function getConfRelativeToggle(session: BBSSession): boolean {
   try {
     const { config } = require('../../config');
     const { getBoardConfig } = require('../../services/bbs-config-file.service');

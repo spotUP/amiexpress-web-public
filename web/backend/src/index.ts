@@ -581,6 +581,8 @@ export interface BBSSession {
   doorLentTerminal?: boolean;
   /** An express.e lineInput / readChar a ported procedure is awaiting (utils/await-input). */
   inputWaiter?: import('./utils/await-input').InputWaitingSession['inputWaiter'];
+  /** Set by a caller that opened the account editor and waits for it to close. */
+  accountEditDone?: () => void;
   paginatedScreen?: {
     lines: string[];
     nextIndex: number;

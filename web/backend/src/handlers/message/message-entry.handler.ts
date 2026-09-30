@@ -89,10 +89,34 @@ function namesMissing(session: BBSSession, confId: number, msgBaseId: number): b
  * menu is brought up here.
  */
 async function endMessageEntry(socket: any, session: BBSSession): Promise<void> {
+  if (await finishEntry(session, session.tempData?.messageEntry, false)) return;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
   const { advanceDisplayFlow } = require('../command.handler');
   await advanceDisplayFlow(socket, session);
+}
+
+/**
+ * enterMSG returns to its caller. The message reader's replyToMSG (express.e
+ * 9874-9907) waits on it and goes on with the delete-original question; the
+ * E command has no such caller and goes back to the menu. true = handled.
+ */
+async function finishEntry(session: BBSSession, entry: any, saved: boolean): Promise<boolean> {
+  const done = entry?.onFinished as ((saved: boolean) => void | Promise<void>) | undefined;
+  if (!done) return false;
+  session.tempData = undefined;
+  await done(saved);
+  return true;
+}
+
+/**
+ * replyToMSG's enterMSG (express.e:9894-9895, replyFlag=1): To and Subject
+ * are already settled by the reader, so entry starts at the Private question.
+ * `onFinished` is told whether the reply was saved.
+ */
+export function enterReply(socket: any, session: BBSSession, entry: Record<string, unknown>): void {
+  session.tempData = { messageEntry: { body: [], currentLine: 1, ...entry } };
+  promptForPrivate(socket, session);
 }
 
 export { isExtSendMsgBase, getConfMailName, getConfMailNameFor, isSysopRecipient } from './conf-mail-name';
@@ -710,6 +734,7 @@ async function abortEntry(socket: any, session: BBSSession): Promise<void> {
     return;
   }
   if (!entry?.editingExistingMsgId) emitText(socket, '\r\n');
+  if (await finishEntry(session, entry, false)) return;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
 }
@@ -803,6 +828,8 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     await entry.finishOutside(entry.body);
     return;
   }
+
+  let savedOk = false;
 
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
   emitText(socket, '\r\nSaving...');
@@ -972,6 +999,7 @@ console.error('[Message] EXTSEND dump failed (non-fatal):', extErr);
 
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
     emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
+    savedOk = true;
 
     // Save to database (for web UI / search indexing only).
     // Body file + HeaderFile already written by writeMessageFile above —
@@ -1143,6 +1171,7 @@ console.error('[saveMessage] Error:', error);
     }
   }
 
+  if (await finishEntry(session, entry, savedOk)) return;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
 
@@ -1335,6 +1364,7 @@ async function runFullEdit(socket: any, session: BBSSession): Promise<void> {
   }
   emitText(socket, '\r\n');
   if (outcome === 'abandoned') {
+    if (await finishEntry(session, entry, false)) return;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
     return;

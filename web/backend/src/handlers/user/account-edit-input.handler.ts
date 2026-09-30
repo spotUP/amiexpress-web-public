@@ -18,6 +18,18 @@ import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
 /**
+ * Out of the account editor: back to whoever opened it - the message reader's
+ * U (express.e 12196-12211, editInfo then displayMessage) - or the menu.
+ */
+function leaveAccountEditor(session: BBSSession): void {
+  const done = session.accountEditDone;
+  session.accountEditDone = undefined;
+  session.tempData = undefined;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  if (done) done();
+}
+
+/**
  * Handle account edit input - Main keyboard handler
  * express.e:21228-21650
  */
@@ -42,8 +54,7 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
       session.tempData.saveAction = 'exit';
       return;
     }
-    session.tempData = undefined;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    leaveAccountEditor(session);
     return;
   }
 
@@ -52,8 +63,7 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     if (session.tempData.changes) {
       socket.emit('ansi-output', '\r\n\x1b[31mExiting without saving changes.\x1b[0m\r\n');
     }
-    session.tempData = undefined;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    leaveAccountEditor(session);
     return;
   }
 
@@ -147,8 +157,7 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     session.tempData.changes = true;
     await saveAccount(socket, session);
     socket.emit('ansi-output', '\r\n\x1b[32mAccount deleted.\x1b[0m\r\n');
-    session.tempData = undefined;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    leaveAccountEditor(session);
     return;
   }
 

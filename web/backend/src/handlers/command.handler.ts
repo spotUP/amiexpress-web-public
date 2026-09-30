@@ -246,6 +246,7 @@ import {
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 import { feedInputWaiter } from '../utils/await-input';
+import { isReading } from './message/read-msg';
 
 // Re-export dependency injection for external modules (backward compatibility)
 
@@ -3534,6 +3535,9 @@ console.log(' In conference selection state');
   // need Enter.
   const SINGLE_CHAR_NAV_COMMANDS = new Set(['Q', 'N', 'A', 'R', 'L', 'K', 'F', '?']);
   if (session.subState === LoggedOnSubState.MSG_READER_NAV) {
+    // The R reader (message/read-msg) reads its own keys through lineInput;
+    // one arriving while it is between prompts has nothing to answer.
+    if (isReading(session)) return;
     if (!session.inputBuffer) {
       session.inputBuffer = '';
     }
