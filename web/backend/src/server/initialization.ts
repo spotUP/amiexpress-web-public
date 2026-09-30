@@ -7,7 +7,7 @@ import { loadConfConfig } from '../services/conf-config.service';
 import { onConferencesChanged } from '../services/conference-change-bus';
 import { expandConferenceAccessTo } from '../services/conference-access-expansion';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
-import { setACSConfig, ToggleFlags } from '../utils/acs.util';
+import { setACSConfig, ToggleFlags, togglesFromBoardConfig } from '../utils/acs.util';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
 import {
   loadFileAreasFromDisk,
@@ -531,11 +531,9 @@ export async function initializeData(io?: SocketIOServer) {
     // Load bbsConfig.info tooltypes into ACS config toggles (express.e sopt.toggles)
     // Done once at startup so all handlers see consistent values via getACSConfig()
     const diskBBSConfig = loadBBSConfig(bbsRoot);
-    const acsToggles = new Array(20).fill(false);
-    // express.e sopt.toggles[TOGGLES_CREDITBYKB=19]
-    if (diskBBSConfig.credit_by_kb) acsToggles[ToggleFlags.CREDITBYKB] = true;
+    const acsToggles = togglesFromBoardConfig(diskBBSConfig);
     setACSConfig({ toggles: acsToggles });
-    console.log(`[INIT] ACS toggles loaded — CREDITBYKB=${acsToggles[ToggleFlags.CREDITBYKB]}`);
+    console.log(`[INIT] ACS toggles loaded — CREDITBYKB=${acsToggles[ToggleFlags.CREDITBYKB]} USEWILDCARDS=${acsToggles[ToggleFlags.USEWILDCARDS]}`);
 
     // Conferences, message bases and file areas, from disk - the same
     // path an admin write re-runs, so a rename reaches the board without

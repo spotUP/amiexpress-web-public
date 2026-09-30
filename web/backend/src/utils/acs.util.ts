@@ -142,6 +142,19 @@ console.log(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
 }
 
 // ===== Configuration Management =====
+/**
+ * sopt.toggles from the board's icon, as ACP.e sets them (2654-2663, 3030).
+ * CREDITBYKB is on by CREDIT_BY_KBYTES; USEWILDCARDS is on unless
+ * NO_WILDCARD_EXPANSION says otherwise - a board that never mentions it
+ * expands a `*` in a name.
+ */
+export function togglesFromBoardConfig(cfg: { credit_by_kb?: boolean; no_wildcard_expansion?: boolean }): boolean[] {
+  const toggles = new Array(20).fill(false);
+  if (cfg.credit_by_kb) toggles[ToggleFlags.CREDITBYKB] = true;
+  toggles[ToggleFlags.USEWILDCARDS] = !cfg.no_wildcard_expansion;
+  return toggles;
+}
+
 export function setACSConfig(config: Partial<ACSConfig>) {
   acsConfig = { ...acsConfig, ...config };
 }

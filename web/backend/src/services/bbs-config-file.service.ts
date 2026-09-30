@@ -79,6 +79,12 @@ export interface BBSConfigData {
    * otherwise read as having opted in.
    */
   no_timeout?: boolean;
+  /**
+   * ACP.e:2663 - `NO_WILDCARD_EXPANSION` on the board's icon clears
+   * `sopt.toggles[TOGGLES_USEWILDCARDS]`; without it the toggle is on and a
+   * `*` in a name is expanded (chooseAName's " Expand: <name> Correct ").
+   */
+  no_wildcard_expansion?: boolean;
 
   // New User Defaults
   new_user_sec_level?: number;
@@ -368,6 +374,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'MAX_SESSION_TIME': 'max_session_time',
   'IDLE_TIMEOUT': 'idle_timeout',
   'NO_TIMEOUT': 'no_timeout',                       // ACP.e:2660 express.e:2185
+  'NO_WILDCARD_EXPANSION': 'no_wildcard_expansion', // ACP.e:2663
 
   // New User Defaults
   'NEW_USER_SEC_LEVEL': 'new_user_sec_level',
@@ -1101,6 +1108,7 @@ function getDefaultConfig(): BBSConfigData {
     max_session_time: -1,
     idle_timeout: 10,
     no_timeout: false,
+    no_wildcard_expansion: false,
     new_user_sec_level: 30,
     new_user_time_limit: -1,
     new_user_chat_limit: -1,

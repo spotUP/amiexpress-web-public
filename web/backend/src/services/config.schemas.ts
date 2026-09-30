@@ -52,6 +52,7 @@ export const SystemConfigSchema = z.object({
   idle_timeout: z.number().int().min(1).max(60).optional(),
   // ACP.e:2660 - the board-wide switch express reads at every prompt.
   no_timeout: z.boolean().optional(),
+  no_wildcard_expansion: z.boolean().optional(),
 
   // New User Defaults
   new_user_sec_level: z.number().int().min(1).max(255).optional(),
