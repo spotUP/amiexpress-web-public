@@ -24,6 +24,8 @@
  *   - `~~` is a literal tilde (express.e:5749), so a code cannot follow one.
  */
 
+import { WIPE_CODES } from '../utils/screen-wipe.util';
+
 /**
  * What has to be chosen before a code can be written down.
  *
@@ -318,6 +320,19 @@ export const MCI_CATALOG: MciCode[] = [
     family: 'extension', argument: { kind: 'none' },
     takesWidth: true, terminator: '|', source: 'web', handledBy: 'dispatch',
   },
+  /*
+   * THE WIPES, this port's own: `~WM` ... `~WX` on a line of their own play an
+   * animation as the screen is drawn (utils/screen-wipe.util). Listed from the
+   * wipe module's table so the two cannot disagree. Unlisted, a screen whose
+   * only code was a wipe counted as carrying none, and replacing it carried
+   * the old file's wipe on top of the new one's - the second then printed as
+   * text (sysop, 2026-09-30: h7's menu showed "WX").
+   */
+  ...Object.entries(WIPE_CODES).map(([letter, wipe]): MciCode => ({
+    code: `W${letter}`, summary: `Draw the screen with the ${wipe} wipe (on a line of its own)`,
+    family: 'extension', argument: { kind: 'none' },
+    takesWidth: false, terminator: '', source: 'web', handledBy: 'caller',
+  })),
 ];
 
 /** By code, for a lookup that does not walk the array. */

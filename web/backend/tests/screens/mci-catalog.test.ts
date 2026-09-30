@@ -9,6 +9,7 @@
  * an entry the parser leaves as literal text fails.
  */
 
+import { parseWipeMCI } from '../../src/utils/screen-wipe.util';
 import { parseMciCodes, mciDispatchKeys } from '../../src/handlers/screen.handler';
 import { MCI_CATALOG, MCI_BY_CODE, MCI_FAMILY_ORDER, type MciCode } from '../../src/screens/mci-catalog';
 
@@ -90,7 +91,9 @@ describe('the MCI catalog describes what the parser actually does', () => {
     '~%s does something the parser would not do for an unknown code',
     async (_code, entry) => {
       const probe = probeFor(entry);
-      const { parsed } = await parseMciCodes(`START ${probe} END`, makeSession());
+      // The board's own order: the wipe pre-pass (screen.handler) runs before
+      // the tokenizer, and a wipe code is gone by the time it parses.
+      const { parsed } = await parseMciCodes(parseWipeMCI(`START ${probe} END`).content, makeSession());
 
       if (entry.code === '~') {
         // `~~` collapses to one tilde rather than disappearing.

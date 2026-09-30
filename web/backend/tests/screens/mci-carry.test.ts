@@ -267,3 +267,21 @@ describe('the SAUCE record is not the last line of art', () => {
     expect(split.art).toContain('SAUCE00');
   });
 });
+
+describe('a replacement that opens with its own wipe', () => {
+  it('is not given the old wipe on top, where the second would print as text', () => {
+    // h7's Conf/2/Menu.txt after a replace, 2026-09-30: `~WX` then `~WX...`,
+    // and the menu showed "WX". A wipe is a code; the upload carries its own.
+    const oldText = '~WX\r\n\x1b[0mOLD MENU\r\n';
+    const newText = '~WX\r\n\x1b[0mNEW MENU\r\n';
+
+    const plan = planMciCarry(oldText, newText);
+    expect(plan.uploadHasCodes).toBe(true);
+    expect(applyMciCarry(newText, plan, 'keep')).toBe(newText);
+  });
+
+  it('still carries the old wipe to art that has none', () => {
+    const plan = planMciCarry('~WX\r\n\x1b[0mOLD MENU\r\n', '\x1b[0mNEW MENU\r\n');
+    expect(applyMciCarry('\x1b[0mNEW MENU\r\n', plan, 'keep')).toBe('~WX\r\n\x1b[0mNEW MENU\r\n');
+  });
+});

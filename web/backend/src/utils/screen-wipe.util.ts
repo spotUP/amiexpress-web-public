@@ -1070,37 +1070,43 @@ function animationStaysInsideFinalGrid(grids: Cell[][][]): boolean {
 }
 
 /**
+ * The wipe codes - `~W` and one letter, on a line of their own - and the
+ * animation each one plays. This port's own codes, not express.e's; the MCI
+ * catalogue lists them from here, so a screen whose only code is a wipe is
+ * known to carry one (screens/mci-carry.ts).
+ */
+export const WIPE_CODES: Readonly<Record<string, WipeType>> = {
+  M: 'matrix',
+  H: 'hblinds',
+  V: 'vblinds',
+  S: 'spiral',
+  C: 'checker',
+  R: 'radial',
+  B: 'blocks',
+  N: 'noise',
+  T: 'typewriter',
+  E: 'explode',
+  X: 'random',
+};
+
+const WIPE_LETTERS = Object.keys(WIPE_CODES).join('');
+
+/**
  * Parse wipe MCI code from content
  * Returns wipe type and content with MCI code removed
  */
 export function parseWipeMCI(content: string): { wipeType: WipeType | null; content: string } {
-  const wipeRegex = /~W([MHVSCRBNTEX])/i;
-  const match = content.match(wipeRegex);
+  const match = content.match(new RegExp(`~W([${WIPE_LETTERS}])`, 'i'));
 
   if (!match) {
     return { wipeType: null, content };
   }
 
-  const code = match[1].toUpperCase();
-  const wipeMap: Record<string, WipeType> = {
-    'M': 'matrix',
-    'H': 'hblinds',
-    'V': 'vblinds',
-    'S': 'spiral',
-    'C': 'checker',
-    'R': 'radial',
-    'B': 'blocks',
-    'N': 'noise',
-    'T': 'typewriter',
-    'E': 'explode',
-    'X': 'random'
-  };
-
-  const wipeType = wipeMap[code] || null;
+  const wipeType = WIPE_CODES[match[1].toUpperCase()] || null;
   // Strip the wipe code plus its trailing newline (the code occupies its own line).
   // Without stripping the \n, contentForMci would start with a blank line, causing
   // the allowMCI check to see an empty first line and disable all MCI substitution.
-  const cleanedContent = content.replace(/~W[MHVSCRBNTEX]\r?\n?/i, '');
+  const cleanedContent = content.replace(new RegExp(`~W[${WIPE_LETTERS}]\\r?\\n?`, 'i'), '');
 
   return { wipeType, content: cleanedContent };
 }
