@@ -213,6 +213,17 @@ export function substituteUnmappable(text: string, charset: SourceCharset): stri
 }
 
 /**
+ * A medium shade is the Amiga's own 0x7F glyph (Topaz draws a checkerboard
+ * there). Amiga art decoded for the board holds it as U+2592
+ * (amiga-text-decode.util amigaGlyphs), so a Latin-1 caller gets the byte the
+ * artist typed back, and CP437 art's medium shade reaches them as the same
+ * checker rather than a colon. Single forward scan, no module-level /g.
+ */
+function toAmigaCheckers(text: string): string {
+  return text.indexOf("\u2592") === -1 ? text : text.split("\u2592").join("\x7f");
+}
+
+/**
  * The string UNCHANGED when the resolved charset is UTF-8 - today's behaviour
  * for web, for `/ws/terminal`, and for a telnet client that negotiated UTF-8 -
  * and a Buffer in that charset otherwise.
@@ -243,8 +254,9 @@ export function encodeForWire(
 ): string | Buffer {
   const charset = resolveWireCharset(session);
   if (charset === "utf-8") return text;
-  if (attrs?.sourceCharset === charset) return iconv.encode(text, charset);
-  return iconv.encode(substituteUnmappable(text, charset), charset);
+  const out = charset === "iso-8859-1" ? toAmigaCheckers(text) : text;
+  if (attrs?.sourceCharset === charset) return iconv.encode(out, charset);
+  return iconv.encode(substituteUnmappable(out, charset), charset);
 }
 
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true });

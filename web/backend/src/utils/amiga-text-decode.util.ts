@@ -191,6 +191,23 @@ export function detectEncoding(
 }
 
 /**
+ * The Amiga's own glyph at 0x7F, as the character it draws.
+ *
+ * Topaz has a checkerboard at 0x7F, and Amiga artists draw dither rows with
+ * it. Latin-1 reads the byte as DEL, which a terminal does not draw: the web
+ * terminal left those cells as they were, so a menu whose dither rows are
+ * 0x7F showed whatever the screen's wipe animation had last put there - rows
+ * of random letters, different at every login (GOTO8O on 607080's menu,
+ * 2026-10-01). U+2592 is the medium shade a web terminal draws; the wire
+ * encoder turns it back into 0x7F for an Amiga caller (wire-encoding.util).
+ */
+export const AMIGA_CHECKER = '\u2592';
+
+export function amigaGlyphs(text: string, encoding: string): string {
+  return encoding === 'iso-8859-1' ? text.replace(/\x7f/g, AMIGA_CHECKER) : text;
+}
+
+/**
  * Read an Amiga text file (screen, bulletin, ANSI art) and return its decoded
  * content with metadata. Handles SAUCE stripping and encoding auto-detection.
  *
@@ -215,7 +232,7 @@ export function readAmigaTextFile(filePath: string): AmigaTextResult {
   const encoding = detectEncoding(buffer, filePath, sauceInfo);
 
   try {
-    const text = iconv.decode(buffer, encoding);
+    const text = amigaGlyphs(iconv.decode(buffer, encoding), encoding);
     return {
       text,
       encoding,
