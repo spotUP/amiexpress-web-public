@@ -77,7 +77,7 @@ import { setInfoCommandsDependencies } from '../handlers/commands/info-commands.
 import { setUtilityCommandsDependencies } from '../handlers/commands/utility-commands.handler';
 import { setSysopCommandsDependencies } from '../handlers/commands/sysop-commands.handler';
 import { setTransferMiscCommandsDependencies } from '../handlers/commands/transfer-misc-commands.handler';
-import { setMessagingDependencies, setMoveEditDependencies } from '../handlers/message/messaging.handler';
+import { setMessagingDependencies } from '../handlers/message/messaging.handler';
 import {
   setFileAreas,
   setDatabase as setDatabaseForFileHandler,
@@ -95,7 +95,6 @@ import {
 // name it actually has, from the module that actually serves FM.
 import { setFileMaintenanceDependencies } from '../handlers/file/file-maintenance.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
-import { setMessageForwardDependencies } from '../handlers/message/message-forward.handler';
 import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
   setDoors,
@@ -616,7 +615,6 @@ export async function initializeData(io?: SocketIOServer) {
 
     // Forward + reply-delete handlers extracted from message-entry on
     // round-21 split — same _db reference, separate setter.
-    setMessageForwardDependencies({ db });
 
     // #78 Phase 5 — engine selection + boot the native singleton if
     // the sysop has supplied the binaries. Boot is async and runs
@@ -893,11 +891,6 @@ export async function initializeData(io?: SocketIOServer) {
     });
 
     // Inject dependencies for sysop message move/edit commands (M/EH)
-    setMoveEditDependencies({
-      conferences,
-      messageBases
-    });
-
     // Initialize DI container (new Clean Architecture approach)
     initializeContainer({
       db,

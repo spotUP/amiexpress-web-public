@@ -176,18 +176,7 @@ import {
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
-  handleMessageReaderNav,
-  handleMsgListStartInput,
   setMessagingDependencies,
-  setMoveEditDependencies,
-  handleMsgMoveConfInput,
-  handleMsgMoveMsgBaseInput,
-  handleMsgMoveConfirm,
-  handleMsgEditHeaderFrom,
-  handleMsgEditHeaderTo,
-  handleMsgEditHeaderSubject,
-  handleMsgEditHeaderPrivate,
-  handleChooseTranslatorInput
 } from './message/messaging.handler';
 import {
   runSysCommand as execSysCommand,
@@ -215,11 +204,6 @@ import {
   handleMessageBodyKeys,
   handleMessageQuoteReplyConfirm,
   handleFullEditConfirm,
-  handleForwardMessageToInput,
-  handleForwardMessageSubjectInput,
-  handleForwardMessagePrivateInput,
-  handleForwardMessageDeleteOriginalInput,
-  handleReplyDeleteOriginalInput
 } from './message/message-entry.handler';
 
 import { finalizeCommand } from '../utils/command-response.util';
@@ -245,7 +229,6 @@ import {
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 import { feedInputWaiter } from '../utils/await-input';
-import { isReading } from './message/read-msg';
 
 // Re-export dependency injection for external modules (backward compatibility)
 
@@ -401,41 +384,6 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
     case LoggedOnSubState.USER_ANSWERS_VIEW:
       const { handleUserAnswersInput } = require('./user/account-edit-input.handler');
       handleUserAnswersInput(socket, session, data);
-      return;
-
-    // Forward message states (express.e forwardMSG:9807-9871)
-    case LoggedOnSubState.FORWARD_MESSAGE_TO:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleForwardMessageToInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_TO) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data); // Echo printable characters
-      }
-      return;
-    case LoggedOnSubState.FORWARD_MESSAGE_SUBJECT:
-      if (data === '\r' || data === '\n') {
-        const input = (session.inputBuffer || '').trim();
-        session.inputBuffer = '';
-        await handleForwardMessageSubjectInput(socket, session, input);
-      } else if (data === '\x7f' || data === '\b') {
-        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_MSG_SUBJECT) {
-        session.inputBuffer = (session.inputBuffer || '') + data;
-        emitText(socket, data); // Echo printable characters
-      }
-      return;
-    case LoggedOnSubState.FORWARD_MESSAGE_PRIVATE:
-      await handleForwardMessagePrivateInput(socket, session, data.toUpperCase());
-      return;
-    case LoggedOnSubState.FORWARD_MESSAGE_DELETE_ORIGINAL:
-      await handleForwardMessageDeleteOriginalInput(socket, session, data.toUpperCase());
-      return;
-    case LoggedOnSubState.REPLY_DELETE_ORIGINAL:
-      await handleReplyDeleteOriginalInput(socket, session, data.toUpperCase());
       return;
 
     default:
@@ -3394,212 +3342,10 @@ console.log(' In conference selection state');
    * Msg. Options became express's own lineInput / yesNo calls.
    */
 
-  // Handle message reader navigation (R command)
-  // express.e:11046 — single-character getMSGCommand, not line input.
-  // The web port used line-input (buffering until Enter) which silently
-  // ate single-letter commands like Q, N, A. Check for a single known
-  // command character first; multi-character commands (NS, RE, etc.) still
-  // need Enter.
-  const SINGLE_CHAR_NAV_COMMANDS = new Set(['Q', 'N', 'A', 'R', 'L', 'K', 'F', '?']);
+  // The reader (message/read-msg) reads its own keys through lineInput and
+  // yesNo, which handleCommand feeds before any sub-state runs. A key that
+  // arrives while it is between prompts has nothing to answer.
   if (session.subState === LoggedOnSubState.MSG_READER_NAV) {
-    // The R reader (message/read-msg) reads its own keys through lineInput;
-    // one arriving while it is between prompts has nothing to answer.
-    if (isReading(session)) return;
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
-    }
-
-    // Single-char dispatch for well-known commands — express.e getMSGCommand
-    // is single-character, not line-input. Q, N, A, R, L, K, F, ? work
-    // immediately without Enter.
-    if (data.length === 1 && data >= ' ' && data <= '~') {
-      const ch = data.toUpperCase();
-      if (SINGLE_CHAR_NAV_COMMANDS.has(ch)) {
-        session.inputBuffer = '';
-        if (ch === '?') {
-          // '?' shows short help, '??' shows full help — but since we
-          // dispatch '?' immediately, '??' never arrives. Check for a
-          // second '?' in the next tick by appending to buffer.
-          // Actually, just show short help for '?' and full help for '??'
-          // which arrives as two separate '?' chars. For the first '?',
-          // display short help immediately.
-          const { handleMessageReaderNav } = require('./message/messaging.handler');
-          await handleMessageReaderNav(socket, session, '?');
-          return;
-        }
-        const { handleMessageReaderNav } = require('./message/messaging.handler');
-        await handleMessageReaderNav(socket, session, ch);
-        return;
-      }
-    }
-
-    // Buffer characters until Enter is pressed (for multi-char commands)
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMessageReaderNav(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-      emitText(socket, data);
-    }
-    return;
-  }
-
-  // Handle listMSGs start message number input - express.e:8833-8843
-  if (session.subState === LoggedOnSubState.MSG_LIST_START_INPUT) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgListStartInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle M (Move Message) conference input - express.e:27024-27049
-  if (session.subState === LoggedOnSubState.MSG_MOVE_CONF_INPUT) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgMoveConfInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle M (Move Message) msgbase input - express.e:27058-27084
-  if (session.subState === LoggedOnSubState.MSG_MOVE_MSGBASE_INPUT) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgMoveMsgBaseInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle M (Move Message) confirmation - express.e:11846-11849
-  if (session.subState === LoggedOnSubState.MSG_MOVE_CONFIRM) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgMoveConfirm(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle EH (Edit Header) From input - express.e:11611-11621
-  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_FROM) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgEditHeaderFrom(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle EH (Edit Header) To input - express.e:11623-11629
-  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_TO) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgEditHeaderTo(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle EH (Edit Header) Subject input - express.e:11630-11634
-  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_SUBJECT) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgEditHeaderSubject(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle EH (Edit Header) Private Y/N - express.e:11636-11648
-  if (session.subState === LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleMsgEditHeaderPrivate(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
-    return;
-  }
-
-  // Handle TS (Choose Translator) input - express.e:11391-11417
-  if (session.subState === LoggedOnSubState.MSG_CHOOSE_TRANSLATOR) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      await handleChooseTranslatorInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-    }
     return;
   }
 

@@ -100,7 +100,6 @@ export enum LoggedOnSubState {
   // Message operations
   READ_MESSAGES = 'read_messages',
   MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
-  MSG_LIST_START_INPUT = 'msg_list_start_input',        // listMSGs: "Starting message [N]: " input
   POST_MESSAGE = 'post_message',
   BULLETIN_INPUT = 'bulletin_input',                    // Bulletin reading input
   POST_MESSAGE_TO = 'post_message_to',
@@ -111,23 +110,6 @@ export enum LoggedOnSubState {
   POST_MESSAGE_QUOTE_REPLY_CONFIRM = 'post_message_quote_reply_confirm', // "Quote in Reply (y/N)?" — express.e:10878
   POST_MESSAGE_FULLEDIT_CONFIRM = 'post_message_fulledit_confirm', // "FullScreen Editor (y/N)?" — express.e:10098-10100
   POST_MESSAGE_QUOTE_RANGE = 'post_message_quote_range',        // Quote message line range input
-  FORWARD_MESSAGE_TO = 'forward_message_to',                    // Forward message recipient input
-  FORWARD_MESSAGE_SUBJECT = 'forward_message_subject',          // Forward message subject input
-  FORWARD_MESSAGE_PRIVATE = 'forward_message_private',          // Forward message privacy choice
-  FORWARD_MESSAGE_DELETE_ORIGINAL = 'forward_message_delete_original', // Delete original message confirmation
-  REPLY_DELETE_ORIGINAL = 'reply_delete_original',                     // Reply: delete original message confirmation (express.e:9898-9903)
-
-  // Sysop message commands (M/E/EH/EM) - express.e:11105-11148, 12169-12189
-  MSG_MOVE_CONF_INPUT = 'msg_move_conf_input',          // Move message: conference number input
-  MSG_MOVE_MSGBASE_INPUT = 'msg_move_msgbase_input',    // Move message: msgbase number input
-  MSG_MOVE_CONFIRM = 'msg_move_confirm',                // Move message: Y/n confirmation
-  MSG_EDIT_HEADER_FROM = 'msg_edit_header_from',        // Edit header: From input
-  MSG_EDIT_HEADER_TO = 'msg_edit_header_to',            // Edit header: To input
-  MSG_EDIT_HEADER_SUBJECT = 'msg_edit_header_subject',  // Edit header: Subject input
-  MSG_EDIT_HEADER_PRIVATE = 'msg_edit_header_private',  // Edit header: Private Y/n
-
-  // Translation commands (T/TS/T!/T*) - express.e:11065-11103
-  MSG_CHOOSE_TRANSLATOR = 'msg_choose_translator',      // TS: Choose language number input
 
   JM_INPUT = 'jm_input',                                // Jump to message number input
   NM_INPUT = 'nm_input',                                // Node Management input - express.e:25294-25366

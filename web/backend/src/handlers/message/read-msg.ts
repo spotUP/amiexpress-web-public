@@ -1109,7 +1109,6 @@ async function command(socket: any, session: BBSSession, r: Reader, str: string)
  */
 export function startReadMSG(socket: any, session: BBSSession, params: string): void {
   const list = params.trim() ? params.trim().split(/\s+/) : [];
-  reading.add(session);
   void (async () => {
     try {
       await readMSG(socket, session, list);
@@ -1117,17 +1116,8 @@ export function startReadMSG(socket: any, session: BBSSession, params: string): 
       console.error('[readMSG] reader failed:', err);
       emitText(socket, '\r\n');
     }
-    reading.delete(session);
     await leaveReader(socket, session);
   })();
-}
-
-/** Sessions inside readMSG. Their keys go to its lineInput / yesNo, or nowhere. */
-const reading = new WeakSet<BBSSession>();
-
-/** True while this caller is in the R reader (a key with no input waiting is dropped). */
-export function isReading(session: BBSSession): boolean {
-  return reading.has(session);
 }
 
 async function leaveReader(socket: any, session: BBSSession): Promise<void> {
@@ -1355,7 +1345,6 @@ export async function searchNewMail(
   // between prompts is dropped (command.handler's MSG_READER_NAV guard).
   const was = session.subState;
   session.subState = LoggedOnSubState.MSG_READER_NAV;
-  reading.add(session);
   try {
     r.msgNum = displayMsg;
     while (r.msgNum < stats.highMsgNum) {
@@ -1371,7 +1360,6 @@ export async function searchNewMail(
     }
     return 'success';
   } finally {
-    reading.delete(session);
     session.subState = was;
   }
 }

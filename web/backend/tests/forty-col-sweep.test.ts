@@ -75,7 +75,7 @@ import { buildFileSearchLines } from '../src/handlers/file/file.handler';
 import { buildWhoRow } from '../src/handlers/chat/chat-commands.handler';
 import { buildRoomMemberRow } from '../src/handlers/chat/room-commands.handler';
 import { buildNodeStatusRow } from '../src/handlers/message/message-commands.handler';
-import { buildMsgListRow, buildMessageHeaderLines } from '../src/handlers/message/messaging.handler';
+import { buildMessageHeaderLines } from '../src/handlers/message/messaging.handler';
 import { buildMailScanRow } from '../src/handlers/message/message-scan.handler';
 import { buildProtocolMenuLines } from '../src/handlers/commands/info-commands.handler';
 import { formatDoorLine } from '../src/handlers/door.handler';
@@ -211,10 +211,6 @@ describe('40-column sweep: tables', () => {
 
   it('node status rows', () => {
     fits(buildNodeStatusRow('24', LONG, LONG, LONG, LONG, true));
-  });
-
-  it('message list rows', () => {
-    fits(buildMsgListRow({ msgNum: 123456, isPrivate: true, from: LONG, subject: LONG }, true));
   });
 
   it('mail scan rows', () => {

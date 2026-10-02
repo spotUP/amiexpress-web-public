@@ -128,7 +128,6 @@ import {
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
-  handleMessageReaderNav,
 } from "../message/messaging.handler";
 
 // Import utilities

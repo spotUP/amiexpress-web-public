@@ -143,7 +143,6 @@ import {
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
-  handleMessageReaderNav,
   setMessagingDependencies,
 } from "../message/messaging.handler";
 import {

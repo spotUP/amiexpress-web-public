@@ -103,23 +103,6 @@ function enterMessage(d: any, params = '') {
   m.handleEnterMessageFullCommand(d.socket, d.session, params);
 }
 
-/** A message sitting in the reader, so `R` and `F` can be driven for real. */
-function seatReader(d: any) {
-  d.session.tempData.msgReaderMessages = [
-    {
-      id: 12,
-      msgNumber: 12,
-      author: 'Zaphod',
-      toUser: 'ALL',
-      subject: 'Hello',
-      body: 'a line',
-      isPrivate: false,
-      createdAt: new Date(0),
-    },
-  ];
-  d.session.tempData.msgReaderIndex = 0;
-}
-
 // ===========================================================================
 // 1. THE GATE - the exact bytes an 80-column caller receives, unchanged.
 // ===========================================================================
@@ -165,26 +148,6 @@ describe('80-column identity: the message header is byte-identical', () => {
     );
     // yesNo(2)'s own bytes (express.e:2134): ESC[32m again before the `?`.
     expect(d.out()).toBe('\r\n         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ');
-  });
-
-  it('the reply header box (express.e:9881-9884)', async () => {
-    const d = drive(false);
-    seatReader(d);
-    await require('../../../src/handlers/message/messaging.handler').handleMessageReaderNav(d.socket, d.session, 'R');
-    expect(d.out()).toContain(
-      '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n' +
-        "     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m Zaphod\r\n"
-    );
-  });
-
-  it('the forward header box (express.e:9816)', async () => {
-    const d = drive(false);
-    seatReader(d);
-    await require('../../../src/handlers/message/messaging.handler').handleMessageReaderNav(d.socket, d.session, 'F');
-    expect(d.out()).toContain(
-      '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n' +
-        "     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m'\x1b[33mALL\x1b[32m'\x1b[32m?\x1b[0m "
-    );
   });
 
   it('the helper itself reproduces every express.e literal', () => {
@@ -285,24 +248,6 @@ describe('40-column layout: nothing folds', () => {
     const prompt = rows[rows.length - 1];
     expect(prompt.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).toBe(' Private (y/N)? ');
     expect(columns(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
-  });
-
-  it('the reply and forward headers fit too', async () => {
-    for (const command of ['R', 'F']) {
-      const d = drive(true);
-      seatReader(d);
-      await require('../../../src/handlers/message/messaging.handler').handleMessageReaderNav(
-        d.socket,
-        d.session,
-        command
-      );
-      for (const row of d.rows()) {
-        if (columns(row) > NARROW_WIDTH) {
-          throw new Error(`${command}: row of ${columns(row)} columns: ${JSON.stringify(row)}`);
-        }
-      }
-      expect(d.rows()).toContain(` \x1b[32m(\x1b[33m${'-'.repeat(37)}\x1b[32m)\x1b[0m`);
-    }
   });
 
   it('the helper fills the row exactly at forty, whatever the shape', () => {

@@ -30,14 +30,9 @@ jest.mock('../../../src/handlers/command-execution.handler', () => ({
   hasSysCommand: (name: string) => registered && name === 'FULLEDIT',
   runSysCommand: (...args: unknown[]) => (runSysCommand as any)(...args),
 }));
-const overwriteMessageBody = jest.fn(async () => undefined);
-jest.mock('../../../src/utils/message-file.util', () => ({
-  ...jest.requireActual('../../../src/utils/message-file.util'),
-  overwriteMessageBody: (...args: unknown[]) => (overwriteMessageBody as any)(...args),
-}));
-jest.mock('../../../src/handlers/message/messaging.handler', () => ({
-  displaySingleMessage: jest.fn(async () => undefined),
-}));
+// What the entry hands back when it is saved (or abandoned, with null): the
+// hook a caller outside the board's own E uses (door-edit-file, the reader).
+const saved = jest.fn(async (_body: string[] | null) => undefined);
 
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
@@ -55,7 +50,7 @@ beforeEach(() => {
   editorWrites = null;
   seenInclude.length = 0;
   runSysCommand.mockClear();
-  overwriteMessageBody.mockClear();
+  saved.mockClear();
 });
 
 afterEach(() => {
@@ -75,8 +70,7 @@ function aCaller(editorType: number) {
     currentConf: 1,
     user: { id: 1, username: 'writer', secLevel: 20, securityFlags: 'T'.repeat(100), editorType },
     tempData: {
-      messageEntry: { body: ['> the quoted line'], editingExistingMsgId: 12, editingReturnIndex: 0 },
-      msgReaderMessages: [{ id: 12, body: 'old' }],
+      messageEntry: { body: ['> the quoted line'], finishOutside: saved },
     },
   };
   return { socket, session, said: () => { flushOutput(socket); return out.join(''); } };
@@ -93,7 +87,7 @@ describe('the full-screen editor (express.e edit() 10093-10141)', () => {
     await handleFullEditConfirm(c.socket, c.session, 'y');
     expect(runSysCommand).toHaveBeenCalledWith(c.socket, c.session, 'FULLEDIT', '');
     expect(seenInclude).toEqual(['> the quoted line\n']);
-    expect(overwriteMessageBody).toHaveBeenCalledWith(1, 12, 'my new text\nsecond line', root);
+    expect(saved).toHaveBeenCalledWith(['my new text', 'second line']);
     expect(fs.existsSync(path.join(root, 'Node3', 'Work', 'msg'))).toBe(false);
   });
 
@@ -102,14 +96,16 @@ describe('the full-screen editor (express.e edit() 10093-10141)', () => {
     editorWrites = 'straight in';
     await promptForMessageBody(c.socket, c.session);
     expect(c.said()).not.toContain('FullScreen Editor');
-    expect(overwriteMessageBody).toHaveBeenCalledWith(1, 12, 'straight in', root);
+    expect(saved).toHaveBeenCalledWith(['straight in']);
   });
 
   test('leaving the editor without saving abandons the message', async () => {
     const c = aCaller(2);
     editorWrites = null;
+    // The board's own E: nothing outside is waiting for the body.
+    delete c.session.tempData.messageEntry.finishOutside;
     await promptForMessageBody(c.socket, c.session);
-    expect(overwriteMessageBody).not.toHaveBeenCalled();
+    expect(saved).not.toHaveBeenCalled();
     expect(c.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 

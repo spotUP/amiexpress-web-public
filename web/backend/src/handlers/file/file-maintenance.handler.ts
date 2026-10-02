@@ -614,7 +614,7 @@ console.log('[FM] Starting file maintenance');
    * Names come from `ConfConfig.info` on disk, not from the mirror: that table
    * is empty on the live board, and the row format matches the one the MESSAGE
    * mover already prints for the same express procedure
-   * (`messaging-sysop.ts`, getMoveConf's msgbase branch).
+   * (`read-msg.ts`, getMoveConf).
    *
    * Only conferences the caller can actually join are listed - offering one he
    * will then be refused is worse than not offering it.

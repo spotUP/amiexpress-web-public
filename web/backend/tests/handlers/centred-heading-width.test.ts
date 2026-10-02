@@ -68,22 +68,7 @@ function drive(petscii: boolean) {
       securityFlags: 'T'.repeat(87),
       secOverride: '',
     },
-    tempData: {
-      moveDestConf: 1,
-      msgReaderMessages: [
-        {
-          id: 1,
-          msgNumber: 1,
-          author: 'A',
-          toUser: 'ALL',
-          subject: 's',
-          body: 'b',
-          isPrivate: false,
-          createdAt: new Date(0),
-        },
-      ],
-      msgReaderIndex: 0,
-    },
+    tempData: {},
   };
   const socket: any = {
     id: `centred-heading-${seq++}`,
@@ -125,47 +110,12 @@ function startsAt(row: string): number {
   return plain.length - plain.trimStart().length + 1;
 }
 
-const sysop = () => require('../../src/handlers/message/messaging-sysop');
-const withConferences = () =>
-  sysop().setMoveEditDependencies({
-    conferences: [{ id: 1, name: 'Amiga' }],
-    messageBases: [{ id: 1, conferenceId: 1, name: 'Default' }],
-  });
 
 // ===========================================================================
 // 1. THE GATE - the exact bytes an 80-column caller receives, unchanged.
 // ===========================================================================
 
 describe('80-column identity: centred headings are byte-identical', () => {
-  it('the M command conference list (express.e:27030-27034)', async () => {
-    const d = drive(false);
-    withConferences();
-    await sysop().handleMsgMoveConfInput(d.socket, d.session, 'L');
-    expect(d.out()).toBe(
-      '\r\n                                 \x1b[32mConference List\x1b[0m\r\n\r\n' +
-        '    1 - Amiga\r\n\r\nConference Number to move to (L to List): '
-    );
-  });
-
-  it('the M command message base list (express.e:27064-27071)', async () => {
-    const d = drive(false);
-    withConferences();
-    await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, 'L');
-    expect(d.out()).toBe(
-      '\r\n                                 \x1b[32mMessagebase List\x1b[0m\r\n\r\n' +
-        '    1 - Default\r\n\r\nMessagebase Number to move to (L to List): '
-    );
-  });
-
-  it('the TS language list (express.e:11395-11397)', async () => {
-    const d = drive(false);
-    await require('../../src/handlers/message/messaging-translation').handleTranslationCommand(
-      d.socket,
-      d.session,
-      'TS'
-    );
-    expect(d.out()).toContain('\r\n\x1b[32m                         Available Languages\x1b[0m\r\n\r\n');
-  });
 
   it('the W user configuration menu (express.e:25730-25732)', () => {
     const d = drive(false);
@@ -195,45 +145,6 @@ describe('80-column identity: centred headings are byte-identical', () => {
 // ===========================================================================
 
 describe('40-column layout: headings land on the screen', () => {
-  it('the conference list heading is one row, centred', async () => {
-    const d = drive(true);
-    withConferences();
-    await sysop().handleMsgMoveConfInput(d.socket, d.session, 'L');
-    const rows = d.rows();
-    const row = headingRow(rows, 'Conference List');
-    expect(columns(row)).toBe(27);
-    expect(startsAt(row)).toBe(13);
-    // The pre-fix bug: 33 spaces then the heading, unwrapped, off the edge.
-    expect(rows.some((r) => /^\s{20,}/.test(r.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')))).toBe(false);
-    for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
-  });
-
-  it('the message base list heading is one row, centred', async () => {
-    const d = drive(true);
-    withConferences();
-    await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, 'L');
-    const rows = d.rows();
-    const row = headingRow(rows, 'Messagebase List');
-    expect(columns(row)).toBe(28);
-    expect(startsAt(row)).toBe(13);
-    for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
-  });
-
-  it('the language list heading is one row, not split mid-word', async () => {
-    const d = drive(true);
-    await require('../../src/handlers/message/messaging-translation').handleTranslationCommand(
-      d.socket,
-      d.session,
-      'TS'
-    );
-    const rows = d.rows();
-    const row = headingRow(rows, 'Available Languages');
-    expect(columns(row)).toBe(29);
-    expect(startsAt(row)).toBe(11);
-    // The pre-fix bug wrapped it into "... Available " + "Languages".
-    expect(rows.some((r) => r.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trim() === 'Languages')).toBe(false);
-    for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
-  });
 
   it('the user configuration heading is one row, not split mid-word', () => {
     const d = drive(true);
@@ -267,79 +178,3 @@ describe('40-column layout: headings land on the screen', () => {
 //    rest on a continuation row. The narrow wording is a decision (sysop,
 //    2026-09-03); NARROW_PROMPT_WIDTH is what keeps it honest.
 // ===========================================================================
-
-describe('the message-move prompts', () => {
-  /** Every branch of the M command that re-asks for a destination. */
-  const CONF_BRANCHES: Array<[string, string]> = [
-    ['after the L listing', 'L'],
-    ['after a non-numeric answer', 'zz'],
-    ['after a conference the caller cannot reach', '99'],
-  ];
-  const BASE_BRANCHES: Array<[string, string]> = [
-    ['after the L listing', 'L'],
-    ['after a non-numeric answer', 'zz'],
-    ['after an out-of-range base', '99'],
-  ];
-
-  describe('80-column identity', () => {
-    it.each(CONF_BRANCHES)('the conference prompt, %s', async (_label, input) => {
-      const d = drive(false);
-      withConferences();
-      await sysop().handleMsgMoveConfInput(d.socket, d.session, input);
-      expect(d.out().endsWith('Conference Number to move to (L to List): ')).toBe(true);
-    });
-
-    it.each(BASE_BRANCHES)('the message base prompt, %s', async (_label, input) => {
-      const d = drive(false);
-      withConferences();
-      await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, input);
-      expect(d.out().endsWith('Messagebase Number to move to (L to List): ')).toBe(true);
-    });
-
-    it('the helper reproduces both express.e strings', () => {
-      expect(movePrompt(ANSI, 'conference')).toBe('Conference Number to move to (L to List): ');
-      expect(movePrompt(ANSI, 'messagebase')).toBe('Messagebase Number to move to (L to List): ');
-      // A wide terminal, and a narrow non-C64 one, keep them.
-      expect(movePrompt({ screenWidth: 132, petsciiMode: false }, 'conference')).toBe(
-        'Conference Number to move to (L to List): '
-      );
-      expect(movePrompt({ screenWidth: 40, petsciiMode: false }, 'messagebase')).toBe(
-        'Messagebase Number to move to (L to List): '
-      );
-    });
-  });
-
-  describe('40 columns', () => {
-    it.each(CONF_BRANCHES)('the conference prompt fits, %s', async (_label, input) => {
-      const d = drive(true);
-      withConferences();
-      await sysop().handleMsgMoveConfInput(d.socket, d.session, input);
-      const rows = d.rows();
-      const prompt = rows[rows.length - 1];
-      expect(prompt).toBe('Conf # to move to (L=List): ');
-      expect(columns(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
-      for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
-    });
-
-    it.each(BASE_BRANCHES)('the message base prompt fits, %s', async (_label, input) => {
-      const d = drive(true);
-      withConferences();
-      await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, input);
-      const rows = d.rows();
-      const prompt = rows[rows.length - 1];
-      expect(prompt).toBe('Base # to move to (L=List): ');
-      expect(columns(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
-      for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
-    });
-
-    it('both leave room for the answer', () => {
-      for (const kind of ['conference', 'messagebase'] as const) {
-        const prompt = movePrompt(C64, kind);
-        // A conference or message base number is up to three digits; the
-        // caller must be able to type one WITHOUT the row wrapping.
-        expect(NARROW_PROMPT_WIDTH - columns(prompt)).toBeGreaterThanOrEqual(3);
-        expect(prompt.split('\r\n')).toHaveLength(1);
-      }
-    });
-  });
-});

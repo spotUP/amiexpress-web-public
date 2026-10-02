@@ -246,24 +246,13 @@ export async function handleMessageSubjectInput(socket: any, session: BBSSession
   // express.e:10847 — lineInput('','',30,...) caps subject at 30 chars
   const subject = input.trim().substring(0, 30);
 
-  // Blank = abort:
-  // - replyToMSG:9890: RETURN RESULT_SUCCESS → back to reader
-  // - enterMSG:10854: RETURN RESULT_FAILURE → back to menu
+  // Blank = abort: enterMSG:10854 RETURN RESULT_FAILURE, back to the menu.
+  // A reply asks its subject in read-msg's replyToMSG, which returns into
+  // the reader on a blank one (9890) and never gets here.
   if (subject === '') {
     emitText(socket, '\r\n');
-    if (session.tempData?.messageEntry?.parentId) {
-      // Reply context: return to message reader (express.e:9890 RESULT_SUCCESS)
-      const msgReaderMessages = session.tempData.msgReaderMessages;
-      const msgReaderIndex = session.tempData.msgReaderIndex || 0;
-      const msgReaderHighest = session.tempData.msgReaderHighestRead;
-      session.tempData = { msgReaderMessages, msgReaderIndex, msgReaderHighestRead: msgReaderHighest };
-      session.subState = LoggedOnSubState.MSG_READER_NAV;
-      const { displaySingleMessage } = require('./messaging.handler');
-      await displaySingleMessage(socket, session, msgReaderIndex);
-    } else {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-    }
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
     return;
   }
 
@@ -733,7 +722,7 @@ async function abortEntry(socket: any, session: BBSSession): Promise<void> {
     await entry.finishOutside(null);
     return;
   }
-  if (!entry?.editingExistingMsgId) emitText(socket, '\r\n');
+  emitText(socket, '\r\n');
   if (await finishEntry(session, entry, false)) return;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
@@ -833,48 +822,6 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
 
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
   emitText(socket, '\r\nSaving...');
-
-  // express.e EM (11142-11148 / 12183-12188): edit-existing branch.
-  // editingExistingMsgId is set by the EM command in messaging.handler.ts.
-  // Skip the new-message creation path and overwrite the canonical body
-  // file in place, then return to the message reader nav prompt.
-  if (entry?.editingExistingMsgId) {
-    try {
-      const { overwriteMessageBody } = require('../../utils/message-file.util');
-      const messageBody = entry.body.join('\n');
-      await overwriteMessageBody(
-        session.currentConf || 1,
-        entry.editingExistingMsgId,
-        messageBody,
-        config.get('dataDir'),
-      );
-      // Sync DB body so search index/web UI stays in sync
-      try {
-        await _db.updateMessage?.(entry.editingExistingMsgId, { body: messageBody });
-      } catch { /* DB sync best-effort */ }
-
-      emitText(socket, ` Message ${entry.editingExistingMsgId} body updated.\r\n\r\n`);
-
-      // Return to message reader at the same index — express.e:11148+
-      // displayMessage(gfh) re-renders, JUMP nextMenu shows nav prompt.
-      const returnIndex = entry.editingReturnIndex ?? 0;
-      const messages = session.tempData.msgReaderMessages || [];
-      // Update in-memory copy too so the redisplay shows new body
-      if (messages[returnIndex]) {
-        messages[returnIndex].body = messageBody;
-      }
-      session.tempData.messageEntry = undefined as any;
-      session.subState = LoggedOnSubState.MSG_READER_NAV;
-      const { displaySingleMessage } = require('./messaging.handler');
-      await displaySingleMessage(socket, session, returnIndex);
-    } catch (err: any) {
-      console.error('[EM] Error overwriting message body:', err);
-      emitText(socket, '\r\nError saving body.\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-    }
-    return;
-  }
 
   try {
     // Create message object
@@ -1113,27 +1060,8 @@ console.error('[Webhook] Error sending new message webhook:', error);
     // its try. Non-throwing.
     reportMessage(session as any, { body: entry.body, isPrivate: entry.isPrivate, parentId: entry.parentId || null, toUserIsSysop }, session.currentConf || 1);
 
-    // express.e:9898-9903 (replyToMSG): after saving, prompt "Delete original message (y/N)?"
-    // only if user has DELETE permission AND original message was addressed to current user.
-    //
-    // express.e compares against confMailName (the per-conference display
-    // name picked by NAME_TYPE_USERNAME/REALNAME/INTERNETNAME — see
-    // express.e:12459-12466 + 9899). For REALNAME conferences the original
-    // mail's `toName` is the user's real name, NOT their login username,
-    // so the previous comparison against session.user.username silently
-    // suppressed the delete-original prompt.
-    const replyOriginalToUser: string = entry.replyOriginalToUser || '';
-    const myConfMailName = getConfMailName(session);
-    if (
-      replyOriginalToUser &&
-      replyOriginalToUser.toLowerCase() === myConfMailName.toLowerCase() &&
-      checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
-    ) {
-      emitText(socket, 'Delete original message \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
-      session.tempData.replyDeleteParentId = entry.parentId;
-      session.subState = LoggedOnSubState.REPLY_DELETE_ORIGINAL;
-      return; // state machine continues; DISPLAY_MENU set after delete confirm
-    }
+    // A reply's "Delete original message" (express.e:9898-9903) is asked by
+    // read-msg's replyToMSG once this save returns.
 
     // express.e saves message and returns to main loop; main loop sets menuPause:=TRUE
     session.menuPause = true;
@@ -1416,19 +1344,6 @@ function showLineEditor(socket: any, session: BBSSession): void {
   session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
 }
 
-/**
- * Forward message handlers (express.e forwardMSG:9807-9871)
- * Implementation lives in message-forward.handler.ts since the round-21
- * split. Re-exported here so existing imports from this module keep
- * resolving without touching command.handler / input-handlers.
- */
-export {
-  handleForwardMessageToInput,
-  handleForwardMessageSubjectInput,
-  handleForwardMessagePrivateInput,
-  handleForwardMessageDeleteOriginalInput,
-  handleReplyDeleteOriginalInput,
-} from './message-forward.handler';
 
 
 /**

@@ -242,48 +242,6 @@ describe('every FileName prompt', () => {
   });
 });
 
-/**
- * sendCLS has to reach the terminal the caller actually has.
- *
- * express.e:5224-5228 sends ASCII 12, and a real Amiga terminal clears on it.
- * xterm.js treats 0x0C as a line feed, so every `checkScreenClear()` this port
- * made - at every site express.e calls it, the menu at express.e:28585
- * included - asked for a clear that never happened. That is why the sysop's
- * screen kept its old contents no matter how correct the board's side was.
- *
- * Each site is driven for a caller with the screen-clear flag set
- * (USER_SCRNCLR, 8): his terminal must get the clear it understands, and no
- * bare form feed.
- */
-describe('sendCLS on a web terminal', () => {
-  const SCRNCLR = 8;
-  const aMessage = { id: 7, msgNumber: 7, timestamp: new Date('2026-09-15T12:00:00Z'), fromUser: 'spot', toUser: 'ALL', subject: 'hi', body: 'hello' };
-  const aReader = () => uploader({
-    subState: LoggedOnSubState.READ_COMMAND,
-    user: { id: 1, username: 'lamer', name: 'lamer', secLevel: 100, userFlags: SCRNCLR, expert: 'X' },
-    tempData: { msgReaderMessages: [{ ...aMessage }], msgReaderIndex: -1, msgReaderConfId: 1 },
-  });
-
-  const sites: Array<[string, (socket: any, session: any) => Promise<unknown>]> = [
-    ['the ? command (express.e:24596)', (socket, session) =>
-      require('../../src/handlers/commands/display-file-commands.handler').handleQuestionMarkCommand(socket, session)],
-    ['reading one message (express.e:8889)', (socket, session) =>
-      require('../../src/handlers/message/messaging.handler').displaySingleMessage(socket, session, 0)],
-    ['reading messages non-stop (express.e:8897)', (socket, session) =>
-      require('../../src/handlers/message/messaging.handler').handleMessageReaderNav(socket, session, 'NS')],
-  ];
-
-  it.each(sites)('%s clears with the sequence the terminal understands, never a bare form feed', async (_site, run) => {
-    const { socket, wire } = aTerminal();
-
-    try { await run(socket, aReader()); } catch { /* what follows the clear is not this test's business */ }
-
-    const sent = wire();
-    expect(sent).toContain(ANSI.CLEAR_SCREEN);
-    expect(sent).not.toContain('\x0c');
-  });
-});
-
 describe('the upload screen\'s own pause', () => {
   // "there is no pause after the screen when i press u" (sysop, 2026-09-29).
   // uploadmsg.txt ends in `~SP`; the interface clears the screen. Run at once,
