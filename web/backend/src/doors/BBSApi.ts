@@ -933,6 +933,11 @@ console.log('[BBSApi] Mouse events disabled');
       await db.updateUser(this.session.user.id, { screenTheme: wanted });
       this.session.user.screenTheme = wanted;
     }
+    // The browser remembers the theme for the screens it draws before the
+    // next login (the title). It was told only at login, so a theme picked
+    // mid-call drew the OLD theme's title at the next connect and the right
+    // one only the time after (sysop, 2026-10-02: h7 picked, 607080's title).
+    this.socket.emit('screen-theme', { screenTheme: wanted });
 
     const companion = companionDoorTheme(root, wanted);
     if (companion) await this.setTheme(companion);

@@ -114,3 +114,19 @@ test('a theme with no companion leaves the door theme exactly as it was', async 
   const fields = updateUser.mock.calls.map(call => Object.keys(call[1] as object)[0]);
   expect(fields).toEqual(['screenTheme']);
 });
+
+test('a theme chosen during the call is remembered for the next title screen, and a refused one is not', async () => {
+  // The browser keeps the theme in a cookie for the screens before login; it
+  // was told only at login, so the next connect drew the old theme's title
+  // (sysop, 2026-10-02).
+  theme('neon');
+  theme('secret', { owner: 'skope', status: 'draft' });
+  const sent: unknown[] = [];
+  const socket: any = { id: 'sock-theme-2', emit: (event: string, data: unknown) => { if (event === 'screen-theme') sent.push(data); }, on: () => {} };
+  const bbs = createBBSApi(socket, { user: { id: 7, username: 'lamer', secLevel: 20 }, nodeId: 1 } as any);
+
+  await bbs.setScreenTheme('secret');
+  expect(sent).toEqual([]);
+  await bbs.setScreenTheme('neon');
+  expect(sent).toEqual([{ screenTheme: 'neon' }]);
+});

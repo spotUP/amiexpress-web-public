@@ -3032,6 +3032,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       tokenLoginPending.current = false;
     });
 
+    // A theme picked during the call (THEMEC), remembered for the title the
+    // board draws before the next login - the same cookie login-success writes.
+    socket.on('screen-theme', (data: { screenTheme?: string }) => {
+      if (typeof data?.screenTheme === 'string' && data.screenTheme) {
+        writeCookieScreenTheme(data.screenTheme);
+      }
+    });
+
     socket.on('login-success', (data: any) => {
       console.log('Login successful:', data);
       loginCredentials.current!.onLoginSuccess();
