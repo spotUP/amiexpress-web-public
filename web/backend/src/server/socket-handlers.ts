@@ -649,13 +649,15 @@ console.error('No session found for socket:', socket.id);
     }
 
     if (decision.kind === 'pause') {
+      // The echo first: a key typed in the same packet as its RETURN shows on
+      // the prompt's row before the handler draws what comes next. Only when
+      // NOT in a door - doors handle their own echo.
+      if (decision.echo !== null && !session.inDoorManager) {
+        socket.emit('ansi-output', decision.echo);
+      }
       if (decision.handler && decision.line !== null) {
         decision.handler(decision.line);
         clearPauseHandler(session, decision.which, decision.handler);
-      }
-      // Only echo when NOT in a door - doors handle their own echo.
-      if (decision.echo !== null && !session.inDoorManager) {
-        socket.emit('ansi-output', decision.echo);
       }
       return;
     }

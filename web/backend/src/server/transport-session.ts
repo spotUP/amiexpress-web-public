@@ -340,13 +340,15 @@ console.log(
       }
 
       if (decision.kind === 'pause') {
-        if (decision.handler && decision.line !== null) {
-          decision.handler(decision.line);
-          clearPauseHandler(session, decision.which, decision.handler);
-        }
+        // The echo first: a key typed in the same packet as its RETURN shows
+        // on the prompt's row before the handler draws what comes next.
         // Doors echo their own input; the BBS's own prompt does not.
         if (decision.echo !== null && !session.inDoorManager) {
           emitter.emit('ansi-output', decision.echo);
+        }
+        if (decision.handler && decision.line !== null) {
+          decision.handler(decision.line);
+          clearPauseHandler(session, decision.which, decision.handler);
         }
         return;
       }

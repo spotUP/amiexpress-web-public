@@ -326,49 +326,59 @@ export function clearPauseHandler(session: BBSSession, which: PauseKind, ran: (l
   if (state[HANDLER_FIELD[which]] === ran) state[HANDLER_FIELD[which]] = undefined;
 }
 
-/** Accumulate one keystroke into a pause buffer and say what to echo. */
+/**
+ * Accumulate what arrived into a pause buffer, KEY BY KEY, and say what to echo.
+ *
+ * A telnet client sends RETURN as CR LF in one packet, and often the letter
+ * before it too: `n\r\n`. This compared the whole packet with `\r`, so the
+ * RETURN was stored as two typed characters and the prompt never submitted -
+ * a caller answering `n` at the logon scan's `(Pause)...More(y/n/ns)?` was
+ * stuck there for good, Enter, Ctrl-C and all (relayed by the sysop,
+ * 2026-10-02). The packet is split the way every other prompt's input is
+ * (splitInputForDispatch, which also makes CR LF one RETURN), and the first
+ * RETURN submits; keys after it in the same packet are dropped, as the prompt
+ * they would answer does not exist yet.
+ */
 function accumulatePause(session: BBSSession, which: PauseKind, data: string): InputDecision {
   const state = session as unknown as PauseState;
   const bufferField = BUFFER_FIELD[which];
   if (state[bufferField] === undefined) state[bufferField] = '';
+  const handler = state[HANDLER_FIELD[which]] as (line: string) => void;
+  let echo = '';
 
-  /**
-   * SPACE on an EMPTY buffer submits, exactly as RETURN does.
-   *
-   * The sysop, 2026-09-07: "Some BBS prompts are not dismissable with
-   * SPACE." Both pause prompts read a LINE, so a space used to be typed
-   * into the buffer and nothing happened until the caller also pressed
-   * RETURN - and a space is what every pager on every other system takes
-   * for "next page". Both handlers already read an empty line as "more",
-   * so this submits the same empty line RETURN submits; no handler needed
-   * a new branch, and no prompt gained a second meaning.
-   *
-   * Only on an empty buffer. `NS`, and a filename with a space in it, are
-   * still lines a caller can type at these prompts.
-   */
-  if (data === ' ' && state[bufferField] === '') {
-    const handler = state[HANDLER_FIELD[which]] as (line: string) => void;
-    return { kind: 'pause', which, handler, line: '', echo: null };
+  for (const key of splitInputForDispatch(data)) {
+    /**
+     * SPACE on an EMPTY buffer submits, exactly as RETURN does.
+     *
+     * The sysop, 2026-09-07: "Some BBS prompts are not dismissable with
+     * SPACE." Both pause prompts read a LINE, so a space used to be typed
+     * into the buffer and nothing happened until the caller also pressed
+     * RETURN - and a space is what every pager on every other system takes
+     * for "next page". Both handlers already read an empty line as "more",
+     * so this submits the same empty line RETURN submits.
+     *
+     * Only on an empty buffer. `NS`, and a filename with a space in it, are
+     * still lines a caller can type at these prompts.
+     */
+    if (key === ' ' && state[bufferField] === '') {
+      return { kind: 'pause', which, handler, line: '', echo: echo || null };
+    }
+    if (key === '\r' || key === '\n') {
+      const line = state[bufferField] as string;
+      // Cleared BEFORE the handler runs: the handler may register the next
+      // prompt, and it must start from an empty buffer.
+      state[bufferField] = '';
+      return { kind: 'pause', which, handler, line, echo: echo || null };
+    }
+    if (key === '\x7f' || key === '\b') {
+      state[bufferField] = (state[bufferField] as string).slice(0, -1);
+      echo += '\b \b';
+      continue;
+    }
+    state[bufferField] = (state[bufferField] as string) + key;
+    echo += key;
   }
-
-  // CR or LF submits the line.
-  if (data === '\r' || data === '\n') {
-    const handler = state[HANDLER_FIELD[which]] as (line: string) => void;
-    const line = state[bufferField] as string;
-    // Cleared BEFORE the handler runs: the handler may register the next
-    // prompt, and it must start from an empty buffer.
-    state[bufferField] = '';
-    return { kind: 'pause', which, handler, line, echo: null };
-  }
-
-  // Backspace takes a character back off, and erases it on the screen.
-  if (data === '\x7f' || data === '\b') {
-    state[bufferField] = (state[bufferField] as string).slice(0, -1);
-    return { kind: 'pause', which, handler: null, line: null, echo: '\b \b' };
-  }
-
-  state[bufferField] = (state[bufferField] as string) + data;
-  return { kind: 'pause', which, handler: null, line: null, echo: data };
+  return { kind: 'pause', which, handler: null, line: null, echo: echo || null };
 }
 
 /**

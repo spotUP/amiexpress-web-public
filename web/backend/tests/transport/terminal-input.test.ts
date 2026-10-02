@@ -145,6 +145,32 @@ describe('TP-8 - a telnet caller gets the web caller\'s input pipeline', () => {
       .toBeUndefined();
   });
 
+  it('an answer and its RETURN in one packet submit the pause (CR LF, 2026-10-02)', () => {
+    // A telnet client sent `n\r\n` as one packet; the whole packet was
+    // stored as typed text and the logon scan's More prompt never ended.
+    const caller = telnetCaller(24);
+    const answered: string[] = [];
+    (caller.session as unknown as { checkPauseHandler?: (line: string) => void })
+      .checkPauseHandler = (line) => answered.push(line);
+
+    caller.type('n\r\n');
+
+    expect(answered).toEqual(['n']);
+    expect(caller.handleCommand).not.toHaveBeenCalled();
+  });
+
+  it('a RETURN alone as CR LF submits the pause too', () => {
+    const caller = telnetCaller(24);
+    const answered: string[] = [];
+    (caller.session as unknown as { checkPauseHandler?: (line: string) => void })
+      .checkPauseHandler = (line) => answered.push(line);
+
+    caller.type('n');
+    caller.type('\r\n');
+
+    expect(answered).toEqual(['n']);
+  });
+
   it('a flag-pause prompt does the same, and backspace takes a character back', () => {
     const caller = telnetCaller(25);
     const answered: string[] = [];
