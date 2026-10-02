@@ -18,6 +18,7 @@
 import * as path from 'path';
 
 import type { ScreenIndex } from './screen-index.service';
+import { isThemeWideScreen } from './screen-tables';
 
 /**
  * The board file named, and every variant beside it, board-relative.
@@ -51,11 +52,35 @@ export function screenScopeOf(index: ScreenIndex, boardRelPath: string): ScreenS
   return matchIn(index, boardRelPath)?.scope;
 }
 
-/** Where the board reads a screen from: the three scopes a theme mirrors. */
+/**
+ * Where the board reads a screen from: the scopes a theme mirrors.
+ *
+ * `conferences` is a theme's own: the one copy of a THEME_WIDE_SCREENS screen
+ * that serves every conference (`Themes/<slug>/Conf/<file>`).
+ */
 export type ScreenScope =
   | { kind: 'node' }
   | { kind: 'conf'; id: number }
+  | { kind: 'conferences' }
   | { kind: 'board' };
+
+/**
+ * The scope a theme keeps one resolution of `screen` in.
+ *
+ * One rule for the seeder and the copy route: a conference screen lands in
+ * that conference's directory, except a screen a theme draws ONCE for every
+ * conference, which lands in the theme's every-conference directory.
+ */
+export function themeScopeOf(
+  screen: string,
+  resolution: { scope: 'node' | 'conf' | 'board'; id: number | null },
+): ScreenScope {
+  if (resolution.scope === 'node') return { kind: 'node' };
+  if (resolution.scope === 'conf') {
+    return isThemeWideScreen(screen) ? { kind: 'conferences' } : { kind: 'conf', id: resolution.id ?? 1 };
+  }
+  return { kind: 'board' };
+}
 
 /** The one walk both questions are answered by. */
 function matchIn(
@@ -77,12 +102,7 @@ function matchIn(
       // same directory does not make every neighbour part of this screen.
       if (!set.some(rel => path.normalize(rel) === wanted)) continue;
 
-      const scope: ScreenScope = resolution.scope === 'node'
-        ? { kind: 'node' }
-        : resolution.scope === 'conf'
-          ? { kind: 'conf', id: resolution.id as number }
-          : { kind: 'board' };
-      return { set, scope };
+      return { set, scope: themeScopeOf(entry.screen, resolution) };
     }
   }
 

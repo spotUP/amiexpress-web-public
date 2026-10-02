@@ -13,13 +13,15 @@
  * a list of slots - drawn or not - each knowing the path its file belongs at
  * inside the theme, so a blank one can be started with a click.
  */
-import { SCREEN_DIR_MAP, ScreenDirType, getScreenFileName, isBoardWritten } from '@bbs/screens/screen-tables';
+import { SCREEN_DIR_MAP, ScreenDirType, THEME_WIDE_DIR, getScreenFileName, isBoardWritten, isThemeWideScreen } from '@bbs/screens/screen-tables';
 import { describeScreen } from './screen-descriptions';
-import type { ScreenIndexShape } from './screen-index-view';
+import { themeWideLabel, type ScreenIndexShape } from './screen-index-view';
 
 export interface ThemeSlot {
   /** The catalogue name: BBSTITLE, CONF_BULL. For a logo, its file name. */
   screen: string;
+  /** What the card is called, when the catalogue name is not it: "Main menu". */
+  label?: string;
   /**
    * Where the board looks for it.
    *
@@ -97,15 +99,19 @@ export function themeChecklist(
   const boardDir = boardsOwn ? 'Screens' : `${root}/${SCOPE_DIR.board}`;
   const push = (screen: string, scope: 'node' | 'conf' | 'board', conference?: number) => {
     const file = getScreenFileName(screen);
+    // No conference: a screen the theme draws ONCE for every conference, in
+    // the directory the loader falls back to for all of them.
     const dir = scope === 'conf'
-      ? `${root}/${SCOPE_DIR.conf}/${conference}`
+      ? conference === undefined ? `${root}/${THEME_WIDE_DIR}` : `${root}/${SCOPE_DIR.conf}/${conference}`
       : `${root}/${SCOPE_DIR[scope]}`;
     const path = `${dir}/${file}${DRAWN_AS}`;
+    const everyConference = scope === 'conf' && conference === undefined;
     slots.push({
       screen,
+      ...(everyConference ? { label: themeWideLabel(screen) } : {}),
       scope,
       conference,
-      description: describeScreen(screen),
+      description: everyConference ? `${themeWideLabel(screen)}, for every conference` : describeScreen(screen),
       path,
       drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
     });
@@ -153,6 +159,17 @@ export function themeChecklist(
     const scope = scopeOf(dirType);
     if (scope !== 'conf') {
       push(screen, scope);
+      continue;
+    }
+    /*
+     * ONE MAIN MENU PER THEME, not one per conference. Five slots asked the
+     * artist to draw the same menu five times, and the four left undone went
+     * on serving the template (h7, 2026-10-02). The theme's one copy serves
+     * every conference; a conference that needs its own is an override, and
+     * not a slot.
+     */
+    if (isThemeWideScreen(screen)) {
+      push(screen, 'conf');
       continue;
     }
     // No conferences known yet (the index is still loading) - one slot, so the

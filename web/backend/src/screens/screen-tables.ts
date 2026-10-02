@@ -195,3 +195,41 @@ export function getScreenFileName(screenName: string): string {
   if (upper === 'ACHIEVETOP') return 'AchieveTop';
   return screenName;
 }
+
+/**
+ * SCREENS A THEME DRAWS ONCE FOR EVERY CONFERENCE.
+ *
+ * express.e reads MENU from confScreenDir alone (express.e:6560-6566), and
+ * confScreenDir is the conference's directory or its SCREENS tooltype
+ * (express.e:5052-5054). There is no board-wide fallback, and the board's own
+ * resolution keeps it that way.
+ *
+ * A THEME is this port's layer, not express.e's, and a theme seeded per
+ * conference held five copies of one main menu: the artist redrew conference
+ * 2's, conference 1 went on serving the template, and the studio showed
+ * several "main menu" cards of which some could not be reached at all (h7,
+ * 2026-10-02). The sysop's ruling: one main menu per theme, served to every
+ * conference, with its level and screen-type variants beside it.
+ *
+ * So for these screens a caller wearing a theme is looked up in the theme's
+ * conference directory first (an override), then in the theme's conference
+ * SCOPE itself - `Themes/<slug>/Conf/` - and only then on the board.
+ * `CONF_BULL` is deliberately absent: every conference's bulletin is its own.
+ */
+export const THEME_WIDE_SCREENS: readonly string[] = ['MENU'];
+
+/** The theme directory, relative to the theme root, that serves every conference. */
+export const THEME_WIDE_DIR = 'Conf';
+
+export function isThemeWideScreen(screenName: string): boolean {
+  return THEME_WIDE_SCREENS.includes(screenName.toUpperCase());
+}
+
+/**
+ * Is this board-relative path a file in a theme's every-conference directory?
+ * `Themes/h7/Conf/Menu.txt` is; `Themes/h7/Conf/2/Menu.txt` is a conference's
+ * own override and is not.
+ */
+export function isThemeWidePath(relPath: string): boolean {
+  return new RegExp(`^Themes/[^/]+/${THEME_WIDE_DIR}/[^/]+$`, 'i').test(relPath.replace(/\\/g, '/'));
+}

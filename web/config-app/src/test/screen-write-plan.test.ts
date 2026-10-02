@@ -239,3 +239,29 @@ describe('a conference keeps its own bulletin', () => {
       .toEqual(['Node1/BBSTITLE.txt', 'Node2/BBSTITLE.txt']);
   });
 });
+
+describe("a theme's one main menu", () => {
+  /*
+   * It serves every conference by being where each one falls back to, so a
+   * replace is that one file. Fanning out along the resolutions wrote it over
+   * every conference's own override, and the identical-copies rule over any
+   * conference copy still holding the same template (2026-10-02).
+   */
+  test('is written alone, never over a conference override or an identical copy', () => {
+    const wide = 'Themes/h7/Conf/Menu.txt';
+    const index = {
+      builtAt: '', unused: [], conferences: [], bulletins: [],
+      screens: [{
+        screen: 'MENU', dirType: 'conf', missingScopes: 0, duplicateGroups: [],
+        resolutions: [
+          { scope: 'conf', id: 1, dir: 'Themes/h7/Conf', dirIsShared: false, file: wide, variants: [] },
+          { scope: 'conf', id: 2, dir: 'Themes/h7/Conf/2', dirIsShared: false, file: 'Themes/h7/Conf/2/Menu.txt', variants: [] },
+        ],
+      }],
+      files: Object.fromEntries([wide, 'Themes/h7/Conf/2/Menu.txt', 'Themes/h7/Conf/3/Menu.txt'].map(relPath =>
+        [relPath, { relPath, bytes: 1, format: 'ansi', sha256: 'template', mci: [] }])),
+    } as unknown as ScreenIndexShape;
+
+    expect(fanOutOptions(index, 'MENU', wide).map(o => o.targets)).toEqual([[wide]]);
+  });
+});

@@ -29,7 +29,7 @@ import {
   type ScopeResolution,
 } from './screen-index.service';
 import { getScreenFileName } from './screen-resolution';
-import { SCREEN_DIR_MAP, SCREEN_EXTENSIONS, ScreenDirType, isScreenFile } from './screen-tables';
+import { SCREEN_DIR_MAP, SCREEN_EXTENSIONS, ScreenDirType, THEME_WIDE_DIR, isScreenFile, isThemeWideScreen } from './screen-tables';
 import { screenIsProgram, screenProgramSignature } from './screen-blankness';
 import { THEME_FILES_DIR, themeDirectory, type ThemeEntry } from './theme-registry';
 
@@ -319,8 +319,8 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
     const reported = new Set<string>();
 
     for (const resolution of entry.resolutions) {
-      const scope = scopeDirectory(entry.dirType, resolution);
-      if (!scope) continue;
+      const ownScope = scopeDirectory(entry.dirType, resolution);
+      if (!ownScope) continue;
 
       /*
        * amigafs remembers the listing until the directory changes. This read
@@ -329,15 +329,33 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
        * (measured, 2026-09-14) - and a second answer to "what files are here"
        * is a second thing to keep in step with the disk.
        */
-      const themeNames = amigafs.listFiles(path.join(root, scope));
-      const themeLevels = new Map<number | null, string>();
-      for (const name of themeNames) {
-        const level = levelOf(stem, name);
-        if (level === undefined) continue;
-        themeLevels.set(level, name);
+      const levelsIn = (scopeDir: string): Map<number | null, string> => {
+        const levels = new Map<number | null, string>();
+        for (const name of amigafs.listFiles(path.join(root, scopeDir))) {
+          const level = levelOf(stem, name);
+          if (level === undefined) continue;
+          levels.set(level, name);
+        }
+        return levels;
+      };
+
+      /*
+       * THE DIRECTORY THE LOADER ANSWERS FROM, in its order: the conference's
+       * own theme directory, then - for a screen the theme draws once for
+       * every conference - the theme's every-conference directory
+       * (screen-resolution.ts, THEME_WIDE_SCREENS).
+       */
+      let scope = ownScope;
+      let themeLevels = levelsIn(ownScope);
+      const wideScope = entry.dirType === ScreenDirType.CONF && isThemeWideScreen(entry.screen);
+      if (themeLevels.size === 0 && wideScope) {
+        scope = THEME_WIDE_DIR;
+        themeLevels = levelsIn(THEME_WIDE_DIR);
       }
       if (themeLevels.size === 0) continue;
       themeHasScreen = true;
+      /** The theme's ONE main menu answering this conference. */
+      const servesEveryLevel = wideScope && scope === THEME_WIDE_DIR;
 
       /*
        * Rule 9 - THE LOADER WILL SKIP THIS SCREEN, and nothing said so.
@@ -434,6 +452,24 @@ export function validateTheme(baseDir: string, theme: ThemeEntry): ThemeValidati
         const shadowKey = `shadow|${path.join(scope, base)}|${shadowed.name}`;
         if (reported.has(shadowKey)) continue;
         reported.add(shadowKey);
+        /*
+         * THE THEME'S ONE MAIN MENU IS SHOWN TO EVERY LEVEL ON PURPOSE.
+         *
+         * The sysop's ruling (2026-10-02): one main menu per theme, served to
+         * every conference and every level. Covering the board's MENU250 is
+         * then what the theme is FOR, not a slip - so it is said, and it does
+         * not hold the theme back. An artist who wants the sysop's own list
+         * kept draws it beside the menu.
+         */
+        if (servesEveryLevel) {
+          advisory.push({
+            rule: 'shadows-security-variant',
+            severity: 'advisory',
+            file: path.join(scope, base),
+            message: `${theme.title}'s ${path.join(scope, base)} is the main menu for every conference and every level, so level-${shadowed.level} callers see it instead of the board's ${shadowed.name}. Draw ${path.join(scope, shadowed.name)} in the theme if they should keep a menu of their own.`,
+          });
+          continue;
+        }
         blocking.push({
           rule: 'shadows-security-variant',
           severity: 'blocking',

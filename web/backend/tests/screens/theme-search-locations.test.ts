@@ -96,8 +96,12 @@ describe('a theme shadows a scope without removing it', () => {
     theme('neon', ['Conf/1']);
     // The conference-root-first order is what makes Conf1/MENU250.TXT the live
     // board's main menu; a theme has to come ahead of that, not just ahead of
-    // Conf1/Screens.
+    // Conf1/Screens. MENU then falls back to the theme's ONE main menu in
+    // Themes/neon/Conf (THEME_WIDE_SCREENS, 2026-10-02) - still ahead of the
+    // board; a bulletin does not.
     expect(dirs('MENU', { nodeId: 1, confId: 1, themeSlug: 'neon' }))
+      .toEqual(['<root>/Themes/neon/Conf/1', '<root>/Themes/neon/Conf', '<root>/Conf1', '<root>/Conf1/Screens']);
+    expect(dirs('CONF_BULL', { nodeId: 1, confId: 1, themeSlug: 'neon' }))
       .toEqual(['<root>/Themes/neon/Conf/1', '<root>/Conf1', '<root>/Conf1/Screens']);
   });
 

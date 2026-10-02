@@ -40,7 +40,23 @@ describe('what a complete theme is', () => {
   it('asks for a conference screen once per conference, because that is the work', () => {
     const slots = themeChecklist(index([], [1, 2, 3]), 'neon');
 
-    expect(slots.filter(s => s.screen === 'MENU').map(s => s.conference)).toEqual([1, 2, 3]);
+    expect(slots.filter(s => s.screen === 'CONF_BULL').map(s => s.conference)).toEqual([1, 2, 3]);
+  });
+
+  /*
+   * EXCEPT THE MAIN MENU: a theme draws it once and every conference falls back
+   * to it. Five slots asked for the same menu five times, and the four left
+   * undone went on serving the template (h7, 2026-10-02).
+   */
+  it('asks for the main menu once, in the directory every conference falls back to', () => {
+    const slots = themeChecklist(index(['Themes/neon/Conf/2/Menu.txt'], [1, 2, 3]), 'neon');
+    const menus = slots.filter(s => s.screen === 'MENU');
+
+    expect(menus).toHaveLength(1);
+    expect(menus[0]).toMatchObject({ label: 'Main menu', path: 'Themes/neon/Conf/MENU.TXT', conference: undefined });
+    // A conference's own copy is an override, not the theme's main menu.
+    expect(menus[0].drawn).toBe(false);
+    expect(themeChecklist(index(['Themes/neon/Conf/Menu.txt']), 'neon').find(s => s.screen === 'MENU')!.drawn).toBe(true);
   });
 
   it('counts a screen as drawn whatever case or extension it arrived in', () => {

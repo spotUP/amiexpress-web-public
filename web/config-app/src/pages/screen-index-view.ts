@@ -1,4 +1,5 @@
 import type { GalleryItem } from '../components/ScreenGallery';
+import { getScreenFileName, isThemeWidePath, isThemeWideScreen } from '@bbs/screens/screen-tables';
 /**
  * The screens list, as rows.
  *
@@ -435,6 +436,20 @@ export function describeReader(
  * node number tells an artist nothing, and this board shares one copy across
  * every node anyway.
  */
+/**
+ * What a theme's ONE copy of a screen it draws for every conference is called
+ * (THEME_WIDE_SCREENS). "MENU - Amiga Demoscene!" named one conference for a
+ * card that serves all of them.
+ */
+const THEME_WIDE_LABEL: Record<string, string> = { MENU: 'Main menu' };
+
+export function themeWideLabel(screen: string): string {
+  return THEME_WIDE_LABEL[screen.toUpperCase()] ?? screen;
+}
+
+/** A theme's own copy of a conference screen: `Themes/h7/Conf/2/Menu.txt`. */
+const THEME_CONFERENCE_PATH = /^Themes\/[^/]+\/Conf\/\d+\//i;
+
 export function galleryLabel(
   file: Pick<ScreenFileShape, 'relPath'>,
   reader: ScreenReaderShape | undefined,
@@ -443,9 +458,17 @@ export function galleryLabel(
   if (bulletin) return `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`;
   if (!reader) return file.relPath;
   if (reader.via === 'include') return file.relPath.split('/').pop() ?? file.relPath;
+  // One card for every conference and every level: its variants are versions
+  // of it, so neither a conference nor a level belongs in its name.
+  if (isThemeWidePath(file.relPath)) return themeWideLabel(reader.screen);
 
   const parts = [reader.screen];
   if (reader.scope === 'conf') parts.push(reader.scopeName ?? `conference ${reader.id}`);
+  // A theme's per-conference main menu is no longer the theme's menu - it
+  // covers the theme's one main menu in that conference, and says so.
+  if (isThemeWideScreen(reader.screen) && THEME_CONFERENCE_PATH.test(file.relPath)) {
+    parts.push('conference override');
+  }
   if (reader.serves) parts.push(`level ${reader.serves}`);
   else if (reader.securityLevel !== undefined) parts.push(`level ${reader.securityLevel}`);
   // MENU250.TXT and menu250.txt.GR serve the same callers on different
@@ -747,11 +770,28 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     return claimed;
   };
   const drawn = opts.ownedBy ? drawnInTheme(opts.ownedBy) : new Set<string>();
+  /*
+   * THE SCREENS THIS THEME DRAWS ONCE FOR EVERY CONFERENCE, and has.
+   *
+   * Its one main menu covers the board's in every conference and at every
+   * level, so none of the board's menu cards - per conference, MENU250, the
+   * .GR twin - is work left to do in this theme.
+   */
+  const drawnEverywhere = new Set<string>();
+  if (opts.ownedBy) {
+    for (const file of drawable) {
+      if (file.theme !== opts.ownedBy || !isThemeWidePath(file.relPath)) continue;
+      for (const reader of file.readBy ?? []) drawnEverywhere.add(reader.screen);
+    }
+  }
   const groups = [...byContent.values()].filter(copies => {
-    if (!opts.ownedBy || drawn.size === 0) return true;
-    // The theme's own cards always stay; a board group goes when the theme
-    // serves the same screen, scope, level band and screen type.
+    if (!opts.ownedBy) return true;
+    // The theme's own cards always stay.
     if (copies.some(copy => copy.theme === opts.ownedBy)) return true;
+    if (copies.some(copy => copy.readBy?.some(r => drawnEverywhere.has(r.screen)))) return false;
+    if (drawn.size === 0) return true;
+    // A board group goes when the theme serves the same screen, scope, level
+    // band and screen type.
     // In a themed index the board's copy reads `shadowed`, never `resolved`
     // — the theme answered first. A shadowed card is the covered original,
     // so it decides by the same key.
@@ -778,8 +818,19 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
    * and `variantOf` would read it as a level.
    */
   const screenKeyOf = (copies: ScreenFileShape[]): string => {
-    const named = copies.find(c => c.readBy?.some(r => r.screen)) ?? copies[0];
+    const named = copies.find(c => isThemeWidePath(c.relPath))
+      ?? copies.find(c => c.readBy?.some(r => r.screen))
+      ?? copies[0];
     const reader = named.readBy?.find(r => r.screen);
+    /*
+     * A THEME'S ONE MAIN MENU IS ONE CARD: every conference, every level and
+     * every screen type it carries beside it (`MENU250.TXT`, `Menu.txt.GR`)
+     * are versions of that card rather than cards of their own - the sysop's
+     * "one card" ruling, 2026-10-02.
+     */
+    if (isThemeWidePath(named.relPath)) {
+      return ['every-conference', (reader?.screen ?? '').toLowerCase(), named.theme ?? '', named.generated ?? ''].join('|');
+    }
     // A file the index could not place has only its name to go on, and two
     // unplaced files with the same name are the same screen as far as anyone
     // can tell from here.
@@ -883,16 +934,32 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
 
   /** The versions of one screen, the most-read first - that is the one an
    *  edit should change, and the one the card stands for. */
+  /*
+   * The theme's every-conference card leads with its BASE file - `Menu.txt`,
+   * what every caller below the sysop's level is served - and never with
+   * `MENU250.TXT`, which reads the same number of conferences.
+   */
+  const isBaseOfWide = (copies: ScreenFileShape[]): boolean => copies.some(copy => {
+    if (!isThemeWidePath(copy.relPath)) return false;
+    const screen = copy.readBy?.find(r => r.screen)?.screen;
+    return !!screen
+      && screenStem(copy.relPath) === getScreenFileName(screen).toLowerCase()
+      && !/\.(gr|ibm|ans|asc)$/i.test(copy.relPath);
+  });
   const ranked = [...byScreen.values()]
-    .map(versions => [...versions].sort((a, b) => scopesOf(b) - scopesOf(a)))
+    .map(versions => [...versions].sort((a, b) =>
+      Number(isBaseOfWide(b)) - Number(isBaseOfWide(a)) || scopesOf(b) - scopesOf(a)))
     .filter(versions => !supersededByTheTheme(versions));
 
   return ranked
     .map(versions => {
       const copies = versions[0];
       const otherVersions = versions.slice(1);
-      // The copy a screen actually resolves to leads; failing that, the first.
-      const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
+      // The theme's every-conference copy leads (it is what a save writes);
+      // otherwise the copy a screen actually resolves to; failing that, the first.
+      const file = copies.find(c => isThemeWidePath(c.relPath))
+        ?? copies.find(c => c.readBy?.some(r => r.via === 'resolved'))
+        ?? copies[0];
       const bulletin = bulletinTitles.get(file.relPath);
       const reader = file.readBy?.[0];
 

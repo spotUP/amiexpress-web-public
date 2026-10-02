@@ -13,6 +13,7 @@
  */
 
 import type { ScreenIndexShape } from './screen-index-view';
+import { isThemeWidePath } from '@bbs/screens/screen-tables';
 
 export type FanOutChoice =
   | 'this-file'
@@ -44,6 +45,19 @@ export function fanOutOptions(
   screen: string,
   openPath: string,
 ): FanOutOption[] {
+  /*
+   * A THEME'S ONE MAIN MENU IS ONE FILE, and it is the whole write.
+   *
+   * It serves every conference by being the place each one falls back to, so
+   * there are no copies to reach. Every conference resolves to it, and a
+   * conference with its own override resolves there instead - fanning out
+   * along the resolutions wrote the main menu over each override, and the
+   * identical-copies rule over any conference copy still holding the same
+   * template.
+   */
+  const thisFileOnly: FanOutOption = { choice: 'this-file', label: 'this file only', targets: [openPath], suggested: false };
+  if (isThemeWidePath(openPath)) return [thisFileOnly];
+
   // An index without its `screens` list is one a caller built for a narrower
   // question - the studio's dialog holds files and nothing else. It has no
   // resolutions, which is exactly what an empty list means here.
@@ -85,9 +99,7 @@ export function fanOutOptions(
   // The file the sysop opened leads, whatever order the index holds.
   const targets = [openPath, ...resolved.filter(f => f !== openPath && sameConference(f))];
 
-  const options: FanOutOption[] = [
-    { choice: 'this-file', label: 'this file only', targets: [openPath], suggested: false },
-  ];
+  const options: FanOutOption[] = [thisFileOnly];
 
   /*
    * Every file that is byte-identical to this one, wherever it lives.

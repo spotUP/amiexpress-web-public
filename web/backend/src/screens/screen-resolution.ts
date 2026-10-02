@@ -28,7 +28,7 @@ export {
   ScreenDirType,
   SCREEN_DIR_MAP,
 } from './screen-tables';
-import { ScreenDirType, SCREEN_DIR_MAP, getScreenFileName } from './screen-tables';
+import { ScreenDirType, SCREEN_DIR_MAP, THEME_WIDE_DIR, getScreenFileName, isThemeWideScreen } from './screen-tables';
 export { getScreenFileName };
 
 
@@ -349,6 +349,19 @@ export function screenSearchLocations(
     // what confIds() enumerates - not on the directory LOCATION.n names.
     const themed = theme(path.join('Conf', String(opts.confId)), `Conf/${opts.confId}`);
     if (themed) locations.push(themed);
+    /*
+     * THE THEME'S ONE MENU, for every conference it has not drawn on its own.
+     *
+     * After the conference's own theme directory (an override wins) and before
+     * the board's directories, so a theme's main menu covers the board's in
+     * every conference. Only ever a THEME location: `theme()` answers null
+     * without one, so the board's own list is express.e's, unchanged. See
+     * THEME_WIDE_SCREENS for why only MENU.
+     */
+    if (isThemeWideScreen(screenName)) {
+      const wide = theme(THEME_WIDE_DIR, `${THEME_WIDE_DIR} (every conference)`);
+      if (wide) locations.push(wide);
+    }
     locations.push({
       dir: screenDir,
       desc: path.resolve(screenDir) === path.resolve(ownDir)

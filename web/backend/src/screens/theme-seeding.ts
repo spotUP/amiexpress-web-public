@@ -25,7 +25,7 @@ import * as path from 'path';
 import { getScreenIndex } from './screen-index.service';
 import { screenIsProgram } from './screen-blankness';
 import { themeTargetFor, themeTargetForBoardFile } from './theme-target-path';
-import { variantSetFor, type ScreenScope } from './theme-variant-set';
+import { themeScopeOf, variantSetFor } from './theme-variant-set';
 import { themeDirectory, readThemeRegistry } from './theme-registry';
 import type { ThemeEntry } from './theme-registry';
 
@@ -114,7 +114,7 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
         // directory name: this board's nodes share `Screens/Node/`, which the
         // name rule reads as ordinary files and mirrors under `Files/`,
         // writing every node screen twice.
-        const target = themeTargetFor(relative, scopeOf(resolution));
+        const target = themeTargetFor(relative, themeScopeOf(entry.screen, resolution));
         if (!target) continue;
 
         const source = path.join(bbsRoot, relative);
@@ -168,12 +168,6 @@ function isProgramFile(source: string): boolean {
   }
 }
 
-/** The scope one resolution was measured at, as the theme tree names it. */
-function scopeOf(resolution: { scope: 'node' | 'conf' | 'board'; id: number | null }): ScreenScope {
-  if (resolution.scope === 'node') return { kind: 'node' };
-  if (resolution.scope === 'conf') return { kind: 'conf', id: resolution.id ?? 1 };
-  return { kind: 'board' };
-}
 
 /**
  * Where a save made while standing in a theme lands: in that theme, always.

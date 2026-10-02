@@ -13,6 +13,7 @@
 import * as path from 'path';
 
 import type { ScreenIndex } from './screen-index.service';
+import { THEME_WIDE_DIR } from './screen-tables';
 import { screenScopeOf, type ScreenScope } from './theme-variant-set';
 
 /**
@@ -62,6 +63,7 @@ export function themeTargetFor(relativePath: string, scope?: ScreenScope): strin
     const file = parts[parts.length - 1];
     if (scope.kind === 'node') return path.join('Node', file);
     if (scope.kind === 'conf') return path.join('Conf', String(scope.id), file);
+    if (scope.kind === 'conferences') return path.join(THEME_WIDE_DIR, file);
     return path.join('Board', file);
   }
 

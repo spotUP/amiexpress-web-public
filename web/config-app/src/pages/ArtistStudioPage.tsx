@@ -131,7 +131,7 @@ export function ArtistStudioPage() {
   const todoItems = useMemo(
     () => undrawn.map(slot => ({
       path: slot.path,
-      label: slot.screen + (slot.conference ? ` - conference ${slot.conference}` : ''),
+      label: slot.label ?? slot.screen + (slot.conference ? ` - conference ${slot.conference}` : ''),
       detail: slot.description || 'Not drawn yet',
       placeholder: true,
       badge: { label: 'Not drawn yet', kind: 'todo' as const },
