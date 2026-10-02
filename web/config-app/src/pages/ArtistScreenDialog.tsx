@@ -72,6 +72,16 @@ export interface ArtistScreenDialogProps {
    */
   onSwitchTheme?: (slug: string) => void;
   /**
+   * The themes `onSwitchTheme` can actually land on; omitted means any.
+   *
+   * An artist stands only in their own themes ("sysops should have full
+   * rights artists should only see their own themes"), so the studio's
+   * switch ignores `default` for them - and "Switch to Board screens" was a
+   * button that did nothing (artist in 607080, 2026-10-02). A switch the page
+   * cannot make is not offered.
+   */
+  switchableThemes?: readonly string[];
+  /**
    * A SYSOP MAY WRITE ANYTHING (sysop's ruling, 2026-09-15: "sysops should
    * have full rights artists should only see their own themes").
    *
@@ -105,7 +115,7 @@ interface GlobalDeletePlan {
   loginStep: { screen: string; label: string } | null;
 }
 
-export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, onSwitchTheme, sysop = false, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
+export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, onSwitchTheme, switchableThemes, sysop = false, isNew = false, newDescription, auditing }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -882,7 +892,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
             <span className="text-content-primary">{theme.slug === 'default' ? 'Board screens' : theme.slug}</span>
             {'. That is why there is nothing here to save or replace.'}
           </p>
-          {onSwitchTheme && (
+          {onSwitchTheme && (!switchableThemes || switchableThemes.includes(ownerSlug)) && (
             <button
               type="button"
               className="btn-small btn-secondary mt-1"

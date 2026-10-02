@@ -19,7 +19,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
-  resolveNodeScreenDir, screenSearchLocations, isScreenFile,
+  resolveNodeScreenDir, screenSearchLocations, isScreenFile, themedPath,
 } from './screen-resolution';
 import { BOARD_WRITTEN_NAME } from './screen-tables';
 import {
@@ -1417,9 +1417,26 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
         // (screen.handler.ts:851, express.e:5533-5554). There is no single file
         // to resolve, so every one of them used to be read by nothing while the
         // board showed them daily.
-        const targets = ref.code === 'SR'
+        const boardTargets = ref.code === 'SR'
           ? numberedPool(baseDir, ref.target)
           : [resolveScreenReference(baseDir, ref.target)].filter((t): t is string => !!t);
+        /*
+         * THROUGH THE THEME'S `Files/` MIRROR, the way the loader reads them.
+         *
+         * `loadScreenFile` offers `themedPath(candidate)` before every by-path
+         * candidate (screen.handler.ts, the `pathCandidates` block), so a
+         * caller wearing the theme is served `Themes/<slug>/Files/Screens/
+         * logoff/001.logoff.txt` where the board names `Screens/logoff/
+         * 001.logoff.txt`. This walk resolved against the board alone, so in
+         * the theme's own index the artist's upload was read by nothing - the
+         * studio hid it and kept offering the board's copy as "not redrawn
+         * yet" (artist in 607080, 2026-10-02). Same mapping, same answer.
+         */
+        const targets = boardTargets.flatMap(target => {
+          const mirror = themedPath(baseDir, themeSlug, target);
+          const onDisk = mirror ? amigafs.resolvePath(mirror) : null;
+          return onDisk ? [onDisk, target] : [target];
+        });
         for (const target of targets) {
           // The ON-DISK spelling, not the reference's. `~SS_BBS:screens/logo.txt`
           // names a directory this board spells `Screens/`; on a case-folding

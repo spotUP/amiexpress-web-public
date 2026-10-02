@@ -34,6 +34,8 @@ const SCOPE_LABEL = {
 
 export function ArtistStudioPage() {
   const { theme, choices, select, isPreparing, error, auditing, sysop } = useMyTheme();
+  /** Where `select` can land: it ignores any slug that is not one of these. */
+  const switchable = choices.map(entry => entry.slug);
 
   /*
    * WHO COULD OWN A THEME AND DOES NOT YET.
@@ -284,6 +286,7 @@ export function ArtistStudioPage() {
         onClose={() => setOpenPath(null)}
         onOpenPath={setOpenPath}
         onSwitchTheme={select}
+        switchableThemes={switchable}
         sysop={sysop}
         auditing={auditing}
       />

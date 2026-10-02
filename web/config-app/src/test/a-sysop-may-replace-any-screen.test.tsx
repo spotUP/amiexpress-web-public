@@ -116,4 +116,22 @@ describe('an artist standing in their own theme, looking at a board screen', () 
     button.click();
     expect(onSwitchTheme).toHaveBeenCalledWith('default');
   });
+
+  /*
+   * Artist in 607080, 2026-10-02: "Switch to Board screens" did nothing. The
+   * studio's switch only lands on the artist's own themes, so the button was
+   * a dead end that looked like a way out.
+   */
+  it('is not offered a switch to the board when the page cannot make it', async () => {
+    const onSwitchTheme = vi.fn();
+    render(
+      <ArtistScreenDialog path={boardScreen} theme={standingIn} index={index}
+        onClose={vi.fn()} onOpenPath={vi.fn()} onSwitchTheme={onSwitchTheme}
+        switchableThemes={[standingIn.slug]} />,
+      { wrapper },
+    );
+
+    await screen.findByText(/nothing here to save or replace/);
+    expect(screen.queryByText('Switch to Board screens')).toBeNull();
+  });
 });
