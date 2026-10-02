@@ -138,8 +138,15 @@ export function charToCP437Byte(char: string): number {
  * conversion is the identity.
  */
 export function latin1ByteToChar(byte: number): string {
-  return String.fromCharCode(byte & 0xff);
+  const b = byte & 0xff;
+  // Topaz draws a checkerboard at 0x7F (DEL), and artists build dither rows
+  // from it; a terminal draws nothing for DEL. Read as the medium shade -
+  // the board does the same (amiga-text-decode amigaGlyphs).
+  return b === 0x7f ? AMIGA_CHECKER : String.fromCharCode(b);
 }
+
+/** The Amiga's 0x7F glyph, as the character a modern terminal draws for it. */
+export const AMIGA_CHECKER = '\u2592';
 
 /**
  * Which of the two a piece is drawn in, from its SAUCE font name.
@@ -150,6 +157,55 @@ export function latin1ByteToChar(byte: number): string {
  */
 export function isAmigaFont(fontName: string | undefined): boolean {
   return /^amiga/i.test((fontName || '').trim());
+}
+
+/**
+ * Whether a screen's bytes are Amiga (Latin-1) art - THE rule, for the board
+ * and the screen editor alike.
+ *
+ * A SAUCE record names the font, and the font decides (isAmigaFont). With no
+ * record, a `.ans` - or bytes with no file name at all - is PC art. A named
+ * screen with no record - most of this board's screens - is weighed by its
+ * bytes: CP437's box-drawing and block
+ * bytes against Latin-1's fractions, accented letters and symbols, Latin-1
+ * unless CP437 clearly wins.
+ *
+ * The board read unstamped screens with this weighing and the editor read them
+ * as CP437, so an Amiga theme's macron (0xAF, the overline its logos pair with
+ * `_`) was `¯` to a caller and `»` in the editor - "upperscore blir ett >>
+ * tecken i vissa av skärmarna" (GOTO8O, 2026-10-01). One function, so the two
+ * cannot read a file differently again.
+ */
+export function isAmigaText(
+  bytes: Uint8Array,
+  sauce?: { tInfoS?: string } | null,
+  fileName?: string,
+): boolean {
+  if (sauce) return isAmigaFont(sauce.tInfoS);
+  // Art of unknown origin (no record, no name - a door's own .ans asset) is
+  // PC art, as it always was; a `.ans` is PC art by its name.
+  if (!fileName || /\.ans$/i.test(fileName)) return false;
+
+  let cp437Score = 0;
+  let latin1Score = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i];
+    // An escape sequence says nothing about the character set.
+    if (byte === 0x1b && i + 1 < bytes.length && bytes[i + 1] === 0x5b) {
+      while (i < bytes.length && !'mHJKABCD'.includes(String.fromCharCode(bytes[i]))) i++;
+      continue;
+    }
+    // CP437 box drawing and blocks (not 0xBC-0xBE, Latin-1's fractions).
+    if (byte >= 0xb3 && byte <= 0xda && byte !== 0xbc && byte !== 0xbd && byte !== 0xbe) cp437Score += 3;
+    if (byte >= 0xb0 && byte <= 0xb2) cp437Score += 2;
+    if (byte >= 0xdb && byte <= 0xdf) cp437Score += 3;
+    // Latin-1's fractions (common in Amiga art), accented letters, and the
+    // symbols CP437 art rarely uses.
+    if (byte === 0xbc || byte === 0xbd || byte === 0xbe) latin1Score += 3;
+    if (byte >= 0xe0) latin1Score += 1;
+    if (byte === 0xa9 || byte === 0xae || byte === 0xb7) latin1Score += 2;
+  }
+  return !(cp437Score >= 10 && cp437Score > latin1Score * 2);
 }
 
 /** The byte-to-character conversion a piece in this font needs. */
@@ -169,12 +225,16 @@ export function decoderForFont(fontName: string | undefined): (byte: number) => 
  * reader draws right (h7's logoff screen, sysop 2026-09-30).
  */
 export function encodeForFont(text: string, fontName: string | undefined): Uint8Array {
-  if (!isAmigaFont(fontName)) return encodeCP437(text);
+  return isAmigaFont(fontName) ? encodeLatin1Art(text) : encodeCP437(text);
+}
+
+/** Amiga art back to its bytes: Latin-1, the medium shade as Topaz's 0x7F. */
+export function encodeLatin1Art(text: string): Uint8Array {
   const chars = Array.from(text);
   const out = new Uint8Array(chars.length);
   for (let i = 0; i < chars.length; i++) {
     const code = chars[i].codePointAt(0) ?? 0x20;
-    out[i] = code <= 0xff ? code : 0x20;
+    out[i] = code === 0x2592 ? 0x7f : code <= 0xff ? code : 0x20;
   }
   return out;
 }

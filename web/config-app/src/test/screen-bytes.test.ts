@@ -44,7 +44,9 @@ describe('a screen becoming cells', () => {
   });
 
   it('a CP437 block is the block character, not a mojibake pair', async () => {
-    const canvas = await screenToCanvas(bytesToBase64(new Uint8Array([0xdb])));
+    // A lone high byte is not enough to call a file PC art (SDK isAmigaText,
+    // the board's rule); a .ans is PC art by its name.
+    const canvas = await screenToCanvas(bytesToBase64(new Uint8Array([0xdb])), undefined, 'art.ans');
 
     expect(canvas[0][0].char).toBe('█');
   });
@@ -52,7 +54,9 @@ describe('a screen becoming cells', () => {
 
 describe('cells becoming a screen again', () => {
   it('a block written back is byte 0xDB, the way the board stores it', async () => {
-    const canvas = await screenToCanvas(bytesToBase64(new Uint8Array([0xdb])));
+    // A lone high byte is not enough to call a file PC art (SDK isAmigaText,
+    // the board's rule); a .ans is PC art by its name.
+    const canvas = await screenToCanvas(bytesToBase64(new Uint8Array([0xdb])), undefined, 'art.ans');
 
     expect(base64ToBytes(canvasToScreen(canvas))).toContain(0xdb);
   });

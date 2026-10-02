@@ -64,8 +64,8 @@ export function firstRows(bytes: Uint8Array, rows: number): Uint8Array {
  *                screen runs sit below its art, and an editor that cannot see
  *                them deletes them on save.
  */
-export async function screenToCanvas(base64: string, maxRows?: number): Promise<Cell[][]> {
-  return (await screenToArt(base64, maxRows)).canvas;
+export async function screenToCanvas(base64: string, maxRows?: number, fileName?: string): Promise<Cell[][]> {
+  return (await screenToArt(base64, maxRows, fileName)).canvas;
 }
 
 /**
@@ -74,10 +74,21 @@ export async function screenToCanvas(base64: string, maxRows?: number): Promise<
  * Amiga (Topaz) piece is Latin-1, anything else CP437 - and it carries the
  * artist's name and flags, which a save without it throws away.
  */
-export async function screenToArt(base64: string, maxRows?: number): Promise<{ canvas: Cell[][]; sauce?: SAUCERecord }> {
+export async function screenToArt(
+  base64: string,
+  maxRows?: number,
+  fileName?: string,
+): Promise<{ canvas: Cell[][]; sauce?: SAUCERecord; amiga?: boolean }> {
   const bytes = base64ToBytes(base64);
-  const { canvas, sauce } = await loadANSFile(maxRows ? firstRows(bytes, maxRows) : bytes);
-  return { canvas, sauce };
+  // The character set by the board's own rule (SDK isAmigaText), decided on
+  // the whole file even when only the first rows are drawn.
+  const { canvas, sauce } = await loadANSFile(maxRows ? firstRows(bytes, maxRows) : bytes, { fileName });
+  const { amiga } = await loadANSFile(bytes, { fileName });
+  // A plain-ASCII file reads the same either way and says nothing about which
+  // it is; the save then writes what was drawn as before (CP437 unless SAUCE
+  // names an Amiga font), so a block brushed onto it stays a block.
+  const decided = sauce !== undefined || bytes.some(b => b >= 0x7f);
+  return { canvas, sauce, amiga: decided ? amiga : undefined };
 }
 
 /**
@@ -99,8 +110,8 @@ export function inkedHeight(canvas: Cell[][]): number {
   return height;
 }
 
-export function canvasToScreen(canvas: Cell[][], sauce?: SAUCERecord): string {
-  return bytesToBase64(saveANSFile(canvas.slice(0, inkedHeight(canvas)), false, sauce));
+export function canvasToScreen(canvas: Cell[][], sauce?: SAUCERecord, amiga?: boolean): string {
+  return bytesToBase64(saveANSFile(canvas.slice(0, inkedHeight(canvas)), false, sauce, amiga));
 }
 
 /**

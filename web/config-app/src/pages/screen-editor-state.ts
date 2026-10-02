@@ -39,11 +39,13 @@ export interface EditorSurface {
   state: EditorState;
   /** The cell a stroke started on, while the pointer is still down. */
   pending: { x: number; y: number } | null;
-  /** The opened file's SAUCE record: its font decides the save's character set. */
+  /** The opened file's SAUCE record: the artist's name and flags, kept on save. */
   sauce?: SAUCERecord;
+  /** The character set the file was read in (SDK isAmigaText), written back on save. */
+  amiga?: boolean;
 }
 
-export function createSurface(canvas: Cell[][], sauce?: SAUCERecord): EditorSurface {
+export function createSurface(canvas: Cell[][], sauce?: SAUCERecord, amiga?: boolean): EditorSurface {
   const state = new EditorState();
   // The SDK draws in place, so the state gets a copy: the array the caller
   // handed over stays exactly as it was, and so does every surface already
@@ -65,6 +67,7 @@ export function createSurface(canvas: Cell[][], sauce?: SAUCERecord): EditorSurf
     state,
     pending: null,
     sauce,
+    amiga,
   };
 }
 

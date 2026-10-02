@@ -4,7 +4,8 @@
  */
 
 import {
-  decodeCP437, encodeCP437, decoderForFont, encodeForFont,
+  decodeCP437, encodeCP437,
+  isAmigaText, isAmigaFont, latin1ByteToChar, cp437ByteToChar, encodeLatin1Art,
 } from './cp437';
 import type { Cell } from '../types';
 import * as Canvas from './canvas';
@@ -142,7 +143,10 @@ function writeString(data: Uint8Array, offset: number, str: string, maxLength: n
 /**
  * Load .ANS (ANSI art) file
  */
-export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][], width: number, height: number, sauce?: SAUCERecord }> {
+export async function loadANSFile(
+  data: Uint8Array,
+  opts: { fileName?: string } = {},
+): Promise<{ canvas: Cell[][], width: number, height: number, sauce?: SAUCERecord, amiga: boolean }> {
   // Parse SAUCE record (if present)
   const sauce = parseSAUCE(data) || undefined;
 
@@ -179,10 +183,13 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   // Parse ANSI content
   const width = sauce?.tInfo1 || 80;
 
-  // Amiga art is Latin-1, not CP437 (see decoderForFont). Eleven of the
+  // Amiga art is Latin-1, not CP437 (see isAmigaText). Eleven of the
   // sixteen Super Qix backgrounds are Amiga pieces, and every one of them
   // came out as box-drawing before this.
-  const byteToChar = decoderForFont(sauce?.tInfoS);
+  // Which of the two, by the rule the board reads the same file with
+  // (isAmigaText): an unstamped Amiga screen is Latin-1 here too.
+  const amiga = isAmigaText(content, sauce, opts.fileName);
+  const byteToChar = amiga ? latin1ByteToChar : cp437ByteToChar;
 
   /*
    * SAUCE's row count is a HINT, not a limit - the same lesson as its
@@ -408,13 +415,19 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
     }
   }
 
-  return { canvas, width, height, sauce };
+  return { canvas, width, height, sauce, amiga };
 }
 
 /**
  * Save .ANS (ANSI art) file
  */
-export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?: Partial<SAUCERecord>): Uint8Array {
+export function saveANSFile(
+  canvas: Cell[][],
+  iceColors: boolean = false,
+  sauce?: Partial<SAUCERecord>,
+  /** The character set the file was read in (loadANSFile's `amiga`); absent, the SAUCE font decides. */
+  amiga?: boolean,
+): Uint8Array {
   const height = canvas.length;
   const width = canvas[0]?.length || 0;
 
@@ -477,10 +490,10 @@ export function saveANSFile(canvas: Cell[][], iceColors: boolean = false, sauce?
   ansiContent += '\x1B[0m';
 
   // Encode in the character set the art is drawn in - the one its SAUCE font
-  // names, as loadANSFile decoded it (decoderForFont): CP437, or Latin-1 for
+  // names, as loadANSFile decoded it (isAmigaText): CP437, or Latin-1 for
   // Amiga art. TextEncoder would write UTF-8 here, turning each block glyph
   // into three bytes and shifting every column after it.
-  const contentData = encodeForFont(ansiContent, sauce?.tInfoS);
+  const contentData = (amiga ?? isAmigaFont(sauce?.tInfoS)) ? encodeLatin1Art(ansiContent) : encodeCP437(ansiContent);
 
   /**
    * A file that USES iCE colours has to SAY it uses them.

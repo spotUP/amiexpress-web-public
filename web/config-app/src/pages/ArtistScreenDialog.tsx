@@ -222,8 +222,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       return;
     }
     let live = true;
-    screenToArt(file.content)
-      .then(({ canvas, sauce }) => { if (live) setEditing(createSurface(canvas, sauce)); })
+    screenToArt(file.content, undefined, path ?? undefined)
+      .then(({ canvas, sauce, amiga }) => { if (live) setEditing(createSurface(canvas, sauce, amiga)); })
       // A screen the browser cannot decode is a screen, not a crash: say so
       // and leave the artist their way out. Without the catch this was an
       // unhandled rejection and a dialog that stayed blank for ever.
@@ -1412,11 +1412,11 @@ function ReadOnlyArt(
   useEffect(() => {
     let live = true;
     setFailed(false);
-    screenToCanvas(content)
+    screenToCanvas(content, undefined, filePath ?? undefined)
       .then(canvas => { if (live) setSurface(createSurface(canvas)); })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
-  }, [content]);
+  }, [content, filePath]);
 
   if (failed) return <p className="text-sm text-status-warn">These bytes cannot be read as ANSI art.</p>;
   if (!surface) return <SkeletonRows rows={3} />;

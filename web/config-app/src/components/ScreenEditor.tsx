@@ -933,7 +933,7 @@ export function ScreenEditor({
             </button>
             <button type="button" className="btn-small btn-primary"
               disabled={saving}
-              onClick={() => onSave?.(canvasToScreen(surface.canvas, surface.sauce))}>
+              onClick={() => onSave?.(canvasToScreen(surface.canvas, surface.sauce, surface.amiga))}>
               <Save size={14} /> {saving ? 'Saving…' : 'Save'}
             </button>
           </>

@@ -18,7 +18,7 @@
  * so they all funnel through the functions here.
  */
 
-import { isAmigaFont } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/cp437';
+import { isAmigaText } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/cp437';
 import * as path from "path";
 import { fileCache } from "./file-cache.util";
 
@@ -134,60 +134,14 @@ export function detectEncoding(
    * admin drew correctly, wrong on the board, reported with a screenshot of
    * each.
    *
-   * The rule is the SDK's isAmigaFont, so the board and the manager cannot
-   * disagree about a file: a font name beginning "Amiga" is Latin-1, and
-   * everything else - the IBM VGA family, or no name at all - is CP437.
+   * The rule is the SDK's isAmigaText, which the screen editor reads files
+   * with too, so the board and the manager cannot disagree about a file.
    */
-  if (sauceInfo.hasSauce) {
-    return isAmigaFont(sauceInfo.fontName) ? "iso-8859-1" : "cp437";
-  }
-
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".ans") return "cp437";
-
-  let cp437Score = 0;
-  let latin1Score = 0;
-
-  for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i];
-
-    // Skip ANSI escape sequences (their bytes don't tell us anything about charset)
-    if (byte === 0x1b && i + 1 < buffer.length && buffer[i + 1] === 0x5b) {
-      while (
-        i < buffer.length &&
-        buffer[i] !== 0x6d &&
-        buffer[i] !== 0x48 &&
-        buffer[i] !== 0x4a &&
-        buffer[i] !== 0x4b &&
-        buffer[i] !== 0x41 &&
-        buffer[i] !== 0x42 &&
-        buffer[i] !== 0x43 &&
-        buffer[i] !== 0x44
-      ) {
-        i++;
-      }
-      continue;
-    }
-
-    // CP437 box-drawing & block (excluding ¼½¾ which collide with Latin-1)
-    if (byte >= 0xb3 && byte <= 0xda && byte !== 0xbc && byte !== 0xbd && byte !== 0xbe) {
-      cp437Score += 3;
-    }
-    // CP437 shading
-    if (byte >= 0xb0 && byte <= 0xb2) cp437Score += 2;
-    // CP437 block elements
-    if (byte >= 0xdb && byte <= 0xdf) cp437Score += 3;
-
-    // Latin-1 fractions (very common in Amiga ANSI art)
-    if (byte === 0xbc || byte === 0xbd || byte === 0xbe) latin1Score += 3;
-    // Latin-1 accented letters
-    if (byte >= 0xe0 && byte <= 0xff) latin1Score += 1;
-    // Latin-1 specific symbols rare in CP437 art: ©, ®, ·
-    if (byte === 0xa9 || byte === 0xae || byte === 0xb7) latin1Score += 2;
-  }
-
-  if (cp437Score >= 10 && cp437Score > latin1Score * 2) return "cp437";
-  return "iso-8859-1";
+  return isAmigaText(
+    buffer,
+    sauceInfo.hasSauce ? { tInfoS: sauceInfo.fontName } : null,
+    filePath,
+  ) ? "iso-8859-1" : "cp437";
 }
 
 /**
