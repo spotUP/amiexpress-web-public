@@ -227,3 +227,14 @@ test("the artist's own notes are not judged as art", () => {
 
   expect(report.blocking).toEqual([]);
 });
+
+test('a screen whose codes would print as text says so, not "a problem the board could not describe"', () => {
+  // A bulletin that includes another screen but has no ~ on its first line:
+  // the MCI gate is closed, so a caller is shown the code itself. The gate
+  // refused h7 over exactly this with no word of why (2026-10-02).
+  const report = validateTheme(root, theme({ 'Conf/1/bull20.txt': 'Hello\r\n~SS_BBS:Screens/x.txt\r\n' }));
+
+  const finding = report.blocking.find(f => f.file.endsWith('bull20.txt'));
+  expect(finding?.message).toMatch(/first line does not start with ~/);
+  expect(report.blocking.map(f => f.message).join('\n')).not.toMatch(/could not describe/);
+});

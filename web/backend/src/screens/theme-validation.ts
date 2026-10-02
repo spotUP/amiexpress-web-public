@@ -27,6 +27,7 @@ import {
   getScreenIndex,
   screenFileFacts,
   type ScopeResolution,
+  type ScreenProblem,
 } from './screen-index.service';
 import { getScreenFileName } from './screen-resolution';
 import { SCREEN_DIR_MAP, SCREEN_EXTENSIONS, ScreenDirType, THEME_WIDE_DIR, isScreenFile, isThemeWideScreen } from './screen-tables';
@@ -136,7 +137,13 @@ function looksLikeAnOldCopy(name: string): boolean {
 }
 
 /** What each problem means to a caller, in the sysop's terms. */
-const PROBLEM_MESSAGE: Record<string, string> = {
+/*
+ * Keyed by EVERY problem the index can report, so a new one fails to compile
+ * here instead of reaching the sysop as "a problem the board could not
+ * describe" - which is what `codes-print-as-text` did, blocking h7's
+ * bulletins with no word of why (2026-10-02).
+ */
+const PROBLEM_MESSAGE: Record<ScreenProblem, string> = {
   empty: 'is empty - a caller wearing this theme would be shown a blank screen',
   'colour-codes-without-escape':
     'holds colour codes with the escape byte missing, so a caller sees the codes printed instead of the colour. Repair it in the screen editor.',
@@ -144,14 +151,17 @@ const PROBLEM_MESSAGE: Record<string, string> = {
     'is drawn in the C64 graphics bank; this board shows the lowercase one. It is served exactly as drawn - redraw it in the editor to follow the rule.',
   'petscii-non-black-background':
     'asks the C64 for a background colour; this board runs on a black screen. It is served exactly as drawn.',
+  'codes-print-as-text':
+    'includes another screen or runs something, but its first line does not start with ~ - so the board does not run its codes and a caller sees them printed as text. Put a line with just ~ at the top.',
 };
 
 /** Which problems stop a theme going live. The C64 rules report, they do not refuse. */
-const PROBLEM_SEVERITY: Record<string, ThemeFinding['severity']> = {
+const PROBLEM_SEVERITY: Record<ScreenProblem, ThemeFinding['severity']> = {
   empty: 'blocking',
   'colour-codes-without-escape': 'blocking',
   'petscii-graphics-bank': 'advisory',
   'petscii-non-black-background': 'advisory',
+  'codes-print-as-text': 'blocking',
 };
 
 export function fileFindings(baseDir: string, themeRoot: string, rel: string): ThemeFinding[] {
@@ -205,9 +215,9 @@ export function fileFindings(baseDir: string, themeRoot: string, rel: string): T
   for (const problem of facts.problems) {
     findings.push({
       rule: 'file-problem',
-      severity: PROBLEM_SEVERITY[problem] ?? 'blocking',
+      severity: PROBLEM_SEVERITY[problem],
       file: rel,
-      message: `${rel} ${PROBLEM_MESSAGE[problem] ?? 'has a problem the board could not describe'}`,
+      message: `${rel} ${PROBLEM_MESSAGE[problem]}`,
     });
   }
 
