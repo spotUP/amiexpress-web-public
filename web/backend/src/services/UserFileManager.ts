@@ -16,7 +16,7 @@ import { User } from '../database';
  * E language struct: axobjects.e:11-68
  * SIZEOF user = 239 bytes
  */
-interface UserFileStruct {
+export interface UserFileStruct {
   name: string;                    // [31] CHAR
   pass: string;                    // [9] CHAR
   location: string;                // [30] CHAR
@@ -78,7 +78,7 @@ interface UserFileStruct {
  * E language struct: axobjects.e:70-81
  * SIZEOF userKeys = 54 bytes
  */
-interface UserKeysFileStruct {
+export interface UserKeysFileStruct {
   userName: string;                // [31] CHAR
   number: number;                  // LONG
   newUser: number;                 // CHAR
@@ -267,6 +267,22 @@ export class UserFileManager {
       ipMask: 0,
       unused: Buffer.alloc(86),
     };
+  }
+
+  /**
+   * The user struct exactly as express.e writes it for a logged-on caller -
+   * `Write(fh,loggedOnUser,SIZEOF user)` into node<n>.user (2935-2950) - and
+   * its user.keys record. One serializer for user.data and the node files: a
+   * second one, with its own layout, wrote node.user 240 bytes long, and the
+   * stats door that reads it (zOOsTAT) showed conference #0, 3932160
+   * minutes and no time left (GOTO8O, relayed 2026-10-02).
+   */
+  public userRecord(user: User, slotNumber: number): Buffer {
+    return this.serializeUserStruct(this.userToFileStruct(user, slotNumber));
+  }
+
+  public userKeysRecord(user: User, slotNumber: number): Buffer {
+    return this.serializeUserKeysStruct(this.userToKeysStruct(user, slotNumber));
   }
 
   /**

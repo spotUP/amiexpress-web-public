@@ -31,6 +31,9 @@ const user = (username: string): any => ({
   password: '',
   secLevel: 10,
   timesOn: 1,
+  // A logged-on User from the database carries its account date; the node
+  // file is the user struct, which holds it (UserFileManager.userRecord).
+  created: new Date(0),
 });
 
 beforeEach(() => {
