@@ -20,6 +20,11 @@
  */
 
 const express = require('express');
+
+/** The sysop token the BBS's door reload asks for (BBS_SYSOP_TOKEN), if set. */
+function sysopAuthHeader() {
+  return process.env.BBS_SYSOP_TOKEN ? { Authorization: `Bearer ${process.env.BBS_SYSOP_TOKEN}` } : {};
+}
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
@@ -124,16 +129,18 @@ async function installDoorToBBS(doorId) {
 
     // Reload BBS command cache via API
     try {
+      // /api/doors/reload needs a sysop login since 2dbc8458a: pass a sysop's
+      // access token in BBS_SYSOP_TOKEN (copy it from the admin's local storage).
       const response = await fetch('http://localhost:3001/api/doors/reload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...sysopAuthHeader() }
       });
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✓ BBS commands reloaded: ${result.message}`);
+        console.log(`[OK] BBS commands reloaded: ${result.message}`);
       } else {
-        console.warn(`[WARNING]  Failed to reload BBS commands: ${response.statusText}`);
+        console.warn(`[WARNING]  Failed to reload BBS commands: ${response.statusText}${response.status === 401 ? ' - set BBS_SYSOP_TOKEN to a sysop access token' : ''}`);
       }
     } catch (err) {
       console.warn(`[WARNING]  Could not reload BBS commands (is BBS running?): ${err.message}`);
@@ -1587,7 +1594,7 @@ app.post('/api/doors/:doorId/install', async (req, res) => {
     console.log(`[OK] Door installed to BBS: ${doorId}`);
 
     // Hot-reload doors in BBS backend without restart
-    console.log(`🔄 Hot-reloading BBS doors...`);
+    console.log(`[INFO] Hot-reloading BBS doors...`);
     try {
       const reloadResult = await new Promise((resolve, reject) => {
         const postData = JSON.stringify({});
@@ -1598,7 +1605,8 @@ app.post('/api/doors/:doorId/install', async (req, res) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData)
+            'Content-Length': Buffer.byteLength(postData),
+            ...sysopAuthHeader()
           }
         };
 
