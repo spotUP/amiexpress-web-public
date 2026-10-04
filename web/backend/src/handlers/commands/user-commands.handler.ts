@@ -522,13 +522,35 @@ export function startZmodemDownload(
    * per-file - the closest fidelity the transport offers.
    */
   onFinished?: (ok: boolean) => Promise<void> | void,
+  /**
+   * transferOnly: express.e downloadFiles(..,updateDownloadStats=FALSE) for
+   * downloadFile (14957) - the transfer alone. Its caller (a message's
+   * attached files, checkAttachedFile 9746) carries on where it was when the
+   * transfer ends, so nothing here moves the caller to the menu, prints the
+   * post-download block or clears the flagged list; the state the caller
+   * was in is handed back and onFinished always runs.
+   */
+  opts: { transferOnly?: boolean } = {},
 ): void {
   const ctxId = `zd-${session.nodeId || 0}-${Date.now()}`;
   console.log(`[ZMODEM-DL ${ctxId}] startZmodemDownload entry files=${JSON.stringify(files)}`);
 
+  const transferOnly = !!opts.transferOnly;
+  const stateBefore = session.subState;
+  /** transferOnly: the caller's state back, and its continuation told. */
+  const handBack = async (ok: boolean): Promise<void> => {
+    session.subState = stateBefore;
+    try {
+      await onFinished?.(ok);
+    } catch (err) {
+      console.error(`[ZMODEM-DL ${ctxId}] onFinished failed:`, err);
+    }
+  };
+
   if (!files || files.length === 0) {
     console.log(`[ZMODEM-DL ${ctxId}] no files, aborting`);
     socket.emit('ansi-output', '\r\nNo files available for download.\r\n');
+    if (transferOnly) { void handBack(false); return; }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -548,6 +570,7 @@ export function startZmodemDownload(
   if (missing.length > 0) {
     console.warn(`[ZMODEM-DL ${ctxId}] missing files: ${JSON.stringify(missing)}`);
     socket.emit('ansi-output', `\r\nDownload error — files not found: ${missing.map((p) => path.basename(p)).join(', ')}\r\n`);
+    if (transferOnly) { void handBack(false); return; }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -603,6 +626,7 @@ export function startZmodemDownload(
     negotiateBinaryForTransfer(session);
     protocolManager.on('complete', async (result: TransferResult) => {
       endRawTransfer(session);
+      if (transferOnly) { await handBack(!!result?.success); return; }
       // The same post-download pipeline ZMODEM runs: stats booked, logs
       // written, the prompt drawn. This branch printed its own line and
       // set DISPLAY_MENU, so an XMODEM or Punter download booked nothing and
@@ -626,6 +650,7 @@ export function startZmodemDownload(
     void protocolManager.start().catch((err: any) => {
       console.error('[TRANSFER] protocol transfer failed to start:', err);
       socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+      if (transferOnly) { void handBack(false); return; }
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       (session as any).menuPause = true;
     });
@@ -648,6 +673,7 @@ export function startZmodemDownload(
         onComplete: async (ok: boolean, detail: any) => {
           endRawTransfer(session);
           console.log(`[ZMODEM-DL ${ctxId}] lrzsz onComplete ok=${ok} exit=${detail.exitCode} signal=${detail.signal}`);
+          if (transferOnly) { await handBack(ok); return; }
           // Book the download now that it is known to have happened, not
           // when it was merely intended. express.e:15437's `IF sentsize`.
           try {
@@ -727,6 +753,7 @@ export function startZmodemDownload(
     onComplete: async (ok, detail) => {
       endRawTransfer(session);
       console.log(`[ZMODEM-DL ${ctxId}] onComplete ok=${ok} sent=${JSON.stringify(detail?.sent || [])}`);
+      if (transferOnly) { await handBack(ok); return; }
       // express.e:20249 clearFlagItems — see comment in lrzsz onComplete
       // above; same clear applies to the zmodem.js fallback path.
       if (ok && session.user?.id) {

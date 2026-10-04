@@ -20,6 +20,7 @@ import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { getStorageContext } from '../../storage/storage-context';
 import { rematerialise, storageFailureText } from '../../storage/remote-download';
+import { issueDownloadTicket } from './download-ticket';
 
 /**
  * What actually happened to the caller's files.
@@ -45,6 +46,12 @@ export interface DeliverableFile {
   confNum?: number;
   areaId?: number;
   dirNum?: number;
+  /**
+   * The file is not in a file area (a message's attached file): the browser
+   * fetches it through a one-time ticket for its path (download-ticket.ts)
+   * instead of the file-area route, which would not find it.
+   */
+  outsideFileAreas?: boolean;
 }
 
 export interface DeliverOptions {
@@ -59,6 +66,13 @@ export interface DeliverOptions {
    * and are gone, so it books at handoff as before.
    */
   onTransferFinished?: (ok: boolean) => Promise<void> | void;
+  /**
+   * express.e downloadFiles(list, NIL, updateDownloadStats=FALSE) as
+   * downloadFile (14957) calls it: the transfer and nothing after it - no
+   * "File transfer Completed." block, no statistics, the flagged list left
+   * alone, and the caller's state handed back when the transfer ends.
+   */
+  transferOnly?: boolean;
 }
 
 /** The name a file goes by, whichever of the two shapes it arrived in. */
@@ -170,7 +184,7 @@ console.error('[Download] re-fetch before transfer failed:', error);
       return 'refused';
     }
 
-    startZmodemDownload(socket, session, paths, opts.onTransferFinished);
+    startZmodemDownload(socket, session, paths, opts.onTransferFinished, { transferOnly: !!opts.transferOnly });
     return 'zmodem';
   }
 
@@ -180,14 +194,50 @@ console.error('[Download] re-fetch before transfer failed:', error);
     const name = fileNameOf(file);
     const confNum = file.confNum ?? file.areaId ?? (session as any)?.currentConf ?? 1;
     const dirNum = file.dirNum ?? 1;
+    const hostPath = filePathOf(file);
     socket.emit('download-file', {
       filename: name,
       size: file.size,
-      url: `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}`,
+      url: file.outsideFileAreas && hostPath
+        ? issueDownloadTicket(hostPath)
+        : `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}`,
       path: filePathOf(file),
       batchIndex: index,
       batchTotal: files.length,
     });
   });
   return 'http';
+}
+
+/**
+ * express.e downloadFile (14957-14988): the files at these paths go to the
+ * caller - downloadFiles(templist, NIL, FALSE) - and this returns when the
+ * transfer is over, as the E procedure does. Nothing is booked
+ * (updateDownloadStats is FALSE). The browser's fetch reports no end, so
+ * for it the hand-off is the end.
+ */
+export async function downloadFile(
+  socket: Socket,
+  session: BBSSession,
+  hostPaths: string[],
+): Promise<DeliveryRoute> {
+  const files: DeliverableFile[] = hostPaths.map((hostPath) => {
+    let size = 0;
+    try { size = require('../../utils/amigafs').statSync(hostPath).size; } catch { /* sent as found */ }
+    return {
+      name: require('path').basename(hostPath),
+      fullPath: hostPath,
+      size,
+      confNum: (session as any)?.currentConf,
+      outsideFileAreas: true,
+    };
+  });
+  let finished: () => void = () => undefined;
+  const transferEnded = new Promise<void>((resolve) => { finished = resolve; });
+  const route = await deliverFilesToCaller(socket, session, files, {
+    transferOnly: true,
+    onTransferFinished: () => finished(),
+  });
+  if (route === 'zmodem') await transferEnded;
+  return route;
 }

@@ -70,6 +70,28 @@ export function readChar(socket: any, session: InputWaitingSession): Promise<str
 }
 
 /**
+ * readChar(seconds) - the next key, or null when none came in time (E's
+ * readChar returns 0 then). pGoodbye's countdown reads with readChar(1).
+ */
+export function readCharWithin(socket: any, session: InputWaitingSession, seconds: number): Promise<string | null> {
+  flushOutput(socket);
+  return new Promise<string | null>((resolve) => {
+    const waiter: Waiter = {
+      kind: 'char',
+      resolve: (key: string) => {
+        clearTimeout(timer);
+        resolve(key);
+      },
+    };
+    const timer = setTimeout(() => {
+      if (session.inputWaiter === waiter) session.inputWaiter = undefined;
+      resolve(null);
+    }, seconds * 1000);
+    session.inputWaiter = waiter;
+  });
+}
+
+/**
  * yesNo(flag) - express.e yesNo. flag 1 prints `(Y/n)?` and Enter means yes,
  * flag 2 prints `(y/N)?` and Enter means no, flag 0 prints nothing and Enter
  * means nothing. Only Y, N and (flag 1/2) CR end it; it answers `Yes` or `No`.

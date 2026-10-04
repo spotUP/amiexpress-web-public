@@ -677,6 +677,22 @@ console.error('[Door Reload] Unexpected error:', error);
     }
   });
 
+  // ===== File Download Endpoint (by ticket) =====
+  // A file outside the file areas - a message's attached file (express.e
+  // checkAttachedFile 9746 -> downloadFile 14957) - fetched once by the
+  // browser through the ticket the board issued for it (download-ticket.ts).
+  app.get('/api/download/ticket/:token', (req: Request, res: Response) => {
+    const { redeemDownloadTicket } = require('../handlers/file/download-ticket');
+    const filePath: string | null = redeemDownloadTicket(String(req.params.token));
+    if (!filePath) return res.status(404).json({ error: 'File not found on server' });
+    try {
+      const stats = amigafs.statSync(filePath);
+      return streamDownload(res, filePath, path.basename(filePath), stats.size);
+    } catch {
+      return res.status(404).json({ error: 'File not found on server' });
+    }
+  });
+
   // ===== File Download Endpoint (by path) =====
   // express.e:20075+ (downloadAFile) - disk-based file serving
   // Route: /api/download/:confNum/:dirNum/:filename

@@ -938,3 +938,30 @@ console.error(`[Download] ${pattern} in conf ${confNum}:`, storageError);
   // ─── helpers ────────────────────────────────────────────────────────────
 
 }
+
+/**
+ * express.e:13750-13772 pGoodbye(), for a procedure port that awaits its
+ * answer (checkAttachedFile's G, 9776-9784). The countdown is the one
+ * startPGoodbye draws: `\b\n`, cursor up, the line, readChar(1) - ten times.
+ * N says No and logs off; y, T, CR or LF says Yes and the caller stays.
+ */
+export async function pGoodbye(socket: Socket, session: BBSSession): Promise<'goodbye' | 'success'> {
+  const { emitText } = require('../../utils/output.util');
+  const { readCharWithin } = require('../../utils/await-input');
+  for (let i = 10; i >= 1; i--) {
+    emitText(socket, '\r\n');
+    emitText(socket, '\x1b[A');
+    emitText(socket, `Last chance!  Auto LOGOFF in ${i} SECS.  Abort: (Enter)=yes? `);
+    const stat: string | null = await readCharWithin(socket, session, 1);
+    if (stat === 'n' || stat === 'N') {
+      emitText(socket, 'No\r\n\r\n');
+      return 'goodbye';
+    }
+    if (stat === 'y' || stat === 'T' || stat === '\r' || stat === '\n') {
+      emitText(socket, 'Yes\r\n\r\n');
+      return 'success';
+    }
+  }
+  emitText(socket, '\r\n');
+  return 'goodbye';
+}

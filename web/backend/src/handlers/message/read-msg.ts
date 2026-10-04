@@ -20,10 +20,10 @@ import type { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
-import { emitText, clearTheScreen } from '../../utils/output.util';
+import { emitText, clearTheScreen, flushOutput } from '../../utils/output.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { isNarrow } from '../../utils/table-format.util';
-import { lineInput, yesNo } from '../../utils/await-input';
+import { lineInput, readChar, yesNo } from '../../utils/await-input';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import type { MailStat, MsgHeader } from '../../services/MessageIndexManager';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
@@ -199,22 +199,110 @@ async function showBody(socket: any, session: BBSSession, r: Reader, h: MsgHeade
 }
 
 /**
- * checkAttachedFile(msgnumb, 1) - 9746. Until the Download prompt is ported
- * (plan item D5) the board still names the attached files.
+ * getAttachType (9711-9744): 2 when the message base holds a non-empty F<n>
+ * directory (files sent with X, saveNewMSG 10721-10731), 3 when there is an
+ * A<n> list (files named with F, saveAttachList 10707-10711), 0 for none.
+ * Type 1 - the message file's own filenote naming the file - has no home on
+ * this board's disks, which keep no filenotes.
  */
-async function checkAttachedFile(socket: any, session: BBSSession, r: Reader, msgNumb: number): Promise<void> {
+function getAttachType(conf: number, msgNumb: number): 0 | 2 | 3 {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getAttachListPath } = require('../../utils/message-file.util');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../../config');
+  let filetype: 0 | 2 | 3 = 0;
   try {
+    if (amigafs.readdirSync(path.join(msgBaseDir(conf), `F${msgNumb}`)).length > 0) filetype = 2;
+  } catch { /* no F<n> directory */ }
+  if (amigafs.existsSync(getAttachListPath(conf, msgNumb, config.get('dataDir')))) filetype = 3;
+  return filetype;
+}
+
+/**
+ * attachMsgFiles (9660-9709): the paths of the message's attached files.
+ * Type 2 flags each file in F<n> as it goes; type 3 reads the A<n> list
+ * past its delete flag. None at all says so.
+ *
+ * Deviation, deliberate: express.e's type-3 loop adds `image` - the A<n>
+ * list's own path - where it means `str`, the file the line names (9696),
+ * so it would send the list file instead of the attachment. The file the
+ * line names is what is sent here.
+ */
+function attachMsgFiles(socket: any, conf: number, msgNumb: number, filetype: 2 | 3): string[] {
+  const files: string[] = [];
+  if (filetype === 2) {
+    const dir = path.join(msgBaseDir(conf), `F${msgNumb}`);
+    try {
+      for (const name of amigafs.readdirSync(dir) as string[]) {
+        emitText(socket, '\r\nFlagging >:');
+        emitText(socket, name);
+        files.push(path.join(dir, name));
+      }
+      emitText(socket, '\r\n');
+    } catch { /* Lock failed: nothing flagged */ }
+  }
+  if (filetype === 3) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { readAttachList } = require('../../utils/message-file.util');
+    const { getAttachListPath } = require('../../utils/message-file.util');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { config } = require('../../config');
-    const list = await readAttachList(r.conf, msgNumb, config.get('dataDir'));
-    if (list && list.filenames.length > 0) {
-      emitText(socket, '\x1b[36mFiles attached\x1b[33m:\x1b[0m\r\n');
-      for (const name of list.filenames) emitText(socket, `   ${name}\r\n`);
-      emitText(socket, '\r\n');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { resolveAssignPath } = require('../../utils/path-util');
+    try {
+      const raw = (amigafs.readFileSync(getAttachListPath(conf, msgNumb, config.get('dataDir'))) as Buffer).toString('latin1');
+      const lines = raw.split('\n').map((line) => line.replace(/\r$/, ''));
+      // ReadStr(f,str) - skip delete flag (9693)
+      for (const line of lines.slice(1)) {
+        if (line.length > 0) files.push(resolveAssignPath(line));
+      }
+    } catch { /* Open failed: nothing flagged */ }
+  }
+  if (files.length === 0) emitText(socket, 'File attachment not found\r\n');
+  return files;
+}
+
+/**
+ * checkAttachedFile(msgnumb, 1) - 9746-9800, the end of displayMessage.
+ * A message with attached files asks whether to take them; Y sends them,
+ * G sends them and then counts down to logoff (pGoodbye).
+ */
+async function checkAttachedFile(socket: any, session: BBSSession, r: Reader, msgNumb: number): Promise<void> {
+  const filetype = getAttachType(r.conf, msgNumb);
+  if (!filetype) return;
+
+  emitText(socket, '...This message has an attached file(s), Download? (y/N/goodbye)? ');
+  const stat = await readChar(socket, session);
+
+  if (stat === 'n' || stat === 'N') emitText(socket, 'No\r\n');
+  if (stat === 'y' || stat === 'Y') {
+    emitText(socket, 'Yes\r\n\r\n');
+    await downloadFile(socket, session, attachMsgFiles(socket, r.conf, msgNumb, filetype));
+  }
+  if (stat === 'g' || stat === 'G') {
+    emitText(socket, 'Goodbye\r\n\r\n');
+    await downloadFile(socket, session, attachMsgFiles(socket, r.conf, msgNumb, filetype));
+    emitText(socket, '\r\n');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { pGoodbye } = require('../file/download.handler');
+    if ((await pGoodbye(socket, session)) === 'goodbye') {
+      // IF(stat=RESULT_GOODBYE) THEN modemOffHook() - 9782
+      flushOutput(socket);
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+      await handleGoodbyeCommand(socket, session, 'Y');
     }
-  } catch { /* an unreadable attach list is no attachment */ }
+    return;
+  }
+  emitText(socket, '\r\n');
+}
+
+/** downloadFile (14957): the files go out, and the reader waits for the transfer. */
+async function downloadFile(socket: any, session: BBSSession, files: string[]): Promise<void> {
+  if (files.length === 0) return;
+  flushOutput(socket);
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const delivery = require('../file/file-delivery');
+  await delivery.downloadFile(socket, session, files);
 }
 
 function noMorePlus(socket: any, r: Reader): void {
