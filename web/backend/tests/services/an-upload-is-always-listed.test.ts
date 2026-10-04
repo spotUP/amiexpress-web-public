@@ -53,6 +53,8 @@ beforeEach(() => {
   spy = jest.spyOn(config, 'get').mockImplementation((key: string) => (key === 'dataDir' ? root : original(key as never)));
   createFileEntry.mockReset();
   failActiveListing = false;
+  const { db } = require('../../src/database');
+  (db.query as jest.Mock).mockImplementation(async () => ({ rows: [] }));
 });
 
 afterEach(() => {
@@ -95,4 +97,36 @@ test('every filed upload is counted for the conference, whoever filed it (FTP in
   // auto-rejoin's "N new file(s) uploaded" reads (2026-10-04).
   await fileUploadedFile(anUpload());
   expect(read(path.join(root, 'Conf1', 'NumULs')).trim()).toBe('1');
+});
+
+describe('a duplicate is a file on the board, not a row in the catalogue', () => {
+  // express.e:19356 runs checkForFile (18408-18447) on the conference's
+  // directories. Filing asked file_entries instead, so a file the sysop had
+  // deleted still had its row, and its re-upload went to HOLD as a duplicate.
+  const REPO = path.resolve(__dirname, '../../../..');
+  function conferenceFilesIn(dir: string): void {
+    const { parseInfoFile, writeInfoFile, updateTooltype } = require('../../src/utils/info-file.util');
+    const icon = path.join(root, 'Conf1.info');
+    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    writeInfoFile(updateTooltype(parseInfoFile(icon), 'DLPATH.1', path.join(root, dir), false));
+  }
+
+  test('a re-upload of a file the sysop deleted is filed, not held', async () => {
+    conferenceFilesIn('Conf1/Files');
+    const { db } = require('../../src/database');
+    // The old row survives, for a file that lived on the board's disk (not in the pool).
+    (db.query as jest.Mock).mockImplementation(async (sql: string) =>
+      ({ rows: /storage_volume IS NOT NULL/.test(sql) ? [] : [{ id: 9, filename: 'LXT-TEST.ZIP' }] }));
+    const outcome = await fileUploadedFile(anUpload());
+    expect(outcome.status).toBe('active');
+    expect(outcome.notices.map((n) => n.kind)).not.toContain('duplicate');
+  });
+
+  test('a file already in the conference goes to HOLD as a duplicate', async () => {
+    conferenceFilesIn('Conf1/Files');
+    fs.writeFileSync(path.join(root, 'Conf1', 'Files', 'lxt-test.zip'), 'OLD BYTES');
+    const outcome = await fileUploadedFile(anUpload());
+    expect(outcome.status).toBe('hold');
+    expect(outcome.notices.map((n) => n.kind)).toContain('duplicate');
+  });
 });

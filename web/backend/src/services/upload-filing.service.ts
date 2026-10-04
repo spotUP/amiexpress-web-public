@@ -197,11 +197,18 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
     ? request.fileArea
     : await areaForConference(request.conferenceId, config.get('dataDir'));
   const areaId = area.id as number;
-  const existing = await db.query(
-    'SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2',
+  // express.e:19356 checkForFile - the conference's own directories on
+  // disk (18408-18447), never the catalogue: a row outlives a file the sysop
+  // deleted, and its re-upload must not be held as a duplicate. A file in the
+  // storage pool has no place on the board's disk, so for it the catalogue row
+  // is the file.
+  const { checkForFile } = require('../utils/file-upload.util');
+  const onBoard: boolean = await checkForFile(request.filename, request.conferenceId, config.get('dataDir'), request.nodeId);
+  const inPool = onBoard ? false : (await db.query(
+    'SELECT id FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2 AND storage_volume IS NOT NULL',
     [request.filename.toLowerCase(), areaId]
-  );
-  const duplicate = existing.rows.length > 0;
+  )).rows.length > 0;
+  const duplicate = onBoard || inPool;
   if (duplicate) {
     // express.e:19372-19376 - a duplicate is not an abort. It goes to the
     // sysop's directory, marked D, and the caller is told.
