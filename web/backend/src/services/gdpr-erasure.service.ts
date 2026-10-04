@@ -19,6 +19,16 @@ import { messageIndexManager } from './MessageIndexManager';
 import { overwriteMessageBody } from '../utils/message-file.util';
 import { userFileManager } from './UserFileManager';
 import { deleteConfAccess } from './delete-conf-access';
+import { conferenceDir, conferenceUploadDirs } from '../conferences/conference-paths';
+import { getHoldDirFilePath } from '../utils/dir-file-reader.util';
+import {
+  CTOP_HEADER_SIZE,
+  CTOP_RECORD_SIZE,
+  decodeCtopHeader,
+  decodeCtopRecords,
+  encodeCtopHeader,
+  encodeCtopRecord,
+} from '@amiexpress/bbs-door-sdk/formats/ctop-data';
 
 /**
  * What an erased caller's own message reads as, in the database mirror and in
@@ -52,6 +62,10 @@ export interface ErasureResult {
   diskRecordErased: boolean;
   answersFilesScrubbed: number;
   callersLogFilesRedacted: number;
+  /** DIR / HOLD/HELD / FILES.BBS listings whose `Sent by:` named the caller. */
+  sentByFilesRenamed: number;
+  /** Conferences whose ctop.data named the caller. */
+  ctopFilesRenamed: number;
 }
 
 /**
@@ -149,6 +163,12 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
   // 4. Best-effort log redaction within retention window.
   const callersLogFilesRedacted = redactRecentLogs(originalUsername, erasedHandle);
 
+  // 5. The file listings' `Sent by:` line and Conftop's upload records name
+  //    the uploader; both take the erased handle. The files themselves and
+  //    their descriptions stay.
+  const sentByFilesRenamed = renameSentByLines(originalUsername, erasedHandle);
+  const ctopFilesRenamed = renameInCtopData(originalUsername, erasedHandle);
+
   return {
     userId,
     erasedHandle,
@@ -161,6 +181,8 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
     diskRecordErased: sameAccount,
     answersFilesScrubbed,
     callersLogFilesRedacted,
+    sentByFilesRenamed,
+    ctopFilesRenamed,
   };
 }
 
@@ -348,7 +370,7 @@ function redactRecentLogs(originalUsername: string, erasedHandle: string): numbe
   for (const entry of entries) {
     if (!/^node\d+$/i.test(entry)) continue;
     const nodeDir = path.join(baseDir, entry);
-    for (const name of ['CallersLog', 'callerslog', 'ErrorLog']) {
+    for (const name of ['CallersLog', 'callerslog', 'CLogBackup', 'ErrorLog']) {
       const filePath = path.join(nodeDir, name);
       if (amigafs.existsSync(filePath)) targets.push(filePath);
     }
@@ -368,13 +390,17 @@ function redactRecentLogs(originalUsername: string, erasedHandle: string): numbe
     Buffer.from(originalUsername, 'utf8').toString('latin1'),
   ])].map(escapeRegex);
   const re = new RegExp(`(?<![A-Za-z0-9_])(?:${spellings.join('|')})(?![A-Za-z0-9_])`, 'g');
+  const logonLocation = new RegExp(`^([^\\r\\n]*\\[\\d+\\] (?:${spellings.join('|')}) \\([^)\\r\\n]*\\)) ?[^\\r\\n]*`, 'gm');
 
   for (const filePath of new Set(targets.map(t => amigafs.resolveExistingAncestors(t)))) {
     try {
       const raw = (amigafs.readFileSync(filePath) as Buffer).toString('latin1');
       if (!re.test(raw)) continue;
       re.lastIndex = 0;
-      const replaced = raw.replace(re, erasedHandle);
+      // The logon line (express.e:16040-16042, `... [slot] name (connect)
+      // location`) carries where the caller lives: it goes, and the line
+      // keeps the shape express.e writes for an empty location.
+      const replaced = raw.replace(logonLocation, '$1 ').replace(re, erasedHandle);
       amigafs.writeFileSync(filePath, Buffer.from(replaced, 'latin1'));
       filesTouched++;
     } catch (error) {
@@ -385,8 +411,95 @@ function redactRecentLogs(originalUsername: string, erasedHandle: string): numbe
   return filesTouched;
 }
 
+/**
+ * The `Sent by: <name>` line express.e appends under an upload's description
+ * (19506-19509, utils/dir-file.util.ts buildSentByLine) in the conference's
+ * DIR files, its HOLD/HELD listing and the upload directory's FILES.BBS. The
+ * name becomes the erased handle; every other byte - the description, the
+ * indent, Latin-1 text - is kept.
+ */
+function renameSentByLines(originalUsername: string, erasedHandle: string): number {
+  const root = boardRoot();
+  const spellings = [...new Set([
+    originalUsername,
+    Buffer.from(originalUsername, 'utf8').toString('latin1'),
+  ])].map(escapeRegex);
+  const sentBy = new RegExp(`^([ \\t]*Sent by: )(?:${spellings.join('|')})([ \\t]*\\r?)$`, 'gim');
+
+  const listings = new Set<string>();
+  for (const conf of conferenceNumbers(root)) {
+    const confDir = conferenceDir(root, conf);
+    let entries: string[] = [];
+    try { entries = amigafs.readdirSync(confDir); } catch { continue; }
+    for (const e of entries) if (/^DIR\d+$/i.test(e)) listings.add(path.join(confDir, e));
+    listings.add(getHoldDirFilePath(confDir));
+    for (const dir of [...conferenceUploadDirs(root, conf), path.join(confDir, 'Upload')]) {
+      listings.add(path.join(dir, 'FILES.BBS'));
+    }
+  }
+
+  let filesTouched = 0;
+  for (const listing of listings) {
+    try {
+      if (!amigafs.existsSync(listing)) continue;
+      const raw = (amigafs.readFileSync(listing) as Buffer).toString('latin1');
+      const replaced = raw.replace(sentBy, `$1${erasedHandle}$2`);
+      if (replaced === raw) continue;
+      amigafs.writeFileSync(listing, Buffer.from(replaced, 'latin1'));
+      filesTouched++;
+    } catch (error) {
+      console.warn('[gdpr-erasure] Failed to rename Sent by in', listing, error);
+    }
+  }
+  return filesTouched;
+}
+
+/**
+ * Conftop's ctop.data in every conference (utils/ctop-updater.util.ts): each
+ * upload record the caller made, and the header's record holder and period
+ * winner when that is the caller, take the erased handle. A record's location
+ * is the caller's own and is emptied with it. The byte counts stay, so the
+ * period's totals do not change.
+ */
+function renameInCtopData(originalUsername: string, erasedHandle: string): number {
+  const root = boardRoot();
+  const name = Buffer.from(originalUsername, 'latin1').subarray(0, 32).toString('latin1');
+  const isTheCaller = (n: string) => sameName(n, name);
+  let filesTouched = 0;
+  for (const conf of conferenceNumbers(root)) {
+    const ctopPath = path.join(conferenceDir(root, conf), 'ctop.data');
+    try {
+      if (!amigafs.existsSync(ctopPath)) continue;
+      const buf = Buffer.from(amigafs.readFileSync(ctopPath) as Buffer);
+      if (buf.length < CTOP_HEADER_SIZE) continue;
+      let touched = false;
+      const header = decodeCtopHeader(buf);
+      if (isTheCaller(header.topUpName) || isTheCaller(header.periodUpName)) {
+        encodeCtopHeader({
+          ...header,
+          ...(isTheCaller(header.topUpName) ? { topUpName: erasedHandle } : {}),
+          ...(isTheCaller(header.periodUpName) ? { periodUpName: erasedHandle } : {}),
+        }).copy(buf, 0);
+        touched = true;
+      }
+      decodeCtopRecords(buf).forEach((record, i) => {
+        if (!isTheCaller(record.userName)) return;
+        encodeCtopRecord({ userName: erasedHandle, location: '', bytes: record.bytes })
+          .copy(buf, CTOP_HEADER_SIZE + i * CTOP_RECORD_SIZE);
+        touched = true;
+      });
+      if (!touched) continue;
+      amigafs.writeFileSync(ctopPath, buf);
+      filesTouched++;
+    } catch (error) {
+      console.warn('[gdpr-erasure] Failed to rename in', ctopPath, error);
+    }
+  }
+  return filesTouched;
+}
+
 // Re-export for tests that need to stub timestamps via a wrapper layer.
-export const __test_only__ = { scrubAnswersFiles, redactRecentLogs };
+export const __test_only__ = { scrubAnswersFiles, redactRecentLogs, renameSentByLines, renameInCtopData };
 
 // Unused but kept so tree-shakers don't complain about getSystemTime import
 // when the current implementation doesn't reference it yet (reserved for

@@ -41,7 +41,7 @@ describe('the erasure\'s CallersLog redaction', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { __test_only__ } = require('../../src/services/gdpr-erasure.service');
 
-  it('replaces the handle and keeps every other byte, Latin-1 included', () => {
+  it('replaces the handle, empties the logon line\'s location, and keeps every other byte, Latin-1 included', () => {
     const nodeDir = path.join(config.getConfig().dataDir, 'Node977');
     fs.mkdirSync(nodeDir, { recursive: true });
     const log = path.join(nodeDir, 'CallersLog');
@@ -50,12 +50,20 @@ describe('the erasure\'s CallersLog redaction', () => {
       const before = Buffer.concat([
         Buffer.from([0x47, 0xe5, 0x72, 0x64, 0x0a]),
         Buffer.from('[3] -=Zed=- (LOCAL) Zedtown\n', 'latin1'),
+        // express.e's logon line (16040), CRLF and a Latin-1 location.
+        Buffer.from('10-04-26 (17:37:02) [3] -=Zed=- (CONNECT 19200) K\xF6ln\r\n', 'latin1'),
+        // Another caller's logon line keeps his location.
+        Buffer.from('10-04-26 (18:00:00) [4] bob (CONNECT 19200) Oslo\n', 'latin1'),
       ]);
       fs.writeFileSync(log, before);
       expect(__test_only__.redactRecentLogs('-=Zed=-', 'erased_1')).toBe(1);
       const after = fs.readFileSync(log);
       expect([...after.subarray(0, 5)]).toEqual([0x47, 0xe5, 0x72, 0x64, 0x0a]);
-      expect(after.subarray(5).toString('latin1')).toBe('[3] erased_1 (LOCAL) Zedtown\n');
+      expect(after.subarray(5).toString('latin1')).toBe(
+        '[3] erased_1 (LOCAL) \n'
+        + '10-04-26 (17:37:02) [3] erased_1 (CONNECT 19200) \r\n'
+        + '10-04-26 (18:00:00) [4] bob (CONNECT 19200) Oslo\n',
+      );
     } finally {
       fs.rmSync(nodeDir, { recursive: true, force: true });
     }

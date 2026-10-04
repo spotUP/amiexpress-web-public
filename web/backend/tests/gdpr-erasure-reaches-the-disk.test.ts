@@ -175,6 +175,29 @@ describe('GDPR erasure (W 20) reaches the disk R reads', () => {
     post(3, ALICE, 'bobby', 'Psst', MsgStatus.PRIVATE, ALICE_PRIVATE);
     post(4, 'carol', 'ALL', 'Other', MsgStatus.NORMAL, 'carol is untouched');
 
+    // Her uploads in the listings (express.e:19506-19509 `Sent by:`), in
+    // Conftop's ctop.data, and her logon line in the CallersLog.
+    const conf1 = path.join(root, 'Conf1');
+    const dirEntry = (file: string, who: string) =>
+      `${file.padEnd(13)} P   12K 10-01-26 Gr\xFC\xDFe aus der Demo\n${' '.repeat(33)}Sent by: ${who}\n`;
+    fs.writeFileSync(path.join(conf1, 'DIR1'), Buffer.from(dirEntry('ALICE.LHA', ALICE) + dirEntry('BOB.LHA', 'bobby'), 'latin1'));
+    fs.mkdirSync(path.join(conf1, 'HOLD'), { recursive: true });
+    fs.writeFileSync(path.join(conf1, 'HOLD', 'HELD'), Buffer.from(dirEntry('HELD.LHA', ALICE), 'latin1'));
+    fs.mkdirSync(path.join(conf1, 'Upload'), { recursive: true });
+    fs.writeFileSync(path.join(conf1, 'Upload', 'FILES.BBS'), Buffer.from(dirEntry('ALICE.LHA', ALICE), 'latin1'));
+    const ctop = require('@amiexpress/bbs-door-sdk/formats/ctop-data');
+    fs.writeFileSync(path.join(conf1, 'ctop.data'), Buffer.concat([
+      ctop.encodeCtopHeader({
+        resetDate: 17800, startDate: 17793, topUpName: ALICE, topUpBytes: 999n, topUpFiles: 3,
+        periodUpName: 'bobby', periodUpBytes: 5n, periodUpFiles: 1,
+      }),
+      ctop.encodeCtopRecord({ userName: ALICE, location: 'Zedtown', bytes: 12345 }),
+      ctop.encodeCtopRecord({ userName: 'bobby', location: 'Bobville', bytes: 777 }),
+    ]));
+    fs.mkdirSync(path.join(root, 'Node1'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Node1', 'CallersLog'),
+      `**************************************************************\n10-01-26 (12:00:00) [${slot}] ${ALICE} (CONNECT 19200) Zedtown\n`);
+
     // Before: R shows her (the fixture is what the board holds).
     const before = await reader('bobby').readAll();
     expect(before).toContain(ALICE);
@@ -225,5 +248,23 @@ describe('GDPR erasure (W 20) reaches the disk R reads', () => {
     const record = confDb.subarray((slot - 1) * recordSize, slot * recordSize);
     expect([...record.subarray(16)].every(b => b === 0)).toBe(true);
     expect([...confDb.subarray(slot * recordSize)].every(b => b === 0x11)).toBe(true);
+
+    // The listings name the erased handle as the uploader; the description
+    // (Latin-1) and Bob's entry are byte for byte what they were.
+    expect(fs.readFileSync(path.join(conf1, 'DIR1')).toString('latin1'))
+      .toBe(dirEntry('ALICE.LHA', erased) + dirEntry('BOB.LHA', 'bobby'));
+    expect(fs.readFileSync(path.join(conf1, 'HOLD', 'HELD')).toString('latin1')).toBe(dirEntry('HELD.LHA', erased));
+    expect(fs.readFileSync(path.join(conf1, 'Upload', 'FILES.BBS')).toString('latin1')).toBe(dirEntry('ALICE.LHA', erased));
+    // Conftop: her record and her record-holder line take the handle, her
+    // location goes; the bytes and Bob's record stay.
+    const top = ctop.decodeCtopFile(fs.readFileSync(path.join(conf1, 'ctop.data')));
+    expect(top.header).toMatchObject({ topUpName: erased, topUpBytes: 999n, periodUpName: 'bobby' });
+    expect(ctop.decodeCtopRecords(fs.readFileSync(path.join(conf1, 'ctop.data')))).toEqual([
+      { userName: erased, location: '', bytes: 12345 },
+      { userName: 'bobby', location: 'Bobville', bytes: 777 },
+    ]);
+    // CallersLog: the logon line keeps its shape, without her name or town.
+    expect(fs.readFileSync(path.join(root, 'Node1', 'CallersLog'), 'latin1'))
+      .toBe(`**************************************************************\n10-01-26 (12:00:00) [${slot}] ${erased} (CONNECT 19200) \n`);
   }, 30000);
 });
