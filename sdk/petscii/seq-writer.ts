@@ -54,9 +54,12 @@ const MCI_GATE: readonly number[] = [0x7e, 0x44, 0x7c];
 
 export interface SeqWriteOptions {
   /**
-   * Emit the charset bank at the top. On by default: a `.seq` that does not
-   * say which bank it wants is drawn in whatever the last screen left, and
-   * the board's screens are mixed.
+   * Emit the charset bank at the top. By default only for a screen in the
+   * graphics bank: the board puts every caller in the lowercase bank before
+   * any screen (its first PETSCII output is a `$0E`) and keeps the caller's
+   * own CTRL+L choice after that, so a lowercase screen that forces `$0E`
+   * flips a caller who chose the graphics bank (sysop, 2026-10-04: the
+   * board's screens carry no leading `$0E`). `true` always declares it.
    */
   declareCharset?: boolean;
   /**
@@ -120,7 +123,8 @@ export function writeSeqWithOffsets(
   state: PetsciiMachineState,
   options: SeqWriteOptions = {},
 ): SeqWriteResult {
-  const { declareCharset = true, mciGate = false } = options;
+  const { mciGate = false } = options;
+  const declareCharset = options.declareCharset ?? state.charsetBank !== 1;
   const out: number[] = [];
   const offsetOfCell = new Int32Array(state.cols * state.rows).fill(-1);
 

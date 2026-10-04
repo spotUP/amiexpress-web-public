@@ -25,8 +25,12 @@ describe('the two rules a C64 board runs', () => {
     expect(violation.reason).toMatch(/lowercase bank/);
   });
 
-  it('counts a file that never selects a bank as the graphics bank - a C64 powers on there', () => {
-    expect(checkBoardRules([0x48, 0x49])[0]?.rule).toBe('graphics-bank');
+  it('passes a file that never selects a bank - the board has already put the caller in the lowercase bank', () => {
+    expect(checkBoardRules([0x48, 0x49])).toEqual([]);
+  });
+
+  it('still refuses a file that selects the graphics bank itself and draws in it', () => {
+    expect(checkBoardRules([0x8e, 0x48, 0x49])[0]?.rule).toBe('graphics-bank');
   });
 
   it('spares a file that flips the bank but draws nothing under it', () => {

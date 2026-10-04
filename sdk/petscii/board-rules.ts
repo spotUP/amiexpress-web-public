@@ -54,6 +54,15 @@ class BoardRuleWatcher extends PetsciiMachine {
   firstRow = -1;
   firstColumn = -1;
 
+  constructor() {
+    super();
+    // A screen starts where the board left the caller: the board's first
+    // PETSCII output is a $0E (web/backend petscii.util charsetPrelude) and
+    // its transducer keeps the caller's bank after that, so a screen that
+    // selects no bank draws in the board's bank, not a power-on C64's.
+    this.state.charsetBank = BOARD_CHARSET_BANK;
+  }
+
   protected putScreenCode(sc: number): boolean {
     const s = this.state;
     if (s.charsetBank !== BOARD_CHARSET_BANK && sc !== SPACE) {
@@ -71,10 +80,10 @@ class BoardRuleWatcher extends PetsciiMachine {
  * What this `.seq` breaks, if anything. An empty array is a file the board
  * can show as its artist drew it.
  *
- * A file that never selects a bank breaks the rule just as loudly as one that
- * selects `$8E`: a C64 powers on in the graphics bank, so art with no `$0E`
- * in front of it reaches the caller as the wrong glyphs. That is the bulk of
- * what is on this board - see the ledger for the count.
+ * A file that selects `$8E` and draws breaks the rule. A file that selects no
+ * bank does NOT: it is shown after the board has put the caller in the
+ * lowercase bank, so it draws there (2026-10-04 - the board's screens lost
+ * their leading `$0E`, so a caller's own CTRL+L case choice is kept).
  */
 export function checkBoardRules(bytes: Uint8Array | Buffer | number[]): BoardRuleViolation[] {
   const machine = new BoardRuleWatcher();
