@@ -22,7 +22,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { emitText, clearTheScreen, flushOutput } from '../../utils/output.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
-import { isNarrow } from '../../utils/table-format.util';
+import { isNarrow, headingIndent, movePrompt } from '../../utils/table-format.util';
 import { lineInput, readChar, yesNo } from '../../utils/await-input';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import type { MailStat, MsgHeader } from '../../services/MessageIndexManager';
@@ -454,12 +454,12 @@ async function getMoveConf(socket: any, session: BBSSession): Promise<{ conf: nu
 
   let answer = '';
   for (;;) {
-    emitText(socket, '\r\nConference Number to move to (L to List): ');
+    emitText(socket, `\r\n${movePrompt(session, 'conference')}`);
     answer = await lineInput(socket, session, 5);
     if (answer.length === 0) return { conf: 0, msgBase: 0 };
     if (answer !== 'L' && answer !== 'l') break;
     emitText(socket, '\r\n');
-    emitText(socket, '                                 \x1b[32mConference List\r\n');
+    emitText(socket, `${headingIndent(session, 'conferenceList', 'Conference List')}\x1b[32mConference List\r\n`);
     emitText(socket, '\r\n');
     const list = await parseMciCodes('~CL|', session);
     emitText(socket, list?.parsed ?? '');
@@ -481,12 +481,12 @@ async function getMoveConf(socket: any, session: BBSSession): Promise<{ conf: nu
     (getMessageBases() || []).filter((b: any) => b.conferenceId === dest);
   if (bases.length > 1) {
     for (;;) {
-      emitText(socket, '\r\nMessagebase Number to move to (L to List): ');
+      emitText(socket, `\r\n${movePrompt(session, 'messagebase')}`);
       answer = await lineInput(socket, session, 5);
       if (answer.length === 0) return { conf: 0, msgBase: 0 };
       if (answer !== 'L' && answer !== 'l') break;
       emitText(socket, '\r\n');
-      emitText(socket, '                                 \x1b[32mMessagebase List\r\n');
+      emitText(socket, `${headingIndent(session, 'messagebaseList', 'Messagebase List')}\x1b[32mMessagebase List\r\n`);
       emitText(socket, '\r\n');
       const was = session.currentConf;
       session.currentConf = dest;

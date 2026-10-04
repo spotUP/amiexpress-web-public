@@ -152,6 +152,23 @@ describe('the R reader', () => {
     expect(c.take()).toContain('\r\nMessage not deleted, not your mail.\r\n\r\n');
   });
 
+  it('M on a C64 asks with the forty-column prompt and centres its list heading', async () => {
+    // The reader lost the narrow forms when the old reader was removed
+    // (2026-10-02): the 42-column prompt wrapped on a C64.
+    const c = caller();
+    c.session.screenWidth = 40;
+    c.session.petsciiMode = true;
+    c.session.user = { id: 1, username: 'sysop', secLevel: 255, securityFlags: 'T'.repeat(200), userFlags: 0, confAccess: 'XX' };
+    await handleReadMessagesFullCommand(c.socket, c.session, '3');
+    await c.settle();
+    c.take();
+    await c.type('m\r');
+    expect(c.take()).toContain('Conf # to move to (L=List): ');
+    await c.type('l\r');
+    expect(c.take()).toMatch(/\r\n {12}\x1b\[32mConference List\r\n/);
+    await c.type('\r');
+  });
+
   it('M moves the message to the chosen conference as it was, and deletes it here', async () => {
     const c = caller();
     // A sysop: every ACS flag, level 255, access to both conferences.
