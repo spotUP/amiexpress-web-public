@@ -54,6 +54,19 @@ interface DriveConfig {
   inPool?: boolean;
   degraded: boolean;
   outOfRequests: boolean;
+  /**
+   * Local drives only: the directory on this host the entry names, or null
+   * when it names nothing here (an Amiga volume such as DH1:, a removed
+   * folder). Null is a broken entry, never a working drive.
+   */
+  resolvedPath?: string | null;
+  /** Local drives that resolved: free space on that disk. */
+  freeBytes?: number;
+}
+
+/** A local drive whose path names nothing on this host. */
+function isUnresolvedLocal(drive: DriveConfig): boolean {
+  return drive.kind !== 's3' && drive.resolvedPath === null;
 }
 
 interface FileEntryRow {
@@ -399,7 +412,7 @@ export function DrivesPage() {
       // place - `secretConfigured`/`inPool` are the checks that catch the
       // drive neither of those two flags can see at all.
       value: (drive) => {
-        if (drive.kind !== 's3') return 0;
+        if (drive.kind !== 's3') return isUnresolvedLocal(drive) ? 5 : 0;
         if (!drive.secretConfigured) return 5;
         if (drive.inPool === false) return 4;
         if (drive.degraded) return 4;
@@ -409,7 +422,14 @@ export function DrivesPage() {
       },
       width: '11rem',
       cell: (drive) => {
-        if (drive.kind !== 's3') return <StatusDot tone="neutral" label="Local" />;
+        // A local drive is a disk on this server. One whose path names nothing
+        // here - DH1: carried over from an Amiga board - is broken, and says
+        // so instead of sitting in the list like a working drive.
+        if (drive.kind !== 's3') {
+          if (isUnresolvedLocal(drive)) return <StatusDot tone="danger" label="Not found on this server" />;
+          if (drive.resolvedPath === undefined) return <StatusDot tone="hollow" label="Unknown" />;
+          return <StatusDot tone="ok" label="Available" />;
+        }
         // A missing secret is a disk fact, true with or without a live
         // process - the drive is unreachable regardless of what `degraded`
         // says, because `degraded`/`outOfRequests` only exist on a
@@ -441,7 +461,7 @@ export function DrivesPage() {
       header: 'Kind',
       value: (drive) => drive.kind,
       width: '5rem',
-      cell: (drive) => <span className="text-content-secondary">{drive.kind === 's3' ? 'S3' : 'Local'}</span>,
+      cell: (drive) => <span className="text-content-secondary">{drive.kind === 's3' ? 'S3' : 'Local disk'}</span>,
     },
     {
       id: 'drive_path',
@@ -449,7 +469,19 @@ export function DrivesPage() {
       value: (drive) => drive.drive_path,
       mono: true,
       cell: (drive) => (
-        <span className="block max-w-xs truncate text-content-secondary" title={drive.drive_path}>{drive.drive_path}</span>
+        <div className="flex flex-col">
+          <span className="block max-w-xs truncate text-content-secondary" title={drive.drive_path}>{drive.drive_path}</span>
+          {drive.kind !== 's3' && drive.resolvedPath && drive.resolvedPath !== drive.drive_path && (
+            <span className="block max-w-xs truncate text-xs text-content-muted" title={drive.resolvedPath}>
+              {drive.resolvedPath}
+            </span>
+          )}
+          {isUnresolvedLocal(drive) && (
+            <span className="text-xs text-status-danger">
+              No such volume or folder on this server - it adds nothing to the free space callers see.
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -468,12 +500,15 @@ export function DrivesPage() {
     },
     {
       id: 'usage',
-      header: 'Used / Quota',
-      value: (drive) => drive.usedBytes,
+      header: 'Space',
+      value: (drive) => (drive.kind === 's3' ? drive.usedBytes : drive.freeBytes ?? -1),
       align: 'right',
       width: '12rem',
       cell: (drive) => {
-        if (drive.kind !== 's3') return null;
+        if (drive.kind !== 's3') {
+          if (drive.freeBytes === undefined) return null;
+          return <span className="text-content-secondary">{formatBytes(drive.freeBytes)} free</span>;
+        }
         const used = formatBytes(drive.usedBytes);
         if (drive.quotaBytes === undefined) {
           return <span className="text-content-secondary">{used} (no quota)</span>;

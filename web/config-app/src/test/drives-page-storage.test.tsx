@@ -421,6 +421,45 @@ describe('DrivesPage - status honesty (a drive VolumeSet dropped must never read
   });
 });
 
+describe('DrivesPage - a local drive is a disk on this server', () => {
+  function localDrive(overrides: Record<string, unknown> = {}) {
+    return s3Drive({
+      id: 1,
+      drive_number: 1,
+      drive_path: 'BBS:',
+      kind: 'local',
+      quotaBytes: undefined,
+      usedBytes: 0,
+      keyId: undefined,
+      inPool: undefined,
+      resolvedPath: '/app/data/bbs',
+      freeBytes: 8 * 1024 ** 3,
+      ...overrides,
+    });
+  }
+
+  it('shows the board disk with its free space', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [localDrive()] });
+    renderPage();
+
+    expect(await screen.findByText('8 GB free')).toBeInTheDocument();
+    expect(screen.getByText('/app/data/bbs')).toBeInTheDocument();
+    expect(screen.getByText('Available')).toBeInTheDocument();
+  });
+
+  it('flags a volume this host does not have (DH1: from an Amiga board) instead of listing it as a drive', async () => {
+    getDrives.mockResolvedValue({
+      success: true,
+      data: [localDrive({ id: 2, drive_number: 2, drive_path: 'DH1:', resolvedPath: null, freeBytes: undefined })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('Not found on this server')).toBeInTheDocument();
+    expect(screen.getByText(/No such volume or folder on this server/)).toBeInTheDocument();
+    expect(screen.queryByText('Available')).not.toBeInTheDocument();
+  });
+});
+
 describe('DrivesPage - delete and edit say what they orphan', () => {
   it('interpolates the file count and bytes into the delete confirmation', async () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive({ usedBytes: 5 * 1024 ** 3 })] });

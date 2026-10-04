@@ -25,6 +25,7 @@ import { storageFailureText } from '../../storage/remote-download';
 import { StorageUnavailableError } from '../../storage/storage-backend';
 import { getPlaypenDir } from '../../utils/bbs-paths.util';
 import { cleanItUp } from '../../utils/clean-it-up.util';
+import { freeDiskSpace, readFreeBytes } from '../../storage/free-space';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -343,6 +344,16 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // equivalent — when the area was configured with a non-default
   // destination, surface it in the header so sysops know files won't
   // land in the default playpen/Files directory.
+  // express.e:18989 tFShi,tFSlo:=freeDiskSpace() runs BEFORE the header, and
+  // its rFreeSpace() prints one line per DRIVE.n that names no volume here
+  // (express.e:17460) - so a Drives.info still listing the original Amiga's
+  // DH1: says so on the screen it would have on the Amiga, instead of being
+  // quietly counted as room.
+  const localDrives = freeDiskSpace(config.get('dataDir'));
+  for (const target of localDrives?.unresolved ?? []) {
+    emitText(socket, `\r\nCan not find free space for ${target}\r\n`);
+  }
+
   const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
   const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
   if (customUlPath) {
@@ -367,11 +378,14 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // rz never writes into the area directory, and on a pooled area that local
   // directory has no reason to exist at all — probing it would answer 0 and
   // refuse every upload, under a line saying the pool has terabytes.
-  // poolSpaceFor returns null for every local area and every board without a
-  // bucket, which keeps that case byte-for-byte as it was.
-  const playpenFreeBytes = readFreeBytes(getPlaypenDir(session.nodeId || 0, config.get('dataDir')));
+  // A LOCAL area's first number is freeDiskSpace() over the board's local
+  // DRIVE.n volumes - the statfs of each one that resolves on this host. A
+  // board whose Drives.info declares no local drive has nothing to sum, and
+  // shows the playpen's filesystem, which is where the bytes land.
+  const dataDir = config.get('dataDir');
+  const playpenFreeBytes = readFreeBytes(getPlaypenDir(session.nodeId || 0, dataDir), dataDir);
   const pool = poolSpaceFor(uploadArea, getStorageContext());
-  const spaceStr = formatSpaceBytes(pool ? pool.total : playpenFreeBytes);
+  const spaceStr = formatSpaceBytes(pool ? pool.total : localDrives ? localDrives.bytes : playpenFreeBytes);
   const atOnceStr = formatSpaceBytes(playpenFreeBytes);
   emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.${eraseRestOfLine(socket)}\r\n`);
 
@@ -456,61 +470,6 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
     uploadCount: 1,
     uploadStartTime: Date.now(),
   };
-}
-
-/**
- * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
- * Returns 0 if both probes fail. This is the LOCAL disk's answer - the playpen
- * half of the upload display, and the floor rz would truncate against. The
- * pool's half comes from `poolSpaceFor`.
- *
- * Amiga-style assigns (BBS:, NODE0:, DOORS:, etc.) are resolved to real
- * filesystem paths before probing — statfsSync fails on virtual paths.
- */
-function readFreeBytes(dirPath: string): number {
-  // Resolve Amiga assigns (BBS:, NODE0:, DOORS:, …) to real FS paths.
-  let resolvedPath = dirPath;
-  if (/^[A-Z]+:/i.test(dirPath)) {
-    try {
-      const { BBSPaths } = require('../../utils/bbs-paths.util');
-      const bbsRoot = config.get('dataDir');
-      const paths = new BBSPaths(bbsRoot);
-      resolvedPath = paths.resolveAmigaPath(dirPath);
-    } catch { /* fall through to original path */ }
-  }
-
-  // statfs answers for a filesystem, not for a directory entry, so a path that
-  // does not exist yet is not "0 bytes free" - it is the wrong question. The
-  // node playpen is created when a transfer starts, so on a quiet node it is
-  // routinely absent, and 0 here refuses every upload. Ask the nearest
-  // ancestor that does exist: same filesystem, real answer.
-  try {
-    const fsMod = require('fs');
-    let probe = resolvedPath;
-    for (let i = 0; i < 64 && !fsMod.existsSync(probe); i++) {
-      const parent = require('path').dirname(probe);
-      if (parent === probe) break;
-      probe = parent;
-    }
-    resolvedPath = probe;
-  } catch { /* probe the original path */ }
-
-  let freeBytes = 0;
-  try {
-    const fs = require('fs');
-    if (typeof fs.statfsSync === 'function') {
-      const st = fs.statfsSync(resolvedPath);
-      freeBytes = st.bfree * st.bsize;
-    } else {
-      // df -k: 1K blocks; column 4 is "Available"
-      const { execSync } = require('child_process');
-      const out: string = execSync(`df -k "${resolvedPath}"`, { encoding: 'utf-8' });
-      const line = out.trim().split('\n').pop() || '';
-      const avail = parseInt(line.trim().split(/\s+/)[3], 10);
-      if (!isNaN(avail)) freeBytes = avail * 1024;
-    }
-  } catch { /* leave freeBytes = 0 */ }
-  return freeBytes;
 }
 
 /**

@@ -15,7 +15,7 @@
  * `hasPool()` to tell "no bucket configured" apart from "the bucket is full."
  */
 import type { StorageVolume, VolumeClass } from './volume-config';
-import { parseVolumes, readVolumeSecret } from './volume-config';
+import { parseVolumes, readVolumeSecret, resolveLocalDrive } from './volume-config';
 import type { StorageBackend } from './storage-backend';
 import { StorageQuotaError } from './storage-backend';
 import { LocalBackend } from './local-backend';
@@ -70,7 +70,11 @@ export class VolumeSet {
     for (const volume of parseVolumes(bbsRoot)) {
       try {
         if (volume.kind === 'local') {
-          states.push(VolumeSet.blank(volume, new LocalBackend(volume.driveNumber, volume.path)));
+          // `BBS:` is the board root, not a directory called "BBS:" under the
+          // process's cwd. A target that names nothing on this host keeps its
+          // text, as before; the admin flags it (drive-config.service.ts).
+          const root = resolveLocalDrive(volume.path, bbsRoot) ?? volume.path;
+          states.push(VolumeSet.blank(volume, new LocalBackend(volume.driveNumber, root)));
           continue;
         }
         const secret = readVolumeSecret(bbsRoot, volume.driveNumber);

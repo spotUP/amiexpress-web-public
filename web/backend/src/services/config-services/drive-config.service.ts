@@ -25,6 +25,7 @@ import * as path from 'path';
 import {
   parseVolumes,
   readVolumeSecret,
+  resolveLocalDrive,
   type EgressPosture,
   type StorageVolume,
   type VolumeClass,
@@ -37,6 +38,7 @@ import { remoteAreaFromDisk, usableRemoteAreasFor } from '../../storage/remote-a
 import { loadFileAreasFromDisk } from '../file-areas-loader';
 import { loadConfConfig } from '../conf-config.service';
 import { VolumeSet } from '../../storage/volume-set';
+import { readFreeBytes } from '../../storage/free-space';
 import { refreshStorageContext } from '../../storage';
 
 /** `GET /api/config/drives` - a drive, decorated with the pool facts the page shows. */
@@ -88,6 +90,16 @@ export interface DriveConfigView extends DriveConfig {
    */
   degraded: boolean;
   outOfRequests: boolean;
+  /**
+   * A LOCAL drive only: the directory on this host its DRIVE.n names, or null
+   * when it names nothing here - `DH1:` carried over from an Amiga board, a
+   * folder that was removed. Null is a broken entry, not a working drive:
+   * freeDiskSpace() counts it as 0 and the upload screen says it cannot find
+   * it (express.e:17460). Undefined for an s3 drive, which has no host path.
+   */
+  resolvedPath?: string | null;
+  /** A LOCAL drive that resolved: free bytes on its filesystem (statfs). */
+  freeBytes?: number;
 }
 
 /** A quarantined file, for the admin page - see `FileCache.parkedFiles`. */
@@ -222,6 +234,7 @@ export class DriveConfigService {
 
     return volumes.map((volume): DriveConfigView => {
       const liveState = live?.volumes.byNumber(volume.driveNumber);
+      const resolvedPath = volume.kind === 'local' ? resolveLocalDrive(volume.path, bbsRoot) : undefined;
       return {
         id: volume.driveNumber,
         drive_number: volume.driveNumber,
@@ -250,6 +263,8 @@ export class DriveConfigService {
         inPool: live ? liveState !== undefined : undefined,
         degraded: liveState?.degraded ?? false,
         outOfRequests: live?.volumes.isOutOfRequests(volume.driveNumber) ?? false,
+        resolvedPath,
+        freeBytes: resolvedPath ? readFreeBytes(resolvedPath, bbsRoot) : undefined,
       };
     });
   }

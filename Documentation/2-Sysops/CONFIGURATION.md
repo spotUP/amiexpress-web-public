@@ -275,7 +275,7 @@ them, the same way it ignores any tooltype it doesn't know.
 
 | Key | Meaning |
 |---|---|
-| `DRIVE.n` | `s3://bucket-name` for a pooled volume, or a plain Amiga path (`DH1:Files`) for local disk. |
+| `DRIVE.n` | `s3://bucket-name` for a pooled volume, or a local disk on this server: `BBS:` (the board's own volume), another board assign, or an absolute folder path. A local entry must name something that exists here - an Amiga volume such as `DH1:` does not, and the admin's Drives page flags it. The upload screen's "available for uploading" figure is the free space of every local drive added up (express.e `freeDiskSpace()`). |
 | `DRIVE.n.ENDPOINT` | The provider's S3-compatible endpoint URL. Required for `s3://`. |
 | `DRIVE.n.REGION` | The provider's region string. Some providers (R2, some MinIO setups) accept `auto`. |
 | `DRIVE.n.KEYID` | The access key ID. Not secret by itself — the secret half is never written here (see below). |
@@ -305,7 +305,7 @@ different file areas yourself; the board will not do it for you today.
 **Worked example — a free-tier volume:**
 
 ```
-DRIVE.1=DH1:Files
+DRIVE.1=BBS:
 DRIVE.2=s3://uprough-cold
 DRIVE.2.ENDPOINT=https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com
 DRIVE.2.REGION=us-ashburn-1

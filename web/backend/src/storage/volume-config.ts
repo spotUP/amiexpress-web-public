@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readTooltypeMap } from '../utils/info-file.util';
+import { BBSPaths } from '../utils/bbs-paths.util';
 
 export type VolumeClass = 'FREE' | 'PAID';
 export type EgressPosture = 'FREE' | 'METERED' | '3X';
@@ -116,17 +117,82 @@ function parseDriveRequestBudget(driveNumber: number, text: string): number {
   return Number(match[1]);
 }
 
-export function parseVolumes(bbsRoot: string): StorageVolume[] {
+/**
+ * The DRIVE.1..n targets, in order, and the tooltype map they came from.
+ *
+ * The one walk of the series: express.e:17400-17424 freeDiskSpace() reads
+ * DRIVE.1, DRIVE.2, ... and stops at the first number that is missing, and
+ * both `parseVolumes` and the board's own `freeDiskSpace` (free-space.ts) need
+ * exactly that list. `drivesInfoExists` is false when the file is absent -
+ * express.e's "DRIVES.info is missing" case, which is not the same as a file
+ * that lists nothing.
+ */
+export function readDriveTargets(bbsRoot: string): {
+  drivesInfoExists: boolean;
+  tools: Map<string, string>;
+  targets: Array<{ driveNumber: number; target: string }>;
+} {
   const drivesInfo = path.join(bbsRoot, 'Drives.info');
-  if (!fs.existsSync(drivesInfo)) return [];
+  if (!fs.existsSync(drivesInfo)) return { drivesInfoExists: false, tools: new Map(), targets: [] };
 
   const tools = readTooltypeMap(drivesInfo);
-  const volumes: StorageVolume[] = [];
-
+  const targets: Array<{ driveNumber: number; target: string }> = [];
   for (let n = 1; n <= 50; n++) {
     const target = tools.get(`DRIVE.${n}`);
     if (!target) break; // A gap ends the list, exactly as freeDiskSpace() does.
+    targets.push({ driveNumber: n, target });
+  }
+  return { drivesInfoExists: true, tools, targets };
+}
 
+/**
+ * The directory on THIS host a local DRIVE.n names, or null when it names
+ * nothing here.
+ *
+ * On the Amiga a DRIVE.n was a volume - `DH1:`, `Work:` - and rFreeSpace()
+ * Lock()ed it (express.e:17437). This port has one volume of its own, the
+ * board root, which is the `BBS:` assign; a board's other assigns (DOORS:,
+ * NODE<n>:, S:, ...) resolve through the same table every other path in the
+ * board uses (`BBSPaths.resolveAmigaPath`). A volume that table does not know
+ * - `DH1:` carried over from the original Amiga board - has no meaning on
+ * this host, and is answered null rather than guessed: the 68K emulator maps
+ * unknown volumes onto the board root so a door's Lock() succeeds, but a
+ * sysop's drive list that silently means "the board root, twice" is the thing
+ * this function exists to stop.
+ *
+ * An absolute host path is itself, and a bare relative one is under the board
+ * root, the same rule `areaLocalRoot` (remote-areas.ts) applies to DLPATH.n.
+ * Either way the directory must exist: statfs answers for a filesystem, and a
+ * path that is not there has none.
+ */
+export function resolveLocalDrive(target: string, bbsRoot: string): string | null {
+  const trimmed = target.trim();
+  if (trimmed === '') return null;
+
+  let resolved: string;
+  if (/^[A-Za-z][A-Za-z0-9_]*:/.test(trimmed)) {
+    const viaAssign = new BBSPaths(bbsRoot).resolveAmigaPath(trimmed);
+    if (viaAssign === trimmed) return null; // an AmigaDOS volume this host does not have
+    resolved = viaAssign;
+  } else if (path.isAbsolute(trimmed)) {
+    resolved = trimmed;
+  } else {
+    resolved = path.join(bbsRoot, trimmed);
+  }
+
+  resolved = path.resolve(resolved);
+  try {
+    return fs.statSync(resolved).isDirectory() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseVolumes(bbsRoot: string): StorageVolume[] {
+  const { tools, targets } = readDriveTargets(bbsRoot);
+  const volumes: StorageVolume[] = [];
+
+  for (const { driveNumber: n, target } of targets) {
     const isS3 = target.toLowerCase().startsWith('s3://');
     const quota = tools.get(`DRIVE.${n}.QUOTA`);
     const egress = tools.get(`DRIVE.${n}.EGRESS`)?.toUpperCase();

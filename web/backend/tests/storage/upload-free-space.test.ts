@@ -28,6 +28,7 @@ import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { config } from '../../src/config';
 import { flushOutput } from '../../src/utils/output.util';
 import { FakeBackend } from './fake-backend';
+import { applyTooltypes } from '../../src/utils/info-file.util';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -323,5 +324,57 @@ describe('the upload gate', () => {
 
     expect(h.written()).not.toContain('Not enough free space for uploading!');
     expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+  });
+});
+
+describe('freeDiskSpace() over the board\'s local DRIVE.n volumes', () => {
+  // express.e:17400-17432: the first number is the sum of rFreeSpace() over
+  // every DRIVE.n. Before this, a local area always showed the playpen's
+  // statfs and Drives.info was never read - so DH1:/DH2: carried over from the
+  // Amiga board sat in the drive list meaning nothing.
+  const GB = 1024 ** 3;
+  const MB = 1024 ** 2;
+
+  function statfsAnswering(byPath: Record<string, number>) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fsMod = require('fs');
+    const real = fsMod.statfsSync.bind(fsMod);
+    return jest.spyOn(fsMod, 'statfsSync').mockImplementation(((p: string) => {
+      const bytes = byPath[String(p)];
+      if (bytes === undefined) return real(p);
+      return { ...real(p), bfree: bytes / 4096, bsize: 4096 };
+    }) as never);
+  }
+
+  it('reports the real free space of the board volume a DRIVE.n=BBS: names', () => {
+    const h = harness({ withPlaypen: true });
+    applyTooltypes(path.join(h.dataDir, 'Drives.info'), [['DRIVE.1', 'BBS:']]);
+    const playpen = path.join(h.dataDir, 'Node1', 'Playpen');
+    const statfs = statfsAnswering({ [h.dataDir]: 20 * GB, [playpen]: 3 * MB });
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    const probed = statfs.mock.calls.map((call) => String(call[0]));
+    statfs.mockRestore();
+    // The sentinel: the board volume itself was measured, not just the playpen.
+    expect(probed).toContain(h.dataDir);
+    expect(h.written()).toContain('20.0 GB available for uploading.  3.0 MB at one time.');
+    expect(h.written()).not.toContain('Can not find free space');
+    expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+  });
+
+  it('says it cannot find a DRIVE.n volume this host does not have, and counts it as nothing', () => {
+    const h = harness({ withPlaypen: true });
+    applyTooltypes(path.join(h.dataDir, 'Drives.info'), [['DRIVE.1', 'BBS:'], ['DRIVE.2', 'DH1:']]);
+    const playpen = path.join(h.dataDir, 'Node1', 'Playpen');
+    const statfs = statfsAnswering({ [h.dataDir]: 20 * GB, [playpen]: 3 * MB });
+
+    displayUploadInterface(h.socket, h.session, '');
+    statfs.mockRestore();
+
+    // express.e:17460 rFreeSpace: 'Can not find free space for <path>'
+    expect(h.written()).toContain('Can not find free space for DH1:');
+    // DH1: adds 0 - it is not silently the board's own disk a second time.
+    expect(h.written()).toContain('20.0 GB available for uploading.');
   });
 });
