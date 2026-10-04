@@ -227,8 +227,10 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
     // Trigger webhook for sysop page
     this.sendPagerWebhook(session);
 
-    // Display paging message
-    socket.emit('ansi-output', '\r\n\x1b[32mF1 Toggles chat\r\n');
+    // express.e:20347 conPuts('\b\nF1 Toggles chat\b\n') - conPuts writes to
+    // the Amiga's local console only, where F1 is the sysop's key. The caller
+    // never sees it, and this port has no local console, so nothing goes to
+    // the caller's socket here.
 
     // Try to execute pager door first
     if (!executePagerDoor || !executePagerDoor(socket, session, chatSession)) {

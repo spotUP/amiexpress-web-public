@@ -191,7 +191,10 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
   if (session.shortcuts) session.shortcuts.clear();
   session.doorExpertMode = false;
   session.menuPause = true; // ensure next displayMainMenu shows if invoked during logoff edge cases
-  const logoffDisplayed = await _displayScreen(socket, session, 'Logoff');
+  // express.e:8187 has no fallback: a board without a LOGOFF screen shows the
+  // caller nothing here. The port printed 'Thank you for calling <bbs>' in
+  // its place - text express.e never writes.
+  await _displayScreen(socket, session, 'Logoff');
 
   /*
    * THE ART GOES OUT NOW, WHILE THERE IS STILL A LINE TO PUT IT ON.
@@ -208,14 +211,6 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
    * different cause had been ruled out: "logoff is still cut off".
    */
   flushOutput(socket);
-
-  if (!logoffDisplayed) {
-    // Fallback if Logoff.txt doesn't exist
-    // express.e:25047 internalCommandG - no header, just processes logoff
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS') + '\r\n');
-    socket.emit('ansi-output', '\r\n');
-  }
 
   // Persist flagged list (express.e saveFlagged) before dropping carrier
   try {

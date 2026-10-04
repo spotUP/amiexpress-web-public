@@ -134,7 +134,8 @@ test('a caller who confirms, then answers the questions by typing, gets through 
   expect(text(socket)).toContain('Where did you hear of us:');
 
   await type(socket, session, 'a friend');
-  expect(text(socket)).toContain('Is the above Correct? (Y/n)');
+  // express.e:30391 aePuts('Is the above Correct? ') - no (Y/n) hint.
+  expect(text(socket)).toMatch(/Is the above Correct\? $/);
 
   await type(socket, session, 'Y');
   expect(session.state).toBe(BBSState.LOGGEDON);
@@ -155,4 +156,39 @@ test('the browser is told it is logged on only once the questionnaire is over', 
   expect(session.user?.username).toBe('newbie');
   expect(session.state).toBe(BBSState.REGISTERING);
   expect(socket._emits.some((e: any) => e.event === 'login-success')).toBe(false);
+});
+
+// express.e:30313-30316: N (or Q) at the new-user "Is the above Correct?"
+// prints 'No!' and goes back to the name prompt (jLoop1, 30133).
+test('N at the new-user confirm says No! and starts over at the name prompt', async () => {
+  const socket = makeSocket();
+  const session = makeSession();
+
+  await type(socket, session, 'N');
+
+  expect(text(socket)).toContain('No!\r\n\r\n');
+  expect(text(socket)).not.toContain('Starting over');
+  expect(session.subState).toBe(LoggedOnSubState.NEW_USER_NAME);
+});
+
+// express.e:30272 aePuts('You want Screen Clears after Messages ? ') - no
+// (y/N) hint; Y turns it on, anything else (Enter included) is No!.
+test('the Screen Clears question carries no hint and still reads Y and Enter', async () => {
+  const yes = makeSocket();
+  const s1 = makeSession();
+  s1.subState = LoggedOnSubState.NEW_USER_COMPUTER;
+  s1.newUserData.computerChoices = ['Amiga'];
+  await type(yes, s1, '');                                // Enter at the computer menu
+  expect(text(yes)).toMatch(/You want Screen Clears after Messages \? $/);
+  await type(yes, s1, 'Y');
+  expect(s1.newUserData.screenClear).toBe(true);
+  expect(text(yes)).toContain('Yes..');
+
+  const enter = makeSocket();
+  const s2 = makeSession();
+  s2.subState = LoggedOnSubState.NEW_USER_SCREEN_CLEAR;
+  await type(enter, s2, '');
+  expect(s2.newUserData.screenClear).toBe(false);
+  expect(text(enter)).toContain('No!');
+  expect(s2.subState).toBe(LoggedOnSubState.NEW_USER_CONFIRM);
 });

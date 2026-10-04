@@ -21,8 +21,6 @@
  * silently.
  *
  * Transport-specific connect-time work that does NOT belong here:
- *   - The "/X Native Telnet: searching for free node…" web banner
- *     (deliberate web-only emulation).
  *   - Connection rate-limiting and node assignment (each transport
  *     has different policies).
  *   - registerSocketHandlers (web socket.io concept; telnet/SSH use
@@ -155,8 +153,8 @@ export async function emitConnectBanner(
   // this service - telnet short-circuits to handleC64Detected - so ANSI
   // clear needs no PETSCII twin here.)
   say("\x1b[2J\x1b[H");
-  say("\r\n/X Native Telnet:  Searching for free node...\r\n");
-  say(`/X Native Telnet:  Successful connection to node ${nodeId}\r\n`);
+  // No '/X Native Telnet:' lines: they imitated the /X telnet daemon and
+  // express.e prints no such text (audit 2026-10-04, sysop decision).
   say("\r\nCONNECT 19200\r\n");
   say("**EMSI_IRQ8E08\r\n");
   say("\r\n");

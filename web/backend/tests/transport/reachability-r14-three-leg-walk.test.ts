@@ -247,7 +247,8 @@ describe('R14 - three legs, one board', () => {
 
     // Not vacuous: an empty stream must not match another empty stream.
     for (const leg of [telnet, ssh, web]) {
-      expect(leg.step01.length).toBeGreaterThan(400);
+      // ~400 bytes; the two invented '/X Native Telnet' lines went 2026-10-04.
+      expect(leg.step01.length).toBeGreaterThan(300);
       expect(leg.step01).toContain(STEP_01);
       expect(leg.step01).toContain('Connection occurred at');
     }

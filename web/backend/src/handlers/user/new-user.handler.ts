@@ -982,7 +982,8 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
  * (Audit A-20.)
  */
 function promptForScreenClear(socket: Socket, session: any) {
-  socket.emit('ansi-output', 'You want Screen Clears after Messages ? (y/N) ');
+  // express.e:30272 prints no (y/N) hint; any answer but Y is No (30276-30281).
+  socket.emit('ansi-output', 'You want Screen Clears after Messages ? ');
   session.inputBuffer = '';
 }
 
@@ -1155,9 +1156,10 @@ async function scriptDoorRan(socket: Socket, session: any): Promise<boolean> {
 export async function handleConfirmInput(socket: Socket, session: any, input: string) {
   const response = input.trim().toUpperCase();
 
-  if (response === 'N' || response === 'NO') {
-    // Go back to name entry
-    socket.emit('ansi-output', '\r\n\x1b[33mStarting over...\x1b[0m\r\n\r\n');
+  // express.e:30313-30316 - N or Q: aePuts('No!\b\n\b\n') and JUMP jLoop1,
+  // back to the name prompt (30133).
+  if (response === 'N' || response === 'NO' || response === 'Q' || response === 'QUIT') {
+    socket.emit('ansi-output', 'No!\r\n\r\n');
     session.subState = LoggedOnSubState.NEW_USER_NAME;
     session.newUserData.linesCountdownShown = false;
     promptForName(socket, session);
@@ -1241,7 +1243,7 @@ export async function handleQuestionnaireAnswer(socket: Socket, session: any, in
     // If still no awaiting prompt and we've exhausted steps, move to confirm
     if (typeof questionnaire.awaitingPromptIndex !== 'number' && questionnaire.currentIndex >= questionnaire.steps.length) {
       session.subState = LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM;
-      socket.emit('ansi-output', '\r\nIs the above Correct? (Y/n) ');
+      socket.emit('ansi-output', '\r\nIs the above Correct? '); // express.e:30391, no hint
     }
     return;
   }
@@ -1384,7 +1386,7 @@ console.warn('[NEW USER] questionnaire MCI line failed:', step.content, (error a
   }
 
   session.subState = LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM;
-  socket.emit('ansi-output', '\r\nIs the above Correct? (Y/n) ');
+  socket.emit('ansi-output', '\r\nIs the above Correct? '); // express.e:30391, no hint
 }
 
 function findQuestionnaireScript(session: any): string | null {

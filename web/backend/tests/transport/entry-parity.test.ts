@@ -50,8 +50,8 @@ describe('the connect banner', () => {
     await emitConnectBanner(caller.emitter, sessionOn('telnet'), 0);
 
     const text = caller.text();
-    expect(text).toContain('/X Native Telnet:  Searching for free node...');
-    expect(text).toContain('/X Native Telnet:  Successful connection to node 3');
+    // express.e prints no /X telnet-daemon lines (sysop decision 2026-10-04).
+    expect(text).not.toContain('/X Native Telnet');
     expect(text).toContain('CONNECT 19200');
     expect(text).toContain('**EMSI_IRQ8E08');
     expect(text).toContain('Welcome to');

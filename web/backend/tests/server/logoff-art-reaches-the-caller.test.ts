@@ -87,4 +87,19 @@ describe('the logoff art reaches the caller', () => {
       expect(at).toBeLessThan(carrierAt);          // and arrived before the goodbye
     }
   });
+
+  // express.e:8187 displayScreen(SCREEN_LOGOFF) and nothing else: a board
+  // with no LOGOFF screen says nothing. The port printed an invented
+  // 'Thank you for calling <bbs>' in its place.
+  test('a board without a LOGOFF screen prints no invented goodbye', async () => {
+    setSystemCommandsDependencies({
+      displayScreen: async () => false,
+      findSecurityScreen: async () => null,
+    });
+    const socket = makeSocket();
+    await handleGoodbyeCommand(socket as any, makeSession());
+    const sent = socket.wire.join('');
+    expect(sent).toContain('NO CARRIER');
+    expect(sent).not.toContain('Thank you for calling');
+  });
 });

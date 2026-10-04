@@ -103,6 +103,16 @@ describe("sysop page-wait (task 18)", () => {
     jest.useRealTimers();
   });
 
+  // express.e:20347 conPuts('\b\nF1 Toggles chat\b\n') writes to the sysop's
+  // local console only; the paging caller never sees it.
+  it("does not show the caller the sysop console's 'F1 Toggles chat'", () => {
+    const socket = makeSocket();
+    handler.startSysopPage(socket, makeSession());
+    const text = socket.emitted.filter(e => e.event === "ansi-output").map(e => String(e.data)).join("");
+    expect(text).toContain("Paging");
+    expect(text).not.toContain("F1 Toggles chat");
+  });
+
   describe('notifySysopPage — flag set by CF_InternalCmd "C" during the door run', () => {
     it("sets sysopPagePending and sysopPageChatSessionId, without touching the socket", () => {
       const session = makeSession();

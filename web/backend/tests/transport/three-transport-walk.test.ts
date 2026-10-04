@@ -195,7 +195,6 @@ describe('step 01 - connect, to the graphics prompt', () => {
 
     for (const text of [telnet, ssh]) {
       // TP-13a: these lines used to reach the browser and nobody else.
-      expect(text).toContain('/X Native Telnet:  Searching for free node...');
       expect(text).toContain('CONNECT 19200');
       expect(text).toContain('**EMSI_IRQ8E08');
       expect(text).toContain('Welcome to');
@@ -206,8 +205,9 @@ describe('step 01 - connect, to the graphics prompt', () => {
 
     // Both legs said something substantial, so an empty stream cannot pass
     // the comparison above by matching another empty stream.
-    expect(telnet.length).toBeGreaterThan(400);
-    expect(ssh.length).toBeGreaterThan(400);
+    // (300: the two '/X Native Telnet' lines are gone - express.e has none.)
+    expect(telnet.length).toBeGreaterThan(300);
+    expect(ssh.length).toBeGreaterThan(300);
   });
 });
 
