@@ -1018,6 +1018,14 @@ class ApiClient {
     });
   }
 
+  /** A bucket's details, tested with one request before they are saved. Nothing is stored. */
+  async testDriveConnection(probe: { endpoint: string; region: string; bucket: string; keyId: string; secret: string }) {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify(probe),
+    });
+  }
+
   async testDrive(driveNumber: number) {
     return this.request<ApiResponse>(`${API_BASE}/config/drives/${driveNumber}/test`, {
       method: 'POST',

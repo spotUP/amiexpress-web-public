@@ -1664,6 +1664,34 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   });
 
   /**
+   * POST /api/config/drives/test-connection
+   * The setup wizard's Test button: one `list()` against a bucket whose
+   * details are in the body and NOT saved anywhere - no Drives.info line, no
+   * Storage/<n>.key. The secret is used for the one request and never
+   * returned (see DriveConfigService.testCredentials).
+   */
+  router.post('/drives/test-connection', async (req: Request, res: Response) => {
+    try {
+      const { endpoint, region, bucket, keyId, secret } = req.body ?? {};
+      for (const [field, value] of Object.entries({ endpoint, bucket, keyId, secret })) {
+        if (typeof value !== 'string') {
+          return handleError(res, new Error(`${field} must be a string`));
+        }
+      }
+      const result = await configService.testDriveCredentials({
+        endpoint,
+        region: typeof region === 'string' ? region : undefined,
+        bucket,
+        keyId,
+        secret,
+      });
+      sendResponse(res, result);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * POST /api/config/drives/:n/test
    * One `list()` against the volume, reporting reachable or not - never the
    * whole bucket (see DriveConfigService.testVolume).

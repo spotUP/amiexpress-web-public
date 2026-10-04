@@ -453,3 +453,45 @@ export function createS3Backend(volume: StorageVolume, secret: string): S3Backen
   });
   return new S3Backend(volume.driveNumber, volume.path, client as unknown as S3ClientLike);
 }
+
+/**
+ * What a failed connection test means, in the words a sysop setting up a
+ * bucket can act on - "the secret does not match the key ID" rather than
+ * `SignatureDoesNotMatch (403)`. Lives beside the name sets above because it
+ * reads the same vocabulary: the modeled S3 error name, the HTTP status, and
+ * Node's own socket codes for a request that never got an answer.
+ *
+ * `S3Backend.unavailable` wraps every failure in a StorageUnavailableError
+ * and keeps the SDK's error as `.cause`, so the cause is read first.
+ */
+export function explainStorageFailure(error: unknown): string {
+  const wrapped = error as { cause?: unknown; message?: string } | undefined;
+  const err = ((wrapped?.cause ?? error) ?? {}) as ErrorShape & { message?: string };
+  const name = err.name ?? '';
+  const status = err.$metadata?.httpStatusCode;
+  const code = err.code ?? '';
+
+  if (name === 'InvalidAccessKeyId') {
+    return 'The provider does not know this key ID. Copy the key ID again - it is the ID, not the name you gave the key.';
+  }
+  if (name === 'SignatureDoesNotMatch') {
+    return 'The secret does not belong to this key ID. Paste the secret again; if you no longer have it, create a new key - providers show a secret only once.';
+  }
+  if (name === 'NoSuchBucket' || name === 'InvalidBucketName') {
+    return 'There is no bucket with this name at this address. Check the bucket name, and that the region or endpoint is the one the bucket was created in.';
+  }
+  if (name === 'PermanentRedirect' || name === 'AuthorizationHeaderMalformed' || status === 301) {
+    return 'The bucket lives in a different region from the one entered. Use the region shown on the bucket in the provider console.';
+  }
+  if (name === 'AccessDenied' || name === 'AllAccessDisabled' || status === 403) {
+    return 'The key was accepted but is not allowed to read this bucket. Give the key read and write access to this bucket.';
+  }
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+    return 'That endpoint address does not exist. Check the region, account ID or host you entered.';
+  }
+  if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EHOSTUNREACH' || name === 'TimeoutError') {
+    return 'Nothing answered at that endpoint. Check the address, and for a self-hosted server that it is running and reachable from the board.';
+  }
+  const detail = err.message || wrapped?.message || String(error);
+  return `The provider refused the request: ${detail}`;
+}

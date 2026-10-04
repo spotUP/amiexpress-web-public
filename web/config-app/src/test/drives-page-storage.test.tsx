@@ -59,6 +59,9 @@ const createDrive = vi.fn();
 const updateDrive = vi.fn();
 const deleteDrive = vi.fn();
 const getStorageProviders = vi.fn();
+const testDriveConnection = vi.fn();
+const getConferenceConfigs = vi.fn();
+const updateConferenceConfig = vi.fn();
 
 vi.mock('../api/client', () => ({
   apiClient: {
@@ -72,34 +75,82 @@ vi.mock('../api/client', () => ({
     updateDrive: (...args: unknown[]) => updateDrive(...args),
     deleteDrive: (...args: unknown[]) => deleteDrive(...args),
     getStorageProviders: (...args: unknown[]) => getStorageProviders(...args),
+    testDriveConnection: (...args: unknown[]) => testDriveConnection(...args),
+    getConferenceConfigs: (...args: unknown[]) => getConferenceConfigs(...args),
+    updateConferenceConfig: (...args: unknown[]) => updateConferenceConfig(...args),
   },
 }));
 
+/** A provider's setup guide, as the catalogue serves it. */
+function guide(overrides: Record<string, unknown> = {}) {
+  return {
+    signupUrl: 'https://example.com/sign-up',
+    docsUrl: 'https://example.com/docs',
+    account: ['Sign up.'],
+    bucket: ['Create a bucket.'],
+    key: ['Create a key.'],
+    keyIdField: 'Access Key ID',
+    secretField: 'Secret Access Key',
+    secretShownOnce: true,
+    endpointHint: '',
+    ...overrides,
+  };
+}
+
 /** The catalogue the page fetches, trimmed to what these tests decide on. */
 const PROVIDERS = [
+  {
+    id: 'b2',
+    label: 'Backblaze B2',
+    endpointTemplate: 'https://s3.{}.backblazeb2.com',
+    endpointFieldLabel: 'Region (eu-central-003, us-west-004)',
+    regionFieldLabel: '',
+    regionFromEndpointField: true,
+    defaultRegion: 'eu-central-003',
+    volumeClass: 'FREE',
+    freeQuotaBytes: 10 * 1024 * 1024 * 1024,
+    egress: 'FREE',
+    minimumRetentionDays: 0,
+    note: 'Free egress up to three times what you store.',
+    setup: guide({
+      signupUrl: 'https://www.backblaze.com/sign-up/cloud-storage',
+      account: ['Choose EU Central in the Region selector before you sign up.'],
+      bucket: ['Set Files in Bucket to Private.'],
+      key: ['Set Allow Access to Bucket(s) to this bucket only.'],
+      keyIdField: 'keyID',
+      secretField: 'applicationKey',
+      endpointHint: 'The region is the middle part of the bucket Endpoint.',
+    }),
+  },
   {
     id: 'r2',
     label: 'Cloudflare R2',
     endpointTemplate: 'https://{}.r2.cloudflarestorage.com',
     endpointFieldLabel: 'Account ID',
+    regionFieldLabel: '',
+    regionFromEndpointField: false,
     defaultRegion: 'auto',
     volumeClass: 'FREE',
     freeQuotaBytes: 10 * 1024 * 1024 * 1024,
     egress: 'FREE',
     minimumRetentionDays: 0,
     note: 'Zero egress cost.',
+    setup: guide(),
   },
   {
     id: 'wasabi',
     label: 'Wasabi',
     endpointTemplate: 'https://s3.{}.wasabisys.com',
     endpointFieldLabel: 'Region',
+    regionFieldLabel: '',
+    regionFromEndpointField: true,
     defaultRegion: 'eu-central-1',
     volumeClass: 'PAID',
     freeQuotaBytes: 0,
     egress: 'FREE',
     minimumRetentionDays: 90,
     note: 'Egress included.',
+    setup: guide(),
   },
 ];
 
@@ -443,73 +494,112 @@ describe('DrivesPage - the Edit form cannot silently strand or delete a mapping'
     expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
     expect(screen.getByText(/use Delete instead/i)).toBeInTheDocument();
   });
-
-  it('keeps the Enabled checkbox on the Add form, where nothing can yet be orphaned', async () => {
-    getDrives.mockResolvedValue({ success: true, data: [] });
-    renderPage();
-
-    await userEvent.click(await screen.findByRole('button', { name: /add drive/i }));
-    expect(await screen.findByText('Enabled')).toBeInTheDocument();
-  });
 });
 
 /**
- * Adding a bucket used to mean editing Drives.info on the server: the form
- * offered a drive number, a path and a description, and the save schema
- * declared only those. A sysop could SEE a pooled volume's terms in the admin
- * and never create one there.
- *
- * These cover the selection-driven flow: pick a provider, type the few things
- * only the sysop knows, and let the catalogue supply the rest.
+ * Adding a drive is a wizard: "i tried to add a Backblaze B2 bucket now but
+ * it needs an api key and there is no help/link on how to create the account
+ * and get a key" (the sysop, 2026-10-04). The steps come from the provider
+ * catalogue; these walk one provider through to a drive in use.
  */
-describe('adding a bucket by picking a provider', () => {
-  it('offers the next contiguous drive number, never 0', async () => {
+describe('the Add Drive wizard', () => {
+  const SECRET = 'K005-application-key-shown-once';
+
+  it('walks Backblaze B2 from sign-up to a directory on the new drive, and never shows the secret back', async () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
-    renderPage();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /add drive/i }));
-
-    // parseVolumes stops at the first gap, so the number must follow on from
-    // what disk already has. 0 was offered before and the schema rejects it.
-    const number = (await screen.findByLabelText(/drive number/i)) as HTMLInputElement;
-    expect(number.value).toBe(String(s3Drive().drive_number + 1));
-  });
-
-  it('sends the provider terms with the drive, and the secret separately', async () => {
-    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    testDriveConnection
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          reachable: false,
+          error: 'SignatureDoesNotMatch (403)',
+          explanation: 'The secret does not belong to this key ID.',
+        },
+      })
+      .mockResolvedValueOnce({ success: true, data: { reachable: true } });
     createDrive.mockResolvedValue({ success: true, data: {} });
     writeDriveSecret.mockResolvedValue({ success: true });
+    getConferenceConfigs.mockResolvedValue({
+      success: true,
+      data: [{ conference_id: 1, name: 'Main', ndirs: 2, storagedrive_1: 2 }],
+    });
+    updateConferenceConfig.mockResolvedValue({ success: true, data: {} });
     renderPage();
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /add drive/i }));
-    await user.click(await screen.findByRole('button', { name: /Cloudflare R2/ }));
 
+    // 1. Provider: the terms that decide it.
+    await user.click(await screen.findByRole('button', { name: /Backblaze B2/ }));
+    expect(screen.getByText(/three times what you store/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    // 2. Account: the sign-up link, in a new tab.
+    const signup = await screen.findByRole('link', { name: /sign-up page/i });
+    expect(signup).toHaveAttribute('href', 'https://www.backblaze.com/sign-up/cloud-storage');
+    expect(signup).toHaveAttribute('target', '_blank');
+    expect(screen.getByText(/EU Central/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    // 3. Bucket: where the region is read from.
+    expect(await screen.findByText(/Files in Bucket to Private/)).toBeInTheDocument();
+    expect(screen.getByText(/middle part of the bucket Endpoint/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    // 4. Key: which console field is which, and that the secret shows once.
+    expect(await screen.findByText(/this bucket only/)).toBeInTheDocument();
+    expect(screen.getByText(/"keyID" there/)).toBeInTheDocument();
+    expect(screen.getByText(/"applicationKey" there/)).toBeInTheDocument();
+    expect(screen.getByText(/once only/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    // 5. Details, tested before anything is saved.
     await user.type(await screen.findByLabelText(/bucket name/i), 'my-bbs-files');
-    await user.type(await screen.findByLabelText(/account id/i), 'acct123');
-    await user.type(await screen.findByLabelText(/access key id/i), 'AKIAEXAMPLE');
-    await user.type(await screen.findByLabelText(/secret access key/i), 'super-secret');
+    await user.type(screen.getByLabelText(/^Region/), 'us-west-004');
+    await user.type(screen.getByLabelText(/key id/i), '0041234567890ab0000000001');
+    await user.type(screen.getByLabelText(/^Secret/), SECRET);
+
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+    expect(await screen.findByText('The secret does not belong to this key ID.')).toBeInTheDocument();
+    expect(testDriveConnection).toHaveBeenCalledWith({
+      endpoint: 'https://s3.us-west-004.backblazeb2.com',
+      // The region the bucket is in, not the catalogue's default.
+      region: 'us-west-004',
+      bucket: 'my-bbs-files',
+      keyId: '0041234567890ab0000000001',
+      secret: SECRET,
+    });
+    expect(createDrive).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+    expect(await screen.findByText(/Connected/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /create drive/i }));
-
-    await waitFor(() => expect(createDrive).toHaveBeenCalled());
+    await waitFor(() => expect(createDrive).toHaveBeenCalledTimes(1));
     const payload = createDrive.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload).toEqual({
+      drive_number: s3Drive().drive_number + 1,
+      drive_path: 's3://my-bbs-files',
+      description: '',
+      enabled: true,
+      provider: 'b2',
+      endpoint: 'https://s3.us-west-004.backblazeb2.com',
+      region: 'us-west-004',
+      keyId: '0041234567890ab0000000001',
+      volumeClass: 'FREE',
+      egress: 'FREE',
+      // The free tier is the starting quota.
+      quotaBytes: 10 * 1024 * 1024 * 1024,
+    });
+    await waitFor(() => expect(writeDriveSecret).toHaveBeenCalledWith(3, SECRET));
 
-    expect(payload.drive_path).toBe('s3://my-bbs-files');
-    // The endpoint is BUILT from the account id - the sysop never types a URL.
-    expect(payload.endpoint).toBe('https://acct123.r2.cloudflarestorage.com');
-    expect(payload.region).toBe('auto');
-    expect(payload.keyId).toBe('AKIAEXAMPLE');
-    expect(payload.volumeClass).toBe('FREE');
-    expect(payload.egress).toBe('FREE');
-    expect(payload.quotaBytes).toBe(10 * 1024 * 1024 * 1024);
-
-    // The secret must never travel to Drives.info with the rest.
-    expect(payload.secret).toBeUndefined();
-    await waitFor(() =>
-      expect(writeDriveSecret).toHaveBeenCalledWith(s3Drive().drive_number + 1, 'super-secret')
-    );
+    // 6. Use it: a directory goes on the new drive through the conference save.
+    await user.click(await screen.findByRole('button', { name: /Dir 2/ }));
+    expect(screen.getByRole('button', { name: /Dir 1/ })).toHaveTextContent('now on drive 2');
+    // Saved means gone from the page: no field and no text holds it.
+    expect(document.body.innerHTML).not.toContain(SECRET);
+    await user.click(screen.getByRole('button', { name: /put 1 on drive 3/i }));
+    await waitFor(() => expect(updateConferenceConfig).toHaveBeenCalledWith(1, { storagedrive_2: 3 }));
   });
 
   it('warns about a minimum retention that bills for deleted files', async () => {
@@ -521,6 +611,25 @@ describe('adding a bucket by picking a provider', () => {
     await user.click(await screen.findByRole('button', { name: /Wasabi/ }));
 
     expect(await screen.findByText(/still bills/i)).toBeTruthy();
-    expect(screen.getByText(/90 days/i)).toBeTruthy();
+    expect(screen.getByText(/90 days\./i)).toBeTruthy();
+  });
+
+  it('adds a folder on this server without any provider steps', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [] });
+    createDrive.mockResolvedValue({ success: true, data: {} });
+    getConferenceConfigs.mockResolvedValue({ success: true, data: [] });
+    renderPage();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add drive/i }));
+    await user.click(await screen.findByRole('button', { name: /This server/ }));
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    await user.type(await screen.findByLabelText(/folder on this server/i), '/data/drive1');
+    await user.click(screen.getByRole('button', { name: /create drive/i }));
+
+    await waitFor(() =>
+      expect(createDrive).toHaveBeenCalledWith({ drive_number: 1, drive_path: '/data/drive1', description: '', enabled: true })
+    );
+    expect(writeDriveSecret).not.toHaveBeenCalled();
   });
 });

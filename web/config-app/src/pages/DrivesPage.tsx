@@ -18,6 +18,8 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { StatusDot } from '../components/ui/StatusDot';
 import { StatTile } from '../components/ui/StatTile';
 import { formatBytes, formatCount } from '../lib/format';
+import { QUOTA_CHOICES, type StorageProvider } from './storage-providers';
+import { StorageSetupWizard } from './StorageSetupWizard';
 
 /** A stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_DRIVES: DriveConfig[] = [];
@@ -101,52 +103,14 @@ interface DriveFormData {
   drive_path: string;
   description: string;
   enabled: boolean;
-  /** '' means a plain local drive - the default, and no bucket fields shown. */
-  provider: string;
-  /** The single value that completes the provider's endpoint template. */
-  endpointFill: string;
   keyId: string;
   secret: string;
   quotaBytes: number | '';
-  /** Edit mode shows the endpoint whole; Add builds it from a template. */
+  /** Shown whole: Edit points an existing drive somewhere else. */
   endpoint: string;
   region: string;
   volumeClass: 'FREE' | 'PAID';
   egress: 'FREE' | 'METERED' | '3X';
-}
-
-/**
- * A provider as the admin needs it. Served by GET /api/config/storage-providers
- * so the egress and retention figures a sysop decides on have one source.
- */
-interface StorageProvider {
-  id: string;
-  label: string;
-  endpointTemplate: string | null;
-  endpointFieldLabel: string;
-  defaultRegion: string;
-  volumeClass: 'FREE' | 'PAID';
-  freeQuotaBytes: number;
-  egress: 'FREE' | 'METERED' | '3X';
-  minimumRetentionDays: number;
-  note: string;
-}
-
-const GB = 1024 * 1024 * 1024;
-
-/** Quota presets, so a size is a button rather than a byte count to work out. */
-const QUOTA_CHOICES: Array<{ label: string; bytes: number }> = [
-  { label: '5 GB', bytes: 5 * GB },
-  { label: '10 GB', bytes: 10 * GB },
-  { label: '25 GB', bytes: 25 * GB },
-  { label: '75 GB', bytes: 75 * GB },
-  { label: 'No limit', bytes: 0 },
-];
-
-function completeEndpoint(provider: StorageProvider | undefined, fill: string): string {
-  if (!provider?.endpointTemplate) return '';
-  if (!provider.endpointTemplate.includes('{}')) return provider.endpointTemplate;
-  return provider.endpointTemplate.replace('{}', fill.trim());
 }
 
 const EMPTY_PARKED: ParkedFileRow[] = [];
@@ -162,8 +126,6 @@ export function DrivesPage() {
     drive_path: '',
     description: '',
     enabled: true,
-    provider: '',
-    endpointFill: '',
     keyId: '',
     secret: '',
     quotaBytes: '',
@@ -177,7 +139,7 @@ export function DrivesPage() {
     queryFn: async () => (await apiClient.getStorageProviders()).data as StorageProvider[],
     staleTime: Infinity,
   });
-  const chosenProvider = providers.find(p => p.id === formData.provider);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   const [secretDrive, setSecretDrive] = useState<DriveConfig | null>(null);
   const [secretValue, setSecretValue] = useState('');
@@ -197,57 +159,6 @@ export function DrivesPage() {
     queryKey: ['drives', 'contents', contentsDrive?.drive_number],
     queryFn: () => apiClient.getDriveContents(contentsDrive!.drive_number),
     enabled: contentsDrive !== null,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (drive: DriveFormData) => {
-      const provider = providers.find(p => p.id === drive.provider);
-
-      // A local drive sends what it always sent. A bucket sends its terms too,
-      // so the DRIVE.n.* sub-keys are written by the same save rather than
-      // hand-typed into Drives.info afterwards.
-      const payload = provider
-        ? {
-            drive_number: drive.drive_number,
-            drive_path: drive.drive_path,
-            description: drive.description,
-            enabled: drive.enabled,
-            provider: provider.id,
-            endpoint: completeEndpoint(provider, drive.endpointFill),
-            region: provider.defaultRegion,
-            keyId: drive.keyId,
-            volumeClass: provider.volumeClass,
-            egress: provider.egress,
-            ...(drive.quotaBytes === '' ? {} : { quotaBytes: drive.quotaBytes }),
-            ...(provider.minimumRetentionDays > 0
-              ? { retentionDays: provider.minimumRetentionDays }
-              : {}),
-          }
-        : {
-            drive_number: drive.drive_number,
-            drive_path: drive.drive_path,
-            description: drive.description,
-            enabled: drive.enabled,
-          };
-
-      const created = await apiClient.createDrive(payload);
-
-      // The secret is a separate write on purpose: it must never reach
-      // Drives.info, which every part of the board can read.
-      if (provider && drive.secret) {
-        await apiClient.writeDriveSecret(drive.drive_number, drive.secret);
-      }
-      return created;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['drives'] });
-      showSuccess('Drive created successfully');
-      setIsModalOpen(false);
-      resetForm();
-    },
-    onError: (error: Error) => {
-      showError(`Failed to create drive: ${error.message}`);
-    },
   });
 
   const updateMutation = useMutation({
@@ -320,8 +231,6 @@ export function DrivesPage() {
     drive_path: '',
     description: '',
     enabled: true,
-    provider: '',
-    endpointFill: '',
     keyId: '',
     secret: '',
     quotaBytes: '',
@@ -338,17 +247,6 @@ export function DrivesPage() {
     setIsModalOpen(false);
     setEditingDrive(null);
     resetForm();
-  };
-
-  const handleAdd = () => {
-    // parseVolumes stops at the first GAP in the DRIVE.n series, so a new
-    // drive has to take the next contiguous number - one typed into a gap is
-    // invisible to the board. Offering it removes the commonest way to get
-    // this wrong; 0 was offered before, which the schema rejects outright.
-    const nextNumber = drives.reduce((highest, d) => Math.max(highest, d.drive_number), 0) + 1;
-    setFormData({ ...BLANK_FORM, drive_number: nextNumber });
-    setEditingDrive(null);
-    setIsModalOpen(true);
   };
 
   const handleEdit = (drive: DriveConfig) => {
@@ -397,7 +295,9 @@ export function DrivesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingDrive) {
+    // Adding is the setup wizard's; this dialog only edits.
+    if (!editingDrive) return;
+    {
       if (editingDrive.kind === 's3' && formData.drive_path !== editingDrive.drive_path) {
         const message = await orphanImpactMessage(
           editingDrive,
@@ -437,8 +337,6 @@ export function DrivesPage() {
       if (editingDrive.kind === 's3' && formData.secret) {
         await apiClient.writeDriveSecret(editingDrive.drive_number, formData.secret);
       }
-    } else {
-      createMutation.mutate(formData);
     }
   };
 
@@ -480,6 +378,11 @@ export function DrivesPage() {
   };
 
   const drives = (data?.data ?? EMPTY_DRIVES) as DriveConfig[];
+
+  // parseVolumes stops at the first GAP in the DRIVE.n series, so a new
+  // drive has to take the next contiguous number - one typed into a gap is
+  // invisible to the board. 0 was offered once, which the schema rejects.
+  const nextDriveNumber = drives.reduce((highest, d) => Math.max(highest, d.drive_number), 0) + 1;
   const poolStatus = poolStatusQuery.data?.data as PoolStatus | undefined;
   const parkedFiles = poolStatus?.parkedFiles ?? EMPTY_PARKED;
   const brokenAreas = poolStatus?.brokenAreas ?? EMPTY_BROKEN;
@@ -632,7 +535,7 @@ export function DrivesPage() {
     <div className="space-y-6">
       <div>
         <div className="mb-4 flex justify-between items-center">
-          <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
+          <button onClick={() => setIsWizardOpen(true)} className="btn-primary flex items-center space-x-2">
             <Plus size={20} />
             <span>Add Drive</span>
           </button>
@@ -805,18 +708,28 @@ export function DrivesPage() {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
-      {isModalOpen && (
+      {/* Adding a drive is a step-by-step setup: account, bucket, key, test, use. */}
+      {isWizardOpen && (
+        <StorageSetupWizard
+          open={isWizardOpen}
+          onClose={() => setIsWizardOpen(false)}
+          providers={providers}
+          nextDriveNumber={nextDriveNumber}
+        />
+      )}
+
+      {/* Edit Modal */}
+      {isModalOpen && editingDrive && (
         <Modal
           open={isModalOpen}
-          title={editingDrive ? 'Edit Drive' : 'Add Drive'}
+          title="Edit Drive"
           onClose={closeModal}
           maxWidth="max-w-md"
           showHeader={false}
         >
             <div className="border-b border-border p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
-                {editingDrive ? 'Edit Drive' : 'Add Drive'}
+                Edit Drive
               </h2>
               <button
                 onClick={closeModal}
@@ -827,156 +740,6 @@ export function DrivesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {!editingDrive && (
-                <div>
-                  <label className="label">Where do the files live?</label>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, provider: '', endpointFill: '', drive_path: '' })}
-                      className={`rounded border px-3 py-2 text-left text-sm transition-colors ${
-                        formData.provider === ''
-                          ? 'border-accent bg-accent/10 text-accent'
-                          : 'border-border text-content-secondary hover:border-accent/50'
-                      }`}
-                    >
-                      <span className="block font-medium">This server</span>
-                      <span className="block text-xs text-content-muted">A local disk</span>
-                    </button>
-                    {providers.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            provider: p.id,
-                            endpointFill: p.endpointTemplate?.includes('{}') ? '' : p.defaultRegion,
-                            quotaBytes: p.freeQuotaBytes || '',
-                          })
-                        }
-                        className={`rounded border px-3 py-2 text-left text-sm transition-colors ${
-                          formData.provider === p.id
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border text-content-secondary hover:border-accent/50'
-                        }`}
-                      >
-                        <span className="block font-medium">{p.label}</span>
-                        <span className="block text-xs text-content-muted">
-                          {p.freeQuotaBytes > 0
-                            ? `${Math.round(p.freeQuotaBytes / GB)} GB free`
-                            : 'Paid'}
-                          {p.egress === 'FREE' ? ' - free downloads' : ' - metered downloads'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {chosenProvider && (
-                    <p className="mt-2 text-xs text-content-muted">
-                      {chosenProvider.note}
-                      {chosenProvider.minimumRetentionDays > 0 && (
-                        <span className="text-warning">
-                          {' '}A file deleted before {chosenProvider.minimumRetentionDays} days still bills
-                          for the full period.
-                        </span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!editingDrive && chosenProvider && (
-                <div className="space-y-4 rounded border border-border p-4">
-                  <div>
-                    <label htmlFor="bucket" className="label">Bucket name *</label>
-                    <input
-                      id="bucket"
-                      type="text"
-                      value={formData.drive_path.replace(/^s3:\/\//, '')}
-                      onChange={e => setFormData({ ...formData, drive_path: `s3://${e.target.value.trim()}` })}
-                      className="input-field w-full font-mono"
-                      placeholder="my-bbs-files"
-                      required
-                    />
-                  </div>
-
-                  {chosenProvider.endpointTemplate?.includes('{}') && (
-                    <div>
-                      <label htmlFor="endpointFill" className="label">
-                        {chosenProvider.endpointFieldLabel} *
-                      </label>
-                      <input
-                        id="endpointFill"
-                        type="text"
-                        value={formData.endpointFill}
-                        onChange={e => setFormData({ ...formData, endpointFill: e.target.value })}
-                        className="input-field w-full font-mono"
-                        required
-                      />
-                      <p className="mt-1 font-mono text-xs text-content-muted">
-                        {completeEndpoint(chosenProvider, formData.endpointFill) || '\u00a0'}
-                      </p>
-                    </div>
-                  )}
-
-                  <div>
-                    <label htmlFor="keyId" className="label">Access key ID *</label>
-                    <input
-                      id="keyId"
-                      type="text"
-                      value={formData.keyId}
-                      onChange={e => setFormData({ ...formData, keyId: e.target.value })}
-                      className="input-field w-full font-mono"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="secret" className="label">Secret access key *</label>
-                    <input
-                      id="secret"
-                      type="password"
-                      value={formData.secret}
-                      onChange={e => setFormData({ ...formData, secret: e.target.value })}
-                      className="input-field w-full font-mono"
-                      required
-                      autoComplete="new-password"
-                    />
-                    <p className="mt-1 text-xs text-content-muted">
-                      Stored outside Drives.info, in Storage/{formData.drive_number}.key - never in the icon
-                      the rest of the board reads.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="label">Quota</label>
-                    <div className="flex flex-wrap gap-2">
-                      {QUOTA_CHOICES.map(choice => (
-                        <button
-                          key={choice.label}
-                          type="button"
-                          onClick={() =>
-                            setFormData({ ...formData, quotaBytes: choice.bytes === 0 ? '' : choice.bytes })
-                          }
-                          className={`rounded border px-3 py-1 text-sm transition-colors ${
-                            (choice.bytes === 0 && formData.quotaBytes === '') ||
-                            formData.quotaBytes === choice.bytes
-                              ? 'border-accent bg-accent/10 text-accent'
-                              : 'border-border text-content-secondary hover:border-accent/50'
-                          }`}
-                        >
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1 text-xs text-content-muted">
-                      The board stops filing new uploads here once the quota is reached. Set it at or below
-                      what the plan actually gives you.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               <div>
                 <label htmlFor="drive_number" className="label">Drive Number *</label>
                 <input
@@ -998,7 +761,7 @@ export function DrivesPage() {
                 )}
               </div>
 
-              <div className={!editingDrive && chosenProvider ? 'hidden' : ''}>
+              <div>
                 <label htmlFor="drive_path" className="label">Drive Path *</label>
                 <input
                   id="drive_path"
@@ -1145,29 +908,15 @@ export function DrivesPage() {
                 />
               </div>
 
-              {editingDrive ? (
-                // No checkbox here. Unchecking it used to write `enabled: false`,
-                // which made writeDrivesInfoFile OMIT the DRIVE.n line entirely -
-                // a full removal from Drives.info, silently, with no confirmation
-                // and no impact message. Removing a drive is what Delete is for;
-                // it now says what that orphans (see handleDelete).
-                <p className="text-xs text-content-muted">
-                  To remove this drive, close this dialog and use Delete instead - it will tell you what that
-                  orphans.
-                </p>
-              ) : (
-                <div>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.enabled}
-                      onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-accent"
-                    />
-                    <span className="text-content-primary">Enabled</span>
-                  </label>
-                </div>
-              )}
+              {/* No Enabled checkbox. Unchecking it used to write `enabled: false`,
+                  which made writeDrivesInfoFile OMIT the DRIVE.n line entirely -
+                  a full removal from Drives.info, silently, with no confirmation
+                  and no impact message. Removing a drive is what Delete is for;
+                  it says what that orphans (see handleDelete). */}
+              <p className="text-xs text-content-muted">
+                To remove this drive, close this dialog and use Delete instead - it will tell you what that
+                orphans.
+              </p>
 
               <p className="text-xs text-content-muted">
                 Quota, class, egress, retention, key id and request budget are read from the DRIVE.n.* sub-keys
@@ -1189,9 +938,9 @@ export function DrivesPage() {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={updateMutation.isPending}
                 >
-                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editingDrive ? 'Update Drive' : 'Create Drive'}
+                  {updateMutation.isPending ? 'Saving...' : 'Update Drive'}
                 </button>
               </div>
             </form>

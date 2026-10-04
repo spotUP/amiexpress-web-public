@@ -31,6 +31,30 @@ describe('the provider catalogue', () => {
     }
   });
 
+  it('tells the sysop where to sign up and how to get a bucket and a key, for every provider', () => {
+    // "it needs an api key and there is no help/link on how to create the
+    // account and get a key" - the sysop, 2026-10-04, adding Backblaze B2.
+    for (const p of STORAGE_PROVIDERS) {
+      expect(new URL(p.setup.signupUrl).protocol).toBe('https:');
+      expect(new URL(p.setup.docsUrl).protocol).toBe('https:');
+      for (const steps of [p.setup.account, p.setup.bucket, p.setup.key]) {
+        expect(steps.length).toBeGreaterThan(0);
+        for (const step of steps) expect(step.trim().length).toBeGreaterThan(0);
+      }
+      expect(p.setup.keyIdField.trim().length).toBeGreaterThan(0);
+      expect(p.setup.secretField.trim().length).toBeGreaterThan(0);
+      // A provider with a field to fill must say where the console shows it.
+      if (p.endpointTemplate?.includes('{}')) expect(p.setup.endpointHint.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('builds an Oracle endpoint in the tenancy home region, not always Frankfurt', () => {
+    const oracle = providerById('oracle')!;
+    expect(buildEndpoint(oracle, 'axabc123', 'us-ashburn-1')).toBe(
+      'https://axabc123.compat.objectstorage.us-ashburn-1.oraclecloud.com'
+    );
+  });
+
   it('builds Cloudflare R2 endpoints from an account id alone', () => {
     const r2 = providerById('r2')!;
     expect(buildEndpoint(r2, 'f3f3dfe3536ea995a70df201b22fb6f1')).toBe(

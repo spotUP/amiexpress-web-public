@@ -284,6 +284,10 @@ export class ConfigService {
     return this.driveService.testVolume(...args);
   }
 
+  async testDriveCredentials(...args: Parameters<DriveConfigService['testCredentials']>) {
+    return this.driveService.testCredentials(...args);
+  }
+
   async contentsOfDrive(...args: Parameters<DriveConfigService['contentsOf']>) {
     return this.driveService.contentsOf(...args);
   }

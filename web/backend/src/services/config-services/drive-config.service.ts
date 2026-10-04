@@ -32,7 +32,7 @@ import {
 import { getStorageContext, getStorageBootError } from '../../storage/storage-context';
 import type { StorageBackend } from '../../storage/storage-backend';
 import { LocalBackend } from '../../storage/local-backend';
-import { createS3Backend } from '../../storage/s3-backend';
+import { createS3Backend, explainStorageFailure } from '../../storage/s3-backend';
 import { remoteAreaFromDisk, usableRemoteAreasFor } from '../../storage/remote-areas';
 import { loadFileAreasFromDisk } from '../file-areas-loader';
 import { loadConfConfig } from '../conf-config.service';
@@ -143,6 +143,42 @@ export interface PoolStatus {
 export interface DriveContents {
   areas: Array<{ conference: number; dir: number }>;
   files: Array<{ filename: string; size: number; uploader: string; downloads: number; conference: number; dir: number }>;
+}
+
+/** The answer to a connection test - `explanation` is the sentence the admin shows. */
+export interface ConnectionTestResult {
+  reachable: boolean;
+  /** The provider's own message, for the log and for a sysop asking for help. */
+  error?: string;
+  /** What it means and what to do, from `explainStorageFailure`. */
+  explanation?: string;
+}
+
+/** `POST /api/config/drives/test-connection` - a bucket's details, before they are saved. */
+export interface DriveCredentialsProbe {
+  endpoint: string;
+  region?: string;
+  bucket: string;
+  keyId: string;
+  secret: string;
+}
+
+/**
+ * One `list()` against a prefix no real area uses (`__connectivity_probe__/`),
+ * never `''` - walking the whole bucket on every click of a Test button is
+ * real request-budget spend against Oracle's 50,000-a-month ceiling.
+ */
+async function probeBackend(backend: StorageBackend): Promise<ConnectionTestResult> {
+  try {
+    await backend.list('__connectivity_probe__/');
+    return { reachable: true };
+  } catch (error) {
+    return {
+      reachable: false,
+      error: error instanceof Error ? error.message : String(error),
+      explanation: explainStorageFailure(error),
+    };
+  }
 }
 
 export class DriveConfigService {
@@ -653,13 +689,14 @@ console.error(
    * against Oracle's 50,000-a-month ceiling for a button a sysop might click
    * repeatedly while debugging a bad key.
    */
-  async testVolume(driveNumber: number): Promise<{ reachable: boolean; error?: string }> {
+  async testVolume(driveNumber: number): Promise<ConnectionTestResult> {
     const bbsRoot = appConfig.get('dataDir');
     let backend: StorageBackend;
     try {
       backend = this.buildBackendFor(bbsRoot, driveNumber);
     } catch (error) {
-      return { reachable: false, error: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      return { reachable: false, error: message, explanation: message };
     }
     if (backend instanceof LocalBackend) return { reachable: true };
 
@@ -678,13 +715,48 @@ console.error(
     };
 
     try {
-      await backend.list('__connectivity_probe__/');
+      return await probeBackend(backend);
+    } finally {
       countRequest();
-      return { reachable: true };
-    } catch (error) {
-      countRequest();
-      return { reachable: false, error: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  /**
+   * The setup wizard's "Test connection": the same one-request probe as
+   * `testVolume`, against credentials the sysop has typed but not saved.
+   *
+   * Nothing is written - no Drives.info line, no `Storage/<n>.key` - so a
+   * mistyped key never becomes a drive in the pool, and nothing is counted
+   * against a live volume because none exists yet. The secret goes to the
+   * provider and nowhere else; the result never carries it back.
+   */
+  async testCredentials(probe: DriveCredentialsProbe): Promise<ConnectionTestResult> {
+    let backend: StorageBackend;
+    try {
+      const bucket = probe.bucket.trim().replace(/^s3:\/\//, '');
+      if (!bucket) throw new Error('Enter the bucket name.');
+      if (!probe.endpoint.trim()) throw new Error('Enter the endpoint.');
+      if (!probe.keyId.trim()) throw new Error('Enter the key ID.');
+      if (!probe.secret) throw new Error('Enter the secret.');
+      backend = this.backendFactory(
+        {
+          // 0 is no drive: DRIVE numbering starts at 1, and this one is not saved.
+          driveNumber: 0,
+          kind: 's3',
+          path: bucket,
+          endpoint: probe.endpoint.trim(),
+          region: probe.region?.trim() || undefined,
+          keyId: probe.keyId.trim(),
+          egress: 'FREE',
+          volumeClass: 'FREE',
+        },
+        probe.secret
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { reachable: false, error: message, explanation: message };
+    }
+    return probeBackend(backend);
   }
 
   // -------------------------------------------------------------- contents
