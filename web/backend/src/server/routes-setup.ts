@@ -734,10 +734,12 @@ console.error('[Door Reload] Unexpected error:', error);
       // always also looked in. Use amigafs for case-insensitive matching
       // (AmigaOS is case-insensitive).
       const possiblePaths = [
+        // Never HOLD, PRIVATE or a node's Playpen: this route takes no login,
+        // and those hold files the board has not released (a held upload, one
+        // addressed to the sysop alone, one still arriving). A file the board
+        // hands a caller from outside the file areas goes by one-time ticket
+        // (handlers/file/download-ticket.ts).
         path.join(conferencePath, `Dir${dirNum}`, filename),
-        path.join(dataDir, 'Node0', 'Playpen', filename),
-        path.join(conferencePath, 'HOLD', filename),
-        path.join(conferencePath, 'PRIVATE', filename)
       ];
 
       let filePath: string | null = null;
@@ -790,7 +792,9 @@ console.error('[Download] Error:', error);
 
       const fileEntry = await db.getFileEntry(fileId);
 
-      if (!fileEntry) {
+      // A held or deleted row is not a released file - its filePath points
+      // into HOLD - and this route takes no login.
+      if (!fileEntry || (fileEntry.status && fileEntry.status !== 'active')) {
         return res.status(404).json({ error: 'File not found' });
       }
 
@@ -817,9 +821,6 @@ console.error(`[Download] file ${fileId} (${fileEntry.filename}):`, storageError
       const possiblePaths = [
         fileEntry.filePath,
         path.join(conferencePath, `Dir${fileEntry.areaId}`, fileEntry.filename),
-        path.join(config.get('dataDir'), 'Node0', 'Playpen', fileEntry.filename),
-        path.join(conferencePath, 'HOLD', fileEntry.filename),
-        path.join(conferencePath, 'PRIVATE', fileEntry.filename)
       ].filter(p => p);
 
       for (const testPath of possiblePaths) {

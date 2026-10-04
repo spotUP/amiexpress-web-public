@@ -207,11 +207,16 @@ describe('GET /api/download/:fileId', () => {
     expect(JSON.stringify(res.body)).not.toContain('not found');
   });
 
+  // This case used to put the file in Node0/Playpen, which the route no
+  // longer serves (an upload still arriving is not a released file - see
+  // the-download-route-serves-only-file-areas.test.ts). A local row is
+  // served from where it says it is.
   it('leaves a local row on the disk walk it always used', async () => {
     const { backend, dataDir } = fixture();
-    fs.mkdirSync(path.join(dataDir, 'Node0', 'Playpen'), { recursive: true });
-    fs.writeFileSync(path.join(dataDir, 'Node0', 'Playpen', 'LEGACY.TXT'), 'legacy');
-    const app = catalogRoute({ id: 8, filename: 'LEGACY.TXT', size: 6 });
+    fs.mkdirSync(path.join(dataDir, 'Conf1', 'Files'), { recursive: true });
+    const local = path.join(dataDir, 'Conf1', 'Files', 'LEGACY.TXT');
+    fs.writeFileSync(local, 'legacy');
+    const app = catalogRoute({ id: 8, filename: 'LEGACY.TXT', size: 6, filePath: local });
 
     const res = await request(app).get('/api/download/8');
 
