@@ -787,19 +787,21 @@ export const DOS_VECTORS: LibraryVector[] = [
     handler: () => 0,
   },
   {
-    // -510 IsFileSystem. D1=name. Returns TRUE if name is a filesystem
-    // device (vs e.g. NIL: or PIPE:). We have no devices in our
+    // -708 IsFileSystem (dos_lib.fd). D1=name. Returns TRUE if name is a
+    // filesystem device (vs e.g. NIL: or PIPE:). We have no devices in our
     // synthetic DosList → always FALSE. Doors checking before AssignLock
-    // get an honest answer and don't try to lock nothing.
-    offset: -510,
+    // get an honest answer and don't try to lock nothing. (It once sat at
+    // -510, GetConsoleTask's slot.)
+    offset: -708,
     name: "IsFileSystem",
     handler: () => 0,
   },
   {
-    // -498 SetProgramName. D1=name. Returns success. We don't track
-    // the program name — doors that call this are usually setting
-    // the bash-style $0 for error messages we don't print.
-    offset: -498,
+    // -570 SetProgramName (dos_lib.fd). D1=name. Returns success. We
+    // don't track the program name — doors that call this are usually
+    // setting the bash-style $0 for error messages we don't print. (It
+    // once sat at -498, where CreateNewProc got DOSTRUE as a Process*.)
+    offset: -570,
     name: "SetProgramName",
     handler: () => 0xFFFFFFFF, // DOSTRUE
   },
@@ -812,17 +814,19 @@ export const DOS_VECTORS: LibraryVector[] = [
     handler: () => 0,
   },
   {
-    // -510 ReadItem. A0=buffer, D1=maxchars, D2=CSource*. Tokenises
-    // a line into buffer. Defensive: return 0 (ITEM_NOTHING).
-    // 2 doors hit this; both treat 0 as "no more tokens" and exit cleanly.
+    // -810 ReadItem (dos_lib.fd, NDK 3.1). D1=buffer, D2=maxchars,
+    // D3=CSource*. Tokenises a line into buffer. Defensive: return 0
+    // (ITEM_NOTHING).
     //
-    // Note: collides with IsFileSystem at -510 — but only one of these
-    // offsets is correct. Per LVOs.i, _LVOReadItem = -510 (per V36 fd).
-    // We already mapped -510 to IsFileSystem above. The auto-stub for
-    // ReadItem is OK because it's a degenerate "no tokens" case and
-    // 0-return matches the safe default. Documenting the collision
-    // here so future fd-updates don't mis-rewire.
-    offset: -606,
+    // This stub once sat at -606, which is SystemTagList. The trap table
+    // keeps the LAST entry per address, so it silently replaced the real
+    // SystemTagList: every door that ran a shell command through System()
+    // got RC 0 and nothing ran. File Description (the board's EXAMINE
+    // door) runs its Depack_ZIP / Depack_LHA line that way, so no upload
+    // ever had its FILE_ID.DIZ extracted.
+    // tests/amiga-emulation/a-door-shell-command-reaches-system.test.ts
+    // refuses two vectors at one offset and a name the NDK puts elsewhere.
+    offset: -810,
     name: "ReadItem",
     handler: () => 0,
   },

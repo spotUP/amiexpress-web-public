@@ -240,10 +240,12 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: () => 0,
   },
   {
-    // -132 RemMemHandler. A1=handler. Void. Pair with AddMemHandler
-    // which we also no-op. Doors that allocate memhandler for low-mem
-    // recovery skip the recovery path entirely.
-    offset: -132,
+    // -780 RemMemHandler (exec_lib.fd, NDK 3.1). A1=handler. Void. Pair
+    // with AddMemHandler which we also no-op. Doors that allocate
+    // memhandler for low-mem recovery skip the recovery path entirely.
+    // (It once sat at -132, Forbid's slot, where only table order kept
+    // Forbid alive.)
+    offset: -780,
     name: "RemMemHandler",
     handler: () => 0,
   },

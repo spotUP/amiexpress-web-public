@@ -26,6 +26,7 @@ type ParsedOptions = {
   timeout?: number;
   args: string[];
   command?: string;
+  params?: string;
 };
 
 function parseArgs(argv: string[]): ParsedOptions {
@@ -60,6 +61,14 @@ function parseArgs(argv: string[]): ParsedOptions {
       const raw = argv[i + 1];
       if (raw) {
         options.timeout = Number(raw);
+      }
+      i += 1;
+    } else if (arg === "--params") {
+      // The full command line the board hands the door as BB_LOCAL /
+      // doorParams, e.g. "EXAMINE BBS:Node1/Playpen/x.zip" for a SysCmd.
+      const raw = argv[i + 1];
+      if (raw !== undefined) {
+        options.params = raw;
       }
       i += 1;
     } else if (arg === "--command") {
@@ -118,6 +127,7 @@ async function main(): Promise<void> {
       timeRemaining: 60,
       doorCommand: parsed.command || undefined,  // Command that invoked the door (N, NSU, FR, etc.)
       doorId: parsed.command || undefined,
+      doorParams: parsed.params,
     },
   });
 
