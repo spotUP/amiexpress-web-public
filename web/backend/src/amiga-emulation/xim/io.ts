@@ -811,6 +811,18 @@ debugLog(
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';
     this.lineInputMaxLen = maxLength;
+
+    /*
+     * TYPE-AHEAD FIRST, as JH_LI does. A pasted block arrives as one chunk:
+     * the first line ends this prompt, and the rest waits in inputQueue for
+     * the next one. JH_PM never read that queue, so every prompt after the
+     * first started empty - pasting a FILE_ID into File Description's
+     * description editor kept only its first row (relayed by the sysop,
+     * 2026-10-04).
+     */
+    while (this.inputQueue.length > 0) {
+      if (this.lineInputKey(this.inputQueue.shift()!)) return;
+    }
     this.emulator.pause();
   }
 

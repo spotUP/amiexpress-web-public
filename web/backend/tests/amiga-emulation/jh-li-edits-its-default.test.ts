@@ -164,4 +164,23 @@ describe('JH_LI edits the default it is given (express.e:2202-2204)', () => {
     (ctx.handler as any).queueInput('\r');
     expect(returned(ctx)).toBe('');
   });
+
+  test('a pasted block fills one JH_PM prompt per line, not just the first', () => {
+    // File Description's description editor asks one JH_PM per row. A pasted
+    // FILE_ID arrives as one chunk; the rows after the first waited in the
+    // type-ahead queue and JH_PM never read it (sysop, 2026-10-04).
+    const ctx = buildHandler();
+    const rows: string[] = [];
+    (ctx.handler as any).completeLineInput = function () {
+      rows.push(this.lineInputBuffer);
+      this.waitingForLineInput = false;
+      this.lineInputMessage = null;
+      this.lineInputBuffer = '';
+    };
+    ctx.handler.handlePromptMessage(lineInput(' 1) '));
+    (ctx.handler as any).queueInput('first row\rsecond row\rthird row\r');
+    ctx.handler.handlePromptMessage(lineInput(' 2) '));
+    ctx.handler.handlePromptMessage(lineInput(' 3) '));
+    expect(rows).toEqual(['first row', 'second row', 'third row']);
+  });
 });
