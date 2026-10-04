@@ -818,6 +818,24 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     return;
   }
 
+  // edit()'s S, X and full-screen save count the post as they return
+  // (express.e:10558, 10564, 10127) - before saveNewMSG, so a save that
+  // then fails has still been counted.
+  session.user!.messagesPosted = (session.user!.messagesPosted || 0) + 1;
+
+  // DISK-BASED: Write updated user stats to user.data/keys/misc files
+  // This ensures messagesPosted is persisted immediately (safer than waiting for logoff)
+  if (session.user!.slotNumber) {
+    try {
+      const { userFileManager } = require('../../services/UserFileManager');
+      userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
+console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
+    } catch (diskErr) {
+console.error('[Message] Error writing user disk files:', diskErr);
+      // Continue anyway - database has the stats, can sync later
+    }
+  }
+
   let savedOk = false;
 
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
@@ -953,21 +971,6 @@ console.error('[Message] EXTSEND dump failed (non-fatal):', extErr);
     // tell createMessage to skip its own disk-write to avoid duplicates.
     const messageId = await _db.createMessage(message, { skipDiskWrite: true });
 
-    // Increment messagesPosted counter (express.e:10127)
-    session.user!.messagesPosted = (session.user!.messagesPosted || 0) + 1;
-
-    // DISK-BASED: Write updated user stats to user.data/keys/misc files
-    // This ensures messagesPosted is persisted immediately (safer than waiting for logoff)
-    if (session.user!.slotNumber) {
-      try {
-        const { userFileManager } = require('../../services/UserFileManager');
-        userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
-console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
-      } catch (diskErr) {
-console.error('[Message] Error writing user disk files:', diskErr);
-        // Continue anyway - database has the stats, can sync later
-      }
-    }
 
     // Log the action
     await _callersLog(

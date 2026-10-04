@@ -237,6 +237,20 @@ describe('Msg. Options (express.e 10373-10578)', () => {
     expect(d.screen()).toContain('X\r\n\r\nSaving...');
   });
 
+  it('S3: S counts the post before the save, so a save that fails still counts (10558)', async () => {
+    const files = require('../../src/utils/message-file.util');
+    const write = jest.spyOn(files, 'writeMessageFile')
+      .mockRejectedValueOnce(new Error('MsgBase locked for Conf1 (waited 5000ms) - message not saved'));
+    const d = drive({ body: ['one'] });
+    d.session.user.messagesPosted = 4;
+    await d.type('\r', 'S\r');
+    for (let i = 0; i < 50 && !d.screen().includes('has not been saved'); i++) await tick();
+    expect(write).toHaveBeenCalled();
+    expect(d.screen()).toContain('Message has not been saved!');
+    expect(d.session.user.messagesPosted).toBe(5);
+    write.mockRestore();
+  });
+
   it('O3: F without the access says so', async () => {
     const d = drive({ body: ['one'], denied: [ACS_ATTACH_FILES] });
     await d.type('\r');
