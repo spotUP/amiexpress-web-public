@@ -145,7 +145,8 @@ export interface FilingRequest {
   fileArea?: ({ id?: number; dlPath?: string } & Record<string, unknown>) | null;
   conferenceId: number;
   nodeId: number;
-  uploader: { username: string; location?: string };
+  /** slotNumber: the uploader's user.data slot, for their own upload tracking. */
+  uploader: { username: string; location?: string; slotNumber?: number };
   /** `hold` when an integrity test already failed; `private` for a private upload. */
   initialStatus: 'active' | 'private' | 'hold';
   /** P passed, F failed, N not tested. `D` is decided here, by the dupe check. */
@@ -431,6 +432,23 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
         }
       }
     }
+  }
+
+  /*
+   * express.e sysopULStats(hold) (18746-18790), called after the move for
+   * every filed upload (19440, 19675). It was called by the web/telnet front
+   * end only, so an FTP upload never counted: NumULs - what an auto-rejoin's
+   * "N new file(s) uploaded" reads - and the sysop's counters missed it.
+   */
+  if (!orphaned) {
+    const { updateSysopUploadStats } = await import('../utils/upload-notify.util');
+    await updateSysopUploadStats(
+      getConferenceDir(request.conferenceId, config.get('dataDir')),
+      request.conferenceId,
+      config.get('dataDir'),
+      status !== 'active',
+      request.uploader.slotNumber,
+    );
   }
 
   return { status, marker, duplicate, orphaned, pool, notices };

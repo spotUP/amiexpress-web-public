@@ -24,7 +24,6 @@ import { storageFailureText } from "../storage/remote-download";
 import type { RemoteLocation } from "../storage/remote-areas";
 import { writeUploadToDirFile } from "../utils/dir-file.util";
 import {
-  updateSysopUploadStats,
   doUploadNotify,
 } from "../utils/upload-notify.util";
 import {
@@ -492,6 +491,7 @@ console.error(`[testFile] Error:`, error);
       uploader: {
         username: session.user!.username,
         location: (session.user as any).location || '',
+        slotNumber: (session.user as any).slotNumber,
       },
       initialStatus: fileStatus,
       marker: checkedMarker as 'P' | 'F' | 'N',
@@ -664,22 +664,6 @@ console.error("[Webhook] Error sending file upload webhook:", error);
     }
     // Achievements (SP2): the upload, the description, the ratio. Non-throwing.
     if (!foundDupe && !quarantineFailed) reportUpload(session as any, data.size, finalDescription, descriptionFromDiz);
-
-    // Update sysop upload statistics (express.e:19440)
-    try {
-      const conferencePath = getConferenceDir(
-        session.currentConf,
-        config.get("dataDir")
-      );
-      await updateSysopUploadStats(
-        conferencePath,
-        session.currentConf,
-        config.get("dataDir"),
-        fileStatus === "hold" || fileStatus === "private"
-      );
-    } catch (error: any) {
-console.error(`[Upload] Error updating sysop stats: ${error.message}`);
-    }
 
     // Clear currentUploadedFile so next file can be processed
     // This is critical for batch uploads - without this, subsequent files are ignored

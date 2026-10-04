@@ -362,6 +362,7 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         uploader: {
           username: request.user.username,
           location: (request.user as unknown as { location?: string }).location,
+          slotNumber: (request.user as unknown as { slotNumber?: number }).slotNumber,
         },
         initialStatus,
         marker,

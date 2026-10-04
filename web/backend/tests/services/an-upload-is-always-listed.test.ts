@@ -88,3 +88,11 @@ test('a DIR entry that cannot be written sends the file to HOLD, listed in HELD'
   expect(fs.existsSync(path.join(root, 'Conf1', 'HOLD', 'LXT-TEST.ZIP'))).toBe(true);
   expect(read(path.join(root, 'Conf1', 'HOLD', 'HELD'))).toContain('LXT-TEST.ZIP');
 });
+
+test('every filed upload is counted for the conference, whoever filed it (FTP included)', async () => {
+  // express.e sysopULStats (18746-18790) after every move. Only the web/telnet
+  // front end counted, so an FTP upload never reached NumULs - what an
+  // auto-rejoin's "N new file(s) uploaded" reads (2026-10-04).
+  await fileUploadedFile(anUpload());
+  expect(read(path.join(root, 'Conf1', 'NumULs')).trim()).toBe('1');
+});

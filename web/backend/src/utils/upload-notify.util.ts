@@ -43,7 +43,9 @@ export async function updateSysopUploadStats(
   conferencePath: string,
   conferenceId: number,
   bbsDataPath: string,
-  isHold: boolean
+  isHold: boolean,
+  /** The uploader's user.data slot: their own Conf.DB uploadTracking follows (18761-18762). */
+  uploaderSlot?: number,
 ): Promise<void> {
   try {
     // Update conference NumULs counter (express.e:18748-18768)
@@ -65,6 +67,12 @@ export async function updateSysopUploadStats(
 
       // Write updated count
       await fs.writeFile(numULsPath, `${count}\n`);
+      // express.e:18761-18762 - cb.uploadTracking:=num: the uploader does not
+      // see their own upload as new at their next auto-rejoin.
+      if (uploaderSlot && uploaderSlot > 0) {
+        const { messagePointerFileManager } = require('../services/MessagePointerFileManager');
+        messagePointerFileManager.patchRecord(conferenceId, uploaderSlot, { uploadTracking: count });
+      }
 console.log(`[UploadStats] Conference ${conferenceId} NumULs: ${count}`);
     }
 
