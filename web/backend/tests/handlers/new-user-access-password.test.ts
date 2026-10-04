@@ -82,7 +82,9 @@ describe('a stranger who does not know the password', () => {
 
     await handleAccessPasswordInput(socket as never, session, 'GUESS');
 
-    expect(socket.text()).toContain('Invalid Password');
+    // express.e:30036 aePuts('Invalid PassWord\b\n'), plain.
+    expect(socket.text()).toContain('\r\nInvalid PassWord\r\n');
+    expect(socket.text()).not.toContain('\x1b[31m');
     expect(logged).toEqual([{ nodeId: 3, text: '\tPassword Failure (xxxx)' }]);
     expect(sysCommands).toEqual([]);
   });
@@ -118,7 +120,8 @@ describe('a stranger who does know it', () => {
 
     await handleAccessPasswordInput(socket as never, session, 'LETMEIN');
 
-    expect(socket.text()).toContain('Correct');
+    // express.e:30046 aePuts('Correct\b\n'), plain, after lineInput's CRLF.
+    expect(socket.text().startsWith('\r\nCorrect\r\n')).toBe(true);
     expect(logged).toEqual([]);
     expect(sysCommands).toEqual([]);
   });

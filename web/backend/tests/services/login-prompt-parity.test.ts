@@ -96,6 +96,10 @@ import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { setDatabase } from '../../src/handlers/command-handler/dependency-injection';
 import { isPasswordResetAvailable, promptPasswordReset } from '../../src/services/login-prompt.service';
 import { handleCommand } from '../../src/handlers/command.handler';
+import { flushOutput } from '../../src/utils/output.util';
+
+/** Everything a line was sent, with the board's 16ms output buffer drained. */
+const wireOf = (line: any): string => { flushOutput(line); return line.said.join(''); };
 import { runPostAuthLogin } from '../../src/services/login-post.service';
 import { db as fakeDb } from '../../src/database';
 import { container } from '../../src/container';
@@ -143,12 +147,13 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
       const flow = promptPasswordReset(line, session);
       expect(session.passwordResetState).toBe('await_confirm');
 
-      session.loginInputHandler('y\r');
+      session.loginInputHandler('y');          // one key: yesNo, not a line
       await settle();
       expect(mailOnPwdFail).toHaveBeenCalledTimes(1);
       const [email, code] = mailOnPwdFail.mock.calls[0];
       expect(email).toBe('spot@example.test');
-      expect(code).toMatch(/^[0-9A-F]{10}$/);
+      // express.e:29159-29163: ten of A-Z a-z 0-9.
+      expect(code).toMatch(/^[A-Za-z0-9]{10}$/);
       expect(session.passwordResetState).toBe('await_code');
 
       session.loginInputHandler(`${code}\r`);
@@ -158,6 +163,37 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
       session.loginInputHandler('n3wpass\r');
       await expect(flow).resolves.toEqual({ ok: true });
       expect(updateUserPassword).toHaveBeenCalledWith('u-7', 'n3wpass');
+
+      // express.e:29152-29181, byte for byte (the code and password are
+      // echoed as typed - the password masked, a WEB_ choice).
+      expect(wireOf(line)).toBe(
+        '\r\nExcessive Password Failure\r\n'
+        + '\r\nDo you want to send a reset code to your email address '
+        + '\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)\x1b[32m?\x1b[0m '
+        + 'Yes\r\n'
+        + '\r\nA reset code has been sent to yuour email address. Please enter it exactly below\r\n\r\n'
+        + 'Reset code: ' + code + '\r\n'
+        + '\r\nThe reset code was correct, please now update your password.\r\n\r\n'
+        + 'Password: *******\r\n',
+      );
+    });
+
+    it('a wrong code says so and is PWFAIL (express.e:29176-29178, 29191-29193)', async () => {
+      const line = aTelnetLine();
+      const session: any = { connectionType: 'telnet', passwordResetUsername: 'spot' };
+      const flow = promptPasswordReset(line, session);
+      session.loginInputHandler('\r');         // Enter is yes
+      await settle();
+      const code: string = mailOnPwdFail.mock.calls[0][1];
+
+      // StrCmp is exact: the same code in the other case is wrong.
+      const swapped = [...code].map((c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase())).join('');
+      session.loginInputHandler(`${swapped === code ? `${code}x` : swapped}\r`);
+      await expect(flow).resolves.toEqual({ ok: false, reason: 'wrong-code' });
+
+      expect(wireOf(line)).toContain('\r\nThe reset code was not correct.\r\n');
+      expect(runPwfailAndLogoff).toHaveBeenCalledWith(line, session, '');
+      expect(updateUserPassword).not.toHaveBeenCalled();
     });
 
     it('mails a different code each time', async () => {
@@ -195,8 +231,9 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
 
       // Decline, so the flow finishes rather than being left open.
       session.loginInputHandler('n');
-      session.loginInputHandler('\r');
       await flow;
+      expect(wireOf(emitter)).toContain('No\r\n');
+      expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
     });
 
     /**
@@ -221,7 +258,7 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
       expect(session.passwordResetState).toBe('await_confirm');
       expect(runPwfailAndLogoff).not.toHaveBeenCalled();
 
-      session.loginInputHandler('n\r');          // decline, so the branch finishes
+      session.loginInputHandler('n');            // decline, so the branch finishes
       await typed;
     });
 
@@ -234,6 +271,11 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
 
       expect(session.passwordResetState).toBeUndefined();
       expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
+      // express.e:29152-29153 then logoffErr (29262-29263), which prints
+      // nothing: plain "Excessive Password Failure", no goodbye line.
+      const line = (runPwfailAndLogoff.mock.calls[0] as any[])[0];
+      expect(wireOf(line)).toMatch(/\r\nExcessive Password Failure\r\n$/);
+      expect((runPwfailAndLogoff.mock.calls[0] as any[])[2]).toBe('');
     });
   });
 

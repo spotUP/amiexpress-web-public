@@ -80,6 +80,8 @@ const db = {
   createUser: jest.fn(async (data: any) => { users.set(data.username, { id: 7, secLevel: 10, ...data }); return 7; }),
   getUserByUsername: jest.fn(async (name: string) => users.get(name) ?? null),
   appendUserToDisk: jest.fn(async () => undefined),
+  // createAccountRecord reads back the slot the record landed in (dc500bb27).
+  getUserById: jest.fn(async (id: number) => [...users.values()].find((u) => u.id === id) ?? null),
   getConfigRepository: () => ({ getSystemConfig: () => null }),
 };
 
@@ -138,7 +140,9 @@ test('a caller who confirms, then answers the questions by typing, gets through 
   expect(session.state).toBe(BBSState.LOGGEDON);
   expect(session.subState).toBe(LoggedOnSubState.DISPLAY_BULL);
   expect(socket._emits.some((e: any) => e.event === 'login-success')).toBe(true);
-  expect(text(socket)).toContain('Account created successfully!');
+  // express.e prints nothing between the questionnaire and the logon
+  // (30096-30112): no "Creating your account..." and no "created" line.
+  expect(text(socket)).not.toMatch(/Creating your account|Account created successfully/);
 });
 
 test('the browser is told it is logged on only once the questionnaire is over', async () => {

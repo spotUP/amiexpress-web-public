@@ -221,13 +221,17 @@ describe('TP-8 - a telnet caller gets the web caller\'s input pipeline', () => {
     expect(caller.inputs()).toEqual(['tell me about fairlight']);
   });
 
-  it('a command that throws is reported to the caller, as it is on web (audit item 9)', async () => {
+  it('a command that throws is logged, and the caller is shown no invented error text', async () => {
+    // express.e has no generic command-failure text; the server log has it.
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const caller = telnetCaller(32);
     caller.handleCommand.mockImplementation(async () => { throw new Error('boom'); });
     caller.type('X');
     await new Promise((resolve) => setTimeout(resolve, 10));
     const shown = caller.connection.written.map((b) => b.toString('latin1')).join('');
-    expect(shown).toContain('Command processing failed');
+    expect(shown).not.toContain('Command processing failed');
+    expect(errors).toHaveBeenCalledWith('[COMMAND ERROR] Unhandled error in handleCommand:', expect.any(Error));
+    errors.mockRestore();
   });
 
   it('a transfer sink takes the bytes, and nothing else sees them', () => {

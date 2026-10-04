@@ -188,6 +188,9 @@ export class ErrorHandler {
     // description ("download files", "edit accounts", "join conference") and
     // this method discarded every one of them.
     //
+    // WEB_: express.e:3037-3039 prints only "Command requires higher
+    // access."; this second line is the port's, kept at the sysop's request.
+    //
     // Deliberately ADDITIVE: express.e's sentence still comes first and
     // unchanged, so the parity a board expects is intact and this is an extra
     // line after it, not a rewrite of it. Asked for by the sysop 2026-09-08

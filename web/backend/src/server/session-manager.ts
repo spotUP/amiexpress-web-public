@@ -116,12 +116,19 @@ export function getNextAvailableNodeId(): number | null {
   return null;
 }
 
-/** What a caller is told when every node is taken - one text, every transport. */
+/**
+ * What a caller is told when every node is taken - one text, every transport.
+ *
+ * WEB_: express.e has no such text - on an Amiga a busy board is a busy line
+ * or the telnet daemon's refusal, before express runs. ASCII only: the rules
+ * were U+2501 box glyphs, which an Amiga or C64 terminal cannot draw.
+ */
 export function allNodesBusyNotice(): string {
-  return '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n'
+  const rule = '-'.repeat(36);
+  return `\r\n\x1b[31m${rule}\x1b[0m\r\n`
     + '\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n'
     + '\x1b[33mPlease try again in a moment.\x1b[0m\r\n'
-    + '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n';
+    + `\x1b[31m${rule}\x1b[0m\r\n`;
 }
 
 /**

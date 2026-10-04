@@ -473,7 +473,7 @@ console.log(`[GA] Door path: ${doorPath}`);
 
         socket.emit(
           "ansi-output",
-          "\r\n\x1b[36m🚀 Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n"
+          "\r\n\x1b[36mStarting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n"
         );
 
         const amigaSession = new AmigaDoorSession(socket, {

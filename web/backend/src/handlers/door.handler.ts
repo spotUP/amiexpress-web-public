@@ -36,7 +36,7 @@ import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { doorCategoryAt } from '../doors/door-category';
 import { getSystemTime } from '../utils/date-time.util';
-import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
+import { logDoorStart, logDoorExit, doorLogTypeNumber } from '../utils/node-logs.util';
 import {
   LoggedOnSubState as LoggedOnSubStateImport,
   BBSState as BBSStateImport,
@@ -3521,16 +3521,10 @@ console.error('[executeAmigaDoor] Unable to persist session for door input:', er
     }
 
     // Log door start to Node{N}/DoorLog (express.e:9392-9419)
-    const doorTypeCode = doorType === 'XIM' ? DoorType.XIM :
-                         doorType === 'SIM' ? DoorType.SIM :
-                         doorType === 'AIM' ? DoorType.AIM :
-                         doorType === 'TIM' ? DoorType.TIM :
-                         doorType === 'IIM' ? DoorType.IIM :
-                         doorType === 'MCI' ? DoorType.MCI :
-                         doorType === 'FIM' ? DoorType.FIM :
-                         doorType === 'DD' ? DoorType.DD : DoorType.XIM;
-    // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
-    logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
+    const doorTypeCode = doorLogTypeNumber(doorType);
+    // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID").
+    // No user is an empty name, not 'Unknown' (express.e:9407).
+    logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username ?? '', doorPath);
 
     // Start the door execution
     console.log(`[TIMING] before amigaSession.start(): ${Date.now() - __doorT0}ms`);
@@ -3575,7 +3569,7 @@ console.warn('[executeAmigaDoor] consumePendingSysopPage failed:', err);
     }
 
     // Log door exit to Node{N}/DoorLog
-    logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
+    logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username ?? '');
 
 console.log(`[executeAmigaDoor] Door execution completed`);
 

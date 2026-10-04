@@ -9,19 +9,37 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Door type constants from express.e (axenums module)
-// These match the numeric values used in Node{N}/DoorLog
-export enum DoorType {
-  XIM = 0,  // XIM doors (AEDoor.library based)
-  SIM = 1,  // SIM doors (DoorControl port)
-  AIM = 2,  // AIM/AREXX doors (maps to XIM internally)
-  TIM = 3,  // TIM doors (PARADOOR)
-  IIM = 4,  // IIM doors
-  MCI = 5,  // MCI text processing
-  AEM = 6,  // AEM/REXX doors
-  SUP = 7,  // SUP doors
-  FIM = 8,  // FIM (FAME BBS doors)
-  DD = 9,   // DD (DayDream BBS doors)
+import { DoorType } from './amiga-command-parser.util';
+
+/**
+ * The number DoorLog writes for a door type: its position in axenums.e:15,
+ *
+ *   ENUM DOORTYPE_XIM, DOORTYPE_AIM, DOORTYPE_SIM, DOORTYPE_TIM,
+ *        DOORTYPE_IIM, DOORTYPE_MCI, DOORTYPE_AEM, DOORTYPE_SUP
+ *
+ * so XIM 0, AIM 1, SIM 2. The board's door-type enum
+ * (amiga-command-parser.util DoorType) carries the names; this is only their
+ * order. The port's own table had SIM=1 and AIM=2, so every SIM door - the
+ * default type - logged `- 1 -` where express.e writes `- 2 -`.
+ */
+const DOORLOG_TYPE_ORDER: readonly string[] = [
+  DoorType.XIM, DoorType.AIM, DoorType.SIM, DoorType.TIM,
+  DoorType.IIM, DoorType.MCI, DoorType.AEM, DoorType.SUP,
+  // WEB_: not in axenums.e:15 - the FAME and DayDream compat layers. They
+  // take the next free numbers, as they always have here.
+  DoorType.FIM, DoorType.DD,
+];
+
+/**
+ * express.e:4312 `IF type=DOORTYPE_AIM THEN type:=DOORTYPE_XIM` runs before
+ * doorLog(type,cmd) at 4332, so an AIM door is logged as XIM (0). An unknown
+ * type logs as XIM, as the port always did.
+ */
+export function doorLogTypeNumber(type: string): number {
+  const upper = String(type || '').toUpperCase();
+  const folded = upper === DoorType.AIM ? DoorType.XIM : upper;
+  const at = DOORLOG_TYPE_ORDER.indexOf(folded);
+  return at < 0 ? 0 : at;
 }
 
 /**
@@ -112,14 +130,14 @@ export function errorLog(bbsRoot: string, nodeId: number, message: string): void
  *
  * @param bbsRoot - BBS root directory
  * @param nodeId - Node number
- * @param doorType - Door type (XIM, SIM, etc.)
- * @param username - Current user's name
+ * @param doorType - axenums.e:15 door-type number (doorLogTypeNumber)
+ * @param username - loggedOnUser.name, or empty when nobody is (express.e:9407)
  * @param doorName - Door name (empty string means "Exiting")
  */
 export function doorLog(
   bbsRoot: string,
   nodeId: number,
-  doorType: DoorType | number,
+  doorType: number,
   username: string,
   doorName: string = ''
 ): void {
@@ -151,7 +169,7 @@ export function doorLog(
 export function logDoorStart(
   bbsRoot: string,
   nodeId: number,
-  doorType: DoorType | number,
+  doorType: number,
   username: string,
   doorName: string
 ): void {
@@ -164,7 +182,7 @@ export function logDoorStart(
 export function logDoorExit(
   bbsRoot: string,
   nodeId: number,
-  doorType: DoorType | number,
+  doorType: number,
   username: string
 ): void {
   doorLog(bbsRoot, nodeId, doorType, username, '');

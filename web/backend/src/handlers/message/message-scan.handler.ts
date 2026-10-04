@@ -272,6 +272,19 @@ console.error('[confScan] Failed to update AquaScan.UserData:', err);
  * @param confAccess - User confAccess string
  * @param user    - User object
  */
+/**
+ * partUploadOK(1)'s notice and question, express.e:17586 and 17613:
+ * `There are some incompleted uploads of yours\b\n`, then (option TRUE)
+ * `View them (Y/N)? ` - plain, capital N. The port coloured it and printed
+ * `(Y/n)`.
+ */
+export function partialUploadsNotice(): string[] {
+  return [
+    '\r\nThere are some incompleted uploads of yours\r\n',
+    'View them (Y/N)? ',
+  ];
+}
+
 async function performPartialUploadCheck(
   socket: any,
   session: any,
@@ -325,8 +338,7 @@ async function performPartialUploadCheck(
     // express.e:28130 - bgFileCheck tooltype check (web: always FALSE for remote)
     // express.e:28134 - mystat:=uploadaFile(0,'URG',FALSE)
     // Display partial upload notice and trigger upload handler
-    socket.emit('ansi-output', '\r\nThere are some incompleted uploads of yours\r\n');
-    socket.emit('ansi-output', `View them \x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)?\x1b[0m `);
+    for (const line of partialUploadsNotice()) socket.emit('ansi-output', line);
 
     // For web version, we show the notice but cannot block here waiting for input.
     // Partial upload resume via 'URG' mode is triggered via the upload handler.

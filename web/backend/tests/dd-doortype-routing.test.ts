@@ -22,7 +22,7 @@ import {
   DoorType,
   parseCmdFile,
 } from "../src/utils/amiga-command-parser.util";
-import { DoorType as LogDoorType } from "../src/utils/node-logs.util";
+import { doorLogTypeNumber } from "../src/utils/node-logs.util";
 
 // door.handler imports BBSState from src/index — mock it so importing the
 // handler doesn't boot the whole server (same pattern as
@@ -46,13 +46,8 @@ describe("DD doorType", () => {
     expect(isAmiga68kDoorType("dd")).toBe(true);
   });
 
-  it("node-logs DoorType assigns DD the next free numeric code (9)", () => {
-    expect(LogDoorType.DD).toBe(9);
-    // Must not collide with any existing code
-    const codes = Object.values(LogDoorType).filter(
-      (v) => typeof v === "number"
-    );
-    expect(new Set(codes).size).toBe(codes.length);
+  it("DoorLog numbers DD after FIM (9)", () => {
+    expect(doorLogTypeNumber("DD")).toBe(9);
   });
 
   describe("parseCmdFile alias parsing (DD -> DoorType.DD)", () => {

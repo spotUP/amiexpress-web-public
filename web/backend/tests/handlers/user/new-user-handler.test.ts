@@ -83,6 +83,7 @@ import {
   handleComputerInput,
   handleScreenClearInput,
   handleAccessPasswordInput,
+  handleAutoValidationInput,
 } from '../../../src/handlers/user/new-user.handler';
 
 function makeSocket() {
@@ -242,6 +243,10 @@ describe('New User Handler — registration steps', () => {
       await handlePasswordConfirm(socket, session, 'SecretPass');
 
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_LINES);
+      // express.e:11307, verbatim.
+      const output = socket._emits.map((e: any) => String(e.payload)).join('');
+      expect(output).toContain(
+        ' 2\r\n\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
     });
 
     it('mismatched password goes back to PASSWORD', async () => {
@@ -267,6 +272,9 @@ describe('New User Handler — registration steps', () => {
 
       expect(session.newUserData.linesPerScreen).toBe(24);
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_COMPUTER);
+      // express.e:11335-11337: the list, a blank line, 'Choose computer type: '.
+      const output = socket._emits.map((e: any) => String(e.payload)).join('');
+      expect(output.endsWith('\r\n\r\nChoose computer type: ')).toBe(true);
     });
 
     it('Auto (Enter) stores the measured terminal height minus the prompt row, never 0', async () => {
@@ -348,6 +356,18 @@ describe('New User Handler — registration steps', () => {
       expect(session.subState).not.toBe(LoggedOnSubState.NEW_USER_SCREEN_CLEAR);
     });
 
+    it('the summary labels the location "City, St.:" (express.e:30288)', async () => {
+      const socket = makeSocket();
+      const session = makeSession({ subState: LoggedOnSubState.NEW_USER_SCREEN_CLEAR });
+      session.newUserData.username = 'tester';
+      session.newUserData.location = 'Oslo';
+
+      await handleScreenClearInput(socket, session, 'Y');
+
+      const output = socket._emits.map((e: any) => String(e.payload)).join('');
+      expect(output).toContain('Handle: tester\r\nCity, St.: Oslo\r\nPhone Num: ');
+    });
+
     it('N sets screenClear=false and advances', async () => {
       const socket = makeSocket();
       const session = makeSession({ subState: LoggedOnSubState.NEW_USER_SCREEN_CLEAR });
@@ -371,7 +391,9 @@ describe('New User Handler — registration steps', () => {
 
       expect(socket.emit).toHaveBeenCalled();
       const output = socket.emit.mock.calls.map((c: any[]) => String(c[1])).join('');
-      expect(output).toContain('Invalid');
+      // express.e:30036 - plain, 'PassWord', after lineInput's CRLF.
+      expect(output).toContain('\r\nInvalid PassWord\r\n');
+      expect(output).not.toContain('\x1b[');
     });
 
     it('three wrong attempts puts session in AWAIT state', async () => {
@@ -387,6 +409,21 @@ describe('New User Handler — registration steps', () => {
       // abortNewUser sets state to AWAIT before the 500ms disconnect timer
       expect(session.state).toBe(BBSState.AWAIT);
       jest.useRealTimers();
+    });
+  });
+
+  describe('handleAutoValidationInput (express.e:30068-30085)', () => {
+    it('a wrong password says express.e:30084 in plain text, after a blank line', async () => {
+      const socket = makeSocket();
+      const session = makeSession({ subState: LoggedOnSubState.NEW_USER_AUTOVAL });
+      session.newUserData.autoValidationComplete = false;
+
+      await handleAutoValidationInput(socket, session, 'not-it');
+
+      const output = socket._emits.map((e: any) => String(e.payload)).join('');
+      expect(output).toContain(
+        '\r\n\r\nIncorrect password, try again or leave blank if not known.\r\n\r\n');
+      expect(output).not.toContain('\x1b[33m');
     });
   });
 });

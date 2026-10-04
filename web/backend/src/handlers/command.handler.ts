@@ -947,12 +947,6 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
   }
 
   await displayScreen(socket, session, 'BBSTITLE');
-  session.paginatedScreen = undefined;
-  session.lastScreenHadPause = false;
-  session.state = BBSState.LOGON;
-  session.subState = undefined;
-  session.tempData = session.tempData || {};
-  session.tempData.loginPhase = 'username';
   /*
    * THE PROMPT ITSELF, not only the browser's cue to draw one.
    *
@@ -972,8 +966,57 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
    * the screen now holds. `petscii-output` is the legacy PUA channel and
    * bypasses that.
    */
+  promptForLogonName(socket, session);
+}
+
+/**
+ * BBSTITLE is on screen; ask for the name. express.e:29552-29571:
+ *
+ *   displayScreen(SCREEN_BBSTITLE)
+ *   ...
+ *   StringF(tempStr,'\b\n\s ',namePrompt)
+ *
+ * Nothing between the title and the prompt - no welcome line, no "please
+ * login". The port printed `-= Welcome to AmiExpress-Web =-` and `Please
+ * login to continue.` here, in three copies of this transition (this file,
+ * command-handler/core.ts and the dead pre-login.ts); all of them now come
+ * through this one function.
+ *
+ * Every dispatcher's "title shown -> name prompt" step ends here, so the
+ * state change, the prompt bytes and the browser's `prompt-login` cue cannot
+ * drift apart between them again. `prompt-login` is web-only
+ * (server/transport-event-rulings.ts); the prompt TEXT is what a byte
+ * transport needs, so both go out.
+ */
+export function promptForLogonName(socket: any, session: BBSSession): void {
+  // express.e:29551 - the title's pagination is over once the name is asked.
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
+  session.state = BBSState.LOGON;
+  session.subState = undefined;
+  session.tempData = session.tempData || {};
+  session.tempData.loginPhase = 'username';
   emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
-  socket.emit('prompt-login');
+  socket.emit('prompt-login'); // Tell frontend to show login form
+}
+
+/**
+ * A key pressed while the caller is still parked at DISPLAY_BBSTITLE (the
+ * C64 path parks there until its pre-login pipeline reaches the title, so a
+ * fast typist can land here). Goes to the same name prompt as every other
+ * path - promptForLogonName, express.e:29552-29571.
+ */
+export async function afterTitleKeypress(socket: any, session: BBSSession): Promise<void> {
+  console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
+  /*
+   * WEB_: express.e:29552-29571 never clears between BBSTITLE and the name
+   * prompt. Kept at the sysop's request (2026-09-14, on a phone): the folded
+   * title is several screens tall and its tail otherwise stays above the
+   * login for the rest of the session. `2J` erases the screen, `3J` the
+   * scrollback, `H` homes the cursor.
+   */
+  emitText(socket, '\x1b[2J\x1b[3J\x1b[H');
+  promptForLogonName(socket, session);
 }
 
 /**
@@ -1444,17 +1487,8 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
         const { displayScreen } = require('./screen.handler');
         await displayScreen(socket, session, 'BBSTITLE');
 
-        // Clear pagination state so next input goes to login prompt (express.e:29551)
-        session.paginatedScreen = undefined;
-        session.lastScreenHadPause = false;
-
-        // Immediately transition to login state (no key press required)
-        session.state = BBSState.LOGON;
-        session.subState = undefined;
-        session.tempData = session.tempData || {};
-        session.tempData.loginPhase = 'username';
-        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
-        socket.emit('prompt-login'); // Tell frontend to show login form
+        // Straight to the name prompt, no key press (express.e:29552-29571)
+        promptForLogonName(socket, session);
         return;
       } else if (data === '\x7f' || data === '\b') {
         // Backspace, wrap-aware. This prompt is 78 columns on its last row,
@@ -1514,14 +1548,7 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
           emitText(socket, '\r\n');
           const { displayScreen: dsBBSTITLE } = require('./screen.handler');
           await dsBBSTITLE(socket, session, 'BBSTITLE');
-          session.paginatedScreen = undefined;
-          session.lastScreenHadPause = false;
-          session.state = BBSState.LOGON;
-          session.subState = undefined;
-          session.tempData = session.tempData || {};
-          session.tempData.loginPhase = 'username';
-          emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
-          socket.emit('prompt-login');
+          promptForLogonName(socket, session);
           return;
         }
 
@@ -1563,32 +1590,8 @@ console.log('[SYSTEM_PASSWORD] 3 failures — disconnecting (express.e:29349-293
     }
 
     if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
-      // User pressed key after BBSTITLE, now ready for login
-console.log(' BBSTITLE viewed, transitioning to login');
-      session.state = BBSState.LOGON;
-      session.subState = undefined;
-      session.tempData = session.tempData || {};
-      session.tempData.loginPhase = 'username';
-      /*
-       * CLEAR FIRST. BBSTITLE is the tallest thing this board draws: 69 lines
-       * of art, eleven of them wider than any terminal - one is 1,427
-       * characters - so an 80-column caller gets each of those folded into a
-       * dozen rows or more and the screen scrolls several times over. Printing
-       * the welcome underneath continues that scroll, and the tail of the
-       * title stays above the login for the rest of the session: "the bbstitle
-       * is very tall and the upper part is not cleared on my mobile so its
-       * always visible above the bbs content" (sysop, 2026-09-14, on a phone,
-       * where 25 rows make it unmissable).
-       *
-       * `2J` erases what is on screen, `3J` drops what scrolled off - a swipe
-       * on a touch screen brings that straight back otherwise - and `H` puts
-       * the welcome at the top.
-       */
-      emitText(socket, '\x1b[2J\x1b[3J\x1b[H');
-      emitText(socket, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
-      emitText(socket, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
-      emitPrompt(socket, `${loginNamePrompt(session.nodeId ?? 0)} `);
-      socket.emit('prompt-login'); // Tell frontend to show login form
+      // A key pressed while the title is still the current screen.
+      await afterTitleKeypress(socket, session);
       return;
     }
 
@@ -1924,13 +1927,11 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               // PWFAIL syscmd then logoffErr writes '\t* Password
               // Failure *' and disconnects. Same path web takes at
               // auth-socket-handlers.ts:458-462.
-              emitText(socket, '\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n');
+              // express.e:29153 plain; logoffErr (29262-29263) prints nothing
+              // - "Too Many Errors, Goodbye!" is the NAME loop's (29634).
+              emitText(socket, '\r\nExcessive Password Failure\r\n');
               const { runPwfailAndLogoff } = await import('../services/login-post.service');
-              await runPwfailAndLogoff(
-                socket,
-                session,
-                '\r\nToo Many Errors, Goodbye!\r\n',
-              );
+              await runPwfailAndLogoff(socket, session, '');
               return;
             }
 

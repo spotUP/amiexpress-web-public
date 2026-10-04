@@ -91,6 +91,12 @@ export function readCharWithin(socket: any, session: InputWaitingSession, second
   });
 }
 
+/** What yesNo(1) and yesNo(2) print before reading the key (express.e yesNo). */
+export const YES_NO_PROMPT = {
+  1: '\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)\x1b[32m?\x1b[0m ',
+  2: '\x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ',
+} as const;
+
 /**
  * yesNo(flag) - express.e yesNo. flag 1 prints `(Y/n)?` and Enter means yes,
  * flag 2 prints `(y/N)?` and Enter means no, flag 0 prints nothing and Enter
@@ -98,8 +104,8 @@ export function readCharWithin(socket: any, session: InputWaitingSession, second
  * LF is not Enter here - express.e removed it.
  */
 export async function yesNo(socket: any, session: InputWaitingSession, flag: 0 | 1 | 2): Promise<boolean> {
-  if (flag === 2) emitText(socket, '\x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m ');
-  else if (flag === 1) emitText(socket, '\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m)\x1b[32m?\x1b[0m ');
+  if (flag === 2) emitText(socket, YES_NO_PROMPT[2]);
+  else if (flag === 1) emitText(socket, YES_NO_PROMPT[1]);
   for (;;) {
     let ch = await readChar(socket, session);
     if (ch === '\r') {

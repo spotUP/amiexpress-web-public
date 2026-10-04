@@ -9,6 +9,7 @@
  * - E: Enter message (internalCommandE - express.e:24860-24868) - See messaging.handler.ts
  */
 
+import { YES_NO_PROMPT } from '../../utils/await-input';
 import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
 import { checkSecurity } from '../../utils/acs.util';
 import * as path from 'path';
@@ -143,7 +144,8 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
       // then yesNo(2) — Y=yes leave (proceed logoff), N/CR=no cancel logoff
       session.tempData = session.tempData || {};
       session.tempData.pendingGoodbye = true;
-      socket.emit('ansi-output', '\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+      // yesNo(2)'s own bytes - the port's copy had lost the second ESC[32m.
+      socket.emit('ansi-output', `\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? ${YES_NO_PROMPT[2]}`);
       session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
       return;
     }

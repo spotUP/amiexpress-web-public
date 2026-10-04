@@ -280,15 +280,16 @@ export function commandPieces(input: string, subState?: unknown): string[] {
 }
 
 /**
- * What the caller is told when a command threw - one report for every
- * transport. Web said `[ERROR] Command processing failed`; telnet and SSH
- * only logged, so their caller was left at a screen that simply stopped
- * (web-vs-telnet audit item 9).
+ * A command that threw - one handler for every transport. The server log
+ * carries it; the caller is shown nothing. express.e has no text for this:
+ * its commands return a result code to the command loop and never print a
+ * generic failure, so `[ERROR] Command processing failed` (which web used to
+ * print, and web-vs-telnet audit item 9 spread to telnet and SSH) was the
+ * port's own invention (invented-text audit 2026-10-04, top-10 item 9).
  */
-export function commandFailed(emitter: { emit: (event: string, ...args: any[]) => unknown }): (error: unknown) => void {
+export function commandFailed(_emitter: { emit: (event: string, ...args: any[]) => unknown }): (error: unknown) => void {
   return (error: unknown) => {
     console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-    emitter.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
   };
 }
 

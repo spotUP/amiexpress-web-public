@@ -26,6 +26,7 @@ import { BBSState } from "../constants/bbs-states";
 import { db } from "../database";
 import { beginLogoff } from "../server/logoff";
 import { emitText, emitPrompt } from "../utils/output.util";
+import { YES_NO_PROMPT } from "../utils/await-input";
 import {
   loadPasswordPolicy,
   validateNewPassword,
@@ -273,21 +274,18 @@ export async function isPasswordResetAvailable(userEmail: string | null | undefi
 }
 
 /**
- * Drive the email-based password reset flow on telnet/SSH using a
- * line-buffered prompt loop. Mirrors the web socket-event flow in
- * auth-socket-handlers.ts ("password-reset-input" handler) one-for-one:
+ * The email password reset after Excessive Password Failure - express.e
+ * checkPassword, 29152-29190:
  *
- *   await_confirm  →  "Do you want to send a reset code…? (Y/n)"
- *   await_code     →  "Enter reset code: " (10-char alnum, emailed)
- *   await_new_pwd  →  "Enter new password: " (min 4 chars, masked)
+ *   await_confirm  ->  "Do you want to send a reset code to your email
+ *                       address " + yesNo(1), one key, Enter is yes
+ *   await_code     ->  "Reset code: " (ten A-Z a-z 0-9, emailed, exact match)
+ *   await_new_pwd  ->  "Password: " (empty keeps the old one)
  *
- * On success, the new password is written to the DB and the caller can
- * re-prompt for username/password. On any rejection or hard failure the
- * adapter calls `beginLogoff` itself, the caller should return.
- *
- * Web is a no-op here — its existing "password-reset-input" socket
- * handler in auth-socket-handlers.ts:748+ owns the flow asynchronously
- * after the failure-path emits `prompt-password-reset`.
+ * No, or a wrong code, is PWFAIL and logoffErr (29191-29193, 29263). On
+ * success the new password is written to the DB and the caller re-prompts
+ * for name and password - express.e instead carries straight on into the
+ * logon (stat:=RESULT_SUCCESS, 29196-29198).
  *
  * Preconditions:
  *   session.passwordResetUsername = the username that failed login
@@ -308,8 +306,12 @@ export async function promptPasswordReset(
   const username = session.passwordResetUsername || "";
   if (!username) return { ok: false, reason: "no-email" };
 
-  emitText(emitter as any, "\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n");
-  emitPrompt(emitter as any, "Do you want to send a reset code to your email address? (Y/n): ");
+  // express.e:29152-29155, plain text.
+  emitText(emitter as any, "\r\nExcessive Password Failure\r\n");
+  emitPrompt(
+    emitter as any,
+    `\r\nDo you want to send a reset code to your email address ${YES_NO_PROMPT[1]}`,
+  );
   session.passwordResetState = "await_confirm";
 
   return new Promise<PasswordResetResult>((resolve) => {
@@ -324,6 +326,20 @@ export async function promptPasswordReset(
       session.passwordResetUsername = undefined;
     };
 
+    /**
+     * No reset code: express.e:29191-29193 `runSysCommand('PWFAIL','')`,
+     * `JUMP logoffErr` - which writes `\t* Password Failure *` (29263) and
+     * prints nothing. The board's one implementation of that is
+     * runPwfailAndLogoff.
+     */
+    const pwfail = async (reason: PasswordResetResult["reason"]) => {
+      teardown();
+      const { runPwfailAndLogoff } = await import("./login-post.service");
+      await runPwfailAndLogoff(emitter, session, "");
+      resolve({ ok: false, reason });
+    };
+
+    /** WEB_: a failure express.e never checks for; the caller is told and dropped. */
     const bail = (reason: PasswordResetResult["reason"], message: string) => {
       teardown();
       beginLogoff(emitter as any, session, {
@@ -334,74 +350,82 @@ export async function promptPasswordReset(
       resolve({ ok: false, reason });
     };
 
-    const processLine = async (line: string) => {
-      if (phase === "await_confirm") {
-        const answer = line.trim().toUpperCase();
-        // express.e:29160-29167 — blank Enter defaults to Y
-        if (answer !== "" && answer !== "Y" && answer !== "YES") {
-          // express.e:29193-29195 — user declined → PWFAIL + logoffErr.
-          bail("user-declined", "\r\n\x1b[31mGoodbye!\x1b[0m\r\n");
-          return;
-        }
+    /** yesNo(1) - express.e:29156: Enter is yes; only Y, N and Enter end it. */
+    const answerYesNo = async (key: string) => {
+      const ch = key === "\r" ? "y" : key;
+      if (ch === "n" || ch === "N") {
+        emitText(emitter as any, "No\r\n");
+        await pwfail("user-declined");
+        return;
+      }
+      if (ch !== "y" && ch !== "Y") return;
+      emitText(emitter as any, "Yes\r\n");
+      phase = "await_code";
+      session.passwordResetState = "await_code";
 
-        const user = await db.getUserByUsername(username);
-        if (!user?.email) {
-          bail("no-email", "\r\n\x1b[31mNo email address on file.\x1b[0m\r\n");
-          return;
-        }
-
-        const resetCode = crypto.randomBytes(5).toString("hex").toUpperCase();
-        session.passwordResetCode = resetCode;
-        const emailSent = await mailOnPwdFail(user.email, resetCode);
-        if (!emailSent) {
-          bail("smtp-failed", "\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n");
-          return;
-        }
-
-        emitText(emitter as any, "\r\n\x1b[32mReset code sent to your email address.\x1b[0m\r\n");
-        emitPrompt(emitter as any, "\r\nEnter reset code: ");
-        phase = "await_code";
-        session.passwordResetState = "await_code";
+      const user = await db.getUserByUsername(username);
+      if (!user?.email) {
+        // WEB_: isPasswordResetAvailable already required an email
+        // (express.e:29154); this is the account changing under us.
+        bail("no-email", "\r\nNo email address on file.\r\n");
         return;
       }
 
+      const resetCode = makeResetCode();
+      session.passwordResetCode = resetCode;
+      const emailSent = await mailOnPwdFail(user.email, resetCode);
+      if (!emailSent) {
+        // WEB_: express.e:29170 sendMail's result is not looked at - the
+        // caller would wait for a code that never comes.
+        bail("smtp-failed", "\r\nFailed to send reset code. Please contact the sysop.\r\n");
+        return;
+      }
+
+      // express.e:29172-29173 - "yuour" is express.e's own spelling.
+      emitText(
+        emitter as any,
+        "\r\nA reset code has been sent to yuour email address. Please enter it exactly below\r\n\r\n",
+      );
+      emitPrompt(emitter as any, "Reset code: ");
+    };
+
+    const processLine = async (line: string) => {
       if (phase === "await_code") {
-        // express.e:29173-29188 — verify reset code (case-insensitive match).
-        if (line.trim().toUpperCase() !== (session.passwordResetCode || "")) {
-          // express.e:29189-29195 — wrong code → PWFAIL + logoffErr.
-          bail("wrong-code", "\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n");
+        // express.e:29176 StrCmp - exact, case and all.
+        if (line !== (session.passwordResetCode || "")) {
+          emitText(emitter as any, "\r\nThe reset code was not correct.\r\n");
+          await pwfail("wrong-code");
           return;
         }
-        emitText(emitter as any, "\r\n\x1b[32mCode verified!\x1b[0m\r\n");
-        emitPrompt(emitter as any, "\r\nEnter new password: ");
+        emitText(
+          emitter as any,
+          "\r\nThe reset code was correct, please now update your password.\r\n\r\n",
+        );
+        emitPrompt(emitter as any, "Password: ");
         phase = "await_new_password";
         session.passwordResetState = "await_new_password";
         return;
       }
 
-      // await_new_password — express.e:29196-29213.
+      // express.e:29182-29187: an empty answer keeps the old password; there
+      // is no length rule.
       const newPassword = line; // do not trim — passwords may have leading/trailing spaces
-      if (newPassword.length < 4) {
-        emitText(emitter as any, "\r\n\x1b[33mPassword must be at least 4 characters.\x1b[0m\r\n");
-        emitPrompt(emitter as any, "Enter new password: ");
-        return;
+      if (newPassword.length > 0) {
+        const user = await db.getUserByUsername(username);
+        if (!user) {
+          bail("db-error", "\r\nUser not found.\r\n"); // WEB_: no express.e counterpart
+          return;
+        }
+        try {
+          await db.updateUserPassword(user.id, newPassword);
+        } catch (err) {
+          console.error("[promptPasswordReset] updateUserPassword failed:", err);
+          // WEB_: no express.e counterpart - its setNewPassword cannot fail.
+          bail("db-error", "\r\nFailed to update password. Please try again later.\r\n");
+          return;
+        }
       }
 
-      const user = await db.getUserByUsername(username);
-      if (!user) {
-        bail("db-error", "\r\n\x1b[31mUser not found.\x1b[0m\r\n");
-        return;
-      }
-      try {
-        await db.updateUserPassword(user.id, newPassword);
-      } catch (err) {
-        console.error("[promptPasswordReset] updateUserPassword failed:", err);
-        bail("db-error", "\r\n\x1b[31mFailed to update password. Please try again later.\x1b[0m\r\n");
-        return;
-      }
-
-      emitText(emitter as any, "\r\n\x1b[32mPassword updated successfully!\x1b[0m\r\n");
-      emitText(emitter as any, "\r\nPlease login with your new password.\r\n\r\n");
       session.loginRetryCount = 0;
       teardown();
       resolve({ ok: true });
@@ -414,7 +438,21 @@ export async function promptPasswordReset(
         lastCharWasCR = false;
         return;
       }
-      // Mask the new-password phase; echo plaintext for Y/n and code.
+      if (phase === "await_confirm") {
+        // One key, not a line (express.e yesNo reads readChar).
+        for (const ch of cleanData) {
+          if (ch === "\r" || ch === "y" || ch === "Y" || ch === "n" || ch === "N") {
+            lastCharWasCR = ch === "\r";
+            answerYesNo(ch).catch((err) => {
+              console.error("[promptPasswordReset] yesNo failed:", err);
+            });
+            return;
+          }
+        }
+        return;
+      }
+      // WEB_: express.e:29182 reads the new password with lineInput, which
+      // echoes it; masked here so it never shows on the caller's screen.
       const mask = phase === "await_new_password";
       for (const ch of cleanData) {
         if (ch === "\b" || ch === "\x7f") {
@@ -428,6 +466,7 @@ export async function promptPasswordReset(
           const line = buf;
           buf = "";
           lastCharWasCR = ch === "\r";
+          // lineInput's own line break after Enter (express.e:2378).
           emitText(emitter as any, "\r\n");
           processLine(line).catch((err) => {
             console.error("[promptPasswordReset] processLine failed:", err);
@@ -442,4 +481,15 @@ export async function promptPasswordReset(
       }
     };
   });
+}
+
+/**
+ * express.e:29159-29163: ten characters, each drawn from
+ * A-Z a-z 0-9. crypto rather than E's Rnd, so a code cannot be predicted.
+ */
+const RESET_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+function makeResetCode(): string {
+  let code = "";
+  for (let i = 0; i < 10; i++) code += RESET_CODE_CHARS[crypto.randomInt(RESET_CODE_CHARS.length)];
+  return code;
 }

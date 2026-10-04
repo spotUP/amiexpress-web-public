@@ -544,7 +544,9 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
 
   if (!attempt || attempt !== accessPasswordNow()) {
     session.newUserData.accessPasswordTries++;
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid Password\x1b[0m\r\n');
+    // express.e:30036 aePuts('Invalid PassWord\b\n') - plain, that case. The
+    // leading CRLF is lineInput's own after Enter (express.e:2378).
+    socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
 
     // express.e:30029-30035 - every failure is logged, and the node's
     // SHOWPWFAIL decides whether the log holds what was typed or `xxxx`. The
@@ -580,7 +582,9 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
   }
 
   setPasswordMask(socket, session, false);
-  socket.emit('ansi-output', '\x1b[32mCorrect\x1b[0m\r\n');
+  // express.e:30046 aePuts('Correct\b\n') - plain, after lineInput's own
+  // CRLF (express.e:2378); without it the word ran on from the masked input.
+  socket.emit('ansi-output', '\r\nCorrect\r\n');
   session.newUserData.accessPasswordTries = 0;
   await beginRegistrationPrompts(socket, session, session.newUserData.username || 'NEW');
 }
@@ -887,7 +891,8 @@ function promptForLines(socket: Socket, session: any) {
       socket.emit('ansi-output', ` ${count}\r\n`);
     }
   }
-  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (0 or Enter for Auto): ');
+  // express.e:11307, verbatim.
+  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
   session.inputBuffer = '';
 }
 
@@ -917,9 +922,8 @@ async function promptForComputer(socket: Socket, session: any) {
     for (let i = 0; i < choices.length; i++) {
       socket.emit('ansi-output', narrowClip(`${String(i + 1).padStart(2, ' ')}> ${choices[i]}`) + '\r\n');
     }
-    // 'Choose computer type (Enter for default): ' is 42 columns; the
-    // narrow form keeps every word and fits 39.
-    socket.emit('ansi-output', '\r\nChoose computer type (Enter=default): ');
+    // express.e:11337 - 22 columns, fits a 40-column screen as it is.
+    socket.emit('ansi-output', '\r\nChoose computer type: ');
     session.inputBuffer = '';
     return;
   }
@@ -937,7 +941,7 @@ async function promptForComputer(socket: Socket, session: any) {
     }
     socket.emit('ansi-output', `${left}${right}`);
   }
-  socket.emit('ansi-output', '\r\nChoose computer type (Enter for default): ');
+  socket.emit('ansi-output', '\r\nChoose computer type: '); // express.e:11337
   session.inputBuffer = '';
 }
 
@@ -1009,9 +1013,9 @@ export async function handleScreenClearInput(socket: Socket, session: any, input
 function showSummaryAndConfirm(socket: Socket, session: any) {
   const data = session.newUserData;
 
-  // Format matches express.e StringF calls 30264-30281
+  // express.e:30286-30304, one StringF per line
   socket.emit('ansi-output', `Handle: ${data.username}\r\n`);
-  socket.emit('ansi-output', `Group Aff: ${data.location}\r\n`);
+  socket.emit('ansi-output', `City, St.: ${data.location}\r\n`); // express.e:30288
   socket.emit('ansi-output', `Phone Num: ${data.phone}\r\n`);
   socket.emit('ansi-output', `E-Mail   : ${data.email}\r\n`);
   
@@ -1077,7 +1081,8 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
 async function enterBoard(socket: Socket, session: any): Promise<void> {
   delete session.newUserData;
   const newUser = session.user;
-  socket.emit('ansi-output', '\x1b[32mAccount created successfully!\x1b[0m\r\n\r\n');
+  // Nothing printed here: express.e goes from the questionnaire straight on
+  // with the logon (30096-30112); there is no "account created" line.
   // The questionnaire ran in its own sub-states, REGISTERING; the board
   // starts here at the bulletins, which is where account creation used to
   // leave the caller - and the browser learns it is logged on only now.
@@ -1201,7 +1206,8 @@ export async function handleAutoValidationInput(socket: Socket, session: any, in
   if (attempt.toUpperCase() === autoValidationPasswordNow(session).toUpperCase()) {
     data.autoValidated = true;
     data.autoValidationComplete = true;
-    socket.emit('ansi-output', '\r\n\x1b[32mAuto-validation password accepted.\x1b[0m\r\n');
+    // express.e:30072, plain: lineInput's CRLF after Enter (2378), then '\b\n...'.
+    socket.emit('ansi-output', '\r\n\r\nAuto-validation password accepted.\r\n');
     setPasswordMask(socket, session, false);
     await continueRegistrationFlow(socket, session);
     return;
@@ -1209,7 +1215,8 @@ export async function handleAutoValidationInput(socket: Socket, session: any, in
 
   data.autoValidationTries--;
   if (data.autoValidationTries > 0) {
-    socket.emit('ansi-output', '\r\n\x1b[33mIncorrect password, try again or leave blank if not known.\x1b[0m\r\n\r\n');
+    // express.e:30084, plain: lineInput's CRLF after Enter (2378), then '\b\n...'.
+    socket.emit('ansi-output', '\r\n\r\nIncorrect password, try again or leave blank if not known.\r\n\r\n');
     promptForAutoValidation(socket, session);
     return;
   }
@@ -1539,7 +1546,8 @@ async function createAccountRecord(socket: Socket, session: any): Promise<boolea
   setPasswordMask(socket, session, false);
 
   try {
-    socket.emit('ansi-output', '\r\n\x1b[32mCreating your account...\x1b[0m\r\n');
+    // No "Creating your account..." - express.e assigns the slot silently
+    // (30096-30112).
 
     // Hash password with bcrypt
     const bcrypt = await import('bcryptjs');

@@ -16,7 +16,7 @@ import {
   DoorType,
   parseCmdFile,
 } from "../src/utils/amiga-command-parser.util";
-import { DoorType as LogDoorType } from "../src/utils/node-logs.util";
+import { doorLogTypeNumber, logDoorStart, logDoorExit } from "../src/utils/node-logs.util";
 
 // door.handler imports BBSState from src/index — mock it so importing the
 // handler doesn't boot the whole server (same pattern as
@@ -34,13 +34,33 @@ describe("FIM doorType", () => {
       expect(DoorType.FIM).toBe("FIM");
     });
 
-    it("node-logs DoorType assigns FIM the next free numeric code (8)", () => {
-      expect(LogDoorType.FIM).toBe(8);
-      // Must not collide with any existing code
-      const codes = Object.values(LogDoorType).filter(
-        (v) => typeof v === "number"
-      );
-      expect(new Set(codes).size).toBe(codes.length);
+    it("DoorLog numbers FIM after axenums.e:15's eight types (8)", () => {
+      expect(doorLogTypeNumber("FIM")).toBe(8);
+    });
+  });
+
+  describe("DoorLog type numbers and name (axenums.e:15, express.e:4312, 9407)", () => {
+    it("numbers the types in axenums.e:15 order: XIM 0, SIM 2, TIM 3 ... SUP 7", () => {
+      expect(["XIM", "SIM", "TIM", "IIM", "MCI", "AEM", "SUP"].map(doorLogTypeNumber))
+        .toEqual([0, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it("folds AIM into XIM before logging (express.e:4312)", () => {
+      expect(doorLogTypeNumber("AIM")).toBe(0);
+    });
+
+    it("writes a SIM door with no user as express.e:9407-9413 does", () => {
+      const board = fs.mkdtempSync(path.join(os.tmpdir(), "doorlog-test-"));
+      try {
+        logDoorStart(board, 1, doorLogTypeNumber("SIM"), "", "DOORS:FILEID/FILEID");
+        logDoorExit(board, 1, doorLogTypeNumber("SIM"), "");
+        const lines = fs.readFileSync(path.join(board, "Node1", "DoorLog"), "latin1").split("\n");
+        // '[\s[25]] \s - \d - \s' with an empty name: "] " + "" + " - 2 - "
+        expect(lines[0]).toMatch(/^\[.{25}\]  - 2 - DOORS:FILEID\/FILEID$/);
+        expect(lines[1]).toMatch(/^\[.{25}\]  - 2 - Exiting$/);
+      } finally {
+        fs.rmSync(board, { recursive: true, force: true });
+      }
     });
   });
 

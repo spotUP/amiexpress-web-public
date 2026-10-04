@@ -21,9 +21,11 @@ describe('system commands - goodbye flagged files', () => {
     // express.e:12670-12672 — "You have flagged files still not downloaded.
     // Do you leave without them?" (yesNo prompt). The earlier copy of this
     // test expected "Download them now?" which was never in express.e.
+    // Byte for byte, yesNo(2)'s prompt included (both ESC[32m's).
     expect(socket.emit).toHaveBeenCalledWith(
       'ansi-output',
-      expect.stringContaining('Do you leave without them?')
+      '\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? '
+        + '\x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)\x1b[32m?\x1b[0m '
     );
   });
 

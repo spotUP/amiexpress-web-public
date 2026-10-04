@@ -421,26 +421,10 @@ console.log(
     }
 
     if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
-      // User pressed key after BBSTITLE, now ready for login
-console.log("📋 BBSTITLE viewed, transitioning to login");
-      session.state = BBSState.LOGON;
-      session.subState = undefined;
-      // The same clear as command.handler's copy of this transition: the title
-      // is several screens tall once folded, and the welcome must not be
-      // printed underneath what is left of it.
-      socket.emit("ansi-output", "\x1b[2J\x1b[3J\x1b[H");
-      socket.emit(
-        "ansi-output",
-        "\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n"
-      );
-      socket.emit(
-        "ansi-output",
-        "\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n"
-      );
-      // The prompt TEXT as well as the cue - see the note on the other copy
-      // above; `prompt-login` reaches a browser and nothing else.
-      socket.emit("ansi-output", `${loginNamePrompt(session.nodeId ?? 0)} `);
-      socket.emit("prompt-login"); // Tell frontend to show login form
+      // The one transition every dispatcher shares - no welcome banner
+      // between title and name prompt (express.e:29552-29571).
+      const { afterTitleKeypress } = require("../command.handler");
+      await afterTitleKeypress(socket, session);
       return;
     }
 
