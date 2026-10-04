@@ -245,50 +245,25 @@ console.error('Error parsing QWK message:', error);
     }
   }
 
-  // Generate outgoing QWK packet for user
-  async generateOutgoingPacket(userId: string, conferences: number[]): Promise<string> {
-    // Get messages for user from specified conferences
-    const messages: QWKMessage[] = [];
+  /**
+   * Write a caller's Zoom packet - express.e internalCommandZOOM (26215) and
+   * qwkZoom (26741): CONTROL.DAT and MESSAGES.DAT, packed as
+   * `AE<slot>.QWK` (26295, `AE\z\r\d[4].QWK`).
+   *
+   * The messages are chosen by the caller (handlers/message/zoom-mail.ts,
+   * from the message base on disk with express.e's private-mail rule); this
+   * only writes them. It used to choose them itself from the SQL messages
+   * mirror with no private-mail rule, so other callers' private mail went
+   * into the packet. Returns the packet's path.
+   */
+  async generateOutgoingPacket(
+    userName: string,
+    slotNumber: number,
+    conferences: Array<{ id: number; name: string }>,
+    messages: QWKMessage[],
+  ): Promise<string> {
+    const filename = `AE${String(Math.max(0, slotNumber) % 10000).padStart(4, '0')}.QWK`;
 
-    for (const confId of conferences) {
-      // Get unread messages for this conference
-      const confMessages = await db.getMessages(confId, 1, {
-        userId,
-        limit: 100
-      });
-
-      // Convert Message[] to QWKMessage[]
-      const qwkMessages: QWKMessage[] = confMessages.map(msg => ({
-        id: parseInt(msg.id.toString()),
-        conference: msg.conferenceId,
-        subject: msg.subject,
-        from: msg.author,
-        to: msg.toUser || '',
-        date: msg.timestamp,
-        body: msg.body,
-        isPrivate: msg.isPrivate,
-        isReply: msg.parentId ? true : false,
-        parentId: msg.parentId,
-        attachments: msg.attachments
-      }));
-
-      messages.push(...qwkMessages);
-    }
-
-    if (messages.length === 0) {
-      throw new Error('No messages to pack');
-    }
-
-    // Create QWK packet filename
-    const timestamp = getSystemTime().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `${this.bbsId}${timestamp}.QWK`;
-
-    /**
-     * CONTROL.DAT, built to qwk.e's layout by the function that has been
-     * sitting here unused. Board identity comes from the board's own config;
-     * the conference list is the set this packet actually carries, which is
-     * what a reader uses to name each message's conference.
-     */
     // bbsName and sysopName are what this board's config actually carries;
     // location and phone are Fido-era CONTROL.DAT fields it has no setting
     // for, and a reader tolerates them being blank.
@@ -297,26 +272,14 @@ console.error('Error parsing QWK message:', error);
       '',
       '',
       config.get('sysopName') || 'Sysop',
-      userId,
-      conferences.map((id) => ({ id, name: `Conference ${id}` })),
+      userName,
+      conferences,
       messages.length,
     );
 
     const packetPath = path.join(this.qwkPath, filename);
     await this.writeQWKPacket(packetPath, messages, control);
-
-    // Create packet record
-    const packetId = await db.createQWKPacket({
-      filename,
-      size: fs.statSync(packetPath).size,
-      created: getSystemTime(),
-      fromBBS: this.bbsId,
-      toBBS: 'USER', // Will be set when downloaded
-      status: 'completed',
-      messages
-    });
-
-    return filename;
+    return packetPath;
   }
 
   /**

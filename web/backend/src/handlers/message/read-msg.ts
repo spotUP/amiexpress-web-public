@@ -72,7 +72,7 @@ function field30(text: string): string {
 }
 
 /** The message base's directory: `<conf>/MsgBase/` (msgBaseLocation). */
-function msgBaseDir(conf: number): string {
+export function msgBaseDir(conf: number): string {
   // The writers' own path (message-file.util), so a message is read from
   // where it was saved.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -88,7 +88,7 @@ function checkScreenClear(socket: any, session: BBSSession): void {
 }
 
 /** getMailStatFile - the conference's MailStats as they are on disk now. */
-function readStats(conf: number): MailStat {
+export function readStats(conf: number): MailStat {
   return messageIndexManager.readMailStats(conf)
     ?? { lowestKey: 1, highMsgNum: 1, lowestNotDel: 0, pad: Buffer.alloc(6) };
 }
@@ -101,6 +101,27 @@ function loadMessageHeader(r: Reader): MsgHeader | null {
 
 function isPublic(h: MsgHeader): boolean {
   return h.status === MsgStatus.NORMAL || h.status === MsgStatus.CENSORED;
+}
+
+/**
+ * Who may have a private message: its sender or its recipient, by the
+ * conference's mail name, or a caller with ACS_SYSOP_READ.
+ *
+ * readit (12344-12348) also lets ACS_READ_PRIV_EALL / ACS_READ_PRIV_ALL read
+ * private mail to EALL / ALL - `allGrants`. Zoom (qwkZoomConf 26650,
+ * asciiZoomConf 26430) applies the bare rule: to me, from me, or SYSOP_READ.
+ */
+export function mayReadPrivateMail(
+  session: BBSSession,
+  h: Pick<MsgHeader, 'toName' | 'fromName'>,
+  me: string,
+  opts: { allGrants: boolean },
+): boolean {
+  if (checkSecurity(session.user, ACSPermission.SYSOP_READ)) return true;
+  if (sameName(h.toName, me) || sameName(h.fromName, me)) return true;
+  if (!opts.allGrants) return false;
+  return (sameName(h.toName, 'eall') && checkSecurity(session.user, ACSPermission.READ_PRIV_EALL))
+    || (sameName(h.toName, 'all') && checkSecurity(session.user, ACSPermission.READ_PRIV_ALL));
 }
 
 /**
@@ -346,10 +367,7 @@ async function readit(socket: any, session: BBSSession, r: Reader): Promise<bool
     let skip = false;
     r.privateFlag = 0;
     if ((h.status === MsgStatus.PRIVATE || h.status === MsgStatus.CENSORED) && !sysopRead) {
-      if (!sameName(h.toName, me)
-        && (!sameName(h.toName, 'eall') || !checkSecurity(session.user, ACSPermission.READ_PRIV_EALL))
-        && (!sameName(h.toName, 'all') || !checkSecurity(session.user, ACSPermission.READ_PRIV_ALL))
-        && !sameName(h.fromName, me)) {
+      if (!mayReadPrivateMail(session, h, me, { allGrants: true })) {
         r.privateFlag = 1;
         if (r.noDirF !== 0) {
           skip = true;

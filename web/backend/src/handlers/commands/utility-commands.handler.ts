@@ -201,77 +201,63 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
 
   console.log('[ENV] Zoom');
 
-  // express.e ZOOM command - no decorative header
+  // express.e:26226 aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
 
-  // Check if user has any unread messages
-  const unreadMessages = _messages.filter(msg =>
-    msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-    (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-  );
-
-  if (unreadMessages.length === 0) {
-    socket.emit('ansi-output', 'No unread messages to download.\r\n');
-    socket.emit('ansi-output', '\r\n');
+  const done = (): void => {
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
-
-  socket.emit('ansi-output', AnsiUtil.colorize(`You have ${unreadMessages.length} unread message(s).`, 'yellow'));
-  socket.emit('ansi-output', '\r\n\r\n');
+  };
 
   try {
-    // Import QWKManager (lazy load to avoid circular dependency)
-    const { QWKManager } = await import('../../services/qwk.service');
-    const qwkManager = new QWKManager();
+    // express.e:26237 qwkZoom() - the messages come from the message base on
+    // disk, chosen with express.e's private-mail rule (zoom-mail.ts).
+    const { qwkZoom } = await import('../message/zoom-mail');
+    const zoom = await qwkZoom(socket, session);
 
-    // Generate QWK packet for all conferences user has flagged for ZOOM
-    // express.e:26227-26238, 26552 - uses user's zoomType and checks ZOOM_SCAN_MASK
-    const userConferences = await getZoomFlaggedConferences(session.user.id);
-
-    if (userConferences.length === 0) {
-      socket.emit('ansi-output', AnsiUtil.colorize('No conferences flagged for ZOOM.', 'yellow'));
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', 'Use CF command to flag conferences for QWK download.\r\n');
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // express.e:26849-26852
+    if (zoom.zoomed === 0) {
+      socket.emit('ansi-output', 'No conferences selected for zooming. Use CF to configure\r\n');
+      done();
       return;
     }
 
-    socket.emit('ansi-output', AnsiUtil.colorize('Generating QWK packet...', 'cyan'));
-    socket.emit('ansi-output', '\r\n');
-
-    const filename = await qwkManager.generateOutgoingPacket(
-      session.user.id.toString(),
-      userConferences
+    // express.e packs in Node<n>/PlayPen; the port's PlayPen is the upload
+    // staging area cleanPlayPen sweeps, so the packet gets a directory of
+    // its own, outside the board.
+    const { QWKManager } = await import('../../services/qwk.service');
+    const os = await import('os');
+    const packetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zoom-'));
+    const packetPath = await new QWKManager(packetDir).generateOutgoingPacket(
+      session.user.username || '',
+      (session.user as any).slotNumber || 0,
+      zoom.conferences,
+      zoom.messages,
     );
-
-    socket.emit('ansi-output', AnsiUtil.colorize(`QWK packet generated: ${filename}`, 'green'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', `Download URL: /api/qwk/download/${filename}\r\n`);
-    socket.emit('ansi-output', '\r\n');
 
     // express.e:26244: '\r\n[32mPack Method [0m1) LHA, 2) ZIP ?>'
     // WEB_: auto-selects ZIP; no interactive prompt possible during transfer setup
     socket.emit('ansi-output', '\r\n\x1b[32mPack Method \x1b[0m1) LHA, 2) ZIP ?>\r\n');
-    socket.emit('ansi-output', '\x1b[33mPrepare for ZoomMail Zmodem Download:\x1b[0m\r\n');
 
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-
+    // express.e:26319-26340: the packet goes to the caller by downloadFile -
+    // over ZMODEM, or to a browser through a one-fetch ticket for exactly this
+    // path - and is deleted once a transfer has finished with it.
+    socket.emit('ansi-output', '\r\n\x1b[33mPrepare for ZoomMail Zmodem Download:\x1b[0m\r\n');
+    const { downloadFile } = await import('../file/file-delivery');
+    const route = await downloadFile(socket, session, [packetPath]);
+    // A browser fetches its ticket after this returns; the packet stays for
+    // that one fetch and the caller's next Zoom overwrites it.
+    if (route !== 'http') {
+      try { fs.rmSync(packetDir, { recursive: true, force: true }); } catch { /* already gone */ }
+    }
+    done();
   } catch (error) {
-console.error('[ZOOM] QWK generation error:', error);
+    console.error('[ZOOM] QWK generation error:', error);
     socket.emit('ansi-output', AnsiUtil.errorLine('Error generating QWK packet'));
     socket.emit('ansi-output', (error as Error).message + '\r\n');
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    done();
   }
 }
 
@@ -382,43 +368,4 @@ export function confineToHelp(root: string, term: string): string | null {
 export function resolveHelpDir(dataDir: string): string {
   const literal = path.join(dataDir, 'HELP');
   return amigafs.resolvePath(literal) ?? literal;
-}
-
-// === UTILITY FUNCTIONS ===
-
-/**
- * Get list of conferences flagged with ZOOM_SCAN_MASK for a user
- * express.e:26552 - checks cb.handle[0] AND ZOOM_SCAN_MASK
- */
-async function getZoomFlaggedConferences(userId: string): Promise<number[]> {
-  const { db } = require('../../database');
-  const ZOOM_SCAN_MASK = 2; // Bit 1 - from express.e axconsts.e:47
-
-  try {
-    const result = await db.query(
-      `SELECT DISTINCT conference_id
-       FROM conf_base
-       WHERE user_id = $1 AND (scan_flags & $2) != 0
-       ORDER BY conference_id`,
-      [userId, ZOOM_SCAN_MASK]
-    );
-
-    return result.rows.map((row: any) => row.conference_id);
-  } catch (error) {
-console.error('[ZOOM] Error getting flagged conferences:', error);
-    // Fallback: return all conferences user has access to
-    try {
-      const confResult = await db.query(
-        `SELECT DISTINCT conference_id
-         FROM conf_base
-         WHERE user_id = $1
-         ORDER BY conference_id`,
-        [userId]
-      );
-      return confResult.rows.map((row: any) => row.conference_id);
-    } catch (fallbackError) {
-console.error('[ZOOM] Fallback query failed:', fallbackError);
-      return [];
-    }
-  }
 }
