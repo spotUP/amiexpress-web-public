@@ -345,7 +345,11 @@ fi
 # that braces, and the one that runs when it matters.
 echo "== free space before build =="
 df -h / | tail -1
-docker builder prune -f --keep-storage=10GB 2>&1 | tail -2 || true
+# --keep-storage is deprecated since Docker 28 and became "reserved space":
+# it pruned nothing ("Total: 0B") while each build added ~8GB, and deploys
+# failed their boot smoke on ENOSPC (2026-10-04). Cap the cache and keep a
+# floor of free disk instead - recent layers survive, so builds stay cached.
+docker builder prune -f --max-used-space=6GB --min-free-space=12GB 2>&1 | tail -2 || true
 # Untagged leftovers only: :latest and :rollback are tags, so
 # neither is a dangling image and neither can be caught here.
 docker image prune -f 2>&1 | tail -2 || true
