@@ -151,3 +151,38 @@ describe("DOS_VECTORS dispatch wiring", () => {
     expect(called).toContain("SystemTagList");
   });
 });
+
+// ─── the output a System() command writes to ──────────────────────────────
+
+describe("SystemTagList's output handle (dos/dostags.h)", () => {
+  // D3 is not a SystemTagList argument. Execute() read it as the output
+  // handle, so a System() command that printed wrote to whatever the door
+  // left in D3 (0xd7ad34a8, File Description's Depack call, 2026-10-04).
+  const JUNK_D3 = 0xd7ad34a8;
+  const TAGS = 0x20000;
+
+  function run(tagList: number, stub: StubEmulator, dos: DosLibrary): number[] {
+    const seen: number[] = [];
+    (dos as any).runCommandLine = (_name: string, out: number) => { seen.push(out); };
+    (dos as any).Output = () => 0x5000b;
+    stub.writeString(STRING_ADDR, "Unzip -o x.zip file_id.diz");
+    stub.setRegister(CPURegister.D1, STRING_ADDR);
+    stub.setRegister(CPURegister.D2, tagList);
+    stub.setRegister(CPURegister.D3, JUNK_D3);
+    dos.SystemTagList();
+    return seen;
+  }
+
+  it('is the caller\'s own Output() when no tag names one, never D3', () => {
+    const { dos, stub } = makeDosWithTmpRoot();
+    expect(run(0, stub, dos)).toEqual([0x5000b]);
+  });
+
+  it('is SYS_Output when the tags name one', () => {
+    const { dos, stub } = makeDosWithTmpRoot();
+    stub.writeMemory32(TAGS, 0x80000021); stub.writeMemory32(TAGS + 4, 0x1111); // SYS_Input
+    stub.writeMemory32(TAGS + 8, 0x80000022); stub.writeMemory32(TAGS + 12, 0x2222); // SYS_Output
+    stub.writeMemory32(TAGS + 16, 0); // TAG_DONE
+    expect(run(TAGS, stub, dos)).toEqual([0x2222]);
+  });
+});

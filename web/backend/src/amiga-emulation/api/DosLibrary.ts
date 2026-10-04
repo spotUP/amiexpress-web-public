@@ -3560,8 +3560,19 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
   Execute(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
-    let outputHandle = this.emulator.getRegister(CPURegister.D3);
+    const outputHandle = this.emulator.getRegister(CPURegister.D3);
     console.log(`[DosLibrary] *** Execute() CALLED *** command="${name}" namePtr=0x${namePtr.toString(16)} outputHandle=0x${outputHandle.toString(16)}`);
+    this.runCommandLine(name, outputHandle);
+  }
+
+  /**
+   * Run one shell command line, writing to `outputHandle` (0 = none given).
+   * The body Execute() and SystemTagList() share: each reads its OWN
+   * arguments - Execute's D3 is its output handle, SystemTagList's comes from
+   * its tag list - and hands them here.
+   */
+  private runCommandLine(name: string, outputHandleArg: number): void {
+    let outputHandle = outputHandleArg;
 
     // Parse shell redirection (">file" or ">>file") from command string
     // AmigaDOS Execute() expects the shell to handle redirection, so we parse it here
@@ -4240,6 +4251,24 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
    * zOOsTAT uses this on exec version >= 36 to run "delete RAM:T/ZOOSTAT.TMP".
    * Returns 0 on success so the caller's TST.L/BEQ skips the "NOT deleted" message.
    */
+  /** SYS_Output from a SystemTagList tag list, else the caller's Output(). */
+  private systemTagOutput(tagList: number): number {
+    // utility/tagitem.h; TAG_IGNORE (1) and unknown tags are stepped over.
+    const TAG_DONE = 0, TAG_MORE = 2, TAG_SKIP = 3;
+    const SYS_OUTPUT = 0x80000022; // SYS_Dummy (TAG_USER+32) + 2
+    let tag = tagList;
+    for (let guard = 0; tag !== 0 && guard < 256; guard++) {
+      const id = this.emulator.readMemory32(tag) >>> 0;
+      const data = this.emulator.readMemory32(tag + 4) >>> 0;
+      if (id === TAG_DONE) break;
+      if (id === TAG_MORE) { tag = data; continue; }
+      if (id === TAG_SKIP) { tag += 8 * (data + 1); continue; }
+      if (id === SYS_OUTPUT) return data;
+      tag += 8;
+    }
+    return this.Output();
+  }
+
   SystemTagList(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
@@ -4272,8 +4301,12 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
       return;
     }
 
-    // Delegate unknown commands to Execute logic for other simple shell commands
-    this.Execute();
+    // SystemTagList(command D1, tags D2): the output is SYS_Output from the
+    // tags, and without one the caller's own Output() (dos/dostags.h). D3 is
+    // not an argument here - it held whatever the door left in it, and
+    // Execute() read that as the output handle (logged 0xd7ad34a8 for File
+    // Description's System() call).
+    this.runCommandLine(name, this.systemTagOutput(this.emulator.getRegister(CPURegister.D2)));
     // Convert DOSTRUE/DOSFALSE to RC convention: DOSTRUE(-1) -> 0, DOSFALSE(0) -> 10
     const execResult = this.emulator.getRegister(CPURegister.D0);
     this.emulator.setRegister(CPURegister.D0, execResult !== 0 ? 0 : 10);
