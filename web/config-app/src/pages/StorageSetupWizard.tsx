@@ -6,9 +6,9 @@ import { MoveExistingFiles } from '../components/storage/MoveExistingFiles';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import {
-  GB,
   QUOTA_CHOICES,
   completeEndpoint,
+  freeTierText,
   regionFor,
   type StorageProvider,
 } from './storage-providers';
@@ -271,7 +271,7 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
                 <button key={p.id} type="button" onClick={() => pickProvider(p.id)} className={choiceClass(providerId === p.id)}>
                   <span className="block font-medium">{p.label}</span>
                   <span className="block text-xs text-content-muted">
-                    {p.freeQuotaBytes > 0 ? `${Math.round(p.freeQuotaBytes / GB)} GB free storage` : 'No free storage'}
+                    {freeTierText(p) ? `${freeTierText(p)} free storage` : 'No free storage'}
                     {p.egress === 'FREE' ? ', free downloads' : ', downloads billed'}
                   </span>
                 </button>
@@ -461,7 +461,7 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
               </div>
               <p className="mt-1 text-xs text-content-muted">
                 The board stops filing new uploads here once the quota is reached.
-                {provider.freeQuotaBytes > 0 && ` The free tier is ${Math.round(provider.freeQuotaBytes / GB)} GB.`}
+                {freeTierText(provider) && ` The free tier is ${freeTierText(provider)}.`}
               </p>
             </div>
 

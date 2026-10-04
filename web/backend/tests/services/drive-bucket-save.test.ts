@@ -70,6 +70,19 @@ describe('the provider catalogue', () => {
     expect(providerById('wasabi')!.minimumRetentionDays).toBe(90);
     expect(providerById('s3')!.minimumRetentionDays).toBe(30);
   });
+
+  it('offers no MinIO card - the sysop removed it (2026-10-04)', () => {
+    expect(providerById('minio')).toBeUndefined();
+    expect(STORAGE_PROVIDERS.some(p => /minio/i.test(p.label))).toBe(false);
+  });
+
+  it('shows Scaleway as 750 GB for 90 days, then 75 GB, not a flat 75 GB', () => {
+    expect(providerById('scaleway')!.freeTier).toBe('750 GB for 90 days, then paid');
+  });
+
+  it('still tells an Amazon S3 sysop to choose the Paid account plan', () => {
+    expect(providerById('s3')!.setup.account.some(s => /Choose the Paid account plan/.test(s))).toBe(true);
+  });
 });
 
 describe('a saved bucket reaches Drives.info', () => {

@@ -22,8 +22,8 @@ export interface StorageProvider {
   id: string;
   label: string;
   /**
-   * Endpoint with `{}` where the sysop's own value goes, or null when the
-   * provider has no fixed shape (MinIO is self-hosted, local needs none).
+   * Endpoint with `{}` where the sysop's own value goes, or null when there
+   * is none to build (a local drive).
    */
   endpointTemplate: string | null;
   /** What the `{}` is, in the sysop's words. Empty when there is nothing to fill. */
@@ -44,6 +44,11 @@ export interface StorageProvider {
   volumeClass: 'FREE' | 'PAID';
   /** Free storage in bytes, as a starting QUOTA. 0 when there is no free tier. */
   freeQuotaBytes: number;
+  /**
+   * The free storage in words, where a size alone would mislead (a trial that
+   * shrinks). Absent: the card shows freeQuotaBytes as a size.
+   */
+  freeTier?: string;
   /** FREE means downloads cost nothing; METERED means every GB served is billed. */
   egress: 'FREE' | 'METERED';
   /** Days a deleted object still bills for. 0 for none. */
@@ -75,9 +80,9 @@ export interface ProviderSetupGuide {
 const GB = 1024 * 1024 * 1024;
 
 /**
- * Read and write to ONE bucket, in the IAM policy language Amazon S3, Wasabi
- * and MinIO/AIStor share. Listed actions rather than `s3:*Object`, which was
- * not confirmed on Wasabi or MinIO. BUCKET is the sysop's bucket name.
+ * Read and write to ONE bucket, in the IAM policy language Amazon S3 and
+ * Wasabi share. Listed actions rather than `s3:*Object`, which was not
+ * confirmed on Wasabi. BUCKET is the sysop's bucket name.
  */
 const ONE_BUCKET_POLICY_STEP =
   'Policy (replace BUCKET with the bucket name): {"Version":"2012-10-17","Statement":[' +
@@ -143,6 +148,10 @@ export const STORAGE_PROVIDERS: StorageProvider[] = [
    * https://www.scaleway.com/en/docs/iam/how-to/create-policy/
    * https://www.scaleway.com/en/docs/object-storage/how-to/create-bucket-policy/
    * https://www.scaleway.com/en/docs/object-storage/concepts/
+   * https://www.scaleway.com/en/docs/object-storage/faq/ (checked 2026-10-04):
+   * "a total 750 GB of free storage ... for 90 days". The "then 75 GB" is the
+   * sysop's wording; the FAQ says regular pricing after the trial, and the
+   * pricing page's 75 GB a month is the free egress allowance.
    */
   {
     id: 'scaleway',
@@ -154,9 +163,10 @@ export const STORAGE_PROVIDERS: StorageProvider[] = [
     defaultRegion: 'fr-par',
     volumeClass: 'FREE',
     freeQuotaBytes: 75 * GB,
+    freeTier: '750 GB for 90 days, then paid',
     egress: 'FREE',
     minimumRetentionDays: 0,
-    note: 'Largest free tier at 75 GB (EU). A card is required to open the account.',
+    note: '750 GB free for the first 90 days, then paid storage; 75 GB of downloads a month stay free (EU). A card is required to open the account.',
     setup: {
       signupUrl: 'https://account.scaleway.com/register',
       docsUrl: 'https://www.scaleway.com/en/docs/object-storage/how-to/create-a-bucket/',
@@ -518,52 +528,6 @@ export const STORAGE_PROVIDERS: StorageProvider[] = [
       secretShownOnce: true,
       endpointHint:
         'Enter the Region code chosen in the navigation bar when the bucket was created, such as eu-central-1.',
-    },
-  },
-  /*
-   * https://github.com/minio/minio (archived 2026-04-25; binaries discontinued)
-   * https://docs.min.io/aistor/installation/container/install/
-   * https://docs.min.io/aistor/administration/console/managing-objects/
-   * https://docs.min.io/aistor/administration/console/security-and-access/
-   * A default install serves plain http on :9000, so the sysop enters the
-   * whole URL rather than a host behind a fixed https://.
-   */
-  {
-    id: 'minio',
-    label: 'MinIO / self-hosted',
-    endpointTemplate: '{}',
-    endpointFieldLabel: 'Server URL (http://minio.example.net:9000)',
-    regionFieldLabel: '',
-    regionFromEndpointField: false,
-    defaultRegion: 'us-east-1',
-    volumeClass: 'FREE',
-    freeQuotaBytes: 0,
-    egress: 'FREE',
-    minimumRetentionDays: 0,
-    note: 'Your own server. No quota unless you set one.',
-    setup: {
-      signupUrl: 'https://www.min.io/download',
-      docsUrl: 'https://docs.min.io/aistor/installation/container/install/',
-      account: [
-        'The free MinIO Community Edition is archived and no longer ships binaries. Its successor is AIStor Free: request its free license key from the download page.',
-        'Start the server as the install guide shows (a container with the license file and a data folder). It serves the S3 API on port 9000 and the console on 9001.',
-        'Open the console at http://your-host:9001, sign in, and change the default minioadmin password at once.',
-      ],
-      bucket: [
-        'Open Buckets in the console and select Add Bucket.',
-        'Enter the Bucket Name, leave versioning and locking off, and create it.',
-      ],
-      key: [
-        'Go to IAM Policies > + Add Policy and paste the policy below in Raw Format.',
-        ONE_BUCKET_POLICY_STEP,
-        'Go to IAM Users > + Add a user and give it that policy.',
-        'Signed in as that user, go to Access Keys > Create Access Key. Save the access key and its password (the secret), then click Create.',
-      ],
-      keyIdField: 'Access Key',
-      secretField: 'Secret Key',
-      secretShownOnce: true,
-      endpointHint:
-        'Enter the address clients reach the S3 API on, port 9000 by default - not the 9001 console. Use http:// unless the server has a certificate.',
     },
   },
 ];

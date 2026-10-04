@@ -41,6 +41,8 @@ export interface StorageProvider {
   defaultRegion: string;
   volumeClass: 'FREE' | 'PAID';
   freeQuotaBytes: number;
+  /** The free storage in words, where a size alone would mislead (Scaleway's trial). */
+  freeTier?: string;
   egress: 'FREE' | 'METERED' | '3X';
   minimumRetentionDays: number;
   note: string;
@@ -57,6 +59,15 @@ export const QUOTA_CHOICES: Array<{ label: string; bytes: number }> = [
   { label: '75 GB', bytes: 75 * GB },
   { label: 'No limit', bytes: 0 },
 ];
+
+/**
+ * The free storage as the card and the quota hint say it: the catalogue's own
+ * words when it has them, else the size. Empty when there is no free tier.
+ */
+export function freeTierText(provider: StorageProvider): string {
+  if (provider.freeTier) return provider.freeTier;
+  return provider.freeQuotaBytes > 0 ? `${Math.round(provider.freeQuotaBytes / GB)} GB` : '';
+}
 
 /** The endpoint: the sysop's value in the template's `{}`, and the region in its `{region}`. */
 export function completeEndpoint(provider: StorageProvider | undefined, fill: string, region = ''): string {
