@@ -47,24 +47,10 @@ import {
   deleteUploadContextById,
 } from "./upload-session-store";
 import { reportUpload } from '../achievements/sites';
+import { messagePointerFileManager } from '../services/MessagePointerFileManager';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
+import { ACSPermission } from '../constants/acs-permissions';
 
-/**
- * Helper function to load conferences for stats tracking
- */
-async function loadConferences(session: any, database: any) {
-  if (session.conferences && Array.isArray(session.conferences)) {
-    return session.conferences;
-  }
-  try {
-    // Use db's delegated method instead of creating new repository
-    const confs = await database.getConferences();
-    session.conferences = confs;
-    return confs;
-  } catch (err) {
-console.error("[Upload] Failed to load conferences for accounting", err);
-    return undefined;
-  }
-}
 
 /**
  * Get upload context from single source of truth
@@ -585,24 +571,26 @@ console.error("[Upload] Error writing user disk files:", diskErr);
       }
     }
 
-    // Update per-conference upload stats (express.e:19530+)
-    // Express.e: Conference stats ONLY updated for successful uploads (not duplicates)
+    // Per-conference upload accounting. express.e:19382 / 19444-19446 add the
+    // upload to loggedOnUser, which under ACS_CONFERENCE_ACCOUNTING holds the
+    // CURRENT conference's record (loadMsgPointers 4893-4905) and goes back
+    // into the caller's Conf.DB slot at saveMsgPointers (4929-4939) - unless
+    // the conference's database is CONFDB_SHARED (4895). It is the caller's
+    // own record, never a row the whole board shares.
     try {
-      const conferences = await loadConferences(session, db);
-      const target = conferences?.find(
-        (c: any) => c.id === session.currentConf
-      );
-      if (target && trackUploads && !foundDupe && !quarantineFailed) {
-        target.uploads = (target.uploads || 0) + 1;
-        target.bytesUpload = (target.bytesUpload || 0) + data.size;
-        // Use db's delegated method instead of creating new repository
-        await db.updateConference(target.id, {
-          uploads: target.uploads,
-          bytesUpload: target.bytesUpload,
-        });
+      const slot = Number(session.user!.slotNumber) || 0;
+      const conf = session.currentConf || 0;
+      if (trackUploads && !foundDupe && !quarantineFailed && slot > 0 && conf > 0
+        && checkSecurity(session.user!, ACSPermission.CONFERENCE_ACCOUNTING)
+        && !messagePointerFileManager.isShared(conf)) {
+        // express.e:19444 CREDITBYKB books kilobytes.
+        const size = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+          ? Math.floor(data.size / 1024) & 0x003fffff
+          : data.size;
+        messagePointerFileManager.addUpload(conf, slot, size);
       }
     } catch (err) {
-console.error("[Upload] Failed to persist conference upload stats", err);
+console.error("[Upload] Failed to book the conference upload", err);
     }
 
     // Log file upload (express.e:9493 callersLog)

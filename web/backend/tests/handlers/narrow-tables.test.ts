@@ -819,10 +819,17 @@ describe('5d new-user computer picker (new-user.handler.ts handleLinesInput)', (
 describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () => {
   async function driveFileStatus(driver: Driver) {
     const { FileStatusHandler } = require('../../src/handlers/file/file-status.handler');
+    // Under conference accounting FS prints the caller's own Conf.DB record
+    // (express.e:24166-24180), not the conference row.
+    const mpfm = require('../../src/services/MessagePointerFileManager');
+    const record = mpfm.deserializeConfBase(Buffer.alloc(mpfm.CONFBASE_RECORD_SIZE));
+    Object.assign(record, { upload: 12, bytesUpload: 1234567, downloads: 34, bytesDownload: 7654321, ratio: 3 });
+    jest.spyOn(mpfm.messagePointerFileManager, 'readRecordOrZero').mockReturnValue(record);
+    jest.spyOn(mpfm.messagePointerFileManager, 'isShared').mockReturnValue(false);
     const handler = new FileStatusHandler(
       {
         getConferences: jest.fn().mockResolvedValue([
-          { id: 1, name: 'General', uploads: 12, bytesUpload: 1234567, downloads: 34, bytesDownload: 7654321, ratio: 3 },
+          { id: 1, name: 'General', uploads: 0, bytesUpload: 0, downloads: 0, bytesDownload: 0, ratio: 0 },
         ]),
       },
       {} as any
@@ -830,6 +837,7 @@ describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () =
     driver.session.user = {
       id: 'u1',
       username: 'SPOT',
+      slotNumber: 7,
       securityFlags: 'T'.repeat(64),
       confAccess: 'X',
       byteLimit: 0,

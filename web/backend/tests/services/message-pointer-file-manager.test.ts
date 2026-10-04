@@ -43,7 +43,7 @@ describe('MessagePointerFileManager', () => {
     const dl = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);
     const ul = Buffer.from([8, 7, 6, 5, 4, 3, 2, 1]);
     const orig = {
-      handle: 'spot',
+      handle: Buffer.from('spot\0\0\0\0\0\0\0\0\0\0\0\0', 'latin1'),
       downloadBytesBCD: dl,
       uploadBytesBCD: ul,
       newSinceDate: 1764000000,
@@ -65,7 +65,7 @@ describe('MessagePointerFileManager', () => {
     const buf = serializeConfBase(orig);
     const back = deserializeConfBase(buf);
 
-    expect(back.handle).toBe('spot');
+    expect(back.handle.toString('latin1', 0, 4)).toBe('spot');
     expect(back.confRead).toBe(12345);
     expect(back.confYM).toBe(67890);
     expect(back.bytesDownload).toBe(999_999_999);
@@ -106,7 +106,7 @@ describe('MessagePointerFileManager', () => {
     const filePath = path.join(confDir, 'Conf.DB');
 
     const seed = serializeConfBase({
-      handle: 'preserved',
+      handle: Buffer.from('preserved\0\0\0\0\0\0\0', 'latin1'),
       downloadBytesBCD: Buffer.from([9, 9, 9, 9, 9, 9, 9, 9]),
       uploadBytesBCD: Buffer.from([8, 8, 8, 8, 8, 8, 8, 8]),
       newSinceDate: 1700000000,
@@ -138,7 +138,7 @@ describe('MessagePointerFileManager', () => {
     );
     expect(back.confYM).toBe(333);          // changed
     expect(back.confRead).toBe(111);        // preserved
-    expect(back.handle).toBe('preserved');  // preserved
+    expect(back.handle.toString('latin1', 0, 9)).toBe('preserved');  // preserved
     expect(back.bytesDownload).toBe(1024);  // preserved
     expect(back.bytesUpload).toBe(2048);    // preserved
     expect(back.messagesPosted).toBe(50);   // preserved

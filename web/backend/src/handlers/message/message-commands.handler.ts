@@ -7,6 +7,7 @@
  * - CM (Conference Maintenance) - SYSOP conference settings - express.e:24843-24852
  */
 
+import { messagePointerFileManager } from '../../services/MessagePointerFileManager';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -924,16 +925,9 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting messages posted counters...\x1b[0m`);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
-        const db = getDatabase();
-        // Reset messages posted counter for all users in this conference
-        // express.e:22833-22835 calls updateAllUsers(conf, msgBase, UPDATE_MESSAGES_POSTED, 0)
-        // express.e:22827 updateAllUsers(conf, msgBase, ...) walks the conf
-        // database of ONE message base. Without the second half of that key
-        // this reset every base in the conference.
-        await db.run(
-          `UPDATE conf_base SET messages_posted = 0 WHERE conference_id = $1 AND message_base_id = $2`,
-          [confId, msgBaseId]
-        );
+        // express.e:22833-22835 updateAllUsers(conf,msgBase,UPDATE_MESSAGES_POSTED,0):
+        // every record of the conference's Conf.DB (22504).
+        messagePointerFileManager.updateAllUsers(confId, rec => { rec.messagesPosted = 0; });
         emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Messages posted counters reset for all users\r\n`);
         await new Promise(r => setTimeout(r, 1200));
       } catch (error) {
@@ -1050,19 +1044,14 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
     } else if (field === 'LOW_MSG') {
       await _updateMessageNumberRange(conf, msgBaseId, value, undefined);
     } else if (field === 'RATIO') {
-      // express.e:22781-22788 - Update ratio for conference
-      await db.run(
-        `UPDATE conferences SET ratio = $1 WHERE id = $2`,
-        [value, conf]
-      );
+      // express.e:22779-22783 updateAllUsers(conf,msgBase,UPDATE_RATIO,n):
+      // the ratio is every caller's own, in his Conf.DB record (22478).
+      messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratio = value & 0xffff; });
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Ratio updated to \x1b[1;33m${value}\x1b[0m\r\n`);
       await new Promise(r => setTimeout(r, 1200));
     } else if (field === 'RATIO_TYPE') {
-      // express.e:22789-22796 - Update ratio type for conference
-      await db.run(
-        `UPDATE conferences SET ratiotype = $1 WHERE id = $2`,
-        [value, conf]
-      );
+      // express.e:22784-22788 updateAllUsers(conf,msgBase,UPDATE_RATIO_TYPE,n) (22480).
+      messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratioType = value & 0xffff; });
       const typeNames = ['None', 'Files', 'Bytes', 'Both'];
       const typeName = typeNames[value] || value;
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Ratio type set to \x1b[1;33m${typeName}\x1b[0m\r\n`);
@@ -1096,11 +1085,6 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
   const isYes = (answer === 'Y' || answer === 'YES');
   const action = session.tempData.cmAction;
   const confId = session.tempData.cmConf || session.currentConf || 1;
-  // express.e:22803-22823 hand updateAllUsers the conference AND the message
-  // base; conf_base is keyed by both, and these updates named only the
-  // conference - so setting a default on one base set it on every base of
-  // that conference.
-  const { id: msgBaseId } = cmMessageBase(confId, session.tempData.cmMsgBase || 1);
 
   // Map action to friendly name
   const actionNames: Record<string, string> = {
@@ -1114,54 +1098,18 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
   emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mSetting ${actionName} to ${status}...\x1b[0m`);
 
   try {
-    const db = getDatabase();
-
-    // express.e:22459-22519 - updateAllUsers with bit flag operations
-    switch (action) {
-      case 'setMailScan': // Case 6 - express.e:22798-22806
-        // UPDATE_NEW_MAIL_SCAN sets/clears MAIL_SCAN_MASK (bit 7, value 128)
-        if (isYes) {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 128 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        } else {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~128 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        }
-        break;
-
-      case 'setFileScan': // Case 7 - express.e:22807-22815
-        // UPDATE_NEW_FILE_SCAN sets/clears FILE_SCAN_MASK (bit 6, value 64)
-        if (isYes) {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 64 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        } else {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~64 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        }
-        break;
-
-      case 'setZoomFlag': // Case 8 - express.e:22816-22824
-        // UPDATE_DEFAULT_ZOOM_FLAG sets/clears ZOOM_SCAN_MASK (bit 1, value 2)
-        if (isYes) {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 2 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        } else {
-          await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~2 WHERE conference_id = $1 AND message_base_id = $2`,
-            [confId, msgBaseId]
-          );
-        }
-        break;
+    // express.e:22798-22824 updateAllUsers(conf,msgBase,UPDATE_NEW_MAIL_SCAN /
+    // UPDATE_NEW_FILE_SCAN / UPDATE_DEFAULT_ZOOM_FLAG, yes): handle[0] of every
+    // record in the conference's Conf.DB, with MAIL_SCAN_MASK 4, FILE_SCAN_MASK 8
+    // and ZOOM_SCAN_MASK 2 (axconsts.e:45-47; 22483-22499). The SQL version set
+    // bits 128 and 64, which are MAILSCAN_ALL and nothing.
+    const masks: Record<string, number> = { setMailScan: 4, setFileScan: 8, setZoomFlag: 2 };
+    const mask = masks[action];
+    if (mask) {
+      messagePointerFileManager.updateAllUsers(confId, rec => {
+        rec.handle = Buffer.from(rec.handle);
+        rec.handle[0] = isYes ? (rec.handle[0] | mask) : (rec.handle[0] & ~mask & 0xff);
+      });
     }
 
     emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m ${actionName} set to \x1b[1;33m${status}\x1b[0m for all users\r\n`);

@@ -22,7 +22,6 @@
 import type { BBSSession } from '../index';
 import { db } from '../database';
 import { ACSPermission } from '../constants/acs-permissions';
-import { ConferenceRepository } from '../database/conference-repository';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import { updateDownloadStats, creditAccountTrackDownloads, checkDownloadRatios } from '../utils/download-ratios.util';
@@ -32,6 +31,8 @@ import { logDownload } from '../utils/download-logging.util';
 import { userFileManager } from './UserFileManager';
 import { doorDropFileManager } from './DoorDropFileManager';
 import { emitDownload } from './bbs-event-emitter';
+import { messagePointerFileManager, accountedBytes } from './MessagePointerFileManager';
+import type { ConferenceAccount } from '../utils/download-ratios.util';
 
 /** A file as either path carries it. */
 export interface BookableFile {
@@ -53,18 +54,6 @@ export function isFreeDownload(file: BookableFile | null | undefined): boolean {
   if (typeof file.comment === 'string' && file.comment.toUpperCase().startsWith('F')) return true;
   if (file.confNum && getConferenceToolFlags(file.confNum).freeDownloads) return true;
   return false;
-}
-
-export async function conferencesOf(session: BBSSession): Promise<any[] | undefined> {
-  if (Array.isArray(session.conferences)) return session.conferences;
-  try {
-    const confs = await new ConferenceRepository(db as any).getConferences();
-    session.conferences = confs;
-    return confs;
-  } catch (err) {
-    console.error('[download-booking] could not load conferences for accounting:', err);
-    return undefined;
-  }
 }
 
 /**
@@ -117,10 +106,11 @@ export async function checkRatiosAndTime(
   }
 
   const accounting = !!user && checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+  const requests = files.map(f => ({ size: f.size || 0, isFree: isFreeDownload(f), conference: f.confNum || session.currentConf }));
   const ratio = await checkDownloadRatios(
     user,
-    files.map(f => ({ size: f.size || 0, isFree: isFreeDownload(f), conference: f.confNum || session.currentConf })),
-    accounting ? await conferencesOf(session) : undefined,
+    requests,
+    accounting ? callersAccounts(session, [session.currentConf, ...requests.map(r => r.conference)]) : undefined,
     accounting,
     getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true,
     session.currentConf,
@@ -133,21 +123,51 @@ export async function checkRatiosAndTime(
   return { status, minsLeft, bytesLeft: ratio.remainingBytes, filesLeft: ratio.remainingFiles };
 }
 
-/** The conference's own download count, where the board keeps accounts for it. */
+/**
+ * The caller's own records for these conferences, as checkRatiosAndTime
+ * reads them under ACS_CONFERENCE_ACCOUNTING (express.e:19891-19902,
+ * calcConfBad 19797): ratio, ratio type, files and bytes from his slot in
+ * each conference's Conf.DB, message base 1. Not the board-wide
+ * `conferences` row - that held everyone's traffic and a ratio of 0, so the
+ * per-conference ratio was never enforced.
+ */
+export function callersAccounts(session: BBSSession, conferenceIds: Array<number | undefined>): ConferenceAccount[] | undefined {
+  const slot = Number(session.user?.slotNumber) || 0;
+  if (slot < 1) return undefined;
+  const ids = [...new Set(conferenceIds.filter((c): c is number => Number.isInteger(c) && (c as number) > 0))];
+  return ids.map(id => {
+    const rec = messagePointerFileManager.readRecordOrZero(id, slot);
+    return {
+      id,
+      ratio: rec.ratio & 0xffff,
+      ratioType: rec.ratioType & 0xffff,
+      uploads: rec.upload & 0xffff,
+      downloads: rec.downloads & 0xffff,
+      bytesUpload: Number(accountedBytes(rec.bytesUpload, rec.uploadBytesBCD)),
+      bytesDownload: Number(accountedBytes(rec.bytesDownload, rec.downloadBytesBCD)),
+    };
+  });
+}
+
+/**
+ * express.e:15439-15452 updateDownloadStats under ACS_CONFERENCE_ACCOUNTING:
+ * the download is booked in the caller's own record for the FILE's
+ * conference (`cb:=confBases.item(getConfIndex(fileItem.confNum,1))`,
+ * addBCD downloadBytesBCD, downloads+1) - not in a row the whole board shares.
+ */
 export async function bookConference(session: BBSSession, file: BookableFile, isFree: boolean): Promise<void> {
   const user = session.user;
   if (!user || isFree) return;
   if (!checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)) return;
   if (!creditAccountTrackDownloads(user)) return;
-  const target = (await conferencesOf(session))?.find((c: any) => c.id === file.confNum);
-  if (!target) return;
-  target.downloads = (target.downloads || 0) + 1;
-  target.bytesDownload = (target.bytesDownload || 0) + (file.size || 0);
-  const rawDb = (db as any).db ?? db;
-  await new ConferenceRepository(rawDb).updateConference(target.id, {
-    downloads: target.downloads,
-    bytesDownload: target.bytesDownload,
-  });
+  const slot = Number(user.slotNumber) || 0;
+  const conf = file.confNum || session.currentConf;
+  if (slot < 1 || !conf) return;
+  // express.e:15435-15437 CREDITBYKB books kilobytes.
+  const size = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+    ? Math.floor((file.size || 0) / 1024) & 0x003fffff
+    : (file.size || 0);
+  messagePointerFileManager.addDownload(conf, slot, size);
 }
 
 /** The account, written where both the board and AmiExpress's own doors read it. */

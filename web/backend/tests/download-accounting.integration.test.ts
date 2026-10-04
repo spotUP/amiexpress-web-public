@@ -1,74 +1,74 @@
-import { db as singletonDb } from '../src/database';
-import { ConferenceRepository } from '../src/database/conference-repository';
-import { DownloadHandler as RawDownloadHandler } from '../src/handlers/file/download.handler';
-import { bookConference } from '../src/services/download-booking.service';
+/**
+ * A download under conference accounting is booked in the caller's OWN
+ * record for the file's conference - his slot in that conference's Conf.DB
+ * (express.e:15439-15452 updateDownloadStats: `cb:=confBases.item(
+ * getConfIndex(fileItem.confNum,1))`, addBCD downloadBytesBCD, downloads+1).
+ *
+ * The port added it to the board-wide `conferences` row instead, so every
+ * caller's FS showed everyone's downloads as his own.
+ */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
-// Access private method for testing
-const DownloadHandler: any = RawDownloadHandler;
+const board = fs.mkdtempSync(path.join(os.tmpdir(), 'dl-accounting-'));
+process.env.BBS_DATA_DIR = board;
 
-describe('download accounting integration (per-conference + credit tracking)', () => {
-  let repo: ConferenceRepository;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { bookConference } = require('../src/services/download-booking.service');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { messagePointerFileManager, CONFBASE_RECORD_SIZE } = require('../src/services/MessagePointerFileManager');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { readPackedBCD } = require('../src/utils/bcd-math.util');
 
-  beforeAll(async () => {
-    await singletonDb.init();
-    repo = new ConferenceRepository((singletonDb as any).db);
-  }, 30000);
+// ACSPermission.CONFERENCE_ACCOUNTING = 57; "T" grants it.
+const flags = '?'.repeat(87).split('');
+flags[57] = 'T';
 
-  afterAll(async () => {
-    await singletonDb.close();
+describe('download accounting (per caller, per conference)', () => {
+  beforeEach(() => {
+    fs.mkdirSync(path.join(board, 'Conf1'), { recursive: true });
+    fs.writeFileSync(path.join(board, 'Conf1', 'Conf.DB'), Buffer.alloc(CONFBASE_RECORD_SIZE * 10));
   });
 
-  it('increments conference stats when ACS conference accounting is enabled', async () => {
-    const confBefore = await repo.getConferenceById(1);
+  afterAll(() => {
+    fs.rmSync(board, { recursive: true, force: true });
+  });
 
-    // Post c316ada1e fix(security), checkSecurity uses file-based ACS lookups
-    // (no more secLevel >= 100 fallback). Grant CONFERENCE_ACCOUNTING via the
-    // user's securityFlags string — that path doesn't require Access/ files.
-    // ACSPermission.CONFERENCE_ACCOUNTING = 57. securityFlags is indexed by
-    // permission number; "T" grants, "F" denies, "?" defers to default logic.
-    const securityFlags = '?'.repeat(87).split('');
-    securityFlags[57] = 'T';
-
+  it("books the download in the caller's own Conf.DB record and nobody else's", async () => {
     const session: any = {
-      user: {
-        username: 'tester',
-        secLevel: 50, // non-sysop
-        securityFlags: securityFlags.join(''),
-        secOverride: '',
-      },
-      conferences: await repo.getConferences(),
+      user: { username: 'tester', secLevel: 50, slotNumber: 3, securityFlags: flags.join(''), secOverride: '' },
+      currentConf: 1,
       nodeId: 1,
     };
 
-    const fileInfo = { confNum: 1, size: 200 };
+    await bookConference(session, { confNum: 1, size: 200 }, false);
+    await bookConference(session, { confNum: 1, size: 50 }, false);
 
-    await bookConference(session, fileInfo, false);
+    const mine = messagePointerFileManager.readRecordOrZero(1, 3);
+    expect(mine.downloads).toBe(2);
+    expect(mine.bytesDownload).toBe(250);
+    expect(readPackedBCD(mine.downloadBytesBCD, 0)).toBe(250n);
 
-    const confAfter = await repo.getConferenceById(1);
-    expect(confAfter?.downloads).toBe((confBefore?.downloads || 0) + 1);
-    expect(confAfter?.bytesDownload).toBe((confBefore?.bytesDownload || 0) + 200);
+    const neighbour = messagePointerFileManager.readRecordOrZero(1, 4);
+    expect(neighbour.downloads).toBe(0);
+    expect(neighbour.bytesDownload).toBe(0);
   });
 
-  it('skips conference increments when credit tracking disables downloads', async () => {
-    const confBefore = await repo.getConferenceById(1);
+  it('books nothing when the credit account does not track downloads', async () => {
     const session: any = {
       user: {
-        username: 'credit',
-        secLevel: 50,
-        creditDays: 5,
-        creditStartDate: Math.floor(Date.now() / 1000) - 100,
-        creditTracking: 0, // TRACK_DOWNLOADS_BIT not set
+        username: 'credit', secLevel: 50, slotNumber: 3, securityFlags: flags.join(''),
+        creditDays: 5, creditStartDate: Math.floor(Date.now() / 1000) - 100, creditTracking: 0,
       },
-      conferences: await repo.getConferences(),
+      currentConf: 1,
       nodeId: 1,
     };
 
-    const fileInfo = { confNum: 1, size: 300 };
+    await bookConference(session, { confNum: 1, size: 300 }, false);
 
-    await bookConference(session, fileInfo, false);
-
-    const confAfter = await repo.getConferenceById(1);
-    expect(confAfter?.downloads).toBe(confBefore?.downloads || 0);
-    expect(confAfter?.bytesDownload).toBe(confBefore?.bytesDownload || 0);
+    const mine = messagePointerFileManager.readRecordOrZero(1, 3);
+    expect(mine.downloads).toBe(0);
+    expect(mine.bytesDownload).toBe(0);
   });
 });

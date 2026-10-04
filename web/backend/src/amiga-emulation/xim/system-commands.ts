@@ -4,6 +4,7 @@
  * Handles system-level XIM commands (registration, shutdown, chaining, etc).
  */
 
+import { messagePointerFileManager, CONFBASE_RECORD_SIZE } from '../../services/MessagePointerFileManager';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
@@ -1241,6 +1242,15 @@ debugLog(
     this.reply(msg, total);
   }
 
+  /**
+   * LOAD_CONFDB - express.e:3935-3936 (and 1480-1481 for the native door
+   * port): `loadConfDB(msg.data, msg.nodeID, 1, msg.filler1)` copies the
+   * account's whole confBase record - SIZEOF confBase, 74 bytes
+   * (axobjects.e:136-155) - from the conference's Conf.DB into the door's
+   * buffer. The port copied 64, so every record past slot 1 was read from
+   * the wrong offset and the last ten bytes (ratio type, ratio,
+   * messagesPosted, access, active) never reached the door.
+   */
   private handleLoadConfDbCommand(msg: XIMMessage): void {
     if (!msg.filler1 || msg.data <= 0) {
       this.reply(msg, 0);
@@ -1248,16 +1258,16 @@ debugLog(
     }
 
     const confNum = msg.nodeId && msg.nodeId > 0 ? msg.nodeId : this.bbsSession?.conferenceId || 1;
-    const buf = this.readSlot(this.confDbPath(confNum), msg.data, 64);
-    if (!buf) {
-      this.reply(msg, 0);
-      return;
-    }
-
-    this.writeBuffer(msg.filler1, buf);
+    this.writeBuffer(msg.filler1, messagePointerFileManager.readRaw(confNum, msg.data));
     this.reply(msg, 1);
   }
 
+  /**
+   * SAVE_CONFDB - express.e:3937-3939 (1477-1479): saveConfDB writes the door's 74-byte
+   * record into the account's slot, and when the account is the caller's
+   * own, `loadMsgPointers(currentConf,1)` takes the pointers it carries, so
+   * the board does not write its older copy back over the door's.
+   */
   private handleSaveConfDbCommand(msg: XIMMessage): void {
     if (!msg.filler1 || msg.data <= 0) {
       this.reply(msg, 0);
@@ -1265,8 +1275,20 @@ debugLog(
     }
 
     const confNum = msg.nodeId && msg.nodeId > 0 ? msg.nodeId : this.bbsSession?.conferenceId || 1;
-    const buf = this.readBuffer(msg.filler1, 64);
-    this.writeSlot(this.confDbPath(confNum), msg.data, buf, 64);
+    const record = this.readBuffer(msg.filler1, CONFBASE_RECORD_SIZE);
+    messagePointerFileManager.writeRaw(confNum, msg.data, record);
+
+    const session = this.bbsSession as unknown as {
+      user?: { slotNumber?: number };
+      currentConf?: number;
+      lastMsgReadConf?: number;
+      lastNewReadConf?: number;
+    };
+    if (Number(session?.user?.slotNumber) === msg.data && Number(session.currentConf) === confNum) {
+      const saved = messagePointerFileManager.readRecordOrZero(confNum, msg.data);
+      session.lastMsgReadConf = saved.confYM;
+      session.lastNewReadConf = saved.confRead;
+    }
     this.reply(msg, 1);
   }
 
@@ -1361,10 +1383,6 @@ console.warn('[XIMSystem] Conf.DB lookup failed:', err);
     const lower = path.join(root, 'user.misc');
     if (fs.existsSync(lower)) return lower;
     return amigafs.resolvePath(lower) || lower;
-  }
-
-  private confDbPath(confNum: number): string {
-    return path.join(this.getPaths().conference(confNum), 'Conf.DB');
   }
 
   private readSlot(filePath: string, slot: number, size: number): Buffer | null {

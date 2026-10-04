@@ -4,6 +4,8 @@
  * 1:1 port from express.e:21228-21650 editInfo() command handling
  */
 
+import { messagePointerFileManager, accountedBytes, type ConfBaseRecord } from '../../services/MessagePointerFileManager';
+import { writePackedBCD } from '../../utils/bcd-math.util';
 import { BBSSession, LoggedOnSubState } from '../../index';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { displayAccountPage0, displayAccountPage1 } from './account.handler';
@@ -743,64 +745,36 @@ async function findLastAccountSlot(): Promise<number> {
 // ===== Conference Accounting Functions - express.e:22045-22250 =====
 
 /**
- * Get or create conf_base record for user/conference/msgbase
+ * The edited account's record for a conference: his slot in the
+ * conference's Conf.DB (express.e:22053-22055 masterLoadPointers(hoozer),
+ * then `cb:=confBases.item(getConfIndex(conf,msgbase))` 22196). Null when
+ * the account has no slot.
  */
-async function getConfBaseRecord(userId: string, confId: number, msgBaseId: number): Promise<any> {
-  const { db } = require('../../database');
-  try {
-    // Try to get existing record
-    const existingResult = db.db.prepare(`
-      SELECT * FROM conf_base
-      WHERE user_id = ? AND conference_id = ? AND message_base_id = ?
-    `).get(userId, confId, msgBaseId);
-
-    if (existingResult) {
-      return existingResult;
-    }
-
-    // Create new record with explicit scan_flags=0 (schema DEFAULT is now 0).
-    db.db.prepare(`
-      INSERT INTO conf_base (user_id, conference_id, message_base_id, scan_flags)
-      VALUES (?, ?, ?, 0)
-    `).run(userId, confId, msgBaseId);
-
-    return db.db.prepare(`
-      SELECT * FROM conf_base
-      WHERE user_id = ? AND conference_id = ? AND message_base_id = ?
-    `).get(userId, confId, msgBaseId);
-  } catch (err) {
-    console.error('Error getting conf_base record:', err);
-    return null;
-  }
+function getConfBaseRecord(user: { slotNumber?: number }, confId: number): ConfBaseRecord | null {
+  const slot = Number(user?.slotNumber) || 0;
+  if (slot < 1) return null;
+  return messagePointerFileManager.readRecordOrZero(confId, slot);
 }
 
-/**
- * Save conf_base record
- */
-async function saveConfBaseRecord(record: any): Promise<boolean> {
-  const { db } = require('../../database');
+/** `~` - express.e:22283-22285 masterSavePointers(hoozer): back into his slot. */
+function saveConfBaseRecord(user: { slotNumber?: number }, confId: number, record: ConfBaseRecord): boolean {
+  const slot = Number(user?.slotNumber) || 0;
+  if (slot < 1) return false;
   try {
-    db.db.prepare(`
-      UPDATE conf_base SET
-        messages_posted = ?,
-        bytes_download = ?,
-        bytes_upload = ?,
-        upload = ?,
-        downloads = ?
-      WHERE user_id = ? AND conference_id = ? AND message_base_id = ?
-    `).run(
-      record.messages_posted || 0,
-      record.bytes_download || 0,
-      record.bytes_upload || 0,
-      record.upload || 0,
-      record.downloads || 0,
-      record.user_id,
-      record.conference_id,
-      record.message_base_id
-    );
+    messagePointerFileManager.patchRecord(confId, slot, {
+      ratio: record.ratio,
+      ratioType: record.ratioType,
+      upload: record.upload,
+      downloads: record.downloads,
+      bytesUpload: record.bytesUpload,
+      uploadBytesBCD: record.uploadBytesBCD,
+      bytesDownload: record.bytesDownload,
+      downloadBytesBCD: record.downloadBytesBCD,
+      messagesPosted: record.messagesPosted,
+    });
     return true;
   } catch (err) {
-    console.error('Error saving conf_base record:', err);
+    console.error('Error saving the Conf.DB record:', err);
     return false;
   }
 }
@@ -813,7 +787,6 @@ export async function displayConferenceAccounting(socket: any, session: BBSSessi
   const { db } = require('../../database');
   const user = session.tempData.editingUser;
   const confId = session.tempData.confAcctConf || 1;
-  const msgBaseId = session.tempData.confAcctMsgBase || 1;
 
   try {
     // Get conference and message base info
@@ -821,9 +794,16 @@ export async function displayConferenceAccounting(socket: any, session: BBSSessi
     const conf = conferences.find((c: any) => c.id === confId);
     const confName = conf?.name || `Conference ${confId}`;
 
-    // Get conf_base record for this user/conference/msgbase
-    const confBase = await getConfBaseRecord(user.id.toString(), confId, msgBaseId);
-    session.tempData.confBaseRecord = confBase;
+    // The edited account's own Conf.DB record. Kept across redraws so an
+    // unsaved edit is shown, re-read when the conference changes.
+    const recordKey = `${user?.slotNumber}:${confId}`;
+    let confBase: ConfBaseRecord | null = session.tempData.confBaseRecord;
+    if (!confBase || session.tempData.confBaseRecordKey !== recordKey) {
+      confBase = getConfBaseRecord(user, confId);
+      session.tempData.confBaseRecord = confBase;
+      session.tempData.confBaseRecordKey = recordKey;
+      session.tempData.confBaseRecordConf = confId;
+    }
 
     // Clear screen
     socket.emit('ansi-output', '\x1b[2J');
@@ -835,12 +815,12 @@ export async function displayConferenceAccounting(socket: any, session: BBSSessi
 
     // Per-conference stats (express.e:22128-22160)
     const ratio = (confBase?.ratio || 0) & 0xFFFF;
-    const ratioType = (confBase?.ratio_type || 0) & 0xFFFF;
+    const ratioType = (confBase?.ratioType || 0) & 0xFFFF;
     const uploads = (confBase?.upload || 0) & 0xFFFF;
     const downloads = (confBase?.downloads || 0) & 0xFFFF;
-    const bytesUp = confBase?.bytes_upload || 0;
-    const bytesDn = confBase?.bytes_download || 0;
-    const msgPosted = (confBase?.messages_posted || 0) & 0xFFFF;
+    const bytesUp = confBase ? accountedBytes(confBase.bytesUpload, confBase.uploadBytesBCD).toString() : '0';
+    const bytesDn = confBase ? accountedBytes(confBase.bytesDownload, confBase.downloadBytesBCD).toString() : '0';
+    const msgPosted = (confBase?.messagesPosted || 0) & 0xFFFF;
 
     socket.emit('ansi-output', `\x1b[6;2H\x1b[33mG>\x1b[32mRatio .........\x1b[36m:\x1b[0m ${String(ratio).padEnd(7)}\r\n`);
 
@@ -915,12 +895,26 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
 
       const confBase = session.tempData.confBaseRecord;
       if (confBase) {
+        // express.e:22231-22281
         switch (field) {
-          case 'K': confBase.upload = value; break;
-          case 'M': confBase.downloads = value; break;
-          case 'O': confBase.bytes_upload = value; break;
-          case 'P': confBase.bytes_download = value; break;
-          case 'L': confBase.messages_posted = value; break;
+          case 'G': confBase.ratio = value & 0xffff; break;
+          case 'I':
+            // 22239-22242: a type outside 0-2 rings the bell and becomes 0.
+            confBase.ratioType = (value < 0 || value > 2) ? 0 : value;
+            if (value < 0 || value > 2) socket.emit('ansi-output', '\x07');
+            break;
+          case 'K': confBase.upload = value & 0xffff; break;
+          case 'M': confBase.downloads = value & 0xffff; break;
+          case 'O':
+            // 22254-22256 bcdNumberInput, then bytesUpload from the BCD.
+            confBase.uploadBytesBCD = writePackedBCD(BigInt(value));
+            confBase.bytesUpload = value > 0x7fffffff ? -1 : value;
+            break;
+          case 'P':
+            confBase.downloadBytesBCD = writePackedBCD(BigInt(value));
+            confBase.bytesDownload = value > 0x7fffffff ? -1 : value;
+            break;
+          case 'L': confBase.messagesPosted = value & 0xffff; break;
         }
         session.tempData.confAcctChanges = true;
       }
@@ -970,9 +964,9 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
     return;
   }
 
-  // Field editing commands (express.e:22229-22250)
-  if (['K', 'M', 'O', 'P', 'L'].includes(command)) {
-    const lineNum: { [key: string]: number } = { K: 8, M: 9, O: 10, P: 11, L: 12 };
+  // Field editing commands (express.e:22229-22281)
+  if (['G', 'I', 'K', 'M', 'O', 'P', 'L'].includes(command)) {
+    const lineNum: { [key: string]: number } = { G: 6, I: 7, K: 8, M: 9, O: 10, P: 11, L: 12 };
     socket.emit('ansi-output', `\x1b[${lineNum[command]};21H`);
     session.tempData.confAcctFieldEdit = command;
     session.inputBuffer = '';
@@ -986,7 +980,7 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
 async function saveConferenceAccountingChanges(socket: any, session: BBSSession): Promise<void> {
   const confBase = session.tempData.confBaseRecord;
   if (confBase && session.tempData.confAcctChanges) {
-    if (await saveConfBaseRecord(confBase)) {
+    if (saveConfBaseRecord(session.tempData.editingUser, session.tempData.confBaseRecordConf || 1, confBase)) {
       socket.emit('ansi-output', '\r\n\x1b[32mSaved.\x1b[0m\r\n');
     } else {
       socket.emit('ansi-output', '\r\n\x1b[31mError saving.\x1b[0m\r\n');

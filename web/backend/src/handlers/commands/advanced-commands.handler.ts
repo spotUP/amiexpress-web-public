@@ -492,22 +492,14 @@ const FILE_SCAN_MASK = 8;   // Bit 3 - File scanning enabled (express.e:axconsts
 const MAILSCAN_ALL = 128;   // Bit 7 - Scan all messages, not just addressed to user (express.e:axconsts.e:48)
 
 /**
- * Get user's scan flags for a conference/base
+ * The caller's scan masks for a conference/base: handle[0] of his Conf.DB
+ * record, which is what express.e's CF edits (24780, 24789, Eor 24812) and every
+ * scan reads back (572-591, 24700, 24710).
  */
 async function getUserScanFlags(userId: string, confId: number, msgBaseId: number): Promise<number> {
-  const { db } = require('../../database');
-
+  const { getConferenceScanFlags } = require('../../utils/message-pointers.util');
   try {
-    const result = await db.query(
-      'SELECT scan_flags FROM conf_base WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3',
-      [userId, confId, msgBaseId]
-    );
-
-    if (result.rows.length > 0) {
-      return result.rows[0].scan_flags ?? 0;
-    }
-
-    return 0; // No entry — default to no auto-scan (opt-in via CF command or SHOW_NEW_FILES tooltype)
+    return await getConferenceScanFlags(userId, confId, msgBaseId);
   } catch (error) {
 console.error('[CF] Error getting scan flags:', error);
     return 0;
@@ -515,7 +507,7 @@ console.error('[CF] Error getting scan flags:', error);
 }
 
 /**
- * Toggle scan flag for a conference/base
+ * Toggle scan flag for a conference/base, in the caller's Conf.DB record.
  * @param mode - true=OR (set), false=AND NOT (clear), null=XOR (toggle)
  */
 async function toggleScanFlag(
@@ -525,30 +517,10 @@ async function toggleScanFlag(
   mask: number,
   mode: boolean | null
 ): Promise<void> {
-  const { db } = require('../../database');
-
+  const { setConferenceScanFlags } = require('../../utils/message-pointers.util');
   try {
-    // Get current flags
-    const currentFlags = await getUserScanFlags(userId, confId, msgBaseId);
-
-    // Calculate new flags
-    let newFlags: number;
-    if (mode === true) {
-      newFlags = currentFlags | mask; // OR - set bit
-    } else if (mode === false) {
-      newFlags = currentFlags & ~mask; // AND NOT - clear bit
-    } else {
-      newFlags = currentFlags ^ mask; // XOR - toggle bit
-    }
-
-    // Upsert to database
-    await db.query(
-      `INSERT INTO conf_base (user_id, conference_id, message_base_id, scan_flags)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, conference_id, message_base_id)
-       DO UPDATE SET scan_flags = $4`,
-      [userId, confId, msgBaseId, newFlags]
-    );
+    await setConferenceScanFlags(userId, confId, msgBaseId, (flags: number) =>
+      mode === true ? flags | mask : mode === false ? flags & ~mask : flags ^ mask);
   } catch (error) {
 console.error('[CF] Error toggling scan flag:', error);
   }

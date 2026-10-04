@@ -25,6 +25,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { DI_TOKENS } from '../../container';
 import { FileStatisticsUseCase } from '../../services/use-cases/file-statistics.use-case';
 import { formatBCD as formatBCDUtil } from '../../utils/bcd-math.util';
+import { messagePointerFileManager, accountedBytes, type ConfBaseRecord } from '../../services/MessagePointerFileManager';
 
 /**
  * FS Command - File Status
@@ -126,19 +127,27 @@ console.log('[FileStatusHandler] Initialized with DI');
         continue;
       }
 
-      const confStats = conferences.find((c: any) => c.id === confNum);
-      const useConfStats = hasConfAccounting && !!confStats;
+      // express.e:24166-24172: under ACS_CONFERENCE_ACCOUNTING, loadMsgPointers(i,1)
+      // puts the caller's OWN record for conference i (his Conf.DB slot) into
+      // loggedOnUser (4893-4905), and the row prints those figures. Without it
+      // - or in a CONFDB_SHARED conference, where 4895 skips the copy - the row
+      // is the account's own totals.
+      const record = hasConfAccounting ? this.callersRecord(user, confNum) : null;
 
       // Format uploads
-      const uploadsCount = useConfStats ? (confStats?.uploads || 0) : (user.uploads || 0);
-      const uploadBytes = useConfStats ? (confStats?.bytesUpload || 0) : (user.bytesUpload || 0);
+      const uploadsCount = record ? record.upload : (user.uploads || 0);
+      const uploadBytes = record
+        ? Number(accountedBytes(record.bytesUpload, record.uploadBytesBCD))
+        : (user.bytesUpload || 0);
       const uploadBytesStr = creditByKB
         ? this.formatKBytes(uploadBytes)
         : this.formatBytes(uploadBytes);
 
       // Format downloads
-      const downloadsCount = useConfStats ? (confStats?.downloads || 0) : (user.downloads || 0);
-      const downloadBytes = useConfStats ? (confStats?.bytesDownload || 0) : (user.bytesDownload || 0);
+      const downloadsCount = record ? record.downloads : (user.downloads || 0);
+      const downloadBytes = record
+        ? Number(accountedBytes(record.bytesDownload, record.downloadBytesBCD))
+        : (user.bytesDownload || 0);
       const downloadBytesStr = creditByKB
         ? this.formatKBytes(downloadBytes)
         : this.formatBytes(downloadBytes);
@@ -158,7 +167,8 @@ console.log('[FileStatusHandler] Initialized with DI');
       }
 
       // Get ratio - express.e:24181-24187
-      const ratio = useConfStats ? (confStats?.ratio || 0) : (user.ratio || (user as any).secLibrary || 0);
+      // express.e:24180 loggedOnUser.secLibrary - the record's ratio under accounting (4903).
+      const ratio = record ? (record.ratio & 0xffff) : (user.ratio || (user as any).secLibrary || 0);
       const secLibrary = ratio;
 
       // Determine color - highlight current conference - express.e:24165
@@ -200,6 +210,18 @@ console.log('[FileStatusHandler] Initialized with DI');
     }
 
     socket.emit('ansi-output', '\x1b[0m\r\n');
+  }
+
+  /**
+   * The caller's Conf.DB record for a conference, as FS reads it under
+   * conference accounting - or null where express.e shows the account's own
+   * totals instead: no slot (4887), or a CONFDB_SHARED conference (4895).
+   */
+  private callersRecord(user: NonNullable<BBSSession['user']>, confNum: number): ConfBaseRecord | null {
+    const slot = Number(user.slotNumber) || 0;
+    if (slot < 1) return null;
+    if (messagePointerFileManager.isShared(confNum)) return null;
+    return messagePointerFileManager.readRecordOrZero(confNum, slot);
   }
 
   /**

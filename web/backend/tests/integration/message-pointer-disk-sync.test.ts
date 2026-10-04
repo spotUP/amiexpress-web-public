@@ -1,27 +1,24 @@
 /**
- * Integration test: SQL pointer update → disk Conf.DB write wiring.
+ * R and the scans write the caller's pointer into his Conf.DB record - the
+ * pointer's one home (express.e:4971-4972 `cb.confYM:=lastMsgReadConf`,
+ * `cb.confRead:=lastNewReadConf`) - and `conf_base` only mirrors it.
  *
- * Asserts that the public `updateReadPointer` / `updateScanPointer` entry
- * points (in `message-pointers.util.ts`) actually call the
- * `MessagePointerFileManager` with the right (conferenceId, slotNumber, value)
- * after looking up the user's slot via `db.getUserById`.
- *
- * Complements the unit tests in
- * `tests/services/message-pointer-file-manager.test.ts` which only cover
- * the manager itself. Together: unit proves the bytes go to the right
- * offset; this proves the SQL handlers actually invoke the manager.
+ * Before 2026-10-04 the SQL row was the pointer and the disk record a
+ * best-effort copy, so a door's SAVE_CONFDB was ignored at the next join.
  */
 
-// Capture manager calls. jest.mock factory must be self-contained because
-// hoisted before imports.
+const records = new Map<string, any>();
 jest.mock('../../src/services/MessagePointerFileManager', () => {
+  const actual = jest.requireActual('../../src/services/MessagePointerFileManager');
   return {
-    CONFBASE_RECORD_SIZE: 74,
+    ...actual,
     messagePointerFileManager: {
-      updateReadPointer: jest.fn(),
-      updateScanPointer: jest.fn(),
-      patchRecord: jest.fn(),
-      readRecord: jest.fn().mockReturnValue(null),
+      readRecordOrZero: jest.fn((conf: number, slot: number) =>
+        ({ ...(records.get(`${conf}:${slot}`) ?? actual.deserializeConfBase(Buffer.alloc(74))) })),
+      patchRecord: jest.fn((conf: number, slot: number, patch: any) => {
+        const key = `${conf}:${slot}`;
+        records.set(key, { ...(records.get(key) ?? actual.deserializeConfBase(Buffer.alloc(74))), ...patch });
+      }),
     },
   };
 });
@@ -61,28 +58,36 @@ describe('message-pointer disk-sync wiring', () => {
   });
 
   beforeEach(() => {
-    (messagePointerFileManager.updateReadPointer as jest.Mock).mockClear();
-    (messagePointerFileManager.updateScanPointer as jest.Mock).mockClear();
+    records.clear();
+    (messagePointerFileManager.patchRecord as jest.Mock).mockClear();
   });
 
-  test('updateReadPointer SQL hook calls manager.updateReadPointer with correct (conf, slot, msgNum)', async () => {
+  test("R's read pointer lands in the caller's record (confYM), and the mirror follows", async () => {
     await updateReadPointer(userId, CONF_ID, MB_ID, 4242);
 
-    expect(messagePointerFileManager.updateReadPointer).toHaveBeenCalledTimes(1);
-    expect(messagePointerFileManager.updateReadPointer).toHaveBeenCalledWith(CONF_ID, SLOT, 4242);
-    // Scan pointer must NOT be touched by the read-pointer SQL path.
-    expect(messagePointerFileManager.updateScanPointer).not.toHaveBeenCalled();
+    expect(records.get(`${CONF_ID}:${SLOT}`)?.confYM).toBe(4242);
+    expect(records.get(`${CONF_ID}:${SLOT}`)?.confRead).toBe(0);
+    const { rows } = await db.query(
+      `SELECT last_msg_read_conf FROM conf_base WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`,
+      [userId, CONF_ID, MB_ID],
+    );
+    expect(rows[0]?.last_msg_read_conf).toBe(4242);
   });
 
-  test('updateScanPointer SQL hook calls manager.updateScanPointer with correct (conf, slot, msgNum)', async () => {
+  test('the read pointer never moves back', async () => {
+    await updateReadPointer(userId, CONF_ID, MB_ID, 50);
+    await updateReadPointer(userId, CONF_ID, MB_ID, 10);
+    expect(records.get(`${CONF_ID}:${SLOT}`)?.confYM).toBe(50);
+  });
+
+  test("the scan pointer lands in the caller's record (confRead)", async () => {
     await updateScanPointer(userId, CONF_ID, MB_ID, 9999);
 
-    expect(messagePointerFileManager.updateScanPointer).toHaveBeenCalledTimes(1);
-    expect(messagePointerFileManager.updateScanPointer).toHaveBeenCalledWith(CONF_ID, SLOT, 9999);
-    expect(messagePointerFileManager.updateReadPointer).not.toHaveBeenCalled();
+    expect(records.get(`${CONF_ID}:${SLOT}`)?.confRead).toBe(9999);
+    expect(records.get(`${CONF_ID}:${SLOT}`)?.confYM).toBe(0);
   });
 
-  test('user without slotNumber is skipped (no manager call)', async () => {
+  test('an account without a slot holds no pointers (express.e:4921-4925)', async () => {
     const slotlessId = `slotless-${Date.now()}`;
     await db.run(
       `INSERT INTO users (id, username, passwordhash, realname, seclevel, slotnumber, created, updated)
@@ -92,26 +97,6 @@ describe('message-pointer disk-sync wiring', () => {
 
     await updateReadPointer(slotlessId, CONF_ID, MB_ID, 100);
 
-    expect(messagePointerFileManager.updateReadPointer).not.toHaveBeenCalled();
-  });
-
-  test('SQL row is still written even when manager call would be skipped (db is authoritative)', async () => {
-    const noSlotId = `noslot2-${Date.now()}`;
-    await db.run(
-      `INSERT INTO users (id, username, passwordhash, realname, seclevel, slotnumber, created, updated)
-       VALUES (?, ?, ?, ?, ?, 0, strftime('%s','now'), strftime('%s','now'))`,
-      [noSlotId, 'no-slot-2', 'x', 'Slotless 2', 10],
-    );
-
-    await updateReadPointer(noSlotId, CONF_ID, MB_ID, 7777);
-
-    // Confirm SQL upsert happened regardless of disk skip.
-    const { rows } = await db.query(
-      `SELECT last_msg_read_conf FROM conf_base
-       WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`,
-      [noSlotId, CONF_ID, MB_ID],
-    );
-    expect(rows[0]?.last_msg_read_conf).toBe(7777);
-    expect(messagePointerFileManager.updateReadPointer).not.toHaveBeenCalled();
+    expect(messagePointerFileManager.patchRecord).not.toHaveBeenCalled();
   });
 });

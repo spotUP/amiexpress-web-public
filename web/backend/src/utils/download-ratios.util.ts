@@ -7,7 +7,21 @@
 
 import { User } from '../types';
 import { getSystemTime } from '../utils/date-time.util';
-import type { Conference } from '../database/types';
+
+/**
+ * What the per-conference ratio check reads for one conference: the caller's
+ * own record in it (express.e:19891-19902 `cb:=confBases.item(getConfIndex(i,1))`,
+ * calcConfBad 19797-19821) - his ratio, ratio type, files and bytes there.
+ */
+export interface ConferenceAccount {
+  id: number;
+  ratio: number;
+  ratioType: number;
+  uploads: number;
+  downloads: number;
+  bytesUpload: number;
+  bytesDownload: number;
+}
 
 export interface DownloadRequest {
   size: number;
@@ -44,8 +58,9 @@ export function creditAccountTrackUploads(user: User): boolean {
 
 /**
  * Check if user can download based on ratio limits.
- * Ported from express.e:19823-19926 (checkRatiosAndTime) with the
- * simplified web model (no per-conference accounting).
+ * Ported from express.e:19823-19926 (checkRatiosAndTime). Under conference
+ * accounting the per-conference block reads the caller's own records
+ * (`conferences`, one ConferenceAccount per conference).
  *
  * - Respects daily byte limits (byteLimit / dailyBytesLimit - dailyBytesDld).
  * - Respects ratioType:
@@ -64,7 +79,8 @@ export function creditAccountTrackUploads(user: User): boolean {
 export async function checkDownloadRatios(
   user: User | undefined,
   requests: DownloadRequest[] | number,
-  conferences?: Conference[],
+  /** The caller's own per-conference records, under conference accounting. */
+  conferences?: ConferenceAccount[],
   conferenceAccountingEnabled: boolean = false,
   creditByKb: boolean = false,
   /** The conference the caller is in: express.e reports what is left there even before a file is picked. */
@@ -146,8 +162,11 @@ export async function checkDownloadRatios(
       const conf = conferences.find(c => c.id === confId);
       const cRatio = conf?.ratio ?? ratioValue;
       const cRatioType = conf?.ratioType ?? ratioType;
-      const cBytesUpload = toUnits(conf?.bytesUpload ?? bytesUpload);
-      const cBytesDownload = toUnits(conf?.bytesDownload ?? bytesDownload);
+      // A record's bytes are already in the board's credit unit: express.e
+      // books KB into it under CREDITBYKB (15435-15437, 19444) and calcConfBad
+      // (19797-19821) compares them unscaled.
+      const cBytesUpload = conf ? Math.max(0, conf.bytesUpload) : bytesUpload;
+      const cBytesDownload = conf ? Math.max(0, conf.bytesDownload) : bytesDownload;
       const cUploads = conf?.uploads ?? uploads;
       const cDownloads = conf?.downloads ?? downloads;
 

@@ -1674,6 +1674,19 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     // Only BBS terminal registrations reach here — web/admin/test users must NOT be written.
     await db.appendUserToDisk(newUserId);
 
+    // The slot is the one the record LANDED in (appendUserToDisk), which is
+    // where every Conf.DB keeps this caller's per-conference record.
+    const landed = await db.getUserById(newUserId);
+    if (landed?.slotNumber) newUser.slotNumber = landed.slotNumber;
+
+    // express.e:30121-30122 clearMsgPointers() + masterSavePointers(loggedOnUser).
+    try {
+      const { clearMsgPointers } = require('../../utils/message-pointers.util');
+      await clearMsgPointers(String(newUserId));
+    } catch (err) {
+console.error('[NewUser] Could not start the conference records:', err);
+    }
+
     // The caller stays REGISTERING until enterBoard(): the input dispatcher
     // (command.handler, `if (session.state === BBSState.REGISTERING)`) only
     // routes keystrokes to the questionnaire in that state. Flipping to

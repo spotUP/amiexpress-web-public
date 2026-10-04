@@ -159,6 +159,45 @@ export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, .
  * caller DLPATH.1.
  */
 /**
+ * The conference database a caller's per-conference record lives in -
+ * express.e:2102-2111 getConfDbFileName.
+ *
+ * `CONFDB_SHARED=<n>` on the conference's icon points it at conference n's
+ * file (2104-2105); otherwise it is the conference's own LOCATION directory
+ * (2109) plus `Conf.DB` (confDBName, 31931). The record at
+ * `(slot-1)*SIZEOF confBase` in it holds the caller's message pointers, scan
+ * flags and - under ACS_CONFERENCE_ACCOUNTING - his upload, download and
+ * ratio figures for that conference.
+ *
+ * Not ported: a conference with several message bases keeps one file per
+ * base under each base's LOCATION.n (2106-2107); this port has no per-base
+ * message locations anywhere yet, so every base of a conference resolves to
+ * the conference's file. The node's `CONF_DB` tooltype (31932) renaming the
+ * file is not read either.
+ */
+export function conferenceConfDbPath(bbsRoot: string, conferenceNumber: number): string {
+  const owner = confDbSharedWith(bbsRoot, conferenceNumber) || conferenceNumber;
+  return path.join(conferenceDir(bbsRoot, owner), 'Conf.DB');
+}
+
+/** express.e:4895/4930 - accounting is skipped in a conference whose database is shared. */
+export function conferenceConfDbShared(bbsRoot: string, conferenceNumber: number): boolean {
+  return confDbSharedWith(bbsRoot, conferenceNumber) > 0;
+}
+
+/** `CONFDB_SHARED` on the conference's icon, or 0 (readToolTypeInt's -1). */
+function confDbSharedWith(bbsRoot: string, conferenceNumber: number): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readTooltypeMap } = require('../utils/info-file.util') as typeof import('../utils/info-file.util');
+    const shared = parseInt(readTooltypeMap(`${conferenceDir(bbsRoot, conferenceNumber)}.info`).get('CONFDB_SHARED') ?? '', 10);
+    return Number.isFinite(shared) && shared > 0 ? shared : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * How many file directories a conference has: `NDIRS` on its icon, the one
  * number express.e reads (5006, 15264 `maxDirs:=readToolTypeInt(...,'NDIRS')`)
  * and the bound on every directory it offers. No NDIRS - no file areas

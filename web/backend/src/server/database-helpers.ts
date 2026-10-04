@@ -314,16 +314,19 @@ console.error('[searchFilesAdvanced] Error:', error);
 // ===== CONFERENCE/MESSAGE OPERATIONS =====
 
 /**
- * Reset new mail scan pointers for all users in a conference/message base
+ * CM 3 - express.e:22789-22791 updateAllUsers(conf,msgBase,UPDATE_MAILSCAN_PTRS,-1):
+ * confRead of every record in the conference's Conf.DB (22482). express.e
+ * writes -1 and the next join's clamp (5037-5038) lifts it to lowestNotDel;
+ * 0 lands on the same pointer through the same clamp and is what the port's
+ * readers have always treated as "unset". The `conf_base` mirror follows.
  */
 export async function resetNewMailScanPointers(conferenceId: number, messageBaseId: number): Promise<number> {
   try {
-    const result = await db.run(`
-      UPDATE conf_base
-      SET last_new_read_conf = 0
-      WHERE conference_id = $1 AND message_base_id = $2
-    `, [conferenceId, messageBaseId]);
-    return (result as any).changes || 0;
+    const { messagePointerFileManager } = require('../services/MessagePointerFileManager');
+    const written: number = messagePointerFileManager.updateAllUsers(conferenceId, (rec: { confRead: number }) => { rec.confRead = 0; });
+    await db.run(`UPDATE conf_base SET last_new_read_conf = 0 WHERE conference_id = $1 AND message_base_id = $2`,
+      [conferenceId, messageBaseId]).catch(() => undefined);
+    return written;
   } catch (error) {
     console.error('[resetNewMailScanPointers] Error:', error);
     return 0;
@@ -331,16 +334,16 @@ export async function resetNewMailScanPointers(conferenceId: number, messageBase
 }
 
 /**
- * Reset last message read pointers for all users in a conference/message base
+ * CM 4 - express.e:22792-22794 updateAllUsers(conf,msgBase,UPDATE_LAST_MESSAGE,-1):
+ * confYM of every record (22502), with the same 0-for--1 note as CM 3.
  */
 export async function resetLastMessageReadPointers(conferenceId: number, messageBaseId: number): Promise<number> {
   try {
-    const result = await db.run(`
-      UPDATE conf_base
-      SET last_msg_read_conf = 0
-      WHERE conference_id = $1 AND message_base_id = $2
-    `, [conferenceId, messageBaseId]);
-    return (result as any).changes || 0;
+    const { messagePointerFileManager } = require('../services/MessagePointerFileManager');
+    const written: number = messagePointerFileManager.updateAllUsers(conferenceId, (rec: { confYM: number }) => { rec.confYM = 0; });
+    await db.run(`UPDATE conf_base SET last_msg_read_conf = 0 WHERE conference_id = $1 AND message_base_id = $2`,
+      [conferenceId, messageBaseId]).catch(() => undefined);
+    return written;
   } catch (error) {
     console.error('[resetLastMessageReadPointers] Error:', error);
     return 0;
