@@ -349,7 +349,8 @@ export class UserDatabaseManager {
     offset = this.writeInt32(buffer, offset, user.accountDate);
     offset = this.writeInt16(buffer, offset, user.screenType);
     offset = this.writeInt16(buffer, offset, user.editorType);
-    user.conferenceAccess.copy(buffer, offset, 0, 10); offset += 10;
+    // At most nine characters and a NUL, as express.e's AstrCopy(..,10) writes it.
+    user.conferenceAccess.copy(buffer, offset, 0, 9); buffer.writeUInt8(0, offset + 9); offset += 10;
     offset = this.writeInt16(buffer, offset, user.uploads);
     offset = this.writeInt16(buffer, offset, user.downloads);
     offset = this.writeInt16(buffer, offset, user.confRJoin);
@@ -510,7 +511,8 @@ export class UserDatabaseManager {
       bytesUpload: user.bytesUpload || 0,
       dailyBytesLimit: user.byteLimit || 0,
       dailyBytesDld: 0,
-      expert: user.expert === 'X' ? 1 : 0,
+      // The letter, as express.e stores it and UserFileManager writes it.
+      expert: user.expert === 'X' ? 0x58 : 0x4e,
       chatRemain: 0,
       chatLimit: user.chatLimit || 0,
       creditDays: 0,

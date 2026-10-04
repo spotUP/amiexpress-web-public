@@ -59,19 +59,22 @@ describe('UserFileManager writes conferenceAccess as 10 fixed bytes (no null ter
   /** The raw user.data record for `slot`. */
   const record = (slot: number) => fs.readFileSync(path.join(root, 'user.data')).subarray((slot - 1) * REC, slot * REC);
 
-  test('all ten access flags reach the disk, the tenth included', () => {
+  // REVISED 2026-10-04: express.e holds nine flags and a NUL (AstrCopy(..,10),
+  // StrLen checks) - ten unterminated bytes ran into `uploads`. See
+  // tests/services/the-user-record-round-trips.test.ts.
+  test('nine access flags reach the disk, then the NUL express.e reads up to', () => {
     mgr.writeUserFiles(user('tenconfs', 'XXXXXXXXXX'), 3);
 
     const at = mgr.conferenceAccessOffset();
-    expect(record(3).subarray(at, at + 10).toString('latin1')).toBe('XXXXXXXXXX');
+    expect(record(3).subarray(at, at + 10).toString('latin1')).toBe('XXXXXXXXX\0');
   });
 
-  test('a mixed map keeps every position, and reads back whole', () => {
+  test('a mixed map keeps its first nine positions, and reads back the same', () => {
     mgr.writeUserFiles(user('mixed', 'X_X_X_X_XX'), 2);
 
     const at = mgr.conferenceAccessOffset();
-    expect(record(2).subarray(at, at + 10).toString('latin1')).toBe('X_X_X_X_XX');
-    expect(mgr.readUserBySlot(2)?.confAccess).toBe('X_X_X_X_XX');
+    expect(record(2).subarray(at, at + 10).toString('latin1')).toBe('X_X_X_X_X\0');
+    expect(mgr.readUserBySlot(2)?.confAccess).toBe('X_X_X_X_X');
   });
 
   test('a string field keeps its null terminator (name[31] holds at most 30 characters)', () => {

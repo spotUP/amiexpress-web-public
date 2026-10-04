@@ -371,11 +371,13 @@ export class UserFileManager {
     offset = this.writeInt16(buffer, offset, struct.screenType);
     offset = this.writeInt16(buffer, offset, struct.editorType);
 
-    // Conference access map — 10 raw bytes, NOT null-terminated (every
-    // position is a meaningful access flag). writeFixedBytes preserves
-    // all 10 positions; writeString would reserve byte 10 for a null
-    // terminator and lose conf-10's access.
-    offset += this.writeFixedBytes(buffer, offset, struct.conferenceAccess, 10);
+    // conferenceAccess[10]: at most nine characters and a NUL - express.e
+    // copies it with AstrCopy(..,10) (21334, 23792, 29369) and reads it with
+    // StrLen (459-465, 8499-8512). Ten unterminated bytes ran on into
+    // `uploads`, so a caller with 256+ uploads read as an access-AREA name
+    // and lost every conference. A tenth X is not something express.e can
+    // hold; a board past nine conferences grants access by area name.
+    offset += this.writeFixedBytes(buffer, offset, struct.conferenceAccess.substring(0, 9), 10);
 
     // More INTs
     offset = this.writeInt16(buffer, offset, struct.uploads);
@@ -1244,7 +1246,7 @@ console.error('[UserFileManager] Error reading user files:', error);
    * silently patching the wrong bytes.
    */
   public conferenceAccessOffset(): number {
-    const marker = '@@ACCESS@@';
+    const marker = '@ACCESS@@';  // nine characters: the field holds nine and a NUL
     const probe = this.serializeUserStruct(
       this.userToFileStruct(
         {
@@ -1277,7 +1279,8 @@ console.error('[UserFileManager] Error reading user files:', error);
     this.ensureUserFilesReady();
     const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE + this.conferenceAccessOffset();
     const bytes = Buffer.alloc(10, 0);
-    bytes.write(access.slice(0, 10), 0, 'latin1');
+    // Nine characters at most; byte ten stays the NUL express.e reads up to.
+    bytes.write(access.slice(0, 9), 0, 'latin1');
     const fd = fs.openSync(this.userDataPath, 'r+');
     try {
       fs.writeSync(fd, bytes, 0, 10, offset);

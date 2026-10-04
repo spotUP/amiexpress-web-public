@@ -59,6 +59,26 @@ describe('the user.data record', () => {
 
   const record = (slot: number) => fs.readFileSync(path.join(root, 'user.data')).subarray((slot - 1) * REC, slot * REC);
 
+  // express.e copies conferenceAccess with AstrCopy(..,10): at most nine
+  // characters and a NUL (21334, 23792, 29369). Its checks use StrLen
+  // (459-465, 8499-8512), which on ten unterminated bytes runs on into
+  // `uploads` - so a caller with 256 uploads or more read as an access-AREA
+  // name and lost every conference (byte-format audit, 2026-10-04).
+  it('ends conferenceAccess with a NUL, so 300 uploads cannot change a caller\'s access', () => {
+    mgr.writeUserFiles(user({ confAccess: 'XXXXXXXXXX', uploads: 300 }), 2);
+    expect(record(2).subarray(136, 146).toString('latin1')).toBe('XXXXXXXXX\0');
+  });
+
+  it('writes a new account\'s conferenceAccess and expert the same way', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { UserDatabaseManager } = require('../../src/services/UserDatabaseManager');
+    const udm = new UserDatabaseManager();
+    const struct = udm.userToStruct(user({ expert: 'X' }));
+    const bytes: Buffer = (udm as any).serializeUser(struct);
+    expect(bytes.subarray(136, 146).toString('latin1')).toBe('XXXXXXXXX\0');
+    expect(bytes[EXPERT]).toBe(0x58);
+  });
+
   it('stores expert mode as the letter, and an "N" comes back as N', () => {
     mgr.writeUserFiles(user({ expert: 'N' }), 2);
     expect(String.fromCharCode(record(2)[EXPERT])).toBe('N');
