@@ -252,6 +252,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'room:motd',
   'room:user-joined',
   'room:user-left',
+  'screen-theme',
   'security:report',
   'session-restore-failed',
   'session-restored',
@@ -607,7 +608,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // 249 as of 2026-09-28: `retry-login` - its last sender was RL's web
     // branch, for a browser login editor TP-9b retired; RL now writes the
     // Username prompt on every transport.
-    expect(ruled.length).toBe(249);
+    // 250 as of 2026-10-04: `screen-theme`, web-only - THEMEC's pick written
+    // to the browser's pre-login theme cookie (doors/BBSApi.ts).
+    expect(ruled.length).toBe(250);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -673,7 +676,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 119 (2026-09-28): `font-changed` gone - no sender left, and no
       // listener ever existed.
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
-      'web-only': 118,
+      'web-only': 119,
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       'not-transport': 105,

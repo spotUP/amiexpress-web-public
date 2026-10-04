@@ -1653,6 +1653,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "(server/telnet-server.ts:1020), which holds the graphics prompt until the " +
     "type is known. Never leaves the process.",
   },
+  "screen-theme": {
+    kind: "web-only",
+    note:
+    "The caller picked a screen theme during the call (THEMEC door, " +
+    "doors/BBSApi.ts setScreenTheme). Browser consumer: " +
+    "packages/terminal/src/components/BBSTerminal.tsx writes the pre-login " +
+    "theme cookie so the next connect draws that theme's BBSTITLE. A byte " +
+    "transport has no cookie to write.",
+  },
   "texttv-mode": {
     kind: "web-only",
     note:

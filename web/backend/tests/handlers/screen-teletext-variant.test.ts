@@ -260,7 +260,7 @@ describe('shipped teletext seeds resolve through the loader', () => {
 
   beforeEach(() => {
     board = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-seeds-'));
-    for (const rel of ['Node1/BBSTITLE.ttx', 'Node1/BBSTITLE.txt', 'Conf1/Menu.ttx', 'Conf1/Menu.txt']) {
+    for (const rel of ['Node1/BBSTITLE.ttx', 'Node1/BBSTITLE.txt', 'Screens/Conf/Menu.ttx', 'Screens/Conf/Menu.txt']) {
       const dst = path.join(board, rel);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
       fs.copyFileSync(path.join(REPO_ROOT, rel), dst);
@@ -292,7 +292,7 @@ describe('shipped teletext seeds resolve through the loader', () => {
     expect(screen!.isTeletext).toBeFalsy();
   });
 
-  test('Conf1/Menu.ttx wins for a teletext session', () => {
+  test('the board menu Screens/Conf/Menu.ttx wins for a teletext session in conference 1', () => {
     const { loadScreenFile } = require('../../src/handlers/screen.handler');
     const screen = loadScreenFile('MENU', 1, 1, { texttvMode: true });
     expect(screen).not.toBeNull();

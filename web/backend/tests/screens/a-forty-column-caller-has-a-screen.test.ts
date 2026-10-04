@@ -168,7 +168,9 @@ describe('every generated default is a screen', () => {
   });
 
   it('a menu keeps every command its ANSI original carried', () => {
-    const source = fs.readFileSync(path.join(REPO, 'Conf1', 'Menu.txt')).toString('latin1');
+    // Conference 1's three-column menu, kept as a fixture since the board
+    // serves one shared menu (9be4d11aa) and no longer ships this layout.
+    const source = fs.readFileSync(path.join(__dirname, '../fixtures/board-screens/conf1-menu.txt')).toString('latin1');
     const { bytes } = generateSeqBytes(source, titleFor('Menu'));
     expect(bytes).not.toBeNull();
     const screen = replay(bytes as Uint8Array).text.join('\n').toUpperCase();
