@@ -74,4 +74,14 @@ describe('a door that runs a shell command reaches System()', () => {
     }
     expect(misfiled).toEqual([]);
   });
+
+  it.each(tables)('%s names nothing that is not a function of that library', (_lib, vectors, ndk) => {
+    // amiga.lib's CreatePort sat at exec -114, Debug's slot, under a name the
+    // NDK gives no exec function at all - so the check above could not see it.
+    const known = new Set(Object.values(ndk));
+    const strangers = vectors
+      .filter(v => v.name && !known.has(String(v.name)) && ndk[v.offset] !== undefined)
+      .map(v => `${v.name} at ${v.offset}, where the NDK has ${ndk[v.offset]}`);
+    expect(strangers).toEqual([]);
+  });
 });
