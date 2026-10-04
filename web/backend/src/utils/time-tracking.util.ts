@@ -5,6 +5,7 @@
  * Handles session time tracking and daily time limit enforcement
  */
 
+import { toAmigaTime } from './date-time.util';
 import { BBSSession } from '../index';
 import { checkSecurity } from './acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
@@ -29,14 +30,15 @@ export const DEFAULT_DAILY_TIME_LIMIT_SECONDS = 3600;
  *
  *     currDay := Div(currTime-21600,86400)
  *
- * A day turns at 06:00 UTC. That 21600 is not decoration: a board's "daily"
- * limits are meant to reset while the board is QUIET, not at midnight when
- * somebody is mid-download. We compared `toDateString()` values instead,
- * which rolls at the SERVER's local midnight - a different instant, and one
- * that moves when the host's timezone does.
+ * `currTime` is getSystemTime() - the board's LOCAL wall-clock seconds plus
+ * 21600 (MiscFuncs.e:463-469) - so taking the 21600 back off leaves local
+ * seconds, and the day turns at the board's local midnight. This used to
+ * subtract 21600 from UTC seconds, which turned the day at 06:00 UTC (08:00
+ * in Stockholm in summer). Read the moment the way express.e does, through
+ * the board's one conversion (date-time.util toAmigaTime).
  */
 export function amiExpressDay(unixSeconds: number): number {
-  return Math.floor((unixSeconds - 21600) / 86400);
+  return Math.floor((toAmigaTime(new Date(unixSeconds * 1000)) - 21600) / 86400);
 }
 
 /**

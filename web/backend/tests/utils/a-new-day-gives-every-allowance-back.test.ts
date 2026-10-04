@@ -18,11 +18,12 @@
  * file-status.handler.ts:154 computes `bytesAvail = todaysBytesLimit -
  * dailyBytesDld`. A caller who hit their daily limit stayed blocked for ever.
  *
- * AND THE DAY TURNED AT THE WRONG MOMENT. express.e counts days from
- * 06:00 UTC - deliberately, so limits reset while a board is quiet rather
- * than mid-download at midnight. We compared `toDateString()`, which turns at
- * the SERVER's local midnight and moves with the host's timezone.
+ * AND THE DAY TURNED AT THE WRONG MOMENT. `currTime` is getSystemTime(), the
+ * board's local seconds plus 21600, so the day turns at the board's LOCAL
+ * midnight. This file used to pin 06:00 UTC - subtracting 21600 from UTC
+ * seconds, a misreading corrected 2026-10-04 with the stored-date fix.
  */
+process.env.TZ = 'Europe/Stockholm';
 jest.mock('../../src/handlers/screen.handler', () => ({
   displayScreen: jest.fn().mockResolvedValue(false),
 }));
@@ -33,8 +34,8 @@ import { BBSSession } from '../../src/index';
 const socket = { emit: jest.fn() } as any;
 const DAY = 86400;
 
-/** 06:00 UTC on 2026-09-15, the exact instant express.e turns that day. */
-const DAY_START = Math.floor(Date.UTC(2026, 8, 15, 6, 0, 0) / 1000);
+/** Midnight in Stockholm (CEST) starting 2026-09-15, the instant express.e turns that day. */
+const DAY_START = Math.floor(Date.UTC(2026, 8, 14, 22, 0, 0) / 1000);
 
 function sessionAt(seconds: number, over: Partial<any> = {}): BBSSession {
   return {
@@ -58,15 +59,16 @@ describe('the AmiExpress day', () => {
   const realNow = Date.now;
   afterEach(() => { Date.now = realNow; });
 
-  it('turns at 06:00 UTC, as express.e:529 counts it', () => {
+  it('turns at the board\'s local midnight, as express.e:529 counts it', () => {
     expect(amiExpressDay(DAY_START)).toBe(amiExpressDay(DAY_START + 3600));
     expect(amiExpressDay(DAY_START - 1)).toBe(amiExpressDay(DAY_START) - 1);
   });
 
-  it('does NOT turn at UTC midnight, which is what we used to compare', () => {
-    const midnight = Math.floor(Date.UTC(2026, 8, 16, 0, 0, 0) / 1000);
-    // Still the 15th's BBS day: 6 hours short of the rollover.
-    expect(amiExpressDay(midnight)).toBe(amiExpressDay(DAY_START));
+  it('does NOT turn at 06:00 UTC, which is what we used to compute', () => {
+    const sixUtc = Math.floor(Date.UTC(2026, 8, 15, 6, 0, 0) / 1000);
+    // 08:00 local on the 15th: the same day that began at local midnight.
+    expect(amiExpressDay(sixUtc)).toBe(amiExpressDay(DAY_START));
+    expect(amiExpressDay(sixUtc - 1)).toBe(amiExpressDay(DAY_START));
   });
 });
 

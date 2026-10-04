@@ -20,10 +20,14 @@
  *
  * The comparison is against the user's LAST-ON day, not this session's.
  */
+process.env.TZ = 'Europe/Stockholm';
+
 import { amiExpressDay } from '../../src/utils/time-tracking.util';
 
 const DAY = 86400;
-const DAY_START = Math.floor(Date.UTC(2026, 8, 15, 6, 0, 0) / 1000);
+// Local midnight in Stockholm starting 2026-09-15 - getSystemTime()-21600 is
+// local seconds, so the day turns there (corrected 2026-10-04).
+const DAY_START = Math.floor(Date.UTC(2026, 8, 14, 22, 0, 0) / 1000);
 
 /**
  * The rule as login-post.service.ts applies it, kept here as the arithmetic
