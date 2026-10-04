@@ -32,6 +32,7 @@ import { parseAmigaHeaderFile } from './amiga-msgheader';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { expandAmigaYear } from '../utils/date-time.util';
+import { parseCallerLogonLine, parseLogoffLine } from './CallersLogManager';
 import type {
   AmigaBBSArchive,
   AmigaUserData,
@@ -701,7 +702,7 @@ console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
    * Port from express.e:9493-9518 (callersLog), 9396-9406 (doorLog), 8968-8992 (errorLog)
    */
   async parseNode(nodePath: string, nodeNumber: number): Promise<AmigaNodeData> {
-    const callersLog = await this.parseCallersLog(nodePath);
+    const callersLog = await this.parseCallersLog(nodePath, nodeNumber);
     const doorLog = await this.parseDoorLog(nodePath);
     const errorLog = await this.parseErrorLog(nodePath);
 
@@ -714,12 +715,16 @@ console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
   }
 
   /**
-   * Parse CallersLog file
-   * Format from express.e:16023-16056 (displayUserToCallersLog)
-   * Example: "01-Jan-2026 (12:34:56) NEW [123] JohnDoe (CONNECT 28800) New York"
-   * Logoff:  "01-Jan-2026 (12:34:56) JohnDoe Off Normally"
+   * Parse CallersLog file - the lines express.e writes:
+   *   logon   express.e:16034-16042  `10-04-26 (17:37:02) [7] regress (CONNECT 19200) Test Account`
+   *                                   (`NEW [n]` on an account's first call)
+   *   logoff  express.e:9467-9471    `10-04-26 (17:41:11) regress Off Normally`
+   * The date is formatLongDate's FORMAT_USA MM-DD-YY and the time HH:MM:SS
+   * (MiscFuncs.e:278-318). Every other line is a tab-indented detail line.
+   * The `[n]` is the account's slot, not the node: the node is the
+   * directory the log lives in.
    */
-  private async parseCallersLog(nodePath: string): Promise<AmigaCallersLogEntry[]> {
+  private async parseCallersLog(nodePath: string, nodeNumber: number): Promise<AmigaCallersLogEntry[]> {
     const logPath = path.join(nodePath, 'CallersLog');
     const entries: AmigaCallersLogEntry[] = [];
 
@@ -729,64 +734,37 @@ console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
 
     try {
       const content = await fs.readFile(logPath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim().length > 0);
+      const lines = content.split('\n');
 
       let currentEntry: Partial<AmigaCallersLogEntry> | null = null;
 
       for (const line of lines) {
-        // Skip divider lines and tab-indented detail lines
-        if (line.startsWith('---') || line.startsWith('\t')) {
-          continue;
-        }
-
-        // Parse login line: "Date (Time) [Slot] Username (ConnectString) Location"
-        // or logoff line: "Date (Time) Username Off [reason]"
-        // The date is DD-Mon-YY or DD-Mon-YYYY and the time HH:MM or
-        // HH:MM:SS, parenthesised or bare: AmigaDOS DateToStr writes two
-        // digits and no seconds, while displayUserToCallersLog
-        // (express.e:16038) wraps the time in parentheses. Demanding a
-        // four-digit year AND parenthesised seconds matched not one line of
-        // this board's logs, so an import brought in zero caller history and
-        // said nothing about it.
-        const loginMatch = line.match(
-          /^(\d{1,2}-\w{3}-\d{2,4})\s+\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\s+(?:NEW\s+)?\[(\d+)\]\s+(\S+)\s+\(([^)]+)\)\s*(.*)$/,
-        );
-        const logoffMatch = line.match(
-          /^(\d{1,2}-\w{3}-\d{2,4})\s+\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\s+(\S+)\s+Off\s*(.*)$/,
-        );
-
-        if (loginMatch) {
-          // Save previous entry if exists
+        const logon = parseCallerLogonLine(line);
+        if (logon) {
           if (currentEntry && currentEntry.username) {
             entries.push(this.finalizeCallersLogEntry(currentEntry));
           }
-
-          // Start new entry
-          const [, date, time, slot, username, connectStr, location] = loginMatch;
-          const loginTime = this.parseAmigaDateTime(date, time);
-
           currentEntry = {
-            username,
-            loginTime,
-            node: parseInt(slot, 10),
-            location: location.trim() || undefined,
-            baud: this.extractBaudRate(connectStr),
+            username: logon.name,
+            loginTime: this.parseUsaDateTime(logon.date, logon.time),
+            node: nodeNumber,
+            location: logon.location.trim() || undefined,
+            baud: this.extractBaudRate(logon.connectString),
             uploaded: 0,
             downloaded: 0,
             messagesRead: 0,
             messagesPosted: 0,
             duration: 0,
           };
-        } else if (logoffMatch && currentEntry) {
-          // Complete current entry with logoff time
-          const [, date, time] = logoffMatch;
-          const logoffTime = this.parseAmigaDateTime(date, time);
+          continue;
+        }
+        const logoff = currentEntry ? parseLogoffLine(line) : null;
+        if (logoff && currentEntry) {
+          const logoffTime = this.parseUsaDateTime(logoff.date, logoff.time);
           currentEntry.logoffTime = logoffTime;
-
           if (currentEntry.loginTime) {
             currentEntry.duration = Math.floor((logoffTime.getTime() - currentEntry.loginTime.getTime()) / 60000);
           }
-
           entries.push(this.finalizeCallersLogEntry(currentEntry));
           currentEntry = null;
         }
@@ -802,6 +780,17 @@ console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
 console.error(`[AmigaParser] Error parsing CallersLog:`, error.message);
       return entries;
     }
+  }
+
+  /**
+   * A CallersLog stamp: formatLongDate/formatLongTime, FORMAT_USA
+   * (MiscFuncs.e:278-318) - `MM-DD-YY` and `HH:MM:SS`, the century by
+   * expandAmigaYear.
+   */
+  private parseUsaDateTime(dateStr: string, timeStr: string): Date {
+    const [mm, dd, yy] = dateStr.split('-').map(n => parseInt(n, 10));
+    const [h, m, sec] = timeStr.split(':').map(n => parseInt(n, 10));
+    return new Date(expandAmigaYear(yy), mm - 1, dd, h, m, sec);
   }
 
   /**

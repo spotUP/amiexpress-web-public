@@ -1158,6 +1158,11 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=$
 
   // Log user logout if they were logged in (express.e:9493 callersLog)
   if (session.user) {
+    // express.e:8160-8166 logoffLog - `Loss Carrier` where the call was
+    // dropped, `N` where it ended normally (an idle timeout is the second
+    // unless the board's TIMEOUT_LC says it is the first, express.e:28607).
+    // Written before SAmiLog and the logoff batches read this log.
+    callersLogManager.logLogoffOnce(session as never, logoffReason(session as never));
     await callersLog(session.user.id, session.user.username, 'Logged off');
 
     // Update SAmiLog.Store with this session's caller entry
@@ -1278,12 +1283,6 @@ console.error('[LOGOFF] Error writing user disk files:', diskErr);
     // express.e deletes these when user logs off so WHO doesn't show logged-off users
     const nodeId = session.nodeId || 0;
     try {
-      // Write to CallersLog before cleanup
-      // express.e:8163-8166 - `Loss Carrier` where the call was dropped, `N`
-      // where it ended normally. An idle timeout is the second unless the
-      // board's TIMEOUT_LC says it is the first (express.e:28607).
-      callersLogManager.logLogoff(nodeId, session.user.username, logoffReason(session as never));
-
       nodeFileManager.deleteNodeFiles(nodeId);
 console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
     } catch (error) {

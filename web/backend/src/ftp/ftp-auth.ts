@@ -410,8 +410,10 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
       }
     },
 
-    log(username: string, message: string, nodeId: number): void {
-      void writeToCallersLog(username, message, nodeId);
+    log(_username: string, message: string, nodeId: number): void {
+      // ftpd.e's callersLog is express.e's own (express.e:28996): the line
+      // as given, no name in front of it.
+      void writeToCallersLog(message, nodeId);
     },
 
   };

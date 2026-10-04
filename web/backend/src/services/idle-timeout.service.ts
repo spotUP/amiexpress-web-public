@@ -211,9 +211,10 @@ function hangUp(socket: IdleSocket, session: IdleSession): void {
     const { callersLogManager } = require('./CallersLogManager');
     if (session.nodeId !== undefined) {
       const stat = timeoutLogoffStat();
-      // The activity line says what happened; the logoff line is written by
-      // the disconnect path and carries the stat this decides.
-      callersLogManager.logActivity(session.nodeId, 'Input timeout');
+      // express.e:2373 - lineInput's timeout writes this line; the logoff
+      // line is written by the disconnect path and carries the stat this
+      // decides.
+      callersLogManager.logActivity(session.nodeId, '\t**Input timed out **');
       (session as { timeoutLogoffStat?: string }).timeoutLogoffStat = stat;
     }
   } catch { /* the log is not worth failing the hang-up for */ }

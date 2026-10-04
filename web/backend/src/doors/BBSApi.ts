@@ -1430,13 +1430,14 @@ console.error('[BBSApi] Error posting message:', error);
   // ========================================
 
   /**
-   * Log to caller's activity log
-   * Equivalent to express.e callersLog() function
+   * A TypeScript door's line in the CallersLog - its BB_CALLERSLOG
+   * (express.e:3804-3805), which goes in as given. The line is the door's
+   * own; by express.e's convention a detail line starts with a tab.
    */
   async logActivity(action: string, details?: string): Promise<void> {
     const { callersLogManager } = require('../services/CallersLogManager');
     const nodeId = this.getNodeNumber();
-    callersLogManager.logActivity(nodeId, action, details);
+    callersLogManager.logActivity(nodeId, details ? `${action} ${details}` : action);
   }
 
   /**

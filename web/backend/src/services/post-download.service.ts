@@ -120,7 +120,7 @@ export async function runPostDownload(
     }
     try {
       const { writeToCallersLog, writeToUDLog } = require('../utils/download-logging.util');
-      await writeToCallersLog(session.user.username, summaryLog, session.nodeId || 1);
+      await writeToCallersLog(summaryLog, session.nodeId || 1);
       await writeToUDLog(summaryLog, session.nodeId || 1);
     } catch (err: any) {
       console.error(`[postDownload] disk log write failed: ${err?.message || err}`);

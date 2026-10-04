@@ -128,7 +128,7 @@ async function fileReceivedUploads(
   for (const skippedName of skipped) {
     try {
       const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
-      void writeToCallersLog(session.user?.username || '', `Skipped ${skippedName}`, session.nodeId || 0);
+      void writeToCallersLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
       void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
     } catch (err) {
       console.error('[UPLOAD] could not log a skipped file:', err);
@@ -1306,6 +1306,9 @@ console.log('[ENV] Downloading');
         try {
           const { callersLog } = require('../../server/database-helpers');
           await callersLog(session.user?.id || null, session.user?.username || 'unknown',
+            `\t\tAttempt to download RESTRICTED file [${f.filePath || f.fileName}]`);
+          // express.e:12750-12751 - and the node's CallersLog.
+          require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1,
             `\t\tAttempt to download RESTRICTED file [${f.filePath || f.fileName}]`);
         } catch (_err) { /* non-critical */ }
         continue;

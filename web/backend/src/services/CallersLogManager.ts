@@ -1,21 +1,24 @@
 /**
- * CallersLogManager - Manages Node{n}/CallersLog activity files
+ * CallersLogManager - Node{n}/CallersLog, written the way express.e writes it.
  *
- * AmiExpress writes activity logs to Node{n}/CallersLog for tracking user actions.
- * This is a text file with timestamped entries.
+ * express.e:9493-9518 callersLog(): append `stringout` to
+ * `BBS:Node<n>/CallersLog`, followed by a linefeed unless the caller says
+ * otherwise, and only while ACS.DO_CALLERSLOG is on. It adds NOTHING - no
+ * timestamp, no name. Every line carries its own shape, built by the writer
+ * that logs it (the logon line, logoffLog, `\t...` detail lines), and every
+ * tool that reads a CallersLog - GLCUpdater, SAmiLog, ByteKillHandler -
+ * depends on those exact bytes:
  *
- * File locations:
- * - BBS:Node0/CallersLog
- * - BBS:Node1/CallersLog
- * - etc.
+ *   **************************************************************
+ *   10-04-26 (17:37:02) [7] regress (CONNECT 19200) Test Account
+ *   \tAmiga Demoscene! (1) Conference Joined
+ *   \tDownloading MUSIC.LHA 54321 bytes
+ *   \t 1 files, 53k bytes, 0 minutes 9 seconds 6035 cps, 100% efficiency at 19200
+ *   10-04-26 (17:41:11) regress Off Normally
  *
- * Format: Text file with lines like:
- * 01-Nov-25 20:49 Login: sysop
- * 01-Nov-25 20:50 Command: WHO
- * 01-Nov-25 20:51 Door: WHO
- * 01-Nov-25 20:52 Logoff
- *
- * Reference: express.e lines 9499-9517
+ * This port used to prefix every line with its own `DD-Mon-YY HH:MM ` and
+ * write `(LOCAL)` for the connect string, so GLCUpdater and SAmiLog found no
+ * call in any log the board wrote (live Node1: 87 dividers, 0 calls).
  */
 
 import * as fs from 'fs';
@@ -23,6 +26,80 @@ import * as path from 'path';
 import { getSystemTime, formatLongDate, formatLongTime } from '../utils/date-time.util';
 import { getBoardConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { getACSConfig, LevelFlags } from '../utils/acs.util';
+
+/** express.e:9575-9577 callersLogDivider(). */
+export const CALLERS_LOG_DIVIDER = '**************************************************************';
+
+/**
+ * The connect string of a caller who came in over a socket.
+ *
+ * express.e:7258-7259 checkIncomingCall: `IF telnetSocket>=0 THEN
+ * StrCopy(connectString,'CONNECT 19200')` - a telnet caller has no modem
+ * CONNECT line, so express.e writes a fixed one. Every caller of this board
+ * arrives on a socket (telnet, SSH or the browser), so all of them are that
+ * caller. `SYSOP_LOCAL` (express.e:7611, 29056) and `F2_LOCAL`
+ * (express.e:7630) are logons at the Amiga's own console; this board has no
+ * console logon, so it never writes either.
+ */
+export const SOCKET_CONNECT_STRING = 'CONNECT 19200';
+
+/** The fields displayUserToCallersLog (express.e:16023-16056) prints. */
+export interface CallerLogonLine {
+  /** loggedOnUser.slotNumber - the ACCOUNT number, not the node. */
+  slotNumber: number;
+  name: string;
+  connectString: string;
+  location: string;
+  /** loggedOnUser.timesCalled=0 before this call: the line reads `NEW [n]`. */
+  isNew: boolean;
+}
+
+/**
+ * The logon line, express.e:16034-16042:
+ *
+ *   formatLongDate(calltime,tempStr)       -> MM-DD-YY (FORMAT_USA)
+ *   formatLongTime(calltime,tempStr2)      -> HH:MM:SS
+ *   '\s (\s) NEW [\d] \s (\s) \s'          when timesCalled=0
+ *   '\s (\s) [\d] \s (\s) \s'              otherwise
+ *
+ * The same line heads the UDLog session (udonly=TRUE).
+ */
+export function formatCallerLogonLine(caller: CallerLogonLine, when: Date = getSystemTime()): string {
+  const date = formatLongDate(when);
+  const time = formatLongTime(when);
+  const marker = caller.isNew ? 'NEW ' : '';
+  return `${date} (${time}) ${marker}[${caller.slotNumber}] ${caller.name} (${caller.connectString}) ${caller.location}`;
+}
+
+/** A logon line read back: what formatCallerLogonLine wrote. */
+export interface ParsedCallerLogonLine extends CallerLogonLine {
+  date: string;   // MM-DD-YY
+  time: string;   // HH:MM:SS
+}
+
+/**
+ * Read a logon line. The connect string is one of the three GLCUpdater.e and
+ * SAmiLog.asm look for (` (CONNECT `, ` (SYSOP_LOCAL)`, ` (F2_LOCAL)`); a line
+ * without one is not a call to either tool, and is not one here.
+ */
+const LOGON_LINE = /^(\d\d-\d\d-\d\d) \((\d\d:\d\d:\d\d)\) (NEW )?\[(\d+)\] (.*?) \((CONNECT[^)]*|SYSOP_LOCAL|F2_LOCAL)\) ?(.*)$/;
+export function parseCallerLogonLine(line: string): ParsedCallerLogonLine | null {
+  const m = LOGON_LINE.exec(line.replace(/\r$/, ''));
+  if (!m) return null;
+  return {
+    date: m[1], time: m[2], isNew: !!m[3], slotNumber: parseInt(m[4], 10),
+    name: m[5], connectString: m[6], location: m[7],
+  };
+}
+
+/** logoffLog's line (express.e:9467-9471) read back. */
+export interface ParsedLogoffLine { date: string; time: string; name: string; stat: string }
+const LOGOFF_LINE = /^(\d\d-\d\d-\d\d) \((\d\d:\d\d:\d\d)\) (.+) Off (.+)$/;
+export function parseLogoffLine(line: string): ParsedLogoffLine | null {
+  const m = LOGOFF_LINE.exec(line.replace(/\r$/, ''));
+  return m ? { date: m[1], time: m[2], name: m[3], stat: m[4] } : null;
+}
 
 export class CallersLogManager {
   private bbsRoot: string;
@@ -45,12 +122,10 @@ export class CallersLogManager {
    * axSetupTool/helpText.e:265 "Do not save the last callers, uploads,
    * downloads information."). Real AmiExpress gates a separate process's
    * (ACP.e) acp.dat cache with this flag - this port has no such process,
-   * so the toggle instead suppresses the three categories the tooltype
-   * names when they are written to this file: callers (logLogin), uploads
-   * (logFileUpload) and downloads (logFileDownload). Everything else this
-   * class logs (commands, doors, chat, conference joins, logoff) is
-   * unaffected, matching express.e's own CallersLog write - which this
-   * toggle never gated at all.
+   * so the toggle instead suppresses the logon line (logLogin), the "last
+   * callers" entry the tooltype names. Every other line is unaffected,
+   * matching express.e's own CallersLog write - which this toggle never
+   * gated at all.
    */
   private isStateSaveDisabled(): boolean {
     try {
@@ -100,189 +175,80 @@ console.log(`[CallersLog] Created directory: Node${nodeId}/`);
   }
 
   /**
-   * Format timestamp for log entry
-   * Format: DD-Mon-YY HH:MM
-   * Example: 01-Nov-25 20:49
+   * express.e:9493-9518 callersLog(stringout, linefeed=TRUE).
+   *
+   * The line goes in exactly as given - express.e adds no stamp and no name -
+   * with a linefeed unless `linefeed` is false (a door's BB_CALLERSLOG,
+   * express.e:3805, brings its own). Nothing is written while ACS
+   * DO_CALLERSLOG is off (express.e:9497).
    */
-  private formatTimestamp(date: Date = getSystemTime()): string {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = months[date.getMonth()];
-    const year = String(date.getFullYear()).slice(-2);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-
-    return `${day}-${month}-${year} ${hours}:${minutes}`;
-  }
-
-  /**
-   * Append entry to CallersLog with auto-timestamp prefix
-   * @param rawEntry If true, entry already contains the timestamp (skip prefix)
-   */
-  private appendLog(nodeId: number, entry: string, rawEntry: boolean = false): void {
+  logActivity(nodeId: number, stringout: string, linefeed: boolean = true): void {
+    if (!getACSConfig().acLvl[LevelFlags.DO_CALLERSLOG]) return;
     try {
       this.ensureNodeDir(nodeId);
-      const logPath = this.getLogPath(nodeId);
-      const logLine = rawEntry ? `${entry}\n` : `${this.formatTimestamp()} ${entry}\n`;
-
-      fs.appendFileSync(logPath, logLine, 'utf8');
-console.log(`[CallersLog] Node${nodeId}: ${entry}`);
+      fs.appendFileSync(this.getLogPath(nodeId), linefeed ? `${stringout}\n` : stringout, 'utf8');
     } catch (error) {
 console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
     }
   }
 
   /**
-   * Write session divider (required for ByteKillHandler compatibility)
-   * express.e callersLogDivider() writes this before each user session
+   * express.e:16023-16052 displayUserToCallersLog(0): the divider, then the
+   * logon line (formatCallerLogonLine).
    */
-  private writeDivider(nodeId: number): void {
-    try {
-      this.ensureNodeDir(nodeId);
-      const logPath = this.getLogPath(nodeId);
-      fs.appendFileSync(logPath, '**************************************************************\n', 'utf8');
-    } catch (error) {
-      console.error(`[CallersLog] Error writing divider to Node${nodeId}/CallersLog:`, error);
-    }
-  }
-
-  /**
-   * Log user login
-   * Per express.e displayUserToCallersLog(), this writes a divider then user info
-   */
-  logLogin(nodeId: number, username: string, slotNumber: number = 1, location: string = 'Unknown'): void {
-    // Write divider before login entry (express.e:16029) - a session
-    // boundary marker other tooling (ByteKillHandler) parses, carrying no
-    // caller identity, so it is kept even with SYS_DONT_SAVE_STATE set.
-    this.writeDivider(nodeId);
+  logLogin(nodeId: number, caller: CallerLogonLine): void {
+    // express.e:16029 - the divider is a session boundary other tooling
+    // (ByteKillHandler, GLCUpdater, SAmiLog) parses and carries no caller
+    // identity, so it is kept even with SYS_DONT_SAVE_STATE set.
+    this.logActivity(nodeId, CALLERS_LOG_DIVIDER);
     // P3-2: SYS_DONT_SAVE_STATE suppresses the "last callers" entry itself.
     if (this.isStateSaveDisabled()) return;
-    // Format: DD-Mon-YYYY (HH:MM) [slot] username (connectString) location
-    // express.e uses formatLongDate + formatLongTime, similar to our format
-    const timestamp = this.formatTimestamp();
-    const entry = `${timestamp} [${slotNumber}] ${username} (LOCAL) ${location}`;
-    // Write directly without extra timestamp (appendLog adds one)
-    try {
-      this.ensureNodeDir(nodeId);
-      const logPath = this.getLogPath(nodeId);
-      fs.appendFileSync(logPath, entry + '\n', 'utf8');
-      console.log(`[CallersLog] Node${nodeId}: Login ${username}`);
-    } catch (error) {
-      console.error(`[CallersLog] Error writing login to Node${nodeId}/CallersLog:`, error);
-    }
+    this.logActivity(nodeId, formatCallerLogonLine(caller));
   }
 
   /**
-   * Log user logoff — express.e:9457-9473 logoffLog()
-   * Format: 'MM-DD-YY (HH:MM:SS) username Off Normally'
-   * @param stat Logoff reason: 'N'=Normal, 'L'=Loss Carrier, etc.
+   * express.e:9457-9473 logoffLog(stat):
+   *   'N...'  -> '\s (\s) \s Off Normally'
+   *   other   -> '\s (\s) \s Off \s'      ('Loss Carrier', 'UUCP feed completed')
    */
   logLogoff(nodeId: number, username: string, stat: string = 'N'): void {
     const now = getSystemTime();
-    const dateStr = formatLongDate(now);  // MM-DD-YY (FORMAT_USA)
-    const timeStr = formatLongTime(now);  // HH:MM:SS
     const reason = stat[0] === 'N' ? 'Off Normally' : `Off ${stat}`;
-    // express.e:9467-9472: '\s (\s) \s Off Normally' or '\s (\s) \s Off \s'
-    // Pass rawEntry=true since the entry already contains the timestamp
-    this.appendLog(nodeId, `${dateStr} (${timeStr}) ${username} ${reason}`, true);
+    this.logActivity(nodeId, `${formatLongDate(now)} (${formatLongTime(now)}) ${username} ${reason}`);
   }
 
   /**
-   * Log command execution
+   * logoffLog for one session, once.
+   *
+   * express.e writes it at "logging off 5" (express.e:8160-8166), BEFORE the
+   * LOGOFF system commands run (express.e:8222, 8230-8231) - and those are the
+   * logoff batches that run GLCUpdater and SAmiLog over this very log, which
+   * read the call's off time and `Off Loss Carrier` from this line. A `G`
+   * goodbye runs the batches itself and the disconnect runs them otherwise,
+   * so both write it first; whichever comes first writes it.
    */
-  logCommand(nodeId: number, command: string): void {
-    this.appendLog(nodeId, `Command: ${command}`);
+  logLogoffOnce(
+    session: { nodeId?: number; user?: { username: string } | null; logoffLogged?: boolean },
+    stat: string,
+  ): void {
+    if (!session.user || session.logoffLogged) return;
+    session.logoffLogged = true;
+    this.logLogoff(session.nodeId || 0, session.user.username, stat);
   }
 
   /**
-   * Log door execution
-   */
-  logDoor(nodeId: number, doorName: string): void {
-    this.appendLog(nodeId, `Door: ${doorName}`);
-  }
-
-  /**
-   * Log door exit
-   */
-  logDoorExit(nodeId: number, doorName: string): void {
-    this.appendLog(nodeId, `Door exit: ${doorName}`);
-  }
-
-  /**
-   * Log message post
-   */
-  logMessagePost(nodeId: number, conference: string, subject: string): void {
-    this.appendLog(nodeId, `Message posted in ${conference}: ${subject}`);
-  }
-
-  /**
-   * Log file upload
-   */
-  logFileUpload(nodeId: number, filename: string, area: string): void {
-    // P3-2: SYS_DONT_SAVE_STATE suppresses upload history.
-    if (this.isStateSaveDisabled()) return;
-    this.appendLog(nodeId, `Upload: ${filename} to ${area}`);
-  }
-
-  /**
-   * Log file download
-   */
-  logFileDownload(nodeId: number, filename: string): void {
-    // P3-2: SYS_DONT_SAVE_STATE suppresses download history.
-    if (this.isStateSaveDisabled()) return;
-    this.appendLog(nodeId, `Download: ${filename}`);
-  }
-
-  /**
-   * Log chat join
-   */
-  logChatJoin(nodeId: number, roomName: string): void {
-    this.appendLog(nodeId, `Chat join: ${roomName}`);
-  }
-
-  /**
-   * Log chat leave
-   */
-  logChatLeave(nodeId: number, roomName: string): void {
-    this.appendLog(nodeId, `Chat leave: ${roomName}`);
-  }
-
-  /**
-   * Log conference join
-   */
-  logConferenceJoin(nodeId: number, conferenceName: string): void {
-    this.appendLog(nodeId, `Conference: ${conferenceName}`);
-  }
-
-  /**
-   * Log custom activity
-   */
-  logActivity(nodeId: number, activity: string): void {
-    this.appendLog(nodeId, activity);
-  }
-
-  /**
-   * Get the last caller (most recent login) from CallersLog
-   * Returns the username of the last user who logged in
+   * The name of the last caller to log on, from the newest logon line of the
+   * first node from `nodeId` up that has one (AREXX BBSGETLASTCALLER).
    */
   getLastCaller(nodeId: number = 0): string | null {
     try {
-      // Try all nodes starting from nodeId
       for (let i = nodeId; i < 255; i++) {
         const logPath = this.getLogPath(i);
         if (!fs.existsSync(logPath)) continue;
-
-        const content = fs.readFileSync(logPath, 'utf8');
-        const lines = content.trim().split('\n').reverse();
-
-        // Find the most recent login entry
-        for (const line of lines) {
-          const loginMatch = line.match(/Login:\s*(\S+)/);
-          if (loginMatch) {
-            return loginMatch[1];
-          }
+        const lines = fs.readFileSync(logPath, 'utf8').split('\n');
+        for (let j = lines.length - 1; j >= 0; j--) {
+          const logon = parseCallerLogonLine(lines[j]);
+          if (logon) return logon.name;
         }
       }
       return null;

@@ -135,7 +135,7 @@ describe('Post-download pipeline (express.e:20251-20316)', () => {
 
     expect(writeUDSessionHeader).toHaveBeenCalledTimes(1);
     expect(callersLog).toHaveBeenCalledWith('u1', 'sysop', `\t${STATS}`);
-    expect(writeToCallersLog).toHaveBeenCalledWith('sysop', `\t${STATS}`, 1);
+    expect(writeToCallersLog).toHaveBeenCalledWith(`\t${STATS}`, 1);
     expect(writeToUDLog).toHaveBeenCalledWith(`\t${STATS}`, 1);
   });
 

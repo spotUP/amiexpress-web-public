@@ -215,7 +215,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           for (const skippedName of (detail?.skipped || [])) {
             try {
               const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
-              void writeToCallersLog(session.user?.username || '', `Skipped ${skippedName}`, session.nodeId || 0);
+              void writeToCallersLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
               void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
             } catch (err) {
               console.error('[UPLOAD] could not log a skipped file:', err);

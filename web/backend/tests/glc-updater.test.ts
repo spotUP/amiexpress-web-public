@@ -75,8 +75,11 @@ describe('the CallersLog parser (GLCUpdater.e:553-762)', () => {
   });
 
   test("the live board's call lines carry no CONNECT/SYSOP_LOCAL/F2_LOCAL, so no call is found", () => {
-    // CallersLogManager.logLogin writes `DD-Mon-YY HH:MM [n] name (LOCAL) loc`,
-    // not express.e:16041's `MM-DD-YY (HH:MM:SS) [n] name (CONNECT ..) loc`.
+    // Until 2026-10-04 CallersLogManager.logLogin wrote `DD-Mon-YY HH:MM [n]
+    // name (LOCAL) loc`, not express.e:16041's `MM-DD-YY (HH:MM:SS) [n] name
+    // (CONNECT ..) loc`; that history stays on the live board, and is not a
+    // call (tests/services/callers-log-is-express-format.test.ts: the board's
+    // logon line now is one).
     expect(findCallStart(liveLog, false)).toBeNull();
   });
 });

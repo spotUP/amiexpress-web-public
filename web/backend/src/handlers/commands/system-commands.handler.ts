@@ -299,6 +299,10 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
     // harmless while the commands finished instantly, a second set of
     // emulators once they did not.
     (session as any).logoffBatchesRan = true;
+    // express.e:8160-8166 - logoffLog('N') comes before these commands; the
+    // batches (GLCUpdater, SAmiLog) read the call's off time from it.
+    const { callersLogManager } = require('../../services/CallersLogManager');
+    callersLogManager.logLogoffOnce(session, 'N');
     /*
      * OFF THE BOARD FIRST, THEN THE PAPERWORK - the deliberate goodbye too.
      *

@@ -117,3 +117,23 @@ it('a logoff that added no session to the CallersLog adds no caller and no call'
   expect(rows.length).toBeGreaterThan(0);
   expect(new Set(rows).size).toBe(rows.length);
 });
+
+it("lists the last call of an express.e CallersLog in the bulletin", async () => {
+  /*
+   * The CallersLog is express.e's (displayUserToCallersLog, express.e:16041;
+   * logoffLog, 9468; the transfer summaries, 18857/20266), read as
+   * SAmiLog.asm reads it. The port parsed its own `DD-Mon-YY HH:MM [n] name
+   * (LOCAL)` line, which no AmiExpress board writes.
+   */
+  const dir = board();
+  setDay0(dir, today(), { calls: 0, dnFiles: 0 });
+  const svc = serviceFor(dir);
+
+  await svc.updateStoreFromCallersLog(1, {});
+
+  expect(day0(dir).calls).toBe(1);
+  const row = svc.generateBulletin(20, { noAnsi: true, noTexts: true }).split('\n')
+    .find((l: string) => / regress /.test(l));
+  // Baud N Name Group/Location On-Time (Actions) H:MM Up-K Dn-K
+  expect(row).toMatch(/^19\.2 1 regress +Test Account +17:37:02 \(---DU-\) 0:04 +12 +53$/);
+});

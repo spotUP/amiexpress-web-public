@@ -613,9 +613,10 @@ debugLog(`  Log text: "${logText}"`);
 
     if (logText.length > 0) {
       const nodeId = this.getNodeId();
-      this.appendNodeLog('CallersLog', logText);
+      // express.e:3805 callersLog(msg.string,FALSE): once, as the door sent
+      // it, with no linefeed added - the door brings its own.
       try {
-        callersLogManager.logActivity(nodeId, logText);
+        callersLogManager.logActivity(nodeId, logText, false);
       } catch (err) {
 console.warn('[XIMBBSInfo] callersLogManager failed:', err);
         SysopDebugUtil.debug(

@@ -404,6 +404,9 @@ export class DownloadHandler {
           const { callersLog } = require('../../server/database-helpers');
           await callersLog(session.user?.id || null, session.user?.username || 'unknown',
             `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`);
+          // express.e:12750-12751 - and the node's CallersLog.
+          require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1,
+            `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`);
         } catch (_err) { /* non-critical */ }
         continue;
       }

@@ -984,6 +984,8 @@ async function editUser(socket: any, session: BBSSession, r: Reader, loop: 'read
   const { callersLog } = require('../../server/database-helpers');
   await callersLog((session.user as any)?.id ?? null, (session.user as any)?.username ?? '', '\tAccount editing from mail.', undefined, session.nodeId ?? 1)
     .catch(() => undefined);
+  // express.e:11166/12206 - the same line in the node's CallersLog.
+  require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1, '\tAccount editing from mail.');
 
   let ran = false;
   if (loop === 'read') {

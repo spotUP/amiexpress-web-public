@@ -108,10 +108,23 @@ describe('callers-log dual write: SQL + disk parity', () => {
     setHelpers({ callersLog: sqlLog, loadFlagged: async () => {}, loadHistory: async () => {} } as any);
     const { socket, session } = aCaller();
 
-    await joinConference(socket, session, 2, 2, true, true);
+    await joinConference(socket, session, 2, 2, false, false);
 
     expect(sqlLog.mock.calls.filter((c) => c[2] === 'Joined conference')).toHaveLength(1);
-    expect(logActivity).toHaveBeenCalledWith(3, '\tJoined conference: Internal');
+    // express.e:5084, 5089-5090: `\t<name> (<conf>) Conference Joined`.
+    expect(logActivity).toHaveBeenCalledWith(3, '\tInternal (2) Conference Joined');
+  });
+
+  test("a conference scan's join writes no CallersLog line (express.e:5056 IF(confScan=FALSE))", async () => {
+    setConferences([{ id: 1, name: 'Amiga Demoscene' }, { id: 2, name: 'Internal' }] as any);
+    setMessageBases([{ id: 2, conferenceId: 2, name: 'General' }] as any);
+    setConstants({ SCREEN_BULL: 'BULL', SCREEN_NODE_BULL: 'NODE_BULL', SCREEN_CONF_BULL: 'CONF_BULL', LoggedOnSubState } as any);
+    setHelpers({ callersLog: sqlLog, loadFlagged: async () => {}, loadHistory: async () => {} } as any);
+    const { socket, session } = aCaller();
+
+    await joinConference(socket, session, 2, 2, false, false, 0, true);
+
+    expect(logActivity).not.toHaveBeenCalled();
   });
 
 });

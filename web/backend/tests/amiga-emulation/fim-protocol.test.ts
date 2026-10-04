@@ -1071,7 +1071,7 @@ describe("CF_CallersLog / CF_UDLog", () => {
   it("411 appends the IOString line to CallersLog with username and node", () => {
     const emu = new MemStub();
     const msg = sendLine(emu, logProto(emu), FIM_CMD.CF_CallersLog, "PAGED SYSOP AT: 01:56\r\n");
-    expect(writeToCallersLog).toHaveBeenCalledWith("SPOT", "PAGED SYSOP AT: 01:56", 3);
+    expect(writeToCallersLog).toHaveBeenCalledWith("PAGED SYSOP AT: 01:56", 3);
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 

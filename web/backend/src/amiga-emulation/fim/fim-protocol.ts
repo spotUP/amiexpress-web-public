@@ -749,11 +749,10 @@ export class FIMProtocol {
         // IOString <- The string added to the callers.log." Routed through
         // the same express.e-port util the BBS itself uses (fire-and-forget;
         // the log line is not worth blocking the door's reply on).
+        // The line goes in as the door wrote it, like express.e's own
+        // BB_CALLERSLOG (express.e:3805) - no caller's name in front.
         const line = this.readCString(msgAddr + FDOM.IOSTRING, FDOM.IOSTRING_LEN).replace(/[\r\n]+$/, "");
-        const username = String(
-          (this.bbsSession.user as Record<string, unknown> | undefined)?.username ?? "Door"
-        );
-        void writeToCallersLog(username, line, this.nodeId);
+        void writeToCallersLog(line, this.nodeId);
         this.reply(msgAddr, FIM_RC.OK);
         break;
       }

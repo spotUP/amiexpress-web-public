@@ -66,6 +66,7 @@ import { loadBBSConfig } from './bbs-config-file.service';
 import { getSystemTime } from '../utils/date-time.util';
 import { formatDateSlash, formatTime as formatTimeUtil } from '../utils/date-format.util';
 import { boardRoot } from '../utils/board-root.util';
+import { parseCallerLogonLine } from './CallersLogManager';
 
 // Cache for previous caller info per node (avoids reading logs repeatedly)
 interface PreviousCallerInfo {
@@ -140,23 +141,17 @@ console.log(`[DoorDropFile] Config reloaded: bbsName="${this.bbsName}" sysopName
       // Try reading from CallersLog in Node directory
       const callersLogPath = path.join(this.bbsRoot, `Node${nodeId}`, 'CallersLog');
       if (fs.existsSync(callersLogPath)) {
-        const content = fs.readFileSync(callersLogPath, 'utf8');
-        const lines = content.trim().split('\n').filter(l => l.trim());
-
-        // Get second-to-last entry (previous caller, not current)
-        // Format varies but typically: "Username [timestamp] action"
-        if (lines.length >= 2) {
-          const prevLine = lines[lines.length - 2];
-          // Try to parse caller name from log line
-          const nameMatch = prevLine.match(/^([A-Za-z0-9 ]+?)\s*[\[\(]/);
-          if (nameMatch) {
-            result.name = nameMatch[1].trim().slice(0, 30);
-          }
-          // Try to extract time
-          const timeMatch = prevLine.match(/(\d{1,2}:\d{2})/);
-          if (timeMatch) {
-            result.time = timeMatch[1];
-          }
+        // The previous caller is the logon line before the current caller's
+        // (displayUserToCallersLog, express.e:16034-16042).
+        const logons = fs.readFileSync(callersLogPath, 'utf8').split('\n')
+          .map(parseCallerLogonLine)
+          .filter((l): l is NonNullable<typeof l> => l !== null);
+        const prev = logons.length >= 2 ? logons[logons.length - 2] : null;
+        if (prev) {
+          result.name = prev.name.slice(0, 30);
+          result.time = prev.time.slice(0, 5);
+          const baud = /^CONNECT (\d+)/.exec(prev.connectString);
+          if (baud) result.baud = baud[1];
         }
       }
     } catch (err) {

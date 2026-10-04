@@ -242,6 +242,9 @@ export class BatchDownloadHandler {
           const { callersLog } = require('../../server/database-helpers');
           await callersLog(session.user?.id || null, session.user?.username || 'unknown',
             `\t\tAttempt to download RESTRICTED file [${fileInfo.fullPath || fileInfo.name || flagItem.fileName}]`);
+          // express.e:12750-12751 - and the node's CallersLog.
+          require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1,
+            `\t\tAttempt to download RESTRICTED file [${fileInfo.fullPath || fileInfo.name || flagItem.fileName}]`);
         } catch (_err) { /* non-critical */ }
         failCount++;
         continue;

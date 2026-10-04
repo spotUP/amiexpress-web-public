@@ -10,15 +10,16 @@
  * of confBase records (axobjects.e:136-155): message pointer, ratio, byte
  * counters, scan flags, answered vote topics, one record per user slot.
  *
- * `parseCallersLog` demanded `DD-Mon-YYYY (HH:MM:SS)`. AmiExpress writes the
- * stamp through AmigaDOS DateToStr, which gives a TWO digit year and no
- * seconds, so a real line reads `13-Jan-26 17:41 [1] sysop (LOCAL) Unknown`.
- * The pattern matched no line of any log on this board: an import produced
- * zero caller history and said nothing.
+ * `parseCallersLog` demanded `DD-Mon-YYYY (HH:MM:SS)`, and then this port's own
+ * `DD-Mon-YY HH:MM`. AmiExpress writes neither: displayUserToCallersLog
+ * (express.e:16034-16042) stamps formatLongDate/formatLongTime, FORMAT_USA
+ * (MiscFuncs.e:278-318), so a real line reads
+ * `10-04-26 (17:37:02) [7] regress (CONNECT 19200) Test Account`.
  *
- * The fixtures are real bytes - the first eight records of this board's
- * Conf2/Conf.DB and a genuine stretch of a Node CallersLog - because a fixture
- * written from the same understanding as the code proves only that they agree.
+ * Conf.DB is the first eight records of this board's Conf2/Conf.DB, real
+ * bytes. The CallersLog is in express.e's format (the same lines as
+ * tests/fixtures/glc/CallersLog.express); this board's own logs held the
+ * port's invented format until 2026-10-04.
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -87,47 +88,34 @@ describe('Conf.DB is per-user conference state', () => {
 });
 
 describe('the node logs a real board writes', () => {
-  test('reads the callers out of a CallersLog', async () => {
+  async function callersOfNode1() {
     const nodes = await new AmigaParserService().parseNodes(BOARD);
     const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
     if (!callers) throw new Error('node 1 has no CallersLog');
+    return callers;
+  }
 
-    expect(callers.length).toBeGreaterThan(0);
-    expect(callers[0].username).toBe('sysop');
+  test('reads every call out of a CallersLog, with its logoff', async () => {
+    const callers = await callersOfNode1();
+    expect(callers.map(c => [c.username, c.location, c.duration])).toEqual([
+      ['CALLER2', 'Somewhere', 15],
+      ['regress', 'Test Account', 4],
+    ]);
   });
 
-  test('puts the call in the right century, not the year 26 AD', async () => {
-    // "13-Jan-26" as written is `new Date(26, 0, 13)`. MiscFuncs.e:338 rebuilds
-    // the century as `IF days>=8035 THEN 20 ELSE 19` - 8035 days after the
-    // 1978 epoch is 2000-01-01 - so 26 is 2026 and 95 would be 1995.
-    const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
-    if (!callers) throw new Error('node 1 has no CallersLog');
-    const [call] = callers;
-
+  test('reads MM-DD-YY (HH:MM:SS) in the right century', async () => {
+    // "10-04-26" is formatLongDate's FORMAT_USA: October 4th. MiscFuncs.e:338
+    // rebuilds the century as `IF days>=8035 THEN 20 ELSE 19`, so 26 is 2026.
+    const [, call] = await callersOfNode1();
     expect(call.loginTime.getFullYear()).toBe(2026);
-    expect(call.loginTime.getMonth()).toBe(0);
-    expect(call.loginTime.getDate()).toBe(13);
+    expect(call.loginTime.getMonth()).toBe(9);
+    expect(call.loginTime.getDate()).toBe(4);
+    expect([call.loginTime.getHours(), call.loginTime.getMinutes(), call.loginTime.getSeconds()]).toEqual([17, 37, 2]);
   });
 
-  test('a stamp with no seconds is a time, not an Invalid Date', async () => {
-    const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
-    if (!callers) throw new Error('node 1 has no CallersLog');
-    const [call] = callers;
-
-    expect(Number.isNaN(call.loginTime.getTime())).toBe(false);
-    expect(call.loginTime.getHours()).toBe(17);
-    expect(call.loginTime.getMinutes()).toBe(41);
-  });
-
-  test('keeps where the caller was and how they connected', async () => {
-    const nodes = await new AmigaParserService().parseNodes(BOARD);
-    const callers = nodes.find(n => n.nodeNumber === 1)?.callersLog;
-    if (!callers) throw new Error('node 1 has no CallersLog');
-    const [call] = callers;
-
-    expect(call.location).toBe('Unknown');
+  test('the node is the directory the log is in; `[n]` is the account, and CONNECT gives the baud', async () => {
+    const [, call] = await callersOfNode1();
     expect(call.node).toBe(1);
+    expect(call.baud).toBe(19200);
   });
 });

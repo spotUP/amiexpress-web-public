@@ -24,7 +24,7 @@ import { db } from "../database";
 import { nodeFileManager } from "../services/NodeFileManager";
 import { loadAccount, rowFieldsFromAccount } from "./load-account";
 import { userDatabaseManager } from "../services/UserDatabaseManager";
-import { callersLogManager } from "./CallersLogManager";
+import { callersLogManager, SOCKET_CONNECT_STRING } from "./CallersLogManager";
 import { initializeSecurity, setEnvStat } from "../utils/security.util";
 import { EnvStat } from "../constants/env-codes";
 import { AnsiUtil } from "../utils/ansi.util";
@@ -39,7 +39,6 @@ import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
 import { userAlreadyOnNode } from "./user-already-online";
-import { writeToCallersLog } from "../utils/download-logging.util";
 import { runExecuteOn } from "./batch-scheduler";
 import { mailOnLogon } from "./mail-notification.service";
 import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
@@ -462,12 +461,16 @@ export async function runPostAuthLogin(
   try {
     nodeFileManager.writeNodeUserFile(nodeId, user);
     nodeFileManager.writeNodeUserKeysFile(nodeId, user);
-    callersLogManager.logLogin(
-      nodeId,
-      user.username,
-      1,
-      user.location || "Unknown",
-    );
+    // express.e:16034-16046 - the logon line carries the account's slot,
+    // its name, the connect string and its location, marked NEW when this
+    // is the account's first call (timesCalled=0 before the increment).
+    callersLogManager.logLogin(nodeId, {
+      slotNumber: user.slotNumber ?? 0,
+      name: user.username,
+      connectString: SOCKET_CONNECT_STRING,
+      location: user.location ?? "",
+      isNew: callsBeforeLogon === 0,
+    });
 
     /**
      * express.e:16048 - LOG_HOST on the node's icon adds the caller's address

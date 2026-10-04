@@ -18,7 +18,6 @@ import { doorScreenWidth, doorSessionGeometry } from '../amiga-emulation/xim/scr
 import { routeAmigaDoorInput } from '../amiga-emulation/door-input-router';
 import { consumePendingSysopPage, runSysopPageWait } from './chat/chat.handler';
 import type { ChatSession } from '../services/use-cases/chat-session.use-case';
-import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
@@ -2054,9 +2053,9 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
     };
     doorSessions.push(doorSession);
 
-    // Log door execution
+    // Log door execution (SQL activity only). express.e logs a door to
+    // Node<n>/DoorLog (doorLog, express.e:9392-9419), never to the CallersLog.
     callersLog(isGuest ? null : doorUser.id, doorUser.username, 'Executed door', door.name);
-    callersLogManager.logDoor(nodeId, door.name);
 
     // Emit BBS event for LiveChat integration (door entered)
     emitDoorActivity({
@@ -2168,7 +2167,6 @@ console.error(`Unknown door type: ${door.type}`);
 
     // Clean up drop files after door exit
     doorDropFileManager.cleanupDropFiles(nodeId);
-    callersLogManager.logDoorExit(nodeId, door.name);
 
     // Emit BBS event for LiveChat integration (door exited)
     emitDoorActivity({
@@ -2276,7 +2274,6 @@ console.error(`[executeDoor] Stack trace:`, error.stack);
     // Clean up resources
     try {
       doorDropFileManager.cleanupDropFiles(nodeId);
-      callersLogManager.logDoorExit(nodeId, `${door.name} (ERROR)`);
 
       if (doorSession) {
         doorSession.endTime = getSystemTime();
@@ -4945,7 +4942,6 @@ console.log(`[executeClientDoor] Client door session started: ${sessionId}`);
     const nodeId = session.nodeId || 0;
     const { user: clientDoorUser, isGuest } = resolveDoorExecutionUser(session);
     callersLog(isGuest ? null : clientDoorUser.id, clientDoorUser.username, 'Executed client door', door.name);
-    callersLogManager.logDoor(nodeId, door.name);
 
     // Give the frontend 1 second to load the bundle and set up listeners
     // before the server proceeds to the server-side component.

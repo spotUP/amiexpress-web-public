@@ -266,12 +266,10 @@ console.warn('[joinConference] Failed to sync node user file:', err);
    * and its pause. See express.e:5119.
    */
 
-  // Log conference join — SQL (web activity widget) + disk (express.e
-  // parity, express.e:9493 callersLog). Was SQL-only per audit
-  // 2026-05-18_sqlite-disk-parity-audit.md.
+  // Log conference join to SQL (web activity widget). The CallersLog line is
+  // written with the join line itself, in continueJoinAfterBull.
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
-    callersLogManager.logActivity(session.nodeId || 1, `\tJoined conference: ${conference.name}`);
   }
 
   if (!silent) {
@@ -595,6 +593,18 @@ async function continueJoinAfterBull(
     }
     // express.e:5087
     if (!quietJoin) emitText(socket, '\r\n');
+    // express.e:5089-5090 - the same line, quiet or not, into the CallersLog
+    // with a tab: `Conference n: name Auto-ReJoined` (5071-5073) or
+    // `name (n) Conference Joined` (5081, 5084), the message base in brackets
+    // when the conference has more than one. `n` is the conference number.
+    // It sits inside express.e's `IF(confScan=FALSE)` (5056), so the scan's
+    // joins of every conference at logon write nothing.
+    if (!confScan) {
+      const base = baseCount > 1 ? ` [${messageBase.name}]` : '';
+      callersLogManager.logActivity(session.nodeId || 1, auto
+        ? `\tConference ${confId}: ${conference.name}${base} Auto-ReJoined`
+        : `\t${conference.name}${base} (${confId}) Conference Joined`);
+    }
 
     // express.e:5092-5113 - the message stats, on EVERY join that is not
     // quiet (not only an auto one).

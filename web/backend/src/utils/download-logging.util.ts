@@ -13,12 +13,15 @@ import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
 
 /**
- * Log download activity
- * Port from express.e:9475-9491 logUDFile()
+ * Log one file going out - express.e:9475-9491 logUDFile(dl=TRUE):
  *
- * @param user User downloading
- * @param filename File being downloaded
- * @param fileSize Size in bytes
+ *   StringF(tempStr,'\t\sDownloading \s \d bytes',
+ *           IF zModemInfo.freeDFlag THEN 'Free ' ELSE '',fileName,filesize)
+ *   callersLog(tempStr)
+ *   udLog(tempStr)
+ *
+ * GLCUpdater and SAmiLog read the summary that follows a `Downloading ` line.
+ *
  * @param isFree Whether this is a free download (doesn't count against ratio)
  */
 export async function logDownload(
@@ -28,56 +31,10 @@ export async function logDownload(
   isFree: boolean = false,
   nodeId: number = 0
 ): Promise<void> {
-
-  const username = user.username || 'Unknown';
-  const timestamp = getSystemTime().toISOString();
-
-  // express.e:9478 - Format log message
-  const message = isFree
-    ? `[${timestamp}] ${username} - Downloading Free ${filename} ${fileSize} bytes`
-    : `[${timestamp}] ${username} - Downloading ${filename} ${fileSize} bytes`;
-
-  // Log to console (in web version, console is our primary log)
-console.log(`[DOWNLOAD] ${message}`);
-
-  // Write to UDLog file if logging is enabled
-  // express.e:9489 - udLog(tempStr)
-  await writeToUDLog(message, nodeId);
-
-  // Write to CallersLog
-  // express.e:9488 - callersLog(tempStr)
-  await writeToCallersLog(username, message, nodeId);
-}
-
-/**
- * Log upload activity
- * Port from express.e:9475-9491 logUDFile() with dl=FALSE
- *
- * @param user User uploading
- * @param filename File being uploaded
- * @param fileSize Size in bytes
- * @param isResume Whether this is a resumed upload
- */
-export async function logUpload(
-  user: User,
-  filename: string,
-  fileSize: number,
-  isResume: boolean = false,
-  nodeId: number = 0
-): Promise<void> {
-
-  const username = user.username || 'Unknown';
-  const timestamp = getSystemTime().toISOString();
-
-  // express.e:9484 - Format upload message
-  const message = isResume
-    ? `[${timestamp}] ${username} - Resuming upload ${filename} ${fileSize} bytes`
-    : `[${timestamp}] ${username} - Uploading ${filename} ${fileSize} bytes`;
-
-console.log(`[UPLOAD] ${message}`);
-
-  await writeToUDLog(message, nodeId);
-  await writeToCallersLog(username, message, nodeId);
+  const line = `\t${isFree ? 'Free ' : ''}Downloading ${filename} ${fileSize} bytes`;
+console.log(`[DOWNLOAD] ${user.username || 'Unknown'}${line}`);
+  await writeToCallersLog(line, nodeId);
+  await writeToUDLog(line, nodeId);
 }
 
 /**
@@ -106,27 +63,12 @@ console.error('[UDLOG] Error writing to log:', error);
 }
 
 /**
- * Write to CallersLog
- * Port from express.e:9493-9518 callersLog()
+ * Write a line to the node's CallersLog - express.e:9493-9518 callersLog(),
+ * through the board's one writer. The line goes in as given.
  */
-export async function writeToCallersLog(username: string, message: string, nodeId: number): Promise<void> {
-  if (!getACSConfig().acLvl[LevelFlags.DO_CALLERSLOG]) return;
-  try {
-    const dataDir = config.get('dataDir');
-    const nodeDir = path.join(dataDir, `Node${nodeId || 0}`);
-    const logDir = fs.existsSync(nodeDir) ? nodeDir : path.join(process.cwd(), 'logs');
-
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-
-    const logFile = path.join(logDir, 'CallersLog');
-
-    // Append to log file
-    fs.appendFileSync(logFile, `${username}: ${message}\n`);
-  } catch (error) {
-console.error('[CALLERSLOG] Error writing to log:', error);
-  }
+export async function writeToCallersLog(message: string, nodeId: number): Promise<void> {
+  const { callersLogManager } = require('../services/CallersLogManager');
+  callersLogManager.logActivity(nodeId, message);
 }
 
 /**
@@ -162,16 +104,14 @@ export async function writeUDSessionHeader(session: any): Promise<void> {
   const divider = '**************************************************************';
   await writeToUDLog(divider, nodeId);
 
-  // Build the session header line
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const datestr = `${pad(now.getDate())}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()]}-${now.getFullYear() % 100}`;
-  const timestr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  const slot = user.slotNumber || 0;
-  const name = user.name || user.username || 'unknown';
-  const connectString = session.connectString || (session.connectionType || 'telnet').toUpperCase();
-  const location = user.location || 'Unknown';
-  const newMarker = (user.timesCalled || 0) === 0 ? 'NEW ' : '';
-  const line = `${datestr} (${timestr}) ${newMarker}[${slot}] ${name} (${connectString}) ${location}`;
+  // express.e:16034-16042, the same line the logon wrote to the CallersLog.
+  const { formatCallerLogonLine, SOCKET_CONNECT_STRING } = require('../services/CallersLogManager');
+  const line = formatCallerLogonLine({
+    slotNumber: user.slotNumber ?? 0,
+    name: user.username,
+    connectString: SOCKET_CONNECT_STRING,
+    location: user.location ?? '',
+    isNew: (user.calls ?? 0) === 0,
+  });
   await writeToUDLog(line, nodeId);
 }

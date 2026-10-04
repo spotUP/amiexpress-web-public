@@ -3,11 +3,10 @@
  * axSetupTool/helpText.e:265 "Do not save the last callers, uploads,
  * downloads information."). Real AmiExpress gates a separate process's
  * (ACP.e) acp.dat cache with this - this port has no such cache, so the
- * toggle instead suppresses the three categories the tooltype names when
- * CallersLogManager would otherwise write them: callers (logLogin), uploads
- * (logFileUpload) and downloads (logFileDownload). Everything else it logs
- * (commands, doors, logoff) must be unaffected, matching express.e's own
- * CallersLog write, which this toggle never gated.
+ * toggle instead suppresses the logon line (logLogin), the "last callers"
+ * entry the tooltype names. Every other line (detail lines, logoff) must be
+ * unaffected, matching express.e's own CallersLog write, which this toggle
+ * never gated.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -46,16 +45,12 @@ describe('CallersLogManager honours SYS_DONT_SAVE_STATE', () => {
     return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
   }
 
-  describe('SYS_DONT_SAVE_STATE unset (default: do save)', () => {
-    it('logs the caller, an upload and a download', () => {
-      mgr.logLogin(0, 'alice', 1, 'Somewhere');
-      mgr.logFileUpload(0, 'FILE.ZIP', 'Utils');
-      mgr.logFileDownload(0, 'OTHER.LHA');
+  const alice = { slotNumber: 1, name: 'alice', connectString: 'CONNECT 19200', location: 'Somewhere', isNew: false };
 
-      const log = readLog();
-      expect(log).toContain('alice');
-      expect(log).toContain('Upload: FILE.ZIP to Utils');
-      expect(log).toContain('Download: OTHER.LHA');
+  describe('SYS_DONT_SAVE_STATE unset (default: do save)', () => {
+    it('logs the caller', () => {
+      mgr.logLogin(0, alice);
+      expect(readLog()).toMatch(/\[1\] alice \(CONNECT 19200\) Somewhere\n$/);
     });
   });
 
@@ -65,7 +60,7 @@ describe('CallersLogManager honours SYS_DONT_SAVE_STATE', () => {
     });
 
     it('suppresses the caller entry but keeps the session divider', () => {
-      mgr.logLogin(0, 'alice', 1, 'Somewhere');
+      mgr.logLogin(0, alice);
 
       const log = readLog();
       expect(log).not.toContain('alice');
@@ -74,24 +69,12 @@ describe('CallersLogManager honours SYS_DONT_SAVE_STATE', () => {
       expect(log).toContain('*'.repeat(10));
     });
 
-    it('suppresses upload history', () => {
-      mgr.logFileUpload(0, 'FILE.ZIP', 'Utils');
-      expect(readLog()).not.toContain('FILE.ZIP');
-    });
-
-    it('suppresses download history', () => {
-      mgr.logFileDownload(0, 'OTHER.LHA');
-      expect(readLog()).not.toContain('OTHER.LHA');
-    });
-
-    it('does not suppress unrelated log categories (commands, doors, logoff)', () => {
-      mgr.logCommand(0, 'WHO');
-      mgr.logDoor(0, 'LORD');
+    it('does not suppress the other lines (detail lines, logoff)', () => {
+      mgr.logActivity(0, '\tAccount editing.\n');
       mgr.logLogoff(0, 'alice', 'N');
 
       const log = readLog();
-      expect(log).toContain('Command: WHO');
-      expect(log).toContain('Door: LORD');
+      expect(log).toContain('\tAccount editing.\n\n');
       expect(log).toContain('alice Off Normally');
     });
   });

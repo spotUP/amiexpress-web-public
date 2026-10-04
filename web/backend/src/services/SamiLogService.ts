@@ -5,6 +5,7 @@ import { config } from '../config';
 import { BBSState } from '../constants/bbs-states';
 import { getSystemTime } from '../utils/date-time.util';
 import { renderedRows } from '../screens/screen-rows';
+import { CALLERS_LOG_DIVIDER, parseCallerLogonLine, parseLogoffLine } from './CallersLogManager';
 import type { BBSSession } from '../index';
 
 const DATA_DIR = config.get('dataDir');
@@ -124,123 +125,109 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9]*C/g, '');
 }
 
-// Helper to parse CallersLog line (duplicated from glc-updater to avoid dependency)
+/** One call as SAmiLog reads it out of the CallersLog. */
 interface SessionEntry {
   username: string;
   location: string;
   nodeStr: string;
-  dateOn: string;
-  timeOn: string;   // HH:MM
-  timeOff: string;  // HH:MM
+  dateOn: string;         // MM-DD-YY
+  timeOn: string;         // HH:MM:SS
+  timeOff: string | null; // HH:MM:SS, null when the call has no `Off` line
   uploadBytes: number;
   downloadBytes: number;
   uploadFiles: number;
   downloadFiles: number;
-  uploadFailed: number;
-  downloadFailed: number;
   flag1: number;
   flag2: number;
 }
 
 /**
- * Parse the last complete session block from the CallersLog.
- *
- * AmiExpress CallersLog format (written by CallersLogManager):
- *   ******...  (64-asterisk divider, written before each session)
- *   DD-Mon-YY HH:MM [N] username (connType) location
- *   DD-Mon-YY HH:MM Door: X
- *   DD-Mon-YY HH:MM Door exit: X
- *   DD-Mon-YY HH:MM Logoff: username
- *   ******...  (start of next session)
- *   ...
- *
- * At logoff time the batch runs; the current session's events are present
- * after the last divider but no closing divider exists yet.
+ * The files and kbytes of every transfer summary carrying `marker`
+ * (SAmiLog.asm sub_572C): ` file(s), ` is the upload summary
+ * (express.e:18857), ` files, ` the download one (express.e:20266) - the
+ * number before the marker is the files, the one before `k` the kbytes.
  */
-function parseLastSession(lines: string[]): SessionEntry | null {
-  // Find the last ***** divider
+function sumTransfers(lines: string[], marker: string): { files: number; kb: number } {
+  let files = 0;
+  let kb = 0;
+  for (const line of lines) {
+    const at = line.indexOf(marker);
+    if (at < 0) continue;
+    const before = line.slice(0, at).trim().split(/\s+/).pop() ?? '';
+    const k = /(\d+)k bytes/.exec(line.slice(at));
+    files += parseInt(before, 10) || 0;
+    kb += k ? parseInt(k[1], 10) : 0;
+  }
+  return { files, kb };
+}
+
+/**
+ * The last call in a node's CallersLog, read as SAmiLog.asm reads it
+ * (loc_340A-loc_37DC): the last divider, the logon line after it
+ * (displayUserToCallersLog, express.e:16034-16042), the logoffLog line
+ * (express.e:9467-9471) for the off time, the transfer summaries for the
+ * kbytes, and these lines for the flags:
+ *
+ *   flag1  bit0 NEW [n]   bit1 `Password Failure`   bit2 `Off Loss Carrier`
+ *          bit3 `Operator Paged`   bit4 `SYSOP DOWNLOAD:`/`Account edit`/`SysopView`
+ *          bit5 a local logon (SYSOP_LOCAL, F2_LOCAL)
+ *   flag2  bit0 `Uploading`/`Resuming`   bit1 `Upload Failed` (no upload)
+ *          bit2 `Downloading`            bit3 `Download Failed` (no download)
+ *
+ * A divider not followed by a logon line is not a call (the logon line was
+ * suppressed, or the log is not express.e's), and null comes back.
+ */
+function parseLastSession(lines: string[], nodeId: number): SessionEntry | null {
   let lastDividerIdx = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].startsWith('***')) {
+    if (lines[i].startsWith(CALLERS_LOG_DIVIDER)) {
       lastDividerIdx = i;
       break;
     }
   }
   if (lastDividerIdx === -1) return null;
 
-  const sessionLines = lines.slice(lastDividerIdx + 1).filter(l => l.trim().length > 0);
-  if (sessionLines.length === 0) return null;
+  const logon = parseCallerLogonLine(lines[lastDividerIdx + 1] ?? '');
+  if (!logon) return null;
+  const rest = lines.slice(lastDividerIdx + 2).map(l => l.replace(/\r$/, ''));
+  const has = (text: string) => rest.some(l => l.includes(text));
 
-  // Login line: DD-Mon-YY HH:MM [N] username (connType) location
-  const loginMatch = sessionLines[0].match(
-    /^(\d{2}-\w{3}-\d{2}) (\d{2}:\d{2}) \[(\d+)\] (\S+) \(([^)]+)\)\s*(.*?)\s*$/
-  );
-  if (!loginMatch) return null;
-
-  const [, dateOn, timeOn, nodeStr, username, connType, locationRaw] = loginMatch;
-  const location = locationRaw || 'Unknown';
-
-  let timeOff = timeOn;
-  let uploadBytes = 0;
-  let downloadBytes = 0;
-  let uploadFiles = 0;
-  let downloadFiles = 0;
-  let uploadFailed = 0;
-  let downloadFailed = 0;
   let flag1 = 0;
   let flag2 = 0;
+  if (logon.isNew) flag1 |= 1 << 0;
+  if (!logon.connectString.startsWith('CONNECT')) flag1 |= 1 << 5;
+  if (has('Password Failure')) flag1 |= 1 << 1;
+  if (has('Off Loss Carrier')) flag1 |= 1 << 2;
+  if (has('Operator Paged')) flag1 |= 1 << 3;
+  if (has('SYSOP DOWNLOAD:') || has('Account edit') || has('SysopView')) flag1 |= 1 << 4;
+  if (has('Download Failed')) flag2 |= 1 << 3;
+  if (has('Downloading')) { flag2 |= 1 << 2; flag2 &= ~(1 << 3); }
+  if (has('Upload Failed')) flag2 |= 1 << 1;
+  if (has('Uploading') || has('Resuming')) { flag2 |= 1 << 0; flag2 &= ~(1 << 1); }
 
-  if (connType.toUpperCase().includes('LOCAL')) flag1 |= (1 << 5); // Local
-
-  for (let i = 1; i < sessionLines.length; i++) {
-    const line = sessionLines[i];
-
-    // Keep timeOff updated to the timestamp of each event line
-    const tsMatch = line.match(/^(\d{2}-\w{3}-\d{2}) (\d{2}:\d{2}) /);
-    if (tsMatch) timeOff = tsMatch[2];
-
-    // Loss carrier
-    if (/loss carrier/i.test(line)) flag1 |= (1 << 2);
-
-    // Hack / password fail
-    if (/hack|password fail/i.test(line)) flag1 |= (1 << 1);
-
-    // Sysop page (door O = page sysop)
-    if (/door:\s+o\b/i.test(line)) flag1 |= (1 << 3);
-
-    // Sysop command (door S = sysop)
-    if (/door:\s+s\b/i.test(line)) flag1 |= (1 << 4);
-
-    // Upload with byte count: "Uploading filename SIZE bytes"
-    // (written by download-logging.util.ts when DO_CALLERSLOG ACS is enabled)
-    const upMatch = line.match(/[Uu]ploading\s+\S+\s+(\d+)\s+bytes/);
-    if (upMatch && !/fail/i.test(line)) {
-      uploadBytes += parseInt(upMatch[1], 10);
-      uploadFiles++;
-      flag2 |= (1 << 0); // Upload
-    } else if (/upload(?:ing)?\s*(?:fail|failed)/i.test(line)) {
-      uploadFailed++;
-      flag2 |= (1 << 1); // UpFail
-    }
-
-    // Download with byte count: "Downloading filename SIZE bytes"
-    const dnMatch = line.match(/[Dd]ownloading\s+\S+\s+(\d+)\s+bytes/);
-    if (dnMatch && !/fail/i.test(line)) {
-      downloadBytes += parseInt(dnMatch[1], 10);
-      downloadFiles++;
-      flag2 |= (1 << 2); // Download
-    } else if (/download(?:ing)?\s*(?:fail|failed)/i.test(line)) {
-      downloadFailed++;
-      flag2 |= (1 << 3); // DnFail
-    }
+  // SAmiLog searches back from the end for the `Off` line.
+  let timeOff: string | null = null;
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const off = parseLogoffLine(rest[i]);
+    if (off) { timeOff = off.time; break; }
   }
 
+  const up = sumTransfers(rest, ' file(s), ');
+  const down = sumTransfers(rest, ' files, ');
+
   return {
-    username, location, nodeStr, dateOn, timeOn, timeOff,
-    uploadBytes, downloadBytes,
-    uploadFiles, downloadFiles,
-    uploadFailed, downloadFailed,
-    flag1, flag2,
+    username: logon.name,
+    location: logon.location,
+    nodeStr: String(nodeId),
+    dateOn: logon.date,
+    timeOn: logon.time,
+    timeOff,
+    uploadBytes: up.kb * 1024,
+    downloadBytes: down.kb * 1024,
+    uploadFiles: up.files,
+    downloadFiles: down.files,
+    flag1,
+    flag2,
   };
 }
 
@@ -271,7 +258,7 @@ console.warn(`[SamiLog] CallersLog not found for Node ${nodeId}`);
     const lines = logContent.split('\n');
     if (lines.length === 0) return;
 
-    const entry = parseLastSession(lines);
+    const entry = parseLastSession(lines, nodeId);
     if (!entry) {
 console.warn('[SamiLog] Could not parse last session from CallersLog');
       return;
@@ -305,11 +292,12 @@ console.log('[SamiLog] Ignoring Sysop call');
 
     const { flag1, flag2, uploadBytes, downloadBytes, uploadFiles, downloadFiles } = entry;
 
-    // Duration: timeOn and timeOff are HH:MM
-    let durationStr = '-:-- ';
-    try {
-      const start = parseTime(entry.timeOn + ':00');
-      const end   = parseTime(entry.timeOff + ':00');
+    // Duration: timeOn and timeOff are HH:MM:SS. A call with no `Off` line
+    // keeps SAmiLog's blank usage and off time.
+    let durationStr = DEFAULT_ENTRY.usage;
+    if (entry.timeOff !== null) try {
+      const start = parseTime(entry.timeOn);
+      const end   = parseTime(entry.timeOff);
       let diffMs = end - start;
       if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // midnight wrap
       const totalMins = Math.floor(diffMs / 60000);
@@ -326,8 +314,8 @@ console.log('[SamiLog] Ignoring Sysop call');
     }
 
     // onTime / offTime stored as HH:MM:SS (8 chars) + trailing space = 9 chars
-    const onTimeFmt  = entry.timeOn  + ':00 ';
-    const offTimeFmt = entry.timeOff + ':00 ';
+    const onTimeFmt  = entry.timeOn + ' ';
+    const offTimeFmt = entry.timeOff !== null ? entry.timeOff + ' ' : DEFAULT_ENTRY.offTime;
 
     const newEntryObj = {
       name:     entry.username,
