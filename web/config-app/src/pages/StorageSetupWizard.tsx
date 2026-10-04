@@ -547,8 +547,10 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
               ))}
             </div>
             <p className="text-xs text-content-muted">
-              Saving does not move files already in a directory. To change this later: Conferences tab, edit the
-              conference, and pick the drive under &quot;Dir N lives on&quot;.
+              New uploads to the directories you pick are stored on drive {createdDrive}. Files already in them
+              are not copied: they stay on this server&apos;s disk and download exactly as before, also while the
+              drive is unreachable. To change this later: Conferences tab, edit the conference, and pick the drive
+              under &quot;Dir N lives on&quot;.
             </p>
           </>
         )}

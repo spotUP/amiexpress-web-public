@@ -42,7 +42,8 @@ import { bareEmulatorPage } from './beeb-bare-page';
 import { ROM_COOKIE, romAccessHolder, cookieValue, queryWithoutGrant } from './beeb-rom-access';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
-import { materialiseCatalogEntry, materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
+import { materialiseCatalogEntry, storageFailureText } from '../storage/remote-download';
+import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { getStorageContext } from '../storage/storage-context';
 
 // Initialize handlers
@@ -710,35 +711,29 @@ console.error('[Door Reload] Unexpected error:', error);
       const dataDir = config.get('dataDir');
       const conferencePath = getConferenceDir(confNum, dataDir);
 
-      // A pooled area answers first, and its answer is final. The bytes come
-      // back as a real local file (FileCache materialises them), so the
-      // streaming below is byte for byte what it always was.
+      // The board's one locator - the same `resolveFile` FTP and the flagged
+      // batch use: a pooled area first (a hit is final, and the bytes come
+      // back as a real local file the cache materialised), then the
+      // conference's DLPATH directories, Files/ and Upload/ on local disk.
       //
-      // An unreachable volume is 503, never the 404 below: "not found" about a
-      // file that is fine is what gets a good catalog row deleted.
-      const storage = getStorageContext();
-      if (storage) {
-        try {
-          const remote = await materialiseRemoteFile(filename, confNum, storage);
-          if (remote) {
-            return streamDownload(res, remote.fullPath, remote.name, remote.size);
-          }
-        } catch (storageError) {
-          // The detail is logged, not returned: this route is unauthenticated,
-          // and a backend's own message can name a bucket, an endpoint or a
-          // key id. The caller needs to know to come back, not where the
-          // board's storage lives.
-console.error(`[Download] ${filename} in conf ${confNum}:`, storageError);
-          return res.status(503).json({ error: STORAGE_UNAVAILABLE_BODY });
-        }
+      // A volume that cannot answer does not end the search. A directory put
+      // on a drive keeps the files it already had on this disk, and the
+      // bucket being down says nothing about those. Only when the file is
+      // found nowhere locally is the outage the answer - 503, never the 404
+      // below: "not found" about a file that is fine is what gets a good
+      // catalog row deleted.
+      let storageError: unknown;
+      try {
+        const found = await resolveFile(dataDir, confNum, filename);
+        if (found) return streamDownload(res, found.fullPath, found.name, found.size);
+      } catch (error) {
+        storageError = error;
       }
 
-      // Search for file in conference directories - express.e disk-based approach
-      // AmiExpress stores files in Conf{N}/Files/ directory
-      // Use amigafs for case-insensitive matching (AmigaOS is case-insensitive)
+      // The places outside the conference's file directories this route has
+      // always also looked in. Use amigafs for case-insensitive matching
+      // (AmigaOS is case-insensitive).
       const possiblePaths = [
-        path.join(conferencePath, 'Files', filename),
-        path.join(conferencePath, 'Upload', filename),
         path.join(conferencePath, `Dir${dirNum}`, filename),
         path.join(dataDir, 'Node0', 'Playpen', filename),
         path.join(conferencePath, 'HOLD', filename),
@@ -759,6 +754,15 @@ console.error(`[Download] ${filename} in conf ${confNum}:`, storageError);
           }
           break;
         }
+      }
+
+      if (!filePath && storageError !== undefined) {
+        // The detail is logged, not returned: this route is unauthenticated,
+        // and a backend's own message can name a bucket, an endpoint or a
+        // key id. The caller needs to know to come back, not where the
+        // board's storage lives.
+console.error(`[Download] ${filename} in conf ${confNum}:`, storageError);
+        return res.status(503).json({ error: STORAGE_UNAVAILABLE_BODY });
       }
 
       if (!filePath) {

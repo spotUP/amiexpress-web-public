@@ -49,10 +49,19 @@ export interface ResolvedFile {
  * deliberate, because a part-migrated conference holds some of its files in
  * each place and both have to be reachable.
  *
- * Throws `StorageUnavailableError` when the volume cannot answer. It must not
- * be caught here and turned into null: null means "no such file", and a caller
- * shown "not found" for a file that is fine is how a sysop deletes its catalog
- * row. `resolveFlaggedFile` is where that error becomes a line on a screen.
+ * A volume that cannot answer does not stop the local walk. Putting a
+ * directory on a drive (STORAGEDRIVE.n - the storage wizard's last step, or
+ * the Conferences form) moves nothing, so the files already in it stay on
+ * this server's disk, and the bucket's health has nothing to say about them.
+ * The `D` command's `findFilesInConference` already served them through an
+ * outage; this did not, so FTP, the flagged batch and the web route (all of
+ * which come here) refused a file sitting right there with "unavailable".
+ *
+ * Throws `StorageUnavailableError` when the volume cannot answer AND the file
+ * is not on local disk either. It must not be turned into null: null means
+ * "no such file", and a caller shown "not found" for a file that is fine is
+ * how a sysop deletes its catalog row. `resolveFlaggedFile` is where that
+ * error becomes a line on a screen.
  */
 export async function resolveFile(
   dataDir: string,
@@ -60,23 +69,36 @@ export async function resolveFile(
   filename: string,
   storage: StorageContext | null = getStorageContext()
 ): Promise<ResolvedFile | null> {
+  let storageError: unknown;
   if (storage) {
-    const remote = await materialiseRemoteFile(filename, confNum, storage);
-    if (remote) {
-      return {
-        name: remote.name,
-        size: remote.size,
-        confNum,
-        dirNum: 1,
-        fullPath: remote.fullPath,
-        // Kept so a transfer can fetch the object again if the cache evicted
-        // it between resolution and send.
-        driveNumber: remote.driveNumber,
-        objectKey: remote.key,
-      };
+    try {
+      const remote = await materialiseRemoteFile(filename, confNum, storage);
+      if (remote) {
+        return {
+          name: remote.name,
+          size: remote.size,
+          confNum,
+          dirNum: 1,
+          fullPath: remote.fullPath,
+          // Kept so a transfer can fetch the object again if the cache evicted
+          // it between resolution and send.
+          driveNumber: remote.driveNumber,
+          objectKey: remote.key,
+        };
+      }
+    } catch (error) {
+      storageError = error;
     }
   }
 
+  const local = findOnLocalDisk(dataDir, confNum, filename);
+  if (local) return local;
+  if (storageError !== undefined) throw storageError;
+  return null;
+}
+
+/** The conference's own download directories on this server's disk. */
+function findOnLocalDisk(dataDir: string, confNum: number, filename: string): ResolvedFile | null {
   const confPath = getConferenceDir(confNum, dataDir);
 
   // Files live in Files/ or Upload/ — Dir1..DirN are AmiExpress
