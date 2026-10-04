@@ -31,7 +31,8 @@ import {
   registerConnectionEmitter,
   unregisterConnectionEmitter,
 } from "./session-emitter-registry";
-import { sessionWantsSwedishPetscii, sessionWantsPetscii } from "../utils/petscii-session-model";
+import { sessionWantsSwedishPetscii, sessionWantsPetscii, togglePetsciiCase } from "../utils/petscii-session-model";
+import { PETSCII_CASE_TOGGLE } from "@amiexpress/bbs-door-sdk/petscii";
 import { routeDoorInput } from "../services/door-input-routing";
 import { c64AdapterFor } from "./c64-door-adapter";
 
@@ -286,6 +287,19 @@ console.log(
         connection.session.terminalType = "c64";
       }
       // 'ascii' / 'ambiguous': leave terminalType as-is (ANSI prompt path).
+    }
+
+    // CTRL+L FROM A PETSCII CALLER IS HIS TERMINAL'S, NOT THE BOARD'S INPUT.
+    // C*Base answers it with a case switch (C*Base 3.3.7 ml0123.a65:1888-1901)
+    // and so does this board, at every PETSCII input (sysop D1, 2026-10-04):
+    // taken here, on the raw bytes, before any prompt, editor or door can see
+    // it. The switch goes out through the emitter's own `petscii-case` branch.
+    if (sessionWantsPetscii(connection.session) && data.includes(PETSCII_CASE_TOGGLE)) {
+      for (const byte of data) {
+        if (byte === PETSCII_CASE_TOGGLE) togglePetsciiCase(emitter, connection.session);
+      }
+      data = Buffer.from(data.filter((byte) => byte !== PETSCII_CASE_TOGGLE));
+      if (data.length === 0) return;
     }
 
     // Convert telnet/SSH data to string

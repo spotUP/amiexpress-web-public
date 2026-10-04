@@ -486,6 +486,8 @@ export interface BBSSession {
   petsciiColumns?: 40 | 80;
   /** Per-session ANSI->PETSCII transducer for real C64 callers (connection-emitter.ts). Lazily created; shared by every emitter built for the connection so cursor/charset/reverse state never forks. */
   petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
+  /** The character set the caller chose with CTRL+L (0 upper case/graphics, 1 lower case); absent = 1. utils/petscii-session-model.ts togglePetsciiCase. */
+  petsciiCaseBank?: 0 | 1;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
   // WEB_: teletext mode (T answer at the graphics prompt). TDAText font +
   // teletext palette in the web terminal; plain ANSI on byte transports.

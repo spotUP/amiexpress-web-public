@@ -68,6 +68,20 @@ export interface AnsiToPetsciiOptions {
    * board's MCI uses for its column tab.
    */
   swedish?: boolean;
+
+  /**
+   * THE CALLER'S CHOSEN CHARACTER SET: 1 is the lower case set (the board's
+   * own, and the default), 0 the upper case/graphics set.
+   *
+   * A DISPLAY choice the caller makes with CTRL+L, the C*Base convention
+   * (C*Base 3.3.7 `src/ml0123.a65:1888-1901`) - not a content rule. The
+   * board's content is still authored in bank 1 (`BOARD_CHARSET_BANK`,
+   * `editor-surface.ts`); this only stops the transducer from switching the
+   * caller's screen back to bank 1 with the next character it prints (the
+   * sysop, 2026-10-04, decision D1 of
+   * `thoughts/shared/plans/2026-10-04-petscii-ctrl-l-case-toggle.md`).
+   */
+  caseBank?: 0 | 1;
 }
 
 /** VIC index -> PETSCII color control byte (inverse of PETSCII_COLOR_TO_VIC; every index has exactly one byte). */
@@ -142,6 +156,8 @@ export class AnsiToPetsciiTransducer {
   private readonly palette: readonly string[];
   /** ROM 325018-02: a-ring and the umlauts where the bracket trio sits. */
   private swedish = false;
+  /** The set the caller chose with CTRL+L; see `AnsiToPetsciiOptions.caseBank`. */
+  private chosenBank: 0 | 1 = 1;
   /** Incomplete escape sequence or trailing CR held until the next chunk. */
   private pending = '';
   private bold = false;
@@ -221,6 +237,7 @@ export class AnsiToPetsciiTransducer {
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
     this.swedish = opts.swedish === true;
+    this.chosenBank = opts.caseBank === 0 ? 0 : 1;
     // The wide screen is a model of its own (wide-screen-machine.ts): no
     // logical lines, and $02 is not a background prefix there.
     this.machine = opts.columns === 80 ? new WideScreenMachine() : new PetsciiMachine();
@@ -242,6 +259,32 @@ export class AnsiToPetsciiTransducer {
    */
   setSwedish(on: boolean): void {
     this.swedish = on;
+  }
+
+  /**
+   * The caller pressed CTRL+L: print in `bank` from now on, and switch his
+   * screen NOW. Returns the switch - `$8E`, or `$0E` with the background
+   * re-assert every `$0E` carries - already fed to the oracle; empty when the
+   * screen is in that set already.
+   *
+   * Nothing is reprinted. A C64 (and CGTerm, and DCTelnet since its PR #52)
+   * changes every character already on the screen when the set changes,
+   * because the screen holds screen codes and the set is one switch; C*Base
+   * relies on exactly that and sends nothing else.
+   *
+   * Like `setSwedish`, a preference that outlives `reset()`: the model is
+   * reset at the graphics prompt and the caller's choice is his.
+   */
+  setCaseBank(bank: 0 | 1): Uint8Array {
+    this.chosenBank = bank;
+    const out: number[] = [];
+    this.ensureBank(bank, out);
+    return Uint8Array.from(out);
+  }
+
+  /** The set the caller chose. 1, the lower case set, unless he pressed CTRL+L. */
+  get caseBank(): 0 | 1 {
+    return this.chosenBank;
   }
 
   /** How wide this caller's screen is. 40 for a C64, 80 for the wide screen. */
@@ -565,9 +608,9 @@ export class AnsiToPetsciiTransducer {
     this.pendingWrap = 'held';
   }
 
-  /** Print one PETSCII byte as text: bank 1, reverse re-asserted from the ANSI state (RETURN cancels it on the C64). */
+  /** Print one PETSCII byte as text: in the caller's set, reverse re-asserted from the ANSI state (RETURN cancels it on the C64). */
   private printByte(out: number[], byte: number): void {
-    this.ensureBank(1, out);
+    this.ensureBank(this.chosenBank, out);
     this.inkForCell(out);
     this.emitPrintable(out, byte);
   }
@@ -654,9 +697,11 @@ export class AnsiToPetsciiTransducer {
 
   /**
    * The byte mapping itself lives in `asciiToPetsciiByte` - the ONE table,
-   * shared with the MCI value encoder. Transduced text is always printed in
-   * bank 1 (`printByte`/`ensureBank` force it), so bank 1 is passed here
-   * unconditionally and the table's bank-0 fold never applies.
+   * shared with the MCI value encoder. Transduced text is printed in the
+   * caller's set (`printByte`/`ensureBank`), so that set is what is passed
+   * here: bank 1 for every caller who has not pressed CTRL+L, and the table's
+   * own bank-0 fold (every letter onto `$41-$5A`) for one who has - which is
+   * what a C64 in the upper case set shows on any board.
    */
   private printChar(out: number[], code: number): void {
     /*
@@ -665,14 +710,18 @@ export class AnsiToPetsciiTransducer {
      * correct for a machine with no glyph for it, wrong for one whose ROM
      * has the glyph exactly where this byte puts it.
      */
+    const bank = this.chosenBank;
     if (this.swedish) {
-      const swede = swedishPetsciiFor(String.fromCodePoint(code));
+      // In the upper case set `$7B-$7D` are graphics, so a capital takes the
+      // letter `$5B-$5D` draws there - the same fold as A-Z onto `$41-$5A`.
+      const char = String.fromCodePoint(code);
+      const swede = swedishPetsciiFor(bank === 0 ? char.toLowerCase() : char);
       if (swede !== null) return this.printByte(out, swede);
     }
-    const { byte, needsReverse } = asciiToPetsciiByte(code, 1);
+    const { byte, needsReverse } = asciiToPetsciiByte(code, bank);
     if (!needsReverse) return this.printByte(out, byte);
     // Glyph only exists as the inverse of another PETSCII glyph.
-    this.ensureBank(1, out);
+    this.ensureBank(bank, out);
     // The glyph's own shape wins over the fill: it EXISTS only as an inverse,
     // so a cell fill cannot have the reverse bit as well.
     this.restorePen(out);
@@ -684,8 +733,26 @@ export class AnsiToPetsciiTransducer {
   /** PetMe64 PUA: U+E000-E0FF bank 0 / U+E100-E1FF bank 1 screen codes, bit 7 = reverse. */
   private printPua(out: number[], code: number): void {
     const bank: 0 | 1 = code >= 0xE100 ? 1 : 0;
-    const sc = code & 0xFF;
-    this.ensureBank(bank, out);
+    let sc = code & 0xFF;
+    if (bank === 1 && this.chosenBank === 0) {
+      /*
+       * A LOWER CASE SET GLYPH ON A SCREEN THE CALLER SWITCHED TO UPPER CASE.
+       *
+       * Switching for it would flip his whole screen back - on a C64 the set
+       * is one switch for every cell - so the glyph is drawn in his set
+       * instead. What differs between the sets is the letters: bank 1 has
+       * the small letters at `$01-$1A` (capitals there in bank 0, already
+       * right) and its capitals at `$41-$5A`, which are graphics in bank 0,
+       * so those fold onto `$01-$1A`. The four graphics that also differ
+       * (`$5E $5F $69 $7A`) are drawn as bank 0 has them - the caller asked
+       * for that set.
+       */
+      const base = sc & 0x7F;
+      if (base >= 0x41 && base <= 0x5A) sc = (sc & 0x80) | (base - 0x40);
+      this.ensureBank(0, out);
+    } else {
+      this.ensureBank(bank, out);
+    }
     // Authored PETSCII carries its own reverse bit, which IS its fill - a
     // cell fill underneath it would cancel the glyph the caller drew.
     this.restorePen(out);

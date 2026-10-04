@@ -499,9 +499,10 @@ describe('TP-4 - the translated events become connection state', () => {
         const ruling: EventRuling = EVENT_RULINGS[name];
         return ruling.kind === 'translate' || ruling.kind === 'render';
       })
-      // The three names the emitter renders in its own branches never reach the
+      // The four names the emitter renders in its own branches never reach the
       // adapter (server/connection-emitter.ts) and deliberately have no body.
-      .filter((name) => !['ansi-output', 'petscii-output', 'petscii-bytes'].includes(name))
+      // `petscii-case` (the CTRL+L switch byte) joined them on 2026-10-04.
+      .filter((name) => !['ansi-output', 'petscii-output', 'petscii-bytes', 'petscii-case'].includes(name))
       .sort();
 
     expect([...TRANSLATED_EVENT_NAMES]).toEqual(promised);

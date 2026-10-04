@@ -23,6 +23,7 @@ import { higherAccess } from '../../utils/error-handling.util';
 import { findAssign, resolveAssignPath } from '../../utils/path-util';
 import { isFileRestricted } from '../../utils/file-restriction.util';
 import { editKey, editorKeyCodes } from './line-editor';
+import { sessionWantsPetscii } from '../../utils/petscii-session-model';
 import { reportMessage } from '../../achievements/sites';
 import { fullEditOffered, editInFullScreen } from './message-full-editor';
 
@@ -306,6 +307,36 @@ function promptQuoteOrBody(socket: any, session: BBSSession): void {
 /** The line editor's cursor - express.e edit()'s `x` - kept beside `space` (inputBuffer). */
 type EditorSession = BBSSession & { bodyCursorX?: number };
 
+/** CTRL+W, ETB. */
+const CTRL_W = 0x17;
+
+/**
+ * CTRL+W FROM A PETSCII CALLER: word wrap off, or on again - C*Base's key
+ * (sysop decision D2, 2026-10-04; plan
+ * `thoughts/shared/plans/2026-10-04-petscii-ctrl-l-case-toggle.md`).
+ *
+ * C*Base 3.3.7 flips `wordwrap` (`src/ml0123.a65:1993-2006`) and prints
+ * prompt 50 or 51, "Word wrap on" / "Word wrap off", then goes back to the
+ * line. It is ON whenever the Message-Maker opens (`bbs.bas` `poke994,1`), so
+ * the flag lives on the message being written and every new one starts with
+ * wrap on. The line is put back on a fresh prompt with the cursor where it
+ * was, the way the board reprints it after a wrap.
+ *
+ * Only a PETSCII caller: express.e edit() drops every code below 32 (10293),
+ * and an ANSI caller keeps express.e.
+ */
+function toggleWordWrap(socket: any, session: BBSSession): void {
+  const entry = session.tempData.messageEntry;
+  entry.wordWrap = entry.wordWrap === false;
+  const space = session.inputBuffer || '';
+  const x = (session as EditorSession).bodyCursorX ?? 0;
+  emitText(
+    socket,
+    `\r\nWord wrap ${entry.wordWrap ? 'on' : 'off'}\r\n` + linePromptFor(entry.currentLine) + space
+      + '\x1b[1D'.repeat(space.length - x),
+  );
+}
+
 /**
  * Keys typed into the line editor - express.e edit() 10166-10360.
  *
@@ -319,7 +350,12 @@ export async function handleMessageBodyKeys(socket: any, session: BBSSession, da
   for (const c of editorKeyCodes(data)) {
     // A key after the one that ended entry is not the editor's to take.
     if (session.subState !== LoggedOnSubState.POST_MESSAGE_BODY) return;
-    const r = editKey({ space: session.inputBuffer || '', x: s.bodyCursorX ?? 0 }, c, maxLineLen);
+    if (c === CTRL_W && sessionWantsPetscii(session)) {
+      toggleWordWrap(socket, session);
+      continue;
+    }
+    const wordWrap = session.tempData.messageEntry.wordWrap !== false;
+    const r = editKey({ space: session.inputBuffer || '', x: s.bodyCursorX ?? 0 }, c, maxLineLen, wordWrap);
     session.inputBuffer = r.space;
     s.bodyCursorX = r.x;
     if (r.echo) emitText(socket, r.echo);

@@ -29,6 +29,11 @@ export interface PetsciiCanvasProps {
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
   /**
+   * CTRL and ALT pressed together: the caller switches the whole screen to
+   * the other character set (the C64's C= + SHIFT). Never sent as a key.
+   */
+  onCaseToggle?: () => void;
+  /**
    * Whether the canvas takes keyboard focus (tabIndex 0). BBSTerminal
    * passes true for a full-canvas PETSCII session, where the canvas owns
    * keyboard input via onData.
@@ -280,6 +285,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   palette,
   scale: maxScale = 4,
   onData,
+  onCaseToggle,
   cursorVisible,
   cursorColour = CURSOR_COLOUR,
   focusable = false,
@@ -673,6 +679,26 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   }, [onCellPointer, cellAt, cellH, height, rows]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    /*
+     * CTRL AND ALT TOGETHER SWITCH THE CASE - the web canvas's C= + SHIFT.
+     *
+     * Alt is this canvas's Commodore key, and on a C64 the Commodore key
+     * with SHIFT flips the whole screen between the two character sets. A
+     * caller holds CTRL and presses ALT (or the other way round) - "hall
+     * inne CTRL, tryck alt" (a C64 caller via the sysop, 2026-10-04). It is
+     * the terminal's own switch: nothing goes to the board as a key, the
+     * component switches the screen and tells the board which set it is in.
+     *
+     * `AltGraph` is not `Alt`, so AltGr on a Windows layout - which reports
+     * itself as Control plus AltGraph - still types its character.
+     */
+    if (!e.metaKey && !e.repeat
+      && ((e.key === 'Alt' && e.ctrlKey) || (e.key === 'Control' && e.altKey))) {
+      e.preventDefault();
+      consumed(e);
+      onCaseToggle?.();
+      return;
+    }
     // CTRL+C IS THE BOARD'S ABORT KEY, and it could not be pressed here at
     // all: the guard below hands every Ctrl chord to the browser, which is
     // right for Cmd+R and for copy, and wrong for the one key that leaves a
@@ -718,7 +744,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       consumed(e);
       onData?.(bytes);
     }
-  }, [onData, swedish]);
+  }, [onData, onCaseToggle, swedish]);
 
   return (
     <div

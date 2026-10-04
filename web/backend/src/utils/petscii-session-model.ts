@@ -74,10 +74,63 @@ export function sessionWantsSwedishPetscii(session: any): boolean {
   return session?.user?.petsciiCharset === 'swedish' || session?.petsciiSwedish === true;
 }
 
+/**
+ * The character set this caller chose with CTRL+L: 1, the lower case set the
+ * board is authored in, until he presses it (sysop decision D1, 2026-10-04,
+ * `thoughts/shared/plans/2026-10-04-petscii-ctrl-l-case-toggle.md`).
+ *
+ * Held on the SESSION beside the model, never in the user record: it is a
+ * display choice for this call, the way C*Base keeps it in one flag
+ * (`caseflg`) and nowhere else. A new connection is a new session and starts
+ * at 1 again.
+ */
+export function sessionPetsciiCaseBank(session: any): 0 | 1 {
+  return session?.petsciiCaseBank === 0 ? 0 : 1;
+}
+
+/**
+ * CTRL+L, pressed by a PETSCII caller: flip his set and switch his screen.
+ *
+ * The SAME event for every transport, and the CHOKE does the switching - the
+ * connection emitter writes the switch byte to a telnet/SSH wire, the web
+ * choke moves the server's model and the browser's own transducer sends the
+ * byte to its canvas. So the switch lands in the stream exactly where the
+ * key was taken, after everything printed before it, on both.
+ *
+ * Callers: the telnet/SSH input hook (`server/transport-session.ts`) and the
+ * web canvas's `petscii-case-toggle` (`server/socket-handlers.ts`).
+ */
+export function togglePetsciiCase(socket: any, session: any): 0 | 1 {
+  const bank: 0 | 1 = sessionPetsciiCaseBank(session) === 1 ? 0 : 1;
+  session.petsciiCaseBank = bank;
+  socket.emit('petscii-case', { bank });
+  return bank;
+}
+
+/**
+ * The web canvas switched its own screen (CTRL+ALT, its C= + SHIFT) and says
+ * which set it shows now. The browser already sent the byte to its canvas,
+ * so nothing is emitted: the session takes the bank, so the next CTRL+L
+ * toggles from the right state, and the model follows so a `.seq` value is
+ * encoded against the set the caller sees.
+ */
+export function petsciiCaseChosenByTerminal(session: any, bank: unknown): void {
+  if (bank !== 0 && bank !== 1) return;
+  session.petsciiCaseBank = bank;
+  switchPetsciiCaseAtChoke(session);
+}
+
+/** Choke side of `petscii-case`: the switch bytes, already fed to the model. */
+export function switchPetsciiCaseAtChoke(session: any): Uint8Array {
+  return petsciiTerminalModelFor(session).setCaseBank(sessionPetsciiCaseBank(session));
+}
+
 export function petsciiTerminalModelFor(session: any): AnsiToPetsciiTransducer {
   if (!session.petsciiTransducer) {
     session.petsciiTransducer = new AnsiToPetsciiTransducer({
       columns: petsciiColumnsOf(session) === 80 ? 80 : 40,
+      // The caller's CTRL+L choice survives a model that is built again.
+      caseBank: sessionPetsciiCaseBank(session),
       /*
        * The caller's CHARACTER ROM travels with the shape. A C64 sold in
        * Sweden puts a-ring and the umlauts where the bracket trio sits, and
@@ -201,7 +254,7 @@ export function resetPetsciiModel(session: any): void {
   // reset one.
   const want = petsciiColumnsOf(session) === 80 ? 80 : 40;
   if (session.petsciiTransducer.columns !== want) {
-    session.petsciiTransducer = new AnsiToPetsciiTransducer({ columns: want });
+    session.petsciiTransducer = new AnsiToPetsciiTransducer({ columns: want, caseBank: sessionPetsciiCaseBank(session) });
     return;
   }
   session.petsciiTransducer.reset();
@@ -311,6 +364,9 @@ export function installPetsciiModelChoke(
         transducePetsciiAtChoke(session, args[0]);
       } else if (event === 'petscii-bytes' && typeof args[0] === 'string') {
         observePetsciiBytesAtChoke(session, args[0]);
+      } else if (event === 'petscii-case') {
+        // The browser sends the switch to its own canvas; the model follows.
+        switchPetsciiCaseAtChoke(session);
       }
     }
     return downstream(event, ...args);

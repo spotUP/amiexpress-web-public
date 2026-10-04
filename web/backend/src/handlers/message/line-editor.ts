@@ -46,8 +46,13 @@ export interface EditKeyResult extends EditLine {
 /**
  * One key through edit()'s loop. `c` is a key code; `maxLineLen` is edit()'s
  * parameter (75 on an eighty-column screen, messageBodyLineLimit elsewhere).
+ *
+ * `wordWrap` is C*Base's CTRL+W, which only a PETSCII caller can turn off
+ * (message-entry.handler.ts). Off, a line past `maxLineLen` breaks where it
+ * stands: express's own no-space branch (10330-10335), which is what C*Base
+ * does with `wordwrap` clear (`ml0123.a65:2122`, `wrapit` skips the break).
  */
-export function editKey(line: EditLine, c: number, maxLineLen: number): EditKeyResult {
+export function editKey(line: EditLine, c: number, maxLineLen: number, wordWrap = true): EditKeyResult {
   let space = line.space;
   let x = line.x;
   let echo = '';
@@ -160,6 +165,9 @@ export function editKey(line: EditLine, c: number, maxLineLen: number): EditKeyR
 
   // express.e:10320-10357 - the word wrap. Past maxLineLen, look back for
   // the last space; the word after it moves to the next line.
+  if (x > maxLineLen && !wordWrap) {
+    return { space: '', x: 0, echo: echo + '\r\n', brk: 'line', committed: space };
+  }
   if (x > maxLineLen) {
     let back = 0;
     let brkflag = false;

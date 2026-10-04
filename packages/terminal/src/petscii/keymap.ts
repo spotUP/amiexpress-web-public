@@ -54,6 +54,18 @@ const COMMODORE_KEYS: { [code: string]: number } = {
   Space: 0xA0,          // shift-space: a blank that is not a space
 };
 
+/**
+ * THE C*BASE CONTROL KEYS: CTRL+L switches the case, CTRL+W word wrap in the
+ * message editor (C*Base 3.3.7 `src/ml0123.a65:1888-1901` and `:1993-2006`).
+ * They send the bytes a C64 sends for the same chords; the board answers
+ * them (sysop decisions D1/D2, 2026-10-04,
+ * `thoughts/shared/plans/2026-10-04-petscii-ctrl-l-case-toggle.md`).
+ */
+const BOARD_CONTROL_KEYS: { [code: string]: number } = {
+  KeyL: 0x0C,
+  KeyW: 0x17,
+};
+
 /** RVS ON / RVS OFF, the only fill a C64 has. */
 const REVERSE_KEYS: { [code: string]: number } = {
   Digit9: 0x12,
@@ -124,6 +136,7 @@ export function commodoreColourToPetscii(code: string): number | null {
  */
 export function controlChordToPetscii(code: string): number | null {
   if (code in REVERSE_KEYS) return REVERSE_KEYS[code];
+  if (code in BOARD_CONTROL_KEYS) return BOARD_CONTROL_KEYS[code];
   return controlColourToPetscii(code);
 }
 

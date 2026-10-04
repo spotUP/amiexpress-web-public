@@ -30,6 +30,11 @@ const CONTROL_KEYS: { [byte: number]: string } = {
   // paste doesnt work at all in petscii mode"), so a caller could not leave
   // the operator chat.
   0x03: '\x03',
+  // CTRL+W: C*Base's word wrap key in its message editor (C*Base 3.3.7
+  // `src/ml0123.a65:1993-2006`). It reaches the board as ETB, the byte an
+  // ASCII keyboard sends for the same chord, and the line editor takes it
+  // (handlers/message/message-entry.handler.ts).
+  0x17: '\x17',
   0x14: '\x7f', 0x7F: '\x7f',
   0x91: '\x1b[A', 0x11: '\x1b[B', 0x1D: '\x1b[C', 0x9D: '\x1b[D',
   0x13: '\x1b[H', 0x94: '\x1b[2~',
@@ -43,6 +48,18 @@ const CONTROL_KEYS: { [byte: number]: string } = {
  * side needs the same one to stop folding a caller's own name onto `aao`.
  */
 const SWEDISH_IN = SWEDISH_PETSCII_TO_CHAR;
+
+/**
+ * CTRL+L: the caller switches his screen to the other character set - the
+ * C*Base convention (C*Base 3.3.7 `src/ml0123.a65:1888-1901`).
+ *
+ * A TERMINAL COMMAND, NOT TEXT. `petsciiInputToAscii` drops it like every
+ * other byte with no input meaning; the transport that holds the bytes - the
+ * telnet input hook, the web canvas - looks for it first and asks the board
+ * to switch (`web/backend/src/utils/petscii-session-model.ts`,
+ * `togglePetsciiCase`). So no prompt, editor or door ever sees it.
+ */
+export const PETSCII_CASE_TOGGLE = 0x0C;
 
 export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): string {
   let out = '';
@@ -77,7 +94,8 @@ export function petsciiInputToAscii(bytes: ArrayLike<number>, swedish = false): 
     const vic = PETSCII_COLOR_TO_VIC[b];
     if (vic !== undefined) { out += colourMarker(vic); continue; }
     // LF, CLR, background, charset: no input meaning. Background is not an
-    // omission - the board is black-background board-wide.
+    // omission - the board is black-background board-wide. CTRL+L
+    // (PETSCII_CASE_TOGGLE) is taken by the transport before this is called.
   }
   return out;
 }

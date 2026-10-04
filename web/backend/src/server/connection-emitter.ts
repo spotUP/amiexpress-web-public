@@ -23,6 +23,7 @@ import {
   observePetsciiBytesAtChoke,
   transducePetsciiAtChoke,
   flushPetsciiModel,
+  switchPetsciiCaseAtChoke,
 } from "../utils/petscii-session-model";
 import { applyTransportEvent } from "./transport-adapter";
 import { encodeForWire } from "../utils/wire-encoding.util";
@@ -191,6 +192,16 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
           connection.write(raw);
         } else {
           connection.write(convertPetsciiToPetMe64(Buffer.from(data as string, "base64")));
+        }
+      } else if (event === "petscii-case") {
+        // The caller pressed CTRL+L (utils/petscii-session-model.ts,
+        // togglePetsciiCase): `$8E` or `$0E` goes out now, and NOTHING is
+        // reprinted - his terminal switches the screen it already has. A
+        // caller who is not PETSCII never gets the event; if one did, there
+        // is no set to switch.
+        if (sessionWantsPetscii(session)) {
+          const bytes = switchPetsciiCaseAtChoke(session);
+          if (bytes.length > 0) connection.write(Buffer.from(bytes));
         }
       } else {
         // TP-3: the `else` this chain never had. Every other name. The adapter

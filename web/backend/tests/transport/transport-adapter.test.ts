@@ -213,6 +213,9 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   // emitted with no ruling at all, which is what the arm-A count below caught.
   'key-repeat-mode',
   'petscii-bytes',
+  // CTRL+L, the caller's case switch (utils/petscii-session-model.ts
+  // togglePetsciiCase), rendered in the emitter's own branch - 2026-10-04.
+  'petscii-case',
   'petscii-mode',
   // Joined beside `petscii-mode`: the other direction of the same switch,
   // sent when the graphics answer is NOT PETSCII so a browser that had been
@@ -610,7 +613,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // Username prompt on every transport.
     // 250 as of 2026-10-04: `screen-theme`, web-only - THEMEC's pick written
     // to the browser's pre-login theme cookie (doors/BBSApi.ts).
-    expect(ruled.length).toBe(250);
+    // 251 as of 2026-10-04: `petscii-case`, render - the CTRL+L case switch
+    // a PETSCII caller presses (utils/petscii-session-model.ts).
+    expect(ruled.length).toBe(251);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -652,8 +657,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // canvas is mounted at. A byte caller IS the screen and needs no shape.
     // web-only 118 (2026-09-10): `texttv-mode`, the teletext session flag.
     // A byte caller keeps the ANSI the board emits and needs no signal.
+    // render 6 (2026-10-04): `petscii-case`, the CTRL+L case switch byte.
     expect(counts).toEqual({
-      render: 5,
+      render: 6,
       translate: 11,
       dead: 10,
       // 113 as of TP-9b: the four login-editor cues are gone with the editor.

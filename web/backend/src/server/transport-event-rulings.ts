@@ -1264,6 +1264,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "a soldered fact there. Ruled beside `petscii-palette`, for the same " +
     "reason and by the same census that caught that one.",
   },
+  "petscii-case": {
+    kind: "render",
+    note:
+    "The caller pressed CTRL+L and chose the other PETSCII character set " +
+    "(utils/petscii-session-model.ts togglePetsciiCase, the C*Base " +
+    "convention). Rendered by the emitter's own branch " +
+    "(server/connection-emitter.ts): the switch byte, `$8E` or `$0E`, from the " +
+    "session's model, and nothing reprinted. Only a PETSCII session emits it.",
+  },
   "petscii-bytes": {
     kind: "render",
     note:

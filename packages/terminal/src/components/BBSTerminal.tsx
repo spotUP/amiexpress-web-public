@@ -42,7 +42,7 @@ import { GamepadManager } from '../utils/gamepad-manager';
 import { injectedKeyEvent } from '../utils/injected-key-event';
 import { mouseReportFor } from '../petscii/petscii-mouse';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, vicColorToPetscii, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, PETSCII_CASE_TOGGLE, petsciiPaletteFor, screenTextInRect, rectFromCorners, PETSCII_COLOR_TO_VIC, vicColorToPetscii, type CellRect } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 import { scrollOffsetForWheel } from '../petscii/scrollback';
@@ -442,6 +442,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
+  /**
+   * THE CALLER'S CHARACTER SET, SWITCHED ON THE WHOLE SCREEN.
+   *
+   * The transducer takes the set as the caller's choice (so the board's next
+   * line does not switch it back) and hands back the switch byte, `$8E` or
+   * `$0E`; the display machine is fed exactly that byte. The screen memory
+   * stays as it is and every cell is drawn again from the other half of the
+   * character ROM - what a C64 does, and what the canvas does on any bank
+   * change. Returns the set now shown, or null with no PETSCII screen.
+   */
+  const switchPetsciiCase = useCallback((bank: 0 | 1 | 'toggle'): 0 | 1 | null => {
+    const transducer = petsciiTransducerRef.current;
+    const machine = petsciiMachineRef.current;
+    if (!transducer || !machine) return null;
+    const next: 0 | 1 = bank === 'toggle' ? (transducer.caseBank === 1 ? 0 : 1) : bank;
+    machine.feed(transducer.setCaseBank(next));
+    return next;
+  }, []);
   /*
    * DRAG-TO-COPY ON THE PETSCII CANVAS.
    *
@@ -2815,6 +2833,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * "aao still shows"). The board's own model already follows the setting;
      * this is the half that draws.
      */
+    /*
+     * THE BOARD SWITCHED THE CASE: the caller pressed CTRL+L, the C*Base key
+     * (sysop decision D1, 2026-10-04). A real C64 obeys the byte the board
+     * sends to it; this terminal obeys the event that carries it.
+     */
+    socket.on('petscii-case', (set: { bank?: number }) => {
+      switchPetsciiCase(set?.bank === 0 ? 0 : 1);
+    });
+
     socket.on('petscii-charset', (set: { charset?: string }) => {
       console.log('[Terminal] PETSCII character set:', set?.charset ?? 'standard');
       applyPetsciiCharset(set?.charset === 'swedish');
@@ -4203,8 +4230,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and
               // function keys included), then the one input path.
+              /*
+               * CTRL+L IS A REQUEST TO THE BOARD, never a key: it answers
+               * with the switch (`petscii-case`), the way C*Base does, and
+               * keeps the caller's set on his session. Its own event, so a
+               * running door cannot receive it as input.
+               */
+              if (bytes.includes(PETSCII_CASE_TOGGLE)) {
+                socketRef.current?.emit('petscii-case-toggle');
+                bytes = bytes.filter((b) => b !== PETSCII_CASE_TOGGLE);
+              }
               const text = petsciiInputToAscii(bytes, petsciiSwedishRef.current);
               if (text) processInputKeyRef.current(text);
+            }}
+            onCaseToggle={() => {
+              /*
+               * CTRL+ALT, the canvas's C= + SHIFT: the terminal switches its
+               * own screen at once, as a C64 does, and tells the board which
+               * set it is in now so the next CTRL+L toggles from there.
+               */
+              const bank = switchPetsciiCase('toggle');
+              if (bank !== null) socketRef.current?.emit('petscii-case-set', { bank });
             }}
             swedish={petsciiSwedish}
             highlight={petsciiSelection ? [{ ...petsciiSelection, tone: 'selection' as const }] : undefined}

@@ -41,6 +41,9 @@ import { displayScreen } from '../handlers/screen.handler';
 import {
   installPetsciiModelChoke,
   flushPetsciiModel,
+  sessionWantsPetscii,
+  togglePetsciiCase,
+  petsciiCaseChosenByTerminal,
   disposePetsciiSessionModel,
 } from '../utils/petscii-session-model';
 import { handleCommand } from '../handlers/command.handler';
@@ -606,6 +609,24 @@ console.log('[socket-handlers] keys:state received:', data);
       console.log(`[gamepad] dpad ${event.direction}, handler=${!!session.gamepadHandler}`);
     }
     session.gamepadHandler?.(event);
+  });
+
+  /*
+   * CTRL+L ON THE PETSCII CANVAS - the caller's case switch, the C*Base
+   * convention (sysop D1, 2026-10-04). Its own event and never a `command`:
+   * socket.io hands a `command` to a running door's listener in parallel with
+   * the handler below, so a key sent that way could not be kept from a door.
+   * The telnet twin is in server/transport-session.ts.
+   */
+  socket.on('petscii-case-toggle', () => {
+    const session = getSession(socket.id);
+    if (session && sessionWantsPetscii(session)) togglePetsciiCase(socket, session);
+  });
+  // CTRL+ALT on the canvas: the browser switched its own screen; the session
+  // and the model learn which set it shows.
+  socket.on('petscii-case-set', (data: { bank?: unknown }) => {
+    const session = getSession(socket.id);
+    if (session && sessionWantsPetscii(session)) petsciiCaseChosenByTerminal(session, data?.bank);
   });
 
   socket.on('command', (data: string) => {
