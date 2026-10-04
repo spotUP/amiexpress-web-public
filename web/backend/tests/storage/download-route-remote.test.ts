@@ -7,6 +7,13 @@
  * a download that only materialises in the handler still 404s at the wire:
  * this route does its own lookup, and it has to know about the pool too.
  */
+// /api/download/:fileId is sysop-only since 31ca0e728; this file is about
+// where a catalogued file is served FROM, so the login is taken as given.
+jest.mock('../../src/middleware/auth.middleware', () => {
+  const pass = () => (_req: unknown, _res: unknown, next: () => void) => next();
+  return { authenticateToken: pass, requireSysop: pass, requireLevel: pass };
+});
+
 import express from 'express';
 import * as fs from 'fs';
 import * as os from 'os';
