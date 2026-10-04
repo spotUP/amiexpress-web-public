@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getNextMsgId } from '../../src/utils/message-file.util';
+import { toAmigaTime } from '../../src/utils/date-time.util';
 
 describe('getNextMsgId — express.e:10576-10624 MSGID generator', () => {
   let tmpDir: string;
@@ -54,10 +55,11 @@ describe('getNextMsgId — express.e:10576-10624 MSGID generator', () => {
 
   test('seeds from current time when counter file is missing', async () => {
     // First call with empty dir — no counter file. Should seed from
-    // getSystemTime per express.e:10611.
-    const before = Math.floor(Date.now() / 1000);
+    // getSystemTime per express.e:10610-10611 - express.e's stored-date
+    // form (toAmigaTime), not Unix seconds.
+    const before = toAmigaTime(new Date());
     const id = await getNextMsgId(tmpDir);
-    const after = Math.floor(Date.now() / 1000);
+    const after = toAmigaTime(new Date());
     const idN = parseInt(id!, 16);
     expect(idN).toBeGreaterThanOrEqual(before);
     expect(idN).toBeLessThanOrEqual(after);

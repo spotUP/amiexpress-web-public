@@ -38,7 +38,7 @@ import type { Database } from '../database';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
-import { getSystemTime } from '../utils/date-time.util';
+import { getSystemTime, toAmigaTime } from '../utils/date-time.util';
 import { messageIndexManager, MsgHeader, MsgStatus } from '../services/MessageIndexManager';
 import { repairConferenceHeaders } from '../services/message-header-repair';
 import { conferenceDir } from '../conferences/conference-paths';
@@ -2907,7 +2907,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
                 toName: msg.toUser || 'ALL',
                 fromName: msg.author,
                 subject: msg.subject || '(no subject)',
-                msgDate: Math.floor(msg.timestamp.getTime() / 1000),
+                msgDate: toAmigaTime(msg.timestamp), // express.e getSystemTime() form
                 recv: 0,
                 extMsgNum: -1,
               });

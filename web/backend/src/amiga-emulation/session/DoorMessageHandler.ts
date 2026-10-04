@@ -25,6 +25,7 @@ import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 import * as net from "net";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -1198,8 +1199,9 @@ debugLog(`[DoorMessageHandler]   Set times called from: ${str}`);
         // express.e:3588-3594: Get/Set time last on (in seconds)
 debugLog(`[DoorMessageHandler]   DT_TIMELASTON: data=${data}`);
         if (data) {
+          // getSystemTime()'s form, as express.e stores and hands it.
           const lastOn = this.config.bbsSession?.user?.lastLogin
-            ? Math.floor(new Date(this.config.bbsSession.user.lastLogin).getTime() / 1000)
+            ? encodeAmigaDate(new Date(this.config.bbsSession.user.lastLogin))
             : 0;
           this.writeStringToMessage(msgAddr, String(lastOn));
         } else {
@@ -1353,7 +1355,7 @@ debugLog(`[DoorMessageHandler]   DT_STAMP: Timestamp, data=${data}`);
       case XIMCommand.DT_CURR_TIME:
         // express.e:3771-3773: Current time
 debugLog(`[DoorMessageHandler]   DT_CURR_TIME`);
-        const currTime = Math.floor(Date.now() / 1000);
+        const currTime = toAmigaTime(new Date()); // express.e:3772 getSystemTime()
         this.writeStringToMessage(msgAddr, String(currTime));
         break;
 

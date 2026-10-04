@@ -30,8 +30,8 @@ export interface MsgHeader {
   toName: string;        // 31 bytes - recipient name
   fromName: string;      // 31 bytes - sender name
   subject: string;       // 31 bytes - subject line
-  msgDate: number;       // 4 bytes - Unix timestamp
-  recv: number;          // 4 bytes - received timestamp
+  msgDate: number;       // 4 bytes - express.e getSystemTime() form (date-time.util.ts fromAmigaTime), not Unix
+  recv: number;          // 4 bytes - received, same form; 0 = unread
   extMsgNum: number;     // 2 bytes - external message number
 }
 

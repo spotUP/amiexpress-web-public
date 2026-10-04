@@ -213,6 +213,76 @@ export function dateTimeToDateStamp(date: Date): { days: number; minutes: number
 }
 
 /**
+ * THE DATE AMIEXPRESS STORES - one conversion pair for every date field the
+ * board writes to, or reads from, a file express.e also reads.
+ *
+ * express.e stores `getSystemTime()` (MiscFuncs.e:463-469):
+ *
+ *     (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
+ *
+ * `startds` is DateStamp(): the Amiga's LOCAL wall clock, counted from
+ * 1978-01-01, and 2922 is the days from 1970-01-01 to 1978-01-01. So the value
+ * is the wall-clock time on the board's clock, counted in seconds as if that
+ * wall clock were UTC from 1970, plus 21600. The 21600 is a bias, not a zone:
+ * every reader takes it straight back off (`dateTimeToDateStamp`,
+ * MiscFuncs.e:256-263, behind formatLongDate/Time/DateTime; the new-day test
+ * `Div(t-21600,86400)`, express.e:28430). The fields: user.data newSinceDate,
+ * accountDate, timeLastOn, creditStartDate, creditTotalDate; user.misc
+ * pwdLastUpdated; Conf.DB newSinceDate; HeaderFile msgDate and recv
+ * (axobjects.e, express.e 4911/8197/8202/8945/10648/21998/29828).
+ *
+ * The port stored plain Unix UTC in all of them, so an AmiExpress reader saw
+ * a message posted at 13:52 in a Swedish summer as 05:52, and the port showed
+ * a 68K door's message six-plus hours late.
+ *
+ * The board's local clock is the process's time zone - TZ, set to the
+ * board's zone in docker-compose.yml - the same clock dateTimeToDateStamp
+ * hands the doors. A wall time that does not exist (the hour skipped when
+ * summer time starts) comes back an hour later; nothing the board writes can
+ * be in it, since the board writes real instants.
+ */
+export const AMIGA_TIME_BIAS = 21600;
+
+/** express.e getSystemTime() at `date`: what the board stores for that moment. */
+export function toAmigaTime(date: Date): number {
+  const ds = dateTimeToDateStamp(date);
+  return (ds.days + 2922) * 86400 + ds.minutes * 60 + Math.floor(ds.ticks / 50) + AMIGA_TIME_BIAS;
+}
+
+/** The moment a stored express.e date names (MiscFuncs.e:256-263 dateTimeToDateStamp). */
+export function fromAmigaTime(value: number): Date {
+  const wall = value - AMIGA_TIME_BIAS;
+  const totalMinutes = Math.floor(wall / 60);
+  const days = Math.floor(totalMinutes / 1440) - 2922;
+  const minutes = totalMinutes - (days + 2922) * 1440;
+  return dateStampToDateTime(days, minutes, (wall - totalMinutes * 60) * 50);
+}
+
+/**
+ * A date FIELD as it goes to disk. 0 is express.e's "never" (a message not
+ * yet received, a credit account never started) and stays 0.
+ *
+ * @param when - a Date, or Unix seconds (the unit the port's own records use)
+ */
+export function encodeAmigaDate(when: Date | number | null | undefined): number {
+  if (when === null || when === undefined) return 0;
+  const date = typeof when === 'number' ? new Date(when * 1000) : when;
+  const ms = date.getTime();
+  if (!Number.isFinite(ms) || ms === 0) return 0;
+  return toAmigaTime(date);
+}
+
+/** A date field read off disk, as a Date; undefined for 0 ("never"). */
+export function decodeAmigaDate(value: number): Date | undefined {
+  return value ? fromAmigaTime(value) : undefined;
+}
+
+/** A date field read off disk, as Unix seconds; 0 stays 0. */
+export function decodeAmigaDateToUnix(value: number): number {
+  return value ? Math.floor(fromAmigaTime(value).getTime() / 1000) : 0;
+}
+
+/**
  * Format duration in seconds as "HH:MM:SS"
  * Useful for displaying elapsed time, session duration, etc.
  *

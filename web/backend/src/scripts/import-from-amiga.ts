@@ -6,6 +6,7 @@ import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { loadConfConfig } from '../services/conf-config.service';
 import { loadConferenceFileAreas } from '../services/file-areas-loader';
 import { readDirFile } from '../utils/dir-file-reader.util';
+import { fromAmigaTime, decodeAmigaDate } from '../utils/date-time.util';
 
 async function importAll() {
 console.log('=== Importing from Amiga Disk Config ===');
@@ -119,9 +120,10 @@ console.log(`Adding User: ${username}`);
         bytesUpload: du.user.bytesUpload,
         bytesDownload: du.user.bytesDownload,
         slotNumber: du.user.slotNumber,
-        newSinceDate: du.user.newSinceDate,
-        lastLogin: new Date(du.user.timeLastOn * 1000),
-        firstLogin: new Date(du.user.accountDate * 1000),
+        newSinceDate: decodeAmigaDate(du.user.newSinceDate),
+        // express.e's getSystemTime() form on disk (date-time.util.ts).
+        lastLogin: fromAmigaTime(du.user.timeLastOn),
+        firstLogin: fromAmigaTime(du.user.accountDate),
         calls: du.user.timesCalled,
         messagesPosted: du.user.messagesPosted,
         newUser: du.user.newUser === 1,

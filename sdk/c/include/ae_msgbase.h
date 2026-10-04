@@ -96,19 +96,14 @@ typedef struct {
 /**
  * Render a message's date as `08Sep26`, NUL-terminated. `out` needs 8 bytes.
  *
- * msgDate and recv are UNIX seconds, not the Amiga's own day count - verified
- * against a real Amiga-written HeaderFile, whose recv stamps read as 2023
- * dates when taken as unix seconds and as nonsense taken any other way.
- *
- * Rendered as UTC. The board renders the same field in LOCAL time
- * (msgfeed.ts's ddmmmyy, and formatMessageDate before it), so a message
- * posted within a few hours of midnight can show a different day in the door
- * than at the `R` prompt. Doing better needs a timezone, which AmigaDOS does
- * not reliably have and which no door should invent; the alternative was
- * calling localtime() on a machine whose clock is already local and shifting
- * twice, which is worse and silent.
+ * msgDate and recv hold express.e's getSystemTime() (MiscFuncs.e:463-469):
+ * the Amiga's LOCAL wall clock, counted in seconds from 1970 as if it were
+ * UTC, plus 21600. Taking the 21600 back off, as express.e's own
+ * dateTimeToDateStamp does (MiscFuncs.e:256-263), leaves the wall clock, so
+ * the day comes out as the board shows it at the `R` prompt - no timezone
+ * needed, because the value never had one.
  */
-void ae_msg_date_string(long unix_seconds, char *out, int cap);
+void ae_msg_date_string(long stored, char *out, int cap);
 
 /**
  * Who a message is to, as the reader sees it.

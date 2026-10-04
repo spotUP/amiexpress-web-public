@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { encodeAmigaDate } from "../utils/date-time.util";
 
 /**
  * UserDatabaseManager - Manages AmiExpress user database files
@@ -483,7 +484,8 @@ export class UserDatabaseManager {
       secLibrary: 0,
       secBulletin: 0,
       messagesPosted: user.messagesPosted || 0,
-      newSinceDate: user.newSinceDate || 0,
+      // express.e's getSystemTime() values, not Unix seconds (date-time.util.ts).
+      newSinceDate: encodeAmigaDate(user.newSinceDate),
       pwdHash: 0,
       confRead2: 0,
       confRead3: 0,
@@ -495,7 +497,7 @@ export class UserDatabaseManager {
       filler2: 0,
       lcFiles: 0,
       badFiles: 0,
-      accountDate: Math.floor(new Date(user.created || Date.now()).getTime() / 1000),
+      accountDate: encodeAmigaDate(new Date(user.created || Date.now())),
       screenType: user.screenType || 0,
       editorType: user.editor || 0,
       conferenceAccess: Buffer.alloc(10, 0x58),
@@ -503,7 +505,7 @@ export class UserDatabaseManager {
       downloads: user.downloads || 0,
       confRJoin: 0,
       timesCalled: user.calls || 0,
-      timeLastOn: Math.floor(new Date(user.lastLogin || Date.now()).getTime() / 1000),
+      timeLastOn: encodeAmigaDate(new Date(user.lastLogin || Date.now())),
       timeUsed: user.timeUsed || 0,
       timeLimit: user.timeLimit || 60,
       timeTotal: user.timeTotal || 0,
@@ -697,8 +699,7 @@ console.warn(`[UserDatabaseManager] updateUserMiscAfterPasswordChange: no misc r
       return;
     }
 
-    const nowSecs = Math.floor(Date.now() / 1000);
-    diskData.misc.pwdLastUpdated = nowSecs;
+    diskData.misc.pwdLastUpdated = encodeAmigaDate(new Date());
     diskData.misc.forcePwdReset = 0;
 
     this.writeUserMisc(slotNumber, diskData.misc);

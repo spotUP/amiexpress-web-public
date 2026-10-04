@@ -18,6 +18,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { UserFileManager } from '../../src/services/UserFileManager';
+import { decodeAmigaDateToUnix } from '../../src/utils/date-time.util';
 import type { User } from '../../src/database';
 
 process.env.SKIP_DB_INIT = '1';
@@ -49,8 +50,9 @@ function board(): { root: string; mgr: UserFileManager } {
   }
 }
 
+/** The stamp as Unix seconds: user.misc holds express.e's getSystemTime() form. */
 const pwdStamp = (root: string): number =>
-  fs.readFileSync(path.join(root, 'user.misc')).readInt32BE(OFF_PWD_UPDATED);
+  decodeAmigaDateToUnix(fs.readFileSync(path.join(root, 'user.misc')).readInt32BE(OFF_PWD_UPDATED));
 
 describe('the password age', () => {
   const roots: string[] = [];

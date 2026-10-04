@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../database';
 import { boardScreenTypes, screenTypeIndex } from '../screens/screen-metadata';
+import { encodeAmigaDate, decodeAmigaDate, decodeAmigaDateToUnix } from '../utils/date-time.util';
 
 /**
  * E language struct: axobjects.e:11-68
@@ -199,7 +200,9 @@ export class UserFileManager {
       // keeps the disk's own count when the caller's User does not carry one,
       // which is every User built from a database row.
       messagesPosted: user.messagesPosted ?? 0,
-      newSinceDate: Math.floor((user.lastLogin?.getTime() || Date.now()) / 1000),
+      // Every date field holds express.e's getSystemTime() value, not Unix
+      // seconds (date-time.util.ts toAmigaTime).
+      newSinceDate: encodeAmigaDate(user.lastLogin ?? new Date()),
       pwdHash: 0, // Old hash format not used
       confRead2: 0,
       confRead3: 0,
@@ -211,7 +214,7 @@ export class UserFileManager {
       filler2: 0,
       lcFiles: 0,
       badFiles: 0,
-      accountDate: Math.floor(user.created.getTime() / 1000),
+      accountDate: encodeAmigaDate(user.created),
       screenType: this.screenTypeToInt(user.screenType),
       editorType: this.editorTypeToInt(user.editor),
       conferenceAccess: user.confAccess || 'XXX',
@@ -219,7 +222,7 @@ export class UserFileManager {
       downloads: user.downloads,
       confRJoin: user.confRJoin || user.autoRejoin || 1, // Auto-rejoin conference (default to 1)
       timesCalled: user.calls,
-      timeLastOn: Math.floor((user.lastLogin?.getTime() || Date.now()) / 1000),
+      timeLastOn: encodeAmigaDate(user.lastLogin ?? new Date()),
       timeUsed: user.timeUsed,
       timeLimit: user.timeLimit,
       timeTotal: user.timeTotal,
@@ -236,9 +239,9 @@ export class UserFileManager {
       chatLimit: user.chatLimit,
       creditDays: user.creditDays ?? 0,
       creditAmount: user.creditAmount ?? 0,
-      creditStartDate: user.creditStartDate ?? 0,
+      creditStartDate: encodeAmigaDate(user.creditStartDate),
       creditTotalToDate: user.creditTotalToDate ?? 0,
-      creditTotalDate: user.creditTotalDate ?? 0,
+      creditTotalDate: encodeAmigaDate(user.creditTotalDate),
       creditTracking: user.creditTracking ?? 0,
       translatorID: 0,
       msgBaseRJoin: 1, // Default to first message base (not stored in user record, only in session)
@@ -302,7 +305,7 @@ export class UserFileManager {
       forcePwdReset: 0,
       accountLocked: 0,
       invalidAttempts: 0,
-      pwdLastUpdated: Math.floor(user.updated.getTime() / 1000),
+      pwdLastUpdated: encodeAmigaDate(user.updated),
       lastIP: 0,
       ipMask: 0,
       unused: Buffer.alloc(86),
@@ -986,8 +989,8 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       timeUsed: userStruct.timeUsed,
       chatLimit: userStruct.chatLimit,
       chatUsed: Math.max(0, userStruct.chatLimit - userStruct.chatRemain),
-      lastLogin: userStruct.timeLastOn > 0 ? new Date(userStruct.timeLastOn * 1000) : undefined,
-      firstLogin: new Date(userStruct.accountDate * 1000),
+      lastLogin: userStruct.timeLastOn > 0 ? decodeAmigaDate(userStruct.timeLastOn) : undefined,
+      firstLogin: decodeAmigaDate(userStruct.accountDate) ?? new Date(0),
       calls: userStruct.timesCalled,
       callsToday: keysStruct.timesOnToday,
       messagesPosted: userStruct.messagesPosted,
@@ -1012,19 +1015,19 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       topDownloadCPS: keysStruct.dnCPS2,
       byteLimit: userStruct.dailyBytesLimit,
       dailyBytesDld: userStruct.dailyBytesDld,
-      newSinceDate: userStruct.newSinceDate > 0 ? new Date(userStruct.newSinceDate * 1000) : undefined,
+      newSinceDate: userStruct.newSinceDate > 0 ? decodeAmigaDate(userStruct.newSinceDate) : undefined,
       creditDays: userStruct.creditDays,
       creditAmount: userStruct.creditAmount,
-      creditStartDate: userStruct.creditStartDate,
+      creditStartDate: decodeAmigaDateToUnix(userStruct.creditStartDate),
       creditTotalToDate: userStruct.creditTotalToDate,
-      creditTotalDate: userStruct.creditTotalDate,
+      creditTotalDate: decodeAmigaDateToUnix(userStruct.creditTotalDate),
       creditTracking: userStruct.creditTracking,
       // express.e:29701 - a record whose own slotNumber field is 0 is a
       // deleted account. The position it sits at stays its slot.
       accountDeleted: userStruct.slotNumber === 0,
       baud: keysStruct.baud,
       userFlags: keysStruct.userFlags,
-      created: new Date(userStruct.accountDate * 1000),
+      created: decodeAmigaDate(userStruct.accountDate) ?? new Date(0),
       updated: fileModTime,
       // Lockout state, straight off user.misc. The admin lists it and the
       // unlock button writes it; the login gate reads the same record.
@@ -1032,7 +1035,7 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       forcePwdReset: miscStruct.forcePwdReset,
       accountLocked: miscStruct.accountLocked,
       invalidAttempts: miscStruct.invalidAttempts,
-      pwdLastUpdated: miscStruct.pwdLastUpdated,
+      pwdLastUpdated: decodeAmigaDateToUnix(miscStruct.pwdLastUpdated),
     };
   }
 
@@ -1427,7 +1430,7 @@ console.error('[UserFileManager] Error reading user files:', error);
       if (user.pwdLastUpdated === undefined) {
         if (keep.pwdLastUpdated > 0) miscStruct.pwdLastUpdated = keep.pwdLastUpdated;
       } else {
-        miscStruct.pwdLastUpdated = Math.max(0, Math.floor(user.pwdLastUpdated));
+        miscStruct.pwdLastUpdated = encodeAmigaDate(Math.max(0, Math.floor(user.pwdLastUpdated)));
       }
 
       // Serialize to buffers

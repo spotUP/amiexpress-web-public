@@ -18,6 +18,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { emitText } from '../../utils/output.util';
 import * as amigafs from '../../utils/amigafs';
 import { decodeMessageBody } from '../../utils/message-file.util';
+import { fromAmigaTime } from '../../utils/date-time.util';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import type { MsgHeader } from '../../services/MessageIndexManager';
 import { mayReadPrivateMail, msgBaseDir, readStats } from './read-msg';
@@ -87,7 +88,7 @@ export function zoomConf(session: BBSSession, conf: number, msgBase: number, las
         subject: h.subject,
         from: h.fromName,
         to: h.toName,
-        date: new Date(h.msgDate * 1000),
+        date: fromAmigaTime(h.msgDate), // express.e's stored-date form
         body: zoomBody(conf, h),
         isPrivate: !(h.status === MsgStatus.NORMAL || h.status === MsgStatus.CENSORED),
         isReply: false,

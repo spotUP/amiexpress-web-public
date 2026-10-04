@@ -8,6 +8,7 @@ import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager'
 import type { Message } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
+import { toAmigaTime, encodeAmigaDate } from '../utils/date-time.util';
 
 export class MessageRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
@@ -197,8 +198,10 @@ console.error(`[Database] Failed to sync message to disk:`, error);
         // Update HeaderFile entry. express.e:11643 — editHeader resets recv:=0,
         // and we mirror that by passing the row's receivedat (which the EH save
         // path nulls explicitly so the recipient sees the message as fresh again).
-        const timestamp = Math.floor(fullMessage.timestamp.getTime() / 1000);
-        const recvSecs = (row as any).receivedat ?? 0;
+        // HeaderFile dates are express.e's getSystemTime() form; the row's
+        // are Unix seconds.
+        const timestamp = toAmigaTime(fullMessage.timestamp);
+        const recvSecs = encodeAmigaDate((row as any).receivedat ?? 0);
         messageIndexManager.updateMessageHeader(fullMessage.conferenceId, msgNumber, {
           status: fullMessage.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
           toName: fullMessage.toUser || 'ALL',

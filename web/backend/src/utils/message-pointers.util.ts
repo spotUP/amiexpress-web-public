@@ -14,7 +14,7 @@ import { db } from '../database';
 import type { MailStat, ConfBase } from '../types/message-pointers';
 import { DEFAULT_MAIL_STAT } from '../types/message-pointers';
 import { getConferenceToolFlags } from './conference-tooltypes.util';
-import { getSystemTime } from '../utils/date-time.util';
+import { getSystemTime, decodeAmigaDate, encodeAmigaDate } from '../utils/date-time.util';
 import {
   messagePointerFileManager,
   accountedBytes,
@@ -53,7 +53,8 @@ function confBaseFromRecord(
     lastMsgReadConf: rec.confYM,
     scanFlags: scanFlagsOf(rec),
     messagesPosted: rec.messagesPosted,
-    newSinceDate: new Date((rec.newSinceDate >>> 0) * 1000),
+    // express.e's getSystemTime() form on disk (express.e:4911); 0 is never.
+    newSinceDate: decodeAmigaDate(rec.newSinceDate) ?? new Date(0),
     bytesDownload: Number(accountedBytes(rec.bytesDownload, rec.downloadBytesBCD)),
     bytesUpload: Number(accountedBytes(rec.bytesUpload, rec.uploadBytesBCD)),
     upload: rec.upload & 0xffff,
@@ -262,7 +263,7 @@ console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferen
     confYM: confBase.lastMsgReadConf | 0,
     handle: withScanFlags(rec, confBase.scanFlags),
     messagesPosted: confBase.messagesPosted & 0xffff,
-    newSinceDate: Math.floor(confBase.newSinceDate.getTime() / 1000) | 0,
+    newSinceDate: encodeAmigaDate(confBase.newSinceDate) | 0,
   });
   mirrorToSql(confBaseFromRecord(
     confBase.userId, confBase.conferenceId, confBase.messageBaseId,

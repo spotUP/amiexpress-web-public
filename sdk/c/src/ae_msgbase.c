@@ -266,11 +266,11 @@ static int join_path(char *out, int cap, const char *name)
 
 /* ---- dates -------------------------------------------------------------
  *
- * Civil date from a unix timestamp, without time.h. vbcc has localtime(), and
- * calling it would be wrong here rather than merely heavy: an Amiga's system
- * clock is already set to local time, so converting a unix stamp with a local
- * timezone shifts it twice. This does the arithmetic in UTC, which is at
- * worst a few hours from what the board shows and is never silently doubled.
+ * Civil date from a stored express.e date, without time.h. The stored value
+ * is the local wall clock in seconds from 1970 plus 21600 (getSystemTime,
+ * MiscFuncs.e:463-469), so taking the 21600 off and doing plain calendar
+ * arithmetic gives the board's own date - no localtime(), whose zone an
+ * Amiga does not reliably have.
  *
  * The algorithm is the standard days-to-civil one: shift the epoch to
  * 0000-03-01 so that February - the month with the leap day - falls at the end
@@ -299,7 +299,7 @@ void ae_msg_to_label(const char *to, const char *reader, char *out, int cap)
     out[n] = '\0';
 }
 
-void ae_msg_date_string(long unix_seconds, char *out, int cap)
+void ae_msg_date_string(long stored, char *out, int cap)
 {
     static const char *MONTHS[12] = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -317,9 +317,9 @@ void ae_msg_date_string(long unix_seconds, char *out, int cap)
     int i = 0;
 
     if (out == 0 || cap < 8) { if (out && cap > 0) out[0] = '\0'; return; }
-    if (unix_seconds <= 0) { out[0] = '\0'; return; }
+    if (stored <= 0) { out[0] = '\0'; return; }
 
-    days = unix_seconds / 86400L;
+    days = (stored - 21600L) / 86400L;     /* MiscFuncs.e:258 dateVal-21600 */
     days += 719468L;                        /* 1970-01-01 -> 0000-03-01 */
 
     era = (days >= 0 ? days : days - 146096L) / 146097L;

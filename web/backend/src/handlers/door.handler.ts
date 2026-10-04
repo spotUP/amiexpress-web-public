@@ -35,7 +35,7 @@ import { declaredKeyRepeatMode, emitKeyRepeatMode } from '../services/game-mode.
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { doorCategoryAt } from '../doors/door-category';
-import { getSystemTime } from '../utils/date-time.util';
+import { getSystemTime, encodeAmigaDate } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, doorLogTypeNumber } from '../utils/node-logs.util';
 import {
   LoggedOnSubState as LoggedOnSubStateImport,
@@ -808,8 +808,10 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
         timeTotal: (session.user as any).timeTotal ?? 0,
         bytesDownload: (session.user as any).bytesDownload ?? 0,
         bytesUpload: (session.user as any).bytesUpload ?? 0,
+        // The record's own value - express.e's getSystemTime() form, which
+        // is what DT_TIMELASTON hands a door (date-time.util.ts).
         timeLastOn: (session.user as any).lastLogin
-          ? Math.floor(new Date((session.user as any).lastLogin).getTime() / 1000)
+          ? encodeAmigaDate(new Date((session.user as any).lastLogin))
           : 0,
       } : null;
 
@@ -3302,8 +3304,10 @@ console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol
         timeTotal: (session.user as any).timeTotal ?? 0,
         bytesDownload: (session.user as any).bytesDownload ?? 0,
         bytesUpload: (session.user as any).bytesUpload ?? 0,
+        // The record's own value - express.e's getSystemTime() form, which
+        // is what DT_TIMELASTON hands a door (date-time.util.ts).
         timeLastOn: (session.user as any).lastLogin
-          ? Math.floor(new Date((session.user as any).lastLogin).getTime() / 1000)
+          ? encodeAmigaDate(new Date((session.user as any).lastLogin))
           : 0,
       } : null;
 

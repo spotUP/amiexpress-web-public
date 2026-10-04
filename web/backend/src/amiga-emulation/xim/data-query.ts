@@ -16,7 +16,7 @@ import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
-import { getSystemTime } from '../../utils/date-time.util';
+import { getSystemTime, toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
 import * as amigafs from '../../utils/amigafs';
@@ -170,7 +170,9 @@ debugLog(`  [READ] DT_PASSWORD: (blocked)`);
               user.passwordHash = hash;
               // Retain plaintext only if other paths expect it (some importers do)
               user.password = newPwd;
-              (user as any).pwdLastUpdated = Date.now();
+              // Unix seconds, like every other User date; user.misc gets
+              // express.e's form from UserFileManager (encodeAmigaDate).
+              (user as any).pwdLastUpdated = Math.floor(Date.now() / 1000);
               (user as any).pwdType = 1; // bcrypt
             } catch (err) {
 console.error('[XIMDataQuery] Failed to hash password:', err);
@@ -524,43 +526,28 @@ debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           const diskStats = (this.bbsSession as any)?.diskUserStats;
           // 0 is not a slot: records are 1-indexed (UserDatabaseManager).
           const userSlot = (this.bbsSession as any)?.userSlotNumber ?? 0;
-          // express.e MiscFuncs.e:255 dateStampToDateTime():
-          //   c_time = (days+2922)*86400 + minute*60 + tick/50 + 21600
-          // i.e. timeLastOn is **Unix epoch seconds + 21600 (6h offset)** —
-          // NOT Amiga 1978 epoch as a previous version assumed. AquaScan
-          // calls dateTimeToDateStamp on this value, which subtracts the
-          // 21600 back out (MiscFuncs.e:258) and rebuilds the DateStamp.
-          // Returning Amiga-epoch (Unix - 252460800) made AquaScan see a
-          // 2018-era date with a midnight time-of-day → "00:00:00" display.
-          const C_TIME_OFFSET = 21600;
-
+          // express.e:3588-3593 hands the door `loggedOnUser.timeLastOn` as it
+          // is stored - getSystemTime()'s form (MiscFuncs.e:463-469), which
+          // the record now holds too (date-time.util.ts toAmigaTime) - and
+          // stores what the door sends back the same way. No conversion in
+          // either direction: AquaScan runs dateTimeToDateStamp on it itself.
           if (isRead) {
             const rawDisk = diskStats?.timeLastOn ?? 0;
-            // user.lastLogin is the canonical source — DB stores it as Unix
-            // seconds, with `Date` reconstruction in user-repository:167.
-            let unixSec: number;
+            let cTime: number;
             if (rawDisk > 0) {
-              // Disk values written by us are Unix seconds (UserFileManager:182:
-              // Math.floor(user.lastLogin.getTime() / 1000)). AquaScan's own
-              // write path stores cTime — convert back. Heuristic: any value
-              // less than the post-1970 cutoff is treated as cTime; otherwise
-              // as raw Unix seconds.
-              unixSec = rawDisk;
+              cTime = rawDisk;
             } else if (user?.lastLogin) {
               const raw = (user as any).lastLogin;
-              unixSec = typeof raw === 'number' ? raw : Math.floor(new Date(raw).getTime() / 1000);
+              cTime = encodeAmigaDate(typeof raw === 'number' ? raw : new Date(raw));
             } else {
-              unixSec = Math.floor(Date.now() / 1000);
+              cTime = toAmigaTime(new Date());
             }
-            const cTime = unixSec + C_TIME_OFFSET;
             this.messageParser.writeString(stringAddr, cTime.toString(), 200);
-console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} unixSec=${unixSec} cTime=${cTime} user.lastLogin=${(user as any)?.lastLogin}`);
+console.log(`[DT_TIMELASTON] rawDisk=${rawDisk} cTime=${cTime} user.lastLogin=${(user as any)?.lastLogin}`);
           } else {
-            // AquaScan writes back cTime; convert to Unix sec for our DB.
             const cTime = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(cTime)) {
-              const unixSec = Math.max(0, cTime - C_TIME_OFFSET);
-              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', unixSec);
+              if (userSlot > 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', Math.max(0, cTime));
             }
 debugLog(`  [WRITE] DT_TIMELASTON: cTime=${cTime}`);
           }
@@ -733,7 +720,10 @@ debugLog(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
 
       case XIMCommand.DT_CURR_TIME:
         if (isRead) {
-          const currTime = Math.floor(Date.now() / 1000);
+          // express.e:3772 StringF(tempstring,'\d',getSystemTime()) - the
+          // stored-date form, so a door that writes it into a HeaderFile
+          // (the SUBS door does) writes what express.e would.
+          const currTime = toAmigaTime(new Date());
           this.messageParser.writeString(stringAddr, currTime.toString(), 200);
 debugLog(`  [READ] DT_CURR_TIME: ${currTime}`);
         }

@@ -16,7 +16,7 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.
 import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
-import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
+import { getSystemTime, formatLongDateTime, toAmigaTime, fromAmigaTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
 import { lineInput, yesNo } from '../../utils/await-input';
 import { higherAccess } from '../../utils/error-handling.util';
@@ -796,7 +796,7 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
   // The quote's trailer names mailHeader.fromName and mailHeader.msgDate (10936-10938).
   const parentMsg = {
     author: file.from,
-    timestamp: new Date((file.msgDate ?? 0) * 1000),
+    timestamp: file.msgDate ? fromAmigaTime(file.msgDate) : new Date(0),
     body: file.body,
   };
 
@@ -980,7 +980,6 @@ console.error('[Message] Error writing user disk files:', diskErr);
     // save (gateway is best-effort by design).
     try {
       const { writeExtSendDumpIfApplicable } = require('../../utils/message-file.util');
-      const messageDateUnixSec = Math.floor(messageDate.getTime() / 1000);
       await writeExtSendDumpIfApplicable(
         session.currentConf || 1,
         session.currentMsgBase || 1,
@@ -988,7 +987,7 @@ console.error('[Message] Error writing user disk files:', diskErr);
           fromName,
           toName: entry.toUser,
           subject: entry.subject,
-          msgDate: messageDateUnixSec,
+          msgDate: toAmigaTime(messageDate),
         },
         messageBody.split('\n'),
         !!entry.isComment,

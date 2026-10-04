@@ -21,7 +21,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { emitText, clearTheScreen, flushOutput } from '../../utils/output.util';
-import { formatLongDateTime } from '../../utils/date-time.util';
+import { formatLongDateTime, fromAmigaTime, toAmigaTime } from '../../utils/date-time.util';
 import { isNarrow, headingIndent, movePrompt } from '../../utils/table-format.util';
 import { lineInput, readChar, yesNo } from '../../utils/await-input';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
@@ -157,13 +157,14 @@ export async function displayMessage(
 
 /** 8898-8949: the header block, and the received mark. */
 function showHeader(socket: any, session: BBSSession, r: Reader, h: MsgHeader): void {
-  const date = formatLongDateTime(new Date(h.msgDate * 1000));
+  // msgDate and recv are express.e's stored-date form (getSystemTime()).
+  const date = formatLongDateTime(fromAmigaTime(h.msgDate));
   checkScreenClear(socket, session);
 
   // 8902-8910: a message to EALL shows the reader's own name with (ALL).
   const to = h.toName.toLowerCase() === 'eall' ? `${confMailName(session)} (ALL)` : h.toName;
   const recvd = h.recv !== 0
-    ? formatLongDateTime(new Date(h.recv * 1000))
+    ? formatLongDateTime(fromAmigaTime(h.recv))
     : (sameName(h.toName, 'ALL') ? 'N/A' : 'No');
   const status = isPublic(h) ? 'Public Message' : 'Private Message';
 
@@ -187,7 +188,7 @@ function showHeader(socket: any, session: BBSSession, r: Reader, h: MsgHeader): 
 
   // 8943-8949: mail to this caller is marked received the first time.
   if (sameName(h.toName, confMailName(session)) && h.recv === 0) {
-    h.recv = Math.floor(Date.now() / 1000);
+    h.recv = toAmigaTime(new Date()); // 8945 mailHeader.recv:=getSystemTime()
     messageIndexManager.updateMessageHeader(r.conf, h.msgNumb, { recv: h.recv });
   }
 }
@@ -550,7 +551,7 @@ async function moveMSG(socket: any, session: BBSSession, r: Reader): Promise<boo
         from: h.fromName,
         to: h.toName,
         subject: h.subject,
-        date: formatMessageDate(new Date(h.msgDate * 1000)),
+        date: formatMessageDate(fromAmigaTime(h.msgDate)),
         body: lines.join('\n'),
         status: h.status,
       }, dataDir, session.nodeId ?? 0);

@@ -18,6 +18,7 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { getConferenceDir } from './file-hold.util';
 import { decodeUtf8Or } from './wire-encoding.util';
+import { toAmigaTime, decodeAmigaDate, fromAmigaTime, formatLongDate, formatLongTime } from './date-time.util';
 import { messageIndexManager, MsgHeader, MsgStatus, MailStat } from '../services/MessageIndexManager';
 
 /**
@@ -39,7 +40,7 @@ export interface MessageFile {
   to: string;
   subject: string;
   date: string;             // formatted "DD-MMM-YY HH:MM:SS"
-  msgDate?: number;         // mailHeader.msgDate, seconds, as the HeaderFile holds it
+  msgDate?: number;         // mailHeader.msgDate as the HeaderFile holds it: express.e's getSystemTime() form (fromAmigaTime)
   msgNum: number;
   body: string;
   isPrivate?: boolean;
@@ -221,9 +222,9 @@ export async function writeMessageFile(
       status = isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL;
     }
 
-    // msgDate as Amiga seconds — express.e stores Unix-epoch-equivalent LONG.
-    // Parse the formatted date back to a Date and convert to seconds.
-    const msgDateSec = parseMessageDateToUnixSec(message.date);
+    // express.e:10648 mh.msgDate:=getSystemTime() - the stored-date form
+    // (date-time.util.ts toAmigaTime), from the formatted date the caller saw.
+    const msgDate = toAmigaTime(parseMessageDate(message.date));
 
     const header: MsgHeader = {
       status,
@@ -231,7 +232,7 @@ export async function writeMessageFile(
       toName: message.to || 'ALL',
       fromName: message.from,
       subject: message.subject,
-      msgDate: msgDateSec,
+      msgDate,
       recv: 0,                   // unread
       extMsgNum: -1,             // express.e:10689
     };
@@ -315,12 +316,12 @@ export async function readMessageFile(
     from: header.fromName,
     to: header.toName,
     subject: header.subject,
-    date: formatMessageDate(new Date(header.msgDate * 1000)),
+    date: formatMessageDate(fromAmigaTime(header.msgDate)),
     msgDate: header.msgDate,
     msgNum: header.msgNumb,
     body,
     isPrivate: header.toName.toUpperCase() !== 'ALL',
-    receivedAt: header.recv > 0 ? new Date(header.recv * 1000) : undefined,
+    receivedAt: header.recv > 0 ? decodeAmigaDate(header.recv) : undefined,
   };
 }
 
@@ -396,7 +397,7 @@ export async function markMessageReceived(
   msgNum: number,
   _bbsDataPath: string
 ): Promise<void> {
-  const recv = Math.floor(Date.now() / 1000);
+  const recv = toAmigaTime(new Date()); // express.e:8945 mailHeader.recv:=getSystemTime()
   messageIndexManager.updateMessageHeader(confNum, msgNum, { recv });
 }
 
@@ -527,7 +528,7 @@ export async function getNextMsgId(bbsDataPath: string): Promise<string | null> 
       // First call ever — counter file not yet created.
     }
 
-    const nowSec = Math.floor(Date.now() / 1000);
+    const nowSec = toAmigaTime(new Date()); // express.e:10610 c:=getSystemTime()
     // express.e:10611 `IF r<>9 THEN v:=c` — the parse returned r==9 only when
     // exactly "$XXXXXXXX" was read (1 + 8 chars). We replicate by treating
     // any unparseable / wrong-length input as stale and reseeding from now.
@@ -556,7 +557,7 @@ export async function getNextMsgId(bbsDataPath: string): Promise<string | null> 
  *   line 1: fromName
  *   line 2: toName
  *   line 3: subject
- *   line 4: formatLongDateTime2(msgDate, " ")  — space-separated D/M/Y H:M:S
+ *   line 4: formatLongDateTime2(msgDate, " ")  — "MM-DD-YY HH:MM:SS"
  *   line 5: getMsgId() result (or empty if it fails)
  *   line 6+: body lines (one per line, '\n' terminated)
  *
@@ -570,6 +571,7 @@ export async function getNextMsgId(bbsDataPath: string): Promise<string | null> 
 export async function writeExtSendDumpIfApplicable(
   confNum: number,
   msgBaseNum: number,
+  /** msgDate in the HeaderFile's own form (express.e getSystemTime(), toAmigaTime). */
   header: { fromName: string; toName: string; subject: string; msgDate: number },
   bodyLines: string[],
   isComment: boolean,
@@ -601,15 +603,12 @@ export async function writeExtSendDumpIfApplicable(
     }
   }
 
-  // express.e:10669 formatLongDateTime2(msgDate, " ") — space-separator form.
-  // formatLongDateTime2 in express.e produces "DD MMM YY HH:MM:SS" with
-  // either a space or whatever separator passed; we replicate the space form.
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const d = new Date(header.msgDate * 1000);
-  const dateLine =
-    `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ` +
-    `${String(d.getFullYear()).slice(-2)} ` +
-    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  // express.e:10669 formatLongDateTime2(msgDate, " ") (MiscFuncs.e:366-386):
+  // DateToStr FORMAT_USA date, the separator, then the time -
+  // "MM-DD-YY HH:MM:SS", which qwk.e:153-161 and ftn.e:296-299 cut up by
+  // column.
+  const d = fromAmigaTime(header.msgDate);
+  const dateLine = `${formatLongDate(d)} ${formatLongTime(d)}`;
 
   // express.e:10671-10676 getMsgId() — FidoNet/UUCP MSGID generator.
   // Returns 8-hex uppercase counter file ID, or empty string on lock
@@ -647,25 +646,25 @@ export async function writeExtSendDumpIfApplicable(
 }
 
 /**
- * Parse a formatted message date "DD-MMM-YY HH:MM:SS" back to Unix seconds.
- * Used to build HeaderFile.msgDate when writing a new message.
+ * Parse a formatted message date "DD-MMM-YY HH:MM:SS" (board-local) back to
+ * the moment it names. Used to build HeaderFile.msgDate when writing a new
+ * message.
  */
-function parseMessageDateToUnixSec(dateStr: string): number {
+function parseMessageDate(dateStr: string): Date {
   const months: Record<string, number> = {
     Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
     Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
   };
   const m = /^(\d{2})-([A-Za-z]{3})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(dateStr || '');
-  if (!m) return Math.floor(Date.now() / 1000);
+  if (!m) return new Date();
   const day = parseInt(m[1], 10);
   const mon = months[m[2]];
   // Y2K window — AmiExpress convention: 80-99 → 1980-1999, 00-79 → 2000-2079.
-  // Keeps msgDate within i32 Unix-seconds range (max ~2038) and matches the
-  // 2-digit year handling shipped with the original BBS.
+  // Matches the 2-digit year handling shipped with the original BBS.
   const yyRaw = parseInt(m[3], 10);
   const yr = yyRaw >= 80 ? 1900 + yyRaw : 2000 + yyRaw;
   const h = parseInt(m[4], 10);
   const min = parseInt(m[5], 10);
   const s = parseInt(m[6], 10);
-  return Math.floor(new Date(yr, mon, day, h, min, s).getTime() / 1000);
+  return new Date(yr, mon, day, h, min, s);
 }

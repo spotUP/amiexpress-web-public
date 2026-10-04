@@ -31,7 +31,7 @@ import { parseConfDb } from './amiga-confbase';
 import { parseAmigaHeaderFile } from './amiga-msgheader';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
-import { expandAmigaYear } from '../utils/date-time.util';
+import { expandAmigaYear, fromAmigaTime } from '../utils/date-time.util';
 import { parseCallerLogonLine, parseLogoffLine } from './CallersLogManager';
 import type {
   AmigaBBSArchive,
@@ -649,8 +649,8 @@ console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
         from: header.fromName,
         to: header.toName,
         subject: header.subject,
-        // msgDate is a Unix timestamp in the record (axobjects.e).
-        date: new Date(header.msgDate * 1000),
+        // msgDate is express.e's getSystemTime() form (MiscFuncs.e:463-469).
+        date: fromAmigaTime(header.msgDate),
         body: body.endsWith('\n') ? body.slice(0, -1) : body,
         flags: header.status,
       });

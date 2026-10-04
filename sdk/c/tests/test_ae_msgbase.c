@@ -514,10 +514,16 @@ TEST(a_message_date_renders_the_way_the_board_renders_it)
     char out[8];
 
     /* 1687536471 is a recv stamp lifted from a real Amiga-written HeaderFile
-     * (reference-boardBBS Conf2). Taken as unix seconds it is 23 June 2023; taken
-     * as anything else it is nonsense, which is how the epoch was settled. */
+     * (reference-boardBBS Conf2): getSystemTime()'s 1970-based seconds plus 21600,
+     * which is the morning of 23 June 2023 on that board's clock. */
     ae_msg_date_string(1687536471L, out, sizeof out);
     ASSERT_STR(out, "23Jun23", "a real stamp off a real board");
+
+    /* 23:30 on 30 September 2026 by the board's clock is stored as
+     * 1790811000+21600. Read as unix seconds it would be 05:30 the next
+     * morning - the day the door used to show for a late-evening post. */
+    ae_msg_date_string(1790832600L, out, sizeof out);
+    ASSERT_STR(out, "30Sep26", "the 21600 comes off before the day is worked out");
 
     ae_msg_date_string(0L, out, sizeof out);
     ASSERT_STR(out, "", "an unset date renders as nothing, not as 1970");
@@ -527,9 +533,9 @@ TEST(a_leap_day_is_not_off_by_one)
 {
     /* The whole reason the conversion shifts the year to start in March. */
     char out[8];
-    ae_msg_date_string(1709164800L, out, sizeof out);   /* 2024-02-29 00:00 UTC */
+    ae_msg_date_string(1709186400L, out, sizeof out);   /* 2024-02-29 00:00 board clock */
     ASSERT_STR(out, "29Feb24", "the leap day itself");
-    ae_msg_date_string(1709251200L, out, sizeof out);   /* 2024-03-01 00:00 UTC */
+    ae_msg_date_string(1709272800L, out, sizeof out);   /* 2024-03-01 00:00 board clock */
     ASSERT_STR(out, "01Mar24", "and the day after it");
 }
 

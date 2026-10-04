@@ -11,6 +11,7 @@ import * as path from 'path';
 import type { Message } from '../database';
 import { messageIndexManager, MsgStatus, MsgHeader } from './MessageIndexManager';
 import { boardRoot } from '../utils/board-root.util';
+import { toAmigaTime } from '../utils/date-time.util';
 
 export class MessageFileManager {
   private bbsRoot: string;
@@ -84,7 +85,7 @@ export class MessageFileManager {
           toName: message.toUser || 'ALL',
           fromName: message.author || 'Unknown',
           subject: message.subject || '',
-          msgDate: Math.floor(ts.getTime() / 1000),
+          msgDate: toAmigaTime(ts), // express.e:10648 getSystemTime() form
           recv: 0,
           extMsgNum: -1,
         };

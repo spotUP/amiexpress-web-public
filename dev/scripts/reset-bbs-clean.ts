@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { toAmigaTime } from '../../web/backend/src/utils/date-time.util';
 
 const BBS_ROOT = '~/Code/amiexpress-web';
 
@@ -82,7 +83,8 @@ function createUserRecord(
     offset += bytes;
   };
 
-  const amigaTime = Math.floor(Date.now() / 1000) - 252460800; // Amiga epoch offset
+  // express.e getSystemTime() (MiscFuncs.e:463-469): local wall clock + 21600.
+  const amigaTime = toAmigaTime(new Date());
 
   // Structure layout matching mtop.e userData (232 bytes):
   writeString(username, 31);          // name[31]
