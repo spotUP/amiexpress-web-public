@@ -28,6 +28,10 @@ jest.mock('../../src/handlers/command.handler', () => ({ handleCommand: jest.fn(
 jest.mock('../../src/handlers/chat/group-chat.handler', () => ({
   handleRoomMessage: jest.fn(async () => undefined),
 }));
+jest.mock('../../src/handlers/chat/chat.handler', () => ({
+  ...jest.requireActual('../../src/handlers/chat/chat.handler'),
+  sendChatMessage: jest.fn(),
+}));
 jest.mock('../../src/database/moderation-repository', () => {
   const banUser = jest.fn(async () => undefined);
   return { ModerationRepository: jest.fn(() => ({ banUser })), __banUser: banUser };
@@ -60,13 +64,14 @@ import request from 'supertest';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { registerSocketHandlers } from '../../src/server/socket-handlers';
-import { setSession, sessions, userSessions, socketToNodeId, socketToUser } from '../../src/server/session-manager';
+import { getSession, setSession, sessions, userSessions, socketToNodeId, socketToUser } from '../../src/server/session-manager';
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { initOperatorChatHandler, stopOperatorChatHandler, operatorMay } from '../../src/handlers/operator-chat.handler';
 import { setupChatOnlyLoginHandler } from '../../src/handlers/chat-only-login.handler';
 import { createChatRouter } from '../../src/api/chat-routes';
 
 const { handleRoomMessage } = jest.requireMock('../../src/handlers/chat/group-chat.handler') as { handleRoomMessage: jest.Mock };
+const { sendChatMessage } = jest.requireMock('../../src/handlers/chat/chat.handler') as { sendChatMessage: jest.Mock };
 const { __banUser: banUser } = jest.requireMock('../../src/database/moderation-repository') as { __banUser: jest.Mock };
 const { accountRefusal } = jest.requireMock('../../src/services/logon-gates') as { accountRefusal: jest.Mock };
 
@@ -136,6 +141,7 @@ describe('socket events ask who is calling', () => {
   afterEach(() => {
     for (const k of Object.keys(mockDb)) delete mockDb[k];
     handleRoomMessage.mockClear();
+    sendChatMessage.mockClear();
     banUser.mockClear();
     accountRefusal.mockReset().mockImplementation(() => null);
     pageRequests.length = 0;
@@ -223,6 +229,37 @@ describe('socket events ask who is calling', () => {
     const caller = await connect({ user: { id: 31, username: 'Caller', secLevel: 20 } });
     await collect(caller, 300, () => caller.emit('room:message', { message: 'hello' }));
     expect(handleRoomMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers a sysop-chat line once, and never for a visitor', async () => {
+    // chat-message (and accept-chat) were registered twice - unguarded in
+    // socket-handlers.ts and behind onCaller in chat-socket-handlers.ts - so
+    // every line a caller typed in sysop chat was delivered twice.
+    const visitor = await connect({});
+    await collect(visitor, 300, () => visitor.emit('chat-message', 'from nobody'));
+    expect(sendChatMessage).not.toHaveBeenCalled();
+
+    const caller = await connect({ user: { id: 34, username: 'Chatter', secLevel: 20 } });
+    (getSession(caller.id ?? '') as unknown as { inChat: boolean }).inChat = true;
+    await collect(caller, 300, () => caller.emit('chat-message', 'hello sysop'));
+    expect(sendChatMessage).toHaveBeenCalledTimes(1);
+    expect(sendChatMessage.mock.calls[0][2]).toBe('hello sysop');
+  });
+
+  it("does not let the browser write its own figure into the caller's top download CPS", async () => {
+    // file-download-complete took `cps` from the browser and wrote it into
+    // topDownloadCPS (and the users row), so a caller could top the CPS list
+    // with any number. The board's own measurement is runPostDownload's.
+    const run = mockDb.run = jest.fn(async () => undefined);
+    const caller = await connect({ user: { id: 35, username: 'Fast', secLevel: 20 } });
+    const session = getSession(caller.id ?? '') as unknown as { user: { topDownloadCPS?: number } };
+    session.user.topDownloadCPS = 4000;
+
+    await collect(caller, 400, () => caller.emit('file-download-complete',
+      { filename: 'x.lha', size: 1000, durationMs: 1, cps: 999999999 }));
+
+    expect(session.user.topDownloadCPS).toBe(4000);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it('does not tell any socket whether a path exists on the server', async () => {

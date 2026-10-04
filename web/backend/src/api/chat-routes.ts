@@ -12,7 +12,7 @@ import express, { Request, Response } from 'express';
 import { jwtSecret } from '../utils/jwt-secrets';
 import { mintChatToken } from '../services/chat-token.service';
 import { loadAccount } from '../services/load-account';
-import { accountRefusal } from '../services/logon-gates';
+import { accountRefusal, tokenHolderRefusal } from '../services/logon-gates';
 import jwt from 'jsonwebtoken';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
@@ -46,7 +46,10 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
   const handleError = (res: Response, error: unknown, statusCode: number = 500) => {
 console.error('[Chat API] Error:', error);
 
-    const message = error instanceof Error ? error.message : 'An error occurred';
+    // A refusal's own sentence (4xx) is for the caller; an unexpected
+    // failure's text can name server paths and stays in the log above -
+    // these routes take no login.
+    const message = statusCode < 500 && error instanceof Error ? error.message : 'An error occurred';
     const response: ApiResponse = {
       success: false,
       message,
@@ -147,10 +150,12 @@ console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!
       try {
         const decoded = jwt.verify(token, secret) as any;
 
-        // Verify user still exists
+        // The account must still exist AND still be allowed on the board:
+        // a token minted before a delete or a lock is no longer valid
+        // (services/logon-gates tokenHolderRefusal).
         const user = await database.getUserById(decoded.userId);
 
-        if (!user) {
+        if (!user || tokenHolderRefusal(user).refusal !== null) {
           return sendResponse(res, { valid: false });
         }
 

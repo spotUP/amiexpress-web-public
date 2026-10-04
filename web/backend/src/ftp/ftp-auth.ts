@@ -36,6 +36,8 @@ import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
 import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
 import { loadAccount } from '../services/load-account';
 import { accountRefusal, AccountRefusal } from '../services/logon-gates';
+import { userDatabaseManager } from '../services/UserDatabaseManager';
+import { getMaxPasswordFails } from '../services/password-policy.util';
 
 /**
  * What an FTP caller is told when the board refuses his account. 420 and the
@@ -414,7 +416,41 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
     },
     async authenticate(username: string, password: string): Promise<FtpUser | FtpLogonRefusal | null> {
       const row = await db.authenticateUser(username, password);
-      if (!row) return null;
+
+      /*
+       * THE ACCOUNT'S PASSWORD COUNTER, as the BBS logon keeps it.
+       *
+       * express.e's ftpAuth (15411) is checkUserPassword (1008-1018), the
+       * same procedure the board's logon uses: a wrong password bumps
+       * userMisc.invalidAttempts and locks the account at
+       * MAX_PASSWORD_FAILS, a right one zeroes it. This answered 430 and
+       * counted nothing, so FTP was an unmetered place to guess a caller's
+       * password that the board's lockout never saw. The counter and the
+       * lock are UserDatabaseManager's, the same calls command.handler makes
+       * for telnet, SSH and the web; the lock itself is honoured below, by
+       * the board's gates. (express's own FTP logon frees the account
+       * without saving it on a failure, so its count was lost on hang-up;
+       * this port persists it, as its BBS logon does.)
+       */
+      if (!row) {
+        try {
+          const named = await db.getUserByUsername(username);
+          if (named?.slotNumber && named.slotNumber > 0) {
+            userDatabaseManager.recordPasswordFailure(named.slotNumber, getMaxPasswordFails());
+          }
+        } catch (err) {
+          // A failure to record must never turn a 430 into a crash.
+          console.warn('[FTP] Could not record password failure:', err);
+        }
+        return null;
+      }
+      if (row.slotNumber && row.slotNumber > 0) {
+        try {
+          userDatabaseManager.clearPasswordFailures(row.slotNumber);
+        } catch (err) {
+          console.warn('[FTP] Could not clear password failures:', err);
+        }
+      }
 
       /*
        * THE BOARD'S OWN ACCOUNT GATES, on the board's own record.

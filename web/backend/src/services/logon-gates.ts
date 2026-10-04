@@ -22,6 +22,8 @@ import { config } from '../config';
 import { getBoardConfig } from './bbs-config-file.service';
 import { userDatabaseManager } from './UserDatabaseManager';
 import { decodeAmigaDateToUnix } from '../utils/date-time.util';
+import { loadAccount } from './load-account';
+import type { User } from '../database/types';
 
 /** The fields of a loaded account the gates read. */
 export interface GatedAccount {
@@ -126,9 +128,44 @@ export function accountRefusal(
   expiryDays: number = passwordExpiryDays(),
   nowSecs?: number,
 ): AccountRefusal | null {
+  const standing = standingRefusal(account, misc);
+  if (standing !== null) return standing;
+  if (passwordChangeRequired(misc, expiryDays, nowSecs)) return 'password-change-required';
+  return null;
+}
+
+/**
+ * The gates that say an account may not be on the board AT ALL - level 0/1,
+ * deleted, locked - in login-post's order. The password-change gate is not
+ * one of them: it is a prompt at the next logon, not a ban.
+ */
+export function standingRefusal(
+  account: GatedAccount,
+  misc: LogonMisc = readLogonMisc(account.slotNumber),
+): Exclude<AccountRefusal, 'password-change-required'> | null {
   if (securityLockoutScreen(account.secLevel) !== null) return 'lockout';
   if (isAccountDeleted(account)) return 'deleted-account';
   if (misc.accountLocked) return 'account-locked';
-  if (passwordChangeRequired(misc, expiryDays, nowSecs)) return 'password-change-required';
   return null;
+}
+
+/**
+ * A TOKEN'S CALLER, asked again every time the token is used.
+ *
+ * A token is minted at a logon that passed every gate, and it outlives that
+ * logon by hours (access) or weeks (refresh). An account the sysop deleted,
+ * locked or set to level 0 after the token was minted kept every door it
+ * opened: the socket connect, the admin API, the refresh that mints the next
+ * one. So whatever accepts a token as a caller asks this of the account's
+ * record as it is NOW (loadAccount: the disk, over the row).
+ *
+ * Returns the refusal, or null with the account the token may act as.
+ */
+export function tokenHolderRefusal(
+  row: User,
+): { refusal: Exclude<AccountRefusal, 'password-change-required'>; account?: undefined }
+  | { refusal: null; account: User } {
+  const account = loadAccount(row).user;
+  const refusal = standingRefusal(account);
+  return refusal === null ? { refusal: null, account } : { refusal };
 }

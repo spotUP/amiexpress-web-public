@@ -15,6 +15,8 @@ import { messageFileManager } from './services/MessageFileManager';
 import { conferenceFileManager } from './services/ConferenceFileManager';
 import { messageIndexManager } from './services/MessageIndexManager';
 import { userDatabaseManager } from './services/UserDatabaseManager';
+import { tokenHolderRefusal } from './services/logon-gates';
+import type { User as AccountRecord } from './database/types';
 import { dbProfiler } from './utils/database-profiler.util';
 
 // Import types
@@ -3099,30 +3101,51 @@ console.warn('Password verification error:', error);
   async verifyAccessToken(token: string): Promise<{ userId: string; username: string; secLevel: number }> {
     const secret = jwtSecret();
 
+    let decoded: any;
     try {
-      const decoded = jwt.verify(token, secret) as any;
-      return {
-        userId: decoded.userId,
-        username: decoded.username,
-        secLevel: decoded.secLevel
-      };
+      decoded = jwt.verify(token, secret);
     } catch (error) {
       throw new Error('Invalid or expired access token');
     }
+    // The account as it is NOW (services/logon-gates tokenHolderRefusal): a
+    // token minted before the sysop deleted, locked or demoted the account
+    // stops working here, and the level is the record's, not the one the
+    // token was signed with.
+    const account = await this.tokenHolder(decoded.userId);
+    return {
+      userId: decoded.userId,
+      username: decoded.username,
+      secLevel: account.secLevel
+    };
+  }
+
+  /** The account a verified token names, refused when it may no longer log on. */
+  private async tokenHolder(userId: unknown): Promise<AccountRecord> {
+    const row = userId === undefined || userId === null ? undefined : await this.getUserById(String(userId));
+    if (!row) throw new Error('Invalid or expired access token');
+    const gate = tokenHolderRefusal(row);
+    if (gate.refusal !== null) throw new Error('Invalid or expired access token');
+    return gate.account;
   }
 
   async verifyRefreshToken(token: string): Promise<{ userId: string; username: string }> {
     const secret = jwtRefreshSecret();
 
+    let decoded: any;
     try {
-      const decoded = jwt.verify(token, secret) as any;
-      return {
-        userId: decoded.userId,
-        username: decoded.username
-      };
+      decoded = jwt.verify(token, secret);
     } catch (error) {
       throw new Error('Invalid or expired refresh token');
     }
+    // A refresh token lives for weeks; the account is asked again here so a
+    // deleted or locked one cannot keep minting access tokens.
+    await this.tokenHolder(decoded.userId).catch(() => {
+      throw new Error('Invalid or expired refresh token');
+    });
+    return {
+      userId: decoded.userId,
+      username: decoded.username
+    };
   }
 
   async authenticateUser(username: string, password: string): Promise<any> {

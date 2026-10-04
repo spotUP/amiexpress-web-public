@@ -591,7 +591,12 @@ console.log('[Upload] Upload request received from:', req.headers.origin);
     upload.single('file')(req, res, (err: any) => {
       if (err) {
 console.error('[Upload] Multer error:', err);
-        return res.status(500).json({ error: `Upload failed: ${err.message}` });
+        // A limit multer enforces ("File too large") is the caller's to
+        // read; anything else is logged above, not returned - this route
+        // takes no login, and a disk error's text names the server's paths.
+        return res.status(500).json({
+          error: err instanceof multer.MulterError ? `Upload failed: ${err.message}` : 'Upload failed',
+        });
       }
 
       try {

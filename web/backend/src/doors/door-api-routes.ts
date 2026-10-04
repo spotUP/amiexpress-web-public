@@ -14,6 +14,13 @@ import { isPlainFileName } from '../utils/plain-file-name.util';
 
 export const doorApiRouter = express.Router();
 
+/*
+ * A 500 here says WHAT failed and nothing more. These routes take no login,
+ * and the error's own text names the server's absolute paths (an esbuild
+ * failure quotes the door's file, an fs error its path); the detail goes to
+ * the log beside each response, never to the browser.
+ */
+
 const getBbsRoot = (): string => {
   return process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 };
@@ -121,7 +128,6 @@ console.log(`[DoorAPI] Serving pre-built bundle: ${preBundlePath}`);
 console.error(`[DoorAPI] Error serving bundle for ${doorId}:`, error);
     res.status(500).json({
       error: 'Failed to bundle door',
-      message: (error as Error).message,
     });
   }
 });
@@ -158,7 +164,6 @@ doorApiRouter.get('/doors/:doorId/manifest', async (req: Request, res: Response)
 console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
     res.status(500).json({
       error: 'Failed to load manifest',
-      message: (error as Error).message,
     });
   }
 });
@@ -196,7 +201,6 @@ doorApiRouter.get(/^\/doors\/([^/]+)\/assets\/(.*)$/u, async (req: Request, res:
 console.error(`[DoorAPI] Error serving asset for ${doorId}:`, error);
     res.status(500).json({
       error: 'Failed to load asset',
-      message: (error as Error).message,
     });
   }
 });
@@ -247,7 +251,6 @@ doorApiRouter.get('/doors/list', authenticateToken(db), requireSysop(), async (r
 console.error('[DoorAPI] Error listing doors:', error);
     res.status(500).json({
       error: 'Failed to list doors',
-      message: (error as Error).message,
     });
   }
 });
@@ -270,7 +273,6 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
 console.error('[DoorAPI] Error clearing cache:', error);
     res.status(500).json({
       error: 'Failed to clear cache',
-      message: (error as Error).message,
     });
   }
 });

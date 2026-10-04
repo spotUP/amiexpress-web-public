@@ -49,18 +49,16 @@ console.log(
   // ===== LEGACY CHAT HANDLERS (Sysop pager) =====
 
   // Handle special chat commands (legacy sysop chat)
-  onCaller(socket, "chat-message", (_caller: BBSSession, message: string) => {
-    const session = getSessionBySocketId(socket.id);
-    if (!session) return;
+  // The ONE registration (socket-handlers.ts had a second, unguarded copy
+  // of this and of accept-chat, so every line was delivered twice).
+  onCaller(socket, "chat-message", (session: BBSSession, message: string) => {
     if ((session as any).inChat) {
       sendChatMessage(socket, session, message);
     }
   });
 
   // Handle sysop accepting chat request (legacy)
-  onCaller(socket, "accept-chat", (_caller: BBSSession, sessionId: string) => {
-    const session = getSessionBySocketId(socket.id);
-    if (!session) return;
+  onCaller(socket, "accept-chat", (session: BBSSession, sessionId: string) => {
     // Sysop accepting chat request
     const chatSession = chatState.activeSessions.find(
       (s: any) => s.id === sessionId

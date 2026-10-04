@@ -932,74 +932,14 @@ console.log(
     await handleUploadBatchComplete(socket, session);
   });
 
-  // Handle file download completion with real CPS from frontend
-  onCaller(
-    socket,
-    "file-download-complete",
-    async (session: BBSSession, data: {
-      filename: string;
-      size: number;
-      durationMs: number;
-      cps: number;
-      path?: string;
-    }) => {
-console.log(
-        `[file-download-complete] ${data.filename}: ${data.size} bytes in ${data.durationMs}ms (${data.cps} CPS)`
-      );
-
-      if (!session.user) {
-console.log(
-          "[file-download-complete] No user in session, skipping CPS update"
-        );
-        return;
-      }
-
-      // Update user's top download CPS if this is a new record
-      const currentTopCPS = session.user.topDownloadCPS || 0;
-      if (data.cps > currentTopCPS) {
-        session.user.topDownloadCPS = data.cps;
-console.log(
-          `[file-download-complete] New top download CPS for ${session.user.username}: ${data.cps} (was ${currentTopCPS})`
-        );
-
-        // Persist to database
-        try {
-          await db.run(
-            `
-          UPDATE users
-          SET topdownloadcps = CASE WHEN topdownloadcps < $1 THEN $1 ELSE topdownloadcps END,
-              updated = CURRENT_TIMESTAMP
-          WHERE id = $2
-        `,
-            [data.cps, session.user.id]
-          );
-
-          // DISK-BASED: Write updated CPS to user.keys file for mtop
-          if (session.user.slotNumber) {
-            try {
-              userFileManager.updateUserDataFile(
-                session.user,
-                session.user.slotNumber
-              );
-console.log(
-                `[file-download-complete] Updated user ${session.user.username} disk files with download CPS`
-              );
-            } catch (diskErr) {
-console.error(
-                "[file-download-complete] Error writing user disk files:",
-                diskErr
-              );
-            }
-          }
-        } catch (err) {
-console.error(
-            "[file-download-complete] Failed to persist download CPS",
-            err
-          );
-        }
-      }
-    }
-  );
+  // `file-download-complete` is not heard. It wrote the BROWSER's own CPS
+  // figure into the caller's top-download record (topDownloadCPS, user.keys
+  // dnCPS2), so any caller could put any number on the CPS top list. In
+  // express.e the record is the board's measurement - bytes sent over the
+  // transfer time the board itself timed (15946-15953), kept when it beats
+  // dnCPS2 (15184-15189) - and this port books exactly that for a browser
+  // download in runPostDownload (services/post-download.service.ts,
+  // express.e:20271-20275). The browser's report is not the board's figure.
 
   // `file-uploaded` socket handler removed in Phase 4 — no frontend
   // (web, packages/terminal, or admin) emits this event in current

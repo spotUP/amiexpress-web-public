@@ -46,7 +46,6 @@ import {
   disposePetsciiSessionModel,
 } from '../utils/petscii-session-model';
 import { handleCommand } from '../handlers/command.handler';
-import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
 import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed, dispatchInOrder } from './terminal-input';
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
@@ -825,27 +824,9 @@ console.error('No session found for socket:', socket.id);
     socket.emit('transfer-raw:cancelled');
   });
 
-  // Handle special chat commands
-  socket.on('chat-message', (message: string) => {
-    const session = getSession(socket.id);
-    if (!session) return;
-
-    if ((session as any).inChat) {
-      sendChatMessage(socket, session, message);
-    }
-  });
-
-  socket.on('accept-chat', (sessionId: string) => {
-    const session = getSession(socket.id);
-    if (!session) return;
-
-    // Sysop accepting chat request
-    const { chatState } = require('./initialization');
-    const chatSession = chatState.activeSessions.find((s: any) => s.id === sessionId);
-    if (chatSession && session.user?.secLevel === 255) { // Sysop level
-      acceptChat(socket, session, chatSession);
-    }
-  });
+  // `chat-message` and `accept-chat` are registered once, behind the logon
+  // guard, in server/chat-socket-handlers.ts. A second unguarded copy here
+  // delivered every chat line twice and let a visitor reach both.
 }
 
 /**

@@ -15,12 +15,21 @@
 process.env.SKIP_DB_INIT = '1';
 
 const authenticateUser = jest.fn();
+const getUserByUsername = jest.fn();
 jest.mock('../../src/database', () => ({
   db: {
     authenticateUser: (...args: unknown[]) => authenticateUser(...args),
+    getUserByUsername: (...args: unknown[]) => getUserByUsername(...args),
     getConfigRepository: () => ({ getConferenceConfigs: () => [] }),
   },
   getDatabase: () => ({}),
+}));
+
+// The board's MAX_PASSWORD_FAILS tooltype, as the policy reader returns it.
+const maxPasswordFails = jest.fn(() => -1);
+jest.mock('../../src/services/password-policy.util', () => ({
+  ...jest.requireActual('../../src/services/password-policy.util'),
+  getMaxPasswordFails: () => maxPasswordFails(),
 }));
 
 import * as net from 'net';
@@ -53,6 +62,8 @@ function onDisk(username: string, slot: number, extra: Record<string, unknown> =
   userFileManager.writeUserFiles({ ...row(username, slot), ...extra } as any, slot);
   authenticateUser.mockImplementation(async (name: string, password: string) =>
     name === username && password === 'right' ? row(username, slot) : null);
+  getUserByUsername.mockImplementation(async (name: string) =>
+    name === username ? row(username, slot) : null);
 }
 
 let server: FtpServer;
@@ -104,6 +115,8 @@ async function login(port: number, username: string, password: string): Promise<
 afterEach(async () => {
   await server?.stop();
   authenticateUser.mockReset();
+  getUserByUsername.mockReset();
+  maxPasswordFails.mockReturnValue(-1);
 });
 
 describe('an FTP login', () => {
@@ -159,5 +172,34 @@ describe('an FTP login', () => {
     const port = await listen();
 
     expect(await login(port, 'ftpwrong', 'nope')).toBe('430 Invalid username or password');
+  });
+
+  it('counts wrong passwords on the account and locks it at MAX_PASSWORD_FAILS, as the BBS logon does', async () => {
+    onDisk('ftpguess', 917);
+    maxPasswordFails.mockReturnValue(3);
+    const port = await listen();
+
+    expect(await login(port, 'ftpguess', 'one')).toBe('430 Invalid username or password');
+    expect(userDatabaseManager.readUserFromDisk(917)!.misc.invalidAttempts).toBe(1);
+    expect(await login(port, 'ftpguess', 'two')).toBe('430 Invalid username or password');
+    expect(await login(port, 'ftpguess', 'three')).toBe('430 Invalid username or password');
+
+    // The third failure locked the account (express.e:1008-1016): the right
+    // password no longer lets it on.
+    expect(userDatabaseManager.readUserFromDisk(917)!.misc.accountLocked).toBeTruthy();
+    expect(await login(port, 'ftpguess', 'right')).toBe(
+      '420 Your account is locked out (possibly due to repeated password failures)');
+    expect(reserved).toHaveLength(0);
+  });
+
+  it('a right password zeroes the count (express.e:1018), so earlier misses do not carry', async () => {
+    onDisk('ftpmissed', 918);
+    maxPasswordFails.mockReturnValue(3);
+    const port = await listen();
+
+    expect(await login(port, 'ftpmissed', 'oops')).toBe('430 Invalid username or password');
+    expect(await login(port, 'ftpmissed', 'oops')).toBe('430 Invalid username or password');
+    expect(await login(port, 'ftpmissed', 'right')).toBe('230 password accepted');
+    expect(userDatabaseManager.readUserFromDisk(918)!.misc.invalidAttempts).toBe(0);
   });
 });
