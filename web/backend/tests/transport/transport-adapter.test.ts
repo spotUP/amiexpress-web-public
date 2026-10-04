@@ -292,11 +292,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'transfer-raw:data',
   'transfer-raw:echo',
   'transfer-raw:init',
-  'transfer:cancelled',
-  'transfer:complete',
-  'transfer:data',
-  'transfer:end',
-  'transfer:error',
   'unoEventBroadcast',
   'video:cells',
   'video:frame',
@@ -615,7 +610,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // to the browser's pre-login theme cookie (doors/BBSApi.ts).
     // 251 as of 2026-10-04: `petscii-case`, render - the CTRL+L case switch
     // a PETSCII caller presses (utils/petscii-session-model.ts).
-    expect(ruled.length).toBe(251);
+    // 246 as of 2026-10-04: the five `transfer:*` names left with the dead
+    // socket channel that sent them, which read and wrote any path a
+    // visitor named (open-surface audit).
+    expect(ruled.length).toBe(246);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -682,7 +680,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 119 (2026-09-28): `font-changed` gone - no sender left, and no
       // listener ever existed.
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
-      'web-only': 119,
+      // 114 (2026-10-04): the five `transfer:*` names gone with the dead
+      // socket channel that read and wrote any path a visitor named.
+      'web-only': 114,
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       'not-transport': 105,

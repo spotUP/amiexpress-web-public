@@ -23,7 +23,6 @@ import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
 import { nodeFileManager } from "../services/NodeFileManager";
 import { loadAccount, rowFieldsFromAccount } from "./load-account";
-import { userDatabaseManager } from "../services/UserDatabaseManager";
 import { callersLogManager, SOCKET_CONNECT_STRING } from "./CallersLogManager";
 import { initializeSecurity, setEnvStat } from "../utils/security.util";
 import { EnvStat } from "../constants/env-codes";
@@ -48,6 +47,13 @@ import { getSystemTime } from "../utils/date-time.util";
 import { amiExpressDay } from '../utils/time-tracking.util';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
+import {
+  isAccountDeleted,
+  passwordChangeRequired,
+  passwordExpiryDays,
+  readLogonMisc,
+  securityLockoutScreen,
+} from './logon-gates';
 import { config as appConfig } from '../config';
 import { reportPresence } from "../achievements/sites";
 
@@ -499,9 +505,10 @@ export async function runPostAuthLogin(
   initializeSecurity(session);
   setEnvStat(session, EnvStat.IDLE);
 
-  // express.e:29768-29773 — secStatus <= 1 lockout.
-  if (user.secLevel <= 1) {
-    const lockScreen = user.secLevel === 0 ? "LOCKOUT0" : "LOCKOUT1";
+  // express.e:29768-29773 — secStatus <= 1 lockout. The gates are shared
+  // with FTP's login (services/logon-gates.ts), so the two cannot disagree.
+  const lockScreen = securityLockoutScreen(user.secLevel);
+  if (lockScreen !== null) {
     await displayScreen(emitter as any, session, lockScreen, false);
     beginLogoff(emitter as any, session, {
       finalState: BBSState.AWAIT,
@@ -511,20 +518,7 @@ export async function runPostAuthLogin(
   }
 
   // Read disk-backed user.misc (accountLocked / forcePwdReset / pwdLastUpdated).
-  let diskMisc: ReturnType<typeof userDatabaseManager.readUserFromDisk> = null;
-  if (user.slotNumber && user.slotNumber > 0) {
-    try {
-      diskMisc = userDatabaseManager.readUserFromDisk(user.slotNumber);
-    } catch (err) {
-      console.warn(
-        `[LOGIN] Could not read user.misc for slot ${user.slotNumber}:`,
-        err,
-      );
-    }
-  }
-  const miscAccountLocked = diskMisc ? diskMisc.misc.accountLocked : 0;
-  const miscForcePwdReset = diskMisc ? diskMisc.misc.forcePwdReset : 0;
-  const miscPwdLastUpdated = diskMisc ? diskMisc.misc.pwdLastUpdated : 0;
+  const logonMisc = readLogonMisc(user.slotNumber);
 
   /**
    * express.e:29701-29711 - a deleted account.
@@ -542,7 +536,7 @@ export async function runPostAuthLogin(
    */
   // The record's own slotNumber field is what express.e tests (29701); the
   // position stays the account's, so a deleted account can be re-activated.
-  if (!user.slotNumber || user.slotNumber === 0 || user.accountDeleted === true) {
+  if (isAccountDeleted(user)) {
     emitter.emit("ansi-output", "\r\nThat account has been deleted.\r\n");
     beginLogoff(emitter as any, session, { message: "" });
     return { ok: false, terminated: "deleted-account" };
@@ -656,7 +650,7 @@ export async function runPostAuthLogin(
   }
 
   // express.e:29775-29782 — accountLocked.
-  if (miscAccountLocked) {
+  if (logonMisc.accountLocked) {
     emitter.emit(
       "ansi-output",
       "\r\nYour account is locked out (possibly due to repeated password failures)\r\n\r\n",
@@ -687,25 +681,10 @@ export async function runPostAuthLogin(
 
   // express.e:29785-29845 — PASSWORD_EXPIRY_DAYS + forcePwdReset.
   {
-    let pwdExpiryDays = 0;
-    try {
-      const sysConf = getBoardConfig(appConfig.get('dataDir'));
-      if (sysConf && typeof sysConf.password_expiry_days === "number") {
-        pwdExpiryDays = sysConf.password_expiry_days;
-      }
-    } catch {
-      /* non-fatal */
-    }
-
-    let forcedByExpiry = false;
-    if (pwdExpiryDays > 0 && miscPwdLastUpdated > 0) {
-      const nowSecs = Math.floor(Date.now() / 1000);
-      if (miscPwdLastUpdated + pwdExpiryDays * 86400 < nowSecs) {
-        forcedByExpiry = true;
-      }
-    }
-
-    const needsPwdChange = forcedByExpiry || miscForcePwdReset !== 0;
+    const needsPwdChange = passwordChangeRequired(
+      logonMisc,
+      passwordExpiryDays(appConfig.get('dataDir')),
+    );
 
     if (needsPwdChange) {
       const { checkSecurity } = require("../utils/acs.util");

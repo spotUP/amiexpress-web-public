@@ -29,9 +29,23 @@ export interface FtpUser {
   username: string;
 }
 
+/**
+ * The board said no to an account whose password was RIGHT: deleted, locked,
+ * level 0, a password that must be changed first. Distinct from null so the
+ * caller is told why, as express.e tells an FTP caller (28745-28752).
+ */
+export interface FtpLogonRefusal {
+  refused: { code: number; text: string };
+}
+
 export interface FtpDeps {
-  /** The board's own password check - bcrypt, the same call the BBS login makes. */
-  authenticate(username: string, password: string): Promise<FtpUser | null>;
+  /**
+   * The board's own password check - bcrypt, the same call the BBS login
+   * makes - and then the board's own account gates (services/logon-gates).
+   * Null is a wrong name or password; a refusal is an account the board will
+   * not let on.
+   */
+  authenticate(username: string, password: string): Promise<FtpUser | FtpLogonRefusal | null>;
   /** Take a node for this session, or null when the board has none free. */
   reserveNode(sessionId: string, user: FtpUser): Promise<number | null>;
   releaseNode(sessionId: string): Promise<void>;
@@ -68,6 +82,12 @@ export interface FtpDeps {
   mayDownload?(user: FtpUser, size: number): Promise<{ allowed: boolean; message?: string }>;
   /** Charge the download once the bytes are actually gone. */
   recordDownload?(user: FtpUser, size: number): Promise<void>;
+  /**
+   * express.e's ftpDownloadFileStart (15109-15140) ends in logUDFile(TRUE)
+   * (9475-9489): `\tDownloading <name> <size> bytes` to the CallersLog and
+   * the UDLog, as the transfer starts. Absent means nothing is logged.
+   */
+  logDownload?(user: FtpUser, name: string, size: number, nodeId: number): Promise<void>;
   /**
    * Why this upload is refused, BEFORE any bytes are taken - the conference's
    * `NO_FTP_UPLOADS` text, a name the board will not accept, a caller without
@@ -263,6 +283,8 @@ export class FtpSession {
 
     // express.e writes the command line itself, not just the verb
     // (ftpd.e:1968-1974). A password is the one thing it must not carry.
+    // WEB_: ftpd.e:1968 logs the raw request, PASS included; masked here
+    // so a CallersLog never holds a caller's password.
     this.deps.log(this.user?.username ?? this.pendingUser ?? 'unknown',
       `\tFTP Command >: ${verb === 'PASS' ? 'PASS ****' : line}`, this.nodeId);
 
@@ -478,9 +500,14 @@ export class FtpSession {
     }
 
     try {
+      // ftpd.e cmdRetr calls downloadFileStart before the bytes go
+      // (ftpd.e:1792), and express.e logs the file there, whole size
+      // (express.e:15109-15140, 9478). Nothing is logged at the end: with no
+      // flagged list in FTP server mode ftpDownloadFileEnd returns at
+      // `IF fileItem=NIL THEN RETURN` (express.e:15168).
+      if (this.deps.logDownload) await this.deps.logDownload(this.user, entry.name, located.size, this.nodeId);
       const sent = await this.sendFile(located.path, data, offset);
       if (this.deps.recordDownload) await this.deps.recordDownload(this.user, sent);
-      this.deps.log(this.user.username, `\tFTP Download >: ${entry.name} (${sent} bytes)`, this.nodeId);
       this.reply(226, 'Transfer complete');
     } catch (error) {
       data.destroy();
@@ -929,6 +956,11 @@ export class FtpSession {
     if (!user) {
       this.pendingUser = null;
       return this.reply(430, 'Invalid username or password');
+    }
+    if ('refused' in user) {
+      // Before a node is taken: an account the board refuses holds nothing.
+      this.pendingUser = null;
+      return this.reply(user.refused.code, user.refused.text);
     }
 
     const nodeId = await this.deps.reserveNode(this.sessionId, user);

@@ -18,6 +18,7 @@ const mockDb = {
   query: jest.fn(async () => ({ rows: [] })),
   getFileEntry: jest.fn(async () => null as any),
   getConferenceById: jest.fn(async () => ({ id: 1, name: 'Conf1' })),
+  verifyAccessToken: jest.fn(async () => ({ userId: '1', username: 'sysop', secLevel: 255 })),
 };
 (globalThis as any).__routeOnlyAreasDb = mockDb;
 jest.mock('../../src/database', () => ({
@@ -33,6 +34,7 @@ import request from 'supertest';
 import { config } from '../../src/config';
 import { applyTooltypes } from '../../src/utils/info-file.util';
 import { setStorageContext } from '../../src/storage/storage-context';
+import { issueAreaDownloadTicket } from '../../src/handlers/file/download-ticket';
 
 let dataDir = '';
 let spy: jest.SpyInstance;
@@ -66,12 +68,12 @@ function app(): express.Express {
 }
 
 test('a file in a file area downloads', async () => {
-  const res = await request(app()).get('/api/download/1/1/PUBLIC.LHA');
+  const res = await request(app()).get(issueAreaDownloadTicket(1, 1, 'PUBLIC.LHA'));
   expect(res.status).toBe(200);
 });
 
 test.each(['HELD.LHA', 'FORSYSOP.LHA', 'INCOMING.LHA'])('%s, outside the file areas, is not served by name', async (name) => {
-  const res = await request(app()).get(`/api/download/1/1/${name}`);
+  const res = await request(app()).get(issueAreaDownloadTicket(1, 1, name));
   expect(res.status).toBe(404);
 });
 
@@ -80,6 +82,6 @@ test('a catalogue id for a held file is not served either', async () => {
     id: 7, filename: 'HELD.LHA', conferenceId: 1, areaId: 1, size: 4, status: 'held',
     filePath: path.join(dataDir, 'Conf1', 'HOLD', 'HELD.LHA'),
   });
-  const res = await request(app()).get('/api/download/7');
+  const res = await request(app()).get('/api/download/7').set('Authorization', 'Bearer sysop');
   expect(res.status).toBe(404);
 });

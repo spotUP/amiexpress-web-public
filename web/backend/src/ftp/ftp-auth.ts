@@ -32,8 +32,29 @@ import { testFile, TestResult } from '../utils/file-test.util';
 import { validateFilename } from '../utils/file-upload.util';
 import { DEFAULT_LISTING_DAYS, FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
-import { writeToCallersLog } from '../utils/download-logging.util';
-import type { FtpDeps, FtpUser } from './ftp-session';
+import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
+import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
+import { loadAccount } from '../services/load-account';
+import { accountRefusal, AccountRefusal } from '../services/logon-gates';
+
+/**
+ * What an FTP caller is told when the board refuses his account. 420 and the
+ * deleted sentence are express.e's own FTP logon (28745-28752); the others
+ * are the BBS logon's own words (29775-29776, 29768 LOCKOUT0/1, 29785), on
+ * the one line FTP has.
+ */
+const FTP_REFUSALS: Record<AccountRefusal, { code: number; text: string }> = {
+  'deleted-account': { code: 420, text: 'That account has been deleted.' },
+  lockout: { code: 420, text: 'Your access level does not allow you to log on.' },
+  'account-locked': {
+    code: 420,
+    text: 'Your account is locked out (possibly due to repeated password failures)',
+  },
+  'password-change-required': {
+    code: 420,
+    text: 'Your account requires your password to be changed - log on to the board to change it.',
+  },
+};
 
 /**
  * The board's own conference tree, for browsing.
@@ -205,6 +226,13 @@ export function boardFtpDeps(): FtpDeps {
 
     async recordDownload(user: FtpUser, size: number) {
       await updateDownloadStats(user as unknown as Parameters<typeof updateDownloadStats>[0], size);
+    },
+
+    async logDownload(user: FtpUser, name: string, size: number, nodeId: number) {
+      // logUDFile(TRUE), express.e:9478 - never 'Free ' here: FTP server
+      // mode has no flagged list for ftpDownloadFileStart to find the file in
+      // (express.e:15130 freeDFlag:=FALSE).
+      await logDownload(user as unknown as Parameters<typeof logDownload>[0], name, size, false, nodeId);
     },
 
     /**
@@ -384,10 +412,33 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         notices: outcome.notices.map((notice) => notice.text),
       };
     },
-    async authenticate(username: string, password: string): Promise<FtpUser | null> {
-      const user = await db.authenticateUser(username, password);
-      if (!user) return null;
-      return { id: user.id, username: user.username, ...user } as FtpUser;
+    async authenticate(username: string, password: string): Promise<FtpUser | FtpLogonRefusal | null> {
+      const row = await db.authenticateUser(username, password);
+      if (!row) return null;
+
+      /*
+       * THE BOARD'S OWN ACCOUNT GATES, on the board's own record.
+       *
+       * This returned the SQL row the moment the password matched, so an
+       * account the sysop had DELETED (the record's slotNumber written as 0,
+       * express.e:21365 - the row stays), LOCKED (user.misc accountLocked) or
+       * set to level 0 logged in over FTP and took files, while the BBS logon
+       * refused it. express.e's own FTP logon loads the account off the disk
+       * (28707) and refuses a deleted one (28745-28752).
+       *
+       * The session now runs on the record loadAccount reads, as every other
+       * transport's does, and the refusals are login-post's own predicates
+       * (services/logon-gates) - one rule, asked from two places.
+       */
+      const { user } = loadAccount(row);
+      const refusal = accountRefusal(user);
+      if (refusal !== null) return { refused: FTP_REFUSALS[refusal] };
+
+      // Without the record's deleted state, as login-post keeps it off the
+      // session: a `false` carried here must never be written back over a
+      // DELETE the sysop makes while this caller is on.
+      const { accountDeleted: _deletedOnDisk, ...account } = user;
+      return { ...account, id: account.id, username: account.username } as unknown as FtpUser;
     },
 
     async reserveNode(sessionId: string, user: FtpUser): Promise<number | null> {

@@ -33,6 +33,9 @@ jest.mock('../../src/database', () => {
     db: new Proxy(actual.db as object, {
       get(target: any, prop: string | symbol) {
         if (prop === 'getUserById') return mockGetUserById;
+        // The restore takes the caller from its token (auth-socket-handlers):
+        // the token names the account the test restores.
+        if (prop === 'verifyAccessToken') return async (token: string) => ({ userId: token, username: 'Spot', secLevel: 20 });
         return target[prop];
       },
     }),
@@ -99,7 +102,7 @@ async function reconnectInto(session: any, socketId: string, nodeId: number): Pr
 
   registerSocketHandlers(makeIo([socket]), socket);
   const restore = await waitForHandler(socket, 'restore-session');
-  await restore({ userId: session.user.id, username: 'Spot', savedAt: Date.now() });
+  await restore({ token: String(session.user.id), userId: session.user.id, username: 'Spot', savedAt: Date.now() });
 
   return emits;
 }

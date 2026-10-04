@@ -2,6 +2,8 @@
  * Moderation socket handlers for LiveChat
  */
 import type { Socket } from 'socket.io';
+import type { BBSSession } from '../index';
+import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { ModerationRepository } from '../database/moderation-repository';
 
@@ -12,8 +14,13 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
 
   if (!userId || !username) return;
 
+  // The sysop's tools: kick, ban and mute any caller, and a system line into
+  // any room. Open to every logged-on chat user before (open-surface audit,
+  // 2026-10-04); no client sends these today - the livechat door's own
+  // emits of these names go to the browser, not here.
+
   // Kick user (temporary disconnection)
-  socket.on('chat:kick', async (data: { roomId: string; targetUserId: string; reason?: string }) => {
+  onLevel(socket, 'chat:kick', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; targetUserId: string; reason?: string }) => {
     try {
       const { roomId, targetUserId, reason } = data;
 
@@ -44,7 +51,7 @@ console.error('[Moderation] Kick error:', error);
   });
 
   // Ban user
-  socket.on('chat:ban', async (data: { roomId: string; targetUserId: string; reason?: string; duration?: number }) => {
+  onLevel(socket, 'chat:ban', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; targetUserId: string; reason?: string; duration?: number }) => {
     try {
       const { roomId, targetUserId, reason, duration } = data;
 
@@ -78,7 +85,7 @@ console.error('[Moderation] Ban error:', error);
   });
 
   // Unban user
-  socket.on('chat:unban', async (data: { roomId: string; targetUserId: string }) => {
+  onLevel(socket, 'chat:unban', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; targetUserId: string }) => {
     try {
       const { roomId, targetUserId } = data;
       await modRepo.unbanUser(roomId, targetUserId);
@@ -94,7 +101,7 @@ console.error('[Moderation] Unban error:', error);
   });
 
   // Mute user
-  socket.on('chat:mute', async (data: { roomId: string; targetUserId: string; duration?: number }) => {
+  onLevel(socket, 'chat:mute', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; targetUserId: string; duration?: number }) => {
     try {
       const { roomId, targetUserId, duration } = data;
       await modRepo.muteUser(roomId, targetUserId, username, duration);
@@ -119,7 +126,7 @@ console.error('[Moderation] Mute error:', error);
   });
 
   // Unmute user
-  socket.on('chat:unmute', async (data: { roomId: string; targetUserId: string }) => {
+  onLevel(socket, 'chat:unmute', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; targetUserId: string }) => {
     try {
       const { roomId, targetUserId } = data;
       await modRepo.unmuteUser(roomId, targetUserId);

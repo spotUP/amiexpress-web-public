@@ -173,6 +173,28 @@ console.log(`[Operator Chat] Stopped paging dots for page ${pageId}`);
 }
 
 /**
+ * Whether this operator-console socket may act - on `pageId` when one is
+ * named. Two kinds of socket reach the console: a logged-in sysop (level
+ * 100 or more, from the JWT the socket middleware read), who may act on any
+ * page; and the holder of one page's Discord link (index.ts gives that socket
+ * `pageId`), who may act on THAT page only. The link was honoured as a sysop
+ * for every page, and typing/keystroke asked nobody at all, so any socket
+ * could type as the sysop into a caller's chat (open-surface audit,
+ * 2026-10-04).
+ */
+export function operatorMay(
+  session: { user?: { secLevel?: number }; pageId?: string } | undefined | null,
+  pageId?: string,
+): boolean {
+  if (!session?.user || (session.user.secLevel ?? 0) < 100) return false;
+  // An action that names no page (status, the lists - filtered per page by
+  // their callers) is any console's; one that names a page is the link's
+  // only for its own page.
+  if (session.pageId === undefined || pageId === undefined) return true;
+  return pageId === session.pageId;
+}
+
+/**
  * Initialize operator chat handler
  */
 export function initOperatorChatHandler(io: any, repository: OperatorChatRepository) {
@@ -221,7 +243,7 @@ console.log(`[Operator Chat] Sysop ${sess.user.username} disconnected`);
     });
 
     socket.on('operator:set-status', async (data: { availability: SysopAvailability; statusMessage?: string }) => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
@@ -233,12 +255,12 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
     });
 
     socket.on('operator:get-pending-pages', async () => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
 
-      const pending = repository.getPendingPages();
+      const pending = repository.getPendingPages().filter((p) => operatorMay(session, p.id));
       // Convert Date objects to timestamps for frontend
       const pendingWithTimestamps = pending.map(page => ({
         ...page,
@@ -252,13 +274,13 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
     });
 
     socket.on('operator:get-active-chats', async () => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
 
       const botChats = Array.from(activeChatSessions.entries())
-        .filter(([_, cs]) => (cs as any).isBotControlled)
+        .filter(([id, cs]) => (cs as any).isBotControlled && operatorMay(session, id))
         .map(([id, cs]) => ({
           pageId: id,
           userHandle: cs.userHandle,
@@ -271,7 +293,7 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
     });
 
     socket.on('operator:accept-page', async (data: { pageId: string }) => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session, data?.pageId)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
@@ -300,7 +322,7 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
     });
 
     socket.on('operator:send-message', async (data: { pageId: string; message: string }) => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session, data?.pageId)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
@@ -309,7 +331,7 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
     });
 
     socket.on('operator:end-chat', async (data: { pageId: string }) => {
-      if (!session?.user || session.user.secLevel < 100) {
+      if (!operatorMay(session, data?.pageId)) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
       }
@@ -318,6 +340,7 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
     });
 
     socket.on('operator:typing', (data: { pageId: string; isTyping: boolean }) => {
+      if (!operatorMay(session, data?.pageId)) return;
       const chatSession = activeChatSessions.get(data.pageId);
       if (chatSession) {
         chatSession.isTyping.sysop = data.isTyping;
@@ -331,6 +354,7 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accep
 
     // Real-time sysop keystroke transmission to BBS user (like livechat char-by-char)
     socket.on('operator:keystroke', (data: { pageId: string; keystroke: string }) => {
+      if (!operatorMay(session, data?.pageId)) return;
       const chatSession = activeChatSessions.get(data.pageId);
       if (!chatSession) return;
 

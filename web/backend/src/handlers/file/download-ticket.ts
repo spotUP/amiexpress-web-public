@@ -50,6 +50,38 @@ export function redeemDownloadTicket(token: string): string | null {
 }
 
 /**
+ * A browser download of a file IN the file areas.
+ *
+ * `/api/download/:conf/:dir/:name` takes no login, and without a ticket it
+ * handed any visitor any file of any conference - one the caller's access
+ * would never list, with no account and no ratio. The board issues this
+ * ticket when it has delivered the file to a caller (file-delivery.ts), for
+ * exactly that conference, directory and name; the route serves the file
+ * once for it and nothing else (open-surface audit, 2026-10-04).
+ */
+const areaTickets = new Map<string, { confNum: number; dirNum: number; name: string; expires: number }>();
+
+/** The URL the caller's browser fetches one file-area file from - once. */
+export function issueAreaDownloadTicket(confNum: number, dirNum: number, name: string): string {
+  const now = Date.now();
+  for (const [token, t] of areaTickets) if (t.expires <= now) areaTickets.delete(token);
+  const token = randomBytes(24).toString('hex');
+  areaTickets.set(token, { confNum: Number(confNum), dirNum: Number(dirNum), name, expires: now + TICKET_LIFETIME_MS });
+  return `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}?ticket=${token}`;
+}
+
+/** Whether the ticket was issued for this file; it is spent either way. */
+export function redeemAreaDownloadTicket(token: string, confNum: number, dirNum: number, name: string): boolean {
+  const ticket = areaTickets.get(token);
+  if (!ticket) return false;
+  areaTickets.delete(token);
+  return ticket.expires > Date.now()
+    && ticket.confNum === confNum
+    && ticket.dirNum === dirNum
+    && ticket.name === name;
+}
+
+/**
  * An upload the board asked one caller for - a TypeScript door's
  * requestArchiveUpload - is posted to `/api/upload`, which takes no login.
  * The board issues this ticket with the request, so only that caller's

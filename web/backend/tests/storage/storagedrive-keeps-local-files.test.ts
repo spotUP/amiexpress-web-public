@@ -61,6 +61,7 @@ import { setStorageContext } from '../../src/storage/storage-context';
 import { resolveFile } from '../../src/handlers/transfer/batch-download.handler';
 import { processBatchFile } from '../../src/server/file-socket-handlers';
 import { FakeBackend } from './fake-backend';
+import { issueAreaDownloadTicket } from '../../src/handlers/file/download-ticket';
 
 interface Board {
   dataDir: string;
@@ -139,7 +140,7 @@ describe('a directory put on a cloud drive with files already in it', () => {
   it('still serves the files left on local disk over the web route', async () => {
     boardMovedToDrive();
 
-    const res = await request(app()).get('/api/download/1/1/OLD.LHA');
+    const res = await request(app()).get(issueAreaDownloadTicket(1, 1, 'OLD.LHA'));
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('old-local-bytes');
@@ -149,7 +150,7 @@ describe('a directory put on a cloud drive with files already in it', () => {
     const { backend } = boardMovedToDrive();
     backend.down = true;
 
-    const res = await request(app()).get('/api/download/1/1/OLD.LHA');
+    const res = await request(app()).get(issueAreaDownloadTicket(1, 1, 'OLD.LHA'));
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('old-local-bytes');
@@ -159,7 +160,7 @@ describe('a directory put on a cloud drive with files already in it', () => {
     const { backend } = boardMovedToDrive();
     backend.down = true;
 
-    const res = await request(app()).get('/api/download/1/1/NOPE.LHA');
+    const res = await request(app()).get(issueAreaDownloadTicket(1, 1, 'NOPE.LHA'));
 
     expect(res.status).toBe(503);
   });
@@ -222,10 +223,10 @@ describe('a directory put on a cloud drive with files already in it', () => {
 
     // And both halves download through the same web route.
     const server = app();
-    const fresh = await request(server).get('/api/download/1/1/NEW.ZIP');
+    const fresh = await request(server).get(issueAreaDownloadTicket(1, 1, 'NEW.ZIP'));
     expect(fresh.status).toBe(200);
     expect(Buffer.from(fresh.body).length).toBe(data.size);
-    const old = await request(server).get('/api/download/1/1/OLD.LHA');
+    const old = await request(server).get(issueAreaDownloadTicket(1, 1, 'OLD.LHA'));
     expect(Buffer.from(old.body).toString()).toBe('old-local-bytes');
   });
 });
@@ -267,7 +268,7 @@ describe("moving a directory's existing files onto its drive", () => {
     expect(fs.existsSync(path.join(dataDir, 'Conf1', 'HOLD', 'SECRET.LHA'))).toBe(true);
     expect((await backend.list('')).map((o: { key: string }) => o.key).join(',')).toContain('OLD.LHA');
 
-    const res = await request(app()).get('/api/download/1/1/OLD.LHA');
+    const res = await request(app()).get(issueAreaDownloadTicket(1, 1, 'OLD.LHA'));
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('old-local-bytes');
 

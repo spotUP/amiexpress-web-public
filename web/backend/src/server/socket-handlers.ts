@@ -11,7 +11,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { emitterForUserId } from './session-emitter-registry';
 import { keyBytesFor } from './composed-key';
-import { config } from '../config';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { BBSSession } from '../index';
@@ -26,7 +25,7 @@ import {
   socketToNodeId,
   userSessions,
   pendingDisconnects,
-  trackPendingDisconnect, reboundSince } from './session-manager';
+  trackPendingDisconnect, reboundSince, allNodesBusyNotice } from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
 import { nodeManager } from '../services/node-manager.service';
 // Use the real interpreter (full REXX semantics) instead of the simulated
@@ -53,7 +52,6 @@ import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed,
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
-import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { startObserving, observeOutput, observeInput, stopObserving } from './session-observers';
 import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
@@ -76,6 +74,7 @@ import { reportLogout } from '../achievements/sites';
 import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
 import { routeDoorInput } from '../services/door-input-routing';
+import { onLevel, SYSOP_LEVEL } from './socket-guard';
 
 /**
  * How far one press of a cursor key moves a windowed door's view, in source
@@ -189,7 +188,10 @@ console.log(`Client connected from ${clientIp}`);
   // The duplicate session creation here was causing subState to be undefined, breaking input handling
 
   // Get active users (for Who's Online displays like telnet-front)
-  socket.on('get-active-users', () => {
+  // The sysop's only: every row carries the caller's IP address, and it was
+  // answered to any socket - a visitor at the login prompt included. No
+  // browser asks for it (doors read doors/who-is-online.ts in-process).
+  onLevel(socket, 'get-active-users', SYSOP_LEVEL, () => {
     // The same read the doors do - see doors/who-is-online.ts. It was written
     // out twice, and the copy the telnet front end wanted could never reach
     // this one anyway.
@@ -332,10 +334,7 @@ console.error('Failed to assign node to session:', error);
       },
       DebugSeverity.CRITICAL
     );
-    socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[33mPlease try again in a moment.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    socket.emit('ansi-output', allNodesBusyNotice());
     socket.disconnect();
     return null;
   }
@@ -764,92 +763,11 @@ console.error('No session found for socket:', socket.id);
     dispatchInOrder(session, commandPieces(data, session.subState), (piece) => handleCommand(socket, session, piece), commandFailed(socket));
   });
 
-  // Binary transfer scaffold (upload/download via socket chunks)
-  socket.on('transfer:start', (payload: any, ack?: (resp: any) => void) => {
-    const session = getSession(socket.id);
-    if (!session) {
-      ack?.({ status: 'error', message: 'no session' });
-      return;
-    }
-
-    cleanupTransfer(session);
-
-    const direction = (payload?.direction || '').toLowerCase();
-    const amigaPath = payload?.path || '';
-    const resolved = resolveTransferPath(session, amigaPath);
-    if (!resolved) {
-      ack?.({ status: 'error', message: 'invalid path' });
-      return;
-    }
-
-    if (direction === 'upload') {
-      try {
-        const stream = fs.createWriteStream(resolved);
-        stream.on('error', (err) => {
-          cleanupTransfer(session);
-          socket.emit('transfer:error', { message: err.message });
-        });
-        (session as any).transfer = { direction, path: resolved, stream };
-        ack?.({ status: 'ready', path: resolved });
-      } catch (err: any) {
-        ack?.({ status: 'error', message: err?.message || 'upload init failed' });
-      }
-      return;
-    }
-
-    if (direction === 'download') {
-      if (!fs.existsSync(resolved)) {
-        ack?.({ status: 'error', message: 'file not found' });
-        return;
-      }
-      ack?.({ status: 'ready', path: resolved });
-      try {
-        const stream = fs.createReadStream(resolved);
-        stream.on('data', (chunk) => socket.emit('transfer:data', chunk));
-        stream.on('end', () => {
-          socket.emit('transfer:end', { path: resolved });
-          cleanupTransfer(session);
-        });
-        stream.on('error', (err) => {
-          socket.emit('transfer:error', { message: err.message });
-          cleanupTransfer(session);
-        });
-        (session as any).transfer = { direction, path: resolved, stream };
-      } catch (err: any) {
-        socket.emit('transfer:error', { message: err?.message || 'download failed' });
-        cleanupTransfer(session);
-      }
-      return;
-    }
-
-    ack?.({ status: 'error', message: 'invalid direction' });
-  });
-
-  socket.on('transfer:data', (data: Buffer) => {
-    const session = getSession(socket.id);
-    if (!session) return;
-    const transfer = (session as any).transfer;
-    if (!transfer || transfer.direction !== 'upload' || !transfer.stream) return;
-    transfer.stream.write(data);
-  });
-
-  socket.on('transfer:end', () => {
-    const session = getSession(socket.id);
-    if (!session) return;
-    const transfer = (session as any).transfer;
-    if (transfer?.direction === 'upload' && transfer.stream) {
-      transfer.stream.end();
-      socket.emit('transfer:complete', { path: transfer.path });
-    }
-    cleanupTransfer(session);
-  });
-
-  socket.on('transfer:cancel', () => {
-    const session = getSession(socket.id);
-    if (!session) return;
-    cleanupTransfer(session);
-    socket.emit('transfer:cancelled');
-  });
+  // The `transfer:*` socket channel that stood here (start/data/end/cancel)
+  // read or wrote ANY path the client named - `BBS:`, `NODE0:`, or a plain
+  // absolute path - for any socket, logged on or not. No client ever spoke
+  // it (the browser moves files over `transfer-raw:*` / ZMODEM), so it is
+  // gone rather than guarded (open-surface audit, 2026-10-04).
 
   // Raw transfer bridge for future ZMODEM: bypass cooked ANSI and feed raw bytes
   socket.on('transfer-raw:start', (payload: any, ack?: (resp: any) => void) => {
@@ -1349,27 +1267,6 @@ console.log(`[DISCONNECT] No userId, calling deleteSession for socket ${socketId
 console.log(`[DISCONNECT] Deleting session for node ${session.nodeId} from sessions map`);
     sessions.delete(session.nodeId.toString());
 console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
-  }
-}
-
-function resolveTransferPath(session: any, amigaPath: string): string | null {
-  try {
-    const bbsRoot =
-      session?.bbsPath ||
-      config.get('dataDir') ||
-      process.env.BBS_DATA_DIR ||
-      path.resolve(process.cwd());
-    const paths = new BBSPaths(bbsRoot);
-    const nodeId = session?.nodeId || 0;
-    if (!amigaPath || amigaPath.length === 0) {
-      const playpen = paths.node(nodeId).playpen();
-      fs.mkdirSync(playpen, { recursive: true });
-      return path.join(playpen, `transfer_${Date.now()}.bin`);
-    }
-    return paths.resolveAmigaPath(amigaPath, nodeId, undefined);
-  } catch (err) {
-console.error('[socket-handlers] resolveTransferPath failed:', err);
-    return null;
   }
 }
 

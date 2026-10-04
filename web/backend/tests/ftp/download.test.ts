@@ -213,6 +213,26 @@ describe('a caller downloading a file', () => {
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));
   });
 
+  it('logs the file as express.e does - Downloading, whole size, at the start - and no invented line', async () => {
+    // express.e:15109-15140 ftpDownloadFileStart -> logUDFile(TRUE), 9478:
+    // '\t\sDownloading \s \d bytes'. ftpd.e itself logs only the command
+    // (1968); there is no `FTP Download >:` line anywhere in either.
+    const logged: string[] = [];
+    const downloads: Array<[string, number, number]> = [];
+    const rig = await listen({
+      log: (_user, message) => { logged.push(message); },
+      logDownload: async (_user, name, size, nodeId) => { downloads.push([name, size, nodeId]); },
+    });
+
+    const { control } = await retrieve(rig.port, 'RETR DEMO.LHA');
+
+    expect(downloads).toEqual([['DEMO.LHA', PAYLOAD.length, 3]]);
+    expect(logged.filter((line) => !line.startsWith('\tFTP Command >: '))).toEqual([]);
+
+    control.destroy();
+    await new Promise<void>((resolve) => rig.server.close(() => resolve()));
+  });
+
   it('resumes at the REST offset instead of sending the file again', async () => {
     const rig = await listen();
     const offset = 10;

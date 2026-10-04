@@ -177,13 +177,42 @@ describe('the BBS door API', () => {
     const { setSession } = require('../../src/server/session-manager');
     const { registerSocketHandlers } = require('../../src/server/socket-handlers');
     /* eslint-enable @typescript-eslint/no-var-requires */
-    // The asking socket's own session: connected, not logged in.
-    setSession(socket.id, { nodeId: 6, socketId: socket.id });
+    // The asking socket's own session: the sysop - every row carries a
+    // caller's IP address, so nobody else is answered (see the next case).
+    setSession(socket.id, { nodeId: 6, socketId: socket.id, user: { id: 1, username: 'Sysop', secLevel: 255 } });
     registerSocketHandlers(io, socket);
 
     handlers['get-active-users']();
     const reply = replies.find((r) => r.event === 'active-users');
     expect(reply?.data).toEqual({ users: listOnlineNodes() });
-    expect(reply?.data.users.map((n: { nodeNumber: number }) => n.nodeNumber)).toEqual([4]);
+    expect(reply?.data.users.map((n: { nodeNumber: number }) => n.nodeNumber)).toEqual([4, 6]);
+  });
+
+  it("does not hand a visitor at the login prompt every caller's IP address", () => {
+    // The asking socket is connected and has not logged on; the board used to
+    // answer it with every online caller's name, location and IP.
+    putSession(4, { username: 'Spot', location: 'nEVERLaND', ip: '10.0.0.9' });
+
+    const handlers: Record<string, (...args: any[]) => void> = {};
+    const replies: Array<{ event: string; data: any }> = [];
+    const socket: any = {
+      id: 'who-is-online-visitor',
+      handshake: { address: '127.0.0.1' },
+      on(event: string, cb: (...args: any[]) => void) { handlers[event] = cb; return socket; },
+      onAny() { return socket; },
+      emit(event: string, data: any) { replies.push({ event, data }); return true; },
+      join() { return socket; },
+      removeAllListeners() { return socket; },
+    };
+    const io: any = { sockets: { sockets: new Map() }, emit() { return true; }, to() { return { emit() { return true; } }; } };
+    /* eslint-disable @typescript-eslint/no-var-requires */
+    const { setSession } = require('../../src/server/session-manager');
+    const { registerSocketHandlers } = require('../../src/server/socket-handlers');
+    /* eslint-enable @typescript-eslint/no-var-requires */
+    setSession(socket.id, { nodeId: 7, socketId: socket.id });
+    registerSocketHandlers(io, socket);
+
+    handlers['get-active-users']();
+    expect(replies.find((r) => r.event === 'active-users')).toBeUndefined();
   });
 });

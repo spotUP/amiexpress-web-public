@@ -95,15 +95,32 @@ console.warn('[AUTH] Unable to load max_password_fails from config:', error);
   };
 
   // Handle session restoration after reconnect
-  socket.on('restore-session', async (sessionData: { userId?: string; username?: string; nodeId?: number; savedAt?: number }) => {
+  socket.on('restore-session', async (sessionData: { token?: string; userId?: string; username?: string; nodeId?: number; savedAt?: number }) => {
     try {
-console.log('[Session Restore] Attempting to restore session for user:', sessionData.username);
+console.log('[Session Restore] Attempting to restore session for user:', sessionData?.username);
 
-      if (!sessionData.userId || !sessionData.username) {
-console.log('[Session Restore] Missing required session data');
+      /*
+       * WHO the browser is comes from its token, never from the ids it sends.
+       * This took `userId` on the client's word, so any socket - a visitor at
+       * the login prompt - could name a caller whose socket had just dropped
+       * (or a telnet caller, whose socket is never in this namespace) and be
+       * handed that caller's live session (open-surface audit, 2026-10-04).
+       * The token is the one login-success gave this tab.
+       */
+      let verified: { userId: string } | null = null;
+      if (typeof sessionData?.token === 'string' && sessionData.token) {
+        try {
+          verified = await db.verifyAccessToken(sessionData.token);
+        } catch {
+          verified = null;
+        }
+      }
+      if (!verified?.userId) {
+console.log('[Session Restore] No valid token - refusing restore');
         socket.emit('session-restore-failed', 'Invalid session data');
         return;
       }
+      sessionData.userId = String(verified.userId);
 
       // Check if session is too old (should match frontend check)
       if (sessionData.savedAt && Date.now() - sessionData.savedAt > 120000) {

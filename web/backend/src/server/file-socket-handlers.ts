@@ -37,6 +37,7 @@ import {
 import { fileUploadedFile } from "../services/upload-filing.service";
 import { examineUpload } from "../services/upload-examine.service";
 import { getSessionBySocketId } from "./session-manager";
+import { onCaller } from "./socket-guard";
 import { callersLog } from "./database-helpers";
 import { SysopDebugUtil } from "../utils/sysop-debug.util";
 import { emitUpload } from "../services/bbs-event-emitter";
@@ -849,8 +850,10 @@ async function processFileUpload(
  * Register file upload/download socket event handlers
  */
 export function registerFileHandlers(socket: Socket) {
-  const session = getSessionBySocketId(socket.id);
-  if (!session) return;
+  if (!getSessionBySocketId(socket.id)) return;
+  // Each event finishes an upload or download FOR a logged-on caller, so each
+  // is registered through onCaller (server/socket-guard.ts) and acts on the
+  // session that gives it - the caller's own, read when the event arrives.
 
   // Legacy `file-upload` (socket-body JSON-encoded byte array) and
   // `file-uploaded` (never emitted by any current frontend) socket
@@ -865,9 +868,10 @@ export function registerFileHandlers(socket: Socket) {
   // returns {filename, path, size}) then emits this small event with
   // just the metadata. No file body on the websocket → no buffer
   // pressure.
-  socket.on(
+  onCaller(
+    socket,
     "file-upload-ready",
-    async (data: {
+    async (session: BBSSession, data: {
       filename: string;
       originalname?: string;
       size: number;
@@ -899,18 +903,10 @@ console.log(
       session.tempData.lastUploadCPS = uploadCPS;
 
       try {
-        const fs = require("fs");
-        if (!fs.existsSync(data.path)) {
-          // Defensive: multer should have written it, but if a race or
-          // permission issue dropped the file we don't want processFileUpload
-          // to chase a missing path.
-          socket.emit(
-            "ansi-output",
-            `\r\n\x1b[31mError: uploaded file missing on server: ${data.path}\x1b[0m\r\n`
-          );
-          return;
-        }
-
+        // `data.path` is the browser's word and is not consulted: the file
+        // is the one /api/upload saved for this session's ticket
+        // (processFileUpload). Testing it here told any socket whether a
+        // path it named existed on the server (open-surface audit).
         await processFileUpload(socket, session, config, {
           filename: data.filename,
           originalname: data.originalname || data.filename,
@@ -929,7 +925,7 @@ console.log(
 
   // Handle upload batch complete from frontend
   // Frontend emits this when all pending files have been uploaded
-  socket.on("upload-batch-complete", async () => {
+  onCaller(socket, "upload-batch-complete", async (session: BBSSession) => {
 console.log(
       "[upload-batch-complete] Frontend signaled batch upload complete"
     );
@@ -937,9 +933,10 @@ console.log(
   });
 
   // Handle file download completion with real CPS from frontend
-  socket.on(
+  onCaller(
+    socket,
     "file-download-complete",
-    async (data: {
+    async (session: BBSSession, data: {
       filename: string;
       size: number;
       durationMs: number;
@@ -1010,7 +1007,7 @@ console.error(
   // legacy door-manager UI and is left intact.
 
   // Handle upload cancellation — reject any pending door archive upload Promise
-  socket.on('upload-cancelled', () => {
+  onCaller(socket, 'upload-cancelled', (session: BBSSession) => {
     if (session.pendingDoorUpload) {
       session.pendingDoorUploadReject?.(new Error('Upload cancelled by user'));
     }

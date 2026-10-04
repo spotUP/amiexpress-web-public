@@ -2,6 +2,8 @@
  * Search socket handlers for LiveChat
  */
 import type { Socket } from 'socket.io';
+import type { BBSSession } from '../index';
+import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { SearchRepository, type SearchFilters } from '../database/search-repository';
 
@@ -11,8 +13,13 @@ export function setupSearchHandlers(socket: Socket, session: any) {
 
   if (!userId) return;
 
+  // Search reads every room's messages, private rooms included. No client
+  // sends this today (the livechat door's emit goes to the browser), so it
+  // is the sysop's until one does and asks for a room-membership rule
+  // (open-surface audit, 2026-10-04).
+
   // Search messages
-  socket.on('chat:search', async (data: SearchFilters) => {
+  onLevel(socket, 'chat:search', SYSOP_LEVEL, async (_caller: BBSSession, data: SearchFilters) => {
     try {
       const { query, roomId, username, startDate, endDate, limit } = data;
 

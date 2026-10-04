@@ -86,15 +86,50 @@ test.each([
   ['post', '/api/doors/reload'],
   ['post', '/api/wizard/enhance'],
   ['post', '/api/wizard/generate'],
+  ['get', '/api/download/7'],
 ])('%s %s without a login is refused', async (method, route) => {
   const res = await (request(app()) as any)[method](route).send({});
   expect(res.status).toBe(401);
 });
 
 test('a download name that decodes to a path above the file areas is not served', async () => {
-  const res = await request(app()).get('/api/download/1/1/..%252f..%252fuser.data');
+  // Even under a ticket the board issued for that very name: the name is
+  // decoded once, so it stays the literal `..%2f..%2fuser.data`.
+  const { issueAreaDownloadTicket } = require('../../src/handlers/file/download-ticket');
+  const url: string = issueAreaDownloadTicket(1, 1, '..%2f..%2fuser.data');
+  expect(url).toContain('/api/download/1/1/..%252f..%252fuser.data?ticket=');
+  const res = await request(app()).get(url);
   expect(res.status).toBe(404);
   expect(res.text).not.toContain('every caller');
+});
+
+describe('a file-area download', () => {
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { applyTooltypes } = require('../../src/utils/info-file.util');
+    applyTooltypes(path.join(dataDir, 'Conf1.info'), [['NDIRS', '1'], ['DLPATH.1', 'BBS:Conf1/Files/']]);
+    fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'MEMBERS.LHA'), 'members only');
+    fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'OTHER.LHA'), 'another file');
+  });
+
+  test('is refused to a visitor the board did not deliver it to', async () => {
+    const res = await request(app()).get('/api/download/1/1/MEMBERS.LHA');
+    expect(res.status).toBe(403);
+    expect(res.text).not.toContain('members only');
+  });
+
+  test('is served once, for the file its ticket names and no other', async () => {
+    const { issueAreaDownloadTicket } = require('../../src/handlers/file/download-ticket');
+    const url: string = issueAreaDownloadTicket(1, 1, 'MEMBERS.LHA');
+    const other = url.replace('MEMBERS.LHA', 'OTHER.LHA');
+    expect((await request(app()).get(other)).status).toBe(403);
+
+    const mine: string = issueAreaDownloadTicket(1, 1, 'MEMBERS.LHA');
+    const res = await request(app()).get(mine);
+    expect(res.status).toBe(200);
+    expect(Buffer.from(res.body).toString()).toBe('members only');
+    expect((await request(app()).get(mine)).status).toBe(403);
+  });
 });
 
 test("a door's upload completes with the file the board saved, never a path the browser names", async () => {

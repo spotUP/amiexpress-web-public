@@ -138,6 +138,9 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
     const delivered: Array<{ path: string; filename: string }> = [];
     const session: any = {
       nodeId: 97,
+      // A door asks for an upload inside a logged-on call; the event is
+      // refused for a socket that has not logged on (server/socket-guard.ts).
+      user: { id: 97, username: 'Uploader', secLevel: 20 },
       pendingDoorUpload: true,
       pendingDoorUploadCallback: (r: { path: string; filename: string }) => delivered.push(r),
       // What /api/upload records for the ticketed session; the event's own

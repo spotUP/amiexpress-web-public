@@ -1745,51 +1745,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "transferRawSend / ZMODEM instead (server/transport-session.ts, moved from " +
     "index.ts:1111-1131), which deliberately bypasses this emitter.",
   },
-  "transfer:cancelled": {
-    kind: "web-only",
-    note:
-    "Browser transfer channel, emitted at server/socket-handlers.ts:912. No " +
-    "frontend listener - the `transfer:*` half is dead scaffold. A byte " +
-    "transport uses transferRawSend / ZMODEM instead " +
-    "(server/transport-session.ts, moved from index.ts:1111-1131), which " +
-    "deliberately bypasses this emitter.",
-  },
-  "transfer:complete": {
-    kind: "web-only",
-    note:
-    "Browser transfer channel, emitted at server/socket-handlers.ts:903. No " +
-    "frontend listener - the `transfer:*` half is dead scaffold. A byte " +
-    "transport uses transferRawSend / ZMODEM instead " +
-    "(server/transport-session.ts, moved from index.ts:1111-1131), which " +
-    "deliberately bypasses this emitter.",
-  },
-  "transfer:data": {
-    kind: "web-only",
-    note:
-    "Browser transfer channel, emitted at server/socket-handlers.ts:869. No " +
-    "frontend listener - the `transfer:*` half is dead scaffold. A byte " +
-    "transport uses transferRawSend / ZMODEM instead " +
-    "(server/transport-session.ts, moved from index.ts:1111-1131), which " +
-    "deliberately bypasses this emitter.",
-  },
-  "transfer:end": {
-    kind: "web-only",
-    note:
-    "Browser transfer channel, emitted at server/socket-handlers.ts:871. No " +
-    "frontend listener - the `transfer:*` half is dead scaffold. A byte " +
-    "transport uses transferRawSend / ZMODEM instead " +
-    "(server/transport-session.ts, moved from index.ts:1111-1131), which " +
-    "deliberately bypasses this emitter.",
-  },
-  "transfer:error": {
-    kind: "web-only",
-    note:
-    "Browser transfer channel, emitted at server/socket-handlers.ts:851, " +
-    "server/socket-handlers.ts:875, server/socket-handlers.ts:880. No frontend " +
-    "listener - the `transfer:*` half is dead scaffold. A byte transport uses " +
-    "transferRawSend / ZMODEM instead (server/transport-session.ts, moved from " +
-    "index.ts:1111-1131), which deliberately bypasses this emitter.",
-  },
   "unoEventBroadcast": {
     kind: "web-only",
     note:

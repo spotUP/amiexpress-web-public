@@ -9,7 +9,10 @@
  */
 
 import express, { Request, Response } from 'express';
+import { jwtSecret } from '../utils/jwt-secrets';
 import { mintChatToken } from '../services/chat-token.service';
+import { loadAccount } from '../services/load-account';
+import { accountRefusal } from '../services/logon-gates';
 import jwt from 'jsonwebtoken';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
@@ -92,6 +95,15 @@ console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
         return handleError(res, new Error('Invalid username or password'), 401);
       }
 
+      // The board's own account gates on the board's own record - the BBS
+      // logon's and FTP's (services/logon-gates). A deleted, locked or
+      // level-0 account was handed a chat token here (open-surface audit,
+      // 2026-10-04); a password that must be changed cannot be changed here.
+      if (accountRefusal(loadAccount(user).user) !== null) {
+console.log(`[Chat API] Account refused by the logon gates: ${safeUsername}`);
+        return handleError(res, new Error('That account cannot log on. Call the board to find out why.'), 403);
+      }
+
       // One minting implementation, shared with the door's login modal, so
       // the two cannot drift into different claims or lifetimes.
       const token = mintChatToken(
@@ -130,7 +142,7 @@ console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!
         return sendResponse(res, { valid: false });
       }
 
-      const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+      const secret = jwtSecret();
 
       try {
         const decoded = jwt.verify(token, secret) as any;

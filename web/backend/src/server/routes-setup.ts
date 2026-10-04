@@ -25,7 +25,7 @@ import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, requireLevel, AuthRequest } from '../middleware/auth.middleware';
 import { isPlainFileName } from '../utils/plain-file-name.util';
-import { redeemUploadTicket } from '../handlers/file/download-ticket';
+import { redeemUploadTicket, redeemAreaDownloadTicket } from '../handlers/file/download-ticket';
 import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
 import { createDoorArtRouter } from '../api/door-art-routes';
@@ -737,6 +737,12 @@ console.error('[Door Reload] Unexpected error:', error);
       if (!isPlainFileName(filename)) {
         return res.status(404).json({ error: 'File not found on server' });
       }
+      // Only a file the board delivered to a caller: the ticket came with
+      // the download-file event for exactly this file (download-ticket.ts).
+      // With none, any visitor could take any conference's files.
+      if (!redeemAreaDownloadTicket(String(req.query.ticket ?? ''), confNum, dirNum, filename)) {
+        return res.status(403).json({ error: 'This download was not asked for' });
+      }
 
       const dataDir = config.get('dataDir');
       const conferencePath = getConferenceDir(confNum, dataDir);
@@ -812,7 +818,9 @@ console.error('[Download] Error:', error);
 
   // ===== File Download Endpoint (by ID - legacy) =====
   // For backward compatibility with database-based file IDs
-  app.get('/api/download/:fileId', async (req: Request, res: Response) => {
+  // No client fetches this any more, and it serves any active catalog row to
+  // whoever asks: the sysop's tool now (open-surface audit, 2026-10-04).
+  app.get('/api/download/:fileId', authenticateToken(db), requireSysop(), async (req: Request, res: Response) => {
     try {
       const fileId = parseInt(req.params.fileId);
 

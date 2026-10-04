@@ -2,6 +2,8 @@
  * Thread socket handlers for LiveChat
  */
 import type { Socket } from 'socket.io';
+import type { BBSSession } from '../index';
+import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { ChatRepository } from '../database/chat-repository';
 
@@ -12,8 +14,13 @@ export function setupThreadHandlers(socket: Socket, session: any) {
 
   if (!userId || !username) return;
 
+  // Threads read and write any room's messages by id, private rooms
+  // included. No client sends these today (the livechat door's emits go to
+  // the browser), so they are the sysop's until one does and asks for a
+  // room-membership rule (open-surface audit, 2026-10-04).
+
   // Create thread from message
-  socket.on('chat:thread:create', async (data: { messageId: number; title?: string }) => {
+  onLevel(socket, 'chat:thread:create', SYSOP_LEVEL, async (_caller: BBSSession, data: { messageId: number; title?: string }) => {
     try {
       const { messageId, title } = data;
 
@@ -38,7 +45,7 @@ console.error('[Thread] Create error:', error);
   });
 
   // Reply to thread
-  socket.on('chat:thread:reply', async (data: { threadId: number; message: string }) => {
+  onLevel(socket, 'chat:thread:reply', SYSOP_LEVEL, async (_caller: BBSSession, data: { threadId: number; message: string }) => {
     try {
       const { threadId, message: content } = data;
 
@@ -71,7 +78,7 @@ console.error('[Thread] Reply error:', error);
   });
 
   // Get thread messages
-  socket.on('chat:thread:messages', async (data: { threadId: number }) => {
+  onLevel(socket, 'chat:thread:messages', SYSOP_LEVEL, async (_caller: BBSSession, data: { threadId: number }) => {
     try {
       const { threadId } = data;
 

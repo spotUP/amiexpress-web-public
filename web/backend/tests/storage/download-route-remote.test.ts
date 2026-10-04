@@ -19,6 +19,7 @@ import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { setStorageContext, type StorageContext } from '../../src/storage/storage-context';
 import type { RemoteArea } from '../../src/storage/remote-areas';
 import { FakeBackend } from './fake-backend';
+import { issueAreaDownloadTicket } from '../../src/handlers/file/download-ticket';
 
 function buildApp(): express.Express {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -88,7 +89,7 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
     const { app, backend } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    const res = await request(app).get('/api/download/1/1/DEMO.LHA');
+    const res = await request(app).get(issueAreaDownloadTicket(1, 1, 'DEMO.LHA'));
 
     expect(res.status).toBe(200);
     expect(res.headers['content-disposition']).toContain('DEMO.LHA');
@@ -102,7 +103,7 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
     backend.down = true;
 
-    const res = await request(app).get('/api/download/1/1/DEMO.LHA');
+    const res = await request(app).get(issueAreaDownloadTicket(1, 1, 'DEMO.LHA'));
 
     expect(res.status).toBe(503);
     expect(JSON.stringify(res.body)).toContain('try again later');
@@ -114,7 +115,7 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
     backend.down = true;
 
-    const res = await request(app).get('/api/download/1/1/DEMO.LHA');
+    const res = await request(app).get(issueAreaDownloadTicket(1, 1, 'DEMO.LHA'));
 
     // A backend message can name a bucket, an endpoint or a key id.
     expect(JSON.stringify(res.body)).not.toContain('DRIVE.2');
@@ -124,7 +125,7 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
   it('still answers 404 for a file the pooled area genuinely does not hold', async () => {
     const { app } = fixture();
 
-    const res = await request(app).get('/api/download/1/1/NOPE.LHA');
+    const res = await request(app).get(issueAreaDownloadTicket(1, 1, 'NOPE.LHA'));
 
     expect(res.status).toBe(404);
   });
@@ -132,7 +133,7 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
   it('serves a local area exactly as before, without touching the pool', async () => {
     const { app, backend } = fixture();
 
-    const res = await request(app).get('/api/download/2/1/LOCAL.TXT');
+    const res = await request(app).get(issueAreaDownloadTicket(2, 1, 'LOCAL.TXT'));
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('on-disk');
@@ -171,6 +172,14 @@ describe('GET /api/download/:fileId', () => {
 
   afterEach(() => { restoreLookup?.(); restoreLookup = null; });
 
+  // The by-id route is the sysop's now (open-surface audit, 2026-10-04).
+  async function sysopAuth(): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Database } = require('../../src/database');
+    const token: string = await Database.prototype.generateAccessToken.call(null, { id: '1', username: 'sysop', secLevel: 255 });
+    return `Bearer ${token}`;
+  }
+
   it('serves a pooled row from its recorded location', async () => {
     const { backend } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
@@ -182,7 +191,7 @@ describe('GET /api/download/:fileId', () => {
       objectKey: 'Conf1/Files/DEMO.LHA',
     });
 
-    const res = await request(app).get('/api/download/7');
+    const res = await request(app).get('/api/download/7').set('Authorization', await sysopAuth());
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('payload');
@@ -201,7 +210,7 @@ describe('GET /api/download/:fileId', () => {
       objectKey: 'Conf1/Files/DEMO.LHA',
     });
 
-    const res = await request(app).get('/api/download/7');
+    const res = await request(app).get('/api/download/7').set('Authorization', await sysopAuth());
 
     expect(res.status).toBe(503);
     expect(JSON.stringify(res.body)).not.toContain('not found');
@@ -218,7 +227,7 @@ describe('GET /api/download/:fileId', () => {
     fs.writeFileSync(local, 'legacy');
     const app = catalogRoute({ id: 8, filename: 'LEGACY.TXT', size: 6, filePath: local });
 
-    const res = await request(app).get('/api/download/8');
+    const res = await request(app).get('/api/download/8').set('Authorization', await sysopAuth());
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('legacy');

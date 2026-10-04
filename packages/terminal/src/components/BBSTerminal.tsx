@@ -2113,7 +2113,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const savedSession = getStoredSessionState();
       if (savedSession && reconnectPending.current) {
         console.log('[Session Persistence] Attempting session restoration for user:', savedSession.username);
-        socket.emit('restore-session', savedSession);
+        // The token is who this tab is: the board takes the caller from it,
+        // never from the ids saved beside it (open-surface audit, 2026-10-04).
+        socket.emit('restore-session', { ...savedSession, token: getStoredSharedToken() });
       } else if (reconnectPending.current) {
         reconnectPending.current = false;
         attemptTokenLogin();

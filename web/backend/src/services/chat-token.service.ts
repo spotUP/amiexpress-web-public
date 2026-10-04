@@ -11,6 +11,7 @@
  */
 
 import jwt from 'jsonwebtoken';
+import { jwtSecret } from '../utils/jwt-secrets';
 
 export interface ChatTokenUser {
   id: string;
@@ -23,7 +24,7 @@ export const REMEMBERED_LIFETIME = '30d';
 export const SESSION_LIFETIME = '24h';
 
 export function chatTokenSecret(): string {
-  return process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+  return jwtSecret();
 }
 
 /**

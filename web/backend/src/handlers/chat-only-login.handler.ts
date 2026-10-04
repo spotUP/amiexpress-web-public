@@ -5,6 +5,8 @@
 import { Socket } from 'socket.io';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { loadAccount } from '../services/load-account';
+import { accountRefusal } from '../services/logon-gates';
 
 export function setupChatOnlyLoginHandler(socket: Socket, session: any): void {
 console.log('[ChatOnlyLogin] Setting up login handler');
@@ -19,7 +21,9 @@ console.log('[ChatOnlyLogin] Received login submission for:', credentials.userna
 
       if (!user) {
 console.log('[ChatOnlyLogin] User not found:', credentials.username);
-        socket.emit('chat-only-login-error', 'User not found');
+        // The same words as a wrong password: a different answer told any
+        // visitor which names have accounts.
+        socket.emit('chat-only-login-error', 'Invalid username or password');
         return;
       }
 
@@ -28,7 +32,18 @@ console.log('[ChatOnlyLogin] User not found:', credentials.username);
 
       if (!isValid) {
 console.log('[ChatOnlyLogin] Invalid password for:', credentials.username);
-        socket.emit('chat-only-login-error', 'Invalid password');
+        socket.emit('chat-only-login-error', 'Invalid username or password');
+        return;
+      }
+
+      // The board's own account gates on the board's own record - the ones
+      // the BBS logon and FTP ask (services/logon-gates). A deleted, locked
+      // or level-0 account logged straight into chat (open-surface audit,
+      // 2026-10-04); a password that must be changed cannot be changed here.
+      const { user: account } = loadAccount(user);
+      if (accountRefusal(account) !== null) {
+console.log('[ChatOnlyLogin] Account refused by the logon gates:', credentials.username);
+        socket.emit('chat-only-login-error', 'That account cannot log on. Call the board to find out why.');
         return;
       }
 
@@ -39,8 +54,13 @@ console.log('[ChatOnlyLogin] Login successful for:', credentials.username);
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DOOR_RUNNING;
 
-      // Notify client of success with user data
-      socket.emit('chat-only-login-success', user);
+      // Who logged on - never the whole row: it carried the password hash
+      // to the browser.
+      socket.emit('chat-only-login-success', {
+        id: user.id,
+        username: user.username,
+        secLevel: user.secLevel,
+      });
 
     } catch (error) {
 console.error('[ChatOnlyLogin] Login error:', error);

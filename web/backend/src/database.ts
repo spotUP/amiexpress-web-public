@@ -3,6 +3,7 @@
 require('dotenv').config({ override: true, quiet: true });
 
 import BetterSqlite3 from 'better-sqlite3';
+import { jwtRefreshSecret, jwtSecret } from './utils/jwt-secrets';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
@@ -3074,7 +3075,7 @@ console.warn('Password verification error:', error);
 
   // JWT Token Methods
   async generateAccessToken(user: any): Promise<string> {
-    const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+    const secret = jwtSecret();
     const payload = {
       userId: user.id,
       username: user.username,
@@ -3085,7 +3086,7 @@ console.warn('Password verification error:', error);
   }
 
   async generateRefreshToken(user: any, rememberMe?: boolean): Promise<string> {
-    const secret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-change-in-production';
+    const secret = jwtRefreshSecret();
     const payload = {
       userId: user.id,
       username: user.username
@@ -3096,7 +3097,7 @@ console.warn('Password verification error:', error);
   }
 
   async verifyAccessToken(token: string): Promise<{ userId: string; username: string; secLevel: number }> {
-    const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+    const secret = jwtSecret();
 
     try {
       const decoded = jwt.verify(token, secret) as any;
@@ -3111,7 +3112,7 @@ console.warn('Password verification error:', error);
   }
 
   async verifyRefreshToken(token: string): Promise<{ userId: string; username: string }> {
-    const secret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-change-in-production';
+    const secret = jwtRefreshSecret();
 
     try {
       const decoded = jwt.verify(token, secret) as any;

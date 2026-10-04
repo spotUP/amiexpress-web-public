@@ -8,12 +8,41 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import { getClientDoorBundler } from './client-door-bundler';
+import { authenticateToken, requireSysop } from '../middleware/auth.middleware';
+import { db } from '../database';
+import { isPlainFileName } from '../utils/plain-file-name.util';
 
 export const doorApiRouter = express.Router();
 
 const getBbsRoot = (): string => {
   return process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 };
+
+/**
+ * A path a door's manifest names, kept inside that door's own directory.
+ * The manifest is the door author's file, and these routes take no login:
+ * `client.bundle: "../../user.data"` must not turn into a file server.
+ */
+function insideDoor(doorBasePath: string, relative: string): string | null {
+  const base = path.resolve(doorBasePath);
+  const full = path.resolve(base, relative);
+  return full.startsWith(base + path.sep) ? full : null;
+}
+
+/**
+ * What a browser running this door may be sent - its CLIENT part, never the
+ * server code beside it (open-surface audit, 2026-10-04).
+ *
+ * A hybrid door's `main`/`entry`/index.ts is the part that runs on the
+ * board, with whatever keys and rules it keeps from the caller; only
+ * `client.entry` is written for the browser. A pure client door has no
+ * server part, so its entry is the client.
+ */
+function clientEntryOf(manifest: any): string | null {
+  if (manifest.client?.entry) return manifest.client.entry;
+  if (manifest.runtime !== 'client') return null;
+  return manifest.entry || manifest.main || 'index.ts';
+}
 
 /**
  * GET /api/doors/:doorId/bundle.js
@@ -39,11 +68,11 @@ console.log(`[DoorAPI] Serving bundle for door: ${doorId}`);
       return res.status(400).json({ error: 'Not a client door' });
     }
 
-    // Get door entry point
-    const entryPoint = doorManifest.client?.entry || doorManifest.entry || doorManifest.main || 'index.ts';
+    // Get door entry point - the client part only
+    const entryPoint = clientEntryOf(doorManifest);
 
     if (!entryPoint) {
-      return res.status(500).json({ error: 'Door entry point not configured' });
+      return res.status(404).json({ error: 'This door has no client part' });
     }
 
 console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
@@ -53,7 +82,7 @@ console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
     // on-the-fly esbuild path resolution issues in dev and bundling delay in prod).
     const isProduction = process.env.NODE_ENV === 'production';
     const preBundlePath = doorManifest.client?.bundle
-      ? path.join(doorBasePath, doorManifest.client.bundle)
+      ? insideDoor(doorBasePath, doorManifest.client.bundle)
       : null;
 
     if (preBundlePath && fs.existsSync(preBundlePath)) {
@@ -66,7 +95,10 @@ console.log(`[DoorAPI] Serving pre-built bundle: ${preBundlePath}`);
     }
 
     // Resolve door path - use actual door base path from registry, not doorId
-    const doorPath = path.join(doorBasePath, entryPoint);
+    const doorPath = insideDoor(doorBasePath, entryPoint);
+    if (!doorPath) {
+      return res.status(404).json({ error: 'This door has no client part' });
+    }
 
     // Bundle the door
     const bundler = getClientDoorBundler();
@@ -205,7 +237,9 @@ console.error(`[DoorAPI] chiptune3 worklet missing: ${workletPath} - run npm ins
  * GET /api/doors/list
  * List all available doors
  */
-doorApiRouter.get('/doors/list', async (req: Request, res: Response) => {
+// Every door on the board, sysop-only ones included: an admin listing, and
+// nothing a caller's browser fetches (open-surface audit, 2026-10-04).
+doorApiRouter.get('/doors/list', authenticateToken(db), requireSysop(), async (req: Request, res: Response) => {
   try {
     const doors = await listAvailableDoors();
     res.json({ doors });
@@ -246,6 +280,9 @@ console.error('[DoorAPI] Error clearing cache:', error);
  * Returns both the manifest and the resolved door path
  */
 async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBasePath: string } | null> {
+  // One plain name. Express decodes the parameter, so `..%2F..` arrives as
+  // `../..` and path.join below would follow it out of Doors/.
+  if (!isPlainFileName(doorId)) return null;
   try {
     const bbsRoot = getBbsRoot();
 

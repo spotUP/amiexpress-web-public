@@ -9,6 +9,7 @@ import { LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
 import { getSessionBySocketId, getSocketIdByUserId } from "./session-manager";
 import { sendChatMessage, acceptChat } from "../handlers/chat/chat.handler";
+import { onCaller } from "./socket-guard";
 
 /**
  * Register chat socket event handlers
@@ -18,6 +19,10 @@ console.log(
     "[CHAT DEBUG] registerChatHandlers called for socket:",
     socket.id
   );
+  // Every event here acts for a LOGGED-ON caller - a chat line under their
+  // name, a room, a DM - so each is registered through onCaller
+  // (server/socket-guard.ts): a visitor at the login prompt has a session but
+  // no user, and used to reach every one of them.
   // NOTE: Don't return early if no session - handlers check session themselves
   // The session may not exist when handlers are registered but will exist when called
 
@@ -36,70 +41,15 @@ console.log(
     }
   });
 
-console.log(
-    "[CHAT DEBUG] Registering chat-only-login-submit handler for socket:",
-    socket.id
-  );
-
-  // ===== CHAT-ONLY LOGIN HANDLER =====
-
-  socket.on(
-    "chat-only-login-submit",
-    async (credentials: { username: string; password: string }) => {
-console.log(
-        "[CHAT-ONLY-LOGIN] Received login attempt for:",
-        credentials.username
-      );
-
-      try {
-        // Find user by username (case-insensitive)
-        const user = await db.getUserByUsername(credentials.username);
-
-        if (!user) {
-console.log(
-            "[CHAT-ONLY-LOGIN] User not found:",
-            credentials.username
-          );
-          socket.emit("chat-only-login-error", "Invalid username or password");
-          return;
-        }
-
-        // Verify password using db's verifyPassword method
-        const passwordValid = await db.verifyPassword(
-          credentials.password,
-          user.passwordHash
-        );
-
-        if (!passwordValid) {
-console.log(
-            "[CHAT-ONLY-LOGIN] Invalid password for user:",
-            credentials.username
-          );
-          socket.emit("chat-only-login-error", "Invalid username or password");
-          return;
-        }
-
-        // Success - send user data back
-console.log(
-          "[CHAT-ONLY-LOGIN] Login successful for:",
-          credentials.username
-        );
-        socket.emit("chat-only-login-success", {
-          username: user.username,
-          secLevel: user.secLevel,
-          id: user.id,
-        });
-      } catch (error) {
-console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
-        socket.emit("chat-only-login-error", "Login failed - server error");
-      }
-    }
-  );
+  // The chat-only login is handlers/chat-only-login.handler.ts, registered on
+  // the sockets that need it. A second copy here answered `chat-only-login-
+  // submit` on EVERY socket: a password check for any visitor that logged
+  // nobody on (open-surface audit, 2026-10-04).
 
   // ===== LEGACY CHAT HANDLERS (Sysop pager) =====
 
   // Handle special chat commands (legacy sysop chat)
-  socket.on("chat-message", (message: string) => {
+  onCaller(socket, "chat-message", (_caller: BBSSession, message: string) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     if ((session as any).inChat) {
@@ -108,7 +58,7 @@ console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
   });
 
   // Handle sysop accepting chat request (legacy)
-  socket.on("accept-chat", (sessionId: string) => {
+  onCaller(socket, "accept-chat", (_caller: BBSSession, sessionId: string) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     // Sysop accepting chat request
@@ -123,7 +73,7 @@ console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
 
   // ===== INTERNODE CHAT EVENTS (User-to-User) =====
 
-  socket.on("chat:request", async (data: { targetUsername: string }) => {
+  onCaller(socket, "chat:request", async (_caller: BBSSession, data: { targetUsername: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -133,7 +83,7 @@ console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
     await handleChatRequest(socket, session, data);
   });
 
-  socket.on("chat:accept", async (data: { sessionId: string }) => {
+  onCaller(socket, "chat:accept", async (_caller: BBSSession, data: { sessionId: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -143,7 +93,7 @@ console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
     await handleChatAccept(socket, session, data);
   });
 
-  socket.on("chat:decline", async (data: { sessionId: string }) => {
+  onCaller(socket, "chat:decline", async (_caller: BBSSession, data: { sessionId: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -153,9 +103,9 @@ console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
     await handleChatDecline(socket, session, data);
   });
 
-  socket.on(
+  onCaller(socket,
     "chat:message",
-    async (data: { message?: string; content?: string; room?: string }) => {
+    async (_caller: BBSSession, data: { message?: string; content?: string; room?: string }) => {
 console.log("📨 [SOCKET.IO] Received chat:message event from client");
 console.log("📨 [SOCKET.IO] Data:", data);
 console.log("📨 [SOCKET.IO] Socket ID:", socket.id);
@@ -191,7 +141,7 @@ console.log("📨 [SOCKET.IO] chat:message completed");
     }
   );
 
-  socket.on("chat:end", async () => {
+  onCaller(socket, "chat:end", async (_caller: BBSSession) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -203,9 +153,9 @@ console.log("📨 [SOCKET.IO] chat:message completed");
 
   // ===== GROUP CHAT ROOM EVENTS (Multi-User) =====
 
-  socket.on(
+  onCaller(socket,
     "room:create",
-    async (data: {
+    async (_caller: BBSSession, data: {
       roomName: string;
       topic?: string;
       isPublic?: boolean;
@@ -222,9 +172,9 @@ console.log("📨 [SOCKET.IO] chat:message completed");
     }
   );
 
-  socket.on(
+  onCaller(socket,
     "room:join",
-    async (data: {
+    async (_caller: BBSSession, data: {
       roomId?: string;
       roomName?: string;
       room?: string;
@@ -258,7 +208,7 @@ console.log("[CHAT DEBUG] Normalized room:join data:", normalizedData);
     }
   );
 
-  socket.on("room:leave", async () => {
+  onCaller(socket, "room:leave", async (_caller: BBSSession) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -266,7 +216,7 @@ console.log("[CHAT DEBUG] Normalized room:join data:", normalizedData);
     await handleRoomLeave(socket, session);
   });
 
-  socket.on("room:message", async (data: { message: string }) => {
+  onCaller(socket, "room:message", async (_caller: BBSSession, data: { message: string }) => {
 console.log("[CHAT DEBUG] room:message received:", data);
     const session = getSessionBySocketId(socket.id);
     if (!session) {
@@ -286,7 +236,7 @@ console.log(
     await handleRoomMessage(socket, session, data);
   });
 
-  socket.on("room:list", async (data?: { showPrivate?: boolean }) => {
+  onCaller(socket, "room:list", async (_caller: BBSSession, data?: { showPrivate?: boolean }) => {
 console.log("[CHAT DEBUG] room:list event received for socket:", socket.id);
     const session = getSessionBySocketId(socket.id);
 console.log(
@@ -304,7 +254,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleRoomList(socket, session, data);
   });
 
-  socket.on("room:kick", async (data: { targetUsername: string }) => {
+  onCaller(socket, "room:kick", async (_caller: BBSSession, data: { targetUsername: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
@@ -312,9 +262,9 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleRoomKick(socket, session, data);
   });
 
-  socket.on(
+  onCaller(socket,
     "room:mute",
-    async (data: { targetUsername: string; mute: boolean }) => {
+    async (_caller: BBSSession, data: { targetUsername: string; mute: boolean }) => {
       const session = getSessionBySocketId(socket.id);
       if (!session) return;
 
@@ -323,7 +273,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     }
   );
 
-  socket.on("room:motd", async (data: { motd: string | null }) => {
+  onCaller(socket, "room:motd", async (_caller: BBSSession, data: { motd: string | null }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const { handleSetRoomMotd } = require("../handlers/chat/room-motd.handler");
@@ -331,7 +281,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleSetRoomMotd({ io: ioServer, socket, session, data });
   });
 
-  socket.on("room:invite", async (data: { roomName?: string; roomId?: string; targetUsername: string }) => {
+  onCaller(socket, "room:invite", async (_caller: BBSSession, data: { roomName?: string; roomId?: string; targetUsername: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const { handleRoomInvite } = require("../handlers/chat/room-invite.handler");
@@ -339,7 +289,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleRoomInvite({ io: ioServer, socket, session, data });
   });
 
-  socket.on("room:revoke-invite", async (data: { roomName?: string; roomId?: string; targetUsername: string }) => {
+  onCaller(socket, "room:revoke-invite", async (_caller: BBSSession, data: { roomName?: string; roomId?: string; targetUsername: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const { handleRoomInvite } = require("../handlers/chat/room-invite.handler");
@@ -347,7 +297,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleRoomInvite({ io: ioServer, socket, session, data, revoke: true });
   });
 
-  socket.on("room:mode", async (data: { modeString: string; params: string[]; roomId?: string }) => {
+  onCaller(socket, "room:mode", async (_caller: BBSSession, data: { modeString: string; params: string[]; roomId?: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const { handleRoomMode } = require("../handlers/chat/mode.handler");
@@ -356,7 +306,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
   });
 
   // ===== DIRECT MESSAGES =====
-  socket.on("chat:dm", async (data: { to: string; message: string }) => {
+  onCaller(socket, "chat:dm", async (_caller: BBSSession, data: { to: string; message: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const io = (socket as any).nsp?.server;
@@ -375,7 +325,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
   });
 
   // ===== GROUP DIRECT MESSAGES =====
-  socket.on("chat:group-dm", async (data: { participants: string[]; message: string }) => {
+  onCaller(socket, "chat:group-dm", async (_caller: BBSSession, data: { participants: string[]; message: string }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const ioServer = (socket as any).nsp?.server;
@@ -390,7 +340,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleChatGroupDm({ io: ioServer, socket, session, data, resolveRecipient: lookupRecipient });
   });
 
-  socket.on("chat:dm-history", async (data: { threadId: string; limit?: number }) => {
+  onCaller(socket, "chat:dm-history", async (_caller: BBSSession, data: { threadId: string; limit?: number }) => {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
     const { handleChatDmHistory } = require("../handlers/chat/dm.handler");
@@ -400,7 +350,7 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
   // Sidebar DM thread list: door requests; backend returns display-ready
   // payloads. Also emitted automatically after every DM send (see
   // dm.handler) so all sidebars stay in sync without polling.
-  socket.on("chat:dm-threads:list", async () => {
+  onCaller(socket, "chat:dm-threads:list", async (_caller: BBSSession) => {
     const session = getSessionBySocketId(socket.id);
     if (!session?.user?.id) return;
     const {
@@ -416,9 +366,9 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
 
   // ===== LIVE TYPING PREVIEW (Keystroke relaying) =====
 
-  socket.on(
+  onCaller(socket,
     "chat:keystroke",
-    (data: { channelId: string; userId: number; char: string }) => {
+    (_caller: BBSSession, data: { channelId: string; userId: number; char: string }) => {
 console.log(
         "[BACKEND] Received chat:keystroke:",
         data,
@@ -449,9 +399,9 @@ console.log("[BACKEND] Broadcasting to room:", socketRoom);
     }
   );
 
-  socket.on(
+  onCaller(socket,
     "chat:keystroke-submit",
-    (data: { channelId: string; userId: number }) => {
+    (_caller: BBSSession, data: { channelId: string; userId: number }) => {
       const session = getSessionBySocketId(socket.id);
       if (!session || !session.currentRoomId) return;
 
@@ -465,9 +415,9 @@ console.log("[BACKEND] Broadcasting to room:", socketRoom);
     }
   );
 
-  socket.on(
+  onCaller(socket,
     "chat:keystroke-clear",
-    (data: { channelId: string; userId: number }) => {
+    (_caller: BBSSession, data: { channelId: string; userId: number }) => {
       const session = getSessionBySocketId(socket.id);
       if (!session || !session.currentRoomId) return;
 

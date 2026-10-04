@@ -36,6 +36,9 @@ jest.mock('../../src/database', () => {
     db: new Proxy(actual.db as object, {
       get(target: any, prop: string | symbol) {
         if (prop === 'getUserById') return mockGetUserById;
+        // The restore takes the caller from its token (auth-socket-handlers):
+        // the token names the account the test restores.
+        if (prop === 'verifyAccessToken') return async (token: string) => ({ userId: token, username: 'Spot', secLevel: 20 });
         return target[prop];
       },
     }),
@@ -271,7 +274,7 @@ describe('OC-3: the web transport carries the session terminal model', () => {
       // handler appears a few ticks after the registrar returns.
       const restore = await waitForHandler(socket, 'restore-session');
 
-      await restore({ userId, username: 'Spot', savedAt: Date.now() });
+      await restore({ token: String(userId), userId, username: 'Spot', savedAt: Date.now() });
 
       // (a) the model and the segments that were only valid against it are gone
       expect(existingSession.petsciiTransducer).toBeUndefined();

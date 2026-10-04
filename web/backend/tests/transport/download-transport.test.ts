@@ -171,7 +171,8 @@ describe('a batch download, by transport', () => {
     expect(triggers[0]).toMatchObject({
       filename: 'ART.LHA',
       size: 1024,
-      url: '/api/download/1/1/ART.LHA',
+      // A one-time ticket for exactly this file (download-ticket.ts).
+      url: expect.stringMatching(/^\/api\/download\/1\/1\/ART\.LHA\?ticket=[0-9a-f]{48}$/),
       batchIndex: 0,
       batchTotal: 2,
     });

@@ -20,7 +20,7 @@ import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { getStorageContext } from '../../storage/storage-context';
 import { rematerialise, storageFailureText } from '../../storage/remote-download';
-import { issueDownloadTicket } from './download-ticket';
+import { issueDownloadTicket, issueAreaDownloadTicket } from './download-ticket';
 
 /**
  * What actually happened to the caller's files.
@@ -200,7 +200,7 @@ console.error('[Download] re-fetch before transfer failed:', error);
       size: file.size,
       url: file.outsideFileAreas && hostPath
         ? issueDownloadTicket(hostPath)
-        : `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}`,
+        : issueAreaDownloadTicket(confNum, dirNum, name),
       path: filePathOf(file),
       batchIndex: index,
       batchTotal: files.length,

@@ -1,5 +1,6 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
 import { startEventLoopWatchdog } from "./server/event-loop-watchdog";
+import { jwtSecret as boardJwtSecret } from './utils/jwt-secrets';
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
 import type { WidthGateFallThrough } from './utils/door-min-columns.util';
@@ -956,14 +957,8 @@ console.log(
       // Handle both ESM and CommonJS module formats
       const jwt = jwtModule.default || jwtModule;
 
-      // Use same fallback as database.ts for JWT_SECRET consistency
-      const jwtSecret =
-        process.env.JWT_SECRET || "amiexpress-secret-key-change-in-production";
-      if (!process.env.JWT_SECRET) {
-console.warn(
-          "[Socket.IO Auth] JWT_SECRET not set, using fallback (not recommended for production)"
-        );
-      }
+      // The board's one token key (utils/jwt-secrets.ts).
+      const jwtSecret = boardJwtSecret();
 
       const decoded = jwt.verify(token, jwtSecret) as any;
 console.log("[Socket.IO Auth] JWT decoded successfully:", {
@@ -1301,7 +1296,7 @@ console.log(`Client connected from ${clientIp}`);
 console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
     socket.emit(
       "ansi-output",
-      "\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
+      "\r\n\x1b[31m------------------------------------\x1b[0m\r\n"
     );
     socket.emit(
       "ansi-output",
@@ -1313,7 +1308,7 @@ console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
     );
     socket.emit(
       "ansi-output",
-      "\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
+      "\x1b[31m------------------------------------\x1b[0m\r\n"
     );
     socket.disconnect();
     return;

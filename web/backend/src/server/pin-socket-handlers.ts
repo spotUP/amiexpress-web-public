@@ -2,6 +2,8 @@
  * Pin socket handlers for LiveChat
  */
 import type { Socket } from 'socket.io';
+import type { BBSSession } from '../index';
+import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { PinRepository } from '../database/pin-repository';
 
@@ -12,8 +14,13 @@ export function setupPinHandlers(socket: Socket, session: any) {
 
   if (!userId || !username) return;
 
+  // Pinning writes into any room by id, and listing reads any room's pins,
+  // private rooms included. No client sends these today (the livechat
+  // door's emits go to the browser), so they are the sysop's until one does
+  // and asks for a room-membership rule (open-surface audit, 2026-10-04).
+
   // Pin a message
-  socket.on('chat:pin:add', async (data: { roomId: string; messageId: number }) => {
+  onLevel(socket, 'chat:pin:add', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; messageId: number }) => {
     try {
       const { roomId, messageId } = data;
 
@@ -40,7 +47,7 @@ console.error('[Pin] Add error:', error);
   });
 
   // Unpin a message
-  socket.on('chat:pin:remove', async (data: { roomId: string; messageId: number }) => {
+  onLevel(socket, 'chat:pin:remove', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; messageId: number }) => {
     try {
       const { roomId, messageId } = data;
 
@@ -59,7 +66,7 @@ console.error('[Pin] Remove error:', error);
   });
 
   // Get pinned messages
-  socket.on('chat:pin:list', async (data: { roomId: string }) => {
+  onLevel(socket, 'chat:pin:list', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string }) => {
     try {
       const { roomId } = data;
       const pinnedMessages = await pinRepo.getPinnedMessages(roomId);
