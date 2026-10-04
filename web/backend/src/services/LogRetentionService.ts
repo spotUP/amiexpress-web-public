@@ -19,6 +19,7 @@
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
+import { runCallersLogRetention, type FileRetentionReport } from './callers-log-retention';
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -30,6 +31,11 @@ export interface LogRetentionConfig {
   maxBytes?: number;
   /** Schedule interval in ms (default 24h). */
   intervalMs?: number;
+  /**
+   * The board whose Node<n>/CallersLog address and typed-password lines go
+   * after `maxAgeDays` (callers-log-retention.ts). Omitted: no such pass.
+   */
+  callersLog?: { dataDir: string; maxAgeDays: number };
 }
 
 export class LogRetentionService {
@@ -37,9 +43,13 @@ export class LogRetentionService {
   private maxBytes: number = DEFAULT_MAX_BYTES;
   private intervalMs: number = DEFAULT_INTERVAL_MS;
   private timer?: ReturnType<typeof setInterval>;
+  private callersLog?: { dataDir: string; maxAgeDays: number };
+  /** What the last CallersLog pass removed, per file. */
+  lastCallersLogReport: FileRetentionReport[] = [];
 
   configure(cfg: LogRetentionConfig): void {
     this.filePaths = [...cfg.filePaths];
+    this.callersLog = cfg.callersLog;
     if (cfg.maxBytes && cfg.maxBytes > 1024) this.maxBytes = cfg.maxBytes;
     if (cfg.intervalMs && cfg.intervalMs > 1000) this.intervalMs = cfg.intervalMs;
   }
@@ -50,6 +60,19 @@ export class LogRetentionService {
    */
   async runOnce(): Promise<Array<{ path: string; beforeBytes: number; afterBytes: number; trimmed: boolean; error?: string }>> {
     const results: Array<{ path: string; beforeBytes: number; afterBytes: number; trimmed: boolean; error?: string }> = [];
+    // The dated pass first: the size cap below empties a whole file, and a
+    // CallersLog the age rule has thinned may no longer need it.
+    if (this.callersLog) {
+      this.lastCallersLogReport = runCallersLogRetention(this.callersLog.dataDir, {
+        maxAgeDays: this.callersLog.maxAgeDays,
+      });
+      for (const r of this.lastCallersLogReport) {
+        if (r.error) console.warn(`[LogRetention] ${r.path}: ${r.error}`);
+        else if (r.address + r.password > 0) {
+          console.log(`[LogRetention] ${r.path}: removed ${r.address} address and ${r.password} password lines older than ${this.callersLog.maxAgeDays} days`);
+        }
+      }
+    }
     for (const filePath of this.filePaths) {
       try {
         const stat = await fsp.stat(filePath).catch(() => null);

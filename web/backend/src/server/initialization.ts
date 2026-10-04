@@ -931,15 +931,17 @@ export async function initializeData(io?: SocketIOServer) {
         try { return getBoardConfig(config.get('dataDir')); } catch { return null; }
       })();
       const retentionDays = (sysCfg?.log_retention_days as number | undefined) ?? 90;
-      // 10 MB per file caps size; retentionDays is the spiritual budget but
-      // not enforced as a timestamp filter — this is the "good enough" hobby
-      // BBS approach documented in the Phase 4 plan.
+      // 10 MB per file caps size. retentionDays is enforced on the CallersLog
+      // lines that hold a caller's address or typed password (the sysop's
+      // decision of 2026-10-04, services/callers-log-retention.ts); every
+      // other line stays.
       logRetentionService.configure({
         filePaths: defaultRetentionTargets(dataDir),
         maxBytes: 10 * 1024 * 1024,
+        callersLog: { dataDir, maxAgeDays: retentionDays },
       });
       logRetentionService.start();
-      console.log(`[LogRetention] started — 10 MB cap per log file, retention target ~${retentionDays}d`);
+      console.log(`[LogRetention] started — 10 MB cap per log file, CallersLog address/password lines kept ${retentionDays}d`);
     } catch (retentionError) {
       console.warn('[LogRetention] failed to start:', retentionError);
     }
