@@ -1,10 +1,8 @@
-import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as amigafs from './amigafs';
-import * as path from 'path';
 
 import { config } from '../config';
-import { db } from '../database';
+import { conferenceDir } from '../conferences/conference-paths';
+import { readTooltypeMap } from './info-file.util';
 import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
 
 export interface ConferenceToolFlags {
@@ -83,103 +81,27 @@ const defaultFlags: ConferenceToolFlags = {
   defaultZoom: false,
 };
 
-const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
+/**
+ * The answer per conference, kept only while its icon is unchanged: a sysop's
+ * edit is read at the next call, as express.e reads the icon when it needs it.
+ */
+const conferenceTooltypeCache = new Map<number, { iconPath: string; stamp: number; flags: ConferenceToolFlags }>();
 
-function readFlagsFromDb(confNumber: number): Partial<ConferenceToolFlags> {
-  try {
-    const repo = db.getConfigRepository?.();
-    if (!repo) {
-      return {};
-    }
-
-    const confConfig = repo.getConferenceConfig(confNumber);
-    if (!confConfig) {
-      return {};
-    }
-
-    const result: Partial<ConferenceToolFlags> = {};
-    if (confConfig.force_newscan) {
-      result.forceNewscan = true;
-    }
-    if (confConfig.no_newscan) {
-      result.noNewscan = true;
-    }
-    if (confConfig.show_new_files) {
-      result.showNewFiles = true;
-    }
-    if (confConfig.no_new_files) {
-      result.noNewFiles = true;
-    }
-    if ((confConfig as any).no_bulls) {
-      result.noBulls = true;
-    }
-    if ((confConfig as any).no_conf_bulls) {
-      result.noConfBulls = true;
-    }
-    if ((confConfig as any).free_downloads) {
-      result.freeDownloads = true;
-    }
-
-    return result;
-  } catch (error) {
-console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
-    SysopDebugUtil.debug(
-      null,
-      null,
-      'Conference Switching',
-      `Failed to read DB config for conference ${confNumber}`,
-      { error: error instanceof Error ? error.message : String(error), confNumber },
-      DebugSeverity.WARNING
-    );
-    return {};
-  }
+/** The conference's icon, beside the directory its LOCATION names. */
+function conferenceIconPath(confNumber: number): string {
+  return `${conferenceDir(config.getConfig().dataDir, confNumber)}.info`;
 }
 
-function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
+function readFlagsFromIcon(iconPath: string): Partial<ConferenceToolFlags> {
   try {
-    const baseDir = config.getConfig().dataDir;
-    const iconPath = path.join(baseDir, `Conf${confNumber}.info`);
-
-    if (!amigafs.existsSync(iconPath)) {
+    if (!fs.existsSync(iconPath)) {
       return {};
     }
 
-    const buffer = fs.readFileSync(iconPath);
-    // flagSet holds boolean keys; tooltypeMap holds key=value pairs for string tooltypes
-    const flagSet = new Set<string>();
-    const tooltypeMap = new Map<string, string>();
-    let currentString = '';
-
-    for (let i = 0; i < buffer.length; i++) {
-      const charCode = buffer[i];
-      if (charCode >= 32 && charCode <= 126) {
-        currentString += String.fromCharCode(charCode);
-      } else {
-        if (currentString.length >= 2) {
-          const cleaned = currentString.replace(/^[^a-zA-Z0-9+(%#']+/g, '').trim();
-          if (cleaned) {
-            // Strip common AmiExpress prefixes
-            let token = cleaned;
-            if (token.startsWith('#') || token.startsWith('+') || token.startsWith("'")) {
-              token = token.substring(1);
-            }
-            const eqIdx = token.indexOf('=');
-            if (eqIdx > 0) {
-              const key = token.substring(0, eqIdx).trim().toUpperCase();
-              const val = token.substring(eqIdx + 1);
-              if (key) {
-                flagSet.add(key);
-                tooltypeMap.set(key, val);
-              }
-            } else {
-              const key = token.trim().toUpperCase();
-              if (key) flagSet.add(key);
-            }
-          }
-        }
-        currentString = '';
-      }
-    }
+    // The board's one tooltype reader (info-file.util); presence is the value
+    // for a flag (checkToolTypeExists, express.e:576).
+    const tooltypeMap = readTooltypeMap(iconPath);
+    const flagSet = new Set<string>(tooltypeMap.keys());
 
     const result: Partial<ConferenceToolFlags> = {};
     if (flagSet.has('FORCE_NEWSCAN')) {
@@ -272,13 +194,13 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
 
     return result;
   } catch (error) {
-console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);
+console.error(`[ConferenceTooltypes] Error parsing ${iconPath}:`, error);
     SysopDebugUtil.debug(
       null,
       null,
       'Conference Switching',
-      `Failed to parse Conf${confNumber}.info tooltypes`,
-      { error: error instanceof Error ? error.message : String(error), confNumber },
+      `Failed to parse ${iconPath} tooltypes`,
+      { error: error instanceof Error ? error.message : String(error), iconPath },
       DebugSeverity.WARNING
     );
     return {};
@@ -286,16 +208,21 @@ console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, err
 }
 
 export function getConferenceToolFlags(confNumber: number): ConferenceToolFlags {
-  if (conferenceTooltypeCache.has(confNumber)) {
-    return conferenceTooltypeCache.get(confNumber)!;
+  const iconPath = conferenceIconPath(confNumber);
+  let stamp = -1;
+  try {
+    stamp = fs.statSync(iconPath).mtimeMs;
+  } catch { /* no icon: every flag off */ }
+  const cached = conferenceTooltypeCache.get(confNumber);
+  if (cached && cached.iconPath === iconPath && cached.stamp === stamp) {
+    return cached.flags;
   }
 
   const flags: ConferenceToolFlags = {
     ...defaultFlags,
-    ...readFlagsFromDb(confNumber),
-    ...readFlagsFromIcon(confNumber),
+    ...(stamp >= 0 ? readFlagsFromIcon(iconPath) : {}),
   };
 
-  conferenceTooltypeCache.set(confNumber, flags);
+  conferenceTooltypeCache.set(confNumber, { iconPath, stamp, flags });
   return flags;
 }
