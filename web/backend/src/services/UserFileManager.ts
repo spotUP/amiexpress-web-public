@@ -115,6 +115,20 @@ interface UserMiscFileStruct {
   unused: Buffer;                  // [86] CHAR
 }
 
+/** user.data `expert` is a CHAR holding 'X' or 'N' (express.e:26114-26119). */
+const EXPERT_X = 0x58;
+const EXPERT_N = 0x4e;
+
+function expertToByte(expert: unknown): number {
+  return String(expert ?? '').toUpperCase() === 'X' ? EXPERT_X : EXPERT_N;
+}
+
+function byteToExpert(byte: number): string {
+  if (byte === EXPERT_X) return 'X';
+  if (byte === EXPERT_N) return 'N';
+  return '';
+}
+
 export class UserFileManager {
   private bbsRoot: string;
   private userDataPath: string;
@@ -162,12 +176,18 @@ export class UserFileManager {
       pass: '', // Password hash stored separately, not in plaintext
       location: user.location || '',
       phoneNumber: user.phone || '',
-      slotNumber: slotNumber,
+      // express.e:21364 - a DELETED account keeps its position and carries 0
+      // in its own slotNumber field. The position is `slotNumber` (the offset
+      // this record is written at); the field is what says it is deleted.
+      slotNumber: user.accountDeleted ? 0 : slotNumber,
       secStatus: user.secLevel,
       secBoard: user.ratioType,
       secLibrary: user.ratio,
       secBulletin: 0, // Computer type
-      messagesPosted: user.messagesPosted || 0, // From user record (tracked by BBS)
+      // Disk-only: the users table has no column for it. updateUserDataFile
+      // keeps the disk's own count when the caller's User does not carry one,
+      // which is every User built from a database row.
+      messagesPosted: user.messagesPosted ?? 0,
       newSinceDate: Math.floor((user.lastLogin?.getTime() || Date.now()) / 1000),
       pwdHash: 0, // Old hash format not used
       confRead2: 0,
@@ -195,23 +215,30 @@ export class UserFileManager {
       bytesDownload: user.bytesDownload,
       bytesUpload: user.bytesUpload,
       dailyBytesLimit: user.byteLimit,
-      dailyBytesDld: 0, // Reset daily
-      expert: user.expert ? 1 : 0,
+      dailyBytesDld: user.dailyBytesDld ?? 0,
+      // A CHAR holding the letter (express.e:24595 `expert="X"`, 26116
+      // `expert:="N"`). `user.expert ? 1 : 0` wrote 1 for 'N' as well, since
+      // 'N' is truthy, so every account looked expert to a door and the
+      // letter express.e compares against was never on disk.
+      expert: expertToByte(user.expert),
       chatRemain: user.chatLimit - user.chatUsed,
       chatLimit: user.chatLimit,
-      creditDays: 0,
-      creditAmount: 0,
-      creditStartDate: 0,
-      creditTotalToDate: 0,
-      creditTotalDate: 0,
-      creditTracking: 0,
+      creditDays: user.creditDays ?? 0,
+      creditAmount: user.creditAmount ?? 0,
+      creditStartDate: user.creditStartDate ?? 0,
+      creditTotalToDate: user.creditTotalToDate ?? 0,
+      creditTotalDate: user.creditTotalDate ?? 0,
+      creditTracking: user.creditTracking ?? 0,
       translatorID: 0,
       msgBaseRJoin: 1, // Default to first message base (not stored in user record, only in session)
       confYM9: 0,
       todaysBytesLimit: user.byteLimit,
       protocol: 0,
       uucpa: user.uuCP ? 1 : 0,
-      lineLength: 79,
+      // Lines per screen, 0 = auto (express.e:11272-11314). It was a constant
+      // 79, as if it were a line WIDTH, so every caller's pause length on disk
+      // was 79 whatever they had chosen.
+      lineLength: Math.max(0, Math.min(255, Math.trunc(user.linesPerScreen ?? 0))),
       newUser: user.newUser ? 1 : 0,
     };
   }
@@ -222,7 +249,8 @@ export class UserFileManager {
   private userToKeysStruct(user: User, slotNumber: number): UserKeysFileStruct {
     return {
       userName: user.username,
-      number: slotNumber,
+      // express.e:21365 `hoozer2.number:=0` beside the record's slotNumber.
+      number: user.accountDeleted ? 0 : slotNumber,
       newUser: user.newUser ? 1 : 0,
       oldUpCPS: Math.min(user.topUploadCPS, 65535), // Max 16-bit unsigned
       oldDnCPS: Math.min(user.topDownloadCPS, 65535),
@@ -951,7 +979,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       callsToday: keysStruct.timesOnToday,
       messagesPosted: userStruct.messagesPosted,
       newUser: userStruct.newUser > 0,
-      expert: userStruct.expert > 0 ? 'X' : 'N',
+      // '' when the byte is neither letter: the old writer's 1, which it wrote
+      // for 'X' and 'N' alike, says nothing about the caller's choice.
+      expert: byteToExpert(userStruct.expert),
       ansi: userStruct.screenType !== 2, // Not ASCII
       linesPerScreen: userStruct.lineLength,
       computer: '', // Not stored in binary files
@@ -976,6 +1006,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       creditTotalToDate: userStruct.creditTotalToDate,
       creditTotalDate: userStruct.creditTotalDate,
       creditTracking: userStruct.creditTracking,
+      // express.e:29701 - a record whose own slotNumber field is 0 is a
+      // deleted account. The position it sits at stays its slot.
+      accountDeleted: userStruct.slotNumber === 0,
       baud: keysStruct.baud,
       userFlags: keysStruct.userFlags,
       created: new Date(userStruct.accountDate * 1000),
@@ -1253,6 +1286,29 @@ console.error('[UserFileManager] Error reading user files:', error);
     }
   }
 
+  /**
+   * The two disk-only facts of one user.data record: its post count and
+   * whether it is deleted. null when the slot is past the end of the file or
+   * has never held an account.
+   */
+  private readRecordState(slotNumber: number): { messagesPosted: number; deleted: boolean } | null {
+    try {
+      if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userDataPath)) return null;
+      const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
+      const buffer = Buffer.alloc(this.USER_STRUCT_SIZE);
+      const fd = fs.openSync(this.userDataPath, 'r');
+      try {
+        if (fs.fstatSync(fd).size < offset + this.USER_STRUCT_SIZE) return null;
+        fs.readSync(fd, buffer, 0, this.USER_STRUCT_SIZE, offset);
+      } finally { fs.closeSync(fd); }
+      const record = this.deserializeUserStruct(buffer, 0);
+      if (!record.name || record.name.trim().length === 0) return null;
+      return { messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0 };
+    } catch {
+      return null;
+    }
+  }
+
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
       // Slot 1 is the first record. A slot of 0 computed offset -232, and
@@ -1276,6 +1332,21 @@ console.error('[UserFileManager] Error reading user files:', error);
       // its zeroes here unlocked every account on each login and on each
       // admin edit. Preserve the on-disk values unless the caller names
       // explicit numbers (BBS account editor B/C/D, admin unlock button).
+      // Disk-only state of the user.data record: kept when the caller's User
+      // does not name it. A User built from a database row carries neither -
+      // the table has no messagesPosted column, and "deleted" is the record's
+      // slotNumber field (express.e:21364), not a row value - so writing this
+      // User's defaults zeroed the post count on every login and admin edit,
+      // and would have undeleted every deleted account.
+      const current = this.readRecordState(slotNumber);
+      if (current) {
+        if (user.messagesPosted === undefined) userStruct.messagesPosted = current.messagesPosted;
+        if (user.accountDeleted === undefined && current.deleted) {
+          userStruct.slotNumber = 0;
+          keysStruct.number = 0;
+        }
+      }
+
       const keep = this.readMiscLockFields(slotNumber);
       if (user.forcePwdReset === undefined) miscStruct.forcePwdReset = keep.forcePwdReset;
       else miscStruct.forcePwdReset = user.forcePwdReset ? 1 : 0;

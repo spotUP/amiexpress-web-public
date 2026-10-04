@@ -251,6 +251,67 @@ describe('UserRepository', () => {
       const user = await repo.getUserById(id);
       expect(user).toBeNull();
     });
+
+    it('clears the deleted account\'s own record on disk, and nobody else\'s', async () => {
+      // The slot was the account's ALPHABETICAL position in getUsers() + 1,
+      // so the admin delete and the self-delete zeroed another caller.
+      const keepId = await repo.createUser(makeUserData({ username: `aaa_keep_${Date.now()}` }));
+      const goneId = await repo.createUser(makeUserData({ username: `zzz_gone_${Date.now()}` }));
+      await repo.appendUserToDisk(keepId);
+      await repo.appendUserToDisk(goneId);
+      const keep = (await repo.getUserById(keepId))!;
+      const gone = (await repo.getUserById(goneId))!;
+      const { userFileManager } = require('../../src/services/UserFileManager');
+      const everyoneBefore = userFileManager.readAllUsers()
+        .filter((u: any) => u.slotNumber !== gone.slotNumber)
+        .map((u: any) => `${u.slotNumber}:${u.username}`);
+
+      await repo.deleteUser(goneId);
+
+      expect(userFileManager.readUserBySlot(gone.slotNumber)).toBeNull();
+      expect(userFileManager.readUserBySlot(keep.slotNumber)!.username).toBe(keep.username);
+      const everyoneAfter = userFileManager.readAllUsers().map((u: any) => `${u.slotNumber}:${u.username}`);
+      expect(everyoneAfter).toEqual(everyoneBefore);
+    });
+  });
+
+  describe('the fields that live on disk', () => {
+    it('expert mode turned off is still off at the next read', async () => {
+      // updateUser stores the letter in an INTEGER column; `? 'X' : 'N'`
+      // read the stored 'N' as truthy.
+      const id = await repo.createUser(makeUserData({ expert: 'X' }));
+      await repo.updateUser(id, { expert: 'N' });
+      expect((await repo.getUserById(id))!.expert).toBe('N');
+      await repo.updateUser(id, { expert: 'X' });
+      expect((await repo.getUserById(id))!.expert).toBe('X');
+    });
+
+    it('a post count goes to the disk record, and a later row write leaves it there', async () => {
+      // The table has no messagesposted column: the update used to throw.
+      const id = await repo.createUser(makeUserData());
+      await repo.appendUserToDisk(id);
+      const slot = (await repo.getUserById(id))!.slotNumber!;
+      const { userFileManager } = require('../../src/services/UserFileManager');
+
+      await repo.updateUser(id, { messagesPosted: 12 });
+      expect(userFileManager.readUserBySlot(slot).messagesPosted).toBe(12);
+
+      await repo.updateUser(id, { location: 'Elsewhere' });
+      expect(userFileManager.readUserBySlot(slot).messagesPosted).toBe(12);
+      expect(userFileManager.readUserBySlot(slot).location).toBe('Elsewhere');
+    });
+
+    it('a row-only write does not touch the disk record', async () => {
+      const id = await repo.createUser(makeUserData({ secLevel: 10 }));
+      await repo.appendUserToDisk(id);
+      const slot = (await repo.getUserById(id))!.slotNumber!;
+      const { userFileManager } = require('../../src/services/UserFileManager');
+
+      await repo.updateUser(id, { secLevel: 99 }, { syncDisk: false });
+
+      expect((await repo.getUserById(id))!.secLevel).toBe(99);
+      expect(userFileManager.readUserBySlot(slot).secLevel).toBe(10);
+    });
   });
 
   // Credit-account fields — before this mirror wiring the users table had no

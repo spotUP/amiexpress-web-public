@@ -1250,6 +1250,10 @@ console.error('[CommandHistory] Error saving command history:', error);
     // This is CRITICAL - must save user data before deleting node files
     if (session.user.slotNumber) {
       try {
+        // express.e:8202 - `loggedOnUser.timeLastOn:=getSystemTime()`, just
+        // before the save. The logon reads it back as the day the caller was
+        // last on (28508), which decides whether today's allowances reset.
+        session.user.lastLogin = getSystemTime();
         userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
 console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${session.user.slotNumber})`);
       } catch (diskErr) {

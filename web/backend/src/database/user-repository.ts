@@ -71,6 +71,35 @@ export function fieldToColumnForTest(field: string): string {
   return fieldToColumn(field);
 }
 
+function expertFromColumn(value: unknown): 'X' | 'N' {
+  if (value === 1 || value === '1') return 'X';
+  return String(value ?? '').toUpperCase() === 'X' ? 'X' : 'N';
+}
+
+/**
+ * User fields that live only in user.data / user.misc. The table has no
+ * column for them, so an UPDATE naming one failed ("no such column") - the
+ * account editor's Messages Posted, for one. They go to the disk write and
+ * never to SQL.
+ */
+const DISK_ONLY_FIELDS = [
+  'messagesPosted',
+  'accountDeleted',
+  'accountLocked',
+  'invalidAttempts',
+  'forcePwdReset',
+  'pwdLastUpdated',
+] as const;
+
+export interface UpdateUserOptions {
+  /**
+   * false: write the row only. For a row that is being brought up to date
+   * FROM the disk record (the logon), where writing the row back over that
+   * record would be the copy running the wrong way.
+   */
+  syncDisk?: boolean;
+}
+
 export class UserRepository extends BaseRepository<User> {
   constructor(db: any) {
     super(db);
@@ -264,7 +293,11 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       calls: safeNumber(user.calls, 0),
       callsToday: safeNumber(user.callstoday, 0),
       newUser: Boolean(user.newuser),
-      expert: user.expert ? 'X' : 'N',
+      // The column is INTEGER, but updateUser writes the letter, so a row
+      // holds 0/1 (createUser) or 'X'/'N' (every later save). `? 'X' : 'N'`
+      // read the stored 'N' as truthy, and a caller who turned expert mode
+      // off was an expert again at the next login.
+      expert: expertFromColumn(user.expert),
       ansi: Boolean(user.ansi),
       linesPerScreen: safeNumber(user.linesperscreen, 23),
       computer: user.computer,
@@ -315,36 +348,46 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
     } as User;
   }
 
-  async updateUser(id: string, updates: Partial<User>): Promise<void> {
+  async updateUser(id: string, updates: Partial<User>, options: UpdateUserOptions = {}): Promise<void> {
 
     const sanitizedUpdates = { ...updates };
     if (typeof sanitizedUpdates.username === 'string') {
       sanitizedUpdates.username = sanitizeInput(sanitizedUpdates.username);
     }
 
+    const diskOnly: Partial<User> = {};
+    for (const field of DISK_ONLY_FIELDS) {
+      if (sanitizedUpdates[field] !== undefined) (diskOnly as Record<string, unknown>)[field] = sanitizedUpdates[field];
+    }
+
     const fields = Object.keys(sanitizedUpdates).filter(key =>
       key !== 'id' &&
       key !== 'created' &&
-      key !== 'lastLoginBeforeUpdate'  // Runtime-only field, not in DB schema
+      key !== 'lastLoginBeforeUpdate' &&  // Runtime-only field, not in DB schema
+      !(DISK_ONLY_FIELDS as readonly string[]).includes(key)
     );
-    if (fields.length === 0) return;
 
-    const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');
-    const values = fields.map(f => {
-      const value = sanitizedUpdates[f as keyof User];
-      if (value instanceof Date) return Math.floor(value.getTime() / 1000);
-      if (typeof value === 'boolean') return value ? 1 : 0;
-      return value;
-    });
+    if (fields.length > 0) {
+      const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');
+      const values = fields.map(f => {
+        const value = sanitizedUpdates[f as keyof User];
+        if (value instanceof Date) return Math.floor(value.getTime() / 1000);
+        if (typeof value === 'boolean') return value ? 1 : 0;
+        return value;
+      });
 
-    const sql = `UPDATE users SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
-    this.run(sql, [...values, id]);
+      const sql = `UPDATE users SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
+      this.run(sql, [...values, id]);
+    }
+
+    if (options.syncDisk === false) return;
+    if (fields.length === 0 && Object.keys(diskOnly).length === 0) return;
 
     // CRITICAL: Sync to disk files for Amiga door compatibility
     const updatedUser = await this.getUserById(id);
     if (updatedUser && updatedUser.slotNumber) {
       try {
-        userFileManager.updateUserDataFile(updatedUser, updatedUser.slotNumber);
+        userFileManager.updateUserDataFile({ ...updatedUser, ...diskOnly }, updatedUser.slotNumber);
 console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${updatedUser.slotNumber})`);
       } catch (error) {
 console.error(`[Database] Failed to sync user update to disk:`, error);
@@ -395,10 +438,10 @@ console.error(`[Database] Failed to sync user update to disk:`, error);
       throw new Error(`User with ID ${id} not found`);
     }
 
-    // Find user's slot in disk files (1-indexed position in user list)
-    const allUsers = await this.getUsers({ limit: 10000 });
-    const slotIndex = allUsers.findIndex(u => u.id === id);
-    const slotNumber = slotIndex >= 0 ? slotIndex + 1 : -1; // Convert to 1-indexed
+    // The account's own position in user.data. This was the user's index in
+    // getUsers() + 1 - an ALPHABETICAL position - so deleting one account
+    // zeroed whichever record happened to sit at that number: somebody else's.
+    const slotNumber = user.slotNumber ?? 0;
 
     // Delete from database
     const result = this.run('DELETE FROM users WHERE id = ?', [id]);

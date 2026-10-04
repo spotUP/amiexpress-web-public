@@ -106,6 +106,14 @@ export interface User {
   invalidAttempts?: number;
   forcePwdReset?: number;
   pwdLastUpdated?: number;
+  /**
+   * The user.data record's own slotNumber field is 0: a deleted account
+   * (express.e:21364, refused at logon 29701). Disk-only, like the lock
+   * fields: `slotNumber` above stays the POSITION, so a deleted account keeps
+   * its record and can be re-activated (21374-21378). Undefined means "leave
+   * the disk's state alone" to every writer.
+   */
+  accountDeleted?: boolean;
   created: Date;
   updated: Date;
 }

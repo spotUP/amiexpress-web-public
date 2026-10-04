@@ -17,7 +17,8 @@ process.env.SKIP_DB_INIT = '1';
 
 const generateAccessToken = jest.fn(async () => 'access-token');
 const generateRefreshToken = jest.fn(async () => 'refresh-token');
-const updateUser = jest.fn(async () => undefined);
+// The first write after the mint: the row brought up to date from the record.
+const updateUser = jest.fn(async (..._args: unknown[]) => { throw new Stop('past the mint'); });
 
 /**
  * The real database module with three methods replaced. A wholesale mock is
@@ -48,9 +49,10 @@ jest.mock('../../src/services/node-reservation.service', () => ({
 
 /** The pipeline runs a long way past the mint; stop it once the token is out. */
 class Stop extends Error {}
+// No record on disk: the login runs on the row (load-account.ts falls back).
 jest.mock('../../src/services/UserFileManager', () => ({
   userFileManager: {
-    updateUserDataFile: () => { throw new Stop('past the mint'); },
+    readUserBySlot: () => null,
   },
 }));
 

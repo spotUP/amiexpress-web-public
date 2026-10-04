@@ -165,20 +165,41 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
   }
 
   // DELETE - Delete account (express.e:21362-21373)
+  //
+  //   hoozer.slotNumber:=0; hoozer2.number:=0
+  //   saveAccount(hoozer,hoozer2,hoozer3,which,1)   -> at the SAME position
+  //   deleteConfAccess(...)
+  //
+  // The record keeps its place in user.data; its own slotNumber field becomes
+  // 0, which is what the logon refuses (29701). This set the row's slotnumber
+  // to 0 instead - the POSITION - so the disk write skipped it (slot 0 has no
+  // record), the deletion never reached user.data, and the startup backfill
+  // handed the row a fresh slot: the account logged in again after a restart.
   if (key === '\x7f' || command === 'DELETE') {
     socket.emit('ansi-output', '\r\n\x1b[31mDelete account\x1b[0m\r\n');
-    user.slotNumber = 0;
+    user.accountDeleted = true;
     session.tempData.changes = true;
     await saveAccount(socket, session);
+    if (user.slotNumber && user.slotNumber > 0) {
+      try {
+        const { deleteConfAccess } = require('../../services/delete-conf-access');
+        const { nodeTooltype } = require('../../utils/node-tooltypes.util');
+        const { boardRoot } = require('../../utils/board-root.util');
+        deleteConfAccess(boardRoot(), user.slotNumber, nodeTooltype(session.nodeId ?? 0, 'CONF_DB') || 'Conf.DB');
+      } catch (err) {
+        console.error('[ACCOUNT EDIT] deleteConfAccess failed:', err);
+      }
+    }
     socket.emit('ansi-output', '\r\n\x1b[32mAccount deleted.\x1b[0m\r\n');
     leaveAccountEditor(session);
     return;
   }
 
-  // 9 - Reactivate (express.e:21374-21378)
+  // 9 - Reactivate (express.e:21374-21378): `hoozer.slotNumber:=which`, the
+  // record's field back to its own position; saved with the next save.
   if (command === '9') {
     socket.emit('ansi-output', '\r\n\x1b[32mRe-Activate\x1b[0m\r\n');
-    user.slotNumber = slot;
+    user.accountDeleted = false;
     session.tempData.changes = true;
     if (session.tempData.page === 0) {
       displayAccountPage0(socket, user, slot);

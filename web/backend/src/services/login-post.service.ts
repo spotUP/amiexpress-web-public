@@ -22,7 +22,7 @@ import type { LoginEmitter } from "../types/login-emitter";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
 import { nodeFileManager } from "../services/NodeFileManager";
-import { userFileManager } from "../services/UserFileManager";
+import { loadAccount, rowFieldsFromAccount } from "./load-account";
 import { userDatabaseManager } from "../services/UserDatabaseManager";
 import { callersLogManager } from "./CallersLogManager";
 import { initializeSecurity, setEnvStat } from "../utils/security.util";
@@ -162,18 +162,25 @@ export async function runPostAuthLogin(
   }
 
   /**
-   * The user record on DISK, which is what a 68K door reads (XIM reads
-   * user.data, not the database). This was in the web credential arm too, so
-   * a telnet caller's login never wrote it; now every transport does.
+   * LOADACCOUNT (express.e:29664, 7977-8022): the session runs on the record
+   * in user.data / user.keys / user.misc, not on the database row.
+   *
+   * This wrote the ROW over the record instead, on every login of every
+   * transport: the post count went to 0 (the table has no column for it), the
+   * time used today went back to the row's morning value, and whatever a door,
+   * AREXX or the sysop had written into the record was reverted. express.e
+   * writes nothing to user.data at a successful logon - the record goes back
+   * at logoff (8207) - so nothing is written here either; the row is brought
+   * up to date FROM the record below.
    */
-  if (user.slotNumber) {
-    try {
-      userFileManager.updateUserDataFile(user, user.slotNumber);
-    } catch (error) {
-      // Best-effort: a failed disk sync must not fail a login.
-      console.error("[LOGIN] Failed to sync user to disk:", error);
-    }
-  }
+  const loaded = loadAccount(user);
+  user = loaded.user;
+  // The day the caller was last on, for the new-day reset (express.e:28508
+  // reads `loggedOnUser.timeLastOn` off the loaded record). The transports
+  // captured the row's lastLogin; the record's is the one express.e uses.
+  const lastLoginBeforeUpdate: Date = loaded.fromDisk
+    ? (user.lastLogin ?? new Date(0))
+    : ctx.lastLoginBeforeUpdate;
 
   /**
    * THE BROWSER'S SESSION TOKEN.
@@ -251,33 +258,45 @@ export async function runPostAuthLogin(
    * to. Nothing to reset, rather than something forgotten.
    */
   const currDay = amiExpressDay(Math.floor(getSystemTime().getTime() / 1000));
-  const lastDay = amiExpressDay(Math.floor(ctx.lastLoginBeforeUpdate.getTime() / 1000));
+  const lastDay = amiExpressDay(Math.floor(lastLoginBeforeUpdate.getTime() / 1000));
   const newDay = lastDay !== currDay;
 
-  // Update last login (preserve previous via ctx for new-since scans).
+  /*
+   * What express.e's logon changes in the loaded record, IN MEMORY: one more
+   * call (displayUserToCallersLog, express.e:16045), and today's counters
+   * (28512-28528). They reach user.data with the rest of the session at
+   * logoff (8207), so they go on the object the session runs on.
+   */
+  const callsBeforeLogon = user.calls || 0;
+  user.calls = callsBeforeLogon + 1;
+  // express.e:28513 zeroes it on a new day rather than starting at one.
+  user.callsToday = newDay ? 0 : (user.callsToday || 0) + 1;
+  if (newDay) {
+    user.timeUsed = 0;
+    user.chatUsed = 0;
+    user.dailyBytesDld = 0;
+    user.timeTotal = user.timeLimit;
+  }
+
+  /*
+   * The ROW follows the record, never the other way round: the fields the
+   * session took off the disk, the logon's changes, and the web's own
+   * lastLogin (the time of this call, which the admin and the web read).
+   * `syncDisk: false` because writing the row back over the record is the
+   * very copy this replaces.
+   */
   await db.updateUser(user.id, {
+    ...(loaded.fromDisk ? rowFieldsFromAccount(user) : {}),
     lastLogin: getSystemTime(),
-    calls: user.calls + 1,
-    // express.e:28513 zeroes it on a new day rather than starting at one.
-    callsToday: newDay ? 0 : user.callsToday + 1,
+    calls: user.calls,
+    callsToday: user.callsToday,
     ...(newDay ? {
       timeUsed: 0,
       chatUsed: 0,
       dailyBytesDld: 0,
       timeTotal: user.timeLimit,
     } : {}),
-  });
-
-  if (newDay) {
-    // The row is written above; the object this session runs on is the one
-    // handed to `session.user` below, so it has to agree or the caller spends
-    // this session against yesterday's counters.
-    user.timeUsed = 0;
-    user.chatUsed = 0;
-    user.dailyBytesDld = 0;
-    user.timeTotal = user.timeLimit;
-    user.callsToday = 0;
-  }
+  }, { syncDisk: false });
 
   // Set session user data
   session.state = BBSState.LOGGEDON;
@@ -287,7 +306,11 @@ export async function runPostAuthLogin(
   // on a socket that never let them go (reload -> restore -> submit),
   // because this assignment overwrites the evidence. Snapshot first.
   session.entryUserId = (session.user as any)?.id;
-  session.user = { ...user, lastLoginBeforeUpdate: ctx.lastLoginBeforeUpdate };
+  // Without the record's deleted state: the gate below reads it off `user`,
+  // and a session that carries `false` would write it back at logoff over a
+  // DELETE the sysop made while the caller was on.
+  const { accountDeleted: _deletedOnDisk, ...sessionUser } = user;
+  session.user = { ...sessionUser, lastLoginBeforeUpdate };
   session.ansiMode = user.ansi;
   installAnsiFilter(emitter, session);
 
@@ -514,7 +537,9 @@ export async function runPostAuthLogin(
    * It comes BEFORE the lockout check because that is express's order: 29701
    * then 29775.
    */
-  if (!user.slotNumber || user.slotNumber === 0) {
+  // The record's own slotNumber field is what express.e tests (29701); the
+  // position stays the account's, so a deleted account can be re-activated.
+  if (!user.slotNumber || user.slotNumber === 0 || user.accountDeleted === true) {
     emitter.emit("ansi-output", "\r\nThat account has been deleted.\r\n");
     beginLogoff(emitter as any, session, { message: "" });
     return { ok: false, terminated: "deleted-account" };
@@ -761,8 +786,10 @@ export async function runPostAuthLogin(
       // (callersLog, webhook payload, etc.) sees the updated hash. The
       // adapter already wrote it; just reload.
       try {
+        // Only the hash: the rest of `user` is the record loaded off the
+        // disk, which the row does not wholly hold (messagesPosted).
         const refreshed = await db.getUserById(user.id);
-        if (refreshed) user = refreshed;
+        if (refreshed) user = { ...user, passwordHash: refreshed.passwordHash };
       } catch {
         /* non-fatal */
       }
@@ -808,7 +835,7 @@ export async function runPostAuthLogin(
         userId: user.id,
         gdprConsented: !!user.gdprConsentAt,
         secLevel: user.secLevel,
-        calls: user.calls + 1,
+        calls: user.calls,
       });
     } catch (error) {
       console.error("[Webhook] Error sending user login webhook:", error);
@@ -818,7 +845,9 @@ export async function runPostAuthLogin(
   // Conference / preference defaults.
   // Achievements (SP2): the presence facts and the snapshots, beside the
   // webhook and never inside its try. Non-throwing.
-  reportPresence(session as any, { ...user, lastLoginBeforeUpdate: ctx.lastLoginBeforeUpdate });
+  // The achievements count the call themselves (`calls + 1`), from the
+  // number before this logon.
+  reportPresence(session as any, { ...user, calls: callsBeforeLogon, lastLoginBeforeUpdate });
 
   session.confRJoin = user.autoRejoin || 1;
   (session as any).msgBaseRJoin = 1;
