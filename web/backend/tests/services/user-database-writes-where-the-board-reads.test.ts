@@ -77,17 +77,24 @@ describe('where a user is written', () => {
     expect(fs.existsSync(path.join(rootDir, 'user.data'))).toBe(true);
   });
 
-  it('appends a user the board can read back, in the directory it reads', () => {
+  it('a new account written by the board\'s writer is read back here, slot 1 at offset 0', () => {
+    // New accounts go through UserFileManager.writeUserFiles (the one
+    // serializer); this manager still reads them, from the same directory.
     const manager = freshManager({ BBS_DATA_DIR: dataDir });
     manager.initializeUserDatabase();
-
     expect(manager.getUserCount()).toBe(0);
 
-    manager.appendUser(
-      manager.userToStruct({ username: 'spot', location: 'Uprough', securityLevel: 255 }),
-      manager.userToKeys({ username: 'spot' }, 0),
-      manager.userToMisc({ username: 'spot' }),
-    );
+    const previous = { ...process.env };
+    process.env.BBS_DATA_DIR = dataDir;
+    const { UserFileManager } = require('../../src/services/UserFileManager');
+    const writer = new UserFileManager();
+    process.env = previous;
+    writer.writeUserFiles({
+      username: 'spot', location: 'Uprough', secLevel: 255, confAccess: 'XX', ratio: 0, ratioType: 0,
+      uploads: 0, downloads: 0, calls: 1, callsToday: 1, timeUsed: 0, timeLimit: 3600, timeTotal: 0,
+      bytesDownload: 0, bytesUpload: 0, byteLimit: 0, chatLimit: 0, chatUsed: 0, topUploadCPS: 0,
+      topDownloadCPS: 0, userFlags: 0, realname: 'spot', newUser: true, expert: 'N',
+    }, 1);
 
     // The bytes, not the manager's own opinion of them. All three files grow
     // together: a user missing from user.keys is a user who cannot log in.
@@ -95,24 +102,7 @@ describe('where a user is written', () => {
     expect(fs.statSync(path.join(dataDir, 'user.keys')).size).toBe(USER_KEYS_BYTES);
     expect(fs.statSync(path.join(dataDir, 'user.misc')).size).toBe(USER_MISC_BYTES);
     expect(manager.getUserCount()).toBe(1);
-
-    const read = manager.readUserFromDisk(1);
-    expect(read).not.toBeNull();
-    expect(read!.user.name).toBe('spot');
-  });
-
-  it('addresses slot 1 at file offset 0 - slots are 1-indexed like express.e', () => {
-    const manager = freshManager({ BBS_DATA_DIR: dataDir });
-    manager.initializeUserDatabase();
-    manager.appendUser(
-      manager.userToStruct({ username: 'spot', location: 'Uprough', securityLevel: 255 }),
-      manager.userToKeys({ username: 'spot' }, 0),
-      manager.userToMisc({ username: 'spot' }),
-    );
-
-    // Raw bytes, not the manager's opinion: slot N lives at (N-1)*SIZE.
-    const misc = fs.readFileSync(path.join(dataDir, 'user.misc'));
-    expect(misc.length).toBe(USER_MISC_BYTES);
+    expect(manager.readUserFromDisk(1)!.user.name).toBe('spot');
     expect(manager.readUserFromDisk(0)).toBeNull();
   });
 });

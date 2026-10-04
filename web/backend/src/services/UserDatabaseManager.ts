@@ -312,97 +312,6 @@ export class UserDatabaseManager {
     return Math.floor(stats.size / this.USER_SIZE);
   }
 
-  appendUser(user: UserStruct, keys: UserKeysStruct, misc: UserMiscStruct): void {
-    const userBuffer = this.serializeUser(user);
-    const keysBuffer = this.serializeUserKeys(keys);
-    const miscBuffer = this.serializeUserMisc(misc);
-    fs.appendFileSync(this.userDataPath, userBuffer);
-    fs.appendFileSync(this.userKeysPath, keysBuffer);
-    fs.appendFileSync(this.userMiscPath, miscBuffer);
-  }
-
-  private serializeUser(user: UserStruct): Buffer {
-    const buffer = Buffer.alloc(this.USER_SIZE);
-    let offset = 0;
-    offset = this.writeString(buffer, offset, user.name, 31);
-    offset = this.writeString(buffer, offset, user.pass, 9);
-    offset = this.writeString(buffer, offset, user.location, 30);
-    offset = this.writeString(buffer, offset, user.phoneNumber, 13);
-    buffer.writeUInt8(0, offset++);
-    offset = this.writeInt16(buffer, offset, user.slotNumber);
-    offset = this.writeInt16(buffer, offset, user.secStatus);
-    offset = this.writeInt16(buffer, offset, user.secBoard);
-    offset = this.writeInt16(buffer, offset, user.secLibrary);
-    offset = this.writeInt16(buffer, offset, user.secBulletin);
-    offset = this.writeInt16(buffer, offset, user.messagesPosted);
-    offset = this.writeInt32(buffer, offset, user.newSinceDate);
-    offset = this.writeInt32(buffer, offset, user.pwdHash);
-    offset = this.writeInt32(buffer, offset, user.confRead2);
-    offset = this.writeInt32(buffer, offset, user.confRead3);
-    offset = this.writeInt16(buffer, offset, user.zoomType);
-    offset = this.writeInt16(buffer, offset, user.unknown);
-    offset = this.writeInt16(buffer, offset, user.unknown2);
-    offset = this.writeInt16(buffer, offset, user.unknown3);
-    offset = this.writeInt16(buffer, offset, user.xferProtocol);
-    offset = this.writeInt16(buffer, offset, user.filler2);
-    offset = this.writeInt16(buffer, offset, user.lcFiles);
-    offset = this.writeInt16(buffer, offset, user.badFiles);
-    offset = this.writeInt32(buffer, offset, user.accountDate);
-    offset = this.writeInt16(buffer, offset, user.screenType);
-    offset = this.writeInt16(buffer, offset, user.editorType);
-    // At most nine characters and a NUL, as express.e's AstrCopy(..,10) writes it.
-    user.conferenceAccess.copy(buffer, offset, 0, 9); buffer.writeUInt8(0, offset + 9); offset += 10;
-    offset = this.writeInt16(buffer, offset, user.uploads);
-    offset = this.writeInt16(buffer, offset, user.downloads);
-    offset = this.writeInt16(buffer, offset, user.confRJoin);
-    offset = this.writeInt16(buffer, offset, user.timesCalled);
-    offset = this.writeInt32(buffer, offset, user.timeLastOn);
-    offset = this.writeInt32(buffer, offset, user.timeUsed);
-    offset = this.writeInt32(buffer, offset, user.timeLimit);
-    offset = this.writeInt32(buffer, offset, user.timeTotal);
-    offset = this.writeInt32(buffer, offset, user.bytesDownload);
-    offset = this.writeInt32(buffer, offset, user.bytesUpload);
-    offset = this.writeInt32(buffer, offset, user.dailyBytesLimit);
-    offset = this.writeInt32(buffer, offset, user.dailyBytesDld);
-    buffer.writeUInt8(user.expert, offset++);
-    buffer.writeUInt8(0, offset++);
-    offset = this.writeInt32(buffer, offset, user.chatRemain);
-    offset = this.writeInt32(buffer, offset, user.chatLimit);
-    offset = this.writeInt32(buffer, offset, user.creditDays);
-    offset = this.writeInt32(buffer, offset, user.creditAmount);
-    offset = this.writeInt32(buffer, offset, user.creditStartDate);
-    offset = this.writeInt32(buffer, offset, user.creditTotalToDate);
-    offset = this.writeInt32(buffer, offset, user.creditTotalDate);
-    buffer.writeUInt8(user.creditTracking, offset++);
-    buffer.writeUInt8(user.translatorID, offset++);
-    offset = this.writeInt16(buffer, offset, user.msgBaseRJoin);
-    offset = this.writeInt32(buffer, offset, user.confYM9);
-    offset = this.writeInt32(buffer, offset, user.todaysBytesLimit);
-    buffer.writeUInt8(user.protocol, offset++);
-    buffer.writeUInt8(user.uucpa, offset++);
-    buffer.writeUInt8(user.lineLength, offset++);
-    buffer.writeUInt8(user.newUser, offset++);
-    return buffer;
-  }
-
-  private serializeUserKeys(keys: UserKeysStruct): Buffer {
-    const buffer = Buffer.alloc(this.USERKEYS_SIZE);
-    let offset = 0;
-    offset = this.writeString(buffer, offset, keys.userName, 31);
-    buffer.writeUInt8(0, offset++);
-    offset = this.writeInt32(buffer, offset, keys.number);
-    buffer.writeUInt8(keys.newUser, offset++);
-    buffer.writeUInt8(0, offset++);
-    offset = this.writeInt16(buffer, offset, keys.oldUpCPS);
-    offset = this.writeInt16(buffer, offset, keys.oldDnCPS);
-    offset = this.writeInt16(buffer, offset, keys.userFlags);
-    offset = this.writeInt16(buffer, offset, keys.baud);
-    offset = this.writeInt32(buffer, offset, keys.upCPS2);
-    offset = this.writeInt32(buffer, offset, keys.dnCPS2);
-    offset = this.writeInt16(buffer, offset, keys.timesOnToday);
-    return buffer;
-  }
-
   serializeUserMisc(misc: UserMiscStruct): Buffer {
     const buffer = Buffer.alloc(this.USERMISC_SIZE);
     let offset = 0;
@@ -432,26 +341,9 @@ export class UserDatabaseManager {
     return offset + length;
   }
 
-  private writeInt16(buffer: Buffer, offset: number, value: number): number {
-    buffer.writeInt16BE(value, offset);
-    return offset + 2;
-  }
-
   private writeInt32(buffer: Buffer, offset: number, value: number): number {
     buffer.writeInt32BE(value, offset);
     return offset + 4;
-  }
-
-  private numberToBCD(value: number): Buffer {
-    const buffer = Buffer.alloc(8, 0);
-    if (value <= 0 || !Number.isFinite(value)) return buffer;
-    const str = Math.floor(value).toString().padStart(16, "0");
-    for (let i = 0; i < 8; i++) {
-      const highDigit = parseInt(str[i * 2], 10);
-      const lowDigit = parseInt(str[i * 2 + 1], 10);
-      buffer[i] = (highDigit << 4) | lowDigit;
-    }
-    return buffer;
   }
 
   readConfAccessFromDisk(slotNumber: number): string {
@@ -470,104 +362,6 @@ export class UserDatabaseManager {
       while (result.length < TOTAL_CONFERENCES) result += "X";
       return result;
     } finally { fs.closeSync(fd); }
-  }
-
-  userToStruct(user: any): UserStruct {
-    return {
-      name: user.username || "",
-      pass: "",
-      location: user.location || "",
-      phoneNumber: user.phoneNumber || "",
-      slotNumber: user.slotNumber || 0,
-      secStatus: user.secLevel || 10,
-      secBoard: 0,
-      secLibrary: 0,
-      secBulletin: 0,
-      messagesPosted: user.messagesPosted || 0,
-      // express.e's getSystemTime() values, not Unix seconds (date-time.util.ts).
-      newSinceDate: encodeAmigaDate(user.newSinceDate),
-      pwdHash: 0,
-      confRead2: 0,
-      confRead3: 0,
-      zoomType: user.zoomType || 0,
-      unknown: 0,
-      unknown2: 0,
-      unknown3: 0,
-      xferProtocol: 0,
-      filler2: 0,
-      lcFiles: 0,
-      badFiles: 0,
-      accountDate: encodeAmigaDate(new Date(user.created || Date.now())),
-      screenType: user.screenType || 0,
-      editorType: user.editor || 0,
-      conferenceAccess: Buffer.alloc(10, 0x58),
-      uploads: user.uploads || 0,
-      downloads: user.downloads || 0,
-      confRJoin: 0,
-      timesCalled: user.calls || 0,
-      timeLastOn: encodeAmigaDate(new Date(user.lastLogin || Date.now())),
-      timeUsed: user.timeUsed || 0,
-      timeLimit: user.timeLimit || 60,
-      timeTotal: user.timeTotal || 0,
-      bytesDownload: user.bytesDownload || 0,
-      bytesUpload: user.bytesUpload || 0,
-      dailyBytesLimit: user.byteLimit || 0,
-      dailyBytesDld: 0,
-      // The letter, as express.e stores it and UserFileManager writes it.
-      expert: user.expert === 'X' ? 0x58 : 0x4e,
-      chatRemain: 0,
-      chatLimit: user.chatLimit || 0,
-      creditDays: 0,
-      creditAmount: 0,
-      creditStartDate: 0,
-      creditTotalToDate: 0,
-      creditTotalDate: 0,
-      creditTracking: 0,
-      translatorID: 0,
-      msgBaseRJoin: 0,
-      confYM9: 0,
-      todaysBytesLimit: 0,
-      protocol: (user.protocol || 'Z').charCodeAt(0),
-      uucpa: user.uuCP ? 1 : 0,
-      lineLength: user.linesPerScreen || 24,
-      newUser: user.newUser ? 1 : 0,
-    };
-  }
-
-  userToKeys(user: any, slotNumber: number): UserKeysStruct {
-    return {
-      userName: user.username || "",
-      number: slotNumber,
-      newUser: user.newUser ? 1 : 0,
-      oldUpCPS: 0,
-      oldDnCPS: 0,
-      userFlags: 0,
-      baud: user.baud || 0,
-      upCPS2: user.topUploadCPS || 0,
-      dnCPS2: user.topDownloadCPS || 0,
-      timesOnToday: 0,
-    };
-  }
-
-  userToMisc(user: any): UserMiscStruct {
-    return {
-      internetName: "",
-      realName: user.realname || "",
-      downloadBytesBCD: this.numberToBCD(user.bytesDownload || 0),
-      uploadBytesBCD: this.numberToBCD(user.bytesUpload || 0),
-      eMail: user.email || "",
-      lastDlCPS: 0,
-      pwdHash: Buffer.alloc(32, 0),
-      salt: Buffer.alloc(8, 0),
-      pwdType: 0,
-      forcePwdReset: 0,
-      accountLocked: 0,
-      invalidAttempts: 0,
-      pwdLastUpdated: 0,
-      lastIP: 0,
-      ipMask: 0,
-      unused: Buffer.alloc(86, 0),
-    };
   }
 
   /**

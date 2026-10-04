@@ -9,6 +9,7 @@ import { AREXXFileIO } from './arexx-file-io';
 import { callersLogManager } from './CallersLogManager';
 import { formatCDateTime, formatLongDateTime, getSystemTime } from '../utils/date-time.util';
 import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { getTodaysCalls } from '../utils/time-tracking.util';
 
 /**
  * AREXX Variable Storage
@@ -1984,7 +1985,7 @@ console.error('BBSCREATEDROPFILE error:', error);
     const downloadBytes = u.downloadBytes ?? u.bytesDownload ?? 0;
     const dailyByteLimit = u.dailyBytesLimit ?? u.byteLimit ?? 0;
     const dailyBytesDld = u.dailyBytesDld ?? 0;
-    const callsToday = u.callsToday ?? u.timesOnToday ?? 0;
+    const callsToday = getTodaysCalls(u); // express.e:28425-28432
     const linesPerScreen = u.linesPerScreen ?? u.lineLength ?? 80;
     const expertOn = u.expert === 'X' || u.expert === true || u.expert === 1;
     const ansiOn = u.ansi === true || u.ansi === 'Y' || u.ansiColor === true;

@@ -19,19 +19,16 @@ process.env.BBS_ROOT = root;
 // The board's modules were loaded against the worker's board by the setup.
 jest.resetModules();
 
-const { UserDatabaseManager } = require('../../../src/services/UserDatabaseManager');
+const { UserFileManager } = require('../../../src/services/UserFileManager');
 const { handleCommand } = require('../../../src/handlers/command.handler');
 const { setMessagingDependencies } = require('../../../src/handlers/message/messaging.handler');
 const { flushOutput } = require('../../../src/utils/output.util');
 const { LoggedOnSubState, BBSState } = require('../../../src/constants/bbs-states');
 
 beforeAll(() => {
-  const udm = new UserDatabaseManager();
-  udm.initializeUserDatabase();
+  const writer = new UserFileManager();
   for (const [slot, name] of [[1, 'Spot'], [2, 'Alice']] as const) {
-    const u = udm.userToStruct({ username: name });
-    u.slotNumber = slot;
-    udm.appendUser(u, udm.userToKeys({ username: name }, slot), udm.userToMisc({}));
+    writer.writeUserFiles({ username: name, realname: '' }, slot);
   }
   setMessagingDependencies({ setEnvStat: () => undefined });
 });

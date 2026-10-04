@@ -69,16 +69,6 @@ describe('the user.data record', () => {
     expect(record(2).subarray(136, 146).toString('latin1')).toBe('XXXXXXXXX\0');
   });
 
-  it('writes a new account\'s conferenceAccess and expert the same way', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { UserDatabaseManager } = require('../../src/services/UserDatabaseManager');
-    const udm = new UserDatabaseManager();
-    const struct = udm.userToStruct(user({ expert: 'X' }));
-    const bytes: Buffer = (udm as any).serializeUser(struct);
-    expect(bytes.subarray(136, 146).toString('latin1')).toBe('XXXXXXXXX\0');
-    expect(bytes[EXPERT]).toBe(0x58);
-  });
-
   it('stores expert mode as the letter, and an "N" comes back as N', () => {
     mgr.writeUserFiles(user({ expert: 'N' }), 2);
     expect(String.fromCharCode(record(2)[EXPERT])).toBe('N');

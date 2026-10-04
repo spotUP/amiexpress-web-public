@@ -5,7 +5,7 @@
  * Handles session time tracking and daily time limit enforcement
  */
 
-import { toAmigaTime } from './date-time.util';
+import { toAmigaTime, getSystemTime } from './date-time.util';
 import { BBSSession } from '../index';
 import { checkSecurity } from './acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
@@ -39,6 +39,33 @@ export const DEFAULT_DAILY_TIME_LIMIT_SECONDS = 3600;
  */
 export function amiExpressDay(unixSeconds: number): number {
   return Math.floor((toAmigaTime(new Date(unixSeconds * 1000)) - 21600) / 86400);
+}
+
+/**
+ * express.e:28425-28432 getTodaysCalls - the calls a user has made today, 0
+ * when their last call was on another day:
+ *
+ *     currDay:=Div(currTime-21600,86400)
+ *     lastDay:=Div(user.timeLastOn-21600,86400)
+ *     IF currDay<>lastDay THEN RETURN 0
+ *   ENDPROC userKeys.timesOnToday AND $FFFF
+ *
+ * What DT_CALLEDTODAY answers (express.e:4189-4195). `timeLastOn` is the
+ * record's lastLogin (types.ts), a Date: both days go through amiExpressDay,
+ * the board's one reading of an AmiExpress day. A user never on (no date) is
+ * on day 0, never today.
+ */
+export function getTodaysCalls(
+  user: { lastLogin?: Date | string; timeLastOn?: Date | string; callsToday?: number; timesOnToday?: number },
+  now: Date = getSystemTime(),
+): number {
+  const lastOn = user.timeLastOn ?? user.lastLogin;
+  const lastMs = lastOn ? new Date(lastOn).getTime() : NaN;
+  if (!Number.isFinite(lastMs)) return 0;
+  const currDay = amiExpressDay(Math.floor(now.getTime() / 1000));
+  const lastDay = amiExpressDay(Math.floor(lastMs / 1000));
+  if (currDay !== lastDay) return 0;
+  return (user.callsToday ?? user.timesOnToday ?? 0) & 0xffff;
 }
 
 /**

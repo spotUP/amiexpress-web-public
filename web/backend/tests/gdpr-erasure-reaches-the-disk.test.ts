@@ -50,9 +50,11 @@ const ALICE_EMAIL = 'alice@zed.example';
 const ALICE_TEXT = 'my alice-only words about the demo party';
 const ALICE_PRIVATE = 'alice whispers to bob';
 
-function account(username: string, realname: string, email: string): any {
+// Each account its own phone: the record carries it (UserFileManager), so a
+// shared number would be found on disk in the account that keeps it.
+function account(username: string, realname: string, email: string, phone = '555-0199'): any {
   return {
-    username, passwordHash: 'hash', realname, location: 'Zedtown', phone: '555-0199', email,
+    username, passwordHash: 'hash', realname, location: 'Zedtown', phone, email,
     secLevel: 20, uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
     ratio: 0, ratioType: 0, timeTotal: 0, timeLimit: 60, timeUsed: 0,
     chatLimit: 30, chatUsed: 0, firstLogin: new Date(), lastLogin: new Date(),
@@ -155,7 +157,7 @@ describe('GDPR erasure (W 20) reaches the disk R reads', () => {
   it('R shows neither the erased name nor their text, and their record is a deleted account', async () => {
     const { MsgStatus } = mods.index;
     // As the new-user flow registers a caller: the row, then the disk record.
-    const bobId = await mods.db.createUser(account('bobby', 'Bob Bobson', 'bob@example'));
+    const bobId = await mods.db.createUser(account('bobby', 'Bob Bobson', 'bob@example', '555-0100'));
     await mods.db.appendUserToDisk(bobId);
     const aliceId = await mods.db.createUser(account(ALICE, ALICE_REAL, ALICE_EMAIL));
     await mods.db.appendUserToDisk(aliceId);

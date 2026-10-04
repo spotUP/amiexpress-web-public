@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { UserDatabaseManager } from '../../src/services/UserDatabaseManager';
+import { UserFileManager } from '../../src/services/UserFileManager';
 
 describe('the on-disk user files', () => {
   it('keep a Latin-1 name, real name and location', () => {
@@ -19,7 +20,7 @@ describe('the on-disk user files', () => {
       const m = new UserDatabaseManager();
       m.initializeUserDatabase();
       const user = { username: 'Björn', realname: 'Åsa Öberg', location: 'Göteborg', secLevel: 20 };
-      m.appendUser(m.userToStruct(user), m.userToKeys(user, 1), m.userToMisc(user));
+      new UserFileManager().writeUserFiles(user as any, 1);
       const back = m.readUserFromDisk(1)!;
       expect(back.keys.userName).toBe('Björn');
       expect(back.user.name).toBe('Björn');

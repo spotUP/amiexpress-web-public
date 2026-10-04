@@ -34,7 +34,7 @@ jest.mock('../../../src/utils/message-file.util', () => ({
 // The test setup has already loaded the board's modules against the worker's
 // board; start them again on this one.
 jest.resetModules();
-const { UserDatabaseManager } = require('../../../src/services/UserDatabaseManager');
+const { UserFileManager } = require('../../../src/services/UserFileManager');
 const { getACSConfig, ToggleFlags } = require('../../../src/utils/acs.util');
 const { feedInputWaiter } = require('../../../src/utils/await-input');
 const { LoggedOnSubState } = require('../../../src/constants/bbs-states');
@@ -43,15 +43,16 @@ const names = require('../../../src/handlers/message/msg-names');
 const { readMessageFile } = require('../../../src/utils/message-file.util');
 
 function addUser(slot: number, username: string, o: { real?: string; inet?: string; access?: string; deact?: boolean } = {}) {
-  const udm = new UserDatabaseManager();
-  udm.initializeUserDatabase();
-  const u = udm.userToStruct({ username });
-  u.slotNumber = slot;
-  u.conferenceAccess = Buffer.from((o.access ?? 'XXXXXXXXXX').padEnd(10, '\0'), 'latin1');
-  const k = udm.userToKeys({ username }, o.deact ? 0 : slot);
-  const m = udm.userToMisc({ realname: o.real ?? '' });
-  m.internetName = o.inet ?? '';
-  udm.appendUser(u, k, m);
+  const writer = new UserFileManager();
+  writer.writeUserFiles({ username, realname: o.real ?? '', confAccess: o.access ?? 'XXXXXXXXX' }, slot);
+  // The two fields the board's writer has no input for: user.keys `number`
+  // (0 = deactivated, offset 32) and user.misc internetName (offset 0, 10).
+  const patch = (file: string, offset: number, bytes: Buffer) => {
+    const fd = fs.openSync(path.join(root, file), 'r+');
+    try { fs.writeSync(fd, bytes, 0, bytes.length, offset); } finally { fs.closeSync(fd); }
+  };
+  if (o.deact) patch('user.keys', (slot - 1) * 56 + 32, Buffer.alloc(4));
+  if (o.inet) patch('user.misc', (slot - 1) * 248, Buffer.from(o.inet.padEnd(10, '\0').slice(0, 10), 'latin1'));
 }
 
 beforeAll(() => {

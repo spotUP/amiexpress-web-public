@@ -168,11 +168,14 @@ export class UserRepository extends BaseRepository<User> {
     // account per express.e:21365.)
     const slotNumber = userDatabaseManager.getUserCount() + 1;
     try {
-      const userStruct = userDatabaseManager.userToStruct(user);
-      userStruct.slotNumber = slotNumber;
-      const keysStruct = userDatabaseManager.userToKeys(user, slotNumber);
-      const miscStruct = userDatabaseManager.userToMisc(user);
-      userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
+      // The board's one user.data/keys/misc writer, at the slot. A second
+      // serializer here (UserDatabaseManager.userToStruct/appendUser) wrote
+      // a new account differently from every later save of the same account:
+      // all nine conferences instead of the access the registration granted
+      // (express.e:29369 applyPreset copies PRESET.AREA), no phone number
+      // (it read `phoneNumber`; the row is `phone`), conference rejoin 0,
+      // today's calls 0 - until the first save rewrote it.
+      userFileManager.writeUserFiles(user, slotNumber);
       // The database takes the slot the record LANDED in. createUser guessed
       // MAX(slotnumber)+1, which is a different number whenever user.data
       // ends in a deleted slot - the live board's test account came out slot

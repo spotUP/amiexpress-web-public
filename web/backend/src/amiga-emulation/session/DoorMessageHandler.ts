@@ -20,6 +20,7 @@ import { populateDoorInfoStructs } from "./door-info.util.js";
 import { parseMciCodes } from "../../handlers/screen.handler.js";
 import { parseInfoFile } from "../../utils/amiga-command-parser.util.js";
 import { debugLog } from "../../utils/debug-log";
+import { getTodaysCalls } from "../../utils/time-tracking.util";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
@@ -1974,16 +1975,17 @@ debugLog(`[DoorMessageHandler]   DT_CFILESDOWNLOAD SET: ${str}`);
         break;
 
       case XIMCommand.DT_CALLEDTODAY:
-        // express.e:4189-4195: Times called today
-        if (data !== 0) {
+        // express.e:4189-4195: read answers getTodaysCalls (28425-28432),
+        // write is `timesOnToday:=Val(msg.string)` - the record's callsToday.
+        {
           const user = (this.config.bbsSession as any)?.user;
-          const calls = user?.timesOnToday || 1;
+          if (data !== 0) {
+            const calls = user ? getTodaysCalls(user) : 0;
 debugLog(`[DoorMessageHandler]   DT_CALLEDTODAY GET: ${calls}`);
-          this.writeStringToMessage(msgAddr, String(calls));
-        } else {
+            this.writeStringToMessage(msgAddr, String(calls));
+          } else {
 debugLog(`[DoorMessageHandler]   DT_CALLEDTODAY SET: ${str}`);
-          if ((this.config.bbsSession as any)?.user) {
-            (this.config.bbsSession as any).user.timesOnToday = parseInt(str) || 0;
+            if (user) user.callsToday = parseInt(str, 10) || 0;
           }
         }
         break;

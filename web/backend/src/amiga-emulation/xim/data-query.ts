@@ -22,6 +22,7 @@ import { debugLog } from '../../utils/debug-log';
 import * as amigafs from '../../utils/amigafs';
 import { checkSecurity, setUserPermission } from '../../utils/acs.util';
 import { formatCDateTime } from '../../utils/date-time.util';
+import { getTodaysCalls } from '../../utils/time-tracking.util';
 
 /** express.e:3662 ACTIVE_NODES answers 32 characters, one per node 0..31. */
 const ACTIVE_NODE_SLOTS = 32;
@@ -1124,25 +1125,15 @@ debugLog(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
         break;
 
       case XIMCommand.DT_CALLEDTODAY:
-        // express.e:4189-4195: Times called today via getTodaysCalls()
-        // express.e:28425-28432: getTodaysCalls() checks if last login was different day
-        {
-          if (isRead) {
-            // Implement getTodaysCalls() logic from express.e:28425-28432
-            const currTime = Math.floor(Date.now() / 1000);
-            const currDay = Math.floor((currTime - 21600) / 86400); // -21600 = 6 hour offset
-            const timeLastOn = user?.timeLastOn || (user?.lastLogin ? Math.floor(new Date(user.lastLogin).getTime() / 1000) : 0);
-            const lastDay = Math.floor((timeLastOn - 21600) / 86400);
-
-            // If different day, return 0; otherwise return timesOnToday
-            const timesOnToday = (currDay !== lastDay) ? 0 : ((user as any)?.timesOnToday ?? 0);
-            this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
-debugLog(`  [READ] DT_CALLEDTODAY: ${timesOnToday} (currDay=${currDay}, lastDay=${lastDay})`);
-          } else {
-            const newCount = parseInt(this.messageParser.readString(stringAddr));
-            if (!isNaN(newCount) && user) (user as any).timesOnToday = newCount;
-debugLog(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
-          }
+        // express.e:4189-4195: read answers getTodaysCalls (28425-28432),
+        // write is `timesOnToday:=Val(msg.string)` - the record's callsToday.
+        if (isRead) {
+          const timesOnToday = user ? getTodaysCalls(user) : 0;
+          this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
+debugLog(`  [READ] DT_CALLEDTODAY: ${timesOnToday}`);
+        } else if (user) {
+          user.callsToday = parseInt(this.messageParser.readString(stringAddr), 10) || 0;
+debugLog(`  [WRITE] DT_CALLEDTODAY: ${user.callsToday}`);
         }
         break;
 

@@ -36,25 +36,23 @@ function freshManager(dataDir: string) {
   // The paths are resolved in the constructor, and the module exports a
   // singleton built at import time.
   const { UserDatabaseManager } = require('../../src/services/UserDatabaseManager');
+  const { UserFileManager } = require('../../src/services/UserFileManager');
   const manager = new UserDatabaseManager();
+  const writer = new UserFileManager();
 
   process.env = previous;
-  return manager;
+  return { manager, writer };
 }
 
 function boardWithUsers(dataDir: string) {
-  const manager = freshManager(dataDir);
+  const { manager, writer } = freshManager(dataDir);
   manager.initializeUserDatabase();
   // Two users. Slots are 1-indexed like express.e (slot 0 is a deleted
   // account - deleting a user sets `slotNumber := 0`, express.e:21365, and
   // login refuses it with "That account has been deleted.", express.e:29701).
-  for (const username of ['sysop', 'spot']) {
-    manager.appendUser(
-      manager.userToStruct({ username, location: 'Uprough', securityLevel: 255 }),
-      manager.userToKeys({ username }, 0),
-      manager.userToMisc({ username }),
-    );
-  }
+  ['sysop', 'spot'].forEach((username, i) => {
+    writer.writeUserFiles({ username, realname: username, location: 'Uprough', secLevel: 255 }, i + 1);
+  });
   return manager;
 }
 
@@ -142,7 +140,7 @@ describe('a wrong password, counted where express counts it', () => {
   });
 
   it('does not throw when the slot has no misc record', () => {
-    const manager = freshManager(dataDir);
+    const { manager } = freshManager(dataDir);
     manager.initializeUserDatabase();
 
     expect(() => manager.recordPasswordFailure(99, 3)).not.toThrow();
