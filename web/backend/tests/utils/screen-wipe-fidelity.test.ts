@@ -249,8 +249,10 @@ function cellDiff(a: TestTerminal, b: TestTerminal): string[] {
 // carrying (2026-09-08).
 // `Conf2/Menu.txt` was here until `e73551d5c` deleted it with the other
 // thirteen conference copies; every case below died on a missing file rather
-// than on anything about wipes. Both survivors are tracked.
-const REAL_SCREENS = ['Conf1/Menu.txt', 'Conf1/MENU250.TXT'];
+// than on anything about wipes. Conf1's own Menu.txt and MENU250.TXT went in
+// `9be4d11aa` (one main menu for every conference): the board's shared menu
+// is the screen every conference now reads.
+const REAL_SCREENS = ['Screens/Conf/Menu.txt'];
 
 /**
  * What screen.handler hands `getWipeFrames`: the decoded file, wipe code
@@ -298,7 +300,7 @@ describe('screen wipes end on the screen itself', () => {
 
   it('the final frame carries no wait: the play loop never sleeps after it', () => {
     for (const wipe of WIPES) {
-      const frames = getWipeFrames(wipe, parsedScreens.get('Conf1/Menu.txt')!);
+      const frames = getWipeFrames(wipe, parsedScreens.get('Screens/Conf/Menu.txt')!);
       expect(`${wipe}: ${frames[frames.length - 1].delay}`).toBe(`${wipe}: 0`);
     }
   });
@@ -609,7 +611,7 @@ describe('the grid model keeps what the terminal would show', () => {
   it('a cursor-forward indent is not collapsed', () => {
     expect(roundTrip('AB\x1b[5CCD\r\nsecond')).toEqual([]);
     // The board's own conference menu indents this way 14 times.
-    expect(roundTrip(parsedScreen('Conf1/Menu.txt'))).toEqual([]);
+    expect(roundTrip(parsedScreen('Screens/Conf/Menu.txt'))).toEqual([]);
   });
 
   it('an absolute cursor position is not collapsed', () => {

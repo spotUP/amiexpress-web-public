@@ -62,9 +62,11 @@ describe('menu brackets survive addAnsiEscapes', () => {
      * red ever since with an ENOENT from inside a write guard, which reads
      * like a mock problem and is not one. `Conf1/Menu.ttx` carries the same
      * variant-B menu and the repo tracks it; `tests/repo/tracked-fixtures`
-     * is the rule this broke.
+     * is the rule this broke. `Conf1/Menu.ttx` went the same way in
+     * `9be4d11aa` (one main menu for every conference); the board's shared
+     * `Screens/Conf/Menu.ttx` is the variant-B menu every conference serves.
      */
-    const MENU = 'Conf1/Menu.ttx';
+    const MENU = 'Screens/Conf/Menu.ttx';
     const menuPath = path.resolve(__dirname, '../../../../', MENU);
     if (!fs.existsSync(menuPath)) {
       throw new Error(
