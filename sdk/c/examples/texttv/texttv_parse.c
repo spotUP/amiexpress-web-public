@@ -6,6 +6,7 @@
 
 #include "texttv_parse.h"
 #include "json_lite.h"
+#include "ui_key.h"
 
 #define TEXTTV_TIMEOUT_DEFAULT 15
 #define TEXTTV_START_DEFAULT 100
@@ -269,6 +270,22 @@ int texttv_link_step(int count, int current, int delta)
     current = (current + delta) % count;
     if (current < 0) current += count;
     return current;
+}
+
+int texttv_action_key(int key, int *pushback)
+{
+    if (key < 0) return TEXTTV_ACT_QUIT;
+    if (key == 'n' || key == 'N') return TEXTTV_ACT_NEXT;
+    if (key == 'p' || key == 'P') return TEXTTV_ACT_PREV;
+    if (key == 'f' || key == 'F') return TEXTTV_ACT_FAV;
+    if (key == 's' || key == 'S') return TEXTTV_ACT_SHARE;
+    if (key == 'i' || key == 'I' || key == UI_KEY_ESC) return TEXTTV_ACT_INDEX;
+    if (key == 'q' || key == 'Q') return TEXTTV_ACT_QUIT;
+    if (key >= '0' && key <= '9') {
+        if (pushback) *pushback = key;   /* the first digit of the number */
+        return TEXTTV_ACT_NUMBER;
+    }
+    return TEXTTV_ACT_NONE;
 }
 
 int texttv_title(const char *json, char *out, unsigned long cap)

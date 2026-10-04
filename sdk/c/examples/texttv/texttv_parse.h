@@ -97,6 +97,28 @@ int texttv_links_parse(const char *json, texttv_link *out, int cap);
  */
 int texttv_link_step(int count, int current, int delta);
 
+/* What one key on the "Page N" actions screen asks for. */
+#define TEXTTV_ACT_NONE 0
+#define TEXTTV_ACT_NEXT 1
+#define TEXTTV_ACT_PREV 2
+#define TEXTTV_ACT_FAV 3
+#define TEXTTV_ACT_SHARE 4
+#define TEXTTV_ACT_INDEX 5
+#define TEXTTV_ACT_QUIT 6
+#define TEXTTV_ACT_NUMBER 7
+
+/*
+ * The actions screen's key, as an action.
+ *
+ * A digit opens number entry AND IS ITS FIRST DIGIT: it goes back into
+ * `*pushback`, the key source's one-key undo (ui_key.h), so the prompt reads
+ * it before anything the caller types next. It used to be consumed here, and
+ * a caller who typed 100 got the prompt with "00" in it and "Pages run 100
+ * to 999" for an answer (2026-10-04). A key below 0 - the caller went away -
+ * is a quit. `pushback` may be 0, and then a digit only names the action.
+ */
+int texttv_action_key(int key, int *pushback);
+
 /*
  * The page's "title" out of the JSON and into Latin-1, in one step.
  *

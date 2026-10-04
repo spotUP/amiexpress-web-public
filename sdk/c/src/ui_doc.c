@@ -24,6 +24,7 @@ void ui_doc_style_init(ui_doc_style *style)
     style->ink = ANSI_CYAN;
     style->frameless = 0;
     style->page_keys = 0;
+    style->help_key = 0;
 }
 
 /**
@@ -267,6 +268,7 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
 {
     paint_ctx ctx;
     char footer[64];
+    int room;
     int page = rows > 0 ? (top_line / rows) + 1 : 1;
     int pages = ui_doc_pages(total, rows);
 
@@ -309,6 +311,18 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
      * built longest-first and the first one that FITS is drawn; the keys
      * outrank the counter, because a reader who cannot leave is stuck and a
      * reader who cannot see the page number is merely uninformed. */
+    /* THE FOOTER SITS IN THE BOTTOM EDGE, NOT OVER IT.
+     *
+     * A framed footer starts two columns in, on the frame's own bottom row.
+     * It used to be written `width` columns wide and PADDED, which reached
+     * the right-hand corner and blanked every dash after the text: the box
+     * had a top, two sides and no bottom (TEXTTV, sysop 2026-10-04). The
+     * text now stops short of the corner and is written without padding,
+     * so the edge the panel just drew stays visible around it. Frameless, the row is the footer's own
+     * and is still padded - nothing else clears it. */
+    room = st->frameless ? st->width : st->width - 1;
+    if (room < 0) room = 0;
+
     footer[0] = '\0';
     {
         char counter[24];
@@ -334,49 +348,56 @@ static void paint_page(ansi_buf *b, const ui_doc_style *st, const char *title,
          * "what RETURN does" outranks "which page this is". */
         if (sel_line >= 0) {
             if (st->page_keys && counter[0] &&
-                (int) (strlen(counter) + 39) <= st->width) {
+                (int) (strlen(counter) + 39) <= room) {
                 /* Eighty columns carry the home key too. */
                 strcpy(footer, counter);
                 strcat(footer, "  <> PAGE  H HOME  ENTER READS  Q LEAVE");
             } else if (st->page_keys && counter[0] &&
-                (int) (strlen(counter) + 31) <= st->width) {
+                (int) (strlen(counter) + 31) <= room) {
                 /* Forty columns fit all three: "PAGE 1/3  <> PAGE  ENTER
                    READS  Q LEAVE" is thirty-nine. */
                 strcpy(footer, counter);
                 strcat(footer, "  <> PAGE  ENTER READS  Q LEAVE");
-            } else if (st->page_keys && (int) strlen("<> PAGE  ENTER READS  Q LEAVE") <= st->width) {
+            } else if (st->page_keys && (int) strlen("<> PAGE  ENTER READS  Q LEAVE") <= room) {
                 strcpy(footer, "<> PAGE  ENTER READS  Q LEAVE");
-            } else if (counter[0] && (int) (strlen(counter) + 28) <= st->width) {
+            } else if (counter[0] && (int) (strlen(counter) + 28) <= room) {
                 strcpy(footer, counter);
                 strcat(footer, "  ENTER READS  Q LEAVE");
-            } else if ((int) strlen("ENTER READS  Q LEAVE") <= st->width) {
+            } else if ((int) strlen("ENTER READS  Q LEAVE") <= room) {
                 strcpy(footer, "ENTER READS  Q LEAVE");
             } else {
                 strcpy(footer, "ENTER READS");
             }
         } else if (st->page_keys && counter[0] &&
-                   (int) (strlen(counter) + 32) <= st->width) {
+                   (int) (strlen(counter) + 32) <= room) {
             strcpy(footer, counter);
             strcat(footer, "  <> PAGE  H HOME  Q LEAVE");
         } else if (st->page_keys && counter[0] &&
-                   (int) (strlen(counter) + 24) <= st->width) {
+                   (int) (strlen(counter) + 24) <= room) {
             strcpy(footer, counter);
             strcat(footer, "  <> PAGE  Q LEAVE");
-        } else if (st->page_keys && (int) strlen("<> PAGE  SPACE NEXT  Q LEAVE") <= st->width) {
+        } else if (st->page_keys && (int) strlen("<> PAGE  SPACE NEXT  Q LEAVE") <= room) {
             strcpy(footer, "<> PAGE  SPACE NEXT  Q LEAVE");
-        } else if (counter[0] && (int) (strlen(counter) + 26) <= st->width) {
+        } else if (counter[0] && (int) (strlen(counter) + 26) <= room) {
             strcpy(footer, counter);
             strcat(footer, "  SPACE NEXT  Q LEAVE");
-        } else if ((int) strlen("SPACE NEXT  Q LEAVE") <= st->width) {
+        } else if ((int) strlen("SPACE NEXT  Q LEAVE") <= room) {
             strcpy(footer, "SPACE NEXT  Q LEAVE");
         } else {
             strcpy(footer, "Q LEAVE");
         }
     }
 
+    /* A caller with help to give says so, after everything above - the way
+       out still outranks it, so it only goes where the whole thing fits. */
+    if (st->help_key && (int) (strlen(footer) + 8) <= room)
+        strcat(footer, "  ? HELP");
+
     ansi_color(b, st->ink, st->bg, 0);
-    ansi_text(b, st->top + st->height + 1,
-              st->left + (st->frameless ? 0 : 2), footer, st->width);
+    if (st->frameless)
+        ansi_text(b, st->top + st->height + 1, st->left, footer, room);
+    else
+        ansi_text_raw(b, st->top + st->height + 1, st->left + 2, footer, room);
     ansi_cursor(b, 0);
 }
 
@@ -558,6 +579,15 @@ int ui_doc_pick(ansi_buf *b, const ui_key_source *src, int *pushback,
             ansi_reset(b);
             if (current) *current = cur;
             return UI_DOC_HOME;
+        case '?':
+            /* What the keys do. The reader cannot know the caller's own
+               keys, so it hands the question back; the caller shows its
+               help and reopens the document. */
+            if (!st->help_key) break;
+            ansi_cursor(b, 1);
+            ansi_reset(b);
+            if (current) *current = cur;
+            return UI_DOC_HELP;
         case UI_KEY_HOME:
             top = 0;
             break;

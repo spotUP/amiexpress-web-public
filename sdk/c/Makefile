@@ -97,7 +97,7 @@ build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 # No BBS, no sockets - the door's classic-Amiga edges live here, driven on
 # the host. Links json_lite: the body preference reads the proxy's "ansi"
 # field through the same extractor the door uses on the wire.
-build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c examples/texttv/texttv_parse.h include/json_lite.h
+build/test_texttv: examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c examples/texttv/texttv_parse.h include/json_lite.h include/ui_key.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/texttv -I include examples/texttv/texttv_parse.c src/json_lite.c tests/test_texttv.c -o $@
 

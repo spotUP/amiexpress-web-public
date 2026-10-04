@@ -462,15 +462,8 @@ static void show_page(int page)
     strcpy(status_line, "");
 }
 
-/* After the reader: one key decides what happens to the page just read. */
-#define ACT_NONE 0
-#define ACT_NEXT 1
-#define ACT_PREV 2
-#define ACT_FAV 3
-#define ACT_SHARE 4
-#define ACT_INDEX 5
-#define ACT_QUIT 6
-#define ACT_NUMBER 7
+/* After the reader: one key decides what happens to the page just read
+   (texttv_action_key - a digit is kept as the number's first digit). */
 
 static int page_actions(void)
 {
@@ -489,8 +482,8 @@ static int page_actions(void)
                 : "F favorite, S share, I index, Q quit.");
     /* The reader's own footer says "<> PAGE", but a caller who has already
        left it should not have to go back in to find that out. */
-    say(7, wide ? "While reading, LEFT and RIGHT flip pages and H goes back to 100."
-                : "Reading: left/right flip, H = page 100.");
+    say(7, wide ? "While reading, LEFT/RIGHT flip pages, H goes to 100, ? shows every key."
+                : "Reading: left/right flip, H 100, ? help");
     draw_status();
     if (page_next[0] != '\0' || page_prev[0] != '\0')
         draw_footer(hints_all, 5, "Q=Quit");
@@ -499,15 +492,7 @@ static int page_actions(void)
     ui_screen_flush(&screen);
 
     key = ui_key_read(&keys, &pushback);
-    if (key < 0) return ACT_QUIT;
-    if (key == 'n' || key == 'N') return ACT_NEXT;
-    if (key == 'p' || key == 'P') return ACT_PREV;
-    if (key == 'f' || key == 'F') return ACT_FAV;
-    if (key == 's' || key == 'S') return ACT_SHARE;
-    if (key == 'i' || key == 'I' || key == UI_KEY_ESC) return ACT_INDEX;
-    if (key == 'q' || key == 'Q') return ACT_QUIT;
-    if ((key >= '0' && key <= '9')) return ACT_NUMBER;
-    return ACT_NONE;
+    return texttv_action_key(key, &pushback);
 }
 
 /*
@@ -521,6 +506,45 @@ static int page_actions(void)
  */
 #define TEXTTV_BACK_DEPTH 8
 #define TEXTTV_HOME_PAGE 100
+
+/*
+ * What the reader's keys do, behind `?`.
+ *
+ * The footer has room for four keys at most and the reader has a dozen, so
+ * a caller who tried anything else saw nothing happen and read the door as
+ * dead (2026-10-04). Drawn by the SDK's own reader, in the page's own box,
+ * and RETURN, Q or ESC goes back to the page. Word-wrapped, so one text
+ * serves forty columns and eighty.
+ */
+static const char reader_help[] =
+    "READING A PAGE\n"
+    "UP/DOWN     move between headlines, or scroll an article\n"
+    "RETURN      open the headline under the cursor\n"
+    "SPACE       next screenful of this page (PGUP/PGDN too)\n"
+    "LEFT/RIGHT  previous / next Text-TV page\n"
+    "H           home: page 100\n"
+    "Q or ESC    back a page; from the first one, the page menu\n"
+    "?           this help\n"
+    "\n"
+    "THE PAGE MENU\n"
+    "100-999     type a page number, then RETURN\n"
+    "N / P       next / previous page\n"
+    "F           add or remove this page as a favorite\n"
+    "S           share the page in the conference\n"
+    "I or ESC    the index\n"
+    "Q           leave Text-TV\n";
+
+/* Returns -1 when the caller went away while reading it. */
+static int show_reader_help(const ui_doc_style *page_style)
+{
+    ui_doc_style style = *page_style;
+    style.page_keys = 0;
+    style.help_key = 0;
+    ansi_clear(&screen.buf);
+    draw_masthead("TEXT-TV HELP");
+    ui_screen_flush(&screen);
+    return ui_doc(&screen.buf, &keys, &pushback, &style, "KEYS", reader_help);
+}
 
 static void read_page(void)
 {
@@ -541,6 +565,7 @@ static void read_page(void)
         texttv_reader_box(screen.cols, screen.rows, &style.left, &style.width, &style.height);
         style.frameless = texttv_reader_frameless(screen.cols);
         style.page_keys = 1;        /* LEFT/RIGHT flip the teletext page */
+        style.help_key = 1;         /* ? says what every key does */
         style.fg = UI_TOKEN(UI_T_INK);
         style.bg = UI_TOKEN(UI_T_GROUND);
         style.ink = UI_TOKEN(UI_T_ACCENT);
@@ -567,6 +592,12 @@ static void read_page(void)
         page_link_cur = cur;
 
         if (rc < 0) return;                     /* the caller went away */
+
+        /* The help, then the same page again - the cursor kept its place. */
+        if (rc == UI_DOC_HELP) {
+            if (show_reader_help(&style) < 0) return;
+            continue;
+        }
 
         if (rc == 1 && cur >= 0 && cur < pick_count) {
             int target = page_links[cur].page;
@@ -832,9 +863,9 @@ int main(int argc, char **argv)
 
         /* Page actions view. */
         action = page_actions();
-        if (action == ACT_QUIT) break;
-        if (action == ACT_INDEX) { view = 0; full = 1; continue; }
-        if (action == ACT_NUMBER) {
+        if (action == TEXTTV_ACT_QUIT) break;
+        if (action == TEXTTV_ACT_INDEX) { view = 0; full = 1; continue; }
+        if (action == TEXTTV_ACT_NUMBER) {
             number_entry();
             if (page_num != 0 && status_line[0] == '\0') {
                 /* number_entry already read it; stay on actions. */
@@ -844,7 +875,7 @@ int main(int argc, char **argv)
             full = 1;
             continue;
         }
-        if (action == ACT_NEXT) {
+        if (action == TEXTTV_ACT_NEXT) {
             int next = texttv_valid_page(page_next);
             if (next == 0) {
                 strcpy(status_line, "[INFO] No next page from here.");
@@ -856,7 +887,7 @@ int main(int argc, char **argv)
             full = 1;
             continue;
         }
-        if (action == ACT_PREV) {
+        if (action == TEXTTV_ACT_PREV) {
             int prev = texttv_valid_page(page_prev);
             if (prev == 0) {
                 strcpy(status_line, "[INFO] No previous page from here.");
@@ -868,7 +899,7 @@ int main(int argc, char **argv)
             full = 1;
             continue;
         }
-        if (action == ACT_FAV) {
+        if (action == TEXTTV_ACT_FAV) {
             int added = texttv_fav_toggle(&config, page_num);
             if (added < 0) {
                 strcpy(status_line, "[INFO] Favorites list is full (32).");
@@ -880,7 +911,7 @@ int main(int argc, char **argv)
             full = 1;
             continue;
         }
-        if (action == ACT_SHARE) {
+        if (action == TEXTTV_ACT_SHARE) {
             if (share_page()) return 0; /* left into the board editor */
             view = 0;
             full = 1;

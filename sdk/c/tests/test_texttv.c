@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "texttv_parse.h"
+#include "ui_key.h"
 
 static int failures = 0;
 #define CHECK(cond) do { \
@@ -434,8 +435,31 @@ static void test_link_step(void)
     CHECK(texttv_link_step(0, 0, -1) == -1);
 }
 
+/* The "Page N" menu: a digit opens number entry and is NOT eaten - typing
+   100 there must reach the prompt as 100, not 00 (2026-10-04). */
+static void test_action_key_keeps_the_first_digit(void)
+{
+    int pushback = -1;
+    CHECK(texttv_action_key('1', &pushback) == TEXTTV_ACT_NUMBER);
+    CHECK(pushback == '1');
+    pushback = -1;
+    CHECK(texttv_action_key('9', &pushback) == TEXTTV_ACT_NUMBER);
+    CHECK(pushback == '9');
+    /* Letters are actions and leave the pushback alone. */
+    pushback = -1;
+    CHECK(texttv_action_key('n', &pushback) == TEXTTV_ACT_NEXT);
+    CHECK(texttv_action_key('Q', &pushback) == TEXTTV_ACT_QUIT);
+    CHECK(texttv_action_key(UI_KEY_ESC, &pushback) == TEXTTV_ACT_INDEX);
+    CHECK(texttv_action_key('x', &pushback) == TEXTTV_ACT_NONE);
+    CHECK(pushback == -1);
+    /* A dropped caller is a quit; a null pushback still names the action. */
+    CHECK(texttv_action_key(-1, &pushback) == TEXTTV_ACT_QUIT);
+    CHECK(texttv_action_key('5', 0) == TEXTTV_ACT_NUMBER);
+}
+
 int main(void)
 {
+    test_action_key_keeps_the_first_digit();
     test_valid_page();
     test_page_path();
     test_page_line();

@@ -49,6 +49,13 @@ typedef struct {
      * ignores all three, as it always has.
      */
     int page_keys;
+    /**
+     * `?` is a key: ui_doc_pick returns UI_DOC_HELP so the caller can show
+     * what its keys do, and the footer says "? HELP" where it fits. A reader
+     * whose keys are all in its footer has no help to give, so zero - every
+     * existing caller - leaves `?` an ordinary keystroke.
+     */
+    int help_key;
 } ui_doc_style;
 
 /** ui_doc_pick outcomes. */
@@ -57,6 +64,7 @@ typedef struct {
 #define UI_DOC_PREV   2   /* LEFT: the document before this one */
 #define UI_DOC_NEXT   3   /* RIGHT: the document after it */
 #define UI_DOC_HOME   4   /* H: the set's first document - teletext page 100 */
+#define UI_DOC_HELP   5   /* ?: the caller asked what the keys do (help_key) */
 
 /** A frame in the middle of an 80x24 screen, white on black. */
 void ui_doc_style_init(ui_doc_style *style);

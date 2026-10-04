@@ -572,6 +572,141 @@ static void h_is_the_way_home_for_a_caller_that_walks(void)
     printf("  [OK] h is the way home, for a caller that walks documents\n");
 }
 
+/* ------------------------------------------------------------------ */
+
+/* Just enough terminal to read a frame back: cursor moves land, SGR and
+   other CSI cost nothing, ESC # n is a line attribute, a clear blanks. */
+#define GRID_ROWS 25
+#define GRID_COLS 80
+static char grid[GRID_ROWS + 1][GRID_COLS + 2];
+
+static void render(const char *p)
+{
+    int row = 1, col = 1, r;
+    for (r = 0; r <= GRID_ROWS; r++) {
+        memset(grid[r], ' ', GRID_COLS + 1);
+        grid[r][GRID_COLS + 1] = '\0';
+    }
+    while (*p) {
+        if (p[0] == 0x1b && p[1] == '#' && p[2]) { p += 3; continue; }
+        if (p[0] == 0x1b && p[1] == '[') {
+            int a = 0, b2 = 0, which = 0;
+            const char *q = p + 2;
+            while (*q && ((unsigned char) *q < 0x40 || (unsigned char) *q > 0x7e)) {
+                if (*q == ';') which = 1;
+                else if (*q >= '0' && *q <= '9') {
+                    if (which) b2 = b2 * 10 + (*q - '0'); else a = a * 10 + (*q - '0');
+                }
+                q++;
+            }
+            if (*q == 'H') { row = a ? a : 1; col = b2 ? b2 : 1; }
+            if (*q == 'J') {
+                for (r = 0; r <= GRID_ROWS; r++) memset(grid[r], ' ', GRID_COLS + 1);
+            }
+            p = *q ? q + 1 : q;
+            continue;
+        }
+        if (row >= 1 && row <= GRID_ROWS && col >= 1 && col <= GRID_COLS)
+            grid[row][col] = *p;
+        col++;
+        p++;
+    }
+}
+
+/**
+ * The frame has a bottom.
+ *
+ * The footer is written on the frame's bottom edge. It was written `width`
+ * columns wide and padded, so it reached the right-hand corner and blanked
+ * every dash after its text: the TEXTTV reader had a top, two sides and no
+ * bottom (sysop, 2026-10-04).
+ */
+static void a_framed_reader_keeps_its_bottom_edge(void)
+{
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight";
+    int bottom, right;
+
+    ui_doc_style_init(&st);
+    /* The TEXTTV reader at 80x25: column 2, 77 wide, 18 tall. */
+    st.top = 3; st.left = 2; st.width = 77; st.height = 3;
+    bottom = st.top + st.height + 1;
+    right = st.left + st.width + 1;
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc(&b, &src, &pushback, &st, " PAGE ", text) == 0);
+    render(storage);
+
+    assert(grid[bottom][st.left] == '+');           /* both corners */
+    assert(grid[bottom][right] == '+');
+    assert(grid[bottom][right - 1] == '-');         /* and edge after the text */
+    assert(strstr(grid[bottom], "Q LEAVE") != 0);   /* the footer is still on it */
+
+    /* The picking reader draws the same frame. */
+    {
+        const int lines[1] = { 0 };
+        int cur = -1;
+        st.page_keys = 1; st.help_key = 1;
+        t.keys = "q"; t.at = 0;
+        src = source_for(&t);
+        ansi_begin(&b, storage, (long) sizeof(storage));
+        assert(ui_doc_pick(&b, &src, &pushback, &st, " PAGE ", text, lines, 1, &cur) == UI_DOC_LEFT);
+        render(storage);
+        assert(grid[bottom][right] == '+');
+        assert(grid[bottom][right - 1] == '-');
+        assert(strstr(grid[bottom], "Q LEAVE") != 0);
+    }
+    printf("  [OK] a framed reader keeps its bottom edge\n");
+}
+
+/**
+ * `?` asks what the keys do.
+ *
+ * The TEXTTV reader has a dozen keys and a footer with room for four; `?`
+ * did nothing, and a caller who tried it read the door as dead (2026-10-04).
+ * Only a reader that has help to give takes the key - elsewhere it is an
+ * ordinary keystroke, as it always was.
+ */
+static void question_mark_asks_for_help_when_the_caller_has_some(void)
+{
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text =
+        "line one\nline two\nline three\nline four\nline five\nline six";
+    const int lines[2] = { 0, 3 };
+    int cur = -1;
+
+    ui_doc_style_init(&st);
+    st.height = 2; st.width = 76; st.top = 1; st.left = 1;
+    st.page_keys = 1;
+    st.help_key = 1;
+
+    /* The cursor moved first: it is still there when the caller comes back. */
+    t.keys = "\x1b[B?"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 2, &cur) == UI_DOC_HELP);
+    assert(cur == 1);
+    assert(strstr(storage, "? HELP") != 0);         /* the footer says so */
+
+    /* Without help to give, `?` is nothing: the reader stays, q leaves. */
+    st.help_key = 0;
+    t.keys = "?q"; t.at = 0;
+    src = source_for(&t);
+    memset(storage, 0, sizeof storage);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " M ", text, lines, 2, &cur) == UI_DOC_LEFT);
+    assert(strstr(storage, "? HELP") == 0);
+    printf("  [OK] ? asks for help, when the caller has some\n");
+}
+
 /** Collect the wrapped lines so a test can look at them. */
 static char rawline[16][256];
 static int rawline_count;
@@ -682,6 +817,8 @@ int main(void)
     a_pen_after_the_last_column_does_not_make_a_line();
     a_line_attribute_costs_the_row_no_columns();
     raw_ansi_costs_no_columns_and_is_never_split();
+    a_framed_reader_keeps_its_bottom_edge();
+    question_mark_asks_for_help_when_the_caller_has_some();
     printf("ui_doc: all passed\n");
     return 0;
 }
