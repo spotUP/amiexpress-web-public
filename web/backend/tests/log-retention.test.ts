@@ -31,7 +31,7 @@ describe('LogRetentionService', () => {
     }
   });
 
-  test('files over maxBytes are truncated to zero bytes (in-place)', async () => {
+  test('files over maxBytes keep their last maxBytes from a line start (in place)', async () => {
     const tmp = makeTmpDir('logret-big-');
     try {
       const p = path.join(tmp, 'backend.log');
@@ -51,9 +51,14 @@ describe('LogRetentionService', () => {
       const res = await svc.runOnce();
 
       expect(res[0].trimmed).toBe(true);
-      expect(res[0].afterBytes).toBe(0);
       const afterStat = fs.statSync(p);
-      expect(afterStat.size).toBe(0);
+      // The newest lines stay, whole: at most 100 KB, starting on a line.
+      expect(afterStat.size).toBeGreaterThan(90 * 1024);
+      expect(afterStat.size).toBeLessThanOrEqual(100 * 1024);
+      expect(res[0].afterBytes).toBe(afterStat.size);
+      const kept = fs.readFileSync(p, 'utf8');
+      expect(kept.length % 100).toBe(0);
+      expect(bigContent.endsWith(kept)).toBe(true);
       expect(afterStat.ino).toBe(beforeIno); // same inode → open FDs survive
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });

@@ -101,13 +101,27 @@ export class LogRetentionService {
   }
 
   /**
-   * Truncate a log file to zero bytes in-place.
-   * In-place truncate preserves open file descriptors so the Node
-   * process keeps writing to the same inode afterwards.
+   * Keep the file's last `maxBytes`, from the first line break inside them,
+   * IN PLACE: the tail is written over the start of the same file and the
+   * file truncated to it, so the inode - and every open descriptor writing to
+   * it - survives (bb394a9f0). This emptied the whole file, so a CallersLog
+   * past the cap lost every call, not just the oldest.
    */
-  private async tailTrim(filePath: string, _currentSize: number): Promise<number> {
-    await fsp.truncate(filePath, 0);
-    return 0;
+  private async tailTrim(filePath: string, currentSize: number): Promise<number> {
+    const start = currentSize - this.maxBytes;
+    const fh = await fsp.open(filePath, 'r+');
+    try {
+      const tail = Buffer.alloc(this.maxBytes);
+      const { bytesRead } = await fh.read(tail, 0, this.maxBytes, start);
+      const kept = tail.subarray(0, bytesRead);
+      const firstBreak = kept.indexOf(0x0a);
+      const body = firstBreak >= 0 ? kept.subarray(firstBreak + 1) : kept;
+      await fh.write(body, 0, body.length, 0);
+      await fh.truncate(body.length);
+      return body.length;
+    } finally {
+      await fh.close();
+    }
   }
 
   /**
