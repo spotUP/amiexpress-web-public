@@ -22,6 +22,7 @@ import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import type { BBSSession } from '../../index';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { config } from '../../config';
+import { userScreenTypeExtension } from '../../screens/screen-metadata';
 import { flushOutput } from '../../utils/output.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { loginNamePrompt, loginPasswordPrompt } from '../../utils/node-tooltypes.util';
@@ -416,7 +417,7 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
   // petsciiMode-aware findSecurityScreen (screen-security.util.ts).
   // texttvMode as well - the sibling call in utility-commands passes it, and
   // a teletext caller asking for help got the ANSI screen without it.
-  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
+  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, userScreenTypeExtension(session.user, config.get('dataDir')), session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
 
   if (helpScreenPath) {
     // express.e:25085 - displayFile(screen)

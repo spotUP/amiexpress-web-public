@@ -25,6 +25,7 @@ import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
 import { config } from '../../config';
+import { userScreenTypeExtension } from '../../screens/screen-metadata';
 
 /**
  * checkScreenClear - express.e:2013-2018
@@ -701,7 +702,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
   const helpScreen = _findSecurityScreen(
     bullHelpBasePath,
     session.user?.secLevel || 0,
-    null,
+    userScreenTypeExtension(session.user, config.get('dataDir')),
     session.ripMode,
     false,
     servesPetsciiArt(session),
@@ -727,7 +728,7 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
   // confScreenDir = Conf{N}/Screens/
   const bulletins = bulletinDir(session);
   const bulletinBasePath = path.join(bulletins, `Bull${bulletinNum}`);
-  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, null, session.ripMode);
+  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, userScreenTypeExtension(session.user, config.get('dataDir')), session.ripMode);
 
   socket.emit('ansi-output', '\r\n');
 

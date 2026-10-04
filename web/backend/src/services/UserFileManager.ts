@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../database';
+import { boardScreenTypes, screenTypeIndex } from '../screens/screen-metadata';
 
 /**
  * E language struct: axobjects.e:11-68
@@ -579,13 +580,10 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     return 0;
   }
 
+  // user.data's screenType is an index into ScreenTypes.info (express.e:11366
+  // `loggedOnUser.screenType:=stat-1`); the same lookup the screen loader uses.
   private screenTypeToInt(screenType: string): number {
-    const map: { [key: string]: number } = {
-      'Amiga Ansi': 0,
-      'PC Ansi': 1,
-      'ASCII': 2,
-    };
-    return map[screenType] || 0;
+    return screenTypeIndex(screenType, boardScreenTypes(this.bbsRoot));
   }
 
   private editorTypeToInt(editor: string): number {
@@ -620,13 +618,10 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     return '/X Zmodem';
   }
 
+  // The TITLE this board gives that index, which is what the port stores; an
+  // index the board has no entry for is kept as the number, so it survives.
   private intToScreenType(value: number): string {
-    const map: { [key: number]: string } = {
-      0: 'Amiga Ansi',
-      1: 'PC Ansi',
-      2: 'ASCII',
-    };
-    return map[value] || 'Amiga Ansi';
+    return boardScreenTypes(this.bbsRoot)[value]?.title ?? String(value);
   }
 
   private intToEditorType(value: number): string {

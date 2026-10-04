@@ -21,6 +21,7 @@ import fs from 'fs';
 import { formatDateSlash } from '../../utils/date-format.util';
 import { servesPetsciiArt } from '../screen.handler';
 import { config } from '../../config';
+import { userScreenTypeExtension } from '../../screens/screen-metadata';
 import * as amigafs from '../../utils/amigafs';
 
 import type { BBSSession } from '../../index';
@@ -328,7 +329,7 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
     // spelling of the directory any more certain.
     const helpBasePath = confineToHelp(helpDir, searchTerm);
     if (helpBasePath) {
-      foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
+      foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, userScreenTypeExtension(session.user, config.get('dataDir')), session.ripMode, false, servesPetsciiArt(session), session.texttvMode === true);
       if (foundFile) break;
     }
     searchTerm = searchTerm.slice(0, -1);

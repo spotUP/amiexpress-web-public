@@ -37,6 +37,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { mciGateOpen, screenFileDrawsNothing, screenIsProgram, screenProgramSignature } from '../screens/screen-blankness';
 import { splitScreenCodes, applyMciCarry, type CarryPlan } from '../screens/mci-carry';
 import { resolveCallerTheme } from '../screens/caller-theme';
+import { userScreenTypeExtension } from '../screens/screen-metadata';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations, themedPath, type SearchLocation,
@@ -1584,6 +1585,9 @@ export function loadScreenFile(
   screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
   const userSecLevel = session?.user?.secLevel ?? 0;
+  // express.e:6264/6282/6299 - the caller's screen type (`.TXT.GR`, `.IBM`),
+  // tried before `.TXT` at every level findSecurityScreen walks.
+  const userScreenTypeExt = userScreenTypeExtension(session?.user, baseDir);
 
   // express.e:6551-6558 - Some screen types use different file names
   // NODE_BULL and CONF_BULL both look for 'BULL' files in their respective directories
@@ -1842,7 +1846,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       if (location.themed) continue;
       const candidates = isAssignPath ? [] : [
         findSecurityScreen(
-          path.join(location.dir, screenBaseNoExt), userSecLevel, null,
+          path.join(location.dir, screenBaseNoExt), userSecLevel, userScreenTypeExt,
           session?.ripMode ?? false, false, servesPetsciiArt(session),
           session?.texttvMode ?? false, { hollow },
         ),
@@ -1926,7 +1930,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
        * `Themes/h7/Conf/2/bull20.txt`, which is right there.
        */
       const themeCopy = (isAssignPath ? null : findSecurityScreen(
-        path.join(location.dir, screenBaseNoExt), userSecLevel, null,
+        path.join(location.dir, screenBaseNoExt), userSecLevel, userScreenTypeExt,
         session?.ripMode ?? false, false, servesPetsciiArt(session),
         session?.texttvMode ?? false, { hollow },
       ))
@@ -1993,7 +1997,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, userScreenTypeExt, session?.ripMode ?? false, false, servesPetsciiArt(session),
         session?.texttvMode ?? false, { hollow });
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
@@ -2114,7 +2118,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session),
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, userScreenTypeExt, session?.ripMode ?? false, false, servesPetsciiArt(session),
         session?.texttvMode ?? false, { hollow });
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);

@@ -10,8 +10,6 @@ import * as path from 'path';
 import { findCaseInsensitive } from './amigafs';
 import { screenFileDrawsNothing } from '../screens/screen-blankness';
 
-// Default extensions if ScreenTypes.info not available
-const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
 const TEXT_EXTENSIONS = ['.TXT', '.txt'];
 
 /**
@@ -80,7 +78,9 @@ function normalizeScreenTypeExtension(screenTypeExt: string): string {
  *
  * @param screenDirAndName - Full path to screen without extension (e.g., "/path/to/Bulletins/Bull1")
  * @param userSecLevel - User's security level (0-255)
- * @param userScreenTypeExt - User's preferred screen type extension (e.g., ".TXT.GR", ".IBM")
+ * @param userScreenTypeExt - User's screen type extension (e.g., ".TXT.GR", ".IBM"):
+ *   pass `userScreenTypeExtension(session.user, dataDir)` (screens/screen-metadata.ts),
+ *   the one place that maps the user's choice onto ScreenTypes.info.
  * @param ripMode - Whether RIP mode is enabled (prefer .RIP files)
  * @param defScreens - DEF_SCREENS tooltype (if true, check non-security first)
  * @param petsciiMode - WEB_ extension over express.e (no Amiga equivalent):
