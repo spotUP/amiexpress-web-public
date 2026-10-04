@@ -484,52 +484,21 @@ console.log('[BatchScheduler] Skipping disabled utility: dannounce');
     return;
   }
 
-  // Special-case GLCUpdater (TypeScript) to send caller data to global server
-  // Command format: utils:glcupdater BBSNAME CALLERSLOG [IGNORELOCAL] [IGNORESYSOP] [IGNORESYSOPUSER] [PROCESSALL]
-  // Example: utils:glcupdater "AmiExpress" bbs:node1/callerslog IGNORELOCAL IGNORESYSOP
+  // GLCUpdater (TypeScript port of GLCUpdater.e) posts the node's last call
+  // to the Global Last Callers server. The arguments go to it unparsed: its
+  // ReadArgs template is its own (GLCUpdater.e:488).
+  // Example: doors:glc/glcupdater "My BBS" bbs:node1/callerslog IGNORELOCAL IGNORESYSOP
   if (program.includes('glcupdater')) {
-    const { processCallersLog } = await import('../utils/glc-updater');
-
-    // Parse GLCUpdater arguments
-    const options: any = {
-      bbsName: '',
-      callersLog: '',
-      ignoreLocal: false,
-      ignoreSysop: false,
-      ignoreSysopUser: false,
-      processAll: false
-    };
-
-    for (let i = 0; i < resolvedArgs.length; i++) {
-      const arg = resolvedArgs[i];
-
-      if (arg.toUpperCase() === 'IGNORELOCAL') {
-        options.ignoreLocal = true;
-      } else if (arg.toUpperCase() === 'IGNORESYSOP') {
-        options.ignoreSysop = true;
-      } else if (arg.toUpperCase() === 'IGNORESYSOPUSER') {
-        options.ignoreSysopUser = true;
-      } else if (arg.toUpperCase() === 'PROCESSALL') {
-        options.processAll = true;
-      } else if (arg.toUpperCase().startsWith('TIMEZONE=')) {
-        options.timeZone = arg.substring(9);
-      } else if (!options.bbsName) {
-        // Strip quotes from BBS name
-        options.bbsName = arg.replace(/^"|"$/g, '');
-      } else if (!options.callersLog) {
-        // Resolve Amiga assign (bbs:, etc.) to filesystem path
-        const rawPath = arg.replace(/^"|"$/g, '');
-        options.callersLog = resolveAssign(rawPath);
-      }
-    }
-
-    if (options.bbsName && options.callersLog) {
-console.log(`[BatchScheduler] Running GLCUpdater for ${options.bbsName}, log: ${options.callersLog}`);
-      await processCallersLog(options);
-console.log('[BatchScheduler] GLCUpdater completed');
-    } else {
-console.error('[BatchScheduler] GLCUpdater requires BBSNAME and CALLERSLOG parameters');
-    }
+    const { runGLCUpdater } = await import('../utils/glc-updater');
+    // PROGDIR: is the program's own directory (GLCUpdater.e:538) - only if
+    // the line names a program that exists.
+    const progPath = amigafs.resolvePath(resolveAssign(parts[0]));
+    const result = await runGLCUpdater(resolvedArgs, {
+      resolvePath: resolveAssign,
+      progDir: progPath ? path.dirname(progPath) : null,
+      cwd: config.getConfig().dataDir,
+    });
+console.log(`[BatchScheduler] GLCUpdater: ${result.status}, ${result.posted} of ${result.requests.length} call(s) posted`);
     return;
   }
 
