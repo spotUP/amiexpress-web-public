@@ -7,7 +7,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { formatFileSize, formatUploadDate } from './file-upload.util';
+import { dirListSize, formatUploadDate } from './file-upload.util';
 import { looksLikeAsciiArt } from './ascii-art.util';
 import { toAmigaText } from './amiga-text.util';
 import { getHoldDirFilePath } from './dir-file-reader.util';
@@ -68,7 +68,8 @@ export function buildDirEntryLine(
   isLCFile: boolean = false
 ): string {
   // Express.e:19447-19452 - Build format string
-  const sizeStr = formatFileSize(fileSize);  // Raw bytes: "  89749" (7 chars, right-aligned)
+  // express.e:18918-18940 formatFileSizeForDirList, with this board's settings.
+  const sizeStr = dirListSize(fileSize);
   const dateStr = formatUploadDate(uploadDate);
 
   // THE DESCRIPTION BECOMES AMIGA BYTES HERE, so it is folded into the

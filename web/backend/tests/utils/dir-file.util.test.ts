@@ -10,12 +10,17 @@ jest.mock('fs/promises', () => ({
   mkdir: jest.fn().mockResolvedValue(undefined),
   appendFile: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../src/utils/file-upload.util', () => ({
-  formatFileSize: jest.fn((size: number) => {
-    // Mirror production default: raw bytes, right-aligned in 7 chars
+jest.mock('../../src/utils/file-upload.util', () => {
+  // Mirror production default: raw bytes, right-aligned in 7 chars.
+  const formatFileSize = jest.fn((size: number) => {
     if (size <= 9999999) return String(size).padStart(7);
     return String(size);
-  }),
+  });
+  return {
+  formatFileSize,
+  // The DIR writer asks dirListSize (the board's CREDITBYKB / CONVERT_TO_MB),
+  // which on the default board is formatFileSize(size).
+  dirListSize: jest.fn((size: number) => formatFileSize(size)),
   formatUploadDate: jest.fn((date: Date) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const day = date.getDate().toString().padStart(2, '0');
@@ -23,7 +28,8 @@ jest.mock('../../src/utils/file-upload.util', () => ({
     const year = date.getFullYear().toString().slice(-2);
     return `${day}-${month}-${year}`;
   }),
-}));
+  };
+});
 jest.mock('../../src/utils/ascii-art.util', () => ({
   looksLikeAsciiArt: jest.fn((line: string) => {
     return line.includes('=====') || line.includes('-----');

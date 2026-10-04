@@ -205,28 +205,57 @@ export function getFileStatusMarker(
  * @param useKB Whether to use KB suffix (TOGGLES_CREDITBYKB=TRUE)
  * @returns Formatted size string (7 chars, right-aligned)
  */
-export function formatFileSize(bytes: number, useKB: boolean = false): string {
+export function formatFileSize(bytes: number, useKB: boolean = false, convertToMB: boolean = false): string {
   if (useKB) {
     // Mode 1: TOGGLES_CREDITBYKB=TRUE - express.e:18920-18930
     // StringF(fsstr,'\r\d[6]K',tmpSize) - right-align in 6 chars + K = 7 total
-    const tmpSize = bytes >>> 10;  // Shr(fsize,10) - convert to KB
+    const tmpSize = Math.floor(bytes / 1024) & 0x003fffff;  // Shr(fsize,10) AND $003fffff
     if (tmpSize <= 999999) {
       return `${tmpSize}K`.padStart(7);  // e.g., "   123K"
-    } else {
-      // For very large files (>999999K), just use raw KB
-      return `${tmpSize}K`;
     }
-  } else {
-    // Mode 2: TOGGLES_CREDITBYKB=FALSE (DEFAULT) - express.e:18931-18940
-    // StringF(fsstr,'\r\d[7]',fsize) - right-align raw bytes in 7 chars
-    // This is what AquaScan and other 68K doors expect for size filtering
-    if (bytes <= 9999999) {
-      return String(bytes).padStart(7);  // e.g., "  89749"
-    } else {
-      // For files >9,999,999 bytes, just use raw bytes (no padding limit)
-      return String(bytes);
-    }
+    return convertToMB ? megabytes(bytes) : `${tmpSize}K`;  // '\dK' or the MB form
   }
+  // Mode 2: TOGGLES_CREDITBYKB=FALSE (DEFAULT) - express.e:18931-18940
+  // StringF(fsstr,'\r\d[7]',fsize) - right-align raw bytes in 7 chars
+  // This is what AquaScan and other 68K doors expect for size filtering
+  if (bytes <= 9999999) {
+    return String(bytes).padStart(7);  // e.g., "  89749"
+  }
+  return convertToMB ? megabytes(bytes) : String(bytes);  // '\d' or the MB form
+}
+
+/**
+ * express.e:18928/18938 with CONVERT_TO_MB:
+ *   StringF(fsstr,'\r\d[4].\dM',Shr(fsize,20) AND $fff,
+ *           Div(fsize-Shl(Shr(fsize,20) AND $fff,20),104858))
+ * Seven characters, like every other size, so the date stays at column 23.
+ */
+function megabytes(bytes: number): string {
+  const mb = Math.floor(bytes / 1048576) & 0xfff;
+  const tenths = Math.floor((bytes - mb * 1048576) / 104858);
+  return `${String(mb).padStart(4)}.${tenths}M`;
+}
+
+/**
+ * The size column of this board's DIR lines: CREDITBYKB from the board's
+ * toggles, CONVERT_TO_MB by its presence on bbsConfig.info - both read where
+ * express.e reads them (sopt.toggles, checkToolTypeExists TOOLTYPE_BBSCONFIG).
+ */
+export function dirListSize(bytes: number): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getACSConfig, ToggleFlags } = require('./acs.util');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { readTooltypeMap } = require('./info-file.util');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../config');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const nodePath = require('path');
+  let convertToMB = false;
+  try {
+    convertToMB = readTooltypeMap(nodePath.join(config.get('dataDir'), 'bbsConfig.info')).has('CONVERT_TO_MB');
+  } catch { /* no board icon: the plain form */ }
+  const creditByKB = getACSConfig()?.toggles?.[ToggleFlags.CREDITBYKB] === true;
+  return formatFileSize(bytes, creditByKB, convertToMB);
 }
 
 /**

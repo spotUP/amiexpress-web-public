@@ -15,7 +15,7 @@ import {
   getNodeWorkDir,
   getPlaypenDir,
 } from "../utils/file-diz.util";
-import { formatFileSize, formatUploadDate, descriptionPromptHead } from "../utils/file-upload.util";
+import { dirListSize, formatUploadDate, descriptionPromptHead } from "../utils/file-upload.util";
 import { testFile, TestResult } from "../utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "../utils/file-hold.util";
 import { getStorageContext } from "../storage/storage-context";
@@ -275,7 +275,7 @@ function promptForDescription(
   data: { filename: string; originalname: string; size: number; path?: string }
 ): void {
   const maxDescLines = 10;
-  const sizeStr = formatFileSize(data.size);
+  const sizeStr = dirListSize(data.size);
   const dateStr = formatUploadDate(getSystemTime());
   const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
