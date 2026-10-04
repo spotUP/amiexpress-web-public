@@ -957,15 +957,12 @@ async function showAllVoteStatistics(socket: any, session: BBSSession): Promise<
 }
 
 /**
- * DS Command: Download with Status (variant of D command)
- * Original: express.e:28302 (mapped to internalCommandD)
- *
- * Download files with status/progress display.
- * In AmiExpress, DS was just an alias to D command.
- * Web version: Shows download interface (same as D command).
+ * DS: Sysop Download - express.e:28302-28303 `internalCommandD(cmdcode,...)`
+ * with the code typed. downloadAFile (20040) makes it a sysop download for a
+ * caller with ACS_SYSOP_DOWNLOAD - any path, logged as `SYSOP DOWNLOAD:` -
+ * and a plain D for anyone else. One handler; the code is the difference.
  */
 export async function handleDownloadWithStatusCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  // express.e:28302-28303 DS maps to internalCommandD — identical flow, no difference
   const { DownloadHandler } = require('../file/download.handler');
-  await DownloadHandler.handleDownloadCommand(socket, session, params);
+  await DownloadHandler.handleDownloadCommand(socket, session, params, 'DS');
 }

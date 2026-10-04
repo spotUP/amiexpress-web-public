@@ -38,15 +38,19 @@ import {
 import { getStorageContext } from '../../storage/storage-context';
 import { getTimeRemainingMinutes } from '../../utils/time-tracking.util';
 import { DEFAULT_CONNECTION_BAUD } from '../../constants/modem';
+import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
 
 export class DownloadHandler {
   /**
-   * D command entry point — express.e:24853-24858 internalCommandD
+   * D and DS command entry point — express.e:24853-24858 internalCommandD.
+   * processBBSCommand sends both codes here with the code typed
+   * (express.e:28300-28303); downloadAFile tells them apart (20040).
    */
   static async handleDownloadCommand(
     socket: Socket,
     session: BBSSession,
-    params: string = ''
+    params: string = '',
+    cmdcode: string = 'D'
   ): Promise<void> {
     // express.e:24854 checkSecurity(ACS_DOWNLOAD)
     if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
@@ -59,7 +63,7 @@ export class DownloadHandler {
     console.log('[ENV] Downloading');
 
     // express.e:24857 beginDLF(cmdcode,params)
-    await this.beginDLF(socket, session, params);
+    await this.beginDLF(socket, session, params, cmdcode);
   }
 
   /**
@@ -70,7 +74,8 @@ export class DownloadHandler {
   private static async beginDLF(
     socket: Socket,
     session: BBSSession,
-    params: string
+    params: string,
+    cmdcode: string = 'D'
   ): Promise<void> {
     // express.e:19960 aePuts('\b\n')
     socket.emit('ansi-output', '\r\n');
@@ -173,6 +178,20 @@ export class DownloadHandler {
       socket.emit('ansi-output', 'No Wildcards permitted.\r\n');
     }
 
+    /*
+     * express.e:20038-20056 - DS from a caller with ACS_SYSOP_DOWNLOAD is a
+     * sysop download: the line goes to the CallersLog and the UDLog, the
+     * names typed are AmigaDOS paths (any mounted device, no file area), and
+     * the caller's flagged files stay out of it. DS from anyone else is D.
+     */
+    const sysopdl = cmdcode.toUpperCase() === 'DS' && checkSecurity(user, ACSPermission.SYSOP_DOWNLOAD);
+    if (sysopdl) {
+      const line = `\tSYSOP DOWNLOAD: ${cmdcode}`;
+      const logging = require('../../utils/download-logging.util');
+      await logging.writeToCallersLog(line, session.nodeId || 1);
+      await logging.writeToUDLog(line, session.nodeId || 1);
+    }
+
     // Collect pre-flagged/params files into fileList — express.e:20037-20097
     // express.e: addFlagItems(tempList,currentConf,params) + flagFilesList items
     // If any are present, tempList.count()<>0 → show '\b\nChecking...\b\n' (line 20066)
@@ -186,8 +205,9 @@ export class DownloadHandler {
     const sessionFlaggedFiles: any[] = Array.isArray((session as any).flaggedFiles)
       ? (session as any).flaggedFiles
       : [];
-    const hasFlags = (session.flagManager instanceof FileFlagManager && session.flagManager.getCount() > 0)
-                  || sessionFlaggedFiles.length > 0;
+    const hasFlags = !sysopdl && (
+      (session.flagManager instanceof FileFlagManager && session.flagManager.getCount() > 0)
+      || sessionFlaggedFiles.length > 0);
     const hasParams = !!params.trim();
 
     if (hasFlags || hasParams) {
@@ -225,7 +245,17 @@ export class DownloadHandler {
         }
       }
 
-      if (hasParams) {
+      if (hasParams && sysopdl) {
+        // express.e:20079-20086 every name is checked before any is looked
+        // up; a wildcard anywhere ends the list (JUMP arestart1).
+        const names = params.trim().split(/\s+/).filter(n => n.length > 0);
+        if (names.some((n) => this.hasWildcards(n))) {
+          socket.emit('ansi-output', '\r\nSysop download doesn\'t support wildcards\r\n');
+        } else {
+          // express.e:20088 checklist() -> checkForFileSize, one name at a time
+          for (const name of names) await this.addSysopFile(socket, session, name, fileList);
+        }
+      } else if (hasParams) {
         const hasExpansion = checkSecurity(user, ACSPermission.FILE_EXPANSION);
         for (const name of params.trim().split(/\s+/).filter(n => n.length > 0)) {
           const err = this.validateFilenameStr(name, hasExpansion);
@@ -250,6 +280,7 @@ export class DownloadHandler {
     session.tempData = {
       downloadFileList: fileList,
       downloadNumFiles: fileList.length,
+      sysopDownload: sysopdl,
     };
 
     // express.e:20107 LOOP — show filespec prompt, wait for filename input
@@ -358,6 +389,21 @@ export class DownloadHandler {
 
     // express.e:20145 aePuts('\b\nChecking...\b\n') — shown BEFORE validation (line 20146)
     socket.emit('ansi-output', '\r\nChecking...\r\n');
+
+    // express.e:20146, 20158-20165 - a sysop download takes any path, but
+    // no wildcard.
+    if (session.tempData?.sysopDownload) {
+      if (this.hasWildcards(trimmed)) {
+        socket.emit('ansi-output', '\r\nSysop download doesn\'t support wildcards\r\n');
+      } else {
+        // express.e:20167 checkForFileSize(...)
+        await this.addSysopFile(socket, session, trimmed, fileList);
+        session.tempData.downloadFileList = fileList;
+        session.tempData.downloadNumFiles = fileList.length;
+      }
+      await this.showFilespecPrompt(socket, session);
+      return;
+    }
 
     // express.e:20146-20165 — validate filename chars (after Checking...)
     const err = this.validateFilenameStr(trimmed, checkSecurity(user, ACSPermission.FILE_EXPANSION));
@@ -784,6 +830,76 @@ export class DownloadHandler {
     // express.e:12680-12715 logic lives in display-ul-stats.util.ts.
     const { emitULStats } = require('../../utils/display-ul-stats.util');
     emitULStats(socket, session);
+  }
+
+  // ─── sysop download ─────────────────────────────────────────────────────
+
+  /**
+   * checkForFileSize (12778-13040) with sysopdl set: the name typed IS the
+   * path. User.data and User.keys are never offered (12804-12820); a device
+   * that is not mounted (findAssign, 12872) or a path that cannot be locked
+   * (12893-12895) is "not found" (13032-13036). Otherwise
+   * checkFIBForFileSize (12717-12776) prints the file's line, refuses a
+   * Restricted one, and adds it once - and never to the flagged list
+   * (12762), which is the caller's, not the sysop's errand.
+   */
+  private static async addSysopFile(
+    socket: Socket,
+    session: BBSSession,
+    name: string,
+    fileList: any[]
+  ): Promise<void> {
+    const part = name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf(':')) + 1).toUpperCase();
+    // express.e:31937/31943 the default userDataFile / userKeysFile names.
+    if (part === 'USER.DATA' || part === 'USER.KEYS') {
+      socket.emit('ansi-output', `   File (${part}) not found.\r\n`);
+      return;
+    }
+    const file = this.sysopFileAt(session, name);
+    if (!file) {
+      socket.emit('ansi-output', `       File (${name}) not found.\r\n`);
+      return;
+    }
+    this.printFileFound(socket, session, file);
+    // express.e:12748-12754 - the file's comment, which this board keeps as
+    // its DIR description (file-restriction.util).
+    const comment = await resolveFileDescription(session.currentConf || 1, config.get('dataDir'), file.name);
+    if (isRestrictedComment(comment)) {
+      socket.emit('ansi-output', '    >>Restricted File<< Updating CallersLog\r\n');
+      require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId || 1,
+        `\t\tAttempt to download RESTRICTED file [${name}]`);
+      return;
+    }
+    if (fileList.some((f) => f.fullPath === file.fullPath)) {
+      socket.emit('ansi-output', '   File is already selected!\r\n'); // express.e:12768
+      return;
+    }
+    fileList.push(file);
+  }
+
+  /** The file an AmigaDOS path names on this host, or null when there is none. */
+  private static sysopFileAt(session: BBSSession, name: string): any | null {
+    if (!deviceMounted(name)) return null;
+    const hostPath = amigafs.resolvePath(resolveAssignPath(name));
+    if (!hostPath) return null;
+    let size: number;
+    try {
+      const st = fs.statSync(hostPath);
+      if (!st.isFile()) return null;
+      size = st.size;
+    } catch {
+      return null;
+    }
+    return {
+      name: path.basename(hostPath),
+      size,
+      fullPath: hostPath,
+      confNum: session.currentConf || 1,
+      dirNum: 1,
+      // Not in a file area: the browser fetches it on a one-time ticket for
+      // its path (file-delivery.ts), ZMODEM sends the path as it is.
+      outsideFileAreas: true,
+    };
   }
 
   // ─── filename validation ────────────────────────────────────────────────

@@ -21,7 +21,7 @@ import { getSystemTime, formatLongDateTime, toAmigaTime, fromAmigaTime } from '.
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
 import { lineInput, yesNo } from '../../utils/await-input';
 import { higherAccess } from '../../utils/error-handling.util';
-import { findAssign, resolveAssignPath } from '../../utils/path-util';
+import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
 import { isFileRestricted } from '../../utils/file-restriction.util';
 import { editKey, editorKeyCodes } from './line-editor';
 import { sessionWantsPetscii } from '../../utils/petscii-session-model';
@@ -711,17 +711,6 @@ async function attachFile(socket: any, session: BBSSession): Promise<void> {
     const yes = await yesNo(socket, session, 2);
     attachedFiles.unshift(yes ? 'Y' : 'N');
   }
-}
-
-/**
- * MiscFuncs.e findAssign(): the path must name a device - the part before
- * its first `:` - and that device must be mounted. A path with no colon
- * names none.
- */
-function deviceMounted(file: string): boolean {
-  const colon = file.indexOf(':');
-  if (colon < 0) return false;
-  return findAssign(file.slice(0, colon + 1)) !== null;
 }
 
 /**

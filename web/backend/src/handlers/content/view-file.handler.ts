@@ -21,6 +21,7 @@ import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-paus
 import { getMaxDirs } from '../../utils/max-dirs.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
+import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
 
 /**
  * View File Handler
@@ -34,7 +35,8 @@ export class ViewFileHandler {
   static async handleViewFileCommand(
     socket: Socket,
     session: BBSSession,
-    params: string = ''
+    params: string = '',
+    cmdcode: string = 'V'
   ): Promise<InternalCommandResult> {
     // express.e:25676 - `IF checkSecurity(ACS_VIEW_A_FILE)=FALSE THEN RETURN
     // RESULT_NOT_ALLOWED`. A bare return: nothing is printed here. The
@@ -61,7 +63,8 @@ console.log('[ENV] Viewing');
     }
 
     // Call viewAFile - express.e:25682
-    await this.viewAFile(socket, session, params);
+    // V and VS both arrive here with the code typed (express.e:28373, 28377).
+    await this.viewAFile(socket, session, params, cmdcode);
 
     // RIP mode: Return to text mode after viewing
     if (session.ripMode) {
@@ -76,7 +79,8 @@ console.log('[ENV] Viewing');
   private static async viewAFile(
     socket: Socket,
     session: BBSSession,
-    params: string
+    params: string,
+    cmdcode: string = 'V'
   ): Promise<void> {
 
     // express.e:20394-20395
@@ -101,20 +105,24 @@ console.log('[ENV] Viewing');
     let filename = '';
 
     if (paramParts.length > 0 && paramParts[0] !== 'NS') {
-      filename = paramParts[0];
+      // A sysop view's parameter is a host path: kept as typed.
+      filename = this.isSysopView(session, cmdcode)
+        ? params.trim().split(/\s+/)[0]
+        : paramParts[0];
     } else {
       // No filename provided - prompt user
       socket.emit('ansi-output', '\x1b[36mEnter filename of file to view? \x1b[0m');
       session.subState = LoggedOnSubState.VIEW_FILE_INPUT;
       session.tempData = {
         waitingForViewFilename: true,
-        nonStopDisplay: hasNonStop
+        nonStopDisplay: hasNonStop,
+        viewCmdcode: cmdcode,
       };
       return;
     }
 
     // Validate and display file
-    await this.displayFile(socket, session, filename, hasNonStop);
+    await this.displayFile(socket, session, filename, hasNonStop, cmdcode);
   }
 
   /**
@@ -128,6 +136,7 @@ console.log('[ENV] Viewing');
     if (session.tempData?.waitingForViewFilename) {
       session.tempData.waitingForViewFilename = false;
       const nonStop = session.tempData.nonStopDisplay || false;
+      const cmdcode: string = session.tempData.viewCmdcode || 'V';
 
       if (!input.trim()) {
         // Empty input - cancel - express.e:20417-20419
@@ -137,7 +146,7 @@ console.log('[ENV] Viewing');
       }
 
       // Process the filename
-      await this.displayFile(socket, session, input.trim(), nonStop);
+      await this.displayFile(socket, session, input.trim(), nonStop, cmdcode);
     }
   }
 
@@ -149,27 +158,45 @@ console.log('[ENV] Viewing');
     socket: Socket,
     session: BBSSession,
     filename: string,
-    nonStop: boolean
+    nonStop: boolean,
+    cmdcode: string = 'V'
   ): Promise<void> {
 
-    // Validate filename - no special symbols - express.e:20460-20467
-    if (!this.isValidFilename(filename)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mYou may not include any special symbols\x1b[0m\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
+    let fileInfo: { fullPath: string } | null;
+    if (this.isSysopView(session, cmdcode)) {
+      // express.e:20435-20450 - the name IS the path, on any mounted device.
+      fileInfo = this.sysopViewFile(filename);
+      if (!fileInfo) {
+        // express.e:20429-20431 skipToIt, with path:=fn
+        socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
+      // express.e:20447-20448
+      require('../../services/CallersLogManager').callersLogManager.logActivity(
+        session.nodeId || 1, `\tSysopView ${filename}`);
+      // express.e:20449-20450 StrCopy(final,fn); JUMP skipit - the shared
+      // restricted / text / display steps below.
+    } else {
+      // Validate filename - no special symbols - express.e:20460-20467
+      if (!this.isValidFilename(filename)) {
+        socket.emit('ansi-output', '\r\n\x1b[31mYou may not include any special symbols\x1b[0m\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
 
-    // Search for file in conference directories - express.e:20469-20475
-    const fileInfo = await this.findFileInConference(
-      config.get('dataDir'),
-      session.currentConf || 1,
-      filename
-    );
+      // Search for file in conference directories - express.e:20469-20475
+      fileInfo = await this.findFileInConference(
+        config.get('dataDir'),
+        session.currentConf || 1,
+        filename
+      );
 
-    if (!fileInfo) {
-      socket.emit('ansi-output', `\r\n\x1b[31mFile ${filename} not found.\x1b[0m\r\n\r\n`);
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      if (!fileInfo) {
+        socket.emit('ansi-output', `\r\n\x1b[31mFile ${filename} not found.\x1b[0m\r\n\r\n`);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
     }
 
     // Check if file is restricted - express.e:20477-20484
@@ -274,6 +301,30 @@ console.error('[VIEW FILE] Error reading file:', error);
       }
     }
     socket.emit('ansi-output', '\r\n');
+  }
+
+  /**
+   * express.e:20435 - VS from a caller with ACS_SYSOP_VIEW. VS from anyone
+   * else is V.
+   */
+  private static isSysopView(session: BBSSession, cmdcode: string): boolean {
+    return cmdcode.toUpperCase() === 'VS' && checkSecurity(session.user, ACSPermission.SYSOP_VIEW);
+  }
+
+  /**
+   * express.e:20436-20446: findAssign(fn) - the device must be mounted - and
+   * Open(fn,MODE_OLDFILE), which a directory does not pass. The host file,
+   * or null for "not found".
+   */
+  private static sysopViewFile(fn: string): { fullPath: string } | null {
+    if (!deviceMounted(fn)) return null;
+    const hostPath = amigafs.resolvePath(resolveAssignPath(fn));
+    if (!hostPath) return null;
+    try {
+      return fs.statSync(hostPath).isFile() ? { fullPath: hostPath } : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

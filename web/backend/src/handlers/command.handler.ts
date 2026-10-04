@@ -4448,7 +4448,7 @@ async function dispatchInternalCommand(
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
-    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302-28303
+    case 'DS': // Sysop Download (internalCommandD with cmdcode DS) - express.e:28302-28303, 20040
       await handleDownloadWithStatusCommand(socket, session, params);
       return;
 
@@ -4543,10 +4543,10 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       // express.e:28373 - `res:=internalCommandV(cmdcode,cmdparams)`
       return await ViewFileHandler.handleViewFileCommand(socket, session, params);
 
-    case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
+    case 'VS': // Sysop View (internalCommandV with cmdcode VS) - express.e:28376-28377, 20435
       const { ViewFileHandler: ViewFileHandler2 } = require('./content/view-file.handler');
       // express.e:28377 - `res:=internalCommandV(cmdcode,cmdparams)`
-      return await ViewFileHandler2.handleViewFileCommand(socket, session, params);
+      return await ViewFileHandler2.handleViewFileCommand(socket, session, params, 'VS');
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
       await handleVotingBoothCommand(socket, session);

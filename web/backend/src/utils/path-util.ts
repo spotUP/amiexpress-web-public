@@ -107,6 +107,19 @@ export function findAssign(assignName: string): string | null {
 }
 
 /**
+ * MiscFuncs.e findAssign() as express.e asks it (`IF findAssign(x)` is TRUE
+ * when the device is NOT there): the path must name a device - the part
+ * before its first `:` - and that device must be mounted. A path with no
+ * colon names none. Message entry's attached files (express.e:10529), the
+ * sysop's DS (12872) and VS (20436) all ask it.
+ */
+export function deviceMounted(file: string): boolean {
+  const colon = file.indexOf(':');
+  if (colon < 0) return false;
+  return findAssign(file.slice(0, colon + 1)) !== null;
+}
+
+/**
  * Resolve path with Amiga assign support
  * Expands assigns like "BBS:Doors/door.exe" to full path
  *
