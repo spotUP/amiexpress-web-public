@@ -60,7 +60,7 @@ test('lists a directory with where each file is', async () => {
 
 test('edits a description, moves and deletes - on the listings the board reads', async () => {
   await request(app).patch('/api/files/conferences/1/dirs/1/entries/ONE.LHA').send({ description: ['New text', 'second line'] }).expect(200);
-  expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).toMatch(/ONE\.LHA .*01-01-24  New text\r\n {33}second line/);
+  expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).toMatch(/ONE\.LHA .*01-01-24  New text\n {33}second line/);
 
   await request(app).post('/api/files/conferences/1/dirs/1/entries/ONE.LHA/move').send({ toConf: 2, toDir: 1 }).expect(200);
   expect(fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1')).toContain('ONE.LHA');

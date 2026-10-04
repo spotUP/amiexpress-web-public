@@ -162,7 +162,11 @@ export function writeDirLines(dirFilePath: string, lines: string[]): void {
   } catch (error) {
     console.error('[FileList] Could not back up the directory listing:', error);
   }
-  fs.writeFileSync(dirFilePath, lines.join('\r\n'), 'latin1');
+  // AmigaDOS text: every line ends in LF alone. A listing with no entries
+  // left keeps one LF - a 0-byte DIR file is AllocMem(0) to AmiExpress and
+  // QuickNew, which report "Couldn't Open DirFile".
+  const body = lines.join('\n').replace(/\n+$/, '');
+  fs.writeFileSync(dirFilePath, body.trim() === '' ? '\n' : `${body}\n`, 'latin1');
 }
 
 /**

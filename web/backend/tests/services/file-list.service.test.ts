@@ -98,3 +98,22 @@ test('a file no list names can be purged; a listed file or a path outside the fo
   await expect(deleteUnlisted(ctx(), 1, 'Conf1', 'DIR1')).rejects.toThrow(/not found/);
   expect(fs.existsSync(path.join(root, 'Conf1', 'DIR1'))).toBe(true);
 });
+
+describe('a rewritten listing is the bytes AmigaDOS tools read', () => {
+  // QuickNew and express.e read DIR files line by line on LF; FM's rewrite
+  // joined them with CRLF, and removing the last entry left a 0-byte file,
+  // which AmiExpress's AllocMem(0) turns into "Couldn't Open DirFile" (live
+  // Conf2/DIR1, 2026-10-04).
+  test('an edited listing ends every line with LF alone', async () => {
+    await deleteEntry(ctx(), 1, 1, 'OLD.LHA');
+    const bytes = read('Conf1/DIR1');
+    expect(bytes).not.toContain('\r');
+    expect(bytes.endsWith('\n')).toBe(true);
+    expect(bytes).toContain('KEEP continues\n');
+  });
+
+  test('removing the last entry leaves one LF, never an empty file', async () => {
+    await deleteEntry(ctx(), 2, 1, 'NEWER.LHA');
+    expect(read('Conf2/DIR1')).toBe('\n');
+  });
+});
