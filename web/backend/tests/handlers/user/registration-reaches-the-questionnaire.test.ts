@@ -70,6 +70,7 @@ const users = new Map<string, any>();
 const db = {
   createUser: jest.fn(async (data: any) => { users.set(data.username, { id: 7, secLevel: 10, ...data }); return 7; }),
   getUserByUsername: jest.fn(async (name: string) => users.get(name) ?? null),
+  getUserById: jest.fn(async (id: any) => [...users.values()].find((u: any) => u.id === id) ?? null),
   appendUserToDisk: jest.fn(async () => undefined),
   getConfigRepository: () => ({ getSystemConfig: () => null }),
 };
@@ -107,8 +108,9 @@ const makeSession = () => ({
 
 beforeEach(() => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'questionnaire-'));
-  // getNodeDirectory maps nodeId 1 to Node0 (the index is one behind).
-  fs.mkdirSync(path.join(dataDir, 'Node0'), { recursive: true });
+  // The caller's own node directory, as express.e uses `node` (30339) -
+  // this used to be Node0 for node 1, one behind.
+  fs.mkdirSync(path.join(dataDir, 'Node1'), { recursive: true });
   getConfig = jest.spyOn(config, 'getConfig').mockReturnValue({ dataDir } as any);
   users.clear();
   setNewUserDependencies({ db, sessions: new Map() });
@@ -121,7 +123,7 @@ afterEach(() => {
 
 describe('a caller who confirms the summary', () => {
   it('is asked the first question, and waits there for the answer', async () => {
-    fs.writeFileSync(path.join(dataDir, 'Node0', 'script57600'), SCRIPT, 'latin1');
+    fs.writeFileSync(path.join(dataDir, 'Node1', 'script57600'), SCRIPT, 'latin1');
     const socket = makeSocket();
     const session = makeSession();
 

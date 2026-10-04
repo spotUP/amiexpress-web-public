@@ -70,6 +70,7 @@ const users = new Map<string, any>();
 const db = {
   createUser: jest.fn(async (data: any) => { users.set(data.username, { id: 7, secLevel: 10, ...data }); return 7; }),
   getUserByUsername: jest.fn(async (name: string) => users.get(name) ?? null),
+  getUserById: jest.fn(async (id: any) => [...users.values()].find((u: any) => u.id === id) ?? null),
   appendUserToDisk: jest.fn(async () => undefined),
   getConfigRepository: () => ({ getSystemConfig: () => null }),
 };

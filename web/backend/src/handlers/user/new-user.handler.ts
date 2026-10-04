@@ -1458,40 +1458,36 @@ async function persistQuestionnaireAnswers(session: any, slotNumber: number): Pr
     amigafs.mkdirSync(nodeDir, { recursive: true });
   }
 
-  const now = getSystemTime();
-  // Format: MM-DD-YY (HH:MM:SS) [slotNumber] username (CONNECT baudRate) location
-  // Per express.e:30354 - uses loggedOnUser.slotNumber (user's slot in USER.DATA)
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const year = String(now.getFullYear()).slice(-2);
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const dateStr = `${month}-${day}-${year}`;
-  const timeStr = `(${hours}:${minutes}:${seconds})`;
-  const baudRate = session.connectionBaud || '115200';
+  // express.e:30344-30356: the TempAns header is the CallersLog's logon line -
+  // `MM-DD-YY (HH:MM:SS) [slot] name (connectString) location` - with the
+  // same connect string (CallersLogManager), and no blank line after it.
+  const { formatCallerLogonLine, SOCKET_CONNECT_STRING } = require('../../services/CallersLogManager');
   const header: string[] = [
     '**************************************************************',
-    `${dateStr} ${timeStr} [${slotNumber}] ${session.newUserData.username || 'NEW'} (CONNECT ${baudRate}) ${session.newUserData.location || 'Unknown'}`,
-    ''
+    formatCallerLogonLine({
+      isNew: false,
+      slotNumber,
+      name: session.newUserData.username || 'NEW',
+      connectString: SOCKET_CONNECT_STRING,
+      location: session.newUserData.location || '',
+    }, getSystemTime()),
   ];
 
   for (const entry of questionnaire.transcript) {
     header.push(entry);
   }
-  header.push('');
 
   // Use Unix line endings (LF) to match original AmiExpress format
   const content = header.join('\n');
 
   try {
-    amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\n`, 'utf8');
+    amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\n`, 'latin1');
   } catch (error) {
 console.warn('[NEW USER] Failed to write TempAns file:', error);
   }
 
   try {
-    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\n`, 'utf8');
+    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\n`, 'latin1');
   } catch (error) {
 console.warn('[NEW USER] Failed to append Answers file:', error);
   }
@@ -1499,8 +1495,9 @@ console.warn('[NEW USER] Failed to append Answers file:', error);
 
 function getNodeDirectory(session: any): string {
   const baseDir = config.getConfig().dataDir;
-  const nodeIndex = Math.max(0, (session.nodeId || 1) - 1);
-  const preferred = path.join(baseDir, `Node${nodeIndex}`);
+  // express.e:30339/30344 `Node\d` with `node` - the caller's own node, as
+  // its CallersLog is. This took one off, so node 2's answers went to Node1.
+  const preferred = path.join(baseDir, `Node${session.nodeId || 0}`);
   if (amigafs.existsSync(preferred)) {
     return amigafs.resolvePath(preferred) || preferred;
   }

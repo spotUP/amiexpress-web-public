@@ -1058,11 +1058,9 @@ debugLog("[LibraryManager] Library system ready");
         fs.mkdirSync(nodeDir, { recursive: true });
       }
 
-      // TempAns is a directory for temporary answer files
-      const tempAnsDir = path.join(nodeDir, "TempAns");
-      if (!amigafs.existsSync(tempAnsDir)) {
-        fs.mkdirSync(tempAnsDir, { recursive: true });
-      }
+      // Node<n>/TempAns is a FILE (express.e:30344 Open(..,MODE_NEWFILE),
+      // copied line by line into Answers at 30413): never create it as a
+      // directory, which made every later TempAns write fail.
 
       // NOTE: "Answers" is a FILE (not directory) that stores user questionnaire responses
       // Do NOT create it as a directory - doors like GetAnswer expect it to be a file
