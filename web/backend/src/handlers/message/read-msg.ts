@@ -29,6 +29,7 @@ import type { MailStat, MsgHeader } from '../../services/MessageIndexManager';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
+import { decodeMessageBody } from '../../utils/message-file.util';
 
 /** What express.e keeps in globals while a conference's mail is being read. */
 export interface Reader {
@@ -174,7 +175,7 @@ function showHeader(socket: any, session: BBSSession, r: Reader, h: MsgHeader): 
 async function showBody(socket: any, session: BBSSession, r: Reader, h: MsgHeader, translation?: Translation): Promise<void> {
   let body = '';
   try {
-    body = (amigafs.readFileSync(path.join(msgBaseDir(r.conf), String(h.msgNumb))) as Buffer).toString('latin1');
+    body = decodeMessageBody(amigafs.readFileSync(path.join(msgBaseDir(r.conf), String(h.msgNumb))) as Buffer);
   } catch { /* displayFile of a missing file shows nothing */ }
   const lines = body.split('\n').map((line) => line.replace(/\r$/, ''));
   if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
@@ -432,7 +433,7 @@ function val(text: string): number | null {
 /** loadMsg (9969-9996) of a message's own file: its lines, as the editor holds them. */
 function loadMsgBody(conf: number, msgNumb: number): string[] | null {
   try {
-    const text = (amigafs.readFileSync(path.join(msgBaseDir(conf), String(msgNumb))) as Buffer).toString('latin1');
+    const text = decodeMessageBody(amigafs.readFileSync(path.join(msgBaseDir(conf), String(msgNumb))) as Buffer);
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { loadMsgLines } = require('./door-edit-file');
     return loadMsgLines(text);

@@ -327,4 +327,34 @@ describe('the R reader', () => {
     expect(shown).toContain('first body');
     expect(shown).not.toContain('Msg. Options');
   });
+
+  it('a message the board wrote with å and a C64 rule reads back and moves as written', async () => {
+    // Every writer stores the body as UTF-8 (message-file.util); the reader
+    // read it as Latin-1, so `å` showed as `Ã¥` and M re-saved those two
+    // characters, doubling the damage in the conference it moved to.
+    const { writeMessageFile } = require('../../src/utils/message-file.util');
+    const { puaForScreenCode } = require('@amiexpress/bbs-door-sdk/petscii');
+    const rule = puaForScreenCode(0x40).repeat(3);
+    const n = await writeMessageFile(1, 1, {
+      from: 'Måns', to: 'ALL', subject: 'Hälsning', date: '01-01-26 12:00:00',
+      body: `Måns skrev här\n${rule}`, isPrivate: false,
+    }, root);
+    const written = fs.readFileSync(path.join(root, 'Conf1', 'MsgBase', String(n)));
+
+    const c = caller();
+    c.session.user = { id: 1, username: 'sysop', secLevel: 255, securityFlags: 'T'.repeat(200), userFlags: 0, confAccess: 'XX' };
+    await handleReadMessagesFullCommand(c.socket, c.session, String(n));
+    await c.settle();
+    const shown = c.take();
+    expect(shown).toContain('Måns skrev här\r\n');
+    expect(shown).not.toContain('Ã');
+
+    await c.type('m\r');
+    await c.type('2\r');
+    c.take();
+    await c.type('y');
+    await c.until('deleted');
+    const movedNumber = messageIndexManager.readHeaderFile(2).slice(-1)[0].msgNumb;
+    expect(fs.readFileSync(path.join(root, 'Conf2', 'MsgBase', String(movedNumber)))).toEqual(written);
+  });
 });

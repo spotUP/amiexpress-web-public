@@ -279,6 +279,16 @@ const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
 export function decodeFromWire(session: WireSession | null | undefined, bytes: Buffer): string {
   const charset = resolveWireCharset(session);
   if (charset === "utf-8") return bytes.toString("utf-8");
+  return decodeUtf8Or(bytes, charset);
+}
+
+/**
+ * Bytes that are well-formed UTF-8 as UTF-8, anything else in `charset`.
+ * The one rule for text whose writer may have been either: a caller's
+ * keystrokes (above), or a message body the board saved as UTF-8 beside one
+ * an Amiga door saved as raw Latin-1 (message-file.util decodeMessageBody).
+ */
+export function decodeUtf8Or(bytes: Buffer, charset: Exclude<WireCharset, "utf-8">): string {
   if (!bytes.some((byte) => byte >= 0x80)) return bytes.toString("latin1");
   try {
     return strictUtf8.decode(bytes);

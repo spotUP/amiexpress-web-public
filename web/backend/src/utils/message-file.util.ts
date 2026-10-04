@@ -17,6 +17,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { getConferenceDir } from './file-hold.util';
+import { decodeUtf8Or } from './wire-encoding.util';
 import { messageIndexManager, MsgHeader, MsgStatus, MailStat } from '../services/MessageIndexManager';
 
 /**
@@ -276,6 +277,16 @@ console.log(`[Message] Wrote Conf${confNum} msg ${msgNum}: ${message.subject}`);
 }
 
 /**
+ * A message body file's text. The board's writers store UTF-8 (below); an
+ * Amiga door, or a message from an Amiga board, stores raw Latin-1. Every
+ * reader of a body - R, M, quoting - goes through this, so a message reads
+ * back as it was written whoever wrote it.
+ */
+export function decodeMessageBody(bytes: Buffer): string {
+  return decodeUtf8Or(bytes, 'iso-8859-1');
+}
+
+/**
  * Read a message — combines body file + HeaderFile metadata.
  */
 export async function readMessageFile(
@@ -287,7 +298,7 @@ export async function readMessageFile(
 
   let body: string;
   try {
-    body = await fs.readFile(msgFilePath, 'utf-8');
+    body = decodeMessageBody(await fs.readFile(msgFilePath));
     // Strip trailing newline added during write
     if (body.endsWith('\n')) body = body.slice(0, -1);
   } catch (err: any) {
