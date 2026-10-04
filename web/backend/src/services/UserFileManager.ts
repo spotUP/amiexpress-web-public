@@ -129,6 +129,17 @@ function byteToExpert(byte: number): string {
   return '';
 }
 
+/** Record sizes and the offsets of the fields express.e acts on - see UserFileManager.recordLayout. */
+export interface UserRecordLayout {
+  userSize: number;
+  keysSize: number;
+  miscSize: number;
+  slotNumberOffset: number;
+  userNewUserOffset: number;
+  keysNumberOffset: number;
+  keysNewUserOffset: number;
+}
+
 export class UserFileManager {
   private bbsRoot: string;
   private userDataPath: string;
@@ -1176,6 +1187,54 @@ console.error('[UserFileManager] Error reading user files:', error);
    * Update a specific user's record in user.data, user.keys, and user.misc
    * Writes to the correct slot position (slots are 1-indexed in AmiExpress)
    */
+
+  /**
+   * Where a door's raw account copy keeps the fields the board itself acts
+   * on, read off this file's own serializers, so a 68K door's LOAD_ACCOUNT /
+   * SAVE_ACCOUNT moves the same records the board writes.
+   *
+   * express.e moves whole records - `Read/Write(fh,ptr,SIZEOF user)` at
+   * `(slot-1)*SIZEOF` (loadAccount 7977, saveAccount 8025) - and acts on
+   * three fields of them: user.slotNumber (saveAccount 8037-8041,
+   * doorMsgSaveAccount 4580), userKeys.number (4581) and the newUser byte it
+   * copies from the user record into the keys record (8061). axobjects.e:
+   * user is 232 bytes (pad at 83, slotNumber INT at 84), userKeys 56 (pad at
+   * 31, number LONG at 32, newUser at 36), userMisc 248.
+   *
+   * The XIM door path kept its own numbers - 239/54/256 and slotNumber at 83
+   * - so every slot past the first was read and written at the wrong place.
+   * Each offset here is found by serializing two records that differ in that
+   * field alone, so the layout cannot drift from the writer.
+   */
+  public recordLayout(): UserRecordLayout {
+    if (this.layout) return this.layout;
+    const probe = (fields: Partial<User>, slot: number) => {
+      const user = { username: 'probe', created: new Date(0), lastLogin: new Date(0), ...fields } as unknown as User;
+      return { user: this.userRecord(user, slot), keys: this.userKeysRecord(user, slot) };
+    };
+    /** The field's first byte: the last byte that differs, less the field's width. */
+    const fieldAt = (a: Buffer, b: Buffer, width: number): number => {
+      let last = -1;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) last = i;
+      if (last < 0) throw new Error('recordLayout: probe records do not differ');
+      return last - (width - 1);
+    };
+    const slotA = probe({}, 1);
+    const slotB = probe({}, 2);
+    const fresh = probe({ newUser: true } as Partial<User>, 1);
+    this.layout = {
+      userSize: this.USER_STRUCT_SIZE,
+      keysSize: this.USERKEYS_STRUCT_SIZE,
+      miscSize: this.USERMISC_STRUCT_SIZE,
+      slotNumberOffset: fieldAt(slotA.user, slotB.user, 2),
+      userNewUserOffset: fieldAt(slotA.user, fresh.user, 1),
+      keysNumberOffset: fieldAt(slotA.keys, slotB.keys, 4),
+      keysNewUserOffset: fieldAt(slotA.keys, fresh.keys, 1),
+    };
+    return this.layout;
+  }
+
+  private layout: UserRecordLayout | null = null;
 
   /**
    * Byte offset of conferenceAccess[10] inside a user.data record.

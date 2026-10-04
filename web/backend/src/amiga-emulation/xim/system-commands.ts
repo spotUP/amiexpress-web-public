@@ -5,6 +5,7 @@
  */
 
 import { messagePointerFileManager, CONFBASE_RECORD_SIZE } from '../../services/MessagePointerFileManager';
+import { userFileManager } from '../../services/UserFileManager';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
@@ -1133,9 +1134,10 @@ debugLog(
       return;
     }
 
-    const userBuf = userPtr ? this.readSlot(this.userDataPath(), slot, 239) : null;
-    const keysBuf = keysPtr ? this.readSlot(this.userKeysPath(), slot, 54) : null;
-    const miscBuf = miscPtr ? this.readSlot(this.userMiscPath(), slot, 256) : null;
+    const layout = userFileManager.recordLayout();
+    const userBuf = userPtr ? this.readSlot(this.userDataPath(), slot, layout.userSize) : null;
+    const keysBuf = keysPtr ? this.readSlot(this.userKeysPath(), slot, layout.keysSize) : null;
+    const miscBuf = miscPtr ? this.readSlot(this.userMiscPath(), slot, layout.miscSize) : null;
 
     // AQUASCAN_DEBUG: log loadAccount calls — AquaScan uses this to read user struct
     if (userBuf && userPtr) {
@@ -1163,32 +1165,37 @@ debugLog(
       return;
     }
 
-    const userBuf = userPtr ? this.readBuffer(userPtr, 239) : null;
-    const keysBuf = keysPtr ? this.readBuffer(keysPtr, 54) : null;
-    const miscBuf = miscPtr ? this.readBuffer(miscPtr, 256) : null;
+    // express.e doorMsgSaveAccount (4570-4586) + saveAccount (8025-8077):
+    // the record goes back whole, at its OWN slotNumber; a record whose
+    // slotNumber is 0 is force-saved at msg.data with keys.number 0, and its
+    // slotNumber stays 0. The record is never renumbered on the way.
+    const layout = userFileManager.recordLayout();
+    const userBuf = userPtr ? this.readBuffer(userPtr, layout.userSize) : null;
+    const keysBuf = keysPtr ? this.readBuffer(keysPtr, layout.keysSize) : null;
+    const miscBuf = miscPtr ? this.readBuffer(miscPtr, layout.miscSize) : null;
 
-    let slot = userBuf ? this.readSlotNumber(userBuf) : 0;
-    if (slot <= 0 && msg.data > 0) {
-      slot = msg.data;
-    }
+    const ownSlot = userBuf ? userBuf.readInt16BE(layout.slotNumberOffset) : 0;
+    const slot = ownSlot > 0 ? ownSlot : msg.data;
     if (slot <= 0) {
       this.reply(msg, 0);
       return;
     }
 
+    if (keysBuf) {
+      if (ownSlot === 0) keysBuf.writeInt32BE(0, layout.keysNumberOffset);
+      // saveAccount 8061: the keys record's newUser follows the user record's.
+      if (userBuf) keysBuf[layout.keysNewUserOffset] = userBuf[layout.userNewUserOffset] ? 1 : 0;
+      this.writeBuffer(keysPtr, keysBuf);
+    }
+
     if (userBuf) {
-      this.writeSlot(this.userDataPath(), slot, this.setSlotNumber(userBuf, slot), 239);
+      this.writeSlot(this.userDataPath(), slot, userBuf, layout.userSize);
     }
     if (keysBuf) {
-      this.writeSlot(
-        this.userKeysPath(),
-        slot,
-        this.setUserKeysNumber(keysBuf, slot),
-        54
-      );
+      this.writeSlot(this.userKeysPath(), slot, keysBuf, layout.keysSize);
     }
     if (miscBuf) {
-      this.writeSlot(this.userMiscPath(), slot, miscBuf, 256);
+      this.writeSlot(this.userMiscPath(), slot, miscBuf, layout.miscSize);
     }
 
     this.reply(msg, 1);
@@ -1199,13 +1206,14 @@ debugLog(
     const keysPtr = msg.filler2 || 0;
     const miscPtr = msg.filler3 || 0;
 
+    const layout = userFileManager.recordLayout();
     const slot = this.findFreeUserSlot();
-    const userBuf = Buffer.alloc(239);
-    const keysBuf = Buffer.alloc(54);
-    const miscBuf = Buffer.alloc(256);
+    const userBuf = Buffer.alloc(layout.userSize);
+    const keysBuf = Buffer.alloc(layout.keysSize);
+    const miscBuf = Buffer.alloc(layout.miscSize);
 
-    this.setSlotNumber(userBuf, slot);
-    this.setUserKeysNumber(keysBuf, slot);
+    userBuf.writeInt16BE(slot, layout.slotNumberOffset);
+    keysBuf.writeInt32BE(slot, layout.keysNumberOffset);
 
     if (userPtr) this.writeBuffer(userPtr, userBuf);
     if (keysPtr) this.writeBuffer(keysPtr, keysBuf);
@@ -1221,7 +1229,7 @@ debugLog(
       return;
     }
 
-    const buf = this.readSlot(this.userKeysPath(), slot, 54);
+    const buf = this.readSlot(this.userKeysPath(), slot, userFileManager.recordLayout().keysSize);
     if (!buf) {
       this.reply(msg, 0);
       return;
@@ -1238,7 +1246,8 @@ debugLog(
       return;
     }
     const stats = amigafs.statSync(dataPath);
-    const total = Math.floor(stats.size / 239);
+    // express.e findLastAccount (21075-21083): size / SIZEOF user.
+    const total = Math.floor(stats.size / userFileManager.recordLayout().userSize);
     this.reply(msg, total);
   }
 
@@ -1442,25 +1451,6 @@ console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
     }
   }
 
-  private readSlotNumber(buf: Buffer): number {
-    if (buf.length < 85) return 0;
-    return buf.readUInt16BE(83);
-  }
-
-  private setSlotNumber(buf: Buffer, slot: number): Buffer {
-    if (buf.length >= 85) {
-      buf.writeUInt16BE(slot, 83);
-    }
-    return buf;
-  }
-
-  private setUserKeysNumber(buf: Buffer, slot: number): Buffer {
-    if (buf.length >= 35) {
-      buf.writeInt32BE(slot, 31);
-    }
-    return buf;
-  }
-
   private findFreeUserSlot(): number {
     const dataPath = this.userDataPath();
     if (!amigafs.existsSync(dataPath)) {
@@ -1471,12 +1461,13 @@ console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
       const fd = amigafs.openSync(dataPath, 'r');
       try {
         const stats = fs.fstatSync(fd);
-        const count = Math.floor(stats.size / 239);
-        const buf = Buffer.alloc(239);
+        const { userSize, slotNumberOffset } = userFileManager.recordLayout();
+        const count = Math.floor(stats.size / userSize);
+        const buf = Buffer.alloc(userSize);
         for (let i = 0; i < count; i++) {
-          const bytes = fs.readSync(fd, buf, 0, 239, i * 239);
-          if (bytes < 239) break;
-          if (buf.readUInt16BE(83) === 0) {
+          const bytes = fs.readSync(fd, buf, 0, userSize, i * userSize);
+          if (bytes < userSize) break;
+          if (buf.readInt16BE(slotNumberOffset) === 0) {
             return i + 1;
           }
         }
