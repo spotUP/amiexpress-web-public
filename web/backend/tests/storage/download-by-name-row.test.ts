@@ -112,30 +112,3 @@ describe('getFileEntryByName', () => {
     expect(await repo.getFileEntryByName(conferenceId, 'no-such-file.lha')).toBeNull();
   });
 });
-
-describe('the download socket handler', () => {
-  const { registerFileHandlers } = require('../../src/server/file-socket-handlers');
-  const { setSession, deleteSession } = require('../../src/server/session-manager');
-
-  it('looks a download up by name through the repository, and books that row', async () => {
-    const handlers = new Map<string, (data: any) => Promise<void>>();
-    const socket: any = {
-      id: 'by-name-download',
-      emit: () => true,
-      on: (event: string, fn: (data: any) => Promise<void>) => { handlers.set(event, fn); },
-    };
-    const session: any = { nodeId: 96, currentConf: 1, user: { id: 'u1', username: 'caller' } };
-    setSession(socket.id, session);
-    try {
-      registerFileHandlers(socket);
-      await handlers.get('file-download-started')!({ filename: 'pooled.lha' });
-
-      expect(handlerDb.getFileEntryByName).toHaveBeenCalledTimes(1);
-      expect(handlerDb.getFileEntryByName.mock.calls[0][0]).toBe(1);
-      expect(String(handlerDb.getFileEntryByName.mock.calls[0][1]).toUpperCase()).toBe('POOLED.LHA');
-      expect(handlerDb.updateFileEntry).toHaveBeenCalledWith(42, { downloads: 4 });
-    } finally {
-      deleteSession(socket.id);
-    }
-  });
-});

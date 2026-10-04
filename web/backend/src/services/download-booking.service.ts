@@ -183,6 +183,44 @@ async function saveAccountRow(user: NonNullable<BBSSession['user']>): Promise<vo
   });
 }
 
+/**
+ * What the board's own extras make of a download: the catalogue's per-file
+ * count, the FILE_DOWNLOADED webhook and the achievement. They lived only in
+ * the browser's `file-download-started` handler, which booked the download a
+ * second time; here they run once, for every transport.
+ */
+async function announceDownload(session: BBSSession, file: BookableFile, name: string): Promise<void> {
+  const user = session.user;
+  if (!user) return;
+  const conferenceId = file.confNum || session.currentConf || 1;
+  let entry: { id: number; downloads?: number; size?: number; uploadDate?: Date } | null = null;
+  try {
+    entry = await db.getFileEntryByName(conferenceId, name);
+    if (entry) await db.updateFileEntry(entry.id, { downloads: (entry.downloads || 0) + 1 });
+  } catch (err) {
+    console.warn(`[download-booking] catalogue count for ${name} failed:`, err);
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { webhookService, WebhookTrigger } = require('./webhook.service');
+    const conference = await db.getConferenceById(conferenceId);
+    await webhookService.sendWebhook(WebhookTrigger.FILE_DOWNLOADED, {
+      username: user.username,
+      userId: user.id,
+      gdprConsented: !!(user as any).gdprConsentAt,
+      filename: name,
+      filesize: file.size,
+      conference: conference?.name || 'Unknown',
+    });
+  } catch (err) {
+    console.warn(`[download-booking] download webhook for ${name} failed:`, err);
+  }
+  // Achievements (SP2): the download, keyed by the file's age. Non-throwing.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { reportDownload } = require('../achievements/sites');
+  reportDownload(session as any, entry ?? { size: file.size });
+}
+
 /** Charge the caller for these files, one at a time, and say so to the board. */
 export async function bookDownloads(session: BBSSession, files: readonly BookableFile[]): Promise<void> {
   const user = session.user;
@@ -196,6 +234,7 @@ export async function bookDownloads(session: BBSSession, files: readonly Bookabl
       await saveAccount(session);
       await bookConference(session, file, isFree);
       doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, file.size);
+      await announceDownload(session, file, name);
       emitDownload({
         username: user.username,
         nodeId: session.nodeId || 1,

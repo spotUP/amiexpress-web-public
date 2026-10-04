@@ -2367,11 +2367,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Track download start time for CPS calculation
       const downloadStartTime = Date.now();
 
-      // Notify backend that download started
-      socket.emit('file-download-started', {
-        filename: fileInfo.filename,
-        startTime: downloadStartTime
-      });
+      // No "download started" message: the board books a browser download
+      // at handoff (download-booking.service), and a second booking from here
+      // charged the caller twice.
 
       try {
         // Use fetch to download so we can track completion time
