@@ -983,13 +983,16 @@ console.log(
     },
   },
   {
-    offset: -114, // LVO -114 (0xFF8E) - amiga.lib CreatePort
-    name: "CreatePort",
-    handler: (emu, lib: ExecLibrary) => {
-      const nameAddr = emu.getRegister(8); // A0 = name pointer
-      const priority = emu.getRegister(0); // D0 = priority
-      debugLog(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
-      return lib.createPort(nameAddr, priority);
+    // LVO -114 is Debug(flags) (exec_lib.fd): drop into the ROM debugger.
+    // There is nothing to drop into here, so it returns. This slot used to
+    // hold "CreatePort", which is an amiga.lib function linked INTO a door
+    // (it calls CreateMsgPort / AllocSignal) and has no exec LVO at all - a
+    // door calling exec -114 got a message port it never asked for.
+    offset: -114,
+    name: "Debug",
+    handler: (emu) => {
+      debugLog(`[exec-vectors] Debug(0x${emu.getRegister(0).toString(16)}) - no ROM debugger, returning`);
+      return 0;
     },
   },
   {
