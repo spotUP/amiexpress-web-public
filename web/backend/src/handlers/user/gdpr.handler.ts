@@ -196,9 +196,13 @@ export async function handleForgetMeUsernameInput(socket: any, session: BBSSessi
   emitText(socket, AnsiUtil.colorize('Erasing your data...\r\n', 'red'));
 
   try {
-    const result = await eraseUserData(db, user.id);
+    const { nodeTooltype } = require('../../utils/node-tooltypes.util');
+    const result = await eraseUserData(db, user.id, {
+      nodeId: session.nodeId ?? 0,
+      confDbName: nodeTooltype(session.nodeId ?? 0, 'CONF_DB') || 'Conf.DB',
+    });
     emitText(socket, AnsiUtil.colorize(
-      `Scrubbed ${result.messageBodiesScrubbed} message bodies, ${result.answersFilesScrubbed} questionnaire files, ${result.callersLogFilesRedacted} log files.\r\n`,
+      `Scrubbed ${result.messageFilesScrubbed} messages, ${result.answersFilesScrubbed} questionnaire files, ${result.callersLogFilesRedacted} log files.\r\n`,
       'yellow'
     ));
     emitText(socket, AnsiUtil.colorize('Your data has been erased.\r\n', 'green'));
