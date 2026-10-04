@@ -116,6 +116,10 @@ const NOT_WRITTEN_BACK: Record<string, string[]> = {
     'inPool',
     'degraded',
     'outOfRequests',
+    // A local drive's volume as this host resolves it, and its free space
+    // (express.e freeDiskSpace, 17400-17432) - measured, nothing to save.
+    'resolvedPath',
+    'freeBytes',
   ],
 };
 

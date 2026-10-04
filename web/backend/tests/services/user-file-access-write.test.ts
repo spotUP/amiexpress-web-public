@@ -40,7 +40,8 @@ describe('writeConferenceAccessAt', () => {
 
     const after = fs.readFileSync(path.join(root, 'user.data'));
     const at = SIZE + offset;
-    expect(after.subarray(at, at + 10).toString('latin1')).toBe('XX_X______');
+    // Nine flags and the NUL express.e's AstrCopy(..,10) leaves (848aa4329).
+    expect(after.subarray(at, at + 10).toString('latin1')).toBe('XX_X_____\0');
     // Everything else - including slot 1 and slot 3 - is untouched.
     expect(after.subarray(0, at)).toEqual(before.subarray(0, at));
     expect(after.subarray(at + 10)).toEqual(before.subarray(at + 10));
