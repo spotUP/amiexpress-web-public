@@ -70,11 +70,14 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
       const app = express();
       registerHttpRoutes(app, {} as never);
 
-      const over = await request(app).post('/api/upload').attach('file', Buffer.alloc(64, 1), 'BIG.LHA');
+      // Each upload carries the one-time ticket the board issues with the
+      // request (BBSApi.requestArchiveUpload); see the-open-routes-ask-who-is-calling.
+      const { issueUploadTicket } = require('../../src/handlers/file/download-ticket');
+      const over = await request(app).post(issueUploadTicket('cap-socket')).attach('file', Buffer.alloc(64, 1), 'BIG.LHA');
       expect(over.status).toBe(500);
       expect(String(over.body.error)).toMatch(/too large/i);
 
-      const under = await request(app).post('/api/upload').attach('file', Buffer.alloc(16, 1), 'SMALL.LHA');
+      const under = await request(app).post(issueUploadTicket('cap-socket')).attach('file', Buffer.alloc(16, 1), 'SMALL.LHA');
       expect(under.status).toBe(200);
       expect(under.body.size).toBe(16);
     } finally {
@@ -117,7 +120,7 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
     expect(bbs).toMatch(/fetch\(\s*[^,)]*uploadUrl[\s\S]*?method:\s*['"]POST['"]/);
   });
 
-  test('backend listens for file-upload-ready and feeds the multer path to processFileUpload', async () => {
+  test('backend listens for file-upload-ready and completes the door with the file /api/upload saved', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-ready-'));
     const multerFile = path.join(dataDir, 'multer-upload.tmp');
     fs.writeFileSync(multerFile, 'archive bytes');
@@ -137,14 +140,18 @@ describe('socket.io upload buffer sizing (regression for #11)', () => {
       nodeId: 97,
       pendingDoorUpload: true,
       pendingDoorUploadCallback: (r: { path: string; filename: string }) => delivered.push(r),
+      // What /api/upload records for the ticketed session; the event's own
+      // `path` is the browser's word and is not used.
+      doorUploadSavedPath: path.join(dataDir, 'DOOR.LHA'),
     };
+    fs.renameSync(multerFile, path.join(dataDir, 'DOOR.LHA'));
     setSession(socket.id, session);
     try {
       registerFileHandlers(socket);
       const ready = handlers.get('file-upload-ready');
       expect(ready).toBeDefined();
 
-      await ready!({ filename: 'DOOR.LHA', size: 13, path: multerFile });
+      await ready!({ filename: 'DOOR.LHA', size: 13, path: '/etc/passwd' });
 
       expect(delivered).toEqual([{ path: path.join(dataDir, 'Doors', 'archives', 'DOOR.LHA'), filename: 'DOOR.LHA' }]);
       expect(fs.readFileSync(delivered[0].path, 'utf8')).toBe('archive bytes');

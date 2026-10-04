@@ -1930,7 +1930,12 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
         reject(err);
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { issueUploadTicket } = require('../handlers/file/download-ticket');
       this.socket.emit('show-file-upload', {
+        // /api/upload takes no login: this one-time ticket is what says the
+        // board asked THIS caller for a file.
+        uploadUrl: issueUploadTicket(this.socket.id),
         accept: '.zip,.lha,.lzh,.lzx',
         maxSize: 100 * 1024 * 1024,
         multiple: false,

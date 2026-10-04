@@ -15,15 +15,24 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ||
   (window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
 
 /**
+ * The wizard's routes spend the board's AI quota, so they take the logged-in
+ * token the rest of this app stores (open-surface audit, 2026-10-04).
+ */
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('authToken');
+  return token
+    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+    : { 'Content-Type': 'application/json' };
+}
+
+/**
  * Enhance a game prompt using AI
  */
 export async function enhancePrompt(request: EnhancementRequest): Promise<EnhancementResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/wizard/enhance`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify(request)
     });
 
@@ -47,9 +56,7 @@ export async function analyzePrompt(promptText: string): Promise<PromptMetadata>
   try {
     const response = await fetch(`${API_BASE_URL}/api/wizard/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify({ prompt: promptText })
     });
 
@@ -204,9 +211,7 @@ export async function enhanceAudioDescription(request: AudioEnhancementRequest):
   try {
     const response = await fetch(`${API_BASE_URL}/api/wizard/enhance-audio`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify(request)
     });
 
@@ -230,9 +235,7 @@ export async function analyzeAudioDescription(audioText: string): Promise<AudioM
   try {
     const response = await fetch(`${API_BASE_URL}/api/wizard/analyze-audio`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify({ audioDescription: audioText })
     });
 
@@ -435,7 +438,7 @@ export async function generateGame(data: {
   try {
     const response = await fetch(`${API_BASE_URL}/api/wizard/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(data)
     });
 

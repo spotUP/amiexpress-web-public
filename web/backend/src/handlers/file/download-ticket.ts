@@ -48,3 +48,29 @@ export function redeemDownloadTicket(token: string): string | null {
   tickets.delete(token);
   return ticket.path;
 }
+
+/**
+ * An upload the board asked one caller for - a TypeScript door's
+ * requestArchiveUpload - is posted to `/api/upload`, which takes no login.
+ * The board issues this ticket with the request, so only that caller's
+ * browser can post one file, once, within the same few minutes; the route
+ * finds the session the file belongs to from it.
+ */
+const uploadTickets = new Map<string, { socketId: string; expires: number }>();
+
+/** The URL the caller's browser posts its one upload to. */
+export function issueUploadTicket(socketId: string): string {
+  const now = Date.now();
+  for (const [token, t] of uploadTickets) if (t.expires <= now) uploadTickets.delete(token);
+  const token = randomBytes(24).toString('hex');
+  uploadTickets.set(token, { socketId, expires: now + TICKET_LIFETIME_MS });
+  return `/api/upload?ticket=${token}`;
+}
+
+/** The socket an upload ticket was issued to, and the ticket is spent; null when there is none. */
+export function redeemUploadTicket(token: string): string | null {
+  const ticket = uploadTickets.get(token);
+  if (!ticket) return null;
+  uploadTickets.delete(token);
+  return ticket.expires > Date.now() ? ticket.socketId : null;
+}

@@ -395,6 +395,7 @@ export interface BBSSession {
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
   pendingDoorUpload?: boolean;        // requestArchiveUpload() is waiting for file-upload event
+  doorUploadSavedPath?: string;      // where /api/upload saved this session's ticketed door upload
   pendingDoorUploadCallback?: ((result: { path: string; filename: string }) => void) | null;
   pendingDoorUploadReject?: ((reason: Error) => void) | null;
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors

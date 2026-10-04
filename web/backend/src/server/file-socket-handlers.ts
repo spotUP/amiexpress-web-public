@@ -790,6 +790,16 @@ console.log("[Upload] No upload context for batch complete");
  * the BBS-user upload path is now ZMODEM-only. The previous "regular
  * file upload to file area" branches were dead and have been removed.
  */
+/** The door-upload completion, for its test: same function the socket event runs. */
+export function processDoorUploadForTest(
+  session: BBSSession,
+  data: { filename: string; size: number; path?: string },
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../config');
+  return processFileUpload({} as Socket, session, config, { originalname: data.filename, ...data });
+}
+
 async function processFileUpload(
   socket: Socket,
   session: BBSSession,
@@ -800,12 +810,18 @@ async function processFileUpload(
   // pendingDoorUpload before emitting `show-file-upload`; this is the
   // sole live caller of processFileUpload after Phase 4.
   if (session.pendingDoorUpload) {
-    if (data.path) {
+    // The file the board saved for this session's ticketed upload
+    // (routes-setup /api/upload) - never `data.path`: that is whatever the
+    // browser says, and copying from it copied any file on the server.
+    const savedPath = session.doorUploadSavedPath;
+    session.doorUploadSavedPath = undefined;
+    if (savedPath && fs.existsSync(savedPath)) {
       const archivesDir = path.join(config.get('dataDir'), 'Doors', 'archives');
       fs.mkdirSync(archivesDir, { recursive: true });
-      const destPath = path.join(archivesDir, path.basename(data.filename));
-      fs.copyFileSync(data.path, destPath);
-      session.pendingDoorUploadCallback?.({ path: destPath, filename: data.filename });
+      const archiveName = path.basename(savedPath);
+      const destPath = path.join(archivesDir, archiveName);
+      fs.copyFileSync(savedPath, destPath);
+      session.pendingDoorUploadCallback?.({ path: destPath, filename: archiveName });
     } else {
       session.pendingDoorUploadReject?.(new Error('Upload failed: no file path received'));
     }

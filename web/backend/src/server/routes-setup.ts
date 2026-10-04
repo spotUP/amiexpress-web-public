@@ -24,6 +24,9 @@ import { config } from '../config';
 import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, requireLevel, AuthRequest } from '../middleware/auth.middleware';
+import { isPlainFileName } from '../utils/plain-file-name.util';
+import { redeemUploadTicket } from '../handlers/file/download-ticket';
+import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
 import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
@@ -85,8 +88,12 @@ console.error('[Upload] Error setting destination:', error);
   },
   filename: (req: any, file: any, cb: (error: Error | null, filename: string) => void) => {
     try {
-console.log('[Upload] Storing file as:', file.originalname);
-      cb(null, file.originalname);
+      // One plain name: a client's `../../x` must not be joined above the
+      // playpen. The directory part a browser may send is dropped.
+      const name = path.basename(String(file.originalname ?? '').replace(/\\/g, '/'));
+      if (!isPlainFileName(name)) return cb(new Error('That is not a file name the board can store'), '');
+console.log('[Upload] Storing file as:', name);
+      cb(null, name);
     } catch (error) {
 console.error('[Upload] Error setting filename:', error);
       cb(error as Error, '');
@@ -553,11 +560,13 @@ console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
   }
 
   // ===== Game Prompt Wizard API Endpoints =====
-  app.post('/api/wizard/enhance', (req: Request, res: Response) => enhancePrompt(req, res));
-  app.post('/api/wizard/analyze', (req: Request, res: Response) => analyzePrompt(req, res));
-  app.post('/api/wizard/enhance-audio', (req: Request, res: Response) => enhanceAudioDescription(req, res));
-  app.post('/api/wizard/analyze-audio', (req: Request, res: Response) => analyzeAudioDescription(req, res));
-  app.post('/api/wizard/generate', (req: Request, res: Response) => generateGame(req, res));
+  // Each of these spends the board's AI quota: a door author's tool, not a
+  // visitor's (open-surface audit, 2026-10-04).
+  app.post('/api/wizard/enhance', authenticateToken(db), requireLevel(100), (req: Request, res: Response) => enhancePrompt(req, res));
+  app.post('/api/wizard/analyze', authenticateToken(db), requireLevel(100), (req: Request, res: Response) => analyzePrompt(req, res));
+  app.post('/api/wizard/enhance-audio', authenticateToken(db), requireLevel(100), (req: Request, res: Response) => enhanceAudioDescription(req, res));
+  app.post('/api/wizard/analyze-audio', authenticateToken(db), requireLevel(100), (req: Request, res: Response) => analyzeAudioDescription(req, res));
+  app.post('/api/wizard/generate', authenticateToken(db), requireLevel(100), (req: Request, res: Response) => generateGame(req, res));
 
   // ===== File Upload Routes =====
   // BBS user file uploads were migrated to ZMODEM/lrzsz in c67e50385
@@ -571,6 +580,13 @@ console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
   //      route below.
   app.post('/api/upload', (req: Request, res: Response) => {
 console.log('[Upload] Upload request received from:', req.headers.origin);
+
+    // Only the caller the board asked: the ticket came with the request
+    // (BBSApi.requestArchiveUpload) and names that caller's session.
+    const socketId = redeemUploadTicket(String(req.query.ticket ?? ''));
+    if (!socketId) {
+      return res.status(403).json({ error: 'This upload was not asked for' });
+    }
 
     upload.single('file')(req, res, (err: any) => {
       if (err) {
@@ -586,6 +602,10 @@ console.error('[Upload] No file in request');
 
 console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
 console.log('[Upload] Saved to:', req.file.path);
+        // The door's request completes with THIS file - the board's own
+        // record of where it saved it, never a path the browser reports.
+        const session = getSession(socketId);
+        if (session?.pendingDoorUpload) session.doorUploadSavedPath = req.file.path;
 
         res.json({
           filename: req.file.filename || req.file.originalname,
@@ -601,7 +621,7 @@ console.error('[Upload] Processing error:', error);
   });
 
   // Door upload endpoint
-  app.post('/api/upload/door', (req: Request, res: Response) => {
+  app.post('/api/upload/door', authenticateToken(db), requireSysop(), (req: Request, res: Response) => {
 console.log('[Door Upload] Upload request received from:', req.headers.origin);
 
     upload.single('door')(req, res, (err: any) => {
@@ -625,7 +645,12 @@ console.log('[Door Upload] Saved to:', req.file.path);
           fs.mkdirSync(doorsArchivePath, { recursive: true });
         }
 
-        const destPath = path.join(doorsArchivePath, req.file.originalname);
+        const archiveName = path.basename(req.file.filename);
+        if (!isPlainFileName(archiveName)) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ error: 'That is not a file name the board can store' });
+        }
+        const destPath = path.join(doorsArchivePath, archiveName);
         fs.copyFileSync(req.file.path, destPath);
 console.log('[Door Upload] Copied to archives:', destPath);
 
@@ -646,7 +671,7 @@ console.error('[Door Upload] Processing error:', error);
   });
 
   // ===== Door Hot-Reload Endpoint =====
-  app.post('/api/doors/reload', async (req: Request, res: Response) => {
+  app.post('/api/doors/reload', authenticateToken(db), requireSysop(), async (req: Request, res: Response) => {
     try {
 console.log('[Door Reload] Hot-reload request received');
 
@@ -702,10 +727,15 @@ console.error('[Door Reload] Unexpected error:', error);
     try {
       const confNum = parseInt(req.params.confNum);
       const dirNum = parseInt(req.params.dirNum);
-      const filename = decodeURIComponent(req.params.filename);
+      // Express has already decoded the parameter once; decoding it again
+      // turned `%252f` into a `/` that path.join then followed upwards.
+      const filename = req.params.filename;
 
       if (isNaN(confNum) || isNaN(dirNum) || !filename) {
         return res.status(400).json({ error: 'Invalid download parameters' });
+      }
+      if (!isPlainFileName(filename)) {
+        return res.status(404).json({ error: 'File not found on server' });
       }
 
       const dataDir = config.get('dataDir');
