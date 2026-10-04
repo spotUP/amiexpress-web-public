@@ -19,6 +19,8 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { handleCommentToSysopCommand } from '../chat/preference-chat-commands.handler';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
+import { callersLogManager } from '../../services/CallersLogManager';
+import { formatLongDateTime, getSystemTime } from '../../utils/date-time.util';
 
 /**
  * Handle O command - Page Sysop
@@ -91,6 +93,15 @@ export async function handlePageSysopCommand(
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
+
+  // express.e:20343-20345 - ccom() logs the page before anything else:
+  //   formatLongDateTime(getSystemTime(),display_time)
+  //   StringF(str,'\tOperator Paged at (\s)',display_time)
+  // SAmiLog flags the call's page from it.
+  callersLogManager.logActivity(
+    session.nodeId || 1,
+    `\tOperator Paged at (${formatLongDateTime(getSystemTime())})`,
+  );
 
   try {
     // Get operator chat repository

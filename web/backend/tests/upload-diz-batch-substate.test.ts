@@ -63,6 +63,7 @@ jest.mock('../src/utils/download-logging.util', () => ({
   writeUDSessionHeader: jest.fn(async () => undefined),
   writeToCallersLog: jest.fn(async () => undefined),
   writeToUDLog: jest.fn(async () => undefined),
+  logUpload: jest.fn(async () => undefined),
 }));
 jest.mock('../src/utils/clean-playpen.util', () => ({ cleanPlayPen: jest.fn(async () => undefined) }));
 jest.mock('../src/services/resume-stuff.service', () => ({

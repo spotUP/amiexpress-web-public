@@ -11,6 +11,7 @@ import { User } from '../types';
 import { getACSConfig, LevelFlags } from './acs.util';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
+import { leftField } from '@amiexpress/bbs-door-sdk/formats/estringf';
 
 /**
  * Log one file going out - express.e:9475-9491 logUDFile(dl=TRUE):
@@ -35,6 +36,56 @@ export async function logDownload(
 console.log(`[DOWNLOAD] ${user.username || 'Unknown'}${line}`);
   await writeToCallersLog(line, nodeId);
   await writeToUDLog(line, nodeId);
+}
+
+/** express.e FilePart(): the name after the last `/` or `:`. */
+function filePart(name: string): string {
+  return name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf(':')) + 1);
+}
+
+/**
+ * One file coming in - express.e:9480-9486 logUDFile(dl=FALSE):
+ *
+ *   StringF(tempStr,'\tUploading \s[12] \d bytes',FilePart(fileName),filesize)
+ *
+ * `\s[12]` is NOT "at least twelve": the E compiler emits it as
+ * `%-12.12s` - left-justified, padded AND cut to exactly twelve. Read from
+ * the string table of a real express binary
+ * (Documentation/7-Reference Sources/reference-boardBBS/express:
+ * `\tUploading %-12.12s %-ld bytes`) and from that board's own CallersLog
+ * (`\tUploading AYS1995.LHA  277169 bytes` - eleven characters, one pad).
+ * It is the SDK's E `leftField`.
+ *
+ * GLCUpdater.e:691 credits a summary only when the line before it carries
+ * `Uploading ` (or `Upload moved`); SAmiLog sets its upload flag from it.
+ */
+export function formatUploadingLine(filename: string, size: number): string {
+  return `\tUploading ${leftField(filePart(filename), 12)} ${size} bytes`;
+}
+
+/** logUDFile(FALSE): the line goes to the CallersLog and the UDLog (express.e:9488-9489). */
+export async function logUpload(filename: string, size: number, nodeId: number): Promise<void> {
+  const line = formatUploadingLine(filename, size);
+  await writeToCallersLog(line, nodeId);
+  await writeToUDLog(line, nodeId);
+}
+
+/**
+ * One FTP upload finished - express.e:15071-15093 ftpUploadFileEnd, which
+ * logs the file AND its own one-file summary, to the CallersLog only:
+ *
+ *   '\tUploading \s \d bytes'          (no field width here: the full name)
+ *   '\t 1 file(s), \dk bytes, \d minute(s). \d second(s), \d cps, N/A % efficiency.'
+ *
+ * kbytes are Shr(transPos-resumePos,10); the seconds are ulTTTM ticks / 50,
+ * whole seconds.
+ */
+export function formatFtpUploadLines(fileName: string, bytes: number, resumePos: number, seconds: number, cps: number): [string, string] {
+  const secs = Math.max(0, Math.floor(seconds));
+  return [
+    `\tUploading ${fileName} ${bytes} bytes`,
+    `\t 1 file(s), ${Math.floor((bytes - resumePos) / 1024)}k bytes, ${Math.floor(secs / 60)} minute(s). ${secs % 60} second(s), ${cps} cps, N/A % efficiency.`,
+  ];
 }
 
 /**

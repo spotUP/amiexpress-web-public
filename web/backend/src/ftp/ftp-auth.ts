@@ -287,6 +287,10 @@ export function boardFtpDeps(): FtpDeps {
       await fsp.mkdir(playpen, { recursive: true });
       const playpenPath = path.join(playpen, request.filename);
 
+      // express.e:15067 ftpUploadFileStart stamps the start, 15078
+      // ftpUploadFileEnd the end: the CallersLog's summary for this file
+      // (formatFtpUploadLines) carries the time and the cps.
+      const receiveStarted = Date.now();
       const bytes = await new Promise<number>((resolve, reject) => {
         let written = 0;
         const out = fs.createWriteStream(playpenPath);
@@ -298,6 +302,8 @@ export function boardFtpDeps(): FtpDeps {
         out.on('close', () => resolve(written));
         data.pipe(out);
       });
+      const receiveSeconds = (Date.now() - receiveStarted) / 1000;
+      const receiveCps = receiveSeconds > 0 ? Math.floor(bytes / receiveSeconds) : bytes;
 
       // express.e tests an upload before it files it, and a failure is a
       // QUARANTINE rather than a rejection: the file goes to the sysop, and
@@ -366,6 +372,7 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         },
         initialStatus,
         marker,
+        ftp: { seconds: receiveSeconds, cps: receiveCps },
       });
 
       // ftpd.e:1690 - 426 when the upload did not survive. A file the board

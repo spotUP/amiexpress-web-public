@@ -289,6 +289,16 @@ console.log('[displayNewFiles] Parsed params:', parsedParams);
 
 console.log('[displayNewFiles] Search date:', searchDate);
 
+    // express.e:27880-27881 - the scan's date goes in the CallersLog:
+    //   StringF(c,'\tDirectory Scan for (\s)',str)
+    // `str` is the eight characters the caller gave (express.e:27864), or
+    // the newSinceDate the prompt offers (27856, 27873-27879). GLCUpdater
+    // marks the call `F` from it (GLCUpdater.e:729).
+    const scanDate = firstParam.length === 8
+      ? parsedParams[0]
+      : formatLongDate(searchDate);
+    callersLogManager.logActivity(session.nodeId || 1, `\tDirectory Scan for (${scanDate})`);
+
     // Always show header during confScan (express.e doesn't suppress this)
     emitText(socket, '\r\n');
     emitText(socket, `Searching for files newer than: ${formatLongDate(searchDate)}\r\n\r\n`);

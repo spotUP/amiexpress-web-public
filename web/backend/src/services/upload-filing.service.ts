@@ -151,6 +151,12 @@ export interface FilingRequest {
   initialStatus: 'active' | 'private' | 'hold';
   /** P passed, F failed, N not tested. `D` is decided here, by the dupe check. */
   marker: 'P' | 'F' | 'N';
+  /**
+   * The bytes came over FTP: the CallersLog gets ftpUploadFileEnd's two lines
+   * (express.e:15084-15093) instead of logUDFile's (express.e:9480-9489).
+   * `seconds` and `cps` are the transfer's own.
+   */
+  ftp?: { seconds: number; cps: number };
 }
 
 /**
@@ -175,6 +181,26 @@ export interface FilingOutcome {
 }
 
 /**
+ * The CallersLog line for a file the board could not move, as express.e
+ * writes it:
+ *
+ *  - into the upload area, moveFile's express.e:16253-16254:
+ *      '\tFAILURE!, unable to move file \s from PlayPen'
+ *  - into HOLD, express.e:19428-19435 - which overwrites the destination with
+ *    its own warning before logging it, so the line really is
+ *      '\tUpload unable to be moved to WARNING!\b\nUnable to move file!\b\n'
+ *    (`\b` is CR in E). Kept byte for byte: it is what the tools reading a
+ *    CallersLog have always seen.
+ */
+function logUnmoved(request: FilingRequest, status: FilingOutcome['status']): void {
+  const { writeToCallersLog } = require('../utils/download-logging.util');
+  const line = status === 'active'
+    ? `\tFAILURE!, unable to move file ${request.filename} from PlayPen`
+    : '\tUpload unable to be moved to WARNING!\r\nUnable to move file!\r\n';
+  void writeToCallersLog(line, request.nodeId);
+}
+
+/**
  * File an upload whose bytes are already in the playpen.
  *
  * Never throws for an expected failure - a duplicate, a dead volume, a
@@ -184,6 +210,24 @@ export interface FilingOutcome {
  */
 export async function fileUploadedFile(request: FilingRequest): Promise<FilingOutcome> {
   const notices: FilingNotice[] = [];
+
+  // 0. THE CALLERSLOG'S LINE FOR THE FILE THAT CAME IN. GLCUpdater (GLCUpdater.e
+  //    691-697) credits an upload summary only when the line before it says
+  //    `Uploading ` or `Upload moved`, and SAmiLog's upload flag is
+  //    `Uploading`; without these lines no upload on this board was ever
+  //    credited. Written here because this is where every transport's file
+  //    arrives (web, telnet, FTP), once per file.
+  if (request.ftp) {
+    // express.e:15084-15088 ftpUploadFileEnd - CallersLog only, no UDLog.
+    const { formatFtpUploadLines, writeToCallersLog } = require('../utils/download-logging.util');
+    for (const line of formatFtpUploadLines(request.filename, request.size, 0, request.ftp.seconds, request.ftp.cps) as string[]) {
+      await writeToCallersLog(line, request.nodeId);
+    }
+  } else {
+    // express.e:16521 zmprogress -> logUDFile(FALSE), express.e:9480-9489.
+    const { logUpload } = require('../utils/download-logging.util');
+    await logUpload(request.filename, request.size, request.nodeId);
+  }
   const sysopName = String(config.get('sysopName') ?? 'the sysop');
   let status = request.initialStatus;
   let marker: FilingOutcome['marker'] = request.marker;
@@ -256,14 +300,19 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
         );
       }
     } else {
-      placedAt = await moveUploadedFile(
-        request.playpenPath!,
-        request.filename,
-        status,
-        request.conferenceId,
-        config.get('dataDir'),
-        destinationFor(area, request.conferenceId, config.get('dataDir'))
-      );
+      try {
+        placedAt = await moveUploadedFile(
+          request.playpenPath!,
+          request.filename,
+          status,
+          request.conferenceId,
+          config.get('dataDir'),
+          destinationFor(area, request.conferenceId, config.get('dataDir'))
+        );
+      } catch (moveError) {
+        logUnmoved(request, status);
+        throw moveError;
+      }
     }
   } catch (error) {
     if (pooledArea) {
@@ -278,7 +327,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
       });
       status = 'hold';
       try {
-        await moveUploadedFile(
+        placedAt = await moveUploadedFile(
           request.playpenPath!,
           request.filename,
           status,
@@ -289,6 +338,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
       } catch (holdError) {
         // 4. Neither the pool nor HOLD has it. Catalogue nothing.
         orphaned = true;
+        logUnmoved(request, status);
         notices.push({
           kind: 'orphaned',
           text: `${request.filename} could not be filed anywhere and needs a sysop`,
@@ -439,6 +489,22 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
         }
       }
     }
+  }
+
+  // The CallersLog's record of where the file went: express.e:19430-19435
+  // (HOLD, LCFILES) and moveFile's express.e:16221/16238 (the upload area),
+  // `\tUpload moved to <path>`, the path as the Amiga names it. GLCUpdater
+  // lists the file under the call's uploads from this line (GLCUpdater.e
+  // 706-714) unless it went to LCFILES/, PARTUPLOAD/ or HOLD/. Written once,
+  // for where the file finally landed: a listing that failed sends it on to
+  // HOLD (step 5), and that is where it is.
+  if (!orphaned && request.playpenPath) {
+    const dataDir = config.get('dataDir');
+    const landed = placedAt
+      ?? path.join(destinationFor(area, request.conferenceId, dataDir) ?? '', request.filename);
+    const { amigaPathOf } = require('./upload-examine.service');
+    const { writeToCallersLog } = require('../utils/download-logging.util');
+    await writeToCallersLog(`\tUpload moved to ${amigaPathOf(dataDir, landed) ?? landed}`, request.nodeId);
   }
 
   /*

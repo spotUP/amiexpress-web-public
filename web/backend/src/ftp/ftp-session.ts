@@ -618,7 +618,10 @@ export class FtpSession {
 
       // What the board decided - a duplicate, a quarantine, a dead volume.
       for (const notice of outcome.notices) this.socket.write(`226-${notice}\r\n`);
-      this.deps.log(this.user.username, `\tFTP Upload >: ${name} (${outcome.bytes} bytes)`, this.nodeId);
+      // The CallersLog lines for this file are express.e's ftpUploadFileEnd
+      // (15084-15088), written by the filing service it went through. This
+      // used to add `\tFTP Upload >: name (n bytes)`, a line neither ftpd.e
+      // nor express.e writes, and which no CallersLog reader knows.
       // ftpd.e:1690 - 226 or 426, the filename in both.
       this.reply(
         outcome.accepted === false ? 426 : 226,
