@@ -387,6 +387,10 @@ export interface BBSSession {
   confScanPauseOwed?: boolean; // express.e:28145 doPause() after the scan's part-upload check; paid by the display flow before the rejoin
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   uploadContext?: UploadSessionContext;
+  /** A procedure waiting for the upload to end (services/upload-end.service.ts). */
+  uploadReturn?: import('./services/upload-end.service').UploadReturn;
+  /** express.e rzmsg (240): the upload is the X of a message - its files go into <msgBaseLocation>F<msgNumb>. */
+  rzmsg?: { dir: string; msgNumb: number };
   pendingDisplayInputs?: string[];
   replayingDisplayInputs?: boolean;
   transferRawActive?: boolean; // When true, bypass cooked command handling for raw transfer (ZMODEM)
@@ -1708,7 +1712,8 @@ console.log("   BBS will continue without SSH support");
       const ftpConfig = (() => {
         try { return getBoardConfig(config.get('dataDir')); } catch { return null; }
       })();
-      const ftpServer = await startFtpServer(ftpConfig, boardFtpDeps());
+      // The namespace answers the already-online gate for a web caller.
+      const ftpServer = await startFtpServer(ftpConfig, boardFtpDeps((id: string) => io.of('/').sockets.has(id)));
       if (ftpServer) {
         const bound = ftpServer.address();
 console.log(`[OK] FTP Server ready on port ${bound?.port}`);

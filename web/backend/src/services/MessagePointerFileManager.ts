@@ -171,9 +171,17 @@ export class MessagePointerFileManager {
    * there (4843-4847 clears the buffer on a short read).
    */
   readRaw(conferenceId: number, slotNumber: number): Buffer {
+    return this.readRawAt(this.getConfDbPath(conferenceId), slotNumber, conferenceId);
+  }
+
+  /**
+   * readRaw for a Conf.DB named by its path rather than its conference - for a
+   * tool that walks every file getConfDbFileName can name (a conference with
+   * several message bases has one per base, express.e:2102-2111).
+   */
+  readRawAt(filePath: string, slotNumber: number, conferenceId: number | string = filePath): Buffer {
     const out = Buffer.alloc(CONFBASE_RECORD_SIZE);
     if (slotNumber < 1) return out;
-    const filePath = this.getConfDbPath(conferenceId);
     let fd: number | undefined;
     try {
       if (!fs.existsSync(filePath)) return out;
@@ -192,6 +200,29 @@ export class MessagePointerFileManager {
   /** loadConfDB's record, decoded. */
   readRecordOrZero(conferenceId: number, slotNumber: number): ConfBaseRecord {
     return deserializeConfBase(this.readRaw(conferenceId, slotNumber));
+  }
+
+  /**
+   * saveConfDB's bytes, unchanged, into a Conf.DB named by its path: the
+   * whole 74-byte record at `(slot-1)*74`, the file zero-padded up to it when
+   * it is shorter (as patchRecord pads it). No field is decoded on the way.
+   */
+  writeRawAt(filePath: string, slotNumber: number, record: Buffer): void {
+    if (slotNumber < 1) throw new Error(`slotNumber must be >= 1, got ${slotNumber}`);
+    const whole = Buffer.alloc(CONFBASE_RECORD_SIZE);
+    record.copy(whole, 0, 0, Math.min(record.length, CONFBASE_RECORD_SIZE));
+    const offset = (slotNumber - 1) * CONFBASE_RECORD_SIZE;
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, Buffer.alloc(0));
+    const fd = fs.openSync(filePath, 'r+');
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (size < offset) fs.writeSync(fd, Buffer.alloc(offset - size), 0, offset - size, size);
+      fs.writeSync(fd, whole, 0, CONFBASE_RECORD_SIZE, offset);
+    } finally {
+      fs.closeSync(fd);
+    }
   }
 
   /** saveConfDB (express.e:4855-4880): the whole record, as a door hands it over. */

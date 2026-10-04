@@ -229,6 +229,7 @@ import {
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
 import { feedInputWaiter } from '../utils/await-input';
+import { endUpload } from '../services/upload-end.service';
 
 // Re-export dependency injection for external modules (backward compatibility)
 
@@ -884,6 +885,31 @@ async function repaintMenuIfPending(socket: any, session: BBSSession): Promise<v
   await menuDisplayMainMenu(socket, session, false, true);
 }
 export const displayMenuPrompt = menuDisplayMenuPrompt;
+
+/**
+ * A COMMAND THAT THREW ends the way a finished command ends: back at the menu
+ * prompt (express.e:28641-28648 - after processCommand, menuPause:=TRUE and
+ * subState:=DISPLAY_MENU, whatever the command did).
+ *
+ * express.e's commands return a result code to that loop and cannot throw, so
+ * there is no screen for this and nothing is printed: the error goes to the
+ * server log (the caller of this logs it). This used to print an invented
+ * "Error processing command." / "Press any key to continue..." and land on the
+ * conference bulletin; a throw anywhere else - a shortcut key, a command's
+ * own input state - left the caller with no prompt at all.
+ *
+ * Whatever sub-state the command had moved to (an input prompt it opened, a
+ * transfer it began) is abandoned: it threw, nothing is waiting on it. A door
+ * that is running owns the screen and is left alone, as showMenuAfterCommand
+ * leaves it. Before logon there is no menu to return to.
+ */
+export function returnToMenuAfterThrow(socket: any, session: BBSSession): void {
+  if (session.state !== BBSState.LOGGEDON) return;
+  if (session.inDoorManager) return;
+  flushOutput(socket);
+  session.subState = LoggedOnSubState.PROCESS_COMMAND;
+  showMenuAfterCommand(socket, session, true);
+}
 
 /**
  * Return to the menu after command execution when the command did not change state.
@@ -1850,6 +1876,19 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           return;
         }
 
+        /**
+         * The logon proper, after the password loop (express.e:29214 on):
+         * the shared post-auth pipeline every transport's login runs through.
+         * Two ways reach it, as in express.e: a correct password, and a
+         * correct reset code after Excessive Password Failure (29196-29198).
+         */
+        const enterLogon = async (user: any): Promise<void> => {
+          const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
+          endPasswordMask(socket, session);
+          const { runPostAuthLogin } = await import('../services/login-post.service');
+          await runPostAuthLogin(socket, session, user, { io, lastLoginBeforeUpdate });
+        };
+
         // Authenticate using use case service (Clean Architecture)
         try {
           const { container } = await import('../container');
@@ -1874,9 +1913,6 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             clm.logActivity(session.nodeId || 1, failureText);
             session.loginRetryCount = (session.loginRetryCount || 0) + 1;
 
-            const { getMaxPasswordFails } = require('../services/password-policy.util');
-            const maxFails = getMaxPasswordFails();
-
             // express.e:1008-1016 counts the failure on the ACCOUNT and locks
             // it there. Until now this port counted only in the session, so
             // `accountLocked` - which login already honours at
@@ -1885,11 +1921,8 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             // that nothing could trip, and a lockout a caller escaped by
             // hanging up.
             try {
-              const failedUser = await getDatabase().getUserByUsername(username);
-              if (failedUser?.slotNumber && failedUser.slotNumber > 0) {
-                const { userDatabaseManager } = require('../services/UserDatabaseManager');
-                userDatabaseManager.recordPasswordFailure(failedUser.slotNumber, maxFails);
-              }
+              const { countWrongPassword } = require('../services/password-failures');
+              countWrongPassword(await getDatabase().getUserByUsername(username), 'AUTH');
             } catch (err) {
               // A failure to record must never block the login flow itself.
               console.warn('[AUTH] Could not record password failure:', err);
@@ -1914,11 +1947,22 @@ function endPasswordMask(socket: any, session: BBSSession): void {
                 session.passwordResetUsername = username;
                 const resetResult = await promptPasswordReset(socket, session);
                 if (resetResult.ok) {
-                  // Re-prompt for username/password from the top.
-                  endPasswordMask(socket, session);
-                  emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
-                  session.tempData.loginPhase = 'username';
-                  session.tempData.loginUsername = '';
+                  // express.e:29196-29198 - a correct reset code is
+                  // `stat:=RESULT_SUCCESS`, the password loop ends and the
+                  // logon carries on (29214+) for the account that failed.
+                  // It used to send the caller back to the name prompt.
+                  // The persisted failure count is not cleared here: the
+                  // reset never passes checkUserPassword's ELSE (1018).
+                  const resetUser = await getDatabase().getUserByUsername(username);
+                  if (resetUser) {
+                    await enterLogon(resetUser);
+                  } else {
+                    // WEB_: the account went away between the reset and the
+                    // logon; express.e has no such window. Nothing to log on to.
+                    endPasswordMask(socket, session);
+                    const { beginLogoff } = require('../server/logoff');
+                    beginLogoff(socket, session, { message: '' });
+                  }
                 }
                 return;
               }
@@ -1954,31 +1998,23 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           // mistyped twice, then got it right, carried those failures until
           // the next sysop edit touched his record.
           try {
-            const okUser = await getDatabase().getUserByUsername(username);
-            if (okUser?.slotNumber && okUser.slotNumber > 0) {
-              const { userDatabaseManager } = require('../services/UserDatabaseManager');
-              userDatabaseManager.clearPasswordFailures(okUser.slotNumber);
-            }
+            const { clearWrongPasswords } = require('../services/password-failures');
+            clearWrongPasswords(await getDatabase().getUserByUsername(username), 'AUTH');
           } catch (err) {
             // A failure to clear must never block the login flow itself.
             console.warn('[AUTH] Could not clear password failures:', err);
           }
-          const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
-          endPasswordMask(socket, session);
-          const { runPostAuthLogin } = await import('../services/login-post.service');
-          const postAuthResult = await runPostAuthLogin(socket, session, user, {
-            io,
-            lastLoginBeforeUpdate,
-          });
-          if (!postAuthResult.ok) {
-            // Shared pipeline already issued the disconnect / forced-
-            // pwd-change prompt / chat-only door launch / quick-logon
-            // menu jump. Nothing more to do here.
-            return;
-          }
+          // Whatever the result, the shared pipeline has already issued the
+          // disconnect / forced-pwd-change prompt / chat-only door launch /
+          // quick-logon menu jump. Nothing more to do here.
+          await enterLogon(user);
         } catch (err: any) {
 console.error('[LOGIN] Error during login:', err?.message || err);
           endPasswordMask(socket, session);
+          // WEB_: an exception in the auth lookup (database / container
+          // error). express.e has no such failure and no text for it
+          // (audit 2026-10-04 row 258); kept so the caller is not left at a
+          // bare prompt with no explanation.
           emitPrompt(socket, `\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           session.tempData.loginPhase = 'username';
           session.tempData.loginUsername = '';
@@ -2767,9 +2803,11 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     // express.e: aePuts('\b\n'); RETURN RESULT_FAILURE -> caller cleanItUp + return -> main loop redisplays menu
     if ((input === 'A' || input === 'a') && input.length === 1) {
       emitText(socket, '\r\n');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
+      endUpload(session, 'failure', () => {
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+      });
       return;
     }
 
@@ -2943,10 +2981,12 @@ console.log(' In web upload mode - ignoring key press (waiting for file-uploaded
     // In terminal mode, any key press cancels upload
 console.log(' In file upload state - canceling upload');
     emitText(socket, '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
+    endUpload(session, 'failure', () => {
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    });
     return;
   }
 
@@ -2957,8 +2997,8 @@ console.log(' In file upload state - canceling upload');
     if (ch === 'A' || ch === 'a') {
       // express.e:17781-17783: aePuts('Abort!\b\n\b\n'); RETURN RESULT_FAILURE
       emitText(socket, 'Abort!\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
+      endUpload(session, 'failure', () => { session.subState = LoggedOnSubState.DISPLAY_MENU; });
     } else if (ch === 'G' || ch === 'g') {
       // express.e:17791-17793: aePuts('Goodbye!\b\n\b\n'); RETURN 2 (goodbye after transfer)
       emitText(socket, 'Goodbye!\r\n\r\n');
@@ -4000,10 +4040,7 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
         }
       } catch (error) {
 console.error('Error processing command:', error);
-        emitText(socket, '\r\n\x1b[31mError processing command.\x1b[0m\r\n');
-        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        returnToMenuAfterThrow(socket, session);
         return;
       }
     }

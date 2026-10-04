@@ -74,6 +74,23 @@ describe('the CallersLog parser (GLCUpdater.e:553-762)', () => {
     ]);
   });
 
+  test("the o and A flags light on express.e's own words (`Operator Paged at`, `Account editing.`)", () => {
+    // express.e:20344 and 24457 write these; GLCUpdater.e:727/731 compares
+    // `Operator Paged At ` / `Account Editing` case-sensitively and so never
+    // matched them. WEB_: matched without regard to case.
+    const log = Buffer.from([
+      '**************************************************************',
+      '10-04-26 (18:00:00) [7] regress (CONNECT 19200) Test Account',
+      '\tOperator Paged at (Sat Oct 04 18:01:02 2026)',
+      '\tAccount editing.',
+      '10-04-26 (18:05:00) regress Off Normally',
+      '',
+    ].join('\n'), 'latin1');
+    const calls = parseCalls(log, findCallStart(log, false)!, logoffMode);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].actions).toBe('---o---A--');
+  });
+
   test("the live board's call lines carry no CONNECT/SYSOP_LOCAL/F2_LOCAL, so no call is found", () => {
     // Until 2026-10-04 CallersLogManager.logLogin wrote `DD-Mon-YY HH:MM [n]
     // name (LOCAL) loc`, not express.e:16041's `MM-DD-YY (HH:MM:SS) [n] name

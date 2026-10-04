@@ -283,9 +283,10 @@ export async function isPasswordResetAvailable(userEmail: string | null | undefi
  *   await_new_pwd  ->  "Password: " (empty keeps the old one)
  *
  * No, or a wrong code, is PWFAIL and logoffErr (29191-29193, 29263). On
- * success the new password is written to the DB and the caller re-prompts
- * for name and password - express.e instead carries straight on into the
- * logon (stat:=RESULT_SUCCESS, 29196-29198).
+ * success the new password is written to the DB and `{ ok: true }` is
+ * returned; the login loop (command.handler) then carries straight on into
+ * the logon for that account, as express.e does (stat:=RESULT_SUCCESS,
+ * 29196-29198), through the same runPostAuthLogin a correct password takes.
  *
  * Preconditions:
  *   session.passwordResetUsername = the username that failed login

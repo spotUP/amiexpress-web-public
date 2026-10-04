@@ -453,7 +453,7 @@ console.log('[TELNET] Door active but nothing listening - emitting door:input');
         session,
         commandPieces(input, session.subState),
         (piece) => Promise.resolve(deps.handleCommand(emitter, session, piece, deps.io)),
-        commandFailed(emitter),
+        commandFailed(emitter, session),
       );
     }
   });

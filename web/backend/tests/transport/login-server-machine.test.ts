@@ -77,6 +77,20 @@ jest.mock('../../src/services/login-post.service', () => ({
   runPostAuthLogin,
 }));
 
+/**
+ * The email reset after Excessive Password Failure. The dialog itself is
+ * login-prompt-parity.test.ts's subject; here it only has to be OFFERED (mail
+ * set up, an address on file) and to SUCCEED, so the loop's next step can be
+ * seen. Unavailable by default, as on a board with no SMTP.
+ */
+const resetAvailable = jest.fn(async (_email?: string | null) => false);
+const passwordReset = jest.fn(async (_socket: unknown, _session: any) => ({ ok: true }));
+jest.mock('../../src/services/login-prompt.service', () => ({
+  ...jest.requireActual('../../src/services/login-prompt.service'),
+  isPasswordResetAvailable: (email?: string | null) => resetAvailable(email),
+  promptPasswordReset: (socket: unknown, session: any) => passwordReset(socket, session),
+}));
+
 const beginLogoff = jest.fn();
 jest.mock('../../src/server/logoff', () => ({
   ...jest.requireActual('../../src/server/logoff'),
@@ -253,6 +267,37 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
       void type(socket, session, 'wrong3\r');
       await new Promise((r) => setTimeout(r, 200));
       expect((wire(socket).match(/Password: /g) || []).length).toBe(before);
+    } finally {
+      container.registerInstance(AuthenticationUseCase, new AuthenticationUseCase());
+    }
+  });
+
+  it('a correct reset code after Excessive Password Failure goes straight into the logon - express.e:29196-29198', async () => {
+    // `stat:=RESULT_SUCCESS` ends the password loop and the logon carries on
+    // for the account that failed. The caller used to be sent back to the
+    // name prompt, to type his name and new password again.
+    const { container } = require('../../src/container');
+    const { AuthenticationUseCase } = require('../../src/services/use-cases/authentication.use-case');
+    container.registerInstance(AuthenticationUseCase, { authenticate: jest.fn(async () => ({ success: false, error: 'bad' })) });
+    resetAvailable.mockResolvedValueOnce(true);
+    try {
+      const socket = makeSocket();
+      const session = loginSession('telnet');
+      await type(socket, session, 'sysop\r');
+      await type(socket, session, 'wrong1\r');
+      await type(socket, session, 'wrong2\r');
+      expect(runPostAuthLogin).not.toHaveBeenCalled();
+      await type(socket, session, 'wrong3\r');
+
+      expect(resetAvailable).toHaveBeenCalledWith(KNOWN.email);
+      expect(passwordReset).toHaveBeenCalledTimes(1);
+      // The sentinel: the shared post-auth pipeline ran, once, for the
+      // account whose reset succeeded - not a name prompt.
+      expect(runPostAuthLogin).toHaveBeenCalledTimes(1);
+      expect(runPostAuthLogin.mock.calls[0][2]).toBe(KNOWN);
+      expect(session.state).toBe(BBSState.LOGGEDON);
+      expect(session.tempData.loginPhase).not.toBe('username');
+      expect(session.maskInput).toBeFalsy();
     } finally {
       container.registerInstance(AuthenticationUseCase, new AuthenticationUseCase());
     }

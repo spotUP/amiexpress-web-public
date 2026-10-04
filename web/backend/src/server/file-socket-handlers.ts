@@ -35,6 +35,7 @@ import {
   sanitizeInput,
 } from "../utils/input-normalizer.util";
 import { fileUploadedFile } from "../services/upload-filing.service";
+import { endUpload } from "../services/upload-end.service";
 import { examineUpload } from "../services/upload-examine.service";
 import { getSessionBySocketId } from "./session-manager";
 import { onCaller } from "./socket-guard";
@@ -124,8 +125,11 @@ export async function handleDizExtractionAndDescription(
         startRenamePrompt(socket, session, data.path!, async (result: any) => {
           if (result.aborted) {
             socket.emit('ansi-output', '\r\n\x1b[31mRename aborted; upload cancelled.\x1b[0m\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
+            clearUploadContext(session, socket);
+            endUpload(session, 'failure', () => {
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+            });
             resolve(true);
             return;
           }
@@ -257,10 +261,12 @@ async function fileWithDescription(
   } catch (error: any) {
 console.error("[UPLOAD] Error filing an upload with a known description:", error);
     socket.emit("ansi-output", `\r\n\x1b[31mUpload failed: ${error.message}\x1b[0m\r\n`);
-    socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     clearUploadContext(session, socket);
+    endUpload(session, 'failure', () => {
+      socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    });
     return true; // Handled (with error), don't wait for description
   }
 }
@@ -311,13 +317,15 @@ export async function processBatchFile(
       "ansi-output",
       "\r\n\x1b[31mError: Upload session lost\x1b[0m\r\n"
     );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     clearUploadContext(session, socket);
+    endUpload(session, 'failure', () => {
+      socket.emit(
+        "ansi-output",
+        "\r\n\x1b[32mPress any key to continue...\x1b[0m"
+      );
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    });
     return;
   }
 
@@ -360,7 +368,10 @@ export async function processBatchFile(
     // Achievements (SP2): a description lifted from FILE_ID.DIZ is not one the caller wrote.
     let descriptionFromDiz = false;
     let testStatus = TestResult.NOT_TESTED;
-    let fileStatus: "active" | "private" | "hold" = currentFile.isPrivate
+    // express.e rzmsg: a message's X (session.rzmsg) - see upload-filing's
+    // fileIntoMessage. A leading `/` makes no private upload of it (19361).
+    const rzmsg = session.rzmsg;
+    let fileStatus: "active" | "private" | "hold" = currentFile.isPrivate && !rzmsg
       ? "private"
       : "active";
 
@@ -407,42 +418,44 @@ console.error(`[FILE_ID.DIZ] Extraction error:`, error);
 console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
       }
 
-      // Test file integrity (express.e:19348-19354)
-      socket.emit(
-        "ansi-output",
-        `\r\nTesting... ${currentFile.filename}...\r\n`
-      );
-      try {
-        // Add 15 second timeout to prevent hanging on file tests
-        const testPromise = testFile(data.path, nodeWorkDir);
-        const timeoutPromise = new Promise<TestResult>((resolve) =>
-          setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
+      // Test file integrity (express.e:19348-19354) - not for rzmsg (19350).
+      if (!rzmsg) {
+        socket.emit(
+          "ansi-output",
+          `\r\nTesting... ${currentFile.filename}...\r\n`
         );
-        testStatus = await Promise.race([testPromise, timeoutPromise]);
+        try {
+          // Add 15 second timeout to prevent hanging on file tests
+          const testPromise = testFile(data.path, nodeWorkDir);
+          const timeoutPromise = new Promise<TestResult>((resolve) =>
+            setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
+          );
+          testStatus = await Promise.race([testPromise, timeoutPromise]);
 console.log(`[testFile] Result: ${testStatus}`);
 
-        if (
-          testStatus === TestResult.SUCCESS ||
-          testStatus === TestResult.NOT_TESTED
-        ) {
-          socket.emit("ansi-output", "\r\nTested Ok...\r\n");
-        } else if (testStatus === TestResult.FAILURE) {
-          socket.emit(
-            "ansi-output",
-            "\r\n\x1b[33mRequires review, possibly bad format\x1b[0m\r\n"
-          );
-          socket.emit(
-            "ansi-output",
-            `\r\n\x1b[33mMoving to ${config.get(
-              "sysopName"
-            )}'s private Directory.\x1b[0m\r\n\r\n`
-          );
-          fileStatus = "hold"; // Mark for HOLD directory (express.e:19364-19369)
-        }
-      } catch (error) {
+          if (
+            testStatus === TestResult.SUCCESS ||
+            testStatus === TestResult.NOT_TESTED
+          ) {
+            socket.emit("ansi-output", "\r\nTested Ok...\r\n");
+          } else if (testStatus === TestResult.FAILURE) {
+            socket.emit(
+              "ansi-output",
+              "\r\n\x1b[33mRequires review, possibly bad format\x1b[0m\r\n"
+            );
+            socket.emit(
+              "ansi-output",
+              `\r\n\x1b[33mMoving to ${config.get(
+                "sysopName"
+              )}'s private Directory.\x1b[0m\r\n\r\n`
+            );
+            fileStatus = "hold"; // Mark for HOLD directory (express.e:19364-19369)
+          }
+        } catch (error) {
 console.error(`[testFile] Error:`, error);
-        testStatus = TestResult.NOT_TESTED;
-        socket.emit("ansi-output", "\r\nTest skipped (error)...\r\n");
+          testStatus = TestResult.NOT_TESTED;
+          socket.emit("ansi-output", "\r\nTest skipped (error)...\r\n");
+        }
       }
     }
 
@@ -467,6 +480,8 @@ console.error(`[testFile] Error:`, error);
     //
     // What stays here is what is genuinely this front end's: saying on the
     // caller's screen what happened to his file.
+    // express.e:19398-19400
+    if (rzmsg) socket.emit("ansi-output", "\r\nMoving to message base file directory.\r\n");
     const filing = await fileUploadedFile({
       playpenPath: data.path,
       filename: currentFile.filename,
@@ -482,6 +497,7 @@ console.error(`[testFile] Error:`, error);
       },
       initialStatus: fileStatus,
       marker: checkedMarker as 'P' | 'F' | 'N',
+      rzmsg: rzmsg ? { dir: rzmsg.dir } : undefined,
     });
 
     for (const notice of filing.notices) {
@@ -503,7 +519,22 @@ console.error(`[testFile] Error:`, error);
     // and crediting the caller's ratio/byte count for it would be paying out
     // for a file nobody can ever download.
     const trackUploads = creditAccountTrackUploads(session.user!);
-    if (trackUploads && !foundDupe && !quarantineFailed) {
+    if (rzmsg) {
+      // A message's file earns the upload count (19377-19380) and nothing
+      // else: no bytes (19442 `rzmsg=NIL`), no listing, no announcement.
+      if (trackUploads && !foundDupe) {
+        await db.run("UPDATE users SET uploads = uploads + 1, updated = CURRENT_TIMESTAMP WHERE id = $1", [session.user!.id]);
+        session.user!.uploads = (session.user!.uploads || 0) + 1;
+        if (session.user!.slotNumber) {
+          try {
+            userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
+          } catch (diskErr) {
+console.error("[Upload] Error writing user disk files:", diskErr);
+          }
+        }
+      }
+    }
+    if (trackUploads && !foundDupe && !quarantineFailed && !rzmsg) {
       // Update CPS tracking on user object using real transfer speed from frontend
       const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
       await updateUploadStats(session.user!, data.size, realUploadCPS);
@@ -581,7 +612,7 @@ console.error("[Upload] Error writing user disk files:", diskErr);
     try {
       const slot = Number(session.user!.slotNumber) || 0;
       const conf = session.currentConf || 0;
-      if (trackUploads && !foundDupe && !quarantineFailed && slot > 0 && conf > 0
+      if (trackUploads && !foundDupe && !quarantineFailed && !rzmsg && slot > 0 && conf > 0
         && checkSecurity(session.user!, ACSPermission.CONFERENCE_ACCOUNTING)
         && !messagePointerFileManager.isShared(conf)) {
         // express.e:19444 CREDITBYKB books kilobytes.
@@ -597,7 +628,7 @@ console.error("[Upload] Failed to book the conference upload", err);
     // Log file upload (express.e:9493 callersLog)
     // Express.e: Only log successful uploads (not duplicates)
     // Also skipped when quarantineFailed: the file was never filed anywhere.
-    if (!foundDupe && !quarantineFailed) {
+    if (!foundDupe && !quarantineFailed && !rzmsg) {
       await callersLog(
         session.user!.id,
         session.user!.username,
@@ -610,7 +641,7 @@ console.error("[Upload] Failed to book the conference upload", err);
     // Express.e: Only emit events for successful uploads (not duplicates)
     // Also skipped when quarantineFailed: other users must not see an
     // announcement for a file that can never be listed or fetched.
-    if (!foundDupe && !quarantineFailed) {
+    if (!foundDupe && !quarantineFailed && !rzmsg) {
       try {
         const conference = await db.getConferenceById(session.currentConf);
         emitUpload({
@@ -631,7 +662,7 @@ console.error("[BBSEvent] Error emitting upload event:", error);
     // Express.e: Only trigger webhooks for successful uploads (not duplicates)
     // Also skipped when quarantineFailed: an external webhook consumer must
     // not be told a file exists that does not.
-    if (!foundDupe && !quarantineFailed) {
+    if (!foundDupe && !quarantineFailed && !rzmsg) {
       try {
         const { webhookService, WebhookTrigger } = await import(
           "../services/webhook.service"
@@ -652,7 +683,7 @@ console.error("[Webhook] Error sending file upload webhook:", error);
       }
     }
     // Achievements (SP2): the upload, the description, the ratio. Non-throwing.
-    if (!foundDupe && !quarantineFailed) reportUpload(session as any, data.size, finalDescription, descriptionFromDiz);
+    if (!foundDupe && !quarantineFailed && !rzmsg) reportUpload(session as any, data.size, finalDescription, descriptionFromDiz);
 
     // Clear currentUploadedFile so next file can be processed
     // This is critical for batch uploads - without this, subsequent files are ignored
@@ -747,13 +778,15 @@ console.error("File upload error:", error);
       "ansi-output",
       `\r\n\x1b[31mUpload failed: ${errorMessage}\x1b[0m\r\n`
     );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     clearUploadContext(session, socket);
+    endUpload(session, 'failure', () => {
+      socket.emit(
+        "ansi-output",
+        "\r\n\x1b[32mPress any key to continue...\x1b[0m"
+      );
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    });
   }
 }
 

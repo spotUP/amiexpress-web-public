@@ -7,6 +7,7 @@ import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { loadAccount } from '../services/load-account';
 import { accountRefusal } from '../services/logon-gates';
+import { countWrongPassword, clearWrongPasswords } from '../services/password-failures';
 
 export function setupChatOnlyLoginHandler(socket: Socket, session: any): void {
 console.log('[ChatOnlyLogin] Setting up login handler');
@@ -32,6 +33,9 @@ console.log('[ChatOnlyLogin] User not found:', credentials.username);
 
       if (!isValid) {
 console.log('[ChatOnlyLogin] Invalid password for:', credentials.username);
+        // express.e:1008-1016 - counted toward MAX_PASSWORD_FAILS on the
+        // account, as the BBS logon and FTP count theirs.
+        countWrongPassword(user, 'CHAT');
         socket.emit('chat-only-login-error', 'Invalid username or password');
         return;
       }
@@ -40,6 +44,9 @@ console.log('[ChatOnlyLogin] Invalid password for:', credentials.username);
       // the BBS logon and FTP ask (services/logon-gates). A deleted, locked
       // or level-0 account logged straight into chat (open-surface audit,
       // 2026-10-04); a password that must be changed cannot be changed here.
+      // express.e:1018 - a right password zeroes the count.
+      clearWrongPasswords(user, 'CHAT');
+
       const { user: account } = loadAccount(user);
       if (accountRefusal(account) !== null) {
 console.log('[ChatOnlyLogin] Account refused by the logon gates:', credentials.username);

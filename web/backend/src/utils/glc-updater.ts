@@ -388,11 +388,18 @@ export function parseCalls(buf: Buffer, start: number, args: Pick<GLCArgs, 'igno
       // GLCUpdater.e:725-732
       if (line.includes('Upload Failed..')) uploadFail = true;
       if (line.includes('Download Failed..')) downloadFail = true;
-      if (line.includes('Operator Paged At ')) opPaged = true;
+      // WEB_: GLCUpdater.e:727 and :731 look for `Operator Paged At ` and
+      // `Account Editing`, but express.e writes `\tOperator Paged at (`
+      // (20344) and `\tAccount editing.` / `\tAccount editing from mail.`
+      // (24457, 11166, 12206) - the case differs, so on a real board the o
+      // and A flags never lit. Matched without regard to case so the flags
+      // say what the call did (sysop's decision, 2026-10-04).
+      const lower = line.toLowerCase();
+      if (lower.includes('operator paged at ')) opPaged = true;
       if (line.includes('Password Failure')) pwFailCount++;
       if (line.includes('Directory Scan ')) fileScan = true;
       if (line.includes('Conference Scan ')) fileScan = true;
-      if (line.includes('Account Editing')) accountEdit = true;
+      if (lower.includes('account editing')) accountEdit = true; // WEB_: see :727 above
       if (pwFailCount === 2) pwdFail = true;
       previousLine = line;
       if (foundEnd) break;                                                             // :734

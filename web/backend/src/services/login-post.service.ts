@@ -33,11 +33,9 @@ import {
   socketToUser,
   reclaimGraceGhost,
 } from "../server/session-manager";
-import { nodeHasReachableCaller } from '../server/session-emitter-registry';
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
-import { userAlreadyOnNode } from "./user-already-online";
 import { runExecuteOn } from "./batch-scheduler";
 import { mailOnLogon } from "./mail-notification.service";
 import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
@@ -48,7 +46,9 @@ import { amiExpressDay } from '../utils/time-tracking.util';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import {
+  accountOnlineElsewhere,
   isAccountDeleted,
+  nodeReservedForAnother,
   passwordChangeRequired,
   passwordExpiryDays,
   readLogonMisc,
@@ -156,8 +156,7 @@ export async function runPostAuthLogin(
    * is here. Case-insensitive, as StriCmp is at express.e:29131.
    */
   if (typeof session.nodeId === "number") {
-    const { isReservationMatch } = require("./node-reservation.service");
-    if (!isReservationMatch(session.nodeId, user.username)) {
+    if (nodeReservedForAnother(session.nodeId, user.username)) {
       const { beginLogoff } = require("../server/logoff");
       beginLogoff(emitter as any, session, {
         message: "\r\n420 Node is currently reserved for another user.\r\n",
@@ -603,8 +602,9 @@ export async function runPostAuthLogin(
     && process.env.NODE_ENV !== 'production';
 
   if (!reauthenticating && !devAllowsTwice) {
-    const alreadyOn = userAlreadyOnNode(
-      appConfig.get('dataDir'),
+    // The one already-online rule, asked by FTP's logon too
+    // (services/logon-gates). It also sees this account on an FTP node.
+    const alreadyOn = accountOnlineElsewhere(
       user.username,
       session.nodeId ?? 0,
       // Liveness: REACHABILITY, not map membership.
@@ -621,7 +621,8 @@ export async function runPostAuthLogin(
       // admin's kick unregister it), or a socket still in the namespace for
       // web. A stale node file with nobody behind it is cleaned up by
       // userAlreadyOnNode's onStale, exactly as before.
-      (nodeId) => nodeHasReachableCaller(nodeId, (id) => nspSockets?.has?.(id) === true),
+      (id) => nspSockets?.has?.(id) === true,
+      appConfig.get('dataDir'),
     );
     if (alreadyOn !== null) {
       try {

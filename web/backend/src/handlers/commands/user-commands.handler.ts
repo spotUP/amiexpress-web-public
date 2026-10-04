@@ -32,6 +32,7 @@ import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { emitText } from '../../utils/output.util';
+import { endUpload, awaitUploadEnd, type UploadStat } from '../../services/upload-end.service';
 
 interface Conference {
   id: number;
@@ -107,6 +108,17 @@ function getTransferTransport(session: BBSSession): TransferTransport {
 }
 
 /**
+ * A way out of the upload: uploadaFile returns (services/upload-end.service.ts)
+ * - to the menu, or to the procedure waiting for it.
+ */
+function uploadReturns(session: BBSSession, stat: UploadStat): void {
+  endUpload(session, stat, () => {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+  });
+}
+
+/**
  * File what a transfer delivered to the playpen: the DIZ check, the
  * description prompt per file, then the batch's filing and stats.
  *
@@ -158,8 +170,7 @@ async function fileReceivedUploads(
   }
   if (!fileArea) {
     socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = true;
+    uploadReturns(session, 'failure');
     return;
   }
 
@@ -228,8 +239,7 @@ async function fileReceivedUploads(
   } catch (err: any) {
     console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
     socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = true;
+    uploadReturns(session, 'failure');
   }
 }
 
@@ -324,8 +334,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         const named = (session.tempData?.uploadBatch ?? [])[0]?.filename as string | undefined;
         if (!named) {
           socket.emit('ansi-output', '\r\nXMODEM sends no filename - type one at FileName 1: before starting.\r\n\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          (session as any).menuPause = true;
+          uploadReturns(session, 'failure');
           return;
         }
         target = path.join(playpen, path.basename(named));
@@ -350,8 +359,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // incomplete in PartUpload (the telnet regression suite, 2026-09-27).
         if (!result.success || result.files.length === 0) {
           socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+          uploadReturns(session, 'failure');
           return;
         }
         await fileReceivedUploads(socket, session, result.files, [], ulStartTime);
@@ -361,8 +369,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       void protocolManager.start().catch((err: any) => {
         console.error('[TRANSFER] protocol transfer failed to start:', err);
         socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        (session as any).menuPause = true;
+        uploadReturns(session, 'failure');
       });
       return;
     }
@@ -383,6 +390,8 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // received and then rejected. A rule that cannot answer takes the
         // file: the post-transfer filing still catches it.
         isDuplicate: (name: string) => {
+          // express.e:16833 - a message's files (rzmsg) are not checked.
+          if (session.rzmsg) return false;
           const { uploadIsDuplicate } = require('../../services/upload-duplicate.service');
           const { config: appCfg } = require('../../config');
           return uploadIsDuplicate({
@@ -396,8 +405,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
             endRawTransfer(session);
             if (!ok) {
               socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-              session.subState = LoggedOnSubState.DISPLAY_MENU;
-              session.menuPause = true;
+              uploadReturns(session, 'failure');
               return;
             }
             // Route through the SAME post-upload pipeline as the RZ command
@@ -433,15 +441,13 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
             if (fired) return;
             fired = true;
             socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
+            uploadReturns(session, 'failure');
           });
           setTimeout(() => {
             if (!fired) {
               fired = true;
               socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
-              session.subState = LoggedOnSubState.DISPLAY_MENU;
-              session.menuPause = true;
+              uploadReturns(session, 'failure');
             }
           }, 120000);
           socket.emit('transfer-raw:init', { direction: 'upload', paths: [playpen] });
@@ -462,8 +468,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         endRawTransfer(session);
         if (!ok) {
           socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+          uploadReturns(session, 'failure');
           return;
         }
         socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
@@ -482,8 +487,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
         let peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
         socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
+        uploadReturns(session, 'success');
       },
     });
 
@@ -1224,6 +1228,26 @@ export async function handleUploadCommand(socket: any, session: BBSSession): Pro
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
 console.log('[ENV] Uploading');
 
+  // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
+  await startUploadaFile(socket, session, false);
+}
+
+/**
+ * uploadaFile(0, '', attach) for a procedure that waits for it: saveNewMSG's
+ * X (express.e:10728) carries on from the line after the upload, with the
+ * upload's result, however the upload ended (services/upload-end.service.ts).
+ */
+export async function uploadaFileAndWait(socket: any, session: BBSSession, attach: boolean): Promise<UploadStat> {
+  const ended = awaitUploadEnd(session);
+  await startUploadaFile(socket, session, attach);
+  return ended;
+}
+
+/**
+ * uploadaFile's opening (express.e:18966-19016): the NOUPLOADS refusal (not
+ * for an attach), the UPLOAD screen, then the upload interface.
+ */
+async function startUploadaFile(socket: any, session: BBSSession, attach: boolean): Promise<void> {
   /*
    * NO CLEAR HERE. express.e:18981-19016 is the whole sequence and it clears
    * NOWHERE: NOUPLOADS, then SCREEN_UPLOAD, then the UPLOADING/space/filename
@@ -1248,14 +1272,15 @@ console.log('[ENV] Uploading');
   // having the file at all, and the caller is told why instead of being
   // dropped back at the menu with no explanation. Silent, because a
   // conference without the file is the normal case and not worth a log line.
-  const refused = await _displayScreen(socket, session, 'NOUPLOADS', true, true);
+  // express.e:18980 IF(attach=FALSE) - a message's X is not refused by it.
+  const refused = !attach && await _displayScreen(socket, session, 'NOUPLOADS', true, true);
   if (refused) {
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    endUpload(session, 'success', () => { session.subState = LoggedOnSubState.DISPLAY_MENU; });
     return;
   }
 
-  // express.e:18986 - IF(uLFType=0) THEN displayScreen(SCREEN_UPLOAD). The
-  // command path is always uLFType 0 here; an attach is a different entry.
+  // express.e:18986 - IF(uLFType=0) THEN displayScreen(SCREEN_UPLOAD). Both
+  // callers are uLFType 0: the U command and a message's X (10728).
   // The command adds no pause of its own (express.e pauses after the DOWNLOAD
   // screen, not this one) - but the screen may carry one: the board's
   // uploadmsg.txt ends in `~SP`, and the interface below clears the screen.

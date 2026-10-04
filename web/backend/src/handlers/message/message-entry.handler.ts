@@ -9,7 +9,8 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/security.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
-import { writeMessageFile, formatMessageDate, readMessageFile } from '../../utils/message-file.util';
+import { writeMessageFile, formatMessageDate, readMessageFile, getMessagesDir } from '../../utils/message-file.util';
+import type { UploadStat } from '../../services/upload-end.service';
 import { config } from '../../config';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
@@ -873,6 +874,7 @@ console.error('[Message] Error writing user disk files:', diskErr);
   }
 
   let savedOk = false;
+  let savedMsgNum = 0;
 
   // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
   emitText(socket, '\r\nSaving...');
@@ -1000,6 +1002,7 @@ console.error('[Message] EXTSEND dump failed (non-fatal):', extErr);
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
     emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
     savedOk = true;
+    savedMsgNum = msgNum;
 
     // Save to database (for web UI / search indexing only).
     // Body file + HeaderFile already written by writeMessageFile above —
@@ -1137,6 +1140,19 @@ console.error('[saveMessage] Error:', error);
     }
   }
 
+  // express.e:10721-10740 - X: the files are uploaded into the message
+  // before saveNewMSG returns to its caller. A goodbye after the transfer
+  // ends the call there (RESULT_STANDARD_LOGOFF, 10733-10737).
+  if (savedOk && entry.rzmsg) {
+    const stat = await sendMessageFiles(socket, session, session.currentConf || 1, savedMsgNum);
+    if (stat === 'goodbye') {
+      session.tempData = undefined;
+      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+      await handleGoodbyeCommand(socket, session, 'Y');
+      return;
+    }
+  }
+
   if (await finishEntry(session, entry, savedOk)) return;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
@@ -1151,6 +1167,38 @@ console.error('[saveMessage] Error:', error);
     const { displayMainMenu } = require('../command-handler/menu');
     await displayMainMenu(socket, session, false /* forceMenuDisplay */, true /* bypassDebounce */);
   } catch (_) { /* swallow — advanceDisplayFlow is the fallback */ }
+}
+
+/**
+ * saveNewMSG's rzmsg block (express.e:10721-10740): the message's F<n>
+ * directory is made, uploadaFile(0,'',TRUE) runs with rzmsg set - its files
+ * are filed into F<n> (upload-filing.service fileIntoMessage) - and F<n> is
+ * deleted afterwards, which AmigaDOS does only when nothing was put in it.
+ * The reader offers what is there (read-msg getAttachType, type 2).
+ */
+async function sendMessageFiles(socket: any, session: BBSSession, conf: number, msgNumb: number): Promise<UploadStat> {
+  const wanted = path.join(getMessagesDir(conf, config.get('dataDir')), `F${msgNumb}`);
+  // 10722-10725 CreateDir
+  try { amigafs.mkdirSync(wanted, { recursive: true }); } catch (err) { console.error('[X] CreateDir failed:', err); }
+  const dir = amigafs.resolvePath(wanted) ?? wanted;
+  // 10726-10727 setEnvStat(ENV_UPLOADING) and bgFileCheck:=FALSE have no home here.
+  emitText(socket, '\r\n');
+  session.rzmsg = { dir, msgNumb };
+  // The upload works in the message's conference. In the logon scan
+  // currentConf is 0 (express.e:28103) while joinConf has loaded the scanned
+  // conference's directories (4997-5016), and this board's upload reads its
+  // conference from currentConf alone.
+  const wasConf = session.currentConf;
+  session.currentConf = conf;
+  try {
+    const { uploadaFileAndWait } = require('../commands/user-commands.handler');
+    return await uploadaFileAndWait(socket, session, true);
+  } finally {
+    session.currentConf = wasConf;
+    // 10730 rzmsg:=NIL; 10731-10733 SetProtection + DeleteFile(F<n>)
+    session.rzmsg = undefined;
+    try { amigafs.rmdirSync(dir); } catch { /* it holds the files */ }
+  }
 }
 
 /**

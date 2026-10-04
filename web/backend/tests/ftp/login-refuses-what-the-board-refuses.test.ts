@@ -38,6 +38,8 @@ import type { FtpDeps } from '../../src/ftp/ftp-session';
 import { boardFtpDeps } from '../../src/ftp/ftp-auth';
 import { userFileManager } from '../../src/services/UserFileManager';
 import { userDatabaseManager } from '../../src/services/UserDatabaseManager';
+import { setNodeReservation, resetAllNodeReservations } from '../../src/services/node-reservation.service';
+import { registerFtpCaller, resetFtpPresence } from '../../src/ftp/ftp-presence';
 
 /** The users row the password check hands back. Level 20, not deleted. */
 function row(username: string, slotNumber: number): any {
@@ -68,13 +70,15 @@ function onDisk(username: string, slot: number, extra: Record<string, unknown> =
 
 let server: FtpServer;
 let reserved: string[];
+let released: string[];
 
 async function listen(): Promise<number> {
   reserved = [];
+  released = [];
   const deps: FtpDeps = {
     ...boardFtpDeps(),
     reserveNode: async (sessionId) => { reserved.push(sessionId); return 4; },
-    releaseNode: async () => undefined,
+    releaseNode: async (sessionId) => { released.push(sessionId); },
     log: () => undefined,
   };
   server = new FtpServer({ port: 0, host: '127.0.0.1' }, deps);
@@ -117,6 +121,8 @@ afterEach(async () => {
   authenticateUser.mockReset();
   getUserByUsername.mockReset();
   maxPasswordFails.mockReturnValue(-1);
+  resetAllNodeReservations();
+  resetFtpPresence();
 });
 
 describe('an FTP login', () => {
@@ -165,6 +171,35 @@ describe('an FTP login', () => {
     expect(await login(port, 'ftpforced', 'right')).toBe(
       '420 Your account requires your password to be changed - log on to the board to change it.');
     expect(reserved).toHaveLength(0);
+  });
+
+  it('refuses a caller on a node the sysop reserved for someone else (express.e:28733-28743)', async () => {
+    onDisk('ftpnotreserved', 919);
+    setNodeReservation(4, 'SomebodyElse');
+    const port = await listen();
+
+    expect(await login(port, 'ftpnotreserved', 'right')).toBe(
+      '420 Node is currently reserved for another user.');
+    // The node it was given goes back.
+    expect(released).toContain(reserved[reserved.length - 1]);
+  });
+
+  it('lets on the caller the node IS reserved for, whatever the case (StriCmp)', async () => {
+    onDisk('ftpreserved', 920);
+    setNodeReservation(4, 'FTPRESERVED');
+    const port = await listen();
+
+    expect(await login(port, 'ftpreserved', 'right')).toBe('230 password accepted');
+  });
+
+  it('refuses an account already online on another node (express.e:28756-28765)', async () => {
+    onDisk('ftptwice', 921);
+    // The same account, on node 7 over FTP - a node, as it is in express.
+    registerFtpCaller('first-session', { nodeId: 7, username: 'FtpTwice', location: '' });
+    const port = await listen();
+
+    expect(await login(port, 'ftptwice', 'right')).toBe('420 User ftptwice already on another node!');
+    expect(released).toContain(reserved[reserved.length - 1]);
   });
 
   it('still answers a wrong password with 430', async () => {

@@ -35,9 +35,13 @@ import { nodeManager } from '../services/node-manager.service';
 import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
 import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
 import { loadAccount } from '../services/load-account';
-import { accountRefusal, AccountRefusal } from '../services/logon-gates';
-import { userDatabaseManager } from '../services/UserDatabaseManager';
-import { getMaxPasswordFails } from '../services/password-policy.util';
+import {
+  accountOnlineElsewhere,
+  accountRefusal,
+  AccountRefusal,
+  nodeReservedForAnother,
+} from '../services/logon-gates';
+import { countWrongPassword, clearWrongPasswords } from '../services/password-failures';
 
 /**
  * What an FTP caller is told when the board refuses his account. 420 and the
@@ -180,7 +184,13 @@ export function boardFtpFilesystem(root?: string): FtpFilesystem {
   });
 }
 
-export function boardFtpDeps(): FtpDeps {
+/**
+ * @param socketIsAlive whether a web caller's socket is still connected - the
+ *   board's socket.io namespace answers it (index.ts passes it). Without it a
+ *   web caller's node counts as empty for the already-online gate; telnet and
+ *   SSH callers and other FTP sessions are seen either way.
+ */
+export function boardFtpDeps(socketIsAlive: (socketId: string) => boolean = () => false): FtpDeps {
   const filesystem = boardFtpFilesystem();
 
   return {
@@ -426,31 +436,22 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
        * MAX_PASSWORD_FAILS, a right one zeroes it. This answered 430 and
        * counted nothing, so FTP was an unmetered place to guess a caller's
        * password that the board's lockout never saw. The counter and the
-       * lock are UserDatabaseManager's, the same calls command.handler makes
-       * for telnet, SSH and the web; the lock itself is honoured below, by
+       * lock are UserDatabaseManager's, through services/password-failures -
+       * the one helper the BBS logon and both chat logins count with too; the lock itself is honoured below, by
        * the board's gates. (express's own FTP logon frees the account
        * without saving it on a failure, so its count was lost on hang-up;
        * this port persists it, as its BBS logon does.)
        */
       if (!row) {
         try {
-          const named = await db.getUserByUsername(username);
-          if (named?.slotNumber && named.slotNumber > 0) {
-            userDatabaseManager.recordPasswordFailure(named.slotNumber, getMaxPasswordFails());
-          }
+          countWrongPassword(await db.getUserByUsername(username), 'FTP');
         } catch (err) {
-          // A failure to record must never turn a 430 into a crash.
+          // A failure to look the name up must never turn a 430 into a crash.
           console.warn('[FTP] Could not record password failure:', err);
         }
         return null;
       }
-      if (row.slotNumber && row.slotNumber > 0) {
-        try {
-          userDatabaseManager.clearPasswordFailures(row.slotNumber);
-        } catch (err) {
-          console.warn('[FTP] Could not clear password failures:', err);
-        }
-      }
+      clearWrongPasswords(row, 'FTP');
 
       /*
        * THE BOARD'S OWN ACCOUNT GATES, on the board's own record.
@@ -493,6 +494,23 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         // The one reason assignSessionToNode throws: every node is busy.
         return null;
       }
+    },
+
+    /*
+     * express.e's FTP logon (28733-28765), after the account load: a node
+     * reserved for another caller, and an account already online on another
+     * node, are refused with 420 - the BBS logon's own rules
+     * (services/logon-gates), asked of the node this caller was given.
+     */
+    async refuseOnNode(nodeId: number, user: FtpUser) {
+      if (nodeReservedForAnother(nodeId, user.username)) {
+        return { refused: { code: 420, text: 'Node is currently reserved for another user.' } };
+      }
+      if (accountOnlineElsewhere(user.username, nodeId, socketIsAlive) !== null) {
+        // express.e:28762 - its words.
+        return { refused: { code: 420, text: `User ${user.username} already on another node!` } };
+      }
+      return null;
     },
 
     async releaseNode(sessionId: string): Promise<void> {

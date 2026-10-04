@@ -286,10 +286,27 @@ export function commandPieces(input: string, subState?: unknown): string[] {
  * generic failure, so `[ERROR] Command processing failed` (which web used to
  * print, and web-vs-telnet audit item 9 spread to telnet and SSH) was the
  * port's own invention (invented-text audit 2026-10-04, top-10 item 9).
+ *
+ * And the caller is put back at the menu prompt, as a finished command puts
+ * him (command.handler returnToMenuAfterThrow, express.e:28641-28648). Only
+ * logging it left a logged-on caller with no prompt and nothing to answer.
  */
-export function commandFailed(_emitter: { emit: (event: string, ...args: any[]) => unknown }): (error: unknown) => void {
+export function commandFailed(
+  emitter: { emit: (event: string, ...args: any[]) => unknown },
+  session?: BBSSession,
+): (error: unknown) => void {
   return (error: unknown) => {
     console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+    if (!session) return;
+    try {
+      // Lazily: command.handler is the whole board, and this module is
+      // required by every transport before it is.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { returnToMenuAfterThrow } = require('../handlers/command.handler') as typeof import('../handlers/command.handler');
+      returnToMenuAfterThrow(emitter, session);
+    } catch (err) {
+      console.error('[COMMAND ERROR] Could not return the caller to the menu:', err);
+    }
   };
 }
 

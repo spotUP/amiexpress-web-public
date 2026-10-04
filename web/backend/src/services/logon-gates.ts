@@ -169,3 +169,69 @@ export function tokenHolderRefusal(
   const refusal = standingRefusal(account);
   return refusal === null ? { refusal: null, account } : { refusal };
 }
+
+/**
+ * THE NODE GATES: the questions a logon asks about the NODE the caller came in
+ * on, once he has one. express.e asks both in its BBS logon and in its FTP
+ * logon (ftpd's account load runs inside express.e):
+ *
+ *   reserved node      BBS 29129-29135, FTP 28733-28743
+ *   already online     BBS 29715-29727, FTP 28756-28765 (checkUserOnLine(1))
+ *
+ * login-post asks them for web, telnet and SSH with its screens around them;
+ * FTP asks them right after it takes a node and answers 420.
+ */
+
+/**
+ * express.e:28734 / 29131 - `StriCmp(userName, reservedName)`: a sysop
+ * reserved this node (F4, or the admin) and this is not the caller he
+ * reserved it for.
+ */
+export function nodeReservedForAnother(nodeId: number, username: string): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isReservationMatch } = require('./node-reservation.service') as typeof import('./node-reservation.service');
+  return !isReservationMatch(nodeId, username);
+}
+
+/**
+ * express.e checkUserOnLine(1): the node this account is already on, other
+ * than `exceptNodeId`, or null.
+ *
+ * Every node the board has, whichever way its caller came in: a BBS node by
+ * its `node<n>.user` record with a caller still reachable behind it
+ * (userAlreadyOnNode + nodeHasReachableCaller - a record whose caller is gone
+ * is a ghost, cleaned up, never a refusal), and an FTP node by the FTP
+ * presence list, which holds exactly the FTP sessions that have a node.
+ * express.e's checkUserOnLine walks every node's name the same way; an FTP
+ * session there IS a node.
+ *
+ * `socketIsAlive` answers for a web caller's socket (see
+ * nodeHasReachableCaller); a caller that has no socket.io namespace to ask
+ * passes one that says no, and only web callers are affected by it.
+ */
+export function accountOnlineElsewhere(
+  username: string,
+  exceptNodeId: number,
+  socketIsAlive: (socketId: string) => boolean,
+  bbsRoot: string = config.get('dataDir'),
+): number | null {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { userAlreadyOnNode } = require('./user-already-online') as typeof import('./user-already-online');
+  const { nodeHasReachableCaller } = require('../server/session-emitter-registry') as typeof import('../server/session-emitter-registry');
+  const { ftpCallersOnline } = require('../ftp/ftp-presence') as typeof import('../ftp/ftp-presence');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+
+  const onBbsNode = userAlreadyOnNode(
+    bbsRoot,
+    username,
+    exceptNodeId,
+    (nodeId) => nodeHasReachableCaller(nodeId, socketIsAlive),
+  );
+  if (onBbsNode !== null) return onBbsNode;
+
+  const wanted = String(username ?? '').replace(/\0/g, '').trim().toLowerCase();
+  if (wanted === '') return null;
+  const onFtp = ftpCallersOnline().find((caller) =>
+    caller.nodeId !== exceptNodeId && caller.username.trim().toLowerCase() === wanted);
+  return onFtp ? onFtp.nodeId : null;
+}

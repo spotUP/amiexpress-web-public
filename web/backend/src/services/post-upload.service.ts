@@ -21,6 +21,7 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { config } from '../config';
 import { callersLog } from '../server/database-helpers';
 import { doUploadNotify } from '../utils/upload-notify.util';
+import { endUpload } from './upload-end.service';
 
 export interface PostUploadEmitter {
   emit(event: string, ...args: unknown[]): unknown;
@@ -196,21 +197,26 @@ export async function runPostUpload(
     console.error(`[postUpload] onCleanup threw: ${err?.message || err}`);
   }
 
-  // express.e:25657 — IF stat=RESULT_GOODBYE THEN modemOffHook()
-  if (ctx.goodbyeAfter) {
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    const { handleGoodbyeCommand } = require('../handlers/commands/system-commands.handler');
-    handleGoodbyeCommand(emitter, session, 'Y');
-    return;
-  }
+  // uploadaFile returns (express.e:19543-19549) - to the menu, or to the
+  // procedure that is waiting for it (services/upload-end.service.ts), which
+  // does its own goodbye (saveNewMSG 10733-10737).
+  endUpload(session, ctx.goodbyeAfter ? 'goodbye' : 'success', () => {
+    // express.e:25657 — IF stat=RESULT_GOODBYE THEN modemOffHook()
+    if (ctx.goodbyeAfter) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      const { handleGoodbyeCommand } = require('../handlers/commands/system-commands.handler');
+      handleGoodbyeCommand(emitter, session, 'Y');
+      return;
+    }
 
-  // Express.e: after uploadaFile() returns RESULT_SUCCESS the main
-  // command loop simply re-prompts for the next command — it does NOT
-  // re-display the conference bulletin (already shown at join time).
-  // Drop straight to DISPLAY_MENU. The earlier code path here used
-  // DISPLAY_CONF_BULL which re-rendered the join-conf ASCII + uploaders
-  // bull after every upload — wrong UX on every transport.
-  emitter.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  (session as any).menuPause = true;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Express.e: after uploadaFile() returns RESULT_SUCCESS the main
+    // command loop simply re-prompts for the next command — it does NOT
+    // re-display the conference bulletin (already shown at join time).
+    // Drop straight to DISPLAY_MENU. The earlier code path here used
+    // DISPLAY_CONF_BULL which re-rendered the join-conf ASCII + uploaders
+    // bull after every upload — wrong UX on every transport.
+    emitter.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    (session as any).menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  });
 }

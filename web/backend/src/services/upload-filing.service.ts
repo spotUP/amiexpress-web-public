@@ -157,6 +157,12 @@ export interface FilingRequest {
    * `seconds` and `cps` are the transfer's own.
    */
   ftp?: { seconds: number; cps: number };
+  /**
+   * express.e rzmsg: the upload is a message's X (saveNewMSG 10721-10740) and
+   * the file belongs to that message - `dir` is its <msgBaseLocation>F<n>.
+   * See fileIntoMessage.
+   */
+  rzmsg?: { dir: string };
 }
 
 /**
@@ -228,6 +234,8 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
     const { logUpload } = require('../utils/download-logging.util');
     await logUpload(request.filename, request.size, request.nodeId);
   }
+  if (request.rzmsg) return fileIntoMessage(request, request.rzmsg.dir);
+
   const sysopName = String(config.get('sysopName') ?? 'the sysop');
   let status = request.initialStatus;
   let marker: FilingOutcome['marker'] = request.marker;
@@ -525,4 +533,80 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
   }
 
   return { status, marker, duplicate, orphaned, pool, notices };
+}
+
+/**
+ * uploadaFile's rzmsg branch (express.e:19350-19510): a message's X files the
+ * upload into the message, not into the conference.
+ *
+ *   - checkForFile still runs (19356), but a duplicate is not held: foundDupe
+ *     is never set (18958), so the file goes to the message all the same. It
+ *     only goes uncredited (19377), which the front end reads from
+ *     `duplicate`.
+ *   - the file moves to <msgBaseLocation>F<n>/<name> (19403-19427): Rename,
+ *     else a copy, else the name gains a `_` while it is under 35 characters.
+ *   - '\tUpload moved to <path>' (or the unable-to-be-moved warning) goes to
+ *     the CallersLog (19429-19435).
+ *   - sysopULStats(hold=NIL) counts it (19440).
+ *   - its listing is F<n>/<name>.dis, written as a DIR entry (19479-19509).
+ *
+ * No catalogue row, no DIR, no FILES.BBS, no ctop: none of them is touched
+ * for rzmsg in express.e.
+ */
+async function fileIntoMessage(request: FilingRequest, dir: string): Promise<FilingOutcome> {
+  const dataDir = config.get('dataDir');
+  const { checkForFile } = require('../utils/file-upload.util');
+  const duplicate: boolean = await checkForFile(request.filename, request.conferenceId, dataDir, request.nodeId);
+  const marker: FilingOutcome['marker'] = request.marker;
+
+  let moved = !request.playpenPath;
+  let dest = path.join(dir, request.filename);
+  if (request.playpenPath) {
+    fs.mkdirSync(dir, { recursive: true });
+    while (!moved && path.basename(dest).length < 35) {
+      try {
+        fs.renameSync(request.playpenPath, dest);
+        moved = true;
+      } catch {
+        try {
+          fs.copyFileSync(request.playpenPath, dest);
+          moved = true;
+          try { fs.unlinkSync(request.playpenPath); } catch { /* the copy is filed */ }
+        } catch {
+          dest += '_';
+        }
+      }
+    }
+    const { amigaPathOf } = require('./upload-examine.service');
+    const { writeToCallersLog } = require('../utils/download-logging.util');
+    const where = moved ? (amigaPathOf(dataDir, dest) ?? dest) : 'WARNING!\r\nUnable to move file!\r\n';
+    await writeToCallersLog(`\tUpload ${moved ? '' : 'unable to be '}moved to ${where}`, request.nodeId);
+  }
+
+  const { updateSysopUploadStats } = await import('../utils/upload-notify.util');
+  await updateSysopUploadStats(
+    getConferenceDir(request.conferenceId, dataDir),
+    request.conferenceId,
+    dataDir,
+    false,
+    request.uploader.slotNumber,
+  );
+
+  // express.e:19479-19480 - StringF(ray,'\sF\d/\s.dis',msgBaseLocation,msgNumb,str):
+  // the name as uploaded, whatever the move had to call the file.
+  const { writeDirEntry } = await import('../utils/dir-file.util');
+  await writeDirEntry(
+    path.join(dir, `${request.filename}.dis`),
+    request.filename,
+    request.size,
+    getSystemTime(),
+    request.description,
+    marker,
+    request.uploader.username,
+    sentByFor(request.nodeId),
+  );
+
+  // express.e:19431-19432 - the caller is told when it could not be moved.
+  const notices: FilingNotice[] = moved ? [] : [{ kind: 'orphaned', text: 'WARNING!\r\nUnable to move file!' }];
+  return { status: 'active', marker, duplicate, orphaned: !moved, pool: null, notices };
 }

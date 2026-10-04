@@ -26,6 +26,7 @@ import { StorageUnavailableError } from '../../storage/storage-backend';
 import { getPlaypenDir } from '../../utils/bbs-paths.util';
 import { cleanItUp } from '../../utils/clean-it-up.util';
 import { freeDiskSpace, readFreeBytes } from '../../storage/free-space';
+import { endUpload } from '../../services/upload-end.service';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -339,7 +340,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 
   if (currentFileAreas.length === 0) {
     emitText(socket, '\r\nNo file directories available.\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    endUpload(session, 'failure', () => { session.subState = LoggedOnSubState.DISPLAY_MENU; });
     return;
   }
 
@@ -408,10 +409,12 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // floor unconditional.
   const refuse = (message: string): void => {
     emitText(socket, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
-    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
+    endUpload(session, 'success', () => {
+      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    });
   };
 
   // A drive the board believes is DOWN, or one that has spent its monthly

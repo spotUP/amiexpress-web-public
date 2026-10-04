@@ -48,6 +48,13 @@ export interface FtpDeps {
   authenticate(username: string, password: string): Promise<FtpUser | FtpLogonRefusal | null>;
   /** Take a node for this session, or null when the board has none free. */
   reserveNode(sessionId: string, user: FtpUser): Promise<number | null>;
+  /**
+   * The board's NODE gates on the node this caller was given (services/
+   * logon-gates): reserved for someone else (express.e:28733-28743), or this
+   * account already on another node (28756-28765). Null lets him on. Absent
+   * only in fixtures that test something else; the board's deps have it.
+   */
+  refuseOnNode?(nodeId: number, user: FtpUser): Promise<FtpLogonRefusal | null>;
   releaseNode(sessionId: string): Promise<void>;
   /** express.e writes every FTP command to the CallersLog; so do we. */
   log(username: string, message: string, nodeId: number): void;
@@ -970,6 +977,16 @@ export class FtpSession {
       // a session that no WHO, log or time limit can see.
       this.pendingUser = null;
       return this.reply(421, 'All nodes are busy - try again later');
+    }
+
+    // express.e:28733 / 28756 - asked once the caller HAS a node, as express
+    // asks them of the node that answered. The node is given back: a refused
+    // caller holds nothing.
+    const nodeRefusal = await this.deps.refuseOnNode?.(nodeId, user);
+    if (nodeRefusal) {
+      this.pendingUser = null;
+      await this.deps.releaseNode(this.sessionId);
+      return this.reply(nodeRefusal.refused.code, nodeRefusal.refused.text);
     }
 
     this.user = user;

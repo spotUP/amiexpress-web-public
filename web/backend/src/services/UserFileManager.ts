@@ -162,13 +162,14 @@ export class UserFileManager {
   public readonly USERKEYS_STRUCT_SIZE = 56;  // mtop reads 56 bytes per userKeys
   public readonly USERMISC_STRUCT_SIZE = 248; // mtop reads 248 bytes per userMisc
 
-  constructor() {
+  /** @param bbsRoot another board's root - a tool working on a copy of one; the board's own by default. */
+  constructor(bbsRoot?: string) {
     // BBS: logical assignment points to project root.
     // Production (Docker) sets BBS_DATA_DIR pointing at the persistent volume;
     // legacy installs may set BBS_ROOT; dev falls back to the calculated path.
     // __dirname when compiled is /dist/services and with tsx it's /src/services,
     // so go 4 levels up either way: dist|src -> backend -> web -> amiexpress-web.
-    this.bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = bbsRoot || process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
     this.userDataPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.data'));
     this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
     this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));
@@ -1542,6 +1543,65 @@ console.log(`[UserFileManager] Deleted user at slot ${slotNumber} (zeroed out sl
 console.error('[UserFileManager] Error deleting user slot:', error);
       throw error;
     }
+  }
+
+  /**
+   * The three records at a slot, byte for byte: user.data, user.keys and
+   * user.misc as express.e's loadAccount reads them (7984-8010). A record
+   * past the end of its file comes back zero-filled, as loadAccount's short
+   * read leaves its buffer.
+   */
+  public readSlotRecords(slotNumber: number): { user: Buffer; keys: Buffer; misc: Buffer } {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`readSlotRecords: invalid slot ${slotNumber}`);
+    }
+    const read = (filePath: string, size: number): Buffer => {
+      const out = Buffer.alloc(size);
+      if (!fs.existsSync(filePath)) return out;
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        const got = fs.readSync(fd, out, 0, size, (slotNumber - 1) * size);
+        if (got < size) out.fill(0, got);
+      } finally {
+        fs.closeSync(fd);
+      }
+      return out;
+    };
+    return {
+      user: read(this.userDataPath, this.USER_STRUCT_SIZE),
+      keys: read(this.userKeysPath, this.USERKEYS_STRUCT_SIZE),
+      misc: read(this.userMiscPath, this.USERMISC_STRUCT_SIZE),
+    };
+  }
+
+  /**
+   * MOVE an account's records to another slot: the bytes go down whole (no
+   * field is re-encoded, so nothing the serializer does not know survives
+   * untouched), and only the two fields that name the position are changed -
+   * the record's slotNumber (user.data) and the keys record's number - as
+   * express.e's saveAccount writes them for a record at that slot (8040-8075).
+   * A deleted record keeps both at 0 (express.e:21365), wherever it lands.
+   */
+  public moveRecordsToSlot(
+    records: { user: Buffer; keys: Buffer; misc: Buffer },
+    toSlot: number,
+  ): void {
+    if (!Number.isInteger(toSlot) || toSlot < 1) {
+      throw new Error(`moveRecordsToSlot: invalid slot ${toSlot}`);
+    }
+    const layout = this.recordLayout();
+    const user = Buffer.from(records.user);
+    const keys = Buffer.from(records.keys);
+    if (user.readInt16BE(layout.slotNumberOffset) !== 0) user.writeInt16BE(toSlot, layout.slotNumberOffset);
+    if (keys.readInt32BE(layout.keysNumberOffset) !== 0) keys.writeInt32BE(toSlot, layout.keysNumberOffset);
+    this.updateFileAtOffset(this.userDataPath, user, (toSlot - 1) * this.USER_STRUCT_SIZE);
+    this.updateFileAtOffset(this.userKeysPath, keys, (toSlot - 1) * this.USERKEYS_STRUCT_SIZE);
+    this.updateFileAtOffset(this.userMiscPath, Buffer.from(records.misc), (toSlot - 1) * this.USERMISC_STRUCT_SIZE);
+  }
+
+  /** The three files, for a tool that must back them up before it writes. */
+  public userFilePaths(): { data: string; keys: string; misc: string } {
+    return { data: this.userDataPath, keys: this.userKeysPath, misc: this.userMiscPath };
   }
 
   /**

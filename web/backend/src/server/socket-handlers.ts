@@ -759,7 +759,7 @@ console.error('No session found for socket:', socket.id);
     // sequence is dispatched whole, and everything else a character at a time.
     // The operator chat takes a pasted line whole - commandPieces asks
     // chatTakesTheWholeChunk for both transports.
-    dispatchInOrder(session, commandPieces(data, session.subState), (piece) => handleCommand(socket, session, piece), commandFailed(socket));
+    dispatchInOrder(session, commandPieces(data, session.subState), (piece) => handleCommand(socket, session, piece), commandFailed(socket, session));
   });
 
   // The `transfer:*` socket channel that stood here (start/data/end/cancel)
