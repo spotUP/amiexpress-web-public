@@ -7,6 +7,7 @@ import { apiClient } from '../api/client';
 import type { ConferenceConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
 import { formatBytes } from '../lib/format';
+import { MoveExistingFiles } from '../components/storage/MoveExistingFiles';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { pathRows, applyPathEdit, resetPathToDerived, rowsToFormFields } from './conference-path-rows';
 
@@ -619,6 +620,14 @@ export function ConferencesPage() {
                           </button>
                         ))}
                       </div>
+                      {/* Saved on a drive and unchanged here: its files still on this
+                          server can be moved onto that drive. */}
+                      {editingConference &&
+                        (editingConference as never as Record<string, number>)[`storagedrive_${row.dir}`] > 0 &&
+                        (editingConference as never as Record<string, number>)[`storagedrive_${row.dir}`] ===
+                          (formData as never as Record<string, number>)[`storagedrive_${row.dir}`] && (
+                          <MoveExistingFiles conference={editingConference.conference_id} dir={row.dir} />
+                        )}
 
                     <div className="grid grid-cols-2 gap-3">
                       {(['download', 'upload'] as const).map((side) => {

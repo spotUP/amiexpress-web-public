@@ -22,6 +22,8 @@ import {
   listEntries,
   mismatches,
   moveEntry,
+  moveDirectoryToDrive,
+  planMoveToDrive,
   updateDescription,
   type FileListContext,
 } from '../services/file-list.service';
@@ -34,7 +36,7 @@ export function createFileListRouter(db?: unknown): express.Router {
     res.json({ success: true, data, message, timestamp: getSystemTime().toISOString() });
   const fail = (res: Response, error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    const status = /not in that listing|not found/i.test(message) ? 404 : /must be/i.test(message) ? 400 : 500;
+    const status = /not in that listing|not found|not on a cloud drive|No cloud drive/i.test(message) ? 404 : /must be/i.test(message) ? 400 : 500;
     res.status(status).json({ success: false, message, timestamp: getSystemTime().toISOString() });
   };
   const num = (value: string, what: string): number => {
@@ -121,6 +123,28 @@ export function createFileListRouter(db?: unknown): express.Router {
   });
 
   /** Where a conference's listings and folders disagree (plan D3). */
+  /**
+   * A directory put on a cloud drive keeps the files it already had on this
+   * server's disk. What moving them would do: the files, their bytes, and
+   * the room left on the drive.
+   */
+  router.get('/conferences/:conf/dirs/:dir/move-to-drive', async (req: Request, res: Response) => {
+    try {
+      ok(res, await planMoveToDrive(ctx(), num(req.params.conf, 'conf'), num(req.params.dir, 'dir')));
+    } catch (error) {
+      fail(res, error);
+    }
+  });
+
+  /** One batch of that move (about 20 seconds); the caller repeats while files remain. */
+  router.post('/conferences/:conf/dirs/:dir/move-to-drive', async (req: Request, res: Response) => {
+    try {
+      ok(res, await moveDirectoryToDrive(ctx(), num(req.params.conf, 'conf'), num(req.params.dir, 'dir')));
+    } catch (error) {
+      fail(res, error);
+    }
+  });
+
   router.get('/conferences/:conf/mismatches', async (req: Request, res: Response) => {
     try {
       ok(res, await mismatches(ctx(), num(req.params.conf, 'conf')));

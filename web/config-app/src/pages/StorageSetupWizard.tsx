@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, PlugZap, X, XCircle } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
+import { MoveExistingFiles } from '../components/storage/MoveExistingFiles';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import {
@@ -173,6 +174,9 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
     onError: (error: Error) => showError(`Failed to create drive: ${error.message}`),
   });
 
+  // Once the directories are saved, the step offers to move their existing files.
+  const [assigned, setAssigned] = useState(false);
+
   const assignMutation = useMutation({
     mutationFn: async () => {
       const byConference = new Map<number, Record<string, number>>();
@@ -191,7 +195,7 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
       queryClient.invalidateQueries({ queryKey: ['drives'] });
       showSuccess(`${chosenDirs.size} director${chosenDirs.size === 1 ? 'y' : 'ies'} now on drive ${createdDrive}`);
-      onClose();
+      setAssigned(true);
     },
     onError: (error: Error) => showError(`Failed to update conferences: ${error.message}`),
   });
@@ -508,7 +512,30 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
           </>
         )}
 
-        {step === 'use' && createdDrive !== null && (
+        {step === 'use' && createdDrive !== null && assigned && (
+          <>
+            <p className="text-sm text-content-primary">
+              New uploads to these directories now go to drive {createdDrive}. Their existing files are still on
+              this server&apos;s disk and download as before; move them now, or later from the Conferences tab.
+            </p>
+            <div className="max-h-72 space-y-3 overflow-y-auto">
+              {[...chosenDirs].map((pair) => {
+                const [conference, dir] = pair.split(':').map(Number);
+                const name = conferences.find((c) => c.conference_id === conference)?.name ?? `Conference ${conference}`;
+                return (
+                  <div key={pair}>
+                    <p className="text-sm font-medium text-content-primary">
+                      {conference}. {name}, Dir {dir}
+                    </p>
+                    <MoveExistingFiles conference={conference} dir={dir} />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {step === 'use' && createdDrive !== null && !assigned && (
           <>
             <p className="text-sm text-content-primary">
               Drive {createdDrive} is ready. Pick the conference directories whose uploads should go to it.
@@ -548,9 +575,9 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
             </div>
             <p className="text-xs text-content-muted">
               New uploads to the directories you pick are stored on drive {createdDrive}. Files already in them
-              are not copied: they stay on this server&apos;s disk and download exactly as before, also while the
-              drive is unreachable. To change this later: Conferences tab, edit the conference, and pick the drive
-              under &quot;Dir N lives on&quot;.
+              stay on this server&apos;s disk until you move them - the next step offers that - and download
+              exactly as before, also while the drive is unreachable. To change this later: Conferences tab, edit
+              the conference, and pick the drive under &quot;Dir N lives on&quot;.
             </p>
           </>
         )}
@@ -582,10 +609,10 @@ export function StorageSetupWizard({ open, onClose, providers, nextDriveNumber }
           </button>
         ) : step === 'use' ? (
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-secondary">
-              {chosenDirs.size > 0 ? 'Skip' : 'Done'}
+            <button type="button" onClick={onClose} className={assigned ? 'btn-primary' : 'btn-secondary'}>
+              {chosenDirs.size > 0 && !assigned ? 'Skip' : 'Done'}
             </button>
-            {chosenDirs.size > 0 && (
+            {chosenDirs.size > 0 && !assigned && (
               <button
                 type="button"
                 onClick={() => assignMutation.mutate()}

@@ -229,3 +229,57 @@ describe('a directory put on a cloud drive with files already in it', () => {
     expect(Buffer.from(old.body).toString()).toBe('old-local-bytes');
   });
 });
+
+describe("moving a directory's existing files onto its drive", () => {
+  async function listed(dataDir: string, names: string[]): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { writeUploadToDirFile } = require('../../src/utils/dir-file.util');
+    for (const name of names) {
+      await writeUploadToDirFile(name, 15, new Date(0), 'a file', 'N', 'spot', path.join(dataDir, 'Conf1'), 'active', 1, false);
+    }
+  }
+
+  function filesRoute(): express.Express {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { createFileListRouter } = require('../../src/api/file-list-routes');
+    const server = express();
+    server.use(express.json());
+    server.use('/api/files', createFileListRouter(mockDb));
+    return server;
+  }
+
+  it('plans the files still on local disk, then moves them into the bucket, and they still download', async () => {
+    const { dataDir, backend } = boardMovedToDrive();
+    // A listed file that exists only in HOLD has not been released: never moved.
+    fs.mkdirSync(path.join(dataDir, 'Conf1', 'HOLD'), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'Conf1', 'HOLD', 'SECRET.LHA'), 'held-bytes');
+    await listed(dataDir, ['OLD.LHA', 'SECRET.LHA']);
+
+    const plan = await request(filesRoute()).get('/api/files/conferences/1/dirs/1/move-to-drive');
+    expect(plan.status).toBe(200);
+    expect(plan.body.data).toMatchObject({ driveNumber: 2, totalBytes: 15, files: [{ filename: 'OLD.LHA', size: 15 }] });
+
+    const run = await request(filesRoute()).post('/api/files/conferences/1/dirs/1/move-to-drive');
+    expect(run.status).toBe(200);
+    expect(run.body.data).toEqual({ moved: ['OLD.LHA'], failed: [], remaining: 0 });
+
+    expect(fs.existsSync(path.join(dataDir, 'Conf1', 'Files', 'OLD.LHA'))).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'Conf1', 'HOLD', 'SECRET.LHA'))).toBe(true);
+    expect((await backend.list('')).map((o: { key: string }) => o.key).join(',')).toContain('OLD.LHA');
+
+    const res = await request(app()).get('/api/download/1/1/OLD.LHA');
+    expect(res.status).toBe(200);
+    expect(Buffer.from(res.body).toString()).toBe('old-local-bytes');
+
+    // Run again: nothing left to move.
+    const again = await request(filesRoute()).post('/api/files/conferences/1/dirs/1/move-to-drive');
+    expect(again.body.data).toEqual({ moved: [], failed: [], remaining: 0 });
+  });
+
+  it('says so for a directory that is not on a drive', async () => {
+    boardMovedToDrive();
+    const res = await request(filesRoute()).get('/api/files/conferences/1/dirs/5/move-to-drive');
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Conference 1 directory 5 is not on a cloud drive.');
+  });
+});

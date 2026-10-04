@@ -1041,6 +1041,18 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/files/conferences`);
   }
 
+  /** What moving a directory's local files onto its cloud drive would do (nothing is moved). */
+  async getMoveToDrivePlan(conf: number, dir: number) {
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/dirs/${dir}/move-to-drive`);
+  }
+
+  /** One batch of that move; repeat while `remaining` is above 0 and the batch moved something. */
+  async moveToDriveBatch(conf: number, dir: number) {
+    return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/dirs/${dir}/move-to-drive`, {
+      method: 'POST',
+    });
+  }
+
   async getFileListEntries(conf: number, dir: number) {
     return this.request<ApiResponse>(`${API_BASE}/files/conferences/${conf}/dirs/${dir}/entries`);
   }

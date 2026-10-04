@@ -20,7 +20,8 @@ import { getStorageContext } from '../storage/storage-context';
 import { usableAreasFor } from '../storage/usable-areas';
 import { putUploadIntoPool, uploadObjectKey } from '../storage/remote-upload';
 import { storageFailureText } from '../storage/remote-download';
-import { objectPrefixFor } from '../storage/remote-areas';
+import { objectPrefixFor, type RemoteArea } from '../storage/remote-areas';
+import type { StorageContext } from '../storage/storage-context';
 
 /** Where the board is, and the catalogue to keep in step (both optional in tests). */
 export interface FileListContext {
@@ -448,39 +449,7 @@ export async function moveBytes(
         `${filename} was not found on local disk, so it could not be filed into DRIVE.${destArea.storageVolume}`
       );
     }
-    let location;
-    try {
-      location = await putUploadIntoPool(source, filename, destArea, storage);
-    } catch (error) {
-      throw new Error(storageFailureText(error));
-    }
-    // Tell the catalog where the bytes landed. This is the HOLD/PRIVATE
-    // release path (srcDir -1 is the HOLD listing) - the row for this file
-    // was already inserted with `areaid = destArea.id` at upload time
-    // (status 'hold'), so this UPDATE finds it by the exact
-    // (filename, areaId) pair recordLocation matches on. Without this,
-    // routes-setup.ts's by-id download route reads a NULL storage_volume
-    // for a file that IS in the bucket and 404s it, usedBytesByVolume
-    // under-counts this drive, and entriesOnVolume omits it from the
-    // per-volume contents report.
-    //
-    // Best-effort, deliberately: the bytes are already safely in the pool
-    // (putUploadIntoPool succeeded above), and an ordinary re-move between
-    // two already-active areas can legitimately have no matching
-    // (filename, destArea.id) row yet - the catalog sync for that path is
-    // its own pre-existing gap (see the commented-out moveDbEntry below),
-    // not one this fix should turn into a failed move that leaves the
-    // object orphaned in the bucket with the sysop told it failed.
-    try {
-      ctx.db?.recordLocation?.(filename, destArea.id, location.driveNumber, location.key);
-    } catch (err) {
-      console.error(
-        `[FileMaintenance] moved ${filename} into DRIVE.${location.driveNumber} but could not record its ` +
-          `catalog location: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    // Only once the object is really there.
-    await fsp.unlink(source);
+    await fileIntoPool(ctx, source, filename, destArea, storage);
     return;
   }
 
@@ -505,14 +474,72 @@ export async function moveBytes(
   throw new Error(`${filename} was not found in the conference's file directories`);
 }
 
+/**
+ * One local file into a pooled area: put, record where it landed, and only
+ * then remove the local copy. FM's move (moveBytes) and moving a whole
+ * directory onto its drive (moveDirectoryToDrive) both go through here.
+ */
+export async function fileIntoPool(
+  ctx: FileListContext,
+  source: string,
+  filename: string,
+  destArea: RemoteArea,
+  storage: StorageContext,
+): Promise<void> {
+  let location;
+  try {
+    location = await putUploadIntoPool(source, filename, destArea, storage);
+  } catch (error) {
+    throw new Error(storageFailureText(error));
+  }
+  // Tell the catalog where the bytes landed. This is the HOLD/PRIVATE
+  // release path (srcDir -1 is the HOLD listing) - the row for this file
+  // was already inserted with `areaid = destArea.id` at upload time
+  // (status 'hold'), so this UPDATE finds it by the exact
+  // (filename, areaId) pair recordLocation matches on. Without this,
+  // routes-setup.ts's by-id download route reads a NULL storage_volume
+  // for a file that IS in the bucket and 404s it, usedBytesByVolume
+  // under-counts this drive, and entriesOnVolume omits it from the
+  // per-volume contents report.
+  //
+  // Best-effort, deliberately: the bytes are already safely in the pool
+  // (putUploadIntoPool succeeded above), and an ordinary re-move between
+  // two already-active areas can legitimately have no matching
+  // (filename, destArea.id) row yet - the catalog sync for that path is
+  // its own pre-existing gap (see the commented-out moveDbEntry below),
+  // not one this fix should turn into a failed move that leaves the
+  // object orphaned in the bucket with the sysop told it failed.
+  try {
+    ctx.db?.recordLocation?.(filename, destArea.id, location.driveNumber, location.key);
+  } catch (err) {
+    console.error(
+      `[FileMaintenance] moved ${filename} into DRIVE.${location.driveNumber} but could not record its ` +
+        `catalog location: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  // Only once the object is really there.
+  await fsp.unlink(source);
+}
+
 export async function buildFileCandidates(ctx: FileListContext, confNum: number, filename: string, dirNum?: number): Promise<string[]> {
   const dataDir = ctx.dataDir;
   const confPath = getConferenceDir(confNum, dataDir);
-  const list: string[] = [];
+  // HOLD / LCFILES first, then where a released file lives.
+  return [
+    path.join(confPath, 'HOLD', filename),
+    path.join(confPath, 'LCFILES', filename),
+    ...releasedFileCandidates(ctx, confNum, filename, dirNum),
+  ];
+}
 
-  // HOLD / LCFILES
-  list.push(path.join(confPath, 'HOLD', filename));
-  list.push(path.join(confPath, 'LCFILES', filename));
+/**
+ * Where a RELEASED file of this conference can be on local disk - never
+ * HOLD or LCFILES, whose files the board has not released.
+ */
+export function releasedFileCandidates(ctx: FileListContext, confNum: number, filename: string, dirNum?: number): string[] {
+  const dataDir = ctx.dataDir;
+  const confPath = getConferenceDir(confNum, dataDir);
+  const list: string[] = [];
 
   // DIR-specific folder (best-effort)
   if (dirNum && dirNum > 0) {
@@ -671,4 +698,115 @@ export async function deleteUnlisted(ctx: FileListContext, conf: number, folder:
   if (!target) throw new Error(`${folder}/${filename} is not found among this conference's unlisted files`);
   await fsp.unlink(path.join(ctx.dataDir, target.folder, target.filename));
   forgetDirectoryListings();
+}
+
+/** A directory's files still on this server's disk, and whether they fit on its drive. */
+export interface MoveToDrivePlan {
+  conference: number;
+  dir: number;
+  driveNumber: number;
+  files: Array<{ filename: string; size: number }>;
+  totalBytes: number;
+  /** Room left on the drive; null when the drive declares no QUOTA. */
+  roomBytes: number | null;
+}
+
+/** What one batch moved, and what is left. */
+export interface MoveToDriveResult {
+  moved: string[];
+  failed: Array<{ filename: string; error: string }>;
+  remaining: number;
+}
+
+/**
+ * The pooled area a directory is on, or a sentence saying why it is not.
+ * The pool's area list follows the conference icons (onConferencesChanged
+ * rebuilds it), so a directory just put on a drive is found here.
+ */
+function pooledAreaOf(conference: number, dir: number): { area: RemoteArea; storage: StorageContext } {
+  const storage = getStorageContext();
+  if (!storage) throw new Error('No cloud drive is configured on this board.');
+  const area = usableAreasFor(conference, storage).find((a) => a.dirNumber === dir);
+  if (!area || area.storageVolume === undefined) {
+    throw new Error(`Conference ${conference} directory ${dir} is not on a cloud drive.`);
+  }
+  return { area, storage };
+}
+
+/** The released files of DIR<dir> that are on local disk: name, size and where. */
+async function localFilesOf(ctx: FileListContext, conference: number, dir: number) {
+  const out: Array<{ filename: string; size: number; source: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of await listEntries(ctx, conference, dir)) {
+    const filename = entry.filename.trim();
+    if (!filename || seen.has(filename.toLowerCase())) continue;
+    seen.add(filename.toLowerCase());
+    for (const candidate of releasedFileCandidates(ctx, conference, filename, dir)) {
+      const found = fs.existsSync(candidate)
+        ? candidate
+        : findCaseInsensitive(path.dirname(candidate), path.basename(candidate));
+      if (found && fs.existsSync(found) && fs.statSync(found).isFile()) {
+        out.push({ filename, size: fs.statSync(found).size, source: found });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * What moving a directory's existing files onto its drive would do. Putting
+ * a directory on a drive (STORAGEDRIVE.n) sends only NEW uploads there; the
+ * files it already had stay on this server's disk until they are moved.
+ */
+export async function planMoveToDrive(ctx: FileListContext, conference: number, dir: number): Promise<MoveToDrivePlan> {
+  const { area, storage } = pooledAreaOf(conference, dir);
+  const files = await localFilesOf(ctx, conference, dir);
+  const room = storage.volumes.freeBytesOn(area.storageVolume!);
+  return {
+    conference,
+    dir,
+    driveNumber: area.storageVolume!,
+    files: files.map(({ filename, size }) => ({ filename, size })),
+    totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+    roomBytes: Number.isFinite(room) ? room : null,
+  };
+}
+
+/**
+ * Moves a directory's local files onto its drive, one at a time through
+ * fileIntoPool, for at most `budgetMs` - a caller loops until `remaining`
+ * is 0. A file that moved is no longer local, so a batch that stops (a
+ * timeout, a full drive, a restart) resumes where it left off. A file that
+ * does not fit in the room left is not tried; the listings do not change -
+ * the file is the same file, only its bytes moved.
+ */
+export async function moveDirectoryToDrive(
+  ctx: FileListContext,
+  conference: number,
+  dir: number,
+  budgetMs = 20_000,
+): Promise<MoveToDriveResult> {
+  const { area, storage } = pooledAreaOf(conference, dir);
+  const files = await localFilesOf(ctx, conference, dir);
+  const started = Date.now();
+  const moved: string[] = [];
+  const failed: MoveToDriveResult['failed'] = [];
+  for (const file of files) {
+    if (Date.now() - started > budgetMs) break;
+    if (file.size > storage.volumes.freeBytesOn(area.storageVolume!)) {
+      failed.push({ filename: file.filename, error: `Drive ${area.storageVolume} has no room for it.` });
+      continue;
+    }
+    try {
+      await fileIntoPool(ctx, file.source, file.filename, area, storage);
+      moved.push(file.filename);
+    } catch (error) {
+      failed.push({ filename: file.filename, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  // The listings amigafs remembers still name the files just moved.
+  forgetDirectoryListings();
+  const remaining = (await localFilesOf(ctx, conference, dir)).length - failed.length;
+  return { moved, failed, remaining: Math.max(0, remaining) };
 }
