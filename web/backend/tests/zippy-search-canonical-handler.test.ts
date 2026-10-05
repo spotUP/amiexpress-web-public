@@ -18,9 +18,8 @@
  *
  * Driven at runtime over a temp board with two DIR files: a caller types Z at
  * the real `processCommand`, answers the search prompt and the dir-span
- * prompt through the real `handleCommand`, and the wire is read. Each other
- * dispatcher (command-handler/command-execution's `processBBSCommand`, which
- * core.ts routes through, and the legacy forwarder) is driven far enough to
+ * prompt through the real `handleCommand`, and the wire is read. The legacy
+ * forwarder is driven far enough to
  * show it lands in the canonical handler: a typo in any require path would
  * throw here instead of silently breaking Z at runtime.
  */
@@ -32,7 +31,6 @@ import * as path from 'path';
 
 import { config } from '../src/config';
 import { processCommand, handleCommand } from '../src/handlers/command.handler';
-import { processBBSCommand } from '../src/handlers/command-handler/command-execution';
 import { handleZippySearchCommand } from '../src/handlers/commands/utility-commands.handler';
 import { BBSState, LoggedOnSubState } from '../src/index';
 import { flushOutput } from '../src/utils/output.util';
@@ -128,14 +126,6 @@ describe('Z command uses canonical ZippySearchHandler (C-Z, express.e:26123-2621
 
     expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
     expect(session.tempData.zippySearchString).toBe('WOMBAT');
-  });
-
-  test('the dispatcher core.ts routes through reaches the canonical handler', async () => {
-    const { socket, session } = aCaller();
-
-    await processBBSCommand(socket, session, 'Z', 'wombat');
-
-    expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
   });
 
   test('the legacy utility-commands export forwards to the canonical handler', async () => {

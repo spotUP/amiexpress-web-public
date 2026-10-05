@@ -11,15 +11,14 @@
 process.env.SKIP_DB_INIT = '1';
 
 const processCommand = jest.fn(async () => 'SUCCESS');
-jest.mock('../../src/handlers/command.handler', () => ({ processCommand }));
-const coreHandleCommand = jest.fn(async () => undefined);
-jest.mock('../../src/handlers/command-handler/core', () => ({ handleCommand: coreHandleCommand }));
+const handleCommand = jest.fn(async () => undefined);
+jest.mock('../../src/handlers/command.handler', () => ({ processCommand, handleCommand }));
 
 import { runScreenCommands } from '../../src/handlers/screen.handler';
 
 const socket: any = { id: 'screen-cmd', emit: () => true, on: () => socket };
 
-beforeEach(() => { processCommand.mockClear(); coreHandleCommand.mockClear(); });
+beforeEach(() => { processCommand.mockClear(); handleCommand.mockClear(); });
 
 it('runs WHO, with parameters, through processCommand with the SYSCMD tier on', async () => {
   const session: any = { nodeId: 1, tempData: {} };
@@ -27,13 +26,13 @@ it('runs WHO, with parameters, through processCommand with the SYSCMD tier on', 
 
   expect(processCommand).toHaveBeenNthCalledWith(1, socket, session, 'WHO', '', true);
   expect(processCommand).toHaveBeenNthCalledWith(2, socket, session, 'CTOP', 'NOW', true);
-  expect(coreHandleCommand).not.toHaveBeenCalled();
+  expect(handleCommand).not.toHaveBeenCalled();
 });
 
-it('still hands a DOORS: helper path to the module that knows it', async () => {
+it('hands a DOORS: helper path to the board\'s handleCommand, which runs WHO2\'s NI/NO', async () => {
   const session: any = { nodeId: 1, tempData: {} };
   await runScreenCommands(socket, session, ['DOORS:who/NI']);
 
-  expect(coreHandleCommand).toHaveBeenCalledWith(socket, session, 'DOORS:who/NI');
+  expect(handleCommand).toHaveBeenCalledWith(socket, session, 'DOORS:who/NI');
   expect(processCommand).not.toHaveBeenCalled();
 });

@@ -180,9 +180,9 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
 });
 
 /*
- * Every live dispatcher of the graphics prompt, driven with a real keystroke.
- * command.handler.ts is the entry point every transport reaches;
- * command-handler/core.ts is the one screen.handler re-enters. The regression
+ * The dispatcher of the graphics prompt, driven with a real keystroke.
+ * command.handler.ts is the entry point every transport reaches (the second
+ * dispatcher, command-handler/core.ts, is gone). The regression
  * was a dispatcher with its own copy that set only `tempData.ripMode` "for
  * future use", so the answer is asserted as the session the screen loader
  * reads - ripMode itself - and the dead field must stay unset.
@@ -191,7 +191,6 @@ describe('every live dispatcher applies the answer the caller typed', () => {
   const { BBSState, LoggedOnSubState } = require('../../src/constants/bbs-states');
   const dispatchers: Array<[string, () => (s: any, x: any, d: string) => Promise<unknown>]> = [
     ['command.handler', () => require('../../src/handlers/command.handler').handleCommand],
-    ['command-handler/core', () => require('../../src/handlers/command-handler/core').handleCommand],
   ];
 
   /** Its own socket id: the output buffer is keyed by it, and a shared key hands the text to another test's socket. */

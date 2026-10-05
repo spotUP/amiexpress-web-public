@@ -3802,13 +3802,14 @@ console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, 
  * it cleared the screen before every command (wiping the art the screen had
  * just drawn), never searched SYSCMD, had no WHO, read and posted the wrong
  * base in custom-msgbase conferences, and lacked the port's newer commands
- * (express.e parity survey, 2026-09-29). A `DOORS:` helper path is the one
- * thing only that module knows how to run, so it keeps going there.
+ * (express.e parity survey, 2026-09-29). A `DOORS:` helper path (WHO2's
+ * NI/NO node tracking) goes to the board's handleCommand, which runs it; the
+ * second dispatcher and its copy of that are gone.
  */
 export async function runScreenCommand(socket: any, session: BBSSession, commandStr: string): Promise<unknown> {
   const trimmed = (commandStr || '').trim();
   if (/^DOORS:/i.test(trimmed)) {
-    const { handleCommand } = require('./command-handler/core');
+    const { handleCommand } = require('./command.handler');
     return handleCommand(socket, session, trimmed);
   }
   const [command, ...rest] = trimmed.toUpperCase().split(/\s+/);
