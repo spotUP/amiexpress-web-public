@@ -30,6 +30,7 @@ import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
 import { parseInfoFile } from '../../utils/info-file.util';
+import { nodeFlag } from '../../utils/node-tooltypes.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
 // materially, so re-consent can be forced for existing users).
@@ -96,7 +97,6 @@ interface QuestionnaireState {
   answers: QuestionnaireAnswer[];
   scriptPath: string;
   tempAnswerPath: string;
-  finalAnswerPath: string;
   transcript: string[];
 }
 
@@ -1314,7 +1314,6 @@ async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean
 
   const nodeDir = getNodeDirectory(session);
   const tempPath = path.join(nodeDir, 'TempAns');
-  const answersPath = path.join(nodeDir, 'Answers');
 
   session.newUserData.questionnaire = {
     steps,
@@ -1322,7 +1321,6 @@ async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean
     answers: [],
     scriptPath,
     tempAnswerPath: tempPath,
-    finalAnswerPath: answersPath,
     transcript: []
   };
 
@@ -1489,10 +1487,22 @@ console.warn('[NEW USER] Failed to write TempAns file:', error);
   }
 
   try {
-    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\n`, 'latin1');
+    amigafs.appendFileSync(answersFileFor(session.nodeId || 0, slotNumber, nodeDir), `${content}\n`, 'latin1');
   } catch (error) {
 console.warn('[NEW USER] Failed to append Answers file:', error);
   }
+}
+
+/**
+ * Where a new caller's answers are appended (express.e:30332-30340): with the
+ * node's CENTRAL_ANSWERS switch, one file per account under the board's
+ * Answers/ (made if missing), named by slot; otherwise the node's own Answers.
+ */
+export function answersFileFor(nodeId: number, slotNumber: number, nodeDir: string): string {
+  if (!nodeFlag(nodeId, 'CENTRAL_ANSWERS')) return path.join(nodeDir, 'Answers');
+  const central = path.join(config.getConfig().dataDir, 'Answers');
+  if (!amigafs.existsSync(central)) amigafs.mkdirSync(central, { recursive: true });
+  return path.join(central, String(slotNumber));
 }
 
 function getNodeDirectory(session: any): string {
