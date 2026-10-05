@@ -16,6 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { dateTimeToDateStamp } from '../../utils/date-time.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { readChar } from '../../utils/await-input';
+import { emitText } from '../../utils/output.util';
 
 // Dependencies injected from index.ts
 let _conferences: any[] = [];
@@ -260,7 +262,6 @@ console.error('[confScan] Failed to update AquaScan.UserData:', err);
  * @param socket  - Socket
  * @param session - BBS session
  * @param numConf - Total number of conferences
- * @param confAccess - User confAccess string
  * @param user    - User object
  */
 /**
@@ -276,11 +277,10 @@ export function partialUploadsNotice(): string[] {
   ];
 }
 
-async function performPartialUploadCheck(
+export async function performPartialUploadCheck(
   socket: any,
   session: any,
   numConf: number,
-  confAccess: string,
   user: any
 ): Promise<void> {
   const { joinConference } = require('../operations/conference.handler');
@@ -292,8 +292,8 @@ async function performPartialUploadCheck(
   // express.e:28119 - FOR conf:=1 TO cmds.numConf
   for (let confIdx = 0; confIdx < numConf; confIdx++) {
     const conf = confIdx + 1;
-    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
-    if (accessChar !== 'X') continue;
+    // express.e:28120 checkConfAccess - flags or an area name, as everywhere.
+    if (!checkConfAccess(user, conf)) continue;
 
     // express.e:28121 - mystat:=joinConf(conf,1,TRUE,FALSE,FORCE_MAILSCAN_SKIP)
     const confMsgBases = _messageBases.filter(mb => mb.conferenceId === conf);
@@ -326,22 +326,23 @@ async function performPartialUploadCheck(
     // express.e:28127 - setEnvStat(ENV_UPLOADING)
     session.currentConf = conf;
 
-    // express.e:28130 - bgFileCheck tooltype check (web: always FALSE for remote)
-    // express.e:28134 - mystat:=uploadaFile(0,'URG',FALSE)
-    // Display partial upload notice and trigger upload handler
-    for (const line of partialUploadsNotice()) socket.emit('ansi-output', line);
-
-    // For web version, we show the notice but cannot block here waiting for input.
-    // Partial upload resume via 'URG' mode is triggered via the upload handler.
-    // express.e:17634 rts_stat:=RESULT_FAILURE (view=yes) -> uploadaFile(0,'URG',FALSE)
-    // WEB_: defer to upload handler; log the partial files for sysop visibility.
-console.log(`[confScan] Partial uploads for slot ${slotNumber} in Conf${conf}:`, partialFiles);
-
-    // express.e:28135 - IF mystat=RESULT_GOODBYE THEN modemOffHook() — not applicable for web
-    // express.e:28137 - ELSEIF(mystat=RESULT_ABORT) aePuts('\b\n') — user answered N
-    socket.emit('ansi-output', '\r\n');
-
-    // express.e:28142 - EXIT mystat=RESULT_FAILURE
+    // express.e:17586, 17613 - the notice and partUploadOK(1)'s question.
+    for (const line of partialUploadsNotice()) emitText(socket, line);
+    // express.e:17615-17631 - read keys until Y or N. N: "No!" and
+    // RESULT_ABORT; Y: RESULT_FAILURE, which means "view them".
+    let key = '';
+    while (key !== 'y' && key !== 'n') key = (await readChar(socket, session)).toLowerCase();
+    if (key === 'n') {
+      emitText(socket, 'No!\r\n');
+      emitText(socket, '\r\n'); // express.e:28137-28138 RESULT_ABORT
+      continue;
+    }
+    // express.e:28126-28134 - in this conference, the upload: its resume
+    // step (resumeStuff) offers each part file back.
+    const { uploadaFileAndWait } = require('../commands/user-commands.handler');
+    const stat: string = await uploadaFileAndWait(socket, session, false);
+    // express.e:28142 - EXIT mystat=RESULT_FAILURE; a goodbye ends the scan.
+    if (stat === 'failure' || stat === 'goodbye') break;
     // express.e:28143 - IF timeout/no_carrier/goodbye THEN RETURN mystat
     // (no carrier/timeout checking needed for web sessions)
   }
@@ -352,7 +353,7 @@ console.log(`[confScan] Partial uploads for slot ${slotNumber} in Conf${conf}:`,
   // paginatedScreen while advanceDisplayFlow carried on into the rejoin, so
   // the prompt was buried. Without it the conference bulletin drew straight
   // over the scan ("no pause after mail scan", sysop, 2026-09-29).
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
   session.confScanPauseOwed = true;
 }
 
@@ -442,8 +443,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
 
     // 28117-28147
     if (checkSecurity(user, ACSPermission.UPLOAD)) {
-      const confAccess = user.confAccess || user.conferenceAccess || '';
-      await performPartialUploadCheck(socket, session, numConf, confAccess, user);
+      await performPartialUploadCheck(socket, session, numConf, user);
     }
     return 0;
   } finally {
