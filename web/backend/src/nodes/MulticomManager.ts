@@ -501,13 +501,20 @@ console.warn(
    * RTW checks netSocket to determine if a node is valid.
    */
   private clearMyNodeInEmulator(emulator: MoiraEmulator, addr: number): void {
-    // First zero everything
+    // An empty slot as ACP's initSemaSemiNodes leaves it (ACP.e:2307-2354):
+    // no handle, no stats, t NIL, netSocket -1, not private, offHook TRUE,
+    // chatColor i+1 (less 6 past 7). The `.s` link at +0x74 is ACP's and
+    // stays for the board's lifetime - a node that logs off keeps its port.
+    const s = emulator.readMemory32(addr + 0x74);
     for (let i = 0; i < MY_NODE_SIZE; i++) {
       emulator.writeMemory(addr + i, 0);
     }
-    // Then set netSocket to -1 (disconnected) at offset 0x20 (aligned)
-    // express.e: ni.netSocket:=-1 for disconnected users
-    emulator.writeMemory32(addr + 0x20, 0xFFFFFFFF);  // -1 in unsigned 32-bit
+    const index = Math.round((addr - MY_NODE_ARRAY_BASE) / MY_NODE_SIZE);
+    const chatColor = index + 1 > 7 ? index + 1 - 6 : index + 1;
+    emulator.writeMemory32(addr + 0x20, 0xFFFFFFFF);  // netSocket -1
+    emulator.writeMemory32(addr + 0x24, chatColor);
+    emulator.writeMemory32(addr + 0x28, 0xFFFFFFFF);  // offHook TRUE
+    emulator.writeMemory32(addr + 0x74, s);
   }
 
   /**
@@ -583,6 +590,10 @@ console.warn(
     for (let i = 0; i < SINGLE_PORT_SIZE; i++) {
       emulator.writeMemory(addr + i, 0);
     }
+    // ACP.e:2330 / 2343 singleNode.status:=-1 - no node here. A zero reads as
+    // a node at its menu (ENV_MENU): NodeChat listed all 32 slots as callers
+    // logged on since 1970.
+    emulator.writeMemory32(addr + 0x52, 0xFFFFFFFF);
   }
 
   /**

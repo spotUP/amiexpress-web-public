@@ -95,3 +95,23 @@ describe('one door exiting does not wipe another door on the same node', () => {
     expect(onlooker.emulator.readMemory32(marker)).toBe(0);
   });
 });
+
+// ACP's initSemaSemiNodes (ACP.e:2307-2354) is what an empty slot looks like:
+// singlePort status -1 (no node), netSocket -1, offHook TRUE, and the `.s`
+// link kept. The port zeroed the slot, so a door read status 0 - a node at
+// its menu - for every one of the 32 slots, and a cleared node lost its link.
+describe('an empty node slot is what ACP leaves', () => {
+  it('reads as no node (status -1) and keeps its singlePort link', () => {
+    const manager = new MulticomManager();
+    const { emulator } = aLiveDoorOn(manager, 'caller-node1', 1);
+
+    expect(emulator.readMemory32(singlePortOf(5) + 0x52)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x20)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x28)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x74)).toBe(singlePortOf(5));
+
+    manager.clearNode(5);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x74)).toBe(singlePortOf(5));
+    expect(emulator.readMemory32(singlePortOf(5) + 0x52)).toBe(0xffffffff);
+  });
+});
