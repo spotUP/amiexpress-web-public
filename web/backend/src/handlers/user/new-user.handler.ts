@@ -687,7 +687,8 @@ async function abortNewUser(socket: Socket, session: any, message: string) {
   session.state = BBSState.AWAIT;
   session.subState = undefined;
   session.newUserData = undefined;
-  // Authentic AmiExpress/modem behaviour: line-drop is announced as NO CARRIER.
+  // WEB_: the modem's NO CARRIER. express.e prints nothing here (its logoff
+  // text sits inside IF loggedOnUser<>NIL, 8163); a dial-up caller saw the modem drop.
   socket.emit('ansi-output', '\r\nNO CARRIER\r\n');
   // socket.io v4: pass true to close the underlying transport, not just this
   // namespace — otherwise the terminal sees no obvious end.
@@ -1618,6 +1619,7 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
     });
 
     if (!newUserId) {
+      // WEB_: express.e's saveAccount cannot fail visibly; a write this board could not make can.
       socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
       session.state = BBSState.AWAIT;
       return false;
@@ -1657,6 +1659,7 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     // Fetch the full user object
     const newUser = await db.getUserByUsername(data.username);
     if (!newUser) {
+      // WEB_: as above - no express.e counterpart.
       socket.emit('ansi-output', '\r\n\x1b[31mError fetching account. Please try again.\x1b[0m\r\n');
       session.state = BBSState.AWAIT;
       return false;
@@ -1709,6 +1712,7 @@ console.error('[NewUser] Could not start the conference records:', err);
     return true;
   } catch (error) {
 console.error(' [NEW USER] Account creation error:', error);
+    // WEB_: as above - no express.e counterpart.
     socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
     session.state = BBSState.AWAIT;
     return false;

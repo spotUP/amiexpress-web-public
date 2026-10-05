@@ -887,6 +887,7 @@ export async function runPostAuthLogin(
       await executeDoor(emitter as any, session, liveChatDoor, []);
     } catch (error) {
       console.error("[AUTH] Failed to launch LiveChat door:", error);
+      // WEB_: the chat-only sign-in (?chatOnly) has no express.e counterpart.
       emitter.emit(
         "ansi-output",
         "\r\n\x1b[31mFailed to launch LiveChat. Please try again.\x1b[0m\r\n",

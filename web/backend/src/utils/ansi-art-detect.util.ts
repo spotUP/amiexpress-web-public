@@ -63,7 +63,10 @@
 import { looksLikeAsciiArt, positionsCursorAbsolutely } from './ascii-art.util';
 import { C64_COLUMNS, petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 
-/** ASCII token per the strategy plan - the board never uses emoji or icons in BBS output. */
+/**
+ * WEB_: a C64 session's stand-in for 80-column art it cannot draw. express.e
+ * has no 40-column rendering. ASCII token - never emoji or icons in BBS output.
+ */
 export const ANSI_ART_SKIPPED_NOTICE = '[80-COLUMN ANSI SCREEN - SKIPPED]\r\n';
 
 /** Share of non-blank rows that must look like art before the whole screen is art. */
