@@ -81,7 +81,7 @@
       "cfgKey": "TIMEZONE",
       "label": "Time zone",
       "type": "string",
-      "default": "GMT Standard Time",
+      "default": "W. Europe Standard Time",
       "help": "Windows naming, because the scenewall server is what reads it."
     },
     {

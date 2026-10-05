@@ -78,9 +78,9 @@
       "cfgKey": "TIMEZONE",
       "label": "Timezone",
       "type": "string",
-      "default": "GMT Standard Time",
+      "default": "W. Europe Standard Time",
       "group": "Display",
-      "help": "Used to print call times. Windows timezone naming, not IANA - \"GMT Standard Time\", not \"Europe/London\"."
+      "help": "Used to print call times. Windows timezone naming, not IANA - \"W. Europe Standard Time\", not \"Europe/Stockholm\". The board sends it with every posted call and reads the list in it."
     }
   ]
 }
