@@ -1500,7 +1500,9 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
             // System password configured — enter gate (express.e:29329-29356)
             session.tempData.systemPasswordAttempts = 0;
             session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
-            emitText(socket, '\r\n');
+            // The graphics answer's lineInput break (29530), then
+            // doSystemPassword's aePuts('\b\n') (29331).
+            emitText(socket, '\r\n\r\n');
             const { displayScreen: ds } = require('./screen.handler');
             await ds(socket, session, 'PRIVATE'); // express.e:29336 — optional PRIVATE screen
             emitText(socket, '>: ');              // express.e:29332 — default SYS_PWRD_PROMPT
@@ -1581,7 +1583,8 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
         // Wrong password — express.e:29343-29346
         const spAttempts = ((session.tempData.systemPasswordAttempts as number) || 0) + 1;
         session.tempData.systemPasswordAttempts = spAttempts;
-        emitText(socket, 'Invalid PassWord\r\n');
+        // getPass2's second break on a failure (1603), then 29343's line.
+        emitText(socket, '\r\nInvalid PassWord\r\n');
 console.log(`[SYSTEM_PASSWORD] Failed attempt ${spAttempts}/3`);
 
         if (spAttempts >= 3) {

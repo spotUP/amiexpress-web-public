@@ -406,3 +406,27 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
     expect(await bytesFor('telnet')).toBe(await bytesFor('web'));
   });
 });
+
+describe('the system password', () => {
+  // express.e doSystemPassword (29329-29356): a wrong answer is getPass2's
+  // two breaks (1599, 1603) and then "Invalid PassWord" (29343).
+  it('a wrong one: two line breaks, then "Invalid PassWord"', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { applyTooltypes } = require('../../src/utils/info-file.util');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'syspw-'));
+    applyTooltypes(path.join(root, 'bbsConfig.info'), [['SYSTEM_PASSWORD', 'secret']]);
+    const saved = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = root;
+    try {
+      const socket = makeSocket();
+      const session = { ...loginSession('telnet'), state: BBSState.AWAIT, subState: LoggedOnSubState.SYSTEM_PASSWORD_INPUT, tempData: { inputBuffer: 'nope' } };
+      await require('../../src/handlers/command.handler').handleCommand(socket, session, '\r');
+      expect(wire(socket)).toContain('\r\n\r\nInvalid PassWord\r\n');
+    } finally {
+      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
