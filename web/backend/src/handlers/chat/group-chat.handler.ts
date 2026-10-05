@@ -129,6 +129,16 @@ function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: s
 }
 
 /**
+ * One event to every member of a group room but the sender, on whatever
+ * transport each is on - a telnet or SSH member is in no socket.io room, so
+ * `socket.to(room)` (which a telnet connection does not even have) cannot
+ * reach them.
+ */
+export function emitToRoom(roomId: string, event: string, payload: unknown, excludeSocketId?: string): void {
+  emitToMembers(groupRoomMembers(roomId), io, event, payload, { exceptEmitterId: excludeSocketId });
+}
+
+/**
  * Broadcast a system message to all room members
  */
 function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string, leaving?: BBSSession) {

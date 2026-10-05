@@ -248,13 +248,15 @@ console.log('[DoorSocket] Intercepting chat:keystroke:', data);
 
       // Broadcast keystroke to other users in the same room (server-side)
       if (session.currentRoomId) {
-        const socketRoom = 'room:' + session.currentRoomId;
-        socket.to(socketRoom).emit('chat:keystroke', {
+        // Every member's own emitter, telnet included: socket.to() threw
+        // "socket.to is not a function" for a telnet caller, inside the
+        // door's keypress handler, and his line never went out.
+        require('./chat/group-chat.handler').emitToRoom(session.currentRoomId, 'chat:keystroke', {
           channelId: session.currentRoomId,
           userId: data.userId,
           username: session.user?.username,
           char: data.char
-        });
+        }, socket.id);
       }
       return wrappedSocket;
     }
@@ -265,12 +267,14 @@ console.log('[DoorSocket] Intercepting chat:keystroke:', data);
 console.log('[DoorSocket] Intercepting chat:keystroke-submit:', data);
 
       if (session.currentRoomId) {
-        const socketRoom = 'room:' + session.currentRoomId;
-        socket.to(socketRoom).emit('chat:keystroke-submit', {
+        // Every member's own emitter, telnet included: socket.to() threw
+        // "socket.to is not a function" for a telnet caller, inside the
+        // door's keypress handler, and his line never went out.
+        require('./chat/group-chat.handler').emitToRoom(session.currentRoomId, 'chat:keystroke-submit', {
           channelId: session.currentRoomId,
           userId: data.userId,
           username: session.user?.username
-        });
+        }, socket.id);
       }
       return wrappedSocket;
     }
@@ -281,12 +285,14 @@ console.log('[DoorSocket] Intercepting chat:keystroke-submit:', data);
 console.log('[DoorSocket] Intercepting chat:keystroke-clear:', data);
 
       if (session.currentRoomId) {
-        const socketRoom = 'room:' + session.currentRoomId;
-        socket.to(socketRoom).emit('chat:keystroke-clear', {
+        // Every member's own emitter, telnet included: socket.to() threw
+        // "socket.to is not a function" for a telnet caller, inside the
+        // door's keypress handler, and his line never went out.
+        require('./chat/group-chat.handler').emitToRoom(session.currentRoomId, 'chat:keystroke-clear', {
           channelId: session.currentRoomId,
           userId: data.userId,
           username: session.user?.username
-        });
+        }, socket.id);
       }
       return wrappedSocket;
     }
@@ -343,7 +349,8 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} starting video s
       socket.emit('video:start-stream', { source: data.source, options: data.options, streamId });
 
       // Notify others in the room if in one
-      if (roomId) {
+      // A telnet or SSH connection has no socket.to (and no camera).
+      if (roomId && typeof socket.to === 'function') {
         const voiceRoomId = `voice:${roomId}`;
         socket.to(voiceRoomId).emit('video:stream-started', {
           userId: session.user?.id,
@@ -367,7 +374,8 @@ console.log('[DoorSocket] Intercepting video:stop-stream:', data);
       socket.emit('video:stop-stream', { streamId: data.streamId });
 
       const roomId = session.currentVoiceChannelId || session.currentRoomId;
-      if (roomId) {
+      // A telnet or SSH connection has no socket.to (and no camera).
+      if (roomId && typeof socket.to === 'function') {
         const voiceRoomId = `voice:${roomId}`;
         socket.to(voiceRoomId).emit('video:stream-stopped', {
           userId: session.user?.id,
