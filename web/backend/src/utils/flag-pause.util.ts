@@ -119,7 +119,8 @@ export async function flagPause(
         // Q fell through to the re-prompt path and the listing got
         // stuck forever — surfaced on live by FR + Q.
         if (response === 'N' || response === 'Q') {
-          emitPrompt(socket, '\r\n');
+          // lineInput's line break, then express.e:28047's aePuts('\b\n').
+          emitPrompt(socket, '\r\n\r\n');
           session.tempData.flagPausePromise = undefined;
           resolveFn!(false);
           return;

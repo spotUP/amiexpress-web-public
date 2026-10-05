@@ -96,3 +96,20 @@ describe('flagPause Q-quit (regression — live FR listing got stuck)', () => {
     expect(result).toBe(true);
   });
 });
+
+describe('flagPause N answers with express.e\'s breaks', () => {
+  // express.e:28035 lineInput, then 28047 aePuts('\b\n') before RESULT_FAILURE.
+  test('N: lineInput\'s line break and 28047\'s', async () => {
+    const { flushOutput } = require('../src/utils/output.util');
+    const emitted: string[] = [];
+    const socket: any = { id: `fp-${Math.random()}`, emit: (e: string, p: any) => { if (e === 'ansi-output') emitted.push(String(p)); }, on: () => socket };
+    const session = makeSession();
+    const promise = flagPause(socket, session, 1);
+    await new Promise((r) => setTimeout(r, 0));
+    emitted.length = 0;
+    await session.flagPauseHandler('N');
+    expect(await promise).toBe(false);
+    flushOutput(socket);
+    expect(emitted.join('')).toBe('\r\n\r\n');
+  });
+});
