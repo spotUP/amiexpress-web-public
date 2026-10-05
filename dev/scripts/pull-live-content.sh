@@ -94,7 +94,10 @@ present_dirs() {
 # the whole pull after it had already written a correct archive. Asking
 # `find` which files exist means tar is only ever handed members it can
 # open.
-ROOT_FILE_PATTERNS='-name "*.info" -o -name "*.DB" -o -name "*.TXT" -o -name "*.txt" -o -name "*.data" -o -name "*.cfg" -o -name "*.CFG"'
+# user.keys and user.misc carry no extension the patterns above catch; without
+# them the pull brought user.data alone and every account was half today's,
+# half the last time these were copied by hand.
+ROOT_FILE_PATTERNS='-name "*.info" -o -name "*.DB" -o -name "*.TXT" -o -name "*.txt" -o -name "*.data" -o -name "*.cfg" -o -name "*.CFG" -o -name "user.keys" -o -name "user.misc"'
 
 # `Conf<n>/Files` and `Upload` are the FILE AREAS - 14 MB on Conf1 alone and
 # not something a dev box needs to render a screen. Skipped unless asked.
