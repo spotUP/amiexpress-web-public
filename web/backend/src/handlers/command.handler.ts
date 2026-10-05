@@ -1796,10 +1796,10 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
           if (session.usernameRetryCount >= 5) {
             const { beginLogoff } = require('../server/logoff');
-            beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
+            beginLogoff(socket, session, { message: '\r\n\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
-          emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+          emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           return;
         }
 
@@ -1810,8 +1810,9 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             emitPrompt(
               socket,
               typed.toUpperCase() === 'NEW'
-                ? '\r\n[C]ontinue as a new user? '
-                : `\r\nThe name ${typed} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user? `,
+                // lineInput's break (2378), then express.e:29608-29614.
+                ? '\r\n\r\n[C]ontinue as a new user? '
+                : `\r\n\r\nThe name ${typed} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user? `,
             );
             return;
           }
@@ -1852,12 +1853,12 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
         if (session.usernameRetryCount >= 5) {
           const { beginLogoff } = require('../server/logoff');
-          beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
+          beginLogoff(socket, session, { message: '\r\n\r\nToo Many Errors, Goodbye!\r\n' });
           return;
         }
         session.tempData.loginPhase = 'username';
         session.tempData.loginUsername = '';
-        emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
         return;
       }
 

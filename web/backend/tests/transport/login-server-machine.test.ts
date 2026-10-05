@@ -206,6 +206,8 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
     // `Invalid PassWord`, for ever.
     expect(wire(socket)).toContain('is not used on this BBS');
     expect(wire(socket)).toContain('[R]etry your name or [C]ontinue as a new user?');
+    // lineInput's break (express.e:2378), then '\b\nThe name ...' (29608).
+    expect(wire(socket)).toContain('newcomer\r\n\r\nThe name newcomer is not used on this BBS.\r\n');
     expect(session.tempData.loginPhase).toBe('new-user-confirm');
     expect(wire(socket)).not.toContain('Password: ');
   });
