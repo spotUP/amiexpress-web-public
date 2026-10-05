@@ -421,6 +421,7 @@ describe('(F)rom reads the conference the user is in', () => {
     await (AlterFlagsHandler as any).flagFrom(socket, session, 'AE-KEY.LHA', manager);
 
     expect(flagged).toEqual([]);
-    expect(out.join('')).toContain('No file areas in this conference');
+    // express.e:12590-12591: flagFrom over no DIR file returns without a word.
+    expect(out.join('')).toBe('');
   });
 });

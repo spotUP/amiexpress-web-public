@@ -360,7 +360,7 @@ console.log('[ENV] Files');
     // Get max dirs for current conference
     const maxDirs = await getMaxDirs(confNum, bbsDataPath);
     if (maxDirs === 0) {
-      socket.emit('ansi-output', '\x1b[31mNo file areas in this conference.\x1b[0m\r\n');
+      // express.e:12568-12592: dir<maxDirs> does not open - RESULT_FAILURE, silently.
       return;
     }
 
@@ -407,7 +407,7 @@ console.log('[ENV] Files');
 
     } catch (error) {
 console.error('[FLAG FROM] Error reading DIR file:', error);
-      socket.emit('ansi-output', '\x1b[31mError reading file list.\x1b[0m\r\n');
+      // express.e:12590-12591: an unreadable list returns, saying nothing.
     }
   }
 }
