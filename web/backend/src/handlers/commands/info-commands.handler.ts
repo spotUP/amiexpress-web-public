@@ -81,7 +81,7 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
 
 // express.e:24223. The blue starts after "Location   ", so the column's
 // last nine spaces are blue.
-const WHO_HEADER = '\x1b[34m|\x1b[33mNd#\x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location   \x1b[34m         |\x1b[36m Action              \x1b[34m|\x1b[36mChat\x1b[0m\x1b[34m|\x1b[0m\r\n';
+const WHO_HEADER = '\x1b[34m|\x1b[33mNd#\x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Group      \x1b[34m         |\x1b[36m Action              \x1b[34m|\x1b[36mChat\x1b[0m\x1b[34m|\x1b[0m\r\n';
 
 /**
  * The Chat column: express.e:24255 chatstr through `\l\s[9]` (24260), which
@@ -409,7 +409,8 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_LOCATION)) {
     emitText(socket, '\x1b[34m[\x1b[0m  4\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  4', 'LOCATION................', currentUser.location || ''));
+    // WEB_: express.e's LOCATION; this board asks callers for their group.
+    emitText(socket, wRow('  4', 'GROUP...................', currentUser.location || ''));
   }
 
   // Option 5: Phone - express.e:25749-25753
@@ -720,7 +721,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      emitText(socket, 'From: ');
+      emitText(socket, 'Group: '); // WEB_: express.e:25993 'From: '
       session.subState = LoggedOnSubState.W_EDIT_LOCATION;
       break;
 

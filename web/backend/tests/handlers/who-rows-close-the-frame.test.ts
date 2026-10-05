@@ -37,5 +37,5 @@ test('every WHO row closes on the frame, YES and NO alike', () => {
   const rows = lines.filter(l => /YES|NO/.test(visible(l)) && visible(l).startsWith('| 0'));
   expect(rows).toHaveLength(2);
   for (const row of rows) expect(visible(row).length).toBe(frame);
-  expect(printed.join('')).toContain('\x1b[36m Location   \x1b[34m         |');
+  expect(printed.join('')).toContain('\x1b[36m Group      \x1b[34m         |');
 });

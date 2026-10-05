@@ -299,7 +299,7 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
   } else {
     emitText(socket, '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n');
-    emitText(socket, '\x1b[34m|\x1b[33m Nd# \x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location            \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36m Chat \x1b[34m|\x1b[0m\r\n');
+    emitText(socket, '\x1b[34m|\x1b[33m Nd# \x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Group               \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36m Chat \x1b[34m|\x1b[0m\r\n');
     emitText(socket, '\x1b[34m)-----+---------------------+---------------------+---------------------+------(\x1b[0m\r\n');
   }
 
@@ -880,7 +880,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
         // Write each user's statistics - express.e:22540-22580
         for (const row of stats.rows) {
           output += `User: ${row.username}\n`;
-          output += `  Location: ${row.location || 'Unknown'}\n`;
+          output += `  Group: ${row.location || 'Unknown'}\n`;
           output += `  Conference Access: ${confId}\n`;
           output += `  Ratio: ${confRatio}\n`;
           output += `  Ratio Type: ${confRatioType}\n`;

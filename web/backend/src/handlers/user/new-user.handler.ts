@@ -398,8 +398,9 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
  * Prompt for location - express.e:30172
  */
 function promptForLocation(socket: Socket, session: any) {
-  // express.e:30194: aePuts('City, State: ')
-  socket.emit('ansi-output', 'City, State: ');
+  // express.e:30194 asks 'City, State: '. WEB_: this board's callers give
+  // their group (sysop, 2026-10-05); the field is still the location.
+  socket.emit('ansi-output', 'Group: ');
   session.inputBuffer = '';
 }
 

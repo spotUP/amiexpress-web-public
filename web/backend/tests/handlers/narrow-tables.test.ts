@@ -344,7 +344,7 @@ describe('5b user list (account.handler.ts displayUserList)', () => {
     expect(out).toContain(
       '\x1b[32mUsername'.padEnd(16) +
         'Real Name'.padEnd(20) +
-        'Location'.padEnd(15) +
+        'Group'.padEnd(15) +
         'Level  Last Login\x1b[0m\r\n'
     );
     expect(out).toContain('\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');

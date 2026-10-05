@@ -268,7 +268,7 @@ export function NodeControlPage() {
                         <span className="text-content-primary">{node.username || 'N/A'}</span>
                       </div>
                       <div>
-                        <span className="text-content-secondary">Location:</span>{' '}
+                        <span className="text-content-secondary">Group:</span>{' '}
                         <span className="text-content-primary">{node.location || 'N/A'}</span>
                       </div>
                       <div>

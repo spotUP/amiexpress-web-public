@@ -124,7 +124,7 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
     socket.emit('ansi-output', '\x1b[32mUsername         Lvl  Last Login\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[36m' + narrowRule('=') + '\x1b[0m\r\n');
   } else {
-    socket.emit('ansi-output', '\x1b[32mUsername'.padEnd(16) + 'Real Name'.padEnd(20) + 'Location'.padEnd(15) + 'Level  Last Login\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[32mUsername'.padEnd(16) + 'Real Name'.padEnd(20) + 'Group'.padEnd(15) + 'Level  Last Login\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
   }
 
@@ -198,7 +198,7 @@ export function displayAccountPage0(socket: any, user: any, slot: number) {
   socket.emit('ansi-output', `\x1b[33mA>\x1b[32m Name......:\x1b[36m${(user.username || '').padEnd(31)}\x1b[33mB>\x1b[32m Real Name.:\x1b[36m${(user.realname || '').padEnd(26)}\x1b[0m\r\n`);
 
   // Line 3: C) Location, D) Password
-  socket.emit('ansi-output', `\x1b[33mC>\x1b[32m Location..:\x1b[36m${(user.location || '').padEnd(30)}\x1b[33mD>\x1b[32m Password..:\x1b[36m*********\x1b[0m\r\n`);
+  socket.emit('ansi-output', `\x1b[33mC>\x1b[32m Group.....:\x1b[36m${(user.location || '').padEnd(30)}\x1b[33mD>\x1b[32m Password..:\x1b[36m*********\x1b[0m\r\n`);
 
   // Line 4: E) Phone, F) Conf Access
   socket.emit('ansi-output', `\x1b[33mE>\x1b[32m Phone Number.:\x1b[36m${(user.phone || '').padEnd(13)}\x1b[33mF>\x1b[32m Conf Access:\x1b[36m${(user.conferenceAccess || '').padEnd(10)}\x1b[0m\r\n`);
@@ -337,7 +337,7 @@ export function handleViewUserStats(socket: any, session: BBSSession, username: 
     socket.emit('ansi-output', `\r\n\x1b[36m-= Statistics for ${user.username} =-\x1b[0m\r\n\r\n`);
     socket.emit('ansi-output', `\x1b[32mAccount Information:\x1b[0m\r\n`);
     socket.emit('ansi-output', `Real Name: ${user.realname}\r\n`);
-    socket.emit('ansi-output', `Location: ${user.location}\r\n`);
+    socket.emit('ansi-output', `Group: ${user.location}\r\n`);
     socket.emit('ansi-output', `Security Level: ${user.secLevel}\r\n`);
     socket.emit('ansi-output', `First Login: ${user.firstLogin.toLocaleDateString()}\r\n`);
     socket.emit('ansi-output', `Last Login: ${user.lastLogin?.toLocaleDateString() || 'Never'}\r\n\r\n`);

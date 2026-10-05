@@ -204,7 +204,7 @@ describe('New User Handler — registration steps', () => {
       const socket = makeSocket();
       const session = makeSession({ subState: LoggedOnSubState.NEW_USER_PHONE });
       await handlePhoneInput(socket, session, '');
-      expect(socket._emits.map((e: any) => String(e.payload)).join('')).toBe('\r\n\r\nCity, State: ');
+      expect(socket._emits.map((e: any) => String(e.payload)).join('')).toBe('\r\n\r\nGroup: ');
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_LOCATION);
     });
   });

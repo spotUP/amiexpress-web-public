@@ -724,7 +724,7 @@ export function UsersPage() {
 
                 <div>
                   <label htmlFor="location" className="label">
-                    Location
+                    Group
                   </label>
                   <input
                     id="location"

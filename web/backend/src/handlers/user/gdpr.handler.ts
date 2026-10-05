@@ -78,7 +78,7 @@ export async function handleViewMyDataOption(socket: any, session: BBSSession): 
   const rows: Array<[string, string]> = [
     ['Handle',          user.username || '(none)'],
     ['Real name',       user.realname || '(none)'],
-    ['Location/Group',  user.location || '(blank)'],
+    ['Group',  user.location || '(blank)'],
     ['Phone',           user.phone || '(blank)'],
     ['Email',           user.email || '(blank)'],
     ['Security level',  String(user.secLevel ?? 0)],

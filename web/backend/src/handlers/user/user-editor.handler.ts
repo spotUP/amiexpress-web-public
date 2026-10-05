@@ -907,7 +907,7 @@ async function handlePageZeroEdit(socket: any, session: BBSSession, db: Database
   const fieldMap: { [key: string]: { field: keyof User, prompt: string, maxLen: number } } = {
     'A': { field: 'username', prompt: 'Name', maxLen: 30 },
     'B': { field: 'realname', prompt: 'Real Name', maxLen: 25 },
-    'C': { field: 'location', prompt: 'Location', maxLen: 30 },
+    'C': { field: 'location', prompt: 'Group', maxLen: 30 },
     // D=Password is ENCRYPTED and not user-editable per express.e:23000-23007
     'E': { field: 'phone', prompt: 'Phone Number', maxLen: 15 },
     'F': { field: 'areaName', prompt: 'Area Name', maxLen: 30 },
