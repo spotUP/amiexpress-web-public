@@ -458,15 +458,17 @@ function promptForLocation(socket: Socket, session: any) {
 }
 
 /**
- * Handle location input - express.e:30172-30179
- * WEB_: blank no longer retreats to name; field is required and re-prompts.
+ * Handle location input - express.e:30193-30201
  */
 export async function handleLocationInput(socket: Socket, session: any, input: string) {
   const location = input.trim();
 
   if (location === '') {
-    // express.e:30198-30200: blank → go back (JUMP iJLoop); WEB_ re-prompts instead
-    promptForLocation(socket, session);
+    // express.e:30198-30200: lineInput's break, '\b\n', JUMP iJLoop - the
+    // name prompt again, with the name typed so far in it (30143).
+    socket.emit('ansi-output', '\r\n\r\n');
+    session.subState = LoggedOnSubState.NEW_USER_NAME;
+    promptForName(socket, session);
     return;
   }
 

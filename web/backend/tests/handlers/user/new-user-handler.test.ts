@@ -175,14 +175,17 @@ describe('New User Handler — registration steps', () => {
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_PHONE);
     });
 
-    it('prompts for re-entry on empty location (location required)', async () => {
+    it('goes back to the name prompt, name filled in, on a blank City (express.e:30198-30200)', async () => {
       const socket = makeSocket();
       const session = makeSession({ subState: LoggedOnSubState.NEW_USER_LOCATION });
+      session.newUserData.username = 'Randy';
 
       await handleLocationInput(socket, session, '');
 
-      // Empty location keeps the user on location prompt
-      expect(socket.emit).toHaveBeenCalled();
+      const out = socket._emits.map(e => String(e.payload)).join('');
+      expect(out).toBe('\r\n\r\n\r\nEnter your Name: Randy');
+      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_NAME);
+      expect(session.inputBuffer).toBe('Randy');
     });
   });
 
