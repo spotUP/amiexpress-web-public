@@ -638,6 +638,10 @@ console.error('[CommandPassword] No password-protected command in session');
 
   const { commandDef, commandName } = session.tempData.passwordProtectedCommand;
 
+  // express.e:4720 - the password is read with lineInput, which ends the
+  // answer with a line break (2378) before "InValid Password!" or the door.
+  socket.emit('ansi-output', '\r\n');
+
   // express.e:4725 - Case-insensitive password comparison (StriCmp)
   if (password.toLowerCase() !== commandDef.password.toLowerCase()) {
     // express.e:4726: '\b\nInValid Password!\b\n' — plain text
