@@ -126,9 +126,15 @@ export function isAnsiArtScreen(content: string): boolean {
  */
 export function petsciiTextScreenPlan(
   content: string,
-  session: { petsciiMode?: boolean; petsciiColumns?: number } | undefined,
+  session: { petsciiMode?: boolean; petsciiColumns?: number; texttvMode?: boolean } | undefined,
   isMenu: boolean = false
 ): 'art-skip' | 'reflow' | 'passthrough' {
+  // A teletext caller is forty columns too (pre-login T: 40x25), and an
+  // 80-column ANSI screen sent to him raw wrapped every row in two - the
+  // screen came out twice as tall and scrolled half away (sysop,
+  // 2026-10-05: "teletext is taller than the other display modes so almost
+  // all screens are scrolled out half"). He takes the forty-column plan.
+  if (session?.texttvMode === true) return isMenu || !isAnsiArtScreen(content) ? 'reflow' : 'art-skip';
   if (session?.petsciiMode !== true) return 'passthrough';
   if (petsciiColumnsOf(session) > C64_COLUMNS) return 'passthrough';
   if (isMenu) return 'reflow';

@@ -190,6 +190,18 @@ describe('handleReadBulletinCommand on real bulletin bytes', () => {
       .toBeLessThanOrEqual(40);
   });
 
+  it('reflows a prose bulletin to 40 columns for a TELETEXT caller too', async () => {
+    // A teletext session is 40x25 and was served the 76-column rows raw:
+    // each wrapped in two and the screen scrolled half away (sysop,
+    // 2026-10-05: "teletext is taller than the other display modes").
+    const out = await readBulletin(PROSE_BULLETIN, { texttvMode: true, screenWidth: 40, screenHeight: 25 });
+
+    for (const row of contentRows(out)) {
+      expect(printableLength(row)).toBeLessThanOrEqual(40);
+    }
+    expect(out).toContain('This BBS is a PRIVATE SYSTEM.');
+  });
+
   it('reflows a prose bulletin to 40 columns for a PETSCII caller', async () => {
     const out = await readBulletin(PROSE_BULLETIN, { petsciiMode: true, screenWidth: 40 });
 
