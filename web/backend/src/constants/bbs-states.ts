@@ -152,7 +152,6 @@ export enum LoggedOnSubState {
 
   // OLM (Online Message) operations - express.e:25406-25515
   OLM_NODE_INPUT = 'olm_node_input',        // Waiting for node number input
-  OLM_COMPOSE = 'olm_compose',              // Composing OLM message (line editor)
 
   // New User Registration - express.e:30003-30310 (doNewUser)
   NEW_USER_GDPR_CONSENT = 'new_user_gdpr_consent', // WEB_: privacy notice accept/decline gate

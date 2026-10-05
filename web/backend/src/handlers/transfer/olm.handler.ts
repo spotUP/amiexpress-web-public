@@ -57,9 +57,8 @@ export async function handleOlmCommand(
 ): Promise<InternalCommandResult> {
 console.log('[OLM] handleOlmCommand called with params:', params);
 
-  // Guard against missing user - prevent crash
+  // No account, no OLM (express.e has no such caller): nothing to say.
   if (!session.user) {
-    emitText(socket, '\r\n\x1b[31mError: Not logged in.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -83,10 +82,10 @@ console.log('[OLM] handleOlmCommand called with params:', params);
   }
 
   // Check if OLM is enabled (sopt.toggles[TOGGLES_MULTICOM])
+  // express.e:25416: TOGGLES_MULTICOM off is the same bare RESULT_NOT_ALLOWED.
   if (!config || !config.get('olmEnabled')) {
-    emitText(socket, '\r\n\x1b[31mOLM system is disabled.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+    return RESULT_NOT_ALLOWED;
   }
 
   // express.e:25418 - Set environment status
@@ -150,16 +149,17 @@ async function processNodeSelection(socket: Socket, session: BBSSession, nodenum
   emitText(socket, '\r\n');
 
   if (messageParts.length === 0) {
-    // Start message editor
-    // express.e:25443-25445 - msgBuf.clear(), lines:=0, edit()
-    session.olmMessageLines = [];
-    session.olmNodeTarget = parseInt(nodenumstr);
-    session.subState = LoggedOnSubState.OLM_COMPOSE;
-
-    emitText(socket,
-      '\x1b[36mEnter your message (max 10 lines, /S to send, /A to abort):\x1b[0m\r\n'
-    );
-    emitPrompt(socket, '\x1b[33m1>\x1b[0m ');
+    // express.e:25443-25445 - msgBuf.clear(), lines:=0, and the board's own
+    // editor; an abort ends the OLM without a word. The line editor only:
+    // the full-screen editor's abandon path does not report back to a
+    // caller outside message entry (as for a door's JH_EF).
+    const { editLines } = require('../message/door-edit-file');
+    const lines: string[] | null = await editLines(socket, session, []);
+    if (lines === null) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+    await sendOlmMessage(socket, session, parseInt(nodenumstr, 10) || 0, lines);
     return;
   }
 
@@ -174,56 +174,6 @@ async function processNodeSelection(socket: Socket, session: BBSSession, nodenum
 }
 
 /**
- * Handle OLM message composition
- * Called from command.handler.ts when in OLM_COMPOSE state
- */
-export async function handleOlmComposeInput(socket: Socket, session: BBSSession, input: string) {
-  const trimmedInput = input.trim();
-
-  // Check for /S (send) command
-  if (trimmedInput.toUpperCase() === '/S') {
-    if (!session.olmMessageLines || session.olmMessageLines.length === 0) {
-      emitText(socket, '\r\n\x1b[31mNo message to send. Message aborted.\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      delete session.olmMessageLines;
-      delete session.olmNodeTarget;
-      return;
-    }
-
-    // Send the message
-    await sendOlmMessage(socket, session, session.olmNodeTarget!, session.olmMessageLines);
-    return;
-  }
-
-  // Check for /A (abort) command
-  if (trimmedInput.toUpperCase() === '/A') {
-    emitText(socket, '\r\n\x1b[33mMessage aborted.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    delete session.olmMessageLines;
-    delete session.olmNodeTarget;
-    return;
-  }
-
-  // Add line to message
-  if (!session.olmMessageLines) {
-    session.olmMessageLines = [];
-  }
-
-  session.olmMessageLines.push(input);
-
-  // Check if we've hit 10 line limit
-  if (session.olmMessageLines.length >= 10) {
-    emitText(socket, '\r\n\x1b[33mMaximum 10 lines reached. Auto-sending...\x1b[0m\r\n');
-    await sendOlmMessage(socket, session, session.olmNodeTarget!, session.olmMessageLines);
-    return;
-  }
-
-  // Show next line prompt
-  const lineNum = session.olmMessageLines.length + 1;
-  emitPrompt(socket, `\x1b[33m${lineNum}>\x1b[0m `);
-}
-
-/**
  * Send OLM message to target node
  * express.e:25449-25500
  */
@@ -234,8 +184,6 @@ console.log('[OLM] Sending message to node', nodenum);
   if (!session.user) {
     emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    delete session.olmMessageLines;
-    delete session.olmNodeTarget;
     return;
   }
 
@@ -243,8 +191,6 @@ console.log('[OLM] Sending message to node', nodenum);
   if (nodenum < 0 || nodenum >= 100) {  // MAXNODES = 100 typically
     emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    delete session.olmMessageLines;
-    delete session.olmNodeTarget;
     return;
   }
 
@@ -269,8 +215,6 @@ console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, sock
   if (!targetSession || !targetSocketId || !targetSession.user || targetSession.blockOLM) {
     emitText(socket, '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    delete session.olmMessageLines;
-    delete session.olmNodeTarget;
     return;
   }
 
@@ -308,8 +252,6 @@ console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, sock
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  delete session.olmMessageLines;
-  delete session.olmNodeTarget;
 }
 
 /**

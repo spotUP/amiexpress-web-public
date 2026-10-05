@@ -2414,39 +2414,6 @@ console.log(' [LIVECHAT] User responding to invitation with Y/n');
     return;
   }
 
-  // PRIORITY 6: Handle OLM message composition
-  // When user is composing OLM message (line-buffered like READ_COMMAND)
-  if (session.subState === LoggedOnSubState.OLM_COMPOSE) {
-console.log(' [OLM] User composing message');
-
-    // Initialize inputBuffer if needed
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
-    }
-
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer || '';
-      session.inputBuffer = '';
-
-      const { handleOlmComposeInput } = require('./transfer/olm.handler');
-      await handleOlmComposeInput(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
-      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
-        // This moves cursor back, overwrites char with space, moves cursor back again
-        emitText(socket, '\b \b');
-      }
-      // If buffer is empty, ignore backspace (prevents erasing prompt)
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      emitText(socket, session.maskInput ? '*' : data);
-    }
-    return;
-  }
 
   // PRIORITY 7-16: Handle New User Registration states (express.e:30115-30310)
   if (session.state === BBSState.REGISTERING) {
