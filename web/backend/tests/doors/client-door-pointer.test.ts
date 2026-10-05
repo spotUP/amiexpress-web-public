@@ -149,9 +149,24 @@ describe('the backend passes the claim on', () => {
     const emitted = await run(install('mci', {}, 'MCI'));
     const wire = emitted.filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');
 
-    // The door ran (its own notice is on the wire), and nothing wiped it after.
-    expect(wire).toContain('MCI door has no text to display.');
+    // The door ran (runDoor's tail, express.e:4530, is on the wire), and
+    // nothing wiped it after.
+    expect(wire).toContain('\x1b[0m');
     expect(wire).not.toContain('\x1b[r\x1b[2J\x1b[H');
+  });
+
+  // express.e:4293-4296 and 4529-4530: an MCI door shows its MCI_TEXT (or,
+  // with none, ~SS_ of its own file) and ends with ESC[0m - no invented
+  // "MCI door has no text to display." and no "Press any key to continue...".
+  it('an MCI door ends as express.e runDoor does', async () => {
+    const withText = { ...install('mcihi', {}, 'MCI'), mciText: 'hello' } as Door;
+    const wire = (await run(withText)).filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');
+    expect(wire).toContain('hello');
+    expect(wire).not.toContain('Press any key');
+
+    const without = (await run(install('mcinone', {}, 'MCI'))).filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');
+    expect(without).not.toContain('MCI door has no text');
+    expect(without).not.toContain('Press any key');
   });
 });
 

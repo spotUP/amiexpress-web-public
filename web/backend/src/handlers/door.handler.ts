@@ -2983,7 +2983,7 @@ console.log(`[executeNativeGccDoor] Door exited with code ${code}`);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
-    emitText(socket, `\r\nDoor exited (code: ${code})\r\n`);
+    doorRunEnds(socket);
   });
 
   // Handle process errors
@@ -3788,23 +3788,26 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
  * MCI doors don't execute a program - they just display text with MCI codes.
  * The MCI_TEXT tooltype contains the text to display with codes like ~CL., ~N|, etc.
  */
+/**
+ * The tail of express.e's runDoor for every door type: `aePuts('[0m')`
+ * (4529-4530) and nothing else - no "completed", no exit code, no press-key.
+ * executeDoor's own tail then returns the caller to the menu.
+ */
+function doorRunEnds(socket: any): void {
+  emitText(socket, '\x1b[0m');
+}
+
 async function executeMciDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
 console.log(`[executeMciDoor] Processing MCI door: ${door.name}`);
 
-  if (!door.mciText) {
-console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
-    emitText(socket, '\r\n\x1b[31mMCI door has no text to display.\x1b[0m\r\n');
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
-
-  // Import parseMciCodes function
+  // express.e:4293-4296: cmd starts as `~SS_<LOCATION>` and MCI_TEXT
+  // replaces it only when present (readToolType leaves it otherwise,
+  // tooltypes.e:164) - a door with no MCI_TEXT displays its own file.
   const { parseMciCodes } = require('./screen.handler');
 
   // Convert escape sequences in MCI_TEXT to actual characters
   // Replace literal \r\n, \r, \n with actual CRLF
-  let mciText = door.mciText
+  let mciText = (door.mciText || `~SS_${door.path || ''}`)
     .replace(/\\r\\n/g, '\r\n')
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\r');
@@ -3838,10 +3841,7 @@ console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
     const { doPause } = require('./screen.handler');
     doPause(socket, session);
   } else {
-    // Standard pause after display
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    doorRunEnds(socket);
   }
 
 console.log(`[executeMciDoor] MCI door completed: ${door.name}`);
@@ -4034,10 +4034,10 @@ console.error(`[DOOR ${door.id}] Error:`, error);
 console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
         if (code === 0) {
-          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           resolve();
         } else {
-          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           doorSession.status = 'error';
           resolve(); // Still resolve to continue
         }
@@ -4065,9 +4065,7 @@ console.error(`[DOOR ${door.id}] Execution error:`, error);
     doorSession.status = 'error';
   }
 
-  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // The menu return is executeDoor's (its tail after this runner).
 }
 
 /**
@@ -4146,10 +4144,10 @@ console.error(`[DOOR ${door.id}] Error:`, error);
 console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
         if (code === 0) {
-          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           resolve();
         } else {
-          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           doorSession.status = 'error';
           resolve(); // Still resolve to continue
         }
@@ -4177,9 +4175,7 @@ console.error(`[DOOR ${door.id}] Execution error:`, error);
     doorSession.status = 'error';
   }
 
-  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // The menu return is executeDoor's (its tail after this runner).
 }
 
 /**
@@ -4284,10 +4280,10 @@ console.log(`[Python Door ${door.id}] Exited with code ${code}`);
         delete session.doorInputHandler;
 
         if (code === 0) {
-          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           resolve();
         } else {
-          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorRunEnds(socket);
           doorSession.status = 'error';
           resolve();
         }
@@ -4323,9 +4319,7 @@ console.error(`[Python Door ${door.id}] Execution error:`, error);
     doorSession.status = 'error';
   }
 
-  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // The menu return is executeDoor's (its tail after this runner).
 }
 
 /**
@@ -4544,7 +4538,7 @@ console.log(`[executeARexxDoor] Executing script: ${doorPath} (${scriptText.leng
     emitText(socket, '\r\n');
     await arexxEngine.executeScript(arexxScript, arexxContext);
 
-    emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+    doorRunEnds(socket);
 
   } catch (error: any) {
 console.error(`[ARexx Door ${door.id}] Execution error:`, error);
@@ -4556,9 +4550,7 @@ console.error(`[ARexx Door ${door.id}] Execution error:`, error);
   // their normal routing. Mirrors executeTypeScriptDoor's exit path.
   session.inDoorManager = false;
   delete session.doorInputHandler;
-  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // The menu return is executeDoor's (its tail after this runner).
 }
 
 /**
