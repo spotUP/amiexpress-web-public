@@ -486,6 +486,9 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.FULL_EDIT)) {
     emitText(socket, '\x1b[34m[\x1b[0m 12\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
+    // WEB_: express.e 25829-25838 builds this row for a caller with
+    // ACS_FULL_EDIT and never prints it (no aePuts) - the Amiga's menu skips
+    // from 11 to 13. Shown here on purpose (sysop decision 2026-10-05).
     // From `editor`, the column that is actually stored - 'Prompt', 'Line'
     // or 'Full', the same three the disk record encodes
     // (UserFileManager.editorTypeToInt). `editorType` is a runtime-only
