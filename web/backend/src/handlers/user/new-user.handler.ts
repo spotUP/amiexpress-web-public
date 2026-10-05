@@ -30,6 +30,7 @@ import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
 import { parseInfoFile } from '../../utils/info-file.util';
+import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
 import { nodeFlag } from '../../utils/node-tooltypes.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
@@ -1512,7 +1513,6 @@ async function getNewUserDefaults() {
       protocol: systemConfig.new_user_protocol,
       screenType: systemConfig.new_user_screen_type,
       editor: systemConfig.new_user_editor,
-      confAccess: systemConfig.new_user_conf_access,
       availableForChat: systemConfig.new_user_available_chat,
       quietNode: systemConfig.new_user_quiet_node,
       autoRejoin: systemConfig.new_user_auto_rejoin
@@ -1548,20 +1548,27 @@ async function createAccountRecord(socket: Socket, session: any): Promise<boolea
     const protocol = defaults?.protocol || 'ZMODEM';
     const screenType = defaults?.screenType || 'ANSI';
     const editor = defaults?.editor || 'FULL';
-    const confAccess = defaults?.confAccess || 'XXX';
+    // express.e:30438-30443 initNewUser applies Preset.1 - PRESET.AREA is
+    // the new record's conferenceAccess (29369). Read from disk, never the
+    // database copy; see utils/new-user-preset.ts.
+    const confAccess = newUserConferenceAccess(config.getConfig().dataDir, session.nodeId || 1);
+    // The rest of Preset.1 (applyPreset, 29360-29367): level, ratio, time,
+    // rejoin and daily bytes. Without a PRESET.AREA nothing is applied and
+    // the board's own defaults stand.
+    const preset = newUserPreset(config.getConfig().dataDir, session.nodeId || 1);
+    const presetTimeLimit = preset ? preset.timeLimit : defaultTimeLimit;
     const availableForChat = defaults?.availableForChat !== false;
     const quietNode = defaults?.quietNode || false;
     const autoRejoin = defaults?.autoRejoin !== false ? 1 : 0;
 
     // Check if this is the first user (should become sysop)
     const firstUserIsSysop = (global as any).firstUserIsSysop === true;
-    let assignedSecLevel = data.autoValidated ? autoValidationSecLevel : defaultSecLevel;
+    let assignedSecLevel = data.autoValidated ? autoValidationSecLevel : (preset ? preset.secLevel : defaultSecLevel);
 
     if (firstUserIsSysop) {
+      // Promoted silently: express.e makes the sysop's account without a
+      // word (processSysopLogon, 29039-29041). Sysop decision 2026-10-05.
       assignedSecLevel = 255; // Auto-promote first user to sysop
-      socket.emit('ansi-output', '\r\n\x1b[33;1m*** FIRST USER DETECTED ***\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33;1mYou have been automatically assigned System Operator status (Level 255)\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33;1mWelcome, Sysop!\x1b[0m\r\n\r\n');
 console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
       // Clear the flag so subsequent users get normal security level
       (global as any).firstUserIsSysop = false;
@@ -1584,7 +1591,9 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       screenClear: data.screenClear,
       availableForChat,
       quietNode,
-      autoRejoin,
+      // The rejoin conference: users.autorejoin is the same number as the
+      // record's confRJoin (conference.handler sets both on a join).
+      autoRejoin: preset ? preset.confRJoin : autoRejoin,
       confAccess,
       newUser: !data.autoValidated, // Auto-validated users skip new user flags
       firstLogin: now,
@@ -1594,10 +1603,12 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       downloads: 0,
       bytesUpload: 0,
       bytesDownload: 0,
-      ratio: 0,
-      ratioType: 0,
-      timeTotal: 0,
-      timeLimit: defaultTimeLimit,
+      ratio: preset ? preset.ratio : 0,
+      ratioType: preset ? preset.ratioType : 0,
+      // express.e:30447 timeTotal:=timeLimit
+      timeTotal: presetTimeLimit,
+      timeLimit: presetTimeLimit,
+      ...(preset ? { confRJoin: preset.confRJoin } : {}),
       timeUsed: 0,
       chatLimit: defaultChatLimit,
       chatUsed: 0,
@@ -1611,7 +1622,7 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       uuCP: false,
       topUploadCPS: 0,
       topDownloadCPS: 0,
-      byteLimit: 0,
+      byteLimit: preset ? preset.byteLimit : 0,
       // WEB_: GDPR consent captured pre-registration (Phase 1).
       gdprConsentAt: data.gdprConsentAt,
       gdprNoticeVersion: data.gdprNoticeVersion,
@@ -1694,7 +1705,8 @@ console.error('[NewUser] Could not start the conference records:', err);
     initializeSecurity(session);
 
     // Set user preferences
-    session.confRJoin = 1; // Default to General conference
+    // The record's rejoin (Preset.1's PRESET.CONFRJOIN, else 1 - 30446).
+    session.confRJoin = (newUser as { confRJoin?: number }).confRJoin || 1;
     session.msgBaseRJoin = 1;
     session.cmdShortcuts = false;
     if (session.shortcuts) session.shortcuts.clear();

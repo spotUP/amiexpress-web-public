@@ -12,6 +12,7 @@
 
 import { Request, Response } from 'express';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
+import { newUserConferenceAccess } from '../../utils/new-user-preset';
 import { config as appConfig } from '../../config';
 import { Database } from '../../database';
 import { sanitizeInput } from '../../utils/input-normalizer.util';
@@ -137,20 +138,15 @@ console.error('Me error:', error);
       // Hash password
       const passwordHash = await this.db.hashPassword(password);
 
-      // Determine new-user confAccess. system_config.new_user_conf_access
-      // is the canonical source — initialization.ts:660-685 keeps it
-      // expanded to match the current conference count. Falling back to
-      // 'XXX' would limit new users to 3 conferences on sites with more
-      // (e.g. live BBS has 14 confs; users registered with hardcoded
-      // 'XXX' saw only the first 3).
+      // A new account's conference access is Preset.1's PRESET.AREA, as
+      // express.e's initNewUser writes it (30438-30443, 29369) - read from
+      // disk, never the database copy. See utils/new-user-preset.ts. The web
+      // has no node, so only the board's Access/PRESET.1 applies.
       let newUserConfAccess = 'XXX';
       try {
-        const cfg = getBoardConfig(appConfig.get('dataDir'));
-        if (cfg?.new_user_conf_access && typeof cfg.new_user_conf_access === 'string' && cfg.new_user_conf_access.length > 0) {
-          newUserConfAccess = cfg.new_user_conf_access;
-        }
+        newUserConfAccess = newUserConferenceAccess(appConfig.get('dataDir'));
       } catch (_) {
-        // Best-effort — keep 'XXX' default if system_config query fails.
+        // Best-effort - keep 'XXX' if the board's files cannot be read.
       }
 
       // Same story for the time limit, which was hardcoded here: the sysop's
@@ -204,7 +200,7 @@ console.error('Me error:', error);
         availableForChat: true,
         quietNode: false,
         autoRejoin: 1,
-        confAccess: newUserConfAccess, // system_config.new_user_conf_access (expanded to match conf count)
+        confAccess: newUserConfAccess, // Preset.1's PRESET.AREA (express.e:29369)
         areaName: 'Standard',
         uuCP: false,
         topUploadCPS: 0,
