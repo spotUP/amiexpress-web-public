@@ -263,6 +263,22 @@ describe('the upload asks for a filename and takes all of it', () => {
     await type(socket, session, '\r');
 
     expect(session.subState).toBe(LoggedOnSubState.UPLOAD_OKAY_CONFIRM);
+    // lineInput's break, 17674's '\b\n', then 17762's '\b\nOkay' (express.e).
+    expect(allOutput(socket)).toContain('\r\n\r\n\r\nOkay:');
+  });
+
+  it('an empty first description line drops the file and asks for that FileName again', async () => {
+    // express.e:17735-17736 count--, JUMP updesccont.
+    const socket = makeSocket();
+    const session = c64Session('');
+    session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+    session.tempData = { uploadCount: 1, uploadBatch: [] };
+    await type(socket, session, 'HELLO.TXT\r');
+    expect(session.subState).toBe(LoggedOnSubState.UPLOAD_DESC_INPUT);
+    await type(socket, session, '\r');
+    expect(session.tempData.uploadBatch).toEqual([]);
+    expect(session.tempData.uploadCount).toBe(1);
+    expect(allOutput(socket)).toMatch(/\r\n\r\nFileName 1: /);
   });
 });
 

@@ -2897,16 +2897,19 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
         return;
       }
 
-      // Original batch mode: Save file to upload batch
-      session.tempData.uploadBatch.push({
-        filename: session.tempData.currentFilename,
-        description: session.tempData.currentDescription.join('\n'),
-        isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
-      });
-
-      // Move to next filename
-      session.tempData.uploadCount++;
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
+      // express.e:17735-17736 - an empty FIRST line drops the file (count--)
+      // and asks for that FileName again; an empty later line ends the
+      // description (17758). Either way lineInput's break, then
+      // '\b\nFileName n: ' (17666).
+      if (session.tempData.descLineCount > 0) {
+        session.tempData.uploadBatch.push({
+          filename: session.tempData.currentFilename,
+          description: session.tempData.currentDescription.join('\n'),
+          isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
+        });
+        session.tempData.uploadCount++;
+      }
+      emitText(socket, `\r\n\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }
@@ -2925,9 +2928,9 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
         isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
       });
 
-      // Move to next filename
+      // Move to next filename - lineInput's break, then 17666's.
       session.tempData.uploadCount++;
-      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
+      emitText(socket, `\r\n\r\nFileName ${session.tempData.uploadCount}: ${eraseRestOfLine(socket)}`);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }

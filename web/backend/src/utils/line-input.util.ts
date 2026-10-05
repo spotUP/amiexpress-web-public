@@ -217,9 +217,9 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   // express.e:17666 - lineInput('','',100,...) "FileName n: " in the batch
   // upload. The branch took whatever one keystroke arrived as the whole name,
   // so a telnet caller naming RG136005.BIN uploaded a file called R (found by
-  // the telnet regression suite, 2026-09-27). The branch emits its own
-  // newlines - the blank line's and the description block's.
-  [LoggedOnSubState.UPLOAD_FILENAME_INPUT, { maxLen: 100 }],
+  // the telnet regression suite, 2026-09-27). lineInput's break here; the
+  // branch adds what follows it (17670, 17674, the description block's).
+  [LoggedOnSubState.UPLOAD_FILENAME_INPUT, { maxLen: 100, echoNewline: true }],
   // express.e:25225 JM's 'Message Base Number (1-n): ', 25300 NM's 'Which to
   // change <Q>=QUIT ? ' and 24489 CL's 'Which node to view? ' are lineInput
   // calls (5, 2 and 5 characters). Each took the first key as the whole
