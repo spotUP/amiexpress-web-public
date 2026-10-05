@@ -79,7 +79,6 @@ import {
   handleFileListCommand,
   handleFileListRawCommand,
   handleAlterFlagsCommand,
-  handleFlagInput,
   handleFileStatusCommand,
   handleReadBulletinCommand,
   handleBulletinInput as handleBulletinInputFromDisplayFileCommands,
