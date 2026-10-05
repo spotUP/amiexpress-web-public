@@ -801,7 +801,8 @@ describe('5d new-user computer picker (new-user.handler.ts handleLinesInput)', (
 
     expect(choices.length).toBeGreaterThan(1);
     expect(out).toContain(
-      ` 1> ${choices[0].padEnd(34, ' ')} 2> ${choices[1].padEnd(34, ' ')}\r\n`
+      // express.e:11321-11324 - '\d[2]> \l\s[34] ' then '\d[2]> \l\s[34]\b\n'
+      ` 1> ${choices[0].padEnd(34, ' ')}  2> ${choices[1].padEnd(34, ' ')}\r\n`
     );
   });
 
