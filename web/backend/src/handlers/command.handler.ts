@@ -2779,9 +2779,8 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
         session.tempData.currentUploadIndex = session.tempData.filesProcessedCount || 0;
         session.tempData.filesProcessedCount = (session.tempData.filesProcessedCount || 0) + 1;
 
-        // Trigger file processing by calling processBatchFile directly
-        emitText(socket, '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');
-
+        // express.e prints nothing between the description and the
+        // checker's "Testing..." (19326-19331).
         // Process the upload directly (not via socket event - that doesn't work)
         await processBatchFile(socket, session, {
           filename: uploadedFile.filename,
@@ -2844,24 +2843,13 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     return;
   }
 
-  // Handle file upload state
+  // A transfer owns the line while the session is parked in FILES_UPLOAD:
+  // its keys go to the raw sink (server/terminal-input.ts), and a web upload
+  // waits on the browser's file picker. A key that still lands here - after
+  // rz exits, while the received files are processed - has no prompt to
+  // answer and is dropped. express.e's transfer blocks the caller the same
+  // way; it has no "any key cancels" and no "Upload canceled".
   if (session.subState === LoggedOnSubState.FILES_UPLOAD) {
-    // In web upload mode, ignore key presses - wait for file-uploaded event
-    // User is interacting with browser file picker, not terminal
-    if (session.tempData?.webUploadMode) {
-console.log(' In web upload mode - ignoring key press (waiting for file-uploaded event)');
-      return;
-    }
-
-    // In terminal mode, any key press cancels upload
-console.log(' In file upload state - canceling upload');
-    emitText(socket, '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
-    session.tempData = undefined;
-    endUpload(session, 'failure', () => {
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    });
     return;
   }
 
