@@ -156,92 +156,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     return false;
   }
 
-  // express.e:11750-11754 — during scans, save oldcn / restore after.
-  // Silent or confScan joins are background iterations; they must not leak into
-  // user-facing session state (currentConfName / relConfNum drive the menu prompt).
-  // Without this gate the partial-upload-check loop in confScan ends in the LAST
-  // accessible conf (e.g. 14 for sysop) and the menu briefly shows that conf
-  // before AUTO_REJOIN switches back to confRJoin.
-  const isBackgroundScan = silent || confScan;
-  if (!isBackgroundScan) {
-    session.currentConf = confId;
-    session.conferenceId = confId; // XIM doors read this
-    session.currentConference = confId; // GlobalStructures reads this
-    session.currentMsgBase = msgBaseId; // Database ID for internal queries
-    session.currentConfName = conference.name;
-    session.relConfNum = confId; // For simplicity, use absolute conf number as relative
-  }
-  // express.e:5015 getMsgBaseLocation(conf,msgBaseNum,msgBaseLocation) - on
-  // every join, a scan's included: the scan's reply is saved here.
-  session.joinedConf = { conf: confId, msgBase: msgBaseId };
-  // express.e:5130 - IF (auto=FALSE) AND (confScan=FALSE): save confRJoin
-  // During confScan or auto-rejoin, confRJoin must NOT be overwritten.
-  if (!auto && !confScan) {
-    session.confRJoin = confId;
-  }
-
-  // express.e:5136 - loggedOnUser.msgBaseRJoin:=msgBaseNum
-  // msgBaseRJoin is stored as RELATIVE number (1-indexed), NOT database ID
-  // confMsgBasesAll was computed during the ACS forward-walk above (reuse it)
-  const confMsgBases = confMsgBasesAll;
-  const msgBaseIndex = confMsgBases.findIndex(mb => mb.id === msgBaseId);
-  const msgBaseNum = msgBaseIndex >= 0 ? msgBaseIndex + 1 : 1; // 1-indexed
-
-  session.msgBaseRJoin = msgBaseNum;
-  if (session.user) {
-    // express.e:5130 - only persist confRJoin on explicit user join
-    if (!auto && !confScan) {
-      session.user.confRJoin = confId;
-      session.user.autoRejoin = confId;
-      session.user.msgBaseRJoin = msgBaseNum;
-    } else {
-      session.user.msgBaseRJoin = msgBaseNum;
-    }
-  }
-
-  // express.e:5026 loadMsgPointers(conf,msgBaseNum), its account half: under
-  // conference accounting this conference's counters become the caller's,
-  // and its post count always does (4893-4911). CUSTOM or not.
-  loadConferenceAccount(session, confId);
-
-  // express.e:5028 — IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
-  // The CUSTOM tooltype routes the conference through customMsgbaseCmd
-  // (a non-standard message-base implementation) instead of the
-  // MailStats/HeaderFile pipeline. When set, skip the standard
-  // mail-stat lookup, message-range display, and mail scan. Audit F-2.
-  const confFlags = getConferenceToolFlags(confId);
-  const isCustom = confFlags.custom;
-
-  // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
-  let mailStat: any = null;
-  if (session.user && !isCustom) {
-    try {
-      mailStat = await getMailStatFile(confId, msgBaseId);
-      const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
-      const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
-      let lastMsgReadConf = validated.lastMsgReadConf || 0;
-      let lastNewReadConf = validated.lastNewReadConf || 0;
-      // express.e:5037-5038 - clamp read pointers up to lowestNotDel
-      // IF(lastMsgReadConf<mailStat.lowestNotDel) THEN lastMsgReadConf:=mailStat.lowestNotDel
-      // IF(lastNewReadConf<mailStat.lowestNotDel) THEN lastNewReadConf:=mailStat.lowestNotDel
-      if (mailStat && mailStat.lowestNotDel > 0) {
-        if (lastMsgReadConf < mailStat.lowestNotDel) lastMsgReadConf = mailStat.lowestNotDel;
-        if (lastNewReadConf < mailStat.lowestNotDel) lastNewReadConf = mailStat.lowestNotDel;
-      }
-      session.lastMsgReadConf = lastMsgReadConf;
-      session.lastNewReadConf = lastNewReadConf;
-    } catch (err) {
-console.error('[joinConference] Failed to load/validate message pointers:', err);
-      session.lastMsgReadConf = 0;
-      session.lastNewReadConf = 0;
-    }
-  } else if (isCustom) {
-    // CUSTOM conference — read pointers don't apply. express.e leaves
-    // them unchanged; we just clear so downstream consumers don't see
-    // stale values from the previous conference.
-    session.lastMsgReadConf = 0;
-    session.lastNewReadConf = 0;
-  }
+  const { mailStat, isCustom } = await enterConference(session, conference, msgBaseId, confMsgBasesAll, silent || confScan, auto, confScan);
 
   // express.e:5130-5138 - createNodeUserFiles() only runs when !auto AND !confScan
   // (interactive conference joins only, not auto-rejoin at login or confScan passes)
@@ -425,6 +340,130 @@ console.warn('[joinConference] Failed to sync node user file:', err);
     await runJoinMailScan(socket, session, confId, msgBaseId, auto, confScan, forceMailScan, isCustom);
   }
 
+  return true;
+}
+
+/**
+ * The state half of express.e joinConf (4995-5040): the caller stands in
+ * `conference` - the session's conference, the rejoin values, the
+ * conference's account counters and its read pointers. No screen, no pause,
+ * no mail scan; joinConference draws those around it, and a door that moves
+ * the caller (AREXX BBSJOINCONF, the TypeScript door API) gets only this.
+ */
+async function enterConference(
+  session: BBSSession,
+  conference: Conference,
+  msgBaseId: number,
+  confMsgBasesAll: MessageBase[],
+  isBackgroundScan: boolean,
+  auto: boolean,
+  confScan: boolean,
+): Promise<{ mailStat: any; isCustom: boolean }> {
+  const confId = conference.id;
+  // express.e:11750-11754 — during scans, save oldcn / restore after.
+  // Silent or confScan joins are background iterations; they must not leak into
+  // user-facing session state (currentConfName / relConfNum drive the menu prompt).
+  // Without this gate the partial-upload-check loop in confScan ends in the LAST
+  // accessible conf (e.g. 14 for sysop) and the menu briefly shows that conf
+  // before AUTO_REJOIN switches back to confRJoin.
+  if (!isBackgroundScan) {
+    session.currentConf = confId;
+    session.conferenceId = confId; // XIM doors read this
+    session.currentConference = confId; // GlobalStructures reads this
+    session.currentMsgBase = msgBaseId; // Database ID for internal queries
+    session.currentConfName = conference.name;
+    session.relConfNum = confId; // For simplicity, use absolute conf number as relative
+  }
+  // express.e:5015 getMsgBaseLocation(conf,msgBaseNum,msgBaseLocation) - on
+  // every join, a scan's included: the scan's reply is saved here.
+  session.joinedConf = { conf: confId, msgBase: msgBaseId };
+  // express.e:5130 - IF (auto=FALSE) AND (confScan=FALSE): save confRJoin
+  // During confScan or auto-rejoin, confRJoin must NOT be overwritten.
+  if (!auto && !confScan) {
+    session.confRJoin = confId;
+  }
+
+  // express.e:5136 - loggedOnUser.msgBaseRJoin:=msgBaseNum
+  // msgBaseRJoin is stored as RELATIVE number (1-indexed), NOT database ID
+  // confMsgBasesAll was computed during the ACS forward-walk above (reuse it)
+  const confMsgBases = confMsgBasesAll;
+  const msgBaseIndex = confMsgBases.findIndex(mb => mb.id === msgBaseId);
+  const msgBaseNum = msgBaseIndex >= 0 ? msgBaseIndex + 1 : 1; // 1-indexed
+
+  session.msgBaseRJoin = msgBaseNum;
+  if (session.user) {
+    // express.e:5130 - only persist confRJoin on explicit user join
+    if (!auto && !confScan) {
+      session.user.confRJoin = confId;
+      session.user.autoRejoin = confId;
+      session.user.msgBaseRJoin = msgBaseNum;
+    } else {
+      session.user.msgBaseRJoin = msgBaseNum;
+    }
+  }
+
+  // express.e:5026 loadMsgPointers(conf,msgBaseNum), its account half: under
+  // conference accounting this conference's counters become the caller's,
+  // and its post count always does (4893-4911). CUSTOM or not.
+  loadConferenceAccount(session, confId);
+
+  // express.e:5028 — IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
+  // The CUSTOM tooltype routes the conference through customMsgbaseCmd
+  // (a non-standard message-base implementation) instead of the
+  // MailStats/HeaderFile pipeline. When set, skip the standard
+  // mail-stat lookup, message-range display, and mail scan. Audit F-2.
+  const confFlags = getConferenceToolFlags(confId);
+  const isCustom = confFlags.custom;
+
+  // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
+  let mailStat: any = null;
+  if (session.user && !isCustom) {
+    try {
+      mailStat = await getMailStatFile(confId, msgBaseId);
+      const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+      const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
+      let lastMsgReadConf = validated.lastMsgReadConf || 0;
+      let lastNewReadConf = validated.lastNewReadConf || 0;
+      // express.e:5037-5038 - clamp read pointers up to lowestNotDel
+      // IF(lastMsgReadConf<mailStat.lowestNotDel) THEN lastMsgReadConf:=mailStat.lowestNotDel
+      // IF(lastNewReadConf<mailStat.lowestNotDel) THEN lastNewReadConf:=mailStat.lowestNotDel
+      if (mailStat && mailStat.lowestNotDel > 0) {
+        if (lastMsgReadConf < mailStat.lowestNotDel) lastMsgReadConf = mailStat.lowestNotDel;
+        if (lastNewReadConf < mailStat.lowestNotDel) lastNewReadConf = mailStat.lowestNotDel;
+      }
+      session.lastMsgReadConf = lastMsgReadConf;
+      session.lastNewReadConf = lastNewReadConf;
+    } catch (err) {
+console.error('[joinConference] Failed to load/validate message pointers:', err);
+      session.lastMsgReadConf = 0;
+      session.lastNewReadConf = 0;
+    }
+  } else if (isCustom) {
+    // CUSTOM conference — read pointers don't apply. express.e leaves
+    // them unchanged; we just clear so downstream consumers don't see
+    // stale values from the previous conference.
+    session.lastMsgReadConf = 0;
+    session.lastNewReadConf = 0;
+  }
+
+  return { mailStat, isCustom };
+}
+
+/**
+ * A door moves the caller into conference `confNum` (AREXX BBSJOINCONF, the
+ * TypeScript door API). express.e has no such call; it is J with no screen:
+ * the same refusal for a conference the caller has no access to, the
+ * conference being left saved (24531), then joinConf's state, first message
+ * base. Returns false when refused.
+ */
+export async function joinConferenceForDoor(session: BBSSession, confNum: number): Promise<boolean> {
+  const conference = conferences.find(c => c.id === confNum);
+  if (!conference || !session.user || !checkConfAccess(session.user, confNum)) return false;
+  const bases = messageBases.filter(mb => mb.conferenceId === confNum);
+  if (bases.length === 0) return false;
+  // express.e:24531 - J saves the conference being left before the next join loads another's.
+  saveConferenceAccount(session, session.currentConf || 0);
+  await enterConference(session, conference, bases[0].id, bases, false, false, false);
   return true;
 }
 

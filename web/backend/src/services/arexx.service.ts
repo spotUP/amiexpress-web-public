@@ -867,7 +867,7 @@ export function splitRexxStatements(line: string): string[] {
 /**
  * BBS-Specific AREXX Functions
  */
-class BBSFunctions {
+export class BBSFunctions {
   private context: any;
 
   constructor(context: any) {
@@ -915,11 +915,10 @@ class BBSFunctions {
    * Join conference
    */
   async BBSJOINCONF(confId: number): Promise<boolean> {
-    if (this.context.session) {
-      this.context.session.currentConf = confId;
-      return true;
-    }
-    return false;
+    if (!this.context.session) return false;
+    // The board's own join state, refused without access - not currentConf alone.
+    const { joinConferenceForDoor } = require('../handlers/operations/conference.handler');
+    return joinConferenceForDoor(this.context.session, confId);
   }
 
   /**

@@ -1056,33 +1056,15 @@ console.log('[BBSApi] Mouse events disabled');
   }
 
   /**
-   * Join a conference by number
+   * Move the caller into conference `confNum`: the board's own join state
+   * (conference.handler joinConferenceForDoor), refused without access.
+   * Setting currentConf alone left joinedConf, the rejoin values, the
+   * conference's account counters and read pointers on the old conference.
    */
   async joinConference(confNum: number): Promise<boolean> {
     try {
-      // Check if conference exists
-      const conferences = await db.getConferences();
-      const targetConf = conferences.find(c => c.id === confNum);
-
-      if (!targetConf) {
-console.warn(`[BBSApi] Conference ${confNum} not found`);
-        return false;
-      }
-
-      // Enforce conference access — express.e checkConfAccess(). A door must
-      // not be able to move the user into a conference their confaccess string
-      // denies. Same 1-based conference number the main join flow uses
-      // (conference.handler.ts:115).
-      if (!checkConfAccess(this.session.user, confNum)) {
-console.warn(`[BBSApi] Access denied to conference ${confNum} for user ${this.session.user?.username ?? '<none>'}`);
-        return false;
-      }
-
-      // Update session
-      this.session.currentConf = confNum;
-      this.session.currentConfName = targetConf.name;
-
-      return true;
+      const { joinConferenceForDoor } = require('../handlers/operations/conference.handler');
+      return await joinConferenceForDoor(this.session, confNum);
     } catch (error) {
 console.error('[BBSApi] Error joining conference:', error);
       return false;

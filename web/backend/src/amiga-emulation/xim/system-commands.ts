@@ -577,10 +577,17 @@ debugLog(`  Command: "${command}"`);
 debugLog('[XIMSystem] PRV_GROUP - Modify group settings');
 debugLog(`  Group data: "${groupData}"`);
 
-    // Update conference names/locations when targeting current conf
-    const confNum = parseInt(groupData, 10);
-    if (!Number.isNaN(confNum)) {
-      (this.bbsSession as any).currentConf = confNum + 1;
+    // express.e renames conference Val(string)+1 for this node: the name at
+    // string+2 (cut at 39), the location at string+40. It never moves the
+    // caller; this used to set currentConf, which left the caller "in" a
+    // conference they never joined. The board has no per-node conference
+    // table, so only the name of the conference the caller is in carries.
+    const confIndex = parseInt(groupData, 10);
+    if (!Number.isNaN(confIndex) && confIndex + 1 === this.bbsSession?.conferenceId) {
+      const name = groupData.slice(2, 39).replace(/[\r\n].*$/s, '');
+      if (name) this.bbsSession.conferenceName = name;
+      const location = groupData.slice(40).replace(/\0.*$/s, '');
+      if (location) this.bbsSession.conferencePath = location;
     }
     this.reply(msg, 1);
   }
