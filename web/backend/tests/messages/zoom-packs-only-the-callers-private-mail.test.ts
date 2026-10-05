@@ -108,8 +108,15 @@ describe('ZOOM', () => {
       },
       tempData: {},
     };
-    for (const ch of 'ZOOM\r') await handleCommand(socket, session, ch);
-    await new Promise((r) => setTimeout(r, 60));
+    for (const ch of 'ZOOM') await handleCommand(socket, session, ch);
+    // ZOOM then waits on its own prompts (express.e 26244-26333): the pack
+    // method and the pause before the transfer. The command's dispatch is
+    // still running while they are answered.
+    const zoom = handleCommand(socket, session, '\r');
+    const settle = () => new Promise((r) => setTimeout(r, 60));
+    await settle();
+    for (const ch of ['2', '\r', ' ']) { await handleCommand(socket, session, ch); await settle(); }
+    await zoom;
 
     expect(out.join('')).toContain('Zooming Conference');
     expect(downloads).toHaveLength(1);
