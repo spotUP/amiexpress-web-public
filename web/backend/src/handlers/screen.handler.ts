@@ -526,6 +526,11 @@ export function servesPetsciiArt(session: { petsciiMode?: boolean; petsciiColumn
  */
 function resolveAlphabetTwin(originalPath: string, session: any): string {
   const parsed = path.parse(originalPath);
+  // The directory as the disk spells it: an include names it as the screen
+  // was written (`BBS:screens/uprough.txt`), the live volume is
+  // case-sensitive and holds `Screens/`, and a twin looked for in a
+  // directory that does not exist is never found.
+  parsed.dir = amigafs.resolvePath(parsed.dir) ?? parsed.dir;
   if (servesPetsciiArt(session)) {
     if (isPetsciiSeqFile(originalPath)) return originalPath;
     const seqCandidate = findCaseInsensitive(parsed.dir, `${parsed.name}.seq`);
