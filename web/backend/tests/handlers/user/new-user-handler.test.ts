@@ -199,6 +199,14 @@ describe('New User Handler — registration steps', () => {
       expect(session.newUserData.phone).toBe('555-1234');
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_EMAIL);
     });
+
+    it('a blank phone number goes back to City (express.e:30209-30212)', async () => {
+      const socket = makeSocket();
+      const session = makeSession({ subState: LoggedOnSubState.NEW_USER_PHONE });
+      await handlePhoneInput(socket, session, '');
+      expect(socket._emits.map((e: any) => String(e.payload)).join('')).toBe('\r\n\r\nCity, State: ');
+      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_LOCATION);
+    });
   });
 
   describe('handleEmailInput (express.e:30207)', () => {
@@ -210,6 +218,18 @@ describe('New User Handler — registration steps', () => {
 
       expect(session.newUserData.email).toBe('user@test.com');
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_PASSWORD);
+    });
+
+    it('takes any address, and a blank one goes back to the phone number (express.e:30214-30223)', async () => {
+      const taken = makeSession({ subState: LoggedOnSubState.NEW_USER_EMAIL });
+      await handleEmailInput(makeSocket(), taken, 'spot at uprough');
+      expect(taken.newUserData.email).toBe('spot at uprough');
+
+      const socket = makeSocket();
+      const blank = makeSession({ subState: LoggedOnSubState.NEW_USER_EMAIL });
+      await handleEmailInput(socket, blank, '');
+      expect(socket._emits.map((e: any) => String(e.payload)).join('')).toBe('\r\n\r\nPhone Number: ');
+      expect(blank.subState).toBe(LoggedOnSubState.NEW_USER_PHONE);
     });
   });
 
@@ -224,14 +244,26 @@ describe('New User Handler — registration steps', () => {
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_PASSWORD_CONFIRM);
     });
 
-    it('rejects password that is too short', async () => {
+    it('a short password is refused only after it is typed twice (express.e:30240-30253)', async () => {
       const socket = makeSocket();
       const session = makeSession({ subState: LoggedOnSubState.NEW_USER_PASSWORD });
 
       await handlePasswordInput(socket, session, 'ab');
+      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_PASSWORD_CONFIRM);
 
+      await handlePasswordConfirm(socket, session, 'ab');
+      const out = socket._emits.filter((e: any) => e.event === 'ansi-output').map((e: any) => String(e.payload)).join('');
+      expect(out).toMatch(/Reenter the PassWord: \r\n\r\nPassword length must be at least \d+ chars, try again\.\.\r\nEnter a PassWord: $/);
       expect(session.subState).toBe(LoggedOnSubState.NEW_USER_PASSWORD);
-      expect(socket.emit).toHaveBeenCalled();
+    });
+
+    it('a blank password goes back to the e-mail address (express.e:30228-30231)', async () => {
+      const socket = makeSocket();
+      const session = makeSession({ subState: LoggedOnSubState.NEW_USER_PASSWORD });
+      await handlePasswordInput(socket, session, '');
+      const out = socket._emits.filter((e: any) => e.event === 'ansi-output').map((e: any) => String(e.payload)).join('');
+      expect(out).toBe('\r\n\r\n\r\nE-Mail Address: ');
+      expect(session.subState).toBe(LoggedOnSubState.NEW_USER_EMAIL);
     });
   });
 

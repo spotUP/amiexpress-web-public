@@ -438,7 +438,15 @@ function promptForPhone(socket: Socket, session: any) {
  * Diverges from express.e:30186 retreat-to-location behavior.
  */
 export async function handlePhoneInput(socket: Socket, session: any, input: string) {
-  session.newUserData.phone = input.trim();
+  const phone = input.trim();
+  if (phone === '') {
+    // express.e:30209-30212: lineInput's break, '\b\n', JUMP jLoop2 - City again.
+    socket.emit('ansi-output', '\r\n\r\n');
+    session.subState = LoggedOnSubState.NEW_USER_LOCATION;
+    promptForLocation(socket, session);
+    return;
+  }
+  session.newUserData.phone = phone;
   session.subState = LoggedOnSubState.NEW_USER_EMAIL;
   promptForEmail(socket, session);
 }
@@ -452,23 +460,17 @@ function promptForEmail(socket: Socket, session: any) {
 }
 
 /**
- * Handle email input - express.e:30191-30199
- * WEB_: blank no longer retreats to phone; field is required and re-prompts.
+ * Handle email input - express.e:30214-30223. Anything typed is taken; a
+ * blank answer goes back to the phone number.
  */
 export async function handleEmailInput(socket: Socket, session: any, input: string) {
   const email = input.trim();
 
   if (email === '') {
-    socket.emit('ansi-output', '\r\nE-Mail Address is required.\r\n');
-    promptForEmail(socket, session);
-    return;
-  }
-
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    socket.emit('ansi-output', '\r\nInvalid email format. Please include @ and domain.\r\n\r\n');
-    promptForEmail(socket, session);
+    // express.e:30220-30222: lineInput's break, '\b\n', JUMP jLoop3.
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.NEW_USER_PHONE;
+    promptForPhone(socket, session);
     return;
   }
 
@@ -677,9 +679,10 @@ async function getComputerChoices(): Promise<string[]> {
 /**
  * Prompt for password - express.e:30203
  */
-function promptForPassword(socket: Socket, session: any) {
+/** `lead` is the break before it: the last answer's (lineInput's, getPass2's), or none after a message that ends in one. */
+function promptForPassword(socket: Socket, session: any, lead = '\r\n') {
   setPasswordMask(socket, session, true);
-  socket.emit('ansi-output', '\r\nEnter a PassWord: ');
+  socket.emit('ansi-output', `${lead}Enter a PassWord: `);
 }
 
 function getSecurityPolicy(): SecurityPolicy {
@@ -731,28 +734,12 @@ export async function handlePasswordInput(socket: Socket, session: any, input: s
   const password = input.trim();
 
   if (password === '') {
-    socket.emit('ansi-output', '\r\nPassword is required.\r\n');
-    promptForPassword(socket, session);
-    return;
-  }
-
-  const policy = getSecurityPolicy();
-  if (password.length < policy.minLength) {
-    socket.emit('ansi-output', `\r\nPassword length must be at least ${policy.minLength} chars, try again..\r\n`);
-    promptForPassword(socket, session);
-    return;
-  }
-
-  // WEB_: strength check runs at first password entry — express.e:30227-
-  // 30254 checks strength only AFTER the confirmation matches. Audit
-  // A-19 flagged the order. Functionally equivalent (failed strength
-  // re-prompts at the same first-password step in both flows); the web
-  // form gives faster feedback to the user typing a weak password
-  // because they don't have to re-type it twice before learning it
-  // failed. Kept the eager check.
-  if (!passwordMeetsStrength(password, policy.minStrength)) {
-    socket.emit('ansi-output', `\r\nPassword must have at least ${policy.minStrength} of these:\r\n  upper case,lower case, numeric and symbols, try again..\r\n`);
-    promptForPassword(socket, session);
+    // express.e:30228-30231: getPass2's break, '\b\n', JUMP jLoop4 - the
+    // e-mail address again.
+    setPasswordMask(socket, session, false);
+    socket.emit('ansi-output', '\r\n\r\n');
+    session.subState = LoggedOnSubState.NEW_USER_EMAIL;
+    promptForEmail(socket, session);
     return;
   }
 
@@ -770,10 +757,26 @@ export async function handlePasswordConfirm(socket: Socket, session: any, input:
   const confirmation = input.trim();
 
   // Check if passwords match (express.e:30207 - IF(StrCmp(string,str2)=0))
+  // getPass2's break, then 30235-30238's '\b\nPasswords do not match...'.
   if (confirmation !== session.newUserData.password) {
-    socket.emit('ansi-output', '\r\nPasswords do not match, try again..\r\n');
+    socket.emit('ansi-output', '\r\n\r\nPasswords do not match, try again..\r\n');
     session.subState = LoggedOnSubState.NEW_USER_PASSWORD;
-    promptForPassword(socket, session);
+    promptForPassword(socket, session, '');
+    return;
+  }
+
+  // express.e:30240-30253 checkPasswordStrength - after the two agree.
+  const policy = getSecurityPolicy();
+  const weak = (password: string) => password.length < policy.minLength
+    ? `\r\n\r\nPassword length must be at least ${policy.minLength} chars, try again..\r\n`
+    : !passwordMeetsStrength(password, policy.minStrength)
+      ? `\r\n\r\nPassword must have at least ${policy.minStrength} of these:\r\n  upper case,lower case, numeric and symbols, try again..\r\n`
+      : null;
+  const refused = weak(confirmation);
+  if (refused) {
+    socket.emit('ansi-output', refused);
+    session.subState = LoggedOnSubState.NEW_USER_PASSWORD;
+    promptForPassword(socket, session, '');
     return;
   }
 
