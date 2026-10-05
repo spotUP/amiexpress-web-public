@@ -241,6 +241,8 @@ describe('Telnet/SSH lrzsz onComplete routes through web pipeline (no duplicatio
     expect(c.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     // express.e:19257-19300 examines each file without a word.
     expect(c.said()).not.toMatch(/File selected|Checking for FILE_ID|FILE_ID\.DIZ found|No FILE_ID/);
+    // U returns RESULT_SUCCESS (25657-25658): the main loop's doPause is the one pause.
+    expect(c.said()).not.toContain('Press any key');
   });
 
   // express.e:19051-19053: a receive that fails still prints "File Uploading

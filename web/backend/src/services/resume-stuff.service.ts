@@ -49,7 +49,6 @@ interface ResumeState {
   playpenDir: string;
   resumed: number;
   deleteAll: boolean;
-  bufferedInput: string;
   emitter: ResumeStuffEmitter;
   onComplete: (result: ResumeStuffResult) => void;
 }
@@ -118,7 +117,6 @@ export function startResumeStuff(
     playpenDir,
     resumed: 0,
     deleteAll: false,
-    bufferedInput: '',
     emitter,
     onComplete,
   };
@@ -134,27 +132,31 @@ export function startResumeStuff(
   emitNextPrompt(session);
 }
 
+/** StringF's `\s[12]`: the name in a twelve-column field. */
+function name12(name: string): string {
+  return name.length >= 12 ? name.slice(0, 12) : name.padEnd(12);
+}
+
+/**
+ * express.e:18150-18156 - the next partial. Under "All" every one left is
+ * deleted without asking (removeAll, 18153-18154, 18171, 18187-18188).
+ */
 function emitNextPrompt(session: BBSSession): void {
   const state = (session as any).resumeStuffState as ResumeState | undefined;
   if (!state) return;
+  while (state.deleteAll && state.index < state.partials.length) {
+    const p = state.partials[state.index];
+    state.emitter.emit('ansi-output', `Delete ${name12(p.basename)} [${p.size}] All.. Deleted!\r\n`);
+    try { fs.unlinkSync(p.fullPath); } catch { /* DeleteFile of nothing */ }
+    state.index++;
+  }
   if (state.index >= state.partials.length) {
     finish(session);
     return;
   }
   const p = state.partials[state.index];
-  // express.e:18180 ' \s Resume \s [\d bytes] (Y/N)?'
-  // (The exact format varies by version; using the canonical pattern.)
-  state.emitter.emit('ansi-output', `\r\nResume ${p.basename} [${p.size} bytes] (Y/N)? `);
+  state.emitter.emit('ansi-output', `Resume ${name12(p.basename)} [${p.size}] (Y/N)? `);
   session.subState = LoggedOnSubState.UPLOAD_RESUME_PROMPT;
-  state.bufferedInput = '';
-}
-
-function emitDeletePrompt(session: BBSSession): void {
-  const state = (session as any).resumeStuffState as ResumeState | undefined;
-  if (!state) return;
-  state.emitter.emit('ansi-output', '\r\nDelete (Y/N/All)? ');
-  session.subState = LoggedOnSubState.UPLOAD_RESUME_DELETE;
-  state.bufferedInput = '';
 }
 
 function finish(session: BBSSession): void {
@@ -165,45 +167,11 @@ function finish(session: BBSSession): void {
   state.onComplete({ resumed: state.resumed, aborted: false });
 }
 
-/**
- * Per-keystroke input handler installed during the resume prompt loop.
- * Buffers until Enter, then dispatches based on current subState.
- */
+/** Each key is one readChar (express.e:18170, 18182); other keys are read and dropped. */
 function handleResumeInput(session: BBSSession, data: string): void {
-  const state = (session as any).resumeStuffState as ResumeState | undefined;
-  if (!state) return;
-
   for (const ch of data) {
-    if (ch === '\r' || ch === '\n') {
-      const answer = state.bufferedInput.trim().toUpperCase();
-      state.emitter.emit('ansi-output', '\r\n');
-      state.bufferedInput = '';
-      processAnswer(session, answer);
-      return;
-    }
-    if (ch === '\x08' || ch === '\x7f') {
-      // backspace
-      if (state.bufferedInput.length > 0) {
-        state.bufferedInput = state.bufferedInput.slice(0, -1);
-        state.emitter.emit('ansi-output', '\b \b');
-      }
-      continue;
-    }
-    // For Y/N/A single-char answers we accept the first char as the
-    // answer without requiring Enter, matching express.e readChar
-    // semantics for prompt loops.
-    if (state.bufferedInput.length === 0 && /^[YNAyna]$/.test(ch)) {
-      state.bufferedInput = ch;
-      state.emitter.emit('ansi-output', ch);
-      // Auto-submit on single-char Y/N/A
-      const answer = ch.toUpperCase();
-      state.emitter.emit('ansi-output', '\r\n');
-      state.bufferedInput = '';
-      processAnswer(session, answer);
-      return;
-    }
-    state.bufferedInput += ch;
-    state.emitter.emit('ansi-output', ch);
+    if (!(session as any).resumeStuffState) return;
+    processAnswer(session, ch.toUpperCase());
   }
 }
 
@@ -213,74 +181,61 @@ function processAnswer(session: BBSSession, answer: string): void {
   const p = state.partials[state.index];
 
   if (session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT) {
-    if (answer === 'Y') {
-      // Move back to playpen under original filename
-      try {
-        if (!fs.existsSync(state.playpenDir)) {
-          fs.mkdirSync(state.playpenDir, { recursive: true });
-        }
-        const dest = path.join(state.playpenDir, p.basename);
-        try {
-          fs.renameSync(p.fullPath, dest);
-          // rename preserves mtime, which would leave the restored partial
-          // looking older than this logon - and cleanPlayPen now refuses to
-          // claim anything that old. Stamp it as this session's so a second
-          // abort files it again instead of orphaning it in the playpen.
-          try {
-            const nowTs = new Date();
-            fs.utimesSync(dest, nowTs, nowTs);
-          } catch { /* best effort: attribution only */ }
-        } catch (err: any) {
-          if (err?.code === 'EXDEV') {
-            fs.copyFileSync(p.fullPath, dest);
-            fs.unlinkSync(p.fullPath);
-          } else throw err;
-        }
-        state.resumed++;
-        console.log(`[resumeStuff] resumed ${p.basename}`);
-      } catch (err: any) {
-        console.error(`[resumeStuff] resume ${p.basename} failed: ${err?.message || err}`);
-        state.emitter.emit('ansi-output', `\r\n\x1b[31mFailed to resume ${p.basename}\x1b[0m\r\n`);
-      }
-      state.index++;
-      emitNextPrompt(session);
-    } else {
-      // N (or anything else) → Delete prompt
-      if (state.deleteAll) {
-        // Silent delete-all mode set on a prior answer
-        try { fs.unlinkSync(p.fullPath); } catch (_e) {}
-        state.index++;
-        emitNextPrompt(session);
-      } else {
-        emitDeletePrompt(session);
-      }
+    if (answer === 'N') {
+      // express.e:18177-18178
+      state.emitter.emit('ansi-output', 'No!   Delete (Y/N/All)? ');
+      session.subState = LoggedOnSubState.UPLOAD_RESUME_DELETE;
+      return;
     }
+    if (answer !== 'Y') return;
+    // express.e:18217-18249 - back to the playpen under its own name, and
+    // resumeStuff returns: one partial resumes per upload. A move that fails
+    // is silent there too.
+    state.emitter.emit('ansi-output', 'Yes..\r\n');
+    state.emitter.emit('ansi-output', `\r\nResuming upload: ${p.basename}\r\n\r\n`);
+    try {
+      if (!fs.existsSync(state.playpenDir)) fs.mkdirSync(state.playpenDir, { recursive: true });
+      const dest = path.join(state.playpenDir, p.basename);
+      try {
+        fs.renameSync(p.fullPath, dest);
+        // rename preserves mtime, which would leave the restored partial
+        // looking older than this logon - and cleanPlayPen now refuses to
+        // claim anything that old. Stamp it as this session's so a second
+        // abort files it again instead of orphaning it in the playpen.
+        try {
+          const nowTs = new Date();
+          fs.utimesSync(dest, nowTs, nowTs);
+        } catch { /* best effort: attribution only */ }
+      } catch (err: any) {
+        if (err?.code === 'EXDEV') {
+          fs.copyFileSync(p.fullPath, dest);
+          fs.unlinkSync(p.fullPath);
+        } else throw err;
+      }
+      state.resumed++;
+    } catch (err: any) {
+      console.error(`[resumeStuff] resume ${p.basename} failed: ${err?.message || err}`);
+    }
+    finish(session);
     return;
   }
 
   if (session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE) {
-    if (answer === 'A') {
-      state.deleteAll = true;
-      // Delete the current AND all remaining
-      try { fs.unlinkSync(p.fullPath); } catch (_e) {}
-      for (let j = state.index + 1; j < state.partials.length; j++) {
-        try { fs.unlinkSync(state.partials[j].fullPath); } catch (_e) {}
-      }
-      state.emitter.emit('ansi-output', `Deleted all ${state.partials.length - state.index} remaining\r\n`);
-      finish(session);
-      return;
-    }
-    if (answer === 'Y') {
-      try { fs.unlinkSync(p.fullPath); } catch (err: any) {
-        console.error(`[resumeStuff] delete ${p.basename} failed: ${err?.message || err}`);
-      }
+    if (answer === 'N') {
+      // express.e:18196-18198
+      state.emitter.emit('ansi-output', 'No!\r\n');
       state.index++;
       emitNextPrompt(session);
       return;
     }
-    // N or anything else: keep file, move on
+    if (answer !== 'Y' && answer !== 'A') return;
+    if (answer === 'A') state.deleteAll = true;
+    // express.e:18209-18216
+    state.emitter.emit('ansi-output', state.deleteAll ? 'All.. Deleted!\r\n' : 'Yes.. Deleted!\r\n');
+    try { fs.unlinkSync(p.fullPath); } catch (err: any) {
+      console.error(`[resumeStuff] delete ${p.basename} failed: ${err?.message || err}`);
+    }
     state.index++;
     emitNextPrompt(session);
-    return;
   }
 }

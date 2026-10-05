@@ -212,7 +212,8 @@ export async function runPostUpload(
     // Drop straight to DISPLAY_MENU. The earlier code path here used
     // DISPLAY_CONF_BULL which re-rendered the join-conf ASCII + uploaders
     // bull after every upload — wrong UX on every transport.
-    emitter.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    // U returns RESULT_SUCCESS (express.e:25657-25658); the main loop's
+    // doPause is the only pause.
     (session as any).menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   });
