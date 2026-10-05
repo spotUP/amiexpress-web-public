@@ -62,13 +62,12 @@ describe('DownloadHandler.handleDownloadCommand — permission check', () => {
     jest.clearAllMocks();
   });
 
-  test('emits permission denied and sets DISPLAY_MENU when secLevel is too low', async () => {
+  test('refuses silently with RESULT_NOT_ALLOWED - the dispatcher says why (express.e:24854, 28400)', async () => {
     const socket = makeSocket();
     const session = makeDownloadSession(5); // secLevel 5 < 10 → no permission
-    await DownloadHandler.handleDownloadCommand(socket, session, '');
-    // Should emit denial message
-    const allEmits: string[] = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? ''));
-    expect(allEmits.some(s => s.includes('ermission') || s.includes('denied') || s.includes('31m'))).toBe(true);
+    const { RESULT_NOT_ALLOWED } = require('../../../src/constants/command-results');
+    expect(await DownloadHandler.handleDownloadCommand(socket, session, '')).toBe(RESULT_NOT_ALLOWED);
+    expect(socket.emit).not.toHaveBeenCalled();
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 

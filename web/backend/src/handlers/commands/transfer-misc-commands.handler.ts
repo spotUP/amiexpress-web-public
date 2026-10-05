@@ -19,6 +19,7 @@ import { formatLongDateTime } from '../../utils/date-time.util';
 import { report } from '../../achievements/reporter';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { joinedConf } from '../../utils/joined-conf.util';
+import type { InternalCommandResult } from '../../constants/command-results';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -796,7 +797,7 @@ async function showAllVoteStatistics(socket: any, session: BBSSession): Promise<
  * caller with ACS_SYSOP_DOWNLOAD - any path, logged as `SYSOP DOWNLOAD:` -
  * and a plain D for anyone else. One handler; the code is the difference.
  */
-export async function handleDownloadWithStatusCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
+export async function handleDownloadWithStatusCommand(socket: any, session: BBSSession, params: string = ''): Promise<InternalCommandResult | void> {
   const { DownloadHandler } = require('../file/download.handler');
-  await DownloadHandler.handleDownloadCommand(socket, session, params, 'DS');
+  return await DownloadHandler.handleDownloadCommand(socket, session, params, 'DS');
 }

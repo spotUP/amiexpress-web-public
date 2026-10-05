@@ -4441,12 +4441,10 @@ async function dispatchInternalCommand(
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
       const { DownloadHandler } = require('./file/download.handler');
-      await DownloadHandler.handleDownloadCommand(socket, session, params);
-      return;
+      return await DownloadHandler.handleDownloadCommand(socket, session, params);
 
     case 'DS': // Sysop Download (internalCommandD with cmdcode DS) - express.e:28302-28303, 20040
-      await handleDownloadWithStatusCommand(socket, session, params);
-      return;
+      return await handleDownloadWithStatusCommand(socket, session, params);
 
     case 'DB': // Download Batch - Download all flagged files
       const { BatchDownloadHandler } = require('./transfer/batch-download.handler');

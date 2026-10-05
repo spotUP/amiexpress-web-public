@@ -211,7 +211,7 @@ describe('typing D on a pooled area', () => {
 
     await typeD(h, 'NOPE.LHA');
 
-    expect(h.written()).toContain('File not found: NOPE.LHA');
+    expect(h.written()).toContain('       File (NOPE.LHA) not found.'); // express.e:13036
     expect(h.written()).not.toContain('unavailable');
   });
 

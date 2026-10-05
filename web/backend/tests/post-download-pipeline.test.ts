@@ -219,9 +219,24 @@ describe('Web download.handler delegates to runPostDownload', () => {
 
       await DownloadHandler.handleFilenameInput(c.socket, c.session, 'SECRET.LHA');
 
-      expect(c.said()).toContain('SECRET.LHA: restricted file');
+      expect(c.said()).toContain(' SECRET.LHA\r\n    >>Restricted File<< Updating CallersLog\r\n'); // express.e:12736, 12749
       expect(callersLog).toHaveBeenCalledTimes(1);
       expect(String(callersLog.mock.calls[0][2])).toContain('Attempt to download RESTRICTED file');
+      expect(c.session.tempData.downloadFileList).toEqual([]);
+    });
+
+    test('naming it on the command line (D SECRET.LHA) is refused the same way', async () => {
+      // The names typed after D took another path, which never asked.
+      const confDir = path.join(root, 'Conf1');
+      fs.mkdirSync(path.join(confDir, 'Files'), { recursive: true });
+      fs.writeFileSync(path.join(confDir, 'Files', 'SECRET.LHA'), Buffer.alloc(100));
+      await writeDirEntry(path.join(confDir, 'DIR1'), 'SECRET.LHA', 100, new Date(), 'Restricted - sysop only', 'N', 'sysop', false);
+      fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\nDLPATH.1=BBS:Conf1/Files/\n');
+      const c = aCaller({});
+
+      await DownloadHandler.handleDownloadCommand(c.socket, c.session, 'SECRET.LHA');
+
+      expect(c.said()).toContain('    >>Restricted File<< Updating CallersLog\r\n');
       expect(c.session.tempData.downloadFileList).toEqual([]);
     });
   });

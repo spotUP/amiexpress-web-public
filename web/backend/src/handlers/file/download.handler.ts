@@ -39,6 +39,7 @@ import { getStorageContext } from '../../storage/storage-context';
 import { getTimeRemainingMinutes } from '../../utils/time-tracking.util';
 import { DEFAULT_CONNECTION_BAUD } from '../../constants/modem';
 import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 
 export class DownloadHandler {
   /**
@@ -51,12 +52,12 @@ export class DownloadHandler {
     session: BBSSession,
     params: string = '',
     cmdcode: string = 'D'
-  ): Promise<void> {
+  ): Promise<InternalCommandResult | void> {
     // express.e:24854 checkSecurity(ACS_DOWNLOAD)
+    // The dispatcher says "Command requires higher access." (express.e:28400).
     if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
-      socket.emit('ansi-output', '\r\nPermission denied.\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      return RESULT_NOT_ALLOWED;
     }
 
     // express.e:24855 setEnvStat(ENV_DOWNLOADING)
@@ -264,13 +265,10 @@ export class DownloadHandler {
             socket, config.get('dataDir'), session.currentConf || 1, name);
           if (found === null) continue; // the volume could not answer; already reported
           if (found.length === 0) {
-            socket.emit('ansi-output', `\r\nFile not found: ${name}\r\n`);
+            socket.emit('ansi-output', `       File (${name}) not found.\r\n`); // express.e:13036
             continue;
           }
-          for (const file of found) {
-            this.printFileFound(socket, session, file);
-            fileList.push(file);
-          }
+          for (const file of found) await this.addFoundFile(socket, session, file, fileList);
         }
       }
     }
@@ -425,45 +423,43 @@ export class DownloadHandler {
     }
 
     if (found.length === 0) {
-      socket.emit('ansi-output', `File not found: ${trimmed}\r\n`);
+      socket.emit('ansi-output', `       File (${trimmed}) not found.\r\n`); // express.e:13036
       await this.showFilespecPrompt(socket, session);
       return;
     }
 
-    // Add to list, update count. Reject files whose comment starts
-    // "Restricted" per express.e checkFIBForFileSize:
-    //   IF StrCmp(fBlock.comment,'Restricted',10)=0 THEN
-    //     callersLog('\t\tAttempt to download RESTRICTED file [<path>]')
-    //     RETURN
-    // Without this gate, sysop-marked restricted files are downloadable.
     if (!session.tempData) session.tempData = { downloadFileList: [], downloadNumFiles: 0 };
-    for (const file of found) {
-      // findFilesInConference does not populate comments, so resolve the
-      // file's DIR description here (single source of truth in
-      // file-restriction.util). Without this, `file.comment` was always
-      // undefined and the Restricted gate never fired.
-      const commentText = file.comment || file.description ||
-        await resolveFileDescription(session.currentConf || 1, config.get('dataDir'), file.name);
-      if (isRestrictedComment(commentText)) {
-        socket.emit('ansi-output', `\r\n\x1b[31m${file.name}: restricted file\x1b[0m\r\n`);
-        try {
-          const { callersLog } = require('../../server/database-helpers');
-          await callersLog(session.user?.id || null, session.user?.username || 'unknown',
-            `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`);
-          // express.e:12750-12751 - and the node's CallersLog.
-          require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1,
-            `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`);
-        } catch (_err) { /* non-critical */ }
-        continue;
-      }
-      this.printFileFound(socket, session, file);  // express.e:12736
-      fileList.push(file);
-    }
+    for (const file of found) await this.addFoundFile(socket, session, file, fileList);
     session.tempData.downloadFileList = fileList;
     session.tempData.downloadNumFiles = fileList.length;
 
     // Show next filespec prompt — stay in DOWNLOAD_FILENAME_INPUT
     await this.showFilespecPrompt(socket, session);
+  }
+
+  /**
+   * express.e:12735-12760 checkFIBForFileSize, per file found: its line is
+   * printed, THEN a file whose comment (this board's DIR description,
+   * file-restriction.util) starts "Restricted" is refused and logged, else it
+   * joins the list. Both D paths - names typed after D, and names typed at the
+   * filespec prompt - come here; the first had no restricted check at all.
+   */
+  private static async addFoundFile(socket: Socket, session: BBSSession, file: any, fileList: any[]): Promise<void> {
+    this.printFileFound(socket, session, file);
+    const comment = file.comment || file.description ||
+      await resolveFileDescription(session.currentConf || 1, config.get('dataDir'), file.name);
+    if (isRestrictedComment(comment)) {
+      socket.emit('ansi-output', '    >>Restricted File<< Updating CallersLog\r\n');
+      const line = `\t\tAttempt to download RESTRICTED file [${file.fullPath || file.name}]`;
+      require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1, line);
+      try {
+        // The web activity table keeps it too.
+        const { callersLog } = require('../../server/database-helpers');
+        await callersLog(session.user?.id || null, session.user?.username || 'unknown', line);
+      } catch { /* the CallersLog line above is the record */ }
+      return;
+    }
+    fileList.push(file);
   }
 
   /**
