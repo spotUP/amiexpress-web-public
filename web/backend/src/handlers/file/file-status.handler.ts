@@ -10,6 +10,7 @@
  * - Handler focuses on presentation/routing only
  */
 
+import { RESULT_NOT_ALLOWED, type InternalCommandResult } from '../../constants/command-results';
 import { injectable, inject } from 'tsyringe';
 import { isNarrow, narrowRule } from '../../utils/table-format.util';
 import { Socket } from 'socket.io';
@@ -49,213 +50,182 @@ console.log('[FileStatusHandler] Initialized with DI');
   async handleFileStatusCommand(
     socket: Socket,
     session: BBSSession
-  ): Promise<void> {
-    // Check security - express.e:24873
+  ): Promise<InternalCommandResult> {
+    // express.e:24873 - the dispatcher says "higher access", not this command.
     if (!checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)) {
-      socket.emit('ansi-output', '\x1b[31mPermission denied.\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      return RESULT_NOT_ALLOWED;
     }
 
-    // Call fileStatus(0) - express.e:24874
+    // express.e:24874 fileStatus(0); the main loop's menuPause follows.
     await this.displayFileStatus(socket, session, false);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
+    session.menuPause = true;
     session.paginatedScreen = undefined;
     session.lastScreenHadPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
-  /**
-   * Display file status - Port from express.e:24141-24250
-   *
-   * @param socket - Socket connection
-   * @param session - User session
-   * @param currentOnly - If true, show only current conference (opt=1 in express.e)
-   */
-  private async displayFileStatus(
-    socket: Socket,
-    session: BBSSession,
-    currentOnly: boolean
-  ): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-
-    // Get system configuration
+  /** fileStatus for this board's conference count (cmds.numConf). */
+  async displayFileStatus(socket: Socket, session: BBSSession, currentOnly: boolean): Promise<void> {
     const conferences = await this.database.getConferences();
-    const totalConferences = conferences.length || 0;
-    const currentConf = session.currentConf || 1;
+    await fileStatus(socket, session, currentOnly, conferences.length || 0);
+  }
+}
 
-    // Check if user has conference accounting access
-    const hasConfAccounting = checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+/**
+ * Display file status - Port from express.e:24141-24250
+ *
+ * @param socket - Socket connection
+ * @param session - User session
+ * @param currentOnly - If true, show only current conference (opt=1 in express.e)
+ * @param numConf - cmds.numConf, the board's conference count
+ */
+export async function fileStatus(
+  socket: Socket,
+  session: BBSSession,
+  currentOnly: boolean,
+  numConf: number,
+): Promise<void> {
+  const user = session.user;
+  if (!user) return;
 
-    // Display header - express.e:24151-24157
-    // C64/40-col Task 5d: the seven-column table cannot be narrowed by
-    // clipping - it becomes a stacked per-conference block instead.
-    const narrow = isNarrow(session);
-    socket.emit('ansi-output', '\x1b[2J\x1b[H');
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', narrow
-      ? '\x1b[32mFile Statistics\x1b[0m\r\n'
-      : '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n');
+  // Get system configuration
+  const totalConferences = numConf;
+  const currentConf = session.currentConf || 1;
 
-    const creditByKB = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true;
+  // Check if user has conference accounting access
+  const hasConfAccounting = checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+
+  // Display header - express.e:24151-24157
+  // C64/40-col Task 5d: the seven-column table cannot be narrowed by
+  // clipping - it becomes a stacked per-conference block instead.
+  // WEB_: the 40-column stacked layout (and its "File Statistics" heading)
+  // is this port's; express.e has the wide table only.
+  const narrow = isNarrow(session);
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', narrow
+    ? '\x1b[32mFile Statistics\x1b[0m\r\n'
+    : '\x1b[32m              Uploads                 Downloads\r\n');
+  socket.emit('ansi-output', '\r\n');
+
+  // express.e:24154-24158: CREDITBYKB changes the header only - the
+  // values stay formatBCD bytes (24170-24171).
+  const creditByKB = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true;
+
+  if (narrow) {
+    socket.emit('ansi-output', `\x1b[0m${narrowRule()}\x1b[0m\r\n`);
+  } else {
+    if (creditByKB) {
+      socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\r\n');
+    } else {
+      socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\r\n');
+    }
+    socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\r\n');
+  }
+
+  // express.e:24162 saveMsgPointers(currentConf,currentMsgBase): the
+  // current conference's record takes the caller's live counters, so its
+  // row below is what he has now.
+  saveConferenceAccount(session, currentConf);
+
+  // Determine which conferences to show - express.e:24161
+  const startConf = currentOnly ? currentConf : 1;
+  const endConf = currentOnly ? currentConf : totalConferences;
+
+  // Loop through conferences - express.e:24163-24190
+  for (let confNum = startConf; confNum <= endConf; confNum++) {
+    // Skip if not current conference and no accounting access
+    if (!currentOnly && confNum !== currentConf && !hasConfAccounting) {
+      continue;
+    }
+
+    if (!checkConfAccess(user, confNum)) {
+      continue;
+    }
+
+    // express.e:24166-24172: under ACS_CONFERENCE_ACCOUNTING, loadMsgPointers(i,1)
+    // puts the caller's OWN record for conference i (his Conf.DB slot) into
+    // loggedOnUser (4893-4905), and the row prints those figures. Without it
+    // - or in a CONFDB_SHARED conference, where 4895 skips the copy - the row
+    // is the account's own totals.
+    const record = hasConfAccounting ? callersRecord(user, confNum) : null;
+
+    // Format uploads
+    const uploadsCount = record ? record.upload : (user.uploads || 0);
+    const uploadBytes = record
+      ? Number(accountedBytes(record.bytesUpload, record.uploadBytesBCD))
+      : (user.bytesUpload || 0);
+    const uploadBytesStr = formatBytes(uploadBytes);
+
+    // Format downloads
+    const downloadsCount = record ? record.downloads : (user.downloads || 0);
+    const downloadBytes = record
+      ? Number(accountedBytes(record.bytesDownload, record.downloadBytesBCD))
+      : (user.bytesDownload || 0);
+    const downloadBytesStr = formatBytes(downloadBytes);
+
+    // Calculate available bytes - express.e:24174-24178
+    const todaysBytesLimit = (user.dailyBytesLimit ?? user.byteLimit) || 0;
+    const dailyBytesDld = user.dailyBytesDld || 0;
+    let bytesAvailStr: string;
+
+    if (todaysBytesLimit === 0) {
+      bytesAvailStr = 'Infinite';
+    } else {
+      const bytesAvail = Math.max(0, todaysBytesLimit - dailyBytesDld);
+      bytesAvailStr = formatBytes(bytesAvail);
+    }
+
+    // Get ratio - express.e:24181-24187
+    // express.e:24180 loggedOnUser.secLibrary - the record's ratio under accounting (4903).
+    const ratio = record ? (record.ratio & 0xffff) : (user.ratio || (user as any).secLibrary || 0);
+    const secLibrary = ratio;
+
+    // express.e:24165: yellow pen for the current conference, cyan otherwise.
+    const n = confNum === currentConf ? 3 : 6;
+    const { relConf } = require('../commands/user-commands.handler');
+    const confDisplay = String(relConf(confNum, user)).padStart(4, ' ');
+    const uploadsDisplay = String(uploadsCount & 0xFFFF).padEnd(7, ' ');
+    const uploadBytesDisplay = uploadBytesStr.padStart(14, ' ');
+    const downloadsDisplay = String(downloadsCount & 0xFFFF).padEnd(7, ' ');
+    const downloadBytesDisplay = downloadBytesStr.padStart(14, ' ');
+    const bytesAvailDisplay = bytesAvailStr.padStart(9, ' ');
 
     if (narrow) {
-      socket.emit('ansi-output', `\x1b[0m${narrowRule()}\x1b[0m\r\n`);
-    } else {
-      if (creditByKB) {
-        socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\x1b[0m\r\n');
-      } else {
-        socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
-      }
-      socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
+      const color = confNum === currentConf ? '33' : '0';
+      const indicator = confNum === currentConf ? '>' : ' ';
+      socket.emit('ansi-output', `\x1b[${color}m${confDisplay}${indicator}\x1b[0m\r\n`);
+      socket.emit('ansi-output', ` UL ${uploadsDisplay} ${uploadBytesDisplay.trim().padStart(14)}\r\n`);
+      socket.emit('ansi-output', ` DL ${downloadsDisplay} ${downloadBytesDisplay.trim().padStart(14)}\r\n`);
+      socket.emit('ansi-output', ` Avail ${bytesAvailDisplay.trim()}  ${secLibrary > 0 ? `${ratio}:1` : 'DSBLD'}\r\n`);
+      continue;
     }
-
-    // express.e:24162 saveMsgPointers(currentConf,currentMsgBase): the
-    // current conference's record takes the caller's live counters, so its
-    // row below is what he has now.
-    saveConferenceAccount(session, currentConf);
-
-    // Determine which conferences to show - express.e:24161
-    const startConf = currentOnly ? currentConf : 1;
-    const endConf = currentOnly ? currentConf : totalConferences;
-
-    // Loop through conferences - express.e:24163-24190
-    for (let confNum = startConf; confNum <= endConf; confNum++) {
-      // Skip if not current conference and no accounting access
-      if (!currentOnly && confNum !== currentConf && !hasConfAccounting) {
-        continue;
-      }
-
-      if (!checkConfAccess(user, confNum)) {
-        continue;
-      }
-
-      // express.e:24166-24172: under ACS_CONFERENCE_ACCOUNTING, loadMsgPointers(i,1)
-      // puts the caller's OWN record for conference i (his Conf.DB slot) into
-      // loggedOnUser (4893-4905), and the row prints those figures. Without it
-      // - or in a CONFDB_SHARED conference, where 4895 skips the copy - the row
-      // is the account's own totals.
-      const record = hasConfAccounting ? this.callersRecord(user, confNum) : null;
-
-      // Format uploads
-      const uploadsCount = record ? record.upload : (user.uploads || 0);
-      const uploadBytes = record
-        ? Number(accountedBytes(record.bytesUpload, record.uploadBytesBCD))
-        : (user.bytesUpload || 0);
-      const uploadBytesStr = creditByKB
-        ? this.formatKBytes(uploadBytes)
-        : this.formatBytes(uploadBytes);
-
-      // Format downloads
-      const downloadsCount = record ? record.downloads : (user.downloads || 0);
-      const downloadBytes = record
-        ? Number(accountedBytes(record.bytesDownload, record.downloadBytesBCD))
-        : (user.bytesDownload || 0);
-      const downloadBytesStr = creditByKB
-        ? this.formatKBytes(downloadBytes)
-        : this.formatBytes(downloadBytes);
-
-      // Calculate available bytes - express.e:24174-24178
-      const todaysBytesLimit = (user.dailyBytesLimit ?? user.byteLimit) || 0;
-      const dailyBytesDld = user.dailyBytesDld || 0;
-      let bytesAvailStr: string;
-
-      if (todaysBytesLimit === 0) {
-        bytesAvailStr = 'Infinite';
-      } else {
-        const bytesAvail = Math.max(0, todaysBytesLimit - dailyBytesDld);
-        bytesAvailStr = creditByKB
-          ? this.formatKBytes(bytesAvail)
-          : this.formatBytes(bytesAvail);
-      }
-
-      // Get ratio - express.e:24181-24187
-      // express.e:24180 loggedOnUser.secLibrary - the record's ratio under accounting (4903).
-      const ratio = record ? (record.ratio & 0xffff) : (user.ratio || (user as any).secLibrary || 0);
-      const secLibrary = ratio;
-
-      // Determine color - highlight current conference - express.e:24165
-      const color = (confNum === currentConf) ? '33' : '0'; // 33=yellow, 0=white
-      const indicator = (confNum === currentConf) ? '>' : ' ';
-
-      // Format conference display - express.e:24181-24187
-      const confDisplay = String(confNum).padStart(4, ' ');
-      const uploadsDisplay = String(uploadsCount & 0xFFFF).padEnd(7, ' ');
-      const uploadBytesDisplay = uploadBytesStr.padStart(14, ' ');
-      const downloadsDisplay = String(downloadsCount & 0xFFFF).padEnd(7, ' ');
-      const downloadBytesDisplay = downloadBytesStr.padStart(14, ' ');
-      const bytesAvailDisplay = bytesAvailStr.padStart(9, ' ');
-
-      // Display line
-      if (narrow) {
-        socket.emit('ansi-output', `\x1b[${color}m${confDisplay}${indicator}\x1b[0m\r\n`);
-        socket.emit('ansi-output', ` UL ${uploadsDisplay} ${uploadBytesDisplay.trim().padStart(14)}\r\n`);
-        socket.emit('ansi-output', ` DL ${downloadsDisplay} ${downloadBytesDisplay.trim().padStart(14)}\r\n`);
-        socket.emit('ansi-output', ` Avail ${bytesAvailDisplay.trim()}  ${secLibrary > 0 ? `${ratio}:1` : 'DSBLD'}\r\n`);
-        continue;
-      }
-      if (secLibrary > 0) {
-        // Library enabled - show ratio - express.e:24181-24183
-        const ratioDisplay = `${ratio}:1`;
-        socket.emit('ansi-output',
-          `\x1b[${color}m    ${confDisplay}${indicator} \x1b[3${color.charAt(0)}m` +
-          `${uploadsDisplay}  ${uploadBytesDisplay} ${downloadsDisplay}  ${downloadBytesDisplay}   ` +
-          `${bytesAvailDisplay}   ${ratioDisplay}\x1b[0m\r\n`
-        );
-      } else {
-        // Library disabled - express.e:24185-24187
-        socket.emit('ansi-output',
-          `\x1b[${color}m    ${confDisplay}${indicator} \x1b[3${color.charAt(0)}m` +
-          `${uploadsDisplay}  ${uploadBytesDisplay} ${downloadsDisplay}  ${downloadBytesDisplay}   ` +
-          `${bytesAvailDisplay}  \x1b[31mDSBLD\x1b[0m\r\n`
-        );
-      }
-    }
-
-    socket.emit('ansi-output', '\x1b[0m\r\n');
-    // express.e:24189 loadMsgPointers(currentConf,currentMsgBase).
-    loadConferenceAccount(session, currentConf);
+    // express.e:24179 / 24181.
+    const head = `\x1b[33m    ${confDisplay}\x1b[0m> \x1b[3${n}m`
+      + `${uploadsDisplay}  ${uploadBytesDisplay} ${downloadsDisplay}  ${downloadBytesDisplay}   ${bytesAvailDisplay}`;
+    socket.emit('ansi-output', secLibrary > 0
+      ? `${head}   ${secLibrary}\x1b[0m:\x1b[3${n}m1\r\n`
+      : `${head}  \x1b[31mDSBLD\r\n`);
   }
 
-  /**
-   * The caller's Conf.DB record for a conference, as FS reads it under
-   * conference accounting - or null where express.e shows the account's own
-   * totals instead: no slot (4887), or a CONFDB_SHARED conference (4895).
-   */
-  private callersRecord(user: NonNullable<BBSSession['user']>, confNum: number): ConfBaseRecord | null {
-    const slot = Number(user.slotNumber) || 0;
-    if (slot < 1) return null;
-    if (messagePointerFileManager.isShared(confNum)) return null;
-    return messagePointerFileManager.readRecordOrZero(confNum, slot);
-  }
+  socket.emit('ansi-output', '\x1b[0m\r\n');
+  // express.e:24189 loadMsgPointers(currentConf,currentMsgBase).
+  loadConferenceAccount(session, currentConf);
+}
 
-  /**
-   * Format bytes for display
-   */
-  private formatBytes(bytes: number): string {
-    if (bytes < 0) return '0';
-    return String(bytes);
-  }
+/**
+ * The caller's Conf.DB record for a conference, as FS reads it under
+ * conference accounting - or null where express.e shows the account's own
+ * totals instead: no slot (4887), or a CONFDB_SHARED conference (4895).
+ */
+function callersRecord(user: NonNullable<BBSSession['user']>, confNum: number): ConfBaseRecord | null {
+  const slot = Number(user.slotNumber) || 0;
+  if (slot < 1) return null;
+  if (messagePointerFileManager.isShared(confNum)) return null;
+  return messagePointerFileManager.readRecordOrZero(confNum, slot);
+}
 
-  /**
-   * Format kilobytes for display (bytes / 1024)
-   */
-  private formatKBytes(bytes: number): string {
-    if (bytes < 0) return '0';
-    const kb = Math.floor(bytes / 1024);
-    return String(kb);
-  }
-
-  /**
-   * Format BCD value for display with thousands separators
-   * Express.e:bcd.e:23 - formatBCD() for precise byte tracking
-   */
-  private formatBCD(bcdValue: bigint): string {
-    // Use proper BCD formatting from bcd-math.util (express.e:bcd.e:23)
-    // Formats with thousands separators (e.g., "1,234,567")
-    return formatBCDUtil(bcdValue);
-  }
+/** formatBCD's output: bare decimal digits (bcd.e:23-40). */
+function formatBytes(bytes: number): string {
+  if (bytes < 0) return '0';
+  return String(bytes);
 }

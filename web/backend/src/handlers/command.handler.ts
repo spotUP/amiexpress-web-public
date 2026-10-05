@@ -4097,7 +4097,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'S': // User Statistics (internalCommandS) - express.e:25540-25568
-      handleUserStatsCommand(socket, session);
+      await handleUserStatsCommand(socket, session);
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
@@ -4226,7 +4226,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'FS': // File Status (internalCommandFS) - express.e:24872-24875
-      await handleFileStatusCommand(socket, session);
+      return await handleFileStatusCommand(socket, session);
       return;
 
     case 'N': // New Files (internalCommandN) - express.e:25275-25279

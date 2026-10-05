@@ -786,7 +786,7 @@ export function startZmodemDownload(
  * Handle S command - Display user statistics
  * 1:1 port from express.e:25540-25568 internalCommandS()
  */
-export function handleUserStatsCommand(socket: any, session: BBSSession): void {
+export async function handleUserStatsCommand(socket: any, session: BBSSession): Promise<void> {
   // express.e:25542 - Check ACS_DISPLAY_USER_STATS permission
   if (!checkSecurity(session.user, ACSPermission.DISPLAY_USER_STATS)) {
     ErrorHandler.permissionDenied(socket, 'view user statistics', {
@@ -906,41 +906,10 @@ console.log('[ENV] User Statistics');
     socket.emit('ansi-output', `\x1b[32mSysop Pages Remaining\x1b[33m:\x1b[0m ${pagesAllowed}\r\n`);
   }
 
-  // express.e:25604 - fileStatus(1) - Display file statistics for current conference
-  // express.e:24141-24190
+  // express.e:25604-25605 fileStatus(1), then a line break.
+  const { fileStatus } = require('../file/file-status.handler');
+  await fileStatus(socket, session, true, _conferences.length);
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\r\n');
-
-  // express.e:24164-24186 fileStatus(opt=1) — current conference only
-  // Row format: [33m{conf4}[0m> [33m{ul7}  {bytesup14} {dl7}  {bytesdown14}   {avail9}   {ratio}[0m:[33m1
-  const confNum = session.currentConf || 1;
-  const fileUploads = (user.uploads || 0) & 0xFFFF;       // AND $FFFF like express.e
-  const fileDownloads = (user.downloads || 0) & 0xFFFF;
-  const bytesUploaded = user.bytesUpload || user.bytesUploaded || 0;
-  const bytesDownloaded = user.bytesDownload || user.bytesDownloaded || 0;
-  const bytesLimit = user.byteLimit || user.dailyBytesLimit || 0;
-  const bytesAvail = bytesLimit > 0 ? Math.max(0, bytesLimit - (user.dailyBytesDld || 0)) : -1;
-  // express.e uses formatBCD() = comma-separated decimal (1,234,567)
-  const fmtBCD = (n: number): string => n.toLocaleString('en-US');
-  const bytesUpStr = fmtBCD(bytesUploaded);
-  const bytesDnStr = fmtBCD(bytesDownloaded);
-  const bytesAvailStr = bytesAvail >= 0 ? fmtBCD(bytesAvail) : 'Infinite';
-  const secLibrary = user.ratio || 0; // secLibrary = ratio divisor
-
-  if (secLibrary > 0) {
-    // express.e:24179: {ratio}[0m:[33m1 = "N:1" format
-    socket.emit('ansi-output',
-      `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[33m${fileUploads.toString().padStart(7)}  ${bytesUpStr.padStart(14)} ${fileDownloads.toString().padStart(7)}  ${bytesDnStr.padStart(14)}   ${bytesAvailStr.padStart(9)}   ${secLibrary}\x1b[0m:\x1b[33m1\x1b[0m\r\n`);
-  } else {
-    // express.e:24181: [31mDSBLD — disabled ratio
-    socket.emit('ansi-output',
-      `\x1b[33m    ${confNum.toString().padStart(4)}\x1b[0m> \x1b[33m${fileUploads.toString().padStart(7)}  ${bytesUpStr.padStart(14)} ${fileDownloads.toString().padStart(7)}  ${bytesDnStr.padStart(14)}   ${bytesAvailStr.padStart(9)}  \x1b[31mDSBLD\x1b[0m\r\n`);
-  }
-  // express.e:24188 aePuts('[0m\b\n'); then ENDPROC RESULT_SUCCESS — main loop sets menuPause:=TRUE
-  socket.emit('ansi-output', '\x1b[0m\r\n');
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -996,6 +965,19 @@ export function getInverse(cn: number, user: any, confRelative: boolean): number
   }
   // express.e:8581 - ENDPROC j (return absolute 1-based conf number)
   return j;
+}
+
+/**
+ * The number a caller sees for conference `cn`: express.e relConf
+ * (8558-8566). Under TOGGLES_CONFRELATIVE only the conferences he can enter
+ * are counted; otherwise it is `cn` itself. getInverse is the other way.
+ */
+export function relConf(cn: number, user: any, confRelative: boolean = getConfRelativeToggle({} as BBSSession)): number {
+  let count = 0;
+  for (let i = 0; i < cn; i++) {
+    if (!confRelative || _checkConfAccess(user, i + 1)) count++;
+  }
+  return count;
 }
 
 /**
@@ -1359,7 +1341,7 @@ export async function handleFontSelectionInput(socket: any, session: BBSSession,
 
   if (choice === 'Q' || choice === '') {
     // Cancel, return to user stats menu
-    handleUserStatsCommand(socket, session);
+    await handleUserStatsCommand(socket, session);
     return;
   }
 

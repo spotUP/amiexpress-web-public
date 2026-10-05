@@ -218,12 +218,12 @@ export async function handleAlterFlagsCommand(
  *
  * Displays file upload/download statistics per conference.
  */
-export async function handleFileStatusCommand(socket: any, session: BBSSession): Promise<void> {
+export async function handleFileStatusCommand(socket: any, session: BBSSession): Promise<InternalCommandResult> {
   // Use FileStatusHandler via DI container
   const { container } = await import('../../container');
   const { FileStatusHandler } = await import('../file/file-status.handler');
   const handler = container.resolve(FileStatusHandler);
-  await handler.handleFileStatusCommand(socket, session);
+  return await handler.handleFileStatusCommand(socket, session);
 }
 
 // formatBytes now imported from '../../utils/byte-format.util' as formatBytesCompact

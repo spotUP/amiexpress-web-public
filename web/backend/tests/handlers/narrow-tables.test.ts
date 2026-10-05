@@ -780,12 +780,13 @@ describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () =
     await driveFileStatus(driver);
     const out = driver.output();
 
-    expect(out).toContain('\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
+    // express.e:24159 and 24179, byte for byte.
+    expect(out).toContain('\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\r\n');
     expect(out).toContain(
-      '\x1b[33m    ' + '   1' + '> ' + '\x1b[33m' +
+      '\x1b[33m    ' + '   1' + '\x1b[0m> ' + '\x1b[33m' +
       '12'.padEnd(7) + '  ' + '1234567'.padStart(14) + ' ' +
       '34'.padEnd(7) + '  ' + '7654321'.padStart(14) + '   ' +
-      'Infinite'.padStart(9) + '   3:1\x1b[0m\r\n'
+      'Infinite'.padStart(9) + '   3\x1b[0m:\x1b[33m1\r\n'
     );
   });
 

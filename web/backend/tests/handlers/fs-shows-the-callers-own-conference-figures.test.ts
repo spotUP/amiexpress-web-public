@@ -99,7 +99,8 @@ describe('FS prints the caller\'s own Conf.DB record for each conference', () =>
     // Sentinel: the record read ran for this conference and this caller.
     expect(read).toHaveBeenCalledWith(1, MY_SLOT);
 
-    const row = out.split('\r\n').find(l => l.includes('1> '));
+    // Visible text: express.e's row resets after the number (24179).
+    const row = out.replace(/\x1b\[[0-9;]*m/g, '').split('\r\n').find(l => l.includes('1> '));
     expect(row).toBeDefined();
     expect(row).toContain('4      ');                 // his uploads
     expect(row).toContain('4321');
