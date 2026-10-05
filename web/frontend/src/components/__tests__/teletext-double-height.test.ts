@@ -37,6 +37,22 @@ describe('the double-height filter', () => {
     expect(filter.write('ordinary')).toBe('ordinary');
   });
 
+  it("reads an escape the board's chunks cut in two", () => {
+    // Where the socket write falls is chance: the second half of the
+    // "AMIGA DEMOSCENE!" headline arrived as `...ESC` then `#4AMIGA...`.
+    for (const cut of [`${ESC}`, `${ESC}#`]) {
+      const filter = createDoubleHeightFilter();
+      const rest = `${ESC}#4NEWS\r\n`.slice(cut.length);
+      expect(filter.write(`${ESC}#3NEWS\r\n${cut}`)).toBe(`${top('NEWS')}\r\n`);
+      expect(filter.write(rest)).toBe(`${bottom('NEWS')}\r\n`);
+    }
+  });
+
+  it('passes a colour escape cut in two through whole', () => {
+    const filter = createDoubleHeightFilter();
+    expect(filter.write(`plain${ESC}`) + filter.write('[33myellow')).toBe(`plain${ESC}[33myellow`);
+  });
+
   it('ends the attribute when the cursor leaves the line', () => {
     /*
      * A 68K door paints with absolute cursor motion and no newlines at all.

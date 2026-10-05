@@ -130,8 +130,26 @@ const SHIFT_IN = '\x0f';
 export function createDoubleHeightFilter(): DoubleHeightFilter {
   let half: LineHalf = 'normal';
   let mosaic = false;
+  /**
+   * An escape the last write ended in the middle of. The board's output is
+   * cut into socket writes wherever the cut falls, and `ESC` | `#4NAME`
+   * read as two writes lost the escape: xterm swallowed `ESC#4` (it has no
+   * DECDHL) and the bottom half of a headline came out as a normal row
+   * (sysop, 2026-10-05, the "AMIGA DEMOSCENE!" placeholder). Held back and
+   * read with the next write.
+   */
+  let pending = '';
 
-  const write = (data: string): string => {
+  const write = (incoming: string): string => {
+    let data = pending + incoming;
+    pending = '';
+    if (data.endsWith(`${ESC}#`)) {
+      pending = `${ESC}#`;
+      data = data.slice(0, -2);
+    } else if (data.endsWith(ESC)) {
+      pending = ESC;
+      data = data.slice(0, -1);
+    }
     // Nothing to do for the overwhelmingly common case: no attribute in
     // flight and none in the chunk. Teletext sessions are ordinary sessions
     // most of the time and this runs on every byte the board sends.
@@ -207,7 +225,7 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
 
   return {
     write,
-    reset() { half = 'normal'; mosaic = false; },
+    reset() { half = 'normal'; mosaic = false; pending = ''; },
     half() { return half; },
     mosaic() { return mosaic; },
   };
