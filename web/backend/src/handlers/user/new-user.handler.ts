@@ -407,9 +407,11 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     return;
   }
 
-  // express.e:30169-30175 - checkForAst: no wildcards in name
+  // express.e:30169-30175: lineInput's line break, '\b\nChecking for
+  // duplicate name...', and only then the wildcard check.
+  socket.emit('ansi-output', '\r\n\r\nChecking for duplicate name...');
   if (checkForAst(name)) {
-    socket.emit('ansi-output', '\r\nNo wildcards allowed in a name.\r\n');
+    socket.emit('ansi-output', 'No wildcards allowed in a name.\r\n');
     // express.e:30174 JUMP floopc - counts toward retry limit
     session.newUserData.retryCount++;
     if (session.newUserData.retryCount >= 5) {
@@ -420,9 +422,6 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     promptForName(socket, session);
     return;
   }
-
-  // express.e:30169 - aePuts('\b\nChecking for duplicate name...')
-  socket.emit('ansi-output', '\r\nChecking for duplicate name...');
 
   const existingUser = await db.getUserByUsername(name);
   if (existingUser) {
@@ -579,7 +578,9 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
       return;
     }
 
-    promptForAccessPassword(socket, session);
+    // express.e:30017 - the REPEAT asks again with no line break before it.
+    session.inputBuffer = '';
+    socket.emit('ansi-output', 'Enter New User Password: ');
     return;
   }
 
@@ -871,9 +872,10 @@ export async function handlePasswordConfirm(socket: Socket, session: any, input:
     return;
   }
 
-  // Password confirmed, move to lines per screen
+  // Password confirmed, move to lines per screen - getPass2's line break,
+  // then 30259's aePuts('\b\n').
   setPasswordMask(socket, session, false);
-  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', '\r\n\r\n');
   session.subState = LoggedOnSubState.NEW_USER_LINES;
   promptForLines(socket, session);
 }
@@ -901,7 +903,8 @@ export async function handleLinesInput(socket: Socket, session: any, input: stri
   const typed = val === '' ? 0 : (parseInt(val) || 0);
   session.newUserData.linesPerScreen = typed > 0 ? typed : autoLinesFor(session);
 
-  socket.emit('ansi-output', '\r\n');
+  // lineInput's line break, then 30263's aePuts('\b\n').
+  socket.emit('ansi-output', '\r\n\r\n');
   session.subState = LoggedOnSubState.NEW_USER_COMPUTER;
   await promptForComputer(socket, session);
 }
@@ -956,7 +959,10 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
   } else {
     const numericChoice = parseInt(selection, 10);
     if (Number.isNaN(numericChoice) || numericChoice < 1 || numericChoice > choices.length) {
-      await promptForComputer(socket, session);
+      // express.e:11342 JUMP jLoop6 - lineInput's break, then the prompt
+      // again; the list is not drawn twice.
+      socket.emit('ansi-output', '\r\nChoose computer type: ');
+      session.inputBuffer = '';
       return;
     }
     session.newUserData.computerType = choices[numericChoice - 1];
@@ -964,7 +970,8 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
     session.newUserData.computerIndex = numericChoice - 1;
   }
 
-  socket.emit('ansi-output', '\r\n');
+  // lineInput's line break, then 30266's aePuts('\b\n').
+  socket.emit('ansi-output', '\r\n\r\n');
   session.subState = LoggedOnSubState.NEW_USER_SCREEN_CLEAR;
   promptForScreenClear(socket, session);
 }

@@ -433,3 +433,29 @@ describe('New User Handler — registration steps', () => {
     });
   });
 });
+
+describe('new-user answers break as express.e\'s lineInput does', () => {
+  const said = (s: any) => s._emits.map((e: any) => String(e.payload)).join('');
+
+  it('Lines: lineInput\'s break and 30263\'s before the computer list', async () => {
+    const socket = makeSocket();
+    const session = makeSession({ subState: LoggedOnSubState.NEW_USER_LINES });
+    await handleLinesInput(socket, session, '24');
+    expect(said(socket).startsWith('\r\n\r\n')).toBe(true);
+  });
+
+  it('a computer number out of range asks again, without drawing the list again', async () => {
+    const socket = makeSocket();
+    const session = makeSession({ subState: LoggedOnSubState.NEW_USER_COMPUTER });
+    session.newUserData.computerChoices = ['AMiGA 500', 'AMiGA 2000'];
+    await handleComputerInput(socket, session, '9');
+    expect(said(socket)).toBe('\r\nChoose computer type: '); // express.e:11342 JUMP jLoop6
+  });
+
+  it('a wrong new-user password: "Invalid PassWord", then the prompt with no extra break', async () => {
+    const socket = makeSocket();
+    const session = makeSession({ subState: LoggedOnSubState.NEW_USER_ACCESS_PASSWORD });
+    await handleAccessPasswordInput(socket, session, 'wrong');
+    expect(said(socket)).toContain('\r\nInvalid PassWord\r\nEnter New User Password: ');
+  });
+});
