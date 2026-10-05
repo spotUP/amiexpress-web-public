@@ -782,36 +782,6 @@ export function startZmodemDownload(
   console.log(`[ZMODEM-DL ${ctxId}] manager.start() returned, transferRawActive=${(session as any).transferRawActive}`);
 }
 
-function shouldShowJoinConferenceList(screenPath?: string): boolean {
-  if (!screenPath) {
-    return true;
-  }
-
-  try {
-    const stats = fs.statSync(screenPath);
-    return stats.size < 200;
-  } catch {
-    return true;
-  }
-}
-
-function displayConferenceList(socket: any, session: BBSSession): void {
-  if (_conferences.length === 0) {
-    socket.emit('ansi-output', '\r\nNo conferences configured.\r\n');
-    return;
-  }
-
-  // express.e:25143 - displayScreen(SCREEN_CONF_JOIN) then prompts
-  // NO header like "-= AVAILABLE CONFERENCES =-"
-  socket.emit('ansi-output', '\r\n');
-  const currentConfId = session.currentConf;
-
-  _conferences.forEach((conf, index) => {
-    const indicator = conf.id === currentConfId ? ' <- Current' : '';
-    socket.emit('ansi-output', ` ${String(index + 1).padStart(2)}. ${conf.name}${indicator}\r\n`);
-  });
-}
-
 /**
  * Handle S command - Display user statistics
  * 1:1 port from express.e:25540-25568 internalCommandS()
@@ -1122,16 +1092,12 @@ console.log('[ENV] Join Conference');
   }
 
   if (newConf < 1 || newConf > _conferences.length) {
-    // AmiExpress shows JOINCONF screen, or if not found, show conference list
-    let screenDisplayed = false;
+    // express.e:25143 displayScreen(SCREEN_JOINCONF): the screen if the
+    // board has one, else nothing (6588-6590) - no list of its own.
     if (typeof _displayScreen === 'function') {
-      screenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
+      await _displayScreen(socket, session, 'JOINCONF');
     } else {
       console.error('[user-commands] _displayScreen not initialized - dependencies may not be set');
-    }
-    if (!screenDisplayed) {
-      // No JOINCONF screen file - show the built-in conference list
-      displayConferenceList(socket, session);
     }
 
     // Clear any pagination state from displayScreen so the next input goes to
