@@ -154,6 +154,7 @@ const bbsRoot = boardRoot();
 import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
 import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 import { boardRoot } from '../utils/board-root.util';
+import { boardSysopName, pagingLine, pageUnansweredText } from '../utils/sysop-page-text.util';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
 
@@ -589,11 +590,9 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
 
   // Display waiting message with animated dots
   const currentTime = getSystemTime().toLocaleString();
-  const bbsConfig = loadBBSConfig(bbsRoot);
-  const sysopName = bbsConfig.sysop_name || 'the operator';
+  const sysopName = boardSysopName();
 
-  socket.emit('ansi-output', `\r\n${currentTime}\r\n`);
-  socket.emit('ansi-output', `\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
+  socket.emit('ansi-output', pagingLine(currentTime, sysopName));
 
   // THE WAIT IS THE CONFIGURED TIMEOUT. express.e's ccom() pages for a fixed
   // 20 dots (express.e:20353) and then frees the caller, because a human
@@ -649,9 +648,7 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
       // and left the caller sitting in OPERATOR_CHAT_WAITING with no bot and
       // no sysop - and, on Node 15+, took the process down with it.
       const releaseCaller = (): void => {
-        socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
-        socket.emit('ansi-output', 'You may continue using the system\r\n');
-        socket.emit('ansi-output', `until ${sysopName} answers your request.\r\n\r\n`);
+        socket.emit('ansi-output', pageUnansweredText(sysopName));
 
         if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
           session.subState = LoggedOnSubState.DISPLAY_MENU;

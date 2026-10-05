@@ -18,6 +18,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 
 import { ChatState } from '../../services/use-cases/chat-session.use-case';
 import { getSystemTime } from '../../utils/date-time.util';
+import { boardSysopName, pagingLine, pageUnansweredText } from '../../utils/sysop-page-text.util';
 import { db } from '../../database';
 import { report } from '../../achievements/reporter';
 
@@ -255,9 +256,9 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
    */
   displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession, onComplete?: () => void): void {
     const displayTime = getSystemTime().toLocaleTimeString();
-    const sysopName = 'Sysop';
+    const sysopName = boardSysopName();
 
-    socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
+    socket.emit('ansi-output', pagingLine(displayTime, sysopName));
 
     // Match dots duration to the configured operator chat page timeout
     let dotCount = 0;
@@ -311,9 +312,7 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
     if (current?.status === 'active') {
       socket.emit('ansi-output', '\r\n\r\n');
     } else {
-      socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
-      socket.emit('ansi-output', 'You may continue using the system\r\n');
-      socket.emit('ansi-output', 'until the sysop answers your request.\r\n\r\n');
+      socket.emit('ansi-output', pageUnansweredText(boardSysopName()));
     }
 
     // Return to menu

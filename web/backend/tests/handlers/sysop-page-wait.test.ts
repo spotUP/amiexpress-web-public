@@ -46,6 +46,13 @@ jest.mock("../../src/database", () => ({
   },
 }));
 
+// express.e prints cmds.sysopName in "Paging <sysop>" and "until <sysop>
+// answers" - the board's SYSOP_NAME, not a fixed word.
+jest.mock("../../src/services/bbs-config-file.service", () => ({
+  ...jest.requireActual("../../src/services/bbs-config-file.service"),
+  loadBBSConfig: () => ({ sysop_name: "Byte Bandit" }),
+}));
+
 import { ChatHandler, setHelpers } from "../../src/handlers/chat/chat.handler";
 import { ChatSessionUseCase } from "../../src/services/use-cases/chat-session.use-case";
 import { LoggedOnSubState } from "../../src/constants/bbs-states";
@@ -217,6 +224,8 @@ describe("sysop page-wait (task 18)", () => {
       const finalText = outputs.join("");
       expect(finalText).toMatch(/The Sysop has been paged/);
       expect(finalText).toMatch(/until .* answers your request/i);
+      expect(finalText).toContain("Paging Byte Bandit (CTRL-C to Abort). .");
+      expect(finalText).toContain("until Byte Bandit answers your request.\r\n\r\n");
 
       expect(onComplete).toHaveBeenCalledTimes(1);
       expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
