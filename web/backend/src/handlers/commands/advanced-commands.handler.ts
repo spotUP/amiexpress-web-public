@@ -71,134 +71,30 @@ export function setAdvancedCommandsDependencies(deps: {
  * Displays a tribute to classic Amiga demo scene groups.
  * This is a nostalgic easter egg command.
  */
+// express.e:24414-24421, one row per aePuts.
+const GREETS: readonly (readonly string[])[] = [
+  ['scoopex', 'lsd', 'skid row', 'alpha flight', 'trsi', 'bamiga sector one'],
+  ['fairlight', 'defjam', 'paradox', 'legend', 'anthrox', 'crystal', 'angels'],
+  ['vision factory', 'zenith', 'slipstream', 'dual crew', 'delight', 'shining'],
+  ['quartex', 'global overdose', 'paranoimia', 'supplex', 'classic', 'hoodlum'],
+  ['accumulators', 'hellfire', 'oracle', 'endless piracy', 'hqc', 'setrox'],
+  ['prodigy', 'prestige', 'nemesis', 'genesis', 'loonies', 'horizon', 'agile'],
+  ['crack inc', 'valhalla', 'sunflex inc', 'ministry', 'the band', 'razor1911'],
+  ['conqueror and zike', 'mad', 'the company'],
+];
+
+/** Each group in blue brackets, a plain space between: express's bytes. */
+function greetsRow(groups: readonly string[]): string {
+  return groups.map(g => `\x1b[34m[\x1b[0m${g}\x1b[34m]\x1b[0m`).join(' ') + '\r\n\r\n';
+}
+
 export function handleGreetingsCommand(socket: any, session: BBSSession): void {
-  // express.e:24412 aePuts('\b\nIn memory of those who came before us...\b\n\b\n') — no color
   socket.emit('ansi-output', '\r\nIn memory of those who came before us...\r\n\r\n');
+  for (const row of GREETS) socket.emit('ansi-output', greetsRow(row));
 
-  // Amiga demo scene groups (exactly as in express.e)
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'scoopex');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'lsd');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'skid row');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'alpha flight');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'trsi');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'bamiga sector one');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'fairlight');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'defjam');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'paradox');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'legend');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'anthrox');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'crystal');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'angels');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'vision factory');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'zenith');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'slipstream');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'dual crew');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'delight');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'shining');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'quartex');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'global overdose');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'paranoimia');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'supplex');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'classic');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'hoodlum');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'accumulators');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'hellfire');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'oracle');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'endless piracy');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'hqc');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'setrox');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'prodigy');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'prestige');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'nemesis');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'genesis');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'loonies');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'horizon');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'agile');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'crack inc');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'valhalla');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'sunflex inc');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'ministry');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'the band');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'razor1911');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', 'conqueror and zike');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'mad');
-  socket.emit('ansi-output', AnsiUtil.colorize('] [', 'blue'));
-  socket.emit('ansi-output', 'the company');
-  socket.emit('ansi-output', AnsiUtil.colorize(']', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Nothing after the list: the main loop's menuPause/doPause follows.
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
