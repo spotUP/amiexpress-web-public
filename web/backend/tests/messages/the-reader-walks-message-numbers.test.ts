@@ -84,7 +84,8 @@ function caller() {
   const take = () => { const t = out.join(''); out.length = 0; return t; };
   /** Until the output holds `text` - a save writes files and can outlast a settle. */
   const until = async (text: string) => {
-    for (let i = 0; i < 100 && !out.join('').includes(text); i++) await new Promise((r) => setTimeout(r, 20));
+    // Up to ten seconds: a loaded machine (a parallel test run) slows the save.
+    for (let i = 0; i < 500 && !out.join('').includes(text); i++) await new Promise((r) => setTimeout(r, 20));
   };
   return { socket, session, type, take, settle, until };
 }
@@ -181,6 +182,8 @@ describe('the R reader', () => {
     await c.type('2\r');
     expect(c.take()).toContain('\r\nYou have chosen conference: Amiga\r\n\r\nMove message (y/n)? ');
     await c.type('y');
+    // The move saves into Conf2 and deletes here; it can outlast a settle.
+    await c.until('Message 3 deleted...');
     const done = c.take();
     expect(done).toContain('Yes\r\nMessage Number 1...done!\r\n\r\n');
     expect(done).toContain('\r\nMessage 3 deleted...\r\n');
