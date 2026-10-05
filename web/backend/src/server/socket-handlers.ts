@@ -1057,6 +1057,15 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=$
 
   // Log user logout if they were logged in (express.e:9493 callersLog)
   if (session.user) {
+    // The line dropped while uploads waited for descriptions: they go to
+    // LCFILES before the logoff is logged, as uploadaFile files them before
+    // it returns (express.e:19385-19489).
+    try {
+      const { fileLostCarrierUploads } = require('../services/lost-carrier-files.service');
+      await fileLostCarrierUploads(session);
+    } catch (err) {
+      console.error('[LOGOFF] filing lost-carrier uploads failed:', err);
+    }
     // express.e:8160-8166 logoffLog - `Loss Carrier` where the call was
     // dropped, `N` where it ended normally (an idle timeout is the second
     // unless the board's TIMEOUT_LC says it is the first, express.e:28607).

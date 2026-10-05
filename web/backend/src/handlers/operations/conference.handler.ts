@@ -613,7 +613,9 @@ async function continueJoinAfterBull(
     const baseCount = messageBases.filter(mb => mb.conferenceId === confId).length;
     if (auto) {
       console.log(`[JOIN] Auto-rejoining conference ${confId} for ${session.user?.username}`);
-      // express.e:5067 - scanHoldDesc() — WEB_: not applicable
+      // express.e:5067 - scanHoldDesc(): the caller's lost-carrier uploads.
+      const { scanHoldDesc } = require('../../services/lost-carrier-files.service');
+      await scanHoldDesc(socket, session);
       // express.e:5068 - processSysCommand('S'): the SysCmd S if the board has
       // one (this board's is the zOOsTAtS door), else the internal S
       // (express.e:28258-28282). Run inside the join, so the door's exit

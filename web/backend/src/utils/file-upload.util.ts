@@ -37,7 +37,8 @@ export async function checkForFile(
   filename: string,
   currentConf: number,
   bbsDataPath?: string,
-  nodeId: number = 0
+  nodeId: number = 0,
+  lcFileXfr: boolean = false,
 ): Promise<boolean> {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
@@ -60,13 +61,13 @@ export async function checkForFile(
   // `StriCmp` does at express.e:18400 after /X 4 dropped pattern matching.
   if (nameIsOnTheNotAllowedList(filename, nodeId, bbsRoot)) return true;
 
-  // 3. LcFiles - express.e:18421-18426. express skips this while an LCFILES
-  // transfer is in progress (`lcFileXfr`); this port has no local-file
-  // transfer, so the check always applies, which is the caller-upload case.
+  // 3. LcFiles - express.e:18421-18426, skipped while lost-carrier files are
+  // being brought back (`lcFileXfr`, scanHoldDesc 17488): there the file's
+  // own LCFILES copy is the file, not a duplicate of it.
   const { conferenceDir } =
     require('../conferences/conference-paths') as typeof import('../conferences/conference-paths');
   const lcFilesPath = path.join(conferenceDir(bbsRoot, currentConf), 'LcFiles', filename);
-  if (existsCaseInsensitively(lcFilesPath)) return true;
+  if (!lcFileXfr && existsCaseInsensitively(lcFilesPath)) return true;
 
   // 4 and 5. Every download and upload directory THIS conference declares -
   // express.e:18428-18447. The conference's own icon is the authority; a path
