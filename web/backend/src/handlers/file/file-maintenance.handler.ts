@@ -22,7 +22,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { flagManagerOf } from '../../utils/file-flag.util';
-import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
+import { NO_SUCH_DIRECTORY, parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
 import { parseDirFile, DirFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.util';
 import { deleteEntry, moveEntry, readDirLines, dateCompareValue, dateOfDirLine } from '../../services/file-list.service';
 import * as path from 'path';
@@ -174,7 +174,8 @@ console.log('[FM] Starting file maintenance');
   ): Promise<void> {
     const trimmed = input.trim();
 
-    socket.emit('ansi-output', '\r\n');
+    // lineInput's line break, then 24946's aePuts('\b\n') - for any answer.
+    socket.emit('ansi-output', '\r\n\r\n');
 
     // express.e:24953-24955 - Empty input, return to menu
     if (trimmed.length === 0) {
@@ -257,9 +258,11 @@ console.log('[FM] Starting file maintenance');
     const { flagFileList, maxDirs, hasHoldAccess } = session.tempData.fmContext;
     const trimmed = input.trim();
 
+    // lineInput's line break (express.e:2378).
     socket.emit('ansi-output', '\r\n');
 
     if (trimmed.length === 0) {
+      socket.emit('ansi-output', '\r\n'); // getDirSpan's (26873)
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = {};
@@ -269,9 +272,7 @@ console.log('[FM] Starting file maintenance');
     const dirSpan: DirSpan = parseDirSpan(trimmed, maxDirs, hasHoldAccess);
 
     if (!dirSpan.success) {
-      if (dirSpan.error) {
-        socket.emit('ansi-output', AnsiUtil.errorLine(dirSpan.error));
-      }
+      socket.emit('ansi-output', NO_SUCH_DIRECTORY); // getDirSpan's (26905)
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = {};
@@ -279,6 +280,7 @@ console.log('[FM] Starting file maintenance');
     }
 
     const dirList = this.buildDirList(dirSpan);
+    socket.emit('ansi-output', '\r\n'); // express.e:24959, before the scan
 
     session.tempData.fmContext = {
       flagFileList,
@@ -583,10 +585,8 @@ console.log('[FM] Starting file maintenance');
 
     const { checkConfAccess } = require('../message/message-scan.handler');
     if (!checkConfAccess(session.user, destConf)) {
-      socket.emit(
-        'ansi-output',
-        AnsiUtil.errorLine('You do not have access to the requested conference')
-      );
+      // express.e:27047 - plain, after lineInput's break.
+      socket.emit('ansi-output', '\r\nYou do not have access to the requested conference\r\n\r\n');
       await this.afterAction(socket, session, nextPos);
       return;
     }
@@ -599,6 +599,10 @@ console.log('[FM] Starting file maintenance');
     const destMaxDirs = await getMaxDirs(destConf, bbsDataPath);
     ctx.destMaxDirs = destMaxDirs;
     session.tempData.fmContext = ctx;
+
+    // express.e:27051-27052 - which conference, by name.
+    const { doorConferenceName } = require('../../services/custom-msgbase');
+    socket.emit('ansi-output', `\r\nYou have chosen conference: ${doorConferenceName(bbsDataPath, destConf)}\r\n`);
 
     socket.emit(
       'ansi-output',
