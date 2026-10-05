@@ -309,7 +309,9 @@ function scrubAnswersFiles(originalUsername: string, erasedHandle: string): numb
       if (!amigafs.existsSync(filePath)) continue;
 
       try {
-        const raw = amigafs.readFileSync(filePath, 'utf8') as string;
+        // Latin-1, as new-user.handler writes it: UTF-8 turned every other
+        // caller's high byte into U+FFFD when the file was written back.
+        const raw = amigafs.readFileSync(filePath, 'latin1') as string;
         const blocks = raw.split(/(?=^\*{10,}\s*$)/m);
         const kept: string[] = [];
         let touched = false;
@@ -325,7 +327,7 @@ function scrubAnswersFiles(originalUsername: string, erasedHandle: string): numb
           kept.push(block);
         }
         if (touched) {
-          amigafs.writeFileSync(filePath, kept.join(''), 'utf8');
+          amigafs.writeFileSync(filePath, kept.join(''), 'latin1');
           filesTouched++;
         }
       } catch (error) {

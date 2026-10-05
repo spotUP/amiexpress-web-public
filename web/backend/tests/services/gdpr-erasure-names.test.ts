@@ -69,3 +69,36 @@ describe('the erasure\'s CallersLog redaction', () => {
     }
   });
 });
+
+describe('the erasure\'s Answers scrub', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../../src/config');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { __test_only__ } = require('../../src/services/gdpr-erasure.service');
+
+  it('removes her block and keeps another caller\'s Latin-1 answers byte for byte', () => {
+    // new-user.handler writes Answers in Latin-1; the scrub read and wrote
+    // UTF-8, so every other caller's 0xE5 (a-ring) became U+FFFD on disk.
+    const nodeDir = path.join(config.getConfig().dataDir, 'Node978');
+    fs.mkdirSync(nodeDir, { recursive: true });
+    const answers = path.join(nodeDir, 'Answers');
+    const banner = '**************************************************************\n';
+    const bob = Buffer.from(`${banner}10-04-26 (18:00:00) [4] bob (CONNECT 19200) G\xE5rd\nFrom M\xE5lm\xF6\n`, 'latin1');
+    try {
+      fs.writeFileSync(answers, Buffer.concat([
+        Buffer.from(`${banner}10-04-26 (17:37:02) [3] zedcaller (CONNECT 19200) Zedtown\nmy answers\n`, 'latin1'),
+        bob,
+      ]));
+      expect(__test_only__.scrubAnswersFiles('zedcaller', 'erased_1')).toBe(1);
+      const after = fs.readFileSync(answers);
+      expect(after.toString('latin1')).not.toContain('zedcaller');
+      expect(after.subarray(after.length - bob.length).equals(bob)).toBe(true);
+    } finally {
+      fs.rmSync(nodeDir, { recursive: true, force: true });
+    }
+  });
+});
