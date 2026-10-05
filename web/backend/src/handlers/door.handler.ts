@@ -1277,8 +1277,8 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
       return;
     } else {
       emitText(socket, `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
+      // The board's own pause, as after every command (express.e:28647).
+      session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -1286,11 +1286,11 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
 
   // No door specified, show interactive arrow-key menu
   if (allDoors.length === 0) {
-    emitText(socket, '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
     emitText(socket, 'No doors are currently available.\r\n');
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // DISPLAY_CONF_BULL rejoined the conference on the next key; the menu
+    // and its own pause are where a command ends (express.e:28647).
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
@@ -1398,7 +1398,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   emitText(socket, '\r\n');
   emitText(socket, '\x1b[0;37m' + '-'.repeat(chromeWidth) + '\x1b[0m\r\n');
   emitText(socket, narrow
-    ? '\x1b[33mUp/Dn:\x1b[0m Move \x1b[33mEnter:\x1b[0m Run \x1b[33mQ:\x1b[0m Quit\r\n'
+    ? '\x1b[33mUp/Down:\x1b[0m Move \x1b[33mEnter:\x1b[0m Run \x1b[33mQ:\x1b[0m Quit\r\n'
     : '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
 
   session.tempData.previousSelectedIndex = selectedIndex;

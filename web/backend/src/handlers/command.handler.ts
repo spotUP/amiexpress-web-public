@@ -4209,7 +4209,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       await handleFileListRawCommand(socket, session, params);
       return;
 
-    case 'FI': // FILE INFO - one record from the last listing, on its own
+    case 'FI': // WEB_: FILE INFO - one record from the last listing, on its own
       // screen. A C64 list row is identity fields at fixed columns and carries
       // no description, so this is where a caller reads what a file IS; the
       // ordinal the list prints is the argument. WEB-only: express.e has no
@@ -4321,7 +4321,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
     }
 
-    case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
+    case 'DOORS': // WEB_: Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);
       return;
 
