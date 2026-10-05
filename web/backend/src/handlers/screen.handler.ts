@@ -2862,7 +2862,12 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // consulted.
     const isMenuTextScreen =
       isMenuScreen || path.basename(filePath).toUpperCase().startsWith('MENU');
-    const petsciiTextPlan = petsciiTextScreenPlan(content, session, isMenuTextScreen);
+    // A teletext page (.ttx, rendered .tti) is already forty columns, drawn
+    // for this caller: it is neither folded nor adapted. Adapting one
+    // rewrote its colours, dropped its mosaic shifts and skipped its codes -
+    // JoinConf.ttx printed `~DT| ~TM|` and `~CL.` raw (sysop, 2026-10-05).
+    const isTeletextPage = isTeletextFile(filePath) || isNativeTtiName(filePath);
+    const petsciiTextPlan = isTeletextPage ? 'passthrough' : petsciiTextScreenPlan(content, session, isMenuTextScreen);
     if (petsciiTextPlan === 'art-skip') {
       /*
        * ADAPT IT BEFORE GIVING UP ON IT.
