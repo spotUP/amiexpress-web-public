@@ -62,3 +62,10 @@ test('W 3 says "Checking for duplicate name..." before the wildcard refusal, and
   await type(spaced, 'a b\r');
   expect(spaced.said()).not.toContain('No spaces allowed');
 });
+
+test('W 11 answers express\'s way: no "Protocol set to", a bad number asks again with no error', async () => {
+  const c = caller(LoggedOnSubState.W_EDIT_PROTOCOL);
+  await type(c, '9\r');
+  expect(c.said()).toBe('9\r\n\r\nChoose protocol: ');
+  expect(c.session.subState).toBe(LoggedOnSubState.W_EDIT_PROTOCOL);
+});

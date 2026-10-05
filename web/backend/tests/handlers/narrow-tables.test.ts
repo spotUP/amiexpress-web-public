@@ -454,31 +454,16 @@ describe('5c transfer protocol menu (info-commands.handler.ts, W option 11)', ()
     await info.handleWOptionSelectInput(driver.socket, driver.session, '11');
   }
 
-  test('80-col PIN: the seven descriptive rows, byte-identical', async () => {
-    const driver = wide();
+  // express.e chooseProtocol (11371-11378): "n> title" rows and "Choose
+  // protocol: " - one list that fits 40 columns, so no narrow variant.
+  test.each([['80-col', () => wide()], ['40-col', () => narrow()]])('%s: express.e chooseProtocol rows', async (_w, make) => {
+    const driver = make();
     await driveProtocolMenu(driver);
     const out = driver.output();
 
-    expect(out).toContain('\x1b[36mSelect Transfer Protocol:\r\n\x1b[0m');
-    expect(out).toContain('\x1b[34m[1] \x1b[0mZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
-    expect(out).toContain('\x1b[34m[6] \x1b[0mPunter (C64)    - Commodore 64/128 protocol\r\n');
-    expect(out).toContain('\x1b[34m[7] \x1b[0mWebSocket       - Browser-based transfers\r\n');
-    expect(out).toContain('Select (1-7) or <CR>=Cancel: ');
-  });
-
-  test('40-col: one protocol per line, full English names, nothing over 39 columns', async () => {
-    const driver = narrow();
-    await driveProtocolMenu(driver);
-    const out = driver.output();
-
-    expectNarrowScreen(out);
-    // Exact rows: a menu that only fits because the prose choke folded the
-    // 80-column descriptions fails here.
-    expect(out).toContain('\x1b[34m[1] \x1b[0mZMODEM (recommended)\r\n');
-    expect(out).toContain('\x1b[34m[2] \x1b[0mYMODEM (Batch)\r\n');
-    expect(out).toContain('\x1b[34m[6] \x1b[0mPunter (Commodore 64/128)\r\n');
-    expect(out).toContain('\x1b[34m[7] \x1b[0mWebSocket (browser)\r\n');
-    expect(out).toContain('Select (1-7) or <CR>=Cancel: ');
+    expect(out).toContain('1> ZMODEM\r\n2> YMODEM (Batch)\r\n');
+    expect(out).toContain('7> WebSocket (Browser)\r\n\r\nChoose protocol: ');
+    expect(out).not.toContain('Select (1-7)');
   });
 });
 

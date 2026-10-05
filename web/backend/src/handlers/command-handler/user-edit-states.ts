@@ -95,10 +95,10 @@ const NO_ECHO_STATES = new Set<LoggedOnSubState>([
 
 /**
  * The W prompts express.e reads with lineInput or getPass2 (25889-26010,
- * 11305, 11338, 11360). Both end every answer with a line break (2378,
+ * 11305, 11338, 11360, 11381). Both end every answer with a line break (2378,
  * 1588/1603) before the caller's next text - the loop top's '\b\n' (25730),
  * "Checking for duplicate name...", the next prompt. The port's own menus
- * (protocol, modem speed, font) are not in it.
+ * (modem speed, font) are not in it.
  */
 const LINE_INPUT_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_OPTION_SELECT,
@@ -113,6 +113,7 @@ const LINE_INPUT_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_EDIT_LINES,
   LoggedOnSubState.W_EDIT_COMPUTER,
   LoggedOnSubState.W_EDIT_SCREENTYPE,
+  LoggedOnSubState.W_EDIT_PROTOCOL,
   LoggedOnSubState.W_EDIT_TRANSLATOR,
 ]);
 

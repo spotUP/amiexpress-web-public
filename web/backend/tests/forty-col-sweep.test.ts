@@ -223,7 +223,7 @@ describe('40-column sweep: tables', () => {
   it('the protocol menu', () => {
     // Its last entry is the trailing prompt, so the whole block is held to
     // the prompt width - the strictest of the two.
-    fits(buildProtocolMenuLines(true), NARROW_PROMPT_WIDTH);
+    fits(buildProtocolMenuLines(), NARROW_PROMPT_WIDTH);
   });
 
   it('door list rows', () => {

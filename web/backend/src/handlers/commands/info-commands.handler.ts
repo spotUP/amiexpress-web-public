@@ -599,45 +599,20 @@ console.log('[ENV] Stats');
 /**
  * Handle W option selection input (express.e:25832)
  */
-/**
- * The transfer protocol menu, as ready-to-emit chunks (C64/40-col Task 5c).
- *
- * 80 columns: the seven descriptive rows, byte-identical.
- * Narrow: the description column comes OFF the line rather than being
- * abbreviated - full English protocol names, one per row, inside 39
- * columns.
- */
-export function buildProtocolMenuLines(narrow: boolean): string[] {
-  if (!narrow) {
-    return [
-      '\r\n',
-      AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'),
-      '\r\n',
-      AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n',
-      AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n',
-      AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n',
-      AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n',
-      AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n',
-      AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n',
-      AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n',
-      '\r\n',
-      'Select (1-7) or <CR>=Cancel: ',
-    ];
-  }
+/** W 11's choices, in the order they are numbered (xprTitle). */
+const PROTOCOL_CHOICES = ['zmodem', 'ymodem', 'xmodem-1k', 'xmodem-crc', 'xmodem', 'punter', 'websocket'] as const;
 
+const CHOOSE_PROTOCOL = '\r\nChoose protocol: ';
+
+/**
+ * express.e chooseProtocol (11371-11378): `n> title` per protocol, then
+ * "Choose protocol: ". The titles fit 40 columns as they are.
+ */
+export function buildProtocolMenuLines(): string[] {
+  const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
   return [
-    '\r\n',
-    AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'),
-    '\r\n',
-    AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM (recommended)\r\n',
-    AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)\r\n',
-    AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K\r\n',
-    AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC\r\n',
-    AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM (legacy)\r\n',
-    AnsiUtil.colorize('[6] ', 'blue') + 'Punter (Commodore 64/128)\r\n',
-    AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket (browser)\r\n',
-    '\r\n',
-    'Select (1-7) or <CR>=Cancel: ',
+    ...PROTOCOL_CHOICES.map((p, i) => `${i + 1}> ${PROTOCOL_DISPLAY_NAMES[p]}\r\n`),
+    CHOOSE_PROTOCOL,
   ];
 }
 
@@ -790,7 +765,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         return;
       }
       // Display protocol selection menu
-      for (const chunk of buildProtocolMenuLines(isNarrow(session))) {
+      for (const chunk of buildProtocolMenuLines()) {
         emitText(socket, chunk);
       }
       session.subState = LoggedOnSubState.W_EDIT_PROTOCOL;
@@ -1408,32 +1383,16 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
     return;
   }
 
-  // Protocol selection mapping
-  const protocolMap: { [key: string]: string } = {
-    '1': 'zmodem',
-    '2': 'ymodem',
-    '3': 'xmodem-1k',
-    '4': 'xmodem-crc',
-    '5': 'xmodem',
-    '6': 'punter',
-    '7': 'websocket'
-  };
-
-  const selectedProtocol = protocolMap[trimmed];
-
+  // express.e:11383-11386: Val; outside 1..count asks again, no text.
+  const selectedProtocol = PROTOCOL_CHOICES[(parseInt(trimmed, 10) || 0) - 1];
   if (!selectedProtocol) {
-    emitText(socket, '\r\nInvalid selection. Please enter 1-7.\r\n');
-    emitText(socket, 'Select (1-7) or <CR>=Cancel: ');
+    emitText(socket, CHOOSE_PROTOCOL);
     return;
   }
 
   // Update user protocol
   session.user.protocol = selectedProtocol;
   await changeAccount(session, { protocol: selectedProtocol });
-
-  const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
-  const protocolName = PROTOCOL_DISPLAY_NAMES[selectedProtocol] || selectedProtocol.toUpperCase();
-  emitText(socket, `\r\nProtocol set to: ${protocolName}\r\n`);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
