@@ -251,6 +251,8 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           lrzManager.start();
         };
         socket.once('transfer-raw:start', () => fireOnce('client-start'));
+        // WEB_: the browser's file picker - cancelled or never answered - has no
+        // express.e counterpart; both texts below are the port's own.
         socket.once('transfer-raw:cancel', () => {
           if ((fireOnce as any)._fired) return;
           (fireOnce as any)._fired = true;
