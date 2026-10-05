@@ -1888,17 +1888,32 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
    * screen NOBODY has in PETSCII still falls to the theme's ANSI, reflowed as
    * before - this rule only fires when there is something better underneath.
    */
-  const petsciiCandidateIn = (dir: string): string | null => {
-    const found = findSecurityScreen(path.join(dir, screenBaseNoExt), userSecLevel, null, false, false, true, false, { hollow });
-    return found && isPetsciiSeqFile(found) ? found : null;
+  /*
+   * The same holds for a TELETEXT caller (sysop, 2026-10-05: "i tested t at
+   * the prompt the bbs title is ansi not teletext"). The live log named it:
+   * `Screens/Node/BBSTITLE.tti` was found, and `Themes/h7/Node/BBSTITLE.txt`,
+   * one location earlier, was served. A theme with no .tti/.ttx copy does not
+   * shadow the board's.
+   */
+  const ownArtCandidateIn = (dir: string): string | null => {
+    if (servesPetsciiArt(session)) {
+      const found = findSecurityScreen(path.join(dir, screenBaseNoExt), userSecLevel, null, false, false, true, false, { hollow });
+      return found && isPetsciiSeqFile(found) ? found : null;
+    }
+    if (session?.texttvMode === true) {
+      const found = findSecurityScreen(path.join(dir, screenBaseNoExt), userSecLevel, null, false, false, false, true, { hollow });
+      return found && (isTeletextFile(found) || (isNativeTtiName(found) && tryNativeTtiFile(found) !== null)) ? found : null;
+    }
+    return null;
   };
-  const boardHasPetsciiCopy = servesPetsciiArt(session) && !isAssignPath
-    && searchLocations.some((l) => !l.themed && petsciiCandidateIn(l.dir) !== null);
+  const ownArt = servesPetsciiArt(session) ? '.seq' : '.tti/.ttx';
+  const boardHasOwnArt = (servesPetsciiArt(session) || session?.texttvMode === true) && !isAssignPath
+    && searchLocations.some((l) => !l.themed && ownArtCandidateIn(l.dir) !== null);
 
   for (const location of searchLocations) {
-    if (location.themed && boardHasPetsciiCopy && petsciiCandidateIn(location.dir) === null) {
+    if (location.themed && boardHasOwnArt && ownArtCandidateIn(location.dir) === null) {
       screenDebug(
-        `[loadScreenFile]  skipping ${location.desc}: it has no .seq for ${screenName}`
+        `[loadScreenFile]  skipping ${location.desc}: it has no ${ownArt} for ${screenName}`
         + ' and the board does - a theme owns art, and this art it does not have',
       );
       continue;

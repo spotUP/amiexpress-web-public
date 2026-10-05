@@ -108,3 +108,46 @@ describe('a theme that HAS one', () => {
     expect(String(result?.filePath)).toMatch(/Themes[\\/]live[\\/]Conf[\\/]1[\\/]Menu\.seq$/);
   });
 });
+
+/*
+ * The same rule for a TELETEXT caller (sysop, 2026-10-05: "i tested t at the
+ * prompt the bbs title is ansi not teletext"). The live log found the board's
+ * `Screens/Node/BBSTITLE.tti` and served `Themes/h7/Node/BBSTITLE.txt`.
+ */
+describe('a theme with no teletext copy', () => {
+  const teletext = (): any => ({
+    nodeId: 1, texttvMode: true, screenWidth: 40, screenHeight: 25,
+    user: { secLevel: 255 }, currentConf: 1, screenThemeResolved: 'live',
+  });
+
+  function teletextBoard(themeHasTtx: boolean): string {
+    const dir = board('no-seq');
+    fs.writeFileSync(path.join(dir, 'Conf1', 'Menu.ttx'), '\x1b[33mBOARD TELETEXT MENU\r\n', 'latin1');
+    if (themeHasTtx) {
+      fs.writeFileSync(path.join(dir, 'Themes', 'live', 'Conf', '1', 'Menu.ttx'), '\x1b[36mTHEME TELETEXT MENU\r\n', 'latin1');
+    }
+    return dir;
+  }
+
+  it('does not shadow the board\'s .ttx', async () => {
+    root = teletextBoard(false);
+    previousRoot = config.get('dataDir');
+    (config as any).set?.('dataDir', root);
+    invalidateScreenIndex();
+
+    const result = await loadScreenFile('Menu', 1, 1, teletext());
+
+    expect(String(result?.filePath)).toMatch(/Conf1[\\/]Menu\.ttx$/);
+  });
+
+  it('a theme WITH one still wins', async () => {
+    root = teletextBoard(true);
+    previousRoot = config.get('dataDir');
+    (config as any).set?.('dataDir', root);
+    invalidateScreenIndex();
+
+    const result = await loadScreenFile('Menu', 1, 1, teletext());
+
+    expect(String(result?.filePath)).toMatch(/Themes[\\/]live[\\/]Conf[\\/]1[\\/]Menu\.ttx$/);
+  });
+});
