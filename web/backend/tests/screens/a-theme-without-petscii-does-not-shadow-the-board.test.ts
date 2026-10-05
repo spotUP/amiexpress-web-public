@@ -164,3 +164,25 @@ describe('a theme with no teletext copy', () => {
     expect(String(result?.filePath)).toMatch(/Themes[\\/]live[\\/]Conf[\\/]1[\\/]Menu\.ttx$/);
   });
 });
+
+/*
+ * A file a screen names outright - `~SS_BBS:screens/uprough.txt` in the
+ * logon screen - is read in the caller's alphabet too (sysop, 2026-10-05:
+ * "the up rough ansi is not teletext").
+ */
+describe('a screen file named by path', () => {
+  const teletextCaller = (): any => ({ nodeId: 1, texttvMode: true, screenWidth: 40, screenHeight: 25, user: { secLevel: 255 }, currentConf: 1 });
+
+  it('is read from its .ttx twin for a teletext caller, and as named for everyone else', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'named-ttx-'));
+    fs.writeFileSync(path.join(dir, 'uprough.txt'), '\x1b[0;31mUP ROUGH IN ANSI\r\n', 'latin1');
+    fs.writeFileSync(path.join(dir, 'uprough.ttx'), '\x1b[0;33mUP ROUGH IN TELETEXT\r\n', 'latin1');
+    const named = path.join(dir, 'uprough.txt');
+
+    const teletext = await loadScreenFile(named, 1, 1, teletextCaller());
+    expect(String(teletext?.filePath)).toMatch(/uprough\.ttx$/);
+
+    const ansi = await loadScreenFile(named, 1, 1, { ...teletextCaller(), texttvMode: false });
+    expect(String(ansi?.filePath)).toMatch(/uprough\.txt$/);
+  });
+});

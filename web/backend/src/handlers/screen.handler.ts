@@ -508,7 +508,7 @@ export function getConferences(): Conference[] {
  * is a sysop commission, not something this resolver can invent.
  *
  * ONE predicate, because the choice is made in two places - the extension
- * order in loadScreenFile's variant list, and resolvePetsciiPath, which
+ * order in loadScreenFile's variant list, and resolveAlphabetTwin, which
  * swaps a resolved `.txt` for its `.seq` neighbour. A caller who passed the
  * first and failed the second would be served the art anyway.
  */
@@ -516,14 +516,34 @@ export function servesPetsciiArt(session: { petsciiMode?: boolean; petsciiColumn
   return session?.petsciiMode === true && petsciiColumnsOf(session) === C64_COLUMNS;
 }
 
-function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): string {
-  if (!petsciiEnabled) return originalPath;
-  if (isPetsciiSeqFile(originalPath)) return originalPath;
+/**
+ * The caller's own copy of a file named outright: the `.seq` twin for a
+ * caller served PETSCII art, the `.tti` (when it really is packets) or `.ttx`
+ * twin for a teletext caller. A file a screen pulls in by name -
+ * `~SS_BBS:screens/uprough.txt` in the logon screen - reached a teletext
+ * caller as its ANSI drawing (sysop, 2026-10-05: "the up rough ansi is not
+ * teletext").
+ */
+function resolveAlphabetTwin(originalPath: string, session: any): string {
   const parsed = path.parse(originalPath);
-  const seqCandidate = findCaseInsensitive(parsed.dir, `${parsed.name}.seq`);
-  if (seqCandidate) {
-    screenDebug(`[loadScreenFile] PETSCII variant preferred: ${originalPath} -> ${seqCandidate}`);
-    return seqCandidate;
+  if (servesPetsciiArt(session)) {
+    if (isPetsciiSeqFile(originalPath)) return originalPath;
+    const seqCandidate = findCaseInsensitive(parsed.dir, `${parsed.name}.seq`);
+    if (seqCandidate) {
+      screenDebug(`[loadScreenFile] PETSCII variant preferred: ${originalPath} -> ${seqCandidate}`);
+      return seqCandidate;
+    }
+    return originalPath;
+  }
+  if (session?.texttvMode === true) {
+    if (isTeletextFile(originalPath) || isNativeTtiName(originalPath)) return originalPath;
+    const tti = findCaseInsensitive(parsed.dir, `${parsed.name}.tti`);
+    const twin = (tti && tryNativeTtiFile(tti) !== null ? tti : null)
+      ?? findCaseInsensitive(parsed.dir, `${parsed.name}.ttx`);
+    if (twin) {
+      screenDebug(`[loadScreenFile] teletext variant preferred: ${originalPath} -> ${twin}`);
+      return twin;
+    }
   }
   return originalPath;
 }
@@ -1622,14 +1642,14 @@ export function loadScreenFile(
     const dir = path.dirname(normalizedAbs);
     const base = path.basename(normalizedAbs);
     const resolved = findCaseInsensitive(dir, base) || normalizedAbs;
-    paths.push(resolvePetsciiPath(resolved, servesPetsciiArt(session)));
+    paths.push(resolveAlphabetTwin(resolved, session));
   } else if (effectiveName.includes(':')) {
     // Use centralized BBS path resolver for Amiga assigns (BBS:, WORK:, NODE:, etc.)
     const resolved = bbsPaths.resolveAmigaPath(effectiveName, nodeId);
     const dir = path.dirname(resolved);
     const base = path.basename(resolved);
     const ci = findCaseInsensitive(dir, base) || resolved;
-    const normalized = resolvePetsciiPath(ci, servesPetsciiArt(session)).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
+    const normalized = resolveAlphabetTwin(ci, session).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
     if (normalized !== ci) {
 console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${ci} -> ${normalized}`);
     }
@@ -2065,7 +2085,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
         let fileToUse: string = foundPath;
         try {
-          fileToUse = resolvePetsciiPath(foundPath, servesPetsciiArt(session));
+          fileToUse = resolveAlphabetTwin(foundPath, session);
           const isPetsciiFile = isPetsciiSeqFile(fileToUse);
           if (isPetsciiFile) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
@@ -2173,7 +2193,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
     }
 
     try {
-      const candidatePath = resolvePetsciiPath(filePath, servesPetsciiArt(session));
+      const candidatePath = resolveAlphabetTwin(filePath, session);
       // Try the path as-is, then with common extensions (.txt, .TXT, .ans, .ANS)
       // This handles ~SR_ which generates paths like "001.logoff" but files are "001.logoff.txt"
       // Same rule as the variant builders above, for the arm an absolute or

@@ -85,7 +85,7 @@ function normalizeScreenTypeExtension(screenTypeExt: string): string {
  * @param defScreens - DEF_SCREENS tooltype (if true, check non-security first)
  * @param petsciiMode - WEB_ extension over express.e (no Amiga equivalent):
  *   web C64 terminal / real-C64 PETSCII sessions prefer a .SEQ variant over
- *   everything else. See resolvePetsciiPath() in screen.handler.ts for the
+ *   everything else. See resolveAlphabetTwin() in screen.handler.ts for the
  *   sibling non-security-lookup preference this mirrors.
  * @param texttvMode - WEB_ extension over express.e (no Amiga equivalent):
  *   teletext sessions (T answer at the graphics prompt) prefer a .TTI
@@ -145,7 +145,7 @@ export function findSecurityScreen(
     // WEB_ extension over express.e:6258-6270 - PETSCII sessions prefer .SEQ
     // ahead of RIP/screen-type/TXT. A PETSCII session is never simultaneously
     // a RIP session on this BBS, but if both flags were ever set, PETSCII
-    // still wins here (matches resolvePetsciiPath()'s priority elsewhere).
+    // still wins here (matches resolveAlphabetTwin()'s priority elsewhere).
     if (petsciiMode) {
       const seqPath = `${basePath}.SEQ`;
       const resolved = takeHollow(resolveCaseInsensitivePath(seqPath));
